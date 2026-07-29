@@ -147,7 +147,7 @@ LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH /tmp/embed_check
 | R04 | text_embedding 返回 NULL | Medium | embed() 返回空向量 + 记录错误 |
 | R05 | 返回向量维度不是 768 | Medium | init 时记录维度，后续每次校验 |
 | R06 | 连续调用 3 次失败后 SDK 需重连 | Medium | 失败计数 ≥3 标记 unhealthy |
-| R07 | ABI 不匹配（.so vs 头文件） | Medium | 以 nm 验证为准，不依赖头文件；接口验证状态见 `cpp-bridge/embedding_abi_compat.h` |
+| R07 | ABI 不匹配（.so vs 头文件） | Medium | nm/readelf 仅确认符号是否导出；函数原型来自匹配版本头文件/源码；最终通过编译和宿主调用确认。接口状态见 `cpp-bridge/embedding_abi_compat.h` |
 | R08 | Kytensor 服务未启动 | Medium | 检查端口 8000/8001 监听状态 |
 | R09 | 长文本超时（>180ms） | Low | Provider 层设超时，超时返回空 |
 | R10 | 包版本与内部 runtime 版本不一致 | Medium | PARTIAL：同时记录包版本与内部版本；环境复现以包版本、文件路径、SHA-256、Build ID 为准；功能结论以 Runtime Test 为准 |

@@ -57,7 +57,7 @@
 
 | 风险                                                                 | 缓解                                                                     |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `text_embedding_get_model_info` 等符号 nm 确认存在但头文件未全部收录 | 以 nm 验证为准，头文件列为参考资料；接口验证状态见 `cpp-bridge/embedding_abi_compat.h` |
+| `text_embedding_get_model_info` 等符号 nm 确认存在但头文件未全部收录 | nm/readelf 仅确认符号是否导出；函数原型来自匹配版本头文件/源码；最终通过编译和宿主调用确认。接口状态见 `cpp-bridge/embedding_abi_compat.h` |
 | init_model 原标禁调，但运行时日志建议调用                            | nm 仅确认符号存在，参数/返回类型由头文件推断，宿主未完整实测。以 `cpp-bridge/embedding_abi_compat.h` 声明为准 |
 | 包版本(1.2.0.4) vs 内部 runtime(1.3.0) 不一致                        | PARTIAL：同时记录包版本与内部版本；环境复现以包版本、文件路径、SHA-256、Build ID 为准；功能结论以 Runtime Test 为准 |
 | init_session 实际走 init_v2 内部路径                                 | 已确认 embed 调用正常                                                    |
