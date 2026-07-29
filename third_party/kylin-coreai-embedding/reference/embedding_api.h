@@ -1,6 +1,6 @@
 /**
  * embedding_api.h
- * 
+ *
  * 官方 kylin-coreai-embedding SDK 头文件
  * 来源：gitee.com/openkylin/kylin-coreai-embedding (openkylin/nile-sp2)
  * Commit: 63aed6f3

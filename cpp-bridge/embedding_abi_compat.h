@@ -31,6 +31,8 @@ extern "C" {
 /* ── 不透明类型 ── */
 typedef struct _EmbeddingResult      EmbeddingResult;      /* SOURCE_VERIFIED | ABI_VERIFIED | HOST_VERIFIED */
 typedef struct _TextEmbeddingSession TextEmbeddingSession; /* SOURCE_VERIFIED | ABI_VERIFIED | HOST_VERIFIED */
+typedef struct _EmbeddingModelList   EmbeddingModelList;   /* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED */
+typedef struct _EmbeddingModelInfo   EmbeddingModelInfo;   /* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED */
 
 /* ── 会话管理 ── */
 
