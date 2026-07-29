@@ -1,0 +1,27 @@
+name: Repository Baseline Check
+
+on:
+  pull_request:
+    branches: [main, integration]
+  push:
+    branches: [main, integration]
+
+jobs:
+  baseline-check:
+    name: 仓库基线验证
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 脚本语法检查
+        run: |
+          for script in scripts/*.sh; do
+            echo "检查: $script"
+            bash -n "$script" || exit 1
+          done
+
+      - name: 仓库基线结构验证
+        run: |
+          chmod +x scripts/verify_repository_baseline.sh
+          ./scripts/verify_repository_baseline.sh

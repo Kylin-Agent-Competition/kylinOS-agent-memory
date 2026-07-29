@@ -1,0 +1,70 @@
+name: Task
+description: 创建开发任务
+title: "[任务] "
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: "## 任务信息"
+  - type: input
+    id: objective
+    attributes:
+      label: 目标
+      description: 任务要达成的目标
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 修改范围
+      description: 本次任务涉及的文件和模块
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: 不修改范围
+      description: 明确不在本任务中修改的内容
+  - type: dropdown
+    id: track
+    attributes:
+      label: 责任轨道
+      options:
+        - A — Embedding / Provider / 数据质量
+        - B — Vector / FTS5 / RRF / 检索评测
+        - C — OS Agent Hook / MemoryClient / QML
+        - D — IPC / SQLite / Outbox / 发布
+        - E — 业务 / 安全 / 数据集 / 业务指标
+    validations:
+      required: true
+  - type: input
+    id: assignee
+    attributes:
+      label: 负责人
+      placeholder: "@username"
+    validations:
+      required: true
+  - type: input
+    id: reviewer
+    attributes:
+      label: Reviewer
+      placeholder: "@D 或 @E"
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依赖
+      description: 本任务依赖的其他任务或条件
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 任务完成的判定条件
+    validations:
+      required: true
+  - type: textarea
+    id: host_test
+    attributes:
+      label: 宿主测试要求
+      description: 需要在麒麟虚拟机上执行的测试

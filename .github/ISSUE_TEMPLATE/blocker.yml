@@ -1,0 +1,36 @@
+name: Blocker
+description: 报告阻塞点
+title: "[Blocker] "
+labels: ["blocker"]
+body:
+  - type: textarea
+    id: blockage
+    attributes:
+      label: 阻断点
+      description: 具体是什么问题在阻断进度
+    validations:
+      required: true
+  - type: textarea
+    id: affected_tasks
+    attributes:
+      label: 影响的任务
+      description: 哪些任务被阻断
+    validations:
+      required: true
+  - type: textarea
+    id: existing_evidence
+    attributes:
+      label: 已有证据
+      description: 已有的日志、截图或测试结果
+  - type: textarea
+    id: unblock_conditions
+    attributes:
+      label: 解除条件
+      description: 什么条件满足时此阻断算解除
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: 临时替代路径
+      description: 在解除前有可用的临时方案吗

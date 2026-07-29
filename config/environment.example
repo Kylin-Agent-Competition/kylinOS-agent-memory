@@ -1,0 +1,20 @@
+# 环境变量示例
+# 复制为 .env 后填入实际值。.env 不会进入版本控制。
+
+# 项目根目录
+KMA_PROJECT_ROOT=
+
+# Memory Service Unix Domain Socket 路径
+KMA_SOCKET_PATH=/tmp/kylin-memory-service.sock
+
+# SQLite 数据库路径
+KMA_DATABASE_PATH=
+
+# 日志级别: DEBUG, INFO, WARNING, ERROR
+KMA_LOG_LEVEL=INFO
+
+# 检索超时 (毫秒)
+KMA_RETRIEVE_DEADLINE_MS=150
+
+# 推送上下文最大 token 数
+KMA_MAX_CONTEXT_TOKENS=800

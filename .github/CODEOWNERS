@@ -1,0 +1,13 @@
+# CODEOWNERS
+#
+# 请在取得 A–E 开发者 GitHub 用户名后启用以下规则。
+# 将 @PLACEHOLDER 替换为真实 GitHub 用户名，然后取消注释。
+#
+# /cpp-bridge/ @A @D
+# /memory-client/ @C @D
+# /os-agent-integration/ @C @D @E
+# /memory-service/ @D @E
+# /evaluation/ @B @E
+# /packaging/ @D @E
+#
+# * @D @E

@@ -1,0 +1,58 @@
+name: Bug Report
+description: 报告缺陷
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: symptoms
+    attributes:
+      label: 现象
+      description: 发生了什么问题
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 正确行为应该是什么
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      description: 如何稳定复现此问题
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息
+      description: OS、Python 版本、虚拟化环境等
+      placeholder: |
+        - OS: 银河麒麟桌面 V11 x86_64 / WSL2
+        - Python: 3.10.x
+        - 虚拟化: VirtualBox 7.x / 无
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: 相关错误日志或截图（务必脱敏）
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 严重程度
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+  - type: textarea
+    id: regression
+    attributes:
+      label: 回归测试要求
+      description: 修复后需要运行的回归测试
