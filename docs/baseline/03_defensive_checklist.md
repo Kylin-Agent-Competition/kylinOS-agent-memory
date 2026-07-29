@@ -150,10 +150,9 @@ LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH /tmp/embed_check
 | R07 | ABI 不匹配（.so vs 头文件） | Medium | 以 nm 验证为准，不依赖头文件；接口验证状态见 `cpp-bridge/embedding_abi_compat.h` |
 | R08 | Kytensor 服务未启动 | Medium | 检查端口 8000/8001 监听状态 |
 | R09 | 长文本超时（>180ms） | Low | Provider 层设超时，超时返回空 |
-| R10 | 龙芯实机 ABI 不同 | Medium | D15 前在龙芯环境验证 |
-| R11 | 包版本与内部 runtime 版本不一致 | Medium | PARTIAL：同时记录包版本与内部版本；环境复现以包版本、文件路径、SHA-256、Build ID 为准；功能结论以 Runtime Test 为准 |
-| R12 | init 内部路径为 init_v2，可能与旧文档不符 | Medium | init_session 实际走 init_v2，已确认 embed 正常可用 |
-| R13 | ldd 依赖全部满足 | — | 验证通过，无缺失依赖 |
+| R10 | 包版本与内部 runtime 版本不一致 | Medium | PARTIAL：同时记录包版本与内部版本；环境复现以包版本、文件路径、SHA-256、Build ID 为准；功能结论以 Runtime Test 为准 |
+| R11 | init 内部路径为 init_v2，可能与旧文档不符 | Medium | init_session 实际走 init_v2，已确认 embed 正常可用 |
+| R12 | ldd 依赖全部满足 | — | 验证通过，无缺失依赖 |
 
 ---
 
