@@ -1,0 +1,23 @@
+# Runtime Identity Log
+# Collected by Reviewer (Runtime Identity Spot Check)
+# Date: 2026-07-29
+
+OS: 银河麒麟桌面操作系统 V11 2603 x86_64
+Virtualization: VirtualBox 7.2.14
+
+PID: 5678
+Binary Path: /usr/bin/kylin-ai-runtime
+
+Package: kylin-ai-runtime
+Package Version: 1.2.0.4-0k0.1
+Architecture: amd64
+
+SHA-256: b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225
+Build ID: d3201935767c5f4a3a89fc00b7223d8c4770313b
+
+dpkg -V: (no output, package files unmodified)
+
+Process Origin: kylin-wlcom.service (user session)
+
+Internal Runtime Version (self-reported at runtime): 1.3.0
+Note: Internal version differs from package version (1.2.0.4). See PARTIAL status in baseline docs.
