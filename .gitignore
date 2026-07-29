@@ -34,6 +34,8 @@ secrets/
 *.sqlite
 *.sqlite3
 runtime/
+!/memory-service/tests/runtime/
+!/memory-service/tests/runtime/**
 data/
 logs/
 artifacts/
