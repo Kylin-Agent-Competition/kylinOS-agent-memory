@@ -16,6 +16,8 @@
 
 **⚠️ 头文件声明不等同于当前宿主 ABI。** Bridge 实现必须依赖宿主 `.so` 实际导出的符号（`nm -D` 确认），不得因头文件中存在声明而直接链接。宿主角度的已验证接口见 `cpp-bridge/embedding_abi_compat.h`。
 
+**🚫 正式构建禁止引用此头文件。** 生产代码（C++ Bridge、pybind11 封装、Provider 层）必须使用 `cpp-bridge/embedding_abi_compat.h`。任何直接 `#include` 此参考副本的代码将不予合并。
+
 ## 更新说明
 
 上游仓库更新时，如需同步此副本，请：
