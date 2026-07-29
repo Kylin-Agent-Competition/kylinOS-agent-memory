@@ -9,8 +9,8 @@ set -euo pipefail
 PASS=0
 FAIL=0
 
-check_pass() { echo "  [PASS] $1"; ((PASS++)); }
-check_fail() { echo "  [FAIL] $1 - $2"; ((FAIL++)); }
+check_pass() { echo "  [PASS] $1"; ((++PASS)); }
+check_fail() { echo "  [FAIL] $1 - $2"; ((++FAIL)); }
 
 echo "================================================"
 echo "  Kylin Memory Environment Check"
@@ -57,7 +57,7 @@ PKG_LIST=(
 )
 
 for pkg in "${PKG_LIST[@]}"; do
-    VER=$(dpkg -l "$pkg" 2>/dev/null | grep "^ii" | awk '{print $3}' || echo "")
+    VER=$(dpkg -l "$pkg" 2>/dev/null | grep -E "^[a-z]i" | awk '{print $3}' || echo "")
     if [ -n "$VER" ]; then
         check_pass "$pkg = $VER"
     else
