@@ -44,6 +44,18 @@ int main() {
     F_errmsg  errmsg  = (F_errmsg) dlsym(h, "embedding_result_get_error_message");
     F_freeres freeres = (F_freeres)dlsym(h, "embedding_result_destroy");
 
+    // 检查所有符号是否加载成功
+    if (!create)  { printf("❌ dlsym: text_embedding_create_session\n"); return 1; }
+    if (!destroy) { printf("❌ dlsym: text_embedding_destroy_session\n"); return 1; }
+    if (!init)    { printf("❌ dlsym: text_embedding_init_session\n"); return 1; }
+    if (!evloop)  { printf("❌ dlsym: text_embedding_enable_internal_event_loop\n"); return 1; }
+    if (!embed)   { printf("❌ dlsym: text_embedding\n"); return 1; }
+    if (!vdata)   { printf("❌ dlsym: embedding_result_get_vector_data\n"); return 1; }
+    if (!vlen)    { printf("❌ dlsym: embedding_result_get_vector_length\n"); return 1; }
+    if (!errc)    { printf("❌ dlsym: embedding_result_get_error_code\n"); return 1; }
+    if (!errmsg)  { printf("❌ dlsym: embedding_result_get_error_message\n"); return 1; }
+    if (!freeres) { printf("❌ dlsym: embedding_result_destroy\n"); return 1; }
+
     printf("=== Embedding SDK 最小调用（已修正） ===\n\n");
 
     // 1. 创建会话
@@ -106,6 +118,25 @@ CPPEOF
 g++ -std=c++17 /tmp/embed_correct.cpp -ldl -o /tmp/embed_correct && \
     LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH /tmp/embed_correct
 ```
+
+### 真实运行输出
+
+```
+=== Embedding SDK 最小调用（已修正） ===
+
+✅ 创建会话
+[1785309818094] info  Connection established successfully to \
+  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock
+[1785309818094] info  Runtime version is  1.3.0 InitEngine call new init_v2
+[1785309818106] info  Proxy init success,sessionId is: 1695534058
+✅ 初始化
+✅ 事件循环
+
+[1] 中文: "你好世界"
+  ...
+```
+
+> **注意**：上述输出中 runtime 版本显示 1.3.0，但系统安装包版本为 1.2.0.4 — 两者不一致，后续以运行时报告为准。
 
 ## 关键修正
 

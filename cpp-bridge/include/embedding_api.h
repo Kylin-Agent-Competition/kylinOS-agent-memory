@@ -9,6 +9,8 @@
 #ifndef KYLIN_EMBEDDING_API_H
 #define KYLIN_EMBEDDING_API_H
 
+#include <stdbool.h>  // bool for C callers inside extern "C"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -23,9 +23,9 @@ echo $LD_LIBRARY_PATH | grep kylin-ai > /dev/null && echo "  ✅ LD_LIBRARY_PATH
 
 | 检查项 | 状态 | 备注 |
 |--------|:----:|------|
-| kylin-ai-runtime 已安装 | | |
-| /usr/lib/kylin-ai/depends 存在 | | |
-| LD_LIBRARY_PATH 含 kylin-ai/depends | | |
+| kylin-ai-runtime 已安装 | ✅ | 1.2.0.4-0k0.1 |
+| /usr/lib/kylin-ai/depends 存在 | ✅ | 包含 libcurl 等 |
+| LD_LIBRARY_PATH 含 kylin-ai/depends | ✅ | 已配置 |
 
 ---
 
@@ -47,11 +47,11 @@ test -r /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1 && echo "  ✅ 
 
 | 检查项 | 状态 | 备注 |
 |--------|:----:|------|
-| .so 文件存在 | | |
-| text_embedding 导出 | | |
-| create_session 导出 | | |
-| init_session 导出 | | |
-| .so 可读 | | |
+| .so 文件存在 | ✅ | /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1 |
+| text_embedding 导出 | ✅ | nm -D 确认 |
+| create_session 导出 | ✅ | nm -D 确认 |
+| init_session 导出 | ✅ | nm -D 确认 |
+| .so 可读 | ✅ | |
 
 ---
 
@@ -65,15 +65,15 @@ ls /usr/share/kylin-ai/model-repository/ensemble-embd_gte-base_uint8-text > /dev
 ls /usr/share/kylin-ai/model-repository/tokenizer_gte-base_uint8-text > /dev/null 2>&1 && echo "  ✅ GTE 分词器" || echo "  ❌"
 
 # 3.2 默认模型配置
-cat /usr/share/kylin-ai/model-repository/model_bank/default_model.yaml 2>/dev/null | head -5
+ls /usr/share/kylin-ai/model-repository/model_bank/ 2>/dev/null
 ```
 
 | 检查项 | 状态 | 备注 |
 |--------|:----:|------|
-| GTE 主模型目录存在 | | |
-| Ensemble 目录存在 | | |
-| 分词器目录存在 | | |
-| default_model.yaml 可读 | | |
+| GTE 主模型目录存在 | ✅ | embd_gte-base_uint8-text |
+| Ensemble 目录存在 | ✅ | ensemble-embd_gte-base_uint8-text |
+| 分词器目录存在 | ✅ | tokenizer_gte-base_uint8-text |
+| default_model.yaml 可读 | ❌ | 文件不存在，改为 config.pbtxt（protobuf 格式） |
 
 ---
 
@@ -91,9 +91,9 @@ ss -tlnp 2>/dev/null | grep -E "8000|8001" || echo "  ⚠️ 端口未监听（�
 
 | 检查项 | 状态 | 备注 |
 |--------|:----:|------|
-| kytensor-server 已安装 | | |
-| kytensor-client 已安装 | | |
-| 8000/8001 端口 | | 未监听时，运行：`kytensor-server start` |
+| kytensor-server 已安装 | ✅ | 2.49.0.6-ok7k0.14 |
+| kytensor-client 已安装 | ✅ | 2.49.0.6-ok7k0.14 |
+| 8000/8001 端口 | ✅ | 8000(HTTP) + 8001(gRPC) 均监听中 |
 
 ---
 
@@ -108,7 +108,6 @@ g++ -std=c++17 -o /tmp/embed_check /dev/stdin \
 #include <cstdio>
 extern "C" {
     struct S {}; typedef S* (*T1)(); typedef int (*T2)(S*);
-    typedef void* (*T3)(S*,const char*);
 }
 int main() {
     void* h = dlopen("/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1", RTLD_NOW);
@@ -130,10 +129,10 @@ LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH /tmp/embed_check
 
 | 检查项 | 状态 | 备注 |
 |--------|:----:|------|
-| 编译成功 | | 失败则缺少 build-essential 或 -dev 包 |
-| dlopen 成功 | | 失败则 .so 不存在或损坏 |
-| create_session 成功 | | 失败则 kylin-ai-runtime 未就绪 |
-| init_session 成功 | | 返回 0 表示正常 |
+| 编译成功 | ✅ | g++ 编译通过 |
+| dlopen 成功 | ✅ | 已解析所有符号 |
+| create_session 成功 | ✅ | 返回非 NULL |
+| init_session 成功 | ✅ | 返回 0（内部走 init_v2） |
 
 ---
 
@@ -147,10 +146,13 @@ LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH /tmp/embed_check
 | R04 | text_embedding 返回 NULL | Medium | embed() 返回空向量 + 记录错误 |
 | R05 | 返回向量维度不是 768 | Medium | init 时记录维度，后续每次校验 |
 | R06 | 连续调用 3 次失败后 SDK 需重连 | Medium | 失败计数 ≥3 标记 unhealthy |
-| R07 | ABI 不匹配（.so vs 头文件） | Medium | 以 nm 验证为准，不依赖头文件 |
+| R07 | ABI 不匹配（.so vs 头文件） | Medium | 以 nm 验证为准，不依赖头文件；全部 17 个符号已验证 ✅ |
 | R08 | Kytensor 服务未启动 | Medium | 检查端口 8000/8001 监听状态 |
 | R09 | 长文本超时（>180ms） | Low | Provider 层设超时，超时返回空 |
 | R10 | 龙芯实机 ABI 不同 | Medium | D15 前在龙芯环境验证 |
+| R11 | 包版本与内部 runtime 版本不一致 | Medium | 包 1.2.0.4 但 internal runtime 报告 1.3.0，Bridge 需以运行时报告为准 |
+| R12 | init 内部路径为 init_v2，可能与旧文档不符 | Medium | init_session 实际走 init_v2，已确认 embed 正常可用 |
+| R13 | ldd 依赖全部满足 | — | 验证通过，无缺失依赖 |
 
 ---
 
@@ -158,10 +160,10 @@ LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH /tmp/embed_check
 
 | 层 | 检查项数 | 通过 | 失败 | 备注 |
 |----|:-------:|:----:|:----:|------|
-| Runtime | | | | |
-| Embedding SDK | | | | |
-| 模型 | | | | |
-| Kytensor | | | | |
-| 最小调用 | | | | |
+| Runtime | 3 | 3 | 0 | 包 1.2.0.4，内部 runtime 报告 1.3.0 |
+| Embedding SDK | 5 | 5 | 0 | 全部 17 个符号 nm 确认 |
+| 模型 | 4 | 3 | 1 | default_model.yaml 不存在，改为 config.pbtxt 格式；SDK 仍能正常加载默认模型 |
+| Kytensor | 3 | 3 | 0 | server + client 均已安装 |
+| 最小调用 | 4 | 4 | 0 | 4 种文本全部通过，维度 768 |
 
 日期：________   检查人：________   麒麟 VM 快照：________

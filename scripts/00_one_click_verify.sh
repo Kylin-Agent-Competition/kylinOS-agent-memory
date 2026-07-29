@@ -21,7 +21,8 @@ echo "━━━ 2. Embedding SDK ━━━"
 ls /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1 > /dev/null 2>&1 && echo "  ✅ .so 存在" || echo "  ❌ .so 缺失"
 test -r /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1 && echo "  ✅ .so 可读" || echo "  ❌ .so 无权限"
 echo "  关键符号："
-for sym in text_embedding_create_session text_embedding_init_session text_embedding text_embedding_destroy_session embedding_result_get_vector_data embedding_result_get_vector_length; do
+ALL_SYMS="text_embedding_create_session text_embedding_destroy_session text_embedding_init_session text_embedding_enable_internal_event_loop text_embedding_init_model text_embedding_get_model_list embedding_model_list_get_count embedding_model_list_get_model embedding_model_info_get_model_name embedding_model_info_get_model_dim text_embedding text_embedding_async embedding_result_get_vector_data embedding_result_get_vector_length embedding_result_get_error_code embedding_result_get_error_message embedding_result_destroy"
+for sym in $ALL_SYMS; do
     nm -D /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1 2>/dev/null | grep "T $sym$" > /dev/null && echo "    ✅ $sym" || echo "    ❌ $sym"
 done
 

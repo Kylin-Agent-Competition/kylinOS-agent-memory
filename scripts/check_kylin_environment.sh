@@ -93,6 +93,20 @@ check_cmd nc
 check_cmd curl
 echo ""
 
+echo "Embedding SDK 检查"
+SDK_SO="/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1"
+if [ -f "$SDK_SO" ]; then
+    echo "  ✓ SDK .so 存在: $SDK_SO"
+    if [ -r "$SDK_SO" ]; then
+        echo "  ✓ SDK .so 可读"
+    else
+        echo "  ✗ SDK .so 无读取权限"
+    fi
+else
+    echo "  ✗ SDK .so 不存在: $SDK_SO"
+fi
+echo ""
+
 echo "项目根目录检查"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "  项目目录: ${PROJECT_ROOT}"
