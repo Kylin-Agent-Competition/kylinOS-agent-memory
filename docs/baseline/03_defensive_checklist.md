@@ -140,7 +140,7 @@ LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH /tmp/embed_check
 
 | 编号 | 风险 | 严重程度 | 缓解措施 |
 |:----:|------|:--------:|---------|
-| R01 | 空输入导致 SDK 崩溃 | High | Bridge 层拦截空字符串，不传给 SDK |
+| R01 | 空输入导致 SDK 崩溃 | Medium | 实测空字符串返回正常向量（维度 768），Bridge 层仍建议拦截空串作为防御 |
 | R02 | NULL 指针传给 SDK | High | Bridge 层做参数校验 |
 | R03 | init_session 返回非 0（runtime 未启动） | High | init 时检查返回值，标记 unhealthy |
 | R04 | text_embedding 返回 NULL | Medium | embed() 返回空向量 + 记录错误 |
