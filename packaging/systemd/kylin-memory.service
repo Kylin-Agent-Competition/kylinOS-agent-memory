@@ -1,0 +1,18 @@
+[Unit]
+Description=Kylin Memory Service
+After=network.target
+Documentation=https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+
+[Service]
+Type=simple
+ExecStart=%h/projects/kylin-memory-sdk/.venv/bin/python -m memory_service
+WorkingDirectory=%h/projects/kylin-memory-sdk
+Environment="LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends"
+Environment="PYTHONUNBUFFERED=1"
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:%h/.local/state/kylin-memory/service.log
+StandardError=append:%h/.local/state/kylin-memory/service.log
+
+[Install]
+WantedBy=default.target

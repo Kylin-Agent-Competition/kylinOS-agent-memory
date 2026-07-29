@@ -1,0 +1,3 @@
+# Place .deb backup files here
+# This directory is intentionally kept in Git to serve as the backup location.
+# Executable .deb files are gitignored. Use backup_current_packages.sh to populate.
