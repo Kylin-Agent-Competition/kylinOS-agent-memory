@@ -41,4 +41,4 @@ entries:
       Runtime 自动加载默认模型 ensemble-embd_gte-base_uint8-text
       运行输出见原始日志
     date: 2026-07-29
-    limitations: 异步/批量/并发/龙芯 未测
+    limitations: 异步/批量/并发/非 x86_64 架构不属于本项目验收范围
