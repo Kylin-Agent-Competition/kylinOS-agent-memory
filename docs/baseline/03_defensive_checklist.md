@@ -26,6 +26,7 @@ echo $LD_LIBRARY_PATH | grep kylin-ai > /dev/null && echo "  ✅ LD_LIBRARY_PATH
 | kylin-ai-runtime 已安装 | ✅ | 1.2.0.4-0k0.1 |
 | /usr/lib/kylin-ai/depends 存在 | ✅ | 包含 libcurl 等 |
 | LD_LIBRARY_PATH 含 kylin-ai/depends | ✅ | 已配置 |
+| 二进制文件完整性 | ✅ | SHA-256 / Build ID / dpkg -V 均通过（详见 01 基线 Runtime 章节） |
 
 ---
 
@@ -146,11 +147,11 @@ LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH /tmp/embed_check
 | R04 | text_embedding 返回 NULL | Medium | embed() 返回空向量 + 记录错误 |
 | R05 | 返回向量维度不是 768 | Medium | init 时记录维度，后续每次校验 |
 | R06 | 连续调用 3 次失败后 SDK 需重连 | Medium | 失败计数 ≥3 标记 unhealthy |
-| R07 | ABI 不匹配（.so vs 头文件） | Medium | 以 nm 验证为准，不依赖头文件；全部 17 个符号已验证 ✅ |
+| R07 | ABI 不匹配（.so vs 头文件） | Medium | 以 nm 验证为准，不依赖头文件；接口验证状态见 `cpp-bridge/embedding_abi_compat.h` |
 | R08 | Kytensor 服务未启动 | Medium | 检查端口 8000/8001 监听状态 |
 | R09 | 长文本超时（>180ms） | Low | Provider 层设超时，超时返回空 |
 | R10 | 龙芯实机 ABI 不同 | Medium | D15 前在龙芯环境验证 |
-| R11 | 包版本与内部 runtime 版本不一致 | Medium | 包 1.2.0.4 但 internal runtime 报告 1.3.0，Bridge 需以运行时报告为准 |
+| R11 | 包版本与内部 runtime 版本不一致 | Medium | PARTIAL：同时记录包版本与内部版本；环境复现以包版本、文件路径、SHA-256、Build ID 为准；功能结论以 Runtime Test 为准 |
 | R12 | init 内部路径为 init_v2，可能与旧文档不符 | Medium | init_session 实际走 init_v2，已确认 embed 正常可用 |
 | R13 | ldd 依赖全部满足 | — | 验证通过，无缺失依赖 |
 
@@ -160,10 +161,10 @@ LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH /tmp/embed_check
 
 | 层 | 检查项数 | 通过 | 失败 | 备注 |
 |----|:-------:|:----:|:----:|------|
-| Runtime | 3 | 3 | 0 | 包 1.2.0.4，内部 runtime 报告 1.3.0 |
+| Runtime | 7 | 7 | 0 | 包 1.2.0.4，内部 1.3.0（PARTIAL），SHA-256/Build ID 已确认 |
 | Embedding SDK | 5 | 5 | 0 | 全部 17 个符号 nm 确认 |
 | 模型 | 4 | 3 | 1 | default_model.yaml 不存在，改为 config.pbtxt 格式；SDK 仍能正常加载默认模型 |
 | Kytensor | 3 | 3 | 0 | server + client 均已安装 |
-| 最小调用 | 4 | 4 | 0 | 4 种文本全部通过，维度 768 |
+| 最小调用 | 5 | 5 | 0 | 5 种文本全部通过（含空输入），维度 768 |
 
 日期：________   检查人：________   麒麟 VM 快照：________

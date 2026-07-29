@@ -19,7 +19,8 @@
 | 通信          | D-Bus/Unix Socket → kylin-ai-runtime                     |
 | 头文件来源    | gitee/openkylin/kylin-coreai-embedding (nile-sp2)        |
 | 头文件 commit | 63aed6f3                                                 |
-| 本地路径      | embedding_api.h（同目录）                                |
+| 本地路径      | `third_party/kylin-coreai-embedding/reference/embedding_api.h` |
+| ABI 兼容声明  | `cpp-bridge/embedding_abi_compat.h`（每接口标记验证状态）     |
 
 ### 已验证 C API (nm -D)
 
@@ -56,9 +57,9 @@
 
 | 风险                                                                 | 缓解                                                                     |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `text_embedding_get_model_info` 等符号 nm 确认存在但头文件未全部收录 | 以 nm 验证为准，头文件列为参考资料                                       |
+| `text_embedding_get_model_info` 等符号 nm 确认存在但头文件未全部收录 | 以 nm 验证为准，头文件列为参考资料；接口验证状态见 `cpp-bridge/embedding_abi_compat.h` |
 | init_model 原标禁调，但运行时日志建议调用                            | 传正确模型名（`ensemble-embd_gte-base_uint8-text`）即可，返回 0 表示成功 |
-| 包版本(1.2.0.4) vs 内部 runtime(1.3.0) 不一致                        | Bridge 以运行时报告版本为准，初始化时记录 version string                 |
+| 包版本(1.2.0.4) vs 内部 runtime(1.3.0) 不一致                        | PARTIAL：同时记录包版本与内部版本；环境复现以包版本、文件路径、SHA-256、Build ID 为准；功能结论以 Runtime Test 为准 |
 | init_session 实际走 init_v2 内部路径                                 | 已确认 embed 调用正常                                                    |
 | Vector Client 与服务端版本耦合                                       | 保持版本栈不变                                                           |
 
@@ -67,10 +68,15 @@
 | 属性              | 值                                                       |
 | ----------------- | -------------------------------------------------------- |
 | kylin-ai-runtime  | 1.2.0.4-0k0.1                                            |
-| 内部 runtime 版本 | 1.3.0（⚠️ 与包版本不一致）                               |
+| 内部 runtime 版本 | 1.3.0（⚠️ 与包版本不一致，见下方 PARTIAL 说明）            |
 | 依赖库路径        | /usr/lib/kylin-ai/depends                                |
 | LD_LIBRARY_PATH   | 已配置                                                   |
 | Unix Socket       | /tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock |
+| 进程 PID（抽查）  | 5678                                                     |
+| 二进制路径        | /usr/bin/kylin-ai-runtime                                 |
+| SHA-256           | b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225 |
+| Build ID          | d3201935767c5f4a3a89fc00b7223d8c4770313b                  |
+| dpkg -V 校验      | 无输出，未发现文件篡改                                     |
 
 ## GTE 模型
 

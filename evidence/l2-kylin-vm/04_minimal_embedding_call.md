@@ -137,7 +137,7 @@ g++ -std=c++17 /tmp/embed_correct.cpp -ldl -o /tmp/embed_correct && \
   ...
 ```
 
-> **注意**：上述输出中 runtime 版本显示 1.3.0，但系统安装包版本为 1.2.0.4 — 两者不一致，后续以运行时报告为准。
+> **注意**：上述输出中 runtime 版本显示 1.3.0，但系统安装包版本为 1.2.0.4 — 两者不一致。此为 PARTIAL：同时记录包版本与内部版本；环境复现以包版本、文件路径、SHA-256 和 Build ID 为准；功能结论以 Runtime Test 为准。详见 `docs/baseline/01_sdk_model_abi_baseline.md` 的 AI Runtime 章节。
 
 ## 关键修正
 
