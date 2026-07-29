@@ -1,3 +1,37 @@
 schema_version: "1.0"
 project: "kylin-os-agent-memory"
-entries: []
+entries:
+  - id: RUNTIME-001
+    description: kylin-ai-runtime 二进制完整性验证
+    status: VERIFIED
+    evidence_level: E4
+    source: docs/baseline/01_sdk_model_abi_baseline.md
+    details: |
+      PID 5678, /usr/bin/kylin-ai-runtime
+      SHA-256: b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225
+      Build ID: d3201935767c5f4a3a89fc00b7223d8c4770313b
+      dpkg -V: 无输出
+    date: 2026-07-29
+    reviewer: Reviewer（Runtime 身份抽查）
+
+  - id: ABI-001
+    description: Embedding SDK 动态库 ABI 验证
+    status: VERIFIED
+    evidence_level: E3
+    source: docs/baseline/01_sdk_model_abi_baseline.md
+    details: |
+      17 个 C API 符号经 nm -D 确认导出
+      全部接口状态见 cpp-bridge/embedding_abi_compat.h
+    date: 2026-07-29
+
+  - id: EMBED-CALL-001
+    description: 最小 Embedding 调用验证（5 用例）
+    status: VERIFIED
+    evidence_level: E4
+    source: evidence/l2-kylin-vm/04_minimal_embedding_call.md
+    details: |
+      中文 / 英文 / 空输入 / 单字符 / 空输入 全通过
+      统一维度 768，单位范数
+      Runtime 自动加载默认模型 ensemble-embd_gte-base_uint8-text
+    date: 2026-07-29
+    limitations: 异步/批量/并发/龙芯 未测
