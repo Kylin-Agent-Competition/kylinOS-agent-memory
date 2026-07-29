@@ -42,7 +42,7 @@
 | `embedding_model_list_get_model`            |  ✅  | 头文件有                                 |
 | `embedding_model_info_get_model_name`       |  ✅  | 头文件有                                 |
 | `embedding_model_info_get_model_dim`        |  ✅  | 头文件有                                 |
-| `text_embedding_init_model`                 |  ✅  | 运行时日志提示应调用，传入正确模型名即可 |
+| `text_embedding_init_model`                 |  ⬜  | SOURCE_VERIFIED + ABI_VERIFIED（nm 确认符号存在，参数/返回类型由头文件推断，宿主未完整实测） |
 | `text_embedding_get_model_list`             |  ✅  | 原文档标禁调，未运行验证                 |
 
 ### 内部 C++ 类 (nm -D, mangled)
@@ -58,7 +58,7 @@
 | 风险                                                                 | 缓解                                                                     |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `text_embedding_get_model_info` 等符号 nm 确认存在但头文件未全部收录 | 以 nm 验证为准，头文件列为参考资料；接口验证状态见 `cpp-bridge/embedding_abi_compat.h` |
-| init_model 原标禁调，但运行时日志建议调用                            | 传正确模型名（`ensemble-embd_gte-base_uint8-text`）即可，返回 0 表示成功 |
+| init_model 原标禁调，但运行时日志建议调用                            | nm 仅确认符号存在，参数/返回类型由头文件推断，宿主未完整实测。以 `cpp-bridge/embedding_abi_compat.h` 声明为准 |
 | 包版本(1.2.0.4) vs 内部 runtime(1.3.0) 不一致                        | PARTIAL：同时记录包版本与内部版本；环境复现以包版本、文件路径、SHA-256、Build ID 为准；功能结论以 Runtime Test 为准 |
 | init_session 实际走 init_v2 内部路径                                 | 已确认 embed 调用正常                                                    |
 | Vector Client 与服务端版本耦合                                       | 保持版本栈不变                                                           |

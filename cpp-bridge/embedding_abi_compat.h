@@ -12,7 +12,10 @@
  * 规则：
  *   1. 只包含 HOST_VERIFIED 或 ABI_VERIFIED 的接口。
  *   2. 未标记 ABI_VERIFIED 的接口不得在此声明。
- *   3. 指针参数、返回值类型以 nm 符号签名为准，不照搬上游头文件。
+ *   3. nm -D 仅确认符号存在（T/t 表示代码段导出），
+ *      无法确认函数参数列表、返回类型或 C++ mangling 语义。
+ *      实际签名以 HOST_VERIFIED 实测调用为准，
+ *      未实测的接口以 SOURCE（头文件）为参考但不保证正确。
  */
 
 #ifndef KYLIN_EMBEDDING_ABI_COMPAT_H
@@ -88,7 +91,7 @@ void embedding_result_destroy(EmbeddingResult** result);
 
 /** 显式初始化指定模型 */
 int text_embedding_init_model(TextEmbeddingSession* session, const char* model_name);
-/* SOURCE_VERIFIED | ABI_VERIFIED | HOST_VERIFIED ✅ nm + 实测通过（传默认模型名返回 0） */
+/* SOURCE_VERIFIED | ABI_VERIFIED | HOST_UNTESTED ⚠️ nm 确认符号存在，参数/返回类型由头文件推断，宿主未完整实测 */
 
 /* ── 模型管理（ABI_VERIFIED 仅 nm 确认） ── */
 
