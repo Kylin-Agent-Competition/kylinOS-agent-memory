@@ -36,6 +36,8 @@ secrets/
 runtime/
 !/memory-service/tests/runtime/
 !/memory-service/tests/runtime/**
+memory-service/tests/runtime/**/__pycache__/
+memory-service/tests/runtime/**/*.py[cod]
 data/
 logs/
 artifacts/
