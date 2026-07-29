@@ -55,5 +55,7 @@ models/
 
 .idea/
 .vscode/settings.json
+.reasonix/
+reasonix.toml
 .DS_Store
 Thumbs.db
