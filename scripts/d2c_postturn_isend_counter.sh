@@ -19,11 +19,9 @@ PROBE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${PROBE_DIR}/out"
 mkdir -p "${OUT_DIR}"
 
-TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+# 状态文件: 持久化 start 时的信息供 stop 读取 (修复时间戳不一致 bug)
 PID_FILE="${OUT_DIR}/postturn_capture.pid"
-LOG_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.log"
-SUMMARY_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.summary.json"
-DB_SNAPSHOT_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.db_snapshots.json"
+STATE_FILE="${OUT_DIR}/postturn_capture.state"
 
 DB_PATH="${HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
 
@@ -48,17 +46,46 @@ cmd_start() {
         exit 1
     fi
 
-    echo "INFO: 启动日志捕获 -> ${LOG_FILE}"
+    local ts log_file
+    ts="$(date +%Y%m%d_%H%M%S)"
+    log_file="${OUT_DIR}/postturn_${ts}.log"
+
+    # 检查 strace 权限
+    if ! strace -p "${pid}" -e trace=write -c -o /dev/null 2>/dev/null; then
+        echo "WARN: strace 附加失败, 可能需要 sudo 权限" >&2
+        echo "WARN: 将使用 sudo 重试, 请输入密码 (如需要)" >&2
+    fi
+
+    echo "INFO: 启动日志捕获 -> ${log_file}"
     # 使用 strace 跟踪系统调用, 过滤 is_end/chatCallback/updateBubble 关键词
     # -s 4096 设置字符串最大长度
     # -f 跟踪子进程
     # -e trace=write,recvmsg 只跟踪写入和消息接收
+    # 优先用普通权限, 失败则提示 sudo
     nohup strace -p "${pid}" -f -s 4096 -e trace=write,recvmsg 2>&1 \
         | grep --line-buffered -E 'is_end|chatCallback|updateBubble' \
-        > "${LOG_FILE}" &
-
+        > "${log_file}" 2>&1 &
     local cap_pid=$!
+
+    # 检查 strace 是否真的启动 (等待 2 秒)
+    sleep 2
+    if ! kill -0 "${cap_pid}" 2>/dev/null; then
+        echo "WARN: 普通权限 strace 启动失败, 尝试 sudo 模式" >&2
+        echo "WARN: 请在另一终端执行: sudo strace -p ${pid} -f -s 4096 -e trace=write,recvmsg 2>&1 | grep --line-buffered -E 'is_end|chatCallback|updateBubble' > ${log_file}" >&2
+        echo "WARN: 或将本脚本以 sudo 运行: sudo $0 start" >&2
+        # 即使 strace 失败, 也继续记录状态 (数据库验证仍可用)
+    fi
+
+    # 持久化状态: PID + 日志文件路径 + 时间戳
     echo "${cap_pid}" > "${PID_FILE}"
+    cat > "${STATE_FILE}" <<EOF
+CAP_PID=${cap_pid}
+LOG_FILE=${log_file}
+TIMESTAMP=${ts}
+AI_PID=${pid}
+START_TIME=$(date -Iseconds)
+EOF
+
     echo "INFO: 捕获进程 PID = ${cap_pid}"
     echo "INFO: 现在请在 AI 助手中发起一次普通文本问答"
     echo "INFO: 完成后运行: $0 stop"
@@ -72,31 +99,46 @@ cmd_stop() {
     local cap_pid
     cap_pid="$(cat "${PID_FILE}")"
 
+    # 从状态文件读取 start 时的日志文件路径 (修复时间戳不一致 bug)
+    local log_file ts
+    if [ -f "${STATE_FILE}" ]; then
+        log_file="$(grep '^LOG_FILE=' "${STATE_FILE}" | cut -d= -f2-)"
+        ts="$(grep '^TIMESTAMP=' "${STATE_FILE}" | cut -d= -f2-)"
+    else
+        echo "ERROR: 状态文件不存在, 无法确定日志文件路径" >&2
+        exit 1
+    fi
+
+    local summary_file="${OUT_DIR}/postturn_${ts}.summary.json"
+
     echo "INFO: 停止捕获进程 ${cap_pid}"
     # 终止 strace 管道
     kill "${cap_pid}" 2>/dev/null || true
     # 终止可能的 strace 子进程
     pkill -P "${cap_pid}" 2>/dev/null || true
-    rm -f "${PID_FILE}"
+    rm -f "${PID_FILE}" "${STATE_FILE}"
 
-    if [ ! -f "${LOG_FILE}" ]; then
-        echo "ERROR: 日志文件不存在: ${LOG_FILE}" >&2
+    if [ ! -f "${log_file}" ]; then
+        echo "ERROR: 日志文件不存在: ${log_file}" >&2
+        echo "ERROR: strace 可能因权限不足未捕获到数据" >&2
+        echo "INFO: 数据库落库验证仍可执行: $0 dbcheck" >&2
+        echo "INFO: 如需 strace 捕获, 请以 sudo 重新运行: sudo $0 start" >&2
         exit 1
     fi
 
-    echo "INFO: 生成计数报告 -> ${SUMMARY_FILE}"
+    echo "INFO: 生成计数报告 -> ${summary_file}"
 
     local chat_callback_count is_end_false_count is_end_true_count update_bubble_count
-    chat_callback_count="$(grep -c 'chatCallback' "${LOG_FILE}" || echo 0)"
-    is_end_false_count="$(grep -c 'is_end.*false\|is_end":false\|is_end=false' "${LOG_FILE}" || echo 0)"
-    is_end_true_count="$(grep -c 'is_end.*true\|is_end":true\|is_end=true' "${LOG_FILE}" || echo 0)"
-    update_bubble_count="$(grep -c 'updateBubble' "${LOG_FILE}" || echo 0)"
+    chat_callback_count="$(grep -c 'chatCallback' "${log_file}" || echo 0)"
+    is_end_false_count="$(grep -c 'is_end.*false\|is_end":false\|is_end=false' "${log_file}" || echo 0)"
+    is_end_true_count="$(grep -c 'is_end.*true\|is_end":true\|is_end=true' "${log_file}" || echo 0)"
+    update_bubble_count="$(grep -c 'updateBubble' "${log_file}" || echo 0)"
 
-    cat > "${SUMMARY_FILE}" <<EOF
+    cat > "${summary_file}" <<EOF
 {
   "experiment": "H2C-PostTurn",
-  "timestamp": "${TIMESTAMP}",
-  "log_file": "$(basename "${LOG_FILE}")",
+  "timestamp": "${ts}",
+  "log_file": "$(basename "${log_file}")",
   "metrics": {
     "chatCallback_count": ${chat_callback_count},
     "is_end_false_count": ${is_end_false_count},
@@ -128,7 +170,7 @@ EOF
         echo "  ✗ H2C-PostTurn-1 失败: is_end=true 计数=${is_end_true_count} (期望 1)"
     fi
     echo ""
-    echo " 报告: ${SUMMARY_FILE}"
+    echo " 报告: ${summary_file}"
     echo "=============================================="
 }
 
@@ -139,15 +181,19 @@ cmd_dbcheck() {
     fi
 
     echo "INFO: 查询聊天数据库 RECORD 表"
+    local ts db_snapshot_file
+    ts="$(date +%Y%m%d_%H%M%S)"
+    db_snapshot_file="${OUT_DIR}/postturn_${ts}.db_snapshots.json"
+
     local rowid_min rowid_max row_count
     rowid_min="$(sqlite3 "${DB_PATH}" "SELECT MIN(rowid) FROM RECORD;" 2>/dev/null || echo "N/A")"
     rowid_max="$(sqlite3 "${DB_PATH}" "SELECT MAX(rowid) FROM RECORD;" 2>/dev/null || echo "N/A")"
     row_count="$(sqlite3 "${DB_PATH}" "SELECT COUNT(*) FROM RECORD;" 2>/dev/null || echo "N/A")"
 
-    cat > "${DB_SNAPSHOT_FILE}" <<EOF
+    cat > "${db_snapshot_file}" <<EOF
 {
   "experiment": "H2C-PostTurn-dbcheck",
-  "timestamp": "${TIMESTAMP}",
+  "timestamp": "${ts}",
   "db_path": "${DB_PATH}",
   "record_table": {
     "rowid_min": "${rowid_min}",
@@ -164,7 +210,7 @@ EOF
     echo "  rowid 范围: ${rowid_min} ~ ${rowid_max}"
     echo "  总行数:     ${row_count}"
     echo ""
-    echo " 快照: ${DB_SNAPSHOT_FILE}"
+    echo " 快照: ${db_snapshot_file}"
     echo "=============================================="
 }
 
