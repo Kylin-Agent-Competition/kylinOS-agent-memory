@@ -13,6 +13,7 @@
   - 「数据查找选型与质量审计手册」属基线文档，当前标注「待人工导入」，无法在本任务内阅读原稿；本规范据此记录为冻结 v1.0 的前置条件之一
   - 官方 AI 助手真实 Tool/Turn/Context 事件结构尚未取得麒麟 VM 证据（C 轨道 `os-agent-integration/` 当前仅建立目录和职责边界），Tool Result 标注字段均为 DRAFT 语义，标注为 UNVERIFIED
   - 封存测试集尚未制作、尚未锁定哈希；本规范仅建立规则，不可声称测试集已封存
+- **本次修订说明**（v0.1 修订，2026-07-30）：本稿已完成与修订后 `MEMORY_BUSINESS_SCHEMA_V0.1.md`（含 v0.1 修订）的字段对齐，主要变更包括：引入 `user_id`/`actor_id` 用户隔离；`confidence` 更名为 `confidence_score`；`evidence_turn_ids` 更名为 `evidence_event_ids`；偏好增加 `memory_status`/`should_persist` 字段，候选判定改用 `memory_status=candidate`；知识增加 `knowledge_type` 枚举；精准遗忘字段重命名为 `target_selector`/`resolved_target_ids`；新增 Tool 成功但不形成长期记忆及跨用户正向/负向案例。标注规范状态不变（v0.1 DRAFT），不对齐审计手册或 Copilot 审查报告（二者于基线文档中均「待人工导入」，已记录为冻结 v1.0 前置条件 HD-ANNO-01/HD-SCHEMA-11），`expression_type` 术语终选待 HD-SCHEMA-14。
 
 ---
 
@@ -47,13 +48,17 @@
 
 | 字段 | 含义 | 取值说明 |
 |------|------|---------|
+| `user_id` | 数据归属用户标识（用户隔离键） | string，required，来自宿主侧业务事件，`*禁止模型生成`；如 `"user_demo_01"` |
 | `preference_key` | 偏好键名（业务语义标识） | 英文 snake_case，如 `language_pref`、`search_sort_order` |
 | `preference_value` | 偏好值 | 字符串，如 `"zh-CN"`、`"by_modified_desc"` |
-| `expression_type` | 表达方式 | `explicit`（显式声明）/ `implicit`（隐式推断）/ `candidate`（候选，待复核） |
-| `scope` | 作用域 | 同 schema 枚举 2.4：`global` / `topic` / `tool` / `session` / `time_window` |
-| `confidence` | 置信度（0.0–1.0） | 人工标注。显式声明 → 0.9–1.0；隐式推断 → 0.5–0.8；边界争议 → 记录原因 |
-| `is_temporary` | 是否为临时要求 | `true` / `false`；若为 true，必须注明临时范围（如「仅本次会话」「仅当前 Turn」） |
-| `evidence_turn_ids` | 支撑该偏好的 Turn ID 列表 | 如 `["turn_01", "turn_03"]` |
+| `expression_type` | 偏好表达类型 | 同 Schema 枚举 2.4：`explicit`（显式声明）/ `implicit`（隐式表达）/ `inferred`（推断/候选表达）。注意：原 `candidate` 语义已迁移至 `memory_status=candidate` 表达；`inferred` 与 `candidate` 术语对应，终选待 HD-SCHEMA-14 |
+| `scope` | 作用域 | 同 Schema 枚举 2.8：`global` / `topic` / `tool` / `session` / `time_window` |
+| `confidence_score` | 置信度评分（0.0–1.0） | 人工标注。显式声明 → 0.9–1.0；隐式推断 → 0.5–0.8；边界争议 → 记录原因 |
+| `memory_status` | 记忆生命周期状态 | 同 Schema 枚举 2.7：`active` / `superseded` / `deprecated` / `expired` / `removed` / `candidate`。候选判断阶段使用 `memory_status=candidate`，不再通过 `expression_type=candidate` 表达 |
+| `is_temporary` | 是否为临时要求 | `true` / `false`；若为 true，必须注明临时范围（如「仅本次会话」「仅当前 Turn」）。`is_temporary=true` 或 `should_persist=false` 时，`memory_status` 必须为 `candidate` |
+| `should_persist` | 是否应持久化为正式偏好 | `true` / `false`；`false` 时等同临时要求，不产生正式长期偏好，`memory_status=candidate` |
+| `evidence_event_ids` | 支撑该偏好的事件 ID 列表 | 如 `["evt_20260730_a1b2c3", "evt_20260729_d4e5f6"]`；依据 Schema 以事件 ID 为业务证据链 |
+| `source_turn_ids` | 支撑该偏好的 Turn ID 列表（可选） | 如 `["turn_01", "turn_03"]`；保留对话内 Turn 粒度溯源，与 `evidence_event_ids` 正交，不承载业务依据语义 |
 | `annotator` | 标注人标识 | 如 `"reviewer_e_01"` |
 | `annotated_at` | 标注时间 | ISO 8601 时间戳 |
 
@@ -61,6 +66,7 @@
 - 偏好标签由人工根据会话上下文判定：标注人 A 初标，标注人 B 复核，争议提交 Reviewer 裁决。
 - LLM 仅用于辅助生成候选表达（如从自然语言中提取候选 key-value 对），不得独立决定最终偏好标签。
 - 复核记录必须包含：复核人、复核时间、是否同意初标、不同意时的修改建议和理由。
+- **候选与正式区分**：`expression_type=inferred` 的偏好条目或 `is_temporary=true` / `should_persist=false` 的条目，在置信度达标且经行为验证/人工复核确认前，`memory_status` 保持 `candidate`，不晋升为正式偏好（`memory_status=active`）。候选条目不参与用户级偏好检索链路，也不参与偏好冲突判定。
 
 ### 2.2 知识（Knowledge）
 
@@ -72,11 +78,14 @@
 
 | 字段 | 含义 | 取值说明 |
 |------|------|---------|
+| `user_id` | 数据归属用户标识（用户隔离键） | string，required，来自宿主侧业务事件，`*禁止模型生成`；如 `"user_demo_01"` |
 | `knowledge_summary` | 知识内容摘要 | 一句话概括，如「用户每月底整理一次文件目录」 |
-| `primary_category` | 主分类标签 | 如「文件操作」「系统设置」「开发习惯」|
-| `confidence` | 置信度（0.0–1.0） | 人工标注 |
-| `source_type` | 来源类型 | 同 schema 枚举 2.1 |
-| `is_outdated` | 是否已过时 | `true` / `false` |
+| `knowledge_type` | 知识子类型 | 同 Schema 枚举 2.5：`workflow`（工作流/操作习惯）/ `case`（案例/场景）/ `template`（模板/格式）/ `fact`（事实性）/ `constraint`（约束/规则）/ `failure_experience`（失败经验）。必须填写，不得以 `primary_category` 替代 |
+| `primary_category` | 主分类标签（开放业务分类） | 如「文件操作」「系统设置」「开发习惯」；**不可替代 `knowledge_type`**，用于语义检索和元数据过滤 |
+| `confidence_score` | 置信度评分（0.0–1.0） | 人工标注 |
+| `source_type` | 来源类型 | 同 Schema 枚举 2.1 |
+| `is_outdated` | 是否已过时（过渡字段） | `true` / `false`；待 D/E 统一为 `memory_status` 后在 v1.0 中移除 |
+| `memory_status` | 记忆生命周期状态 | 同 Schema 枚举 2.7：`active` / `superseded` / `deprecated` / `expired` / `removed` / `candidate` |
 | `extracted_entities` | 抽取的实体列表 | 如 `["文件管理器", "月末", "目录整理"]` |
 | `evidence_event_ids` | 支撑该知识的事件 ID 列表 | 如 `["evt_001", "evt_002"]` |
 | `annotator` | 标注人标识 | 同偏好 |
@@ -103,7 +112,8 @@
 
 **关键规则**：
 - Tool 执行失败（`execution_status=failure` 或 `timeout`）时，`should_form_memory` 必须为 `false`，`failure_tag` 必须标注 `tool_failure`。
-- Tool 执行成功但结果仅为瞬态上下文（如一次性查询结果、实时状态），`should_form_memory` 可为 `false`，`failure_tag` 标注 `transient_context`。
+- Tool 执行成功但结果仅为瞬态上下文（如一次性查询当前时间、一次性状态探测、单次查询结果），`should_form_memory` 可为 `false`，`failure_tag` 标注 `transient_context`。此类反例已追加至 §六 案例库（正例7）。
+- 不得将 Tool 成功但属瞬态上下文的结果错误标注为 Knowledge 或 Preference 条目。
 
 **验证状态**：UNVERIFIED（官方 AI 助手真实 Tool 调用格式与返回结构尚未取得麒麟 VM 证据，C 轨道尚未集成。本规范定义的 Tool Result 标注字段均为 DRAFT 语义层占位，D3 Gate 前需 C 轨道取证后回填。）
 
@@ -117,9 +127,10 @@
 
 | 字段 | 含义 | 取值说明 |
 |------|------|---------|
+| `user_id` | 数据归属用户标识（用户隔离键） | string，required，派生自冲突涉及的条目，`*禁止模型生成` |
 | `left_item_id` | 冲突左方条目 ID | 如 `"pref_001"` |
 | `right_item_id` | 冲突右方条目 ID | 如 `"pref_002"` |
-| `conflict_type` | 冲突类型 | 同 schema 枚举 2.6 |
+| `conflict_type` | 冲突类型 | 同 Schema 枚举 2.10 |
 | `conflict_description` | 冲突描述 | 自然语言，解释矛盾所在 |
 | `recommended_resolution` | 消解建议 | `keep_left` / `keep_right` / `merge` / `flag_for_review` / `keep_higher_confidence` |
 | `annotator` | 标注人标识 | 同偏好 |
@@ -135,12 +146,15 @@
 
 | 字段 | 含义 | 取值说明 |
 |------|------|---------|
-| `forget_request_turn_id` | 用户提出遗忘请求的 Turn ID | 如 `"turn_11"` |
-| `forget_target_description` | 用户表述的遗忘目标描述 | 自然语言，如「忘掉我上周关于 Python 项目的所有内容」 |
-| `forget_mode` | 遗忘粒度 | 同 schema 枚举 2.8 |
-| `target_ids` | 实际受影响的条目 ID 列表 | 如 `["kn_003", "pref_005"]` |
+| `user_id` | 数据归属用户标识（用户隔离键） | string，required，来自宿主侧业务事件，`*禁止模型生成` |
+| `forget_request_turn_id` | 用户提出遗忘请求的 Turn ID | 如 `"turn_11"`；可选保留 Turn 粒度溯源，与 `evidence_event_ids` 正交 |
+| `target_selector` | 用户输入的遗忘目标选择器（原始描述） | 自然语言，如「忘掉我上周关于 Python 项目的所有内容」；对应 Schema `target_selector` |
+| `forget_mode` | 遗忘粒度 | 同 Schema 枚举 2.12 |
+| `resolved_target_ids` | 系统解析后的目标 ID 列表 | 如 `["kn_003", "pref_005"]`；必须经预览确认后方可执行删除，`*禁止模型生成` |
+| `affected_count` | 实际影响的记录数量 | integer，`*禁止模型生成`，由系统在执行后产出；标注阶段可填写预期值 |
 | `preview_provided` | 执行前是否提供了预览 | `true` / `false` |
 | `user_confirmed` | 用户是否确认执行 | `true` / `false` |
+| `requires_confirmation` | 是否需要用户确认后执行 | `true` / `false`；`*禁止模型生成`最终决策 |
 | `execution_verified` | 遗忘执行后验证是否通过 | `true` / `false` / `N/A` |
 | `hard_delete` | 是否为硬删除（不留明文残留） | `true` / `false` |
 | `annotator` | 标注人标识 | 同偏好 |
@@ -149,7 +163,7 @@
 **关键规则**：
 - 精准遗忘必须先预览再确认：系统在遗忘执行前必须向用户展示受影响的条目列表，获得确认后方可执行。
 - 硬删除（`hard_delete=true`）时，被删除内容不得在 SQLite 正文、Vector 索引、FTS5 全文索引或缓存中留存可检索的明文残留。
-- 遗忘以业务对象级别的目标 ID 列表为精准范围，不得按模糊关键词或时间窗口粗略删除后声称「已精准遗忘」。
+- 遗忘以业务对象级别的 `resolved_target_ids` 为精准范围，不得按模糊关键词或时间窗口粗略删除后声称「已精准遗忘」。
 
 ### 2.6 端到端会话（End-to-End Session）
 
@@ -161,6 +175,7 @@
 
 | 字段 | 含义 | 取值说明 |
 |------|------|---------|
+| `user_id` | 数据归属用户标识（用户隔离键） | string，required，来自宿主侧业务事件，`*禁止模型生成` |
 | `session_id` | 会话标识 | 如 `"sess_e2e_001"` |
 | `turn_count` | 会话 Turn 总数 | 整数 |
 | `formed_preferences` | 会话中形成的偏好条目 ID 列表 | 如 `["pref_001", "pref_002"]` |
@@ -207,7 +222,7 @@
 
 - **允许**：使用 LLM 对自然语言 Turn 内容进行辅助分析，生成候选的 `preference_key`、`preference_value` 或 `knowledge_summary` 表达。
 - **禁止**：LLM 独立决定最终 Gold Label；LLM 替代标注人 A 或标注人 B 的初标/复核角色；LLM 在无人干预的情况下对标注结果进行「批量修正」。
-- **所有 LLM 生成的候选输出**必须在标注记录中标记为 `candidate`（候选），并记录模型名称、调用时间、Prompt 摘要，供复核人审查。
+- **所有 LLM 生成的候选输出**必须在标注记录中标记为 `memory_status=candidate`（候选），并记录模型名称、调用时间、Prompt 摘要，供复核人审查。
 
 ### 4.3 复核证据要求
 
@@ -238,7 +253,7 @@
 | S-05 | 身份证号 | 18 位数字组合（含末位 X）、地址/生日等关联上下文 | 标记 `sensitivity=high`；标注字段填 `[REDACTED_ID_NUMBER]`；不写入记忆 |
 | S-06 | 手机号 | 11 位手机号码模式、国家代码前缀、通讯录关联上下文 | 标记 `sensitivity=high`；标注字段填 `[REDACTED_PHONE]`；不写入记忆 |
 | S-07 | 敏感路径 | 绝对路径含 `/etc/shadow`、`~/.ssh/`、系统关键目录、用户私密目录 | 标记 `sensitivity=high`；标注字段填 `[REDACTED_PATH]`；路径原文不写入记忆 |
-| S-08 | 跨用户数据 | 数据内容不属于当前 `actor_id`（如包含另一用户的聊天记录、偏好、操作日志） | 标记 `sensitivity=critical`；标注字段仅记录 `sensitivity=critical` 与 `isolation_violation=true`；正文不写入、不进入可检索索引 |
+| S-08 | 跨用户数据 | 数据内容不属于当前 `user_id`（如包含另一用户的聊天记录、偏好、操作日志） | 标记 `sensitivity=critical`；标注字段仅记录 `sensitivity=critical` 与 `isolation_violation=true`；正文不写入、不进入可检索索引 |
 | S-09 | 硬删除正文 | 经 `ForgetPlan` 执行硬删除的条目内容 | 已完成硬删除的正文不得在 SQLite、Vector、FTS5、日志、导出文件和备份中留存明文可检索残留。标注记录仅保留 `forget_plan_id` 和遗忘执行时间戳，不保留正文 |
 
 ### 5.2 敏感过滤标注字段
@@ -247,16 +262,21 @@
 
 | 字段 | 含义 | 取值说明 |
 |------|------|---------|
-| `sensitivity_level` | 敏感度等级 | `none` / `low` / `medium` / `high` / `critical`（同 schema 枚举 2.5） |
+| `sensitivity_level` | 敏感度等级 | `none` / `low` / `medium` / `high` / `critical`（同 Schema 枚举 2.9） |
 | `sensitive_type` | 敏感类型编号 | 如 `S-01`、`S-03`（如含多种则记录多项） |
 | `should_ignore` | 是否应忽略该 Turn | `true` / `false`。含 S-01 至 S-04 或 S-08 的 Turn 必须标记 `true` |
 | `redacted_summary` | 脱敏后摘要 | 不包含任何敏感原文的简要描述，如「用户粘贴了一段 API Key」 |
 
 ### 5.3 跨用户隔离
 
-- 开发集和评测集的每个会话必须有明确的 `actor_id` 绑定。
-- 一个会话内不得出现两个不同的 `actor_id`（跨用户数据属构造错误，需标记为数据集质量问题）。
-- 评测时不得将 A 用户的偏好/知识返回给 B 用户的查询（隔离验证由 E 轨道 Runtime Test 覆盖）。
+- 开发集、回归集和封存集的每个会话必须有明确的 `user_id` 绑定。`user_id` 是用户级数据隔离的硬约束，所有核心业务对象（Preference、Knowledge、Conflict、ForgetPlan）和端到端会话均须具备 `user_id` 字段。
+- `user_id` 的取值**禁止由模型/LLM 生成**，必须来自宿主侧业务事件或外部输入。
+- 区分 `user_id`（数据归属与隔离键）与 `actor_id`（事件实际发起者）：同一 `user_id` 下可能有多个 `actor_id`（如系统代用户执行操作），但数据归属始终以 `user_id` 为准。
+- 一个会话内不得出现两个不同的 `user_id`（跨用户数据属构造错误，需标记 `isolation_violation=true` 且 `sensitivity=critical`）。
+- **评测要求**：
+  - **正向隔离测试（同用户）**：同 `user_id` 的用户应可召回自己的全部偏好、知识条目；可更新或删除自己名下的记忆。案例见 §六 正例 8。
+  - **负向隔离测试（跨用户）**：不同 `user_id` 的用户**必须无法**读取、更新或删除其他用户的偏好、知识条目或遗忘计划。任何跨用户操作尝试必须被标记为 `isolation_violation=true`、`sensitivity=critical`，且操作方不得获取任何实际数据。案例见 §六 反例 6。
+- 隔离验证由 E 轨道 Runtime Test 覆盖（对应 REQ-05、REQ-07）。
 
 ---
 
@@ -281,13 +301,17 @@ Turn 05 | agent_response: 「好的，以下是您上周的会议纪要整理…
 
 **标注**：
 - 分类：明确偏好
+- `user_id`: `"user_demo_01"`
 - `preference_key`: `language_pref`
 - `preference_value`: `"zh-CN"`
 - `expression_type`: `explicit`
 - `scope`: `global`
-- `confidence`: `0.95`
+- `confidence_score`: `0.95`
 - `is_temporary`: `false`
-- `evidence_turn_ids`: `["turn_01"]`
+- `should_persist`: `true`
+- `memory_status`: `active`
+- `evidence_event_ids`: `["evt_20260730_turn01_fs", "evt_20260730_turn05_fs"]`
+- `source_turn_ids`: `["turn_01"]`
 - `annotator`: `"annotator_demo_a"`
 - `annotated_at`: `"2026-07-30T10:00:00+08:00"`
 
@@ -309,6 +333,7 @@ Turn 03 | user_demo: 「在邮件客户端里，我偏好按发件人排序。�
 ```
 
 **标注**：
+- `user_id`: `"user_demo_01"`
 - 偏好评注 1（Turn 01）：
   - `preference_key`: `file_search_sort_order`
   - `preference_value`: `"by_modified_desc"`
@@ -325,7 +350,7 @@ Turn 03 | user_demo: 「在邮件客户端里，我偏好按发件人排序。�
 
 #### 正例 3：Tool 失败不得形成成功知识
 
-**场景**：用户 `user_demo` 请求 Tool 执行文件搜索，Tool 返回失败。
+**场景**：用户 `user_demo_01` 请求 Tool 执行文件搜索，Tool 返回失败。
 
 **会话片段**（虚构）：
 ```
@@ -361,19 +386,20 @@ Turn 07 | user_demo: 「改一下，文件列表还是按修改日期排吧。�
 ```
 
 **标注**：
+- `user_id`: `"user_demo_01"`
 - 旧偏好（会话 A）：
   - `preference_key`: `file_list_sort_order`
   - `preference_value`: `"by_name"`
-  - `is_active`: `false`（被后续更新覆盖）
+  - `memory_status`: `superseded`（被后续更新覆盖）
 - 新偏好（会话 B）：
   - 分类：偏好更新
   - `preference_key`: `file_list_sort_order`
   - `preference_value`: `"by_modified_desc"`
-  - `is_active`: `true`
+  - `memory_status`: `active`
   - 关联旧偏好 ID：`"pref_001"`
 
 **Gold Label 判定依据**：
-- 同一 `preference_key` 出现新 value，且用户明确使用「改一下」表达变更意图。旧偏好标记为 `is_active=false`，不删除但失效。
+- 同一 `preference_key` 出现新 value，且用户明确使用「改一下」表达变更意图。旧偏好标记为 `memory_status=superseded`，不删除但失效。
 
 ---
 
@@ -397,13 +423,16 @@ Turn 12 | agent_response: 「已遗忘 3 条相关记忆。」
 ```
 
 **标注**：
+- `user_id`: `"user_demo_01"`
 - 遗忘计划标注：
   - `forget_request_turn_id`: `"turn_11"`
-  - `forget_target_description`: `"上周二关于项目排期的所有讨论"`
+  - `target_selector`: `"上周二关于项目排期的所有讨论"`
   - `forget_mode`: `session`（以时间范围限定，目标 session 内全部相关条目）
-  - `target_ids`: `["kn_003", "kn_004", "pref_005"]`
+  - `resolved_target_ids`: `["kn_003", "kn_004", "pref_005"]`
+  - `affected_count`: `3`
   - `preview_provided`: `true`
   - `user_confirmed`: `true`
+  - `requires_confirmation`: `true`
   - `execution_verified`: `true`
   - `hard_delete`: `true`
 
@@ -431,15 +460,83 @@ Turn 12 | agent_response: 「已遗忘 3 条相关记忆。」
 
 **标注**：
 - 分类：隐式偏好
+- `user_id`: `"user_demo_01"`
 - `preference_key`: `search_sort_order`
 - `preference_value`: `"by_date_desc"`
 - `expression_type`: `implicit`
-- `confidence`: `0.75`（跨 3 个会话、3 次一致行为，但非显式声明）
+- `confidence_score`: `0.75`（跨 3 个会话、3 次一致行为，但非显式声明）
 - `is_temporary`: `false`
-- `evidence_turn_ids`: `["turn_05_sessA", "turn_03_sessB", "turn_07_sessC"]`
+- `should_persist`: `true`
+- `memory_status`: `active`
+- `evidence_event_ids`: `["evt_turn05_sessA", "evt_turn03_sessB", "evt_turn07_sessC"]`
+- `source_turn_ids`: `["turn_05_sessA", "turn_03_sessB", "turn_07_sessC"]`
 
 **Gold Label 判定依据**：
 - ≥2 个 Turn 且跨 ≥1 个会话，行为模式一致。置信度 0.75 反映「未显式声明但有充分行为证据」。
+
+---
+
+#### 正例 7：Tool 调用成功但不应形成长期记忆（一次性查询）
+
+**场景**：用户 `user_demo_01` 请求查询当前时间，Tool 返回成功，但结果属瞬态上下文，不应形成任何长期记忆。
+
+**会话片段**（虚构）：
+```
+Turn 03 | user_demo: 「现在几点了？」
+Turn 03 | tool_result: execution_status=success, tool_name=system_clock, result="当前时间：2026-07-30 14:35:22 CST"
+Turn 03 | agent_response: 「现在是 2026 年 7 月 30 日下午 2 点 35 分。」
+Turn 04 | user_demo: 「好的，谢谢。」
+```
+
+**标注**：
+- `user_id`: `"user_demo_01"`
+- Tool Result 标注：
+  - `tool_call_id`: `"tool_system_clock_003"`
+  - `tool_name`: `"system_clock"`
+  - `execution_status`: `success`
+  - `should_form_memory`: `false`
+  - `memory_type_if_formed`: `N/A`
+  - `failure_tag`: `transient_context`
+- 不应形成任何 Knowledge 或 Preference 条目。
+
+**Gold Label 判定依据**：
+- Tool 虽然执行成功（`execution_status=success`），但返回结果是实时时间，属于一次性查询、无复用价值的瞬态上下文。将「用户查询过当前时间」标注为 Knowledge 条目会导致长期记忆中积累无意义的一次性交互记录，且可能被错误检索为与时间相关的事实知识。
+- 此类边界案例的关键判据：**结果是否具有跨会话复用价值**；若不具有，`should_form_memory=false`，`failure_tag=transient_context`。
+
+---
+
+#### 正例 8：跨用户正向隔离——同用户可召回自己的记忆
+
+**场景**：用户 `user_demo_01` 在跨会话检索中成功召回自己在历史会话中建立的偏好和知识条目。验证同 `user_id` 下的记忆可见性。
+
+**会话 A 片段**（虚构）：
+```
+Turn 01 | user_demo_01: 「以后所有代码注释都用英文写。」
+Turn 01 | agent_response: 「好的，已记住：代码注释使用英文。」
+```
+
+**会话 B 片段**（虚构，数天后）：
+```
+Turn 01 | user_demo_01: 「帮我写个函数，功能是读取配置文件。」
+Turn 03 | agent_response（基于 memory_service 返回的偏好）: 「根据您的偏好，注释将使用英文。以下是代码……（英文注释）」
+```
+
+**标注**：
+- 会话 A 偏好标注：
+  - `user_id`: `"user_demo_01"`
+  - `preference_key`: `code_comment_language`
+  - `preference_value`: `"en"`
+  - `expression_type`: `explicit`
+  - `confidence_score`: `0.95`
+  - `memory_status`: `active`
+- 会话 B 检索验证：
+  - 检索请求 `user_id`: `"user_demo_01"`，查询偏好相关记忆（`preference_scope=tool` 或按 `preference_key` 过滤）
+  - 预期：返回 `code_comment_language=en`（同用户召回成功）
+  - 实际 agent_response 中的英文注释已证实偏好生效
+- `isolation_violation`: `false`
+
+**Gold Label 判定依据**：
+- 同 `user_id` 下的偏好/知识条目应在跨会话检索中可见，且可正确参与记忆融合与响应生成。此案例验证正向隔离正确性：用户可以看到并受益于自己的历史偏好。
 
 ---
 
@@ -518,8 +615,8 @@ Turn 10 | user_demo: 「不用再自动保存了，我自己手动存。」
 ```
 
 **错误标注示例（反例）**：
-- 错误地仅保留了旧偏好 `auto_save_interval=5min` 且 `is_active=true`，忽略了 Turn 10 的撤销。
-- 正确标注：Turn 10 应生成偏好撤销标注，旧偏好 `auto_save_interval` 标记 `is_active=false`，并记录撤销来源 Turn ID。
+- 错误地仅保留了旧偏好 `auto_save_interval=5min` 且 `memory_status=active`，忽略了 Turn 10 的撤销。
+- 正确标注：Turn 10 应生成偏好撤销标注，旧偏好 `auto_save_interval` 标记 `memory_status=superseded`，并记录撤销来源 Turn ID。
 
 ---
 
@@ -538,6 +635,49 @@ Turn 07 | user_demo: 「帮我用这个 Token 调一下 API：eyJhbGciOiJIUzI1Ni
 
 ---
 
+#### 反例 6：跨用户负向隔离——其他用户不可读取、更新或删除
+
+**场景**：用户 `user_demo_02` 尝试读取、更新和删除 `user_demo_01` 的偏好和知识条目，系统必须全部拒绝并标记隔离违规。
+
+**假设前提**：
+- `user_demo_01` 在历史会话中建立了以下记忆条目：
+  - 偏好：`preference_key=language_pref`, `preference_value=zh-CN`, `user_id=user_demo_01`
+  - 知识：`knowledge_summary="用户每月底整理一次文件目录"`, `user_id=user_demo_01`
+
+**尝试 1：跨用户读取**
+```
+Turn 01 | user_demo_02: 「我的语言偏好是什么？」
+```
+- **错误行为**（反例）：系统返回 `user_demo_01` 的偏好 `language_pref=zh-CN`，造成跨用户数据泄露。
+- **正确行为**：系统仅为 `user_demo_02` 检索 `user_id=user_demo_02` 的记忆，不返回 `user_demo_01` 的条目。如 `user_demo_02` 无对应记忆，返回空或 `not_found`。
+
+**尝试 2：跨用户更新**
+```
+Turn 02 | user_demo_02: 「把语言偏好改成英文。」
+```
+- **错误行为**（反例）：系统更新了 `user_id=user_demo_01` 下 `language_pref` 的值为 `en`。
+- **正确行为**：系统仅允许更新 `user_id=user_demo_02` 下的条目。若 `user_demo_02` 下无 `language_pref` 条目，操作不应影响 `user_demo_01` 的数据；可新建 `user_demo_02` 自己的偏好，但不覆盖他人。
+
+**尝试 3：跨用户遗忘**
+```
+Turn 03 | user_demo_02: 「忘掉所有文件整理相关的记忆。」
+```
+- **错误行为**（反例）：系统在 `resolved_target_ids` 中包含了 `user_id=user_demo_01` 的知识条目 `"kn_file_organize_001"`，并执行了遗忘。
+- **正确行为**：系统仅为 `user_demo_02` 解析 `target_selector`，`resolved_target_ids` 中**不得**包含任何 `user_id != user_demo_02` 的条目。
+
+**标注**：
+- 所有跨用户操作尝试：
+  - `isolation_violation`: `true`
+  - `sensitivity`: `critical`（对应 S-08 跨用户数据）
+  - `should_ignore`: `true`
+  - `redacted_summary`: `"user_B 尝试读取/更新/删除 user_A 的记忆，已被隔离策略拒绝"`
+
+**Gold Label 判定依据**：
+- `user_id` 是用户级数据隔离的硬约束。任何操作（读取、更新、删除、遗忘）必须以当前请求的 `user_id` 为过滤键，**绝对不得**跨越 `user_id` 边界。
+- 此案例验证负向隔离正确性：跨用户操作必须被拒绝，且不会泄漏、篡改或删除其他用户的数据。隔离违规操作必须标记 `isolation_violation=true`、`sensitivity=critical`。
+
+---
+
 ### 6.3 歧义/边界案例（Ambiguous / Boundary Cases，≥3）
 
 #### 边界案例 1：模糊的临时性声明
@@ -552,14 +692,14 @@ Turn 04 | user_demo: 「平时我习惯用深色主题，但是今天演示用�
 **标注讨论**：
 - 可能解读 A：`theme_pref=dark` 为长期偏好（`scope=global`，`is_temporary=false`），Turn 04 仅是一个临时例外，不应覆盖长期偏好。
 - 可能解读 B：`theme_pref=light` 是当前有效偏好（`is_temporary=true`，范围=仅本次演示），且 Turn 04 末尾「演示完再说」暗示之后可能恢复。
-- **建议处理**：标注为边界案例，记录两种解读。标注人 A/B 独立判定后提交 Reviewer 裁决。在裁决前标记两条偏好候选（`expression_type=candidate`），不锁定为 Gold Label。
+- **建议处理**：标注为边界案例，记录两种解读。标注人 A/B 独立判定后提交 Reviewer 裁决。在裁决前标记两条偏好候选（`memory_status=candidate`），不锁定为 Gold Label。
 
 **裁决要点**：
-- 「平时我习惯用……」属于隐式偏好的历史证据陈述，应标注为 `theme_pref=dark` 偏好（置信度 0.7，因为本 Turn 不是偏好设置行为，而是偏好自述）。
+- 「平时我习惯用……」属于隐式偏好的历史证据陈述，应标注为 `theme_pref=dark` 偏好（`confidence_score` 0.7，因为本 Turn 不是偏好设置行为，而是偏好自述）。
 - Turn 04 中的「演示用浅色的」属临时要求，`is_temporary=true`，不覆盖 `theme_pref=dark`。
 
 **最终标签**：
-- 长期偏好：`preference_key=theme_pref`, `preference_value=dark`, `expression_type=implicit`, `confidence=0.7`, `is_temporary=false`
+- 长期偏好：`preference_key=theme_pref`, `preference_value=dark`, `expression_type=implicit`, `confidence_score=0.7`, `is_temporary=false`, `memory_status=active`
 - 临时要求：标记为「不应形成记忆」(`failure_tag=transient_context`)，不影响长期偏好
 
 ---
@@ -621,9 +761,9 @@ Turn 04 | user_demo: 「说重点。」
 **场景**：用户 `user_demo` 曾在 30 天前设置了某偏好，此后 30 天未再提及，且行为中未体现该偏好。
 
 **标注讨论**：
-- 可能解读 A：偏好未撤销（用户未说「不用了」），`is_active=true`。
-- 可能解读 B：30 天无证据可视为隐式撤销或衰减到期，`is_active=false`。
-- **建议处理**：标注为边界案例。当前 v0.1 不冻结衰减阈值（衰减策略待 A/E 确认），标注人应在标注记录中注明「隐式撤销待衰减策略 ADR 确认」，当前标记 `is_active=true` 并增加备注「无近期证据，待衰减模型判定」。
+- 可能解读 A：偏好未撤销（用户未说「不用了」），`memory_status=active`。
+- 可能解读 B：30 天无证据可视为隐式撤销或衰减到期，`memory_status=expired`。
+- **建议处理**：标注为边界案例。当前 v0.1 不冻结衰减阈值（衰减策略待 A/E 确认），标注人应在标注记录中注明「隐式撤销待衰减策略 ADR 确认」，当前标记 `memory_status=active` 并增加备注「无近期证据，待衰减模型判定」。
 
 ---
 
@@ -635,7 +775,7 @@ Turn 04 | user_demo: 「说重点。」
 |------|--------|--------|--------|
 | **主要用途** | 日常开发、单元测试、标注规则验证、分类器迭代 | CI 流水线自动回归、功能稳定性验证 | 正式评测、Gate 评审、性能基准 |
 | **可修改性** | 可调整：新增/修正样本、更新标注、调整分类 | 相对稳定：修正标注错误需走变更记录，不得大幅增删样本 | 锁定：SHA-256 哈希锁定后**禁止任何修改**（含标注修正） |
-| **标注质量要求** | 标注可迭代，允许部分边界案例暂标为 `candidate` | 所有标注必须为 Gold Label（经复核一致） | 所有标注必须为 Gold Label + 封存审计记录 |
+| **标注质量要求** | 标注可迭代，允许部分边界案例暂标为 `memory_status=candidate` | 所有标注必须为 Gold Label（经复核一致） | 所有标注必须为 Gold Label + 封存审计记录 |
 | **覆盖范围** | 覆盖六类数据全部七类开发集分类，优先覆盖正例和歧义案例 | 覆盖六类数据的关键正例与反例，确保回归覆盖核心路径 | 覆盖六类数据全部七类开发集分类，包含评测指标体系所需的全部维度 |
 | **数据规模要求** | 不设下限，随开发迭代增长 | ≥ 100 条标注样本 | 待评测指标体系 ADR 确认后确定（当前未定） |
 | **版本管理** | 跟随代码分支 | 跟随代码分支，标签化版本 | Git LFS 或独立存储，SHA-256 清单纳入仓库审计 |
@@ -661,6 +801,8 @@ Turn 04 | user_demo: 「说重点。」
 | HD-ANNO-05 | E 确认 `sensitivity` 五级分级的明确判定标准和分级规则，回填本规范安全边界章节 | REQ-05 | E | D3 Gate 前 |
 | HD-ANNO-06 | 制作首批开发集标注样本（≥50 条），验证本规范的标注字段完整性和分类覆盖率 | REQ-07 | E | D3 Gate 前 |
 | HD-ANNO-07 | 确认「数据查找选型与质量审计手册」中对标注流程的证据保留格式要求，如与本规范不一致则以手册为准 | REQ-07 | 团队/E | D3 Gate 前 |
+| HD-ANNO-08 | 导入「架构设计审查报告（Copilot 独立审查报告）」至 `docs/baseline/`，用报告建议复核本规范全部字段与标注规则，记录差异并决策是否追加修订（对应 HD-SCHEMA-11） | REQ-01–07 | E | D3 Gate 前 |
+| HD-ANNO-09 | E 确认 `expression_type` 最终术语选择（`inferred` v.s. `candidate`），统一本规范与业务 Schema（对应 HD-SCHEMA-14） | REQ-02 | E | D3 Gate 前 |
 
 ---
 
@@ -669,6 +811,7 @@ Turn 04 | user_demo: 「说重点。」
 | 版本 | 日期 | 变更说明 | 作者 |
 |------|------|---------|------|
 | v0.1 | 2026-07-30 | DRAFT 初稿：建立六类评测数据标注字段、七类开发集分类、Gold Label 人工复核规则、安全边界（九类敏感类型）、正例 6 条、反例 5 条、歧义/边界案例 4 条、数据集三类用途差异与当前未封存如实记录。基于 schema v0.1、需求矩阵 v0.1 和 datasets/README.md 事实编写。 | E 轨道 |
+| v0.1（修订） | 2026-07-30 | 标注规范与 Schema v0.1 修订对齐：引入 `user_id`/`actor_id` 用户隔离；`confidence` 更名为 `confidence_score`；`evidence_turn_ids` 更名为 `evidence_event_ids`，增加可选 `source_turn_ids`；偏好增加 `memory_status`/`should_persist`，候选判定改用 `memory_status=candidate`；知识增加 `knowledge_type` 枚举 2.5 六值；精准遗忘 `forget_target_description`→`target_selector`、`target_ids`→`resolved_target_ids`，新增 `affected_count`/`requires_confirmation`；开发集分类枚举引用号修正；§5.3 跨用户隔离增补 `user_id` 硬约束与正向/负向评测要点；案例库新增 Tool 成功不形成长期记忆反例（正例7）与跨用户正向（正例8）/负向（反例6）案例；更新 HD-ANNO-08/09 引用架构审查报告与 expression_type 术语终选。状态不变（v0.1 DRAFT），未声称测试集封存。 | E 轨道 |
 
 ---
 
@@ -678,7 +821,7 @@ Turn 04 | user_demo: 「说重点。」
 
 1. 「数据查找选型与质量审计手册」已导入仓库，且本文档已与手册对齐
 2. D3 Gate 经 D/E Reviewer 审查通过，且审查结论文档化
-3. 八章「未确认能力与人工决策待办」中 HD-ANNO-01 至 HD-ANNO-07 均有明确决议
+3. 八章「未确认能力与人工决策待办」中 HD-ANNO-01 至 HD-ANNO-09 均有明确决议
 4. 开发集首批标注样本（≥50 条）已生产，覆盖六类数据和七类开发集分类，且至少 90% 已标记为 Gold Label
 5. 安全边界中的敏感类型识别规则经过至少一轮安全测试验证
 6. Tool Result 标注字段的 UNVERIFIED 状态经 C 轨道取证后回填为 VERIFIED 或 NOT_APPLICABLE
