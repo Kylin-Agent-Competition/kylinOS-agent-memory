@@ -80,7 +80,7 @@
 | 防御点 | Runtime 层 · 关键符号导出确认 |
 | 测试输入 | 存在的 .so 但 dlsym 传入不存在的符号名 |
 | 预期行为 | `BridgeResult.error == ERR_DLSYM_FAILED` |
-| 对应错误码 | `ERR_DLSYM_FAILED (0x0102)` |
+| 对应错误码 | `ERR_DLSYM_FAILED (0x0103)` |
 | 验证日期 | 2026-07-30 |
 | 验证环境 | 银河麒麟 V11 2603 x86_64, VirtualBox 7.2.14 |
 | 验证命令 | `dlsym(h, "this_symbol_does_not_exist_at_all")` |

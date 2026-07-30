@@ -134,7 +134,7 @@ struct TimeoutConfig {
 // ── Bridge 初始化参数 ──
 
 struct BridgeInitParams {
-    std::string so_path = "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1";
+    std::string so_path = "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1";  // x86_64 平台路径（宿主证据 embedding_abi_symbols.log:7）。aarch64 平台需改为 /usr/lib/aarch64-linux-gnu/...（UNTESTED）
     std::string depends_path = "/usr/lib/kylin-ai/depends";
     TimeoutConfig timeouts;
 };
