@@ -13,7 +13,10 @@
   - 「数据查找选型与质量审计手册」属基线文档，当前标注「待人工导入」，无法在本任务内阅读原稿；本规范据此记录为冻结 v1.0 的前置条件之一
   - 官方 AI 助手真实 Tool/Turn/Context 事件结构尚未取得麒麟 VM 证据（C 轨道 `os-agent-integration/` 当前仅建立目录和职责边界），Tool Result 标注字段均为 DRAFT 语义，标注为 UNVERIFIED
   - 封存测试集尚未制作、尚未锁定哈希；本规范仅建立规则，不可声称测试集已封存
-- **本次修订说明**（v0.1 修订，2026-07-30）：本稿已完成与修订后 `MEMORY_BUSINESS_SCHEMA_V0.1.md`（含 v0.1 修订）的字段对齐，主要变更包括：引入 `user_id`/`actor_id` 用户隔离；`confidence` 更名为 `confidence_score`；`evidence_turn_ids` 更名为 `evidence_event_ids`；偏好增加 `memory_status`/`should_persist` 字段，候选判定改用 `memory_status=candidate`；知识增加 `knowledge_type` 枚举；精准遗忘字段重命名为 `target_selector`/`resolved_target_ids`；新增 Tool 成功但不形成长期记忆及跨用户正向/负向案例。标注规范状态不变（v0.1 DRAFT），不对齐审计手册或 Copilot 审查报告（二者于基线文档中均「待人工导入」，已记录为冻结 v1.0 前置条件 HD-ANNO-01/HD-SCHEMA-11），`expression_type` 术语终选待 HD-SCHEMA-14。
+  - `UNVERIFIED` 表示标注字段或业务契约尚未在目标环境验证，引用追踪矩阵 `REQUIREMENT_TRACEABILITY_MATRIX.md` 第五节 SDK 能力验证状态双轴映射（`HOST_VERIFIED`/`SOURCE_VERIFIED`/`ABI_VERIFIED`/`PARTIAL`/`UNTESTED`/`NOT_FOUND`/`BLOCKED`）。`PENDING`/`UNVERIFIED`（业务/项目维度）与 `HOST_VERIFIED`/`SOURCE_VERIFIED`/`ABI_VERIFIED`（SDK 能力维度）为不同枚举体系，不得混为同一枚举；本文档不宣称 `HOST_VERIFIED`
+  - 基线 DOCX（01–04 项：官方 SDK 能力边界、总体架构 SOP、环境配置手册、Agent/LLM 使用指南）当前**未被 Git 仓库跟踪**，`docs/baseline/` 目录下不存在这些实体文件。项目团队可能持有或审查过程曾引用外部基线材料，但这些材料不可作为仓库内已导入证据；本文档不得声称根目录或仓库内已存在基线 DOCX
+- **本次修订说明**（v0.1 修订，2026-07-30）：本稿已完成与修订后 `MEMORY_BUSINESS_SCHEMA_V0.1.md`（含 v0.1 修订）的字段对齐，主要变更包括：引入 `user_id`/`actor_id` 用户隔离；`confidence` 更名为 `confidence_score`；`evidence_turn_ids` 更名为 `evidence_event_ids`；偏好增加 `memory_status`/`should_persist` 字段，候选判定改用 `memory_status=candidate`；知识增加 `knowledge_type` 枚举；精准遗忘字段重命名为 `target_selector`/`resolved_target_ids`；新增 Tool 成功但不形成长期记忆及跨用户正向/负向案例。标注规范状态不变（v0.1 DRAFT），不对齐审计手册或 Copilot 审查报告（二者于基线文档中均「待人工导入」，已记录为冻结 v1.0 前置条件 HD-ANNO-01/HD-SCHEMA-11），`expression_type` 已按任务规格归一为 `explicit`/`implicit`（`inferred` 归一为 `implicit`，`candidate` 不作为表达类型值），待 SOP v1.1 导入后终审（HD-SCHEMA-14）。
+- **本次修订说明**（v0.1 修订2，2026-07-31）：本稿已完成与 Schema 修订2 及矩阵修订2 的语义对齐，主要变更包括：`expression_type` 归一为 `explicit`/`implicit` 两值（`inferred` 归一为 `implicit`，不作为独立枚举值；`candidate` 不作为表达类型值）；候选状态通过 `memory_status=candidate` 等生命周期字段表达；新增 `source_type` 七值与 `event_type` 三值层级区分说明；补充 `UNVERIFIED` 与 SDK 能力验证状态双轴映射关系说明；修正基线 DOCX 在库事实表述（未声称仓库内已存在 DOCX）；Schema 枚举引用号因新增 2.2 `event_type` 而顺延修正。标注规范定位不变（v0.1 DRAFT），冻结门槛与 Gold Label/用户隔离/敏感过滤/精准遗忘两阶段规则未弱化。
 
 ---
 
@@ -31,6 +34,15 @@
 | 端到端会话 | 跨多 Turn 的完整对话序列，包含多类数据融合 | 多对象联合 |
 | 开发集分类 | 将单一样本按业务语义归类到偏好/知识/Tool Result 等维度的标签体系 | 标注规则层 |
 | Gold Label | 经人工规则与双人复核确定的最终标注标签，是该样本在评测中的标准答案 | 标注规则层 |
+
+### 来源层级区分说明
+
+`source_type`（Schema 枚举 2.1）与 `event_type`（Schema 枚举 2.2）处于不同层级，二者不得混用：
+
+- **`source_type`** 定义事件来源大类（「数据从何而来」），取值：`chat` / `tool_result` / `manual_config` / `recollect` / `file` / `meeting` / `voice`。
+- **`event_type`** 定义消息粒度角色（「该数据在交互中的具体角色」），取值：`user_message` / `agent_response` / `system_message`。
+
+`user_message`、`agent_response` 等消息粒度不得作为 `source_type` 取值；`chat`、`tool_result` 等来源大类不得作为 `event_type` 取值。一个 `source_type=chat` 的事件可包含多条 `event_type` 为 `user_message` 或 `agent_response` 的子记录。
 
 ---
 
@@ -51,10 +63,10 @@
 | `user_id` | 数据归属用户标识（用户隔离键） | string，required，来自宿主侧业务事件，`*禁止模型生成`；如 `"user_demo_01"` |
 | `preference_key` | 偏好键名（业务语义标识） | 英文 snake_case，如 `language_pref`、`search_sort_order` |
 | `preference_value` | 偏好值 | 字符串，如 `"zh-CN"`、`"by_modified_desc"` |
-| `expression_type` | 偏好表达类型 | 同 Schema 枚举 2.4：`explicit`（显式声明）/ `implicit`（隐式表达）/ `inferred`（推断/候选表达）。注意：原 `candidate` 语义已迁移至 `memory_status=candidate` 表达；`inferred` 与 `candidate` 术语对应，终选待 HD-SCHEMA-14 |
-| `scope` | 作用域 | 同 Schema 枚举 2.8：`global` / `topic` / `tool` / `session` / `time_window` |
+| `expression_type` | 偏好表达类型 | 同 Schema 枚举 2.5：`explicit`（显式声明）/ `implicit`（隐式表达）。`inferred` 为旧称，已归一为 `implicit`，不作为独立枚举值；候选状态通过 `memory_status=candidate`（Schema 枚举 2.8）/`PreferenceCandidate`/`preference_stage=candidate` 等生命周期字段表达 |
+| `scope` | 作用域 | 同 Schema 枚举 2.9（`preference_scope`）：`global` / `topic` / `tool` / `session` / `time_window` |
 | `confidence_score` | 置信度评分（0.0–1.0） | 人工标注。显式声明 → 0.9–1.0；隐式推断 → 0.5–0.8；边界争议 → 记录原因 |
-| `memory_status` | 记忆生命周期状态 | 同 Schema 枚举 2.7：`active` / `superseded` / `deprecated` / `expired` / `removed` / `candidate`。候选判断阶段使用 `memory_status=candidate`，不再通过 `expression_type=candidate` 表达 |
+| `memory_status` | 记忆生命周期状态 | 同 Schema 枚举 2.8：`active` / `superseded` / `deprecated` / `expired` / `removed` / `candidate`。候选判断阶段使用 `memory_status=candidate`，不再通过 `expression_type` 的候选值表达 |
 | `is_temporary` | 是否为临时要求 | `true` / `false`；若为 true，必须注明临时范围（如「仅本次会话」「仅当前 Turn」）。`is_temporary=true` 或 `should_persist=false` 时，`memory_status` 必须为 `candidate` |
 | `should_persist` | 是否应持久化为正式偏好 | `true` / `false`；`false` 时等同临时要求，不产生正式长期偏好，`memory_status=candidate` |
 | `evidence_event_ids` | 支撑该偏好的事件 ID 列表 | 如 `["evt_20260730_a1b2c3", "evt_20260729_d4e5f6"]`；依据 Schema 以事件 ID 为业务证据链 |
@@ -66,7 +78,7 @@
 - 偏好标签由人工根据会话上下文判定：标注人 A 初标，标注人 B 复核，争议提交 Reviewer 裁决。
 - LLM 仅用于辅助生成候选表达（如从自然语言中提取候选 key-value 对），不得独立决定最终偏好标签。
 - 复核记录必须包含：复核人、复核时间、是否同意初标、不同意时的修改建议和理由。
-- **候选与正式区分**：`expression_type=inferred` 的偏好条目或 `is_temporary=true` / `should_persist=false` 的条目，在置信度达标且经行为验证/人工复核确认前，`memory_status` 保持 `candidate`，不晋升为正式偏好（`memory_status=active`）。候选条目不参与用户级偏好检索链路，也不参与偏好冲突判定。
+- **候选与正式区分**：经模型辅助推断但尚未复核的隐式偏好条目、或 `is_temporary=true` / `should_persist=false` 的临时条目，在置信度达标且经行为验证/人工复核确认前，`memory_status` 保持 `candidate`（见 Schema 枚举 2.8），不晋升为正式偏好（`memory_status=active`）。候选条目不参与用户级偏好检索链路，也不参与偏好冲突判定。
 
 ### 2.2 知识（Knowledge）
 
@@ -80,12 +92,12 @@
 |------|------|---------|
 | `user_id` | 数据归属用户标识（用户隔离键） | string，required，来自宿主侧业务事件，`*禁止模型生成`；如 `"user_demo_01"` |
 | `knowledge_summary` | 知识内容摘要 | 一句话概括，如「用户每月底整理一次文件目录」 |
-| `knowledge_type` | 知识子类型 | 同 Schema 枚举 2.5：`workflow`（工作流/操作习惯）/ `case`（案例/场景）/ `template`（模板/格式）/ `fact`（事实性）/ `constraint`（约束/规则）/ `failure_experience`（失败经验）。必须填写，不得以 `primary_category` 替代 |
+| `knowledge_type` | 知识子类型 | 同 Schema 枚举 2.6：`workflow`（工作流/操作习惯）/ `case`（案例/场景）/ `template`（模板/格式）/ `fact`（事实性）/ `constraint`（约束/规则）/ `failure_experience`（失败经验）。必须填写，不得以 `primary_category` 替代 |
 | `primary_category` | 主分类标签（开放业务分类） | 如「文件操作」「系统设置」「开发习惯」；**不可替代 `knowledge_type`**，用于语义检索和元数据过滤 |
 | `confidence_score` | 置信度评分（0.0–1.0） | 人工标注 |
 | `source_type` | 来源类型 | 同 Schema 枚举 2.1 |
 | `is_outdated` | 是否已过时（过渡字段） | `true` / `false`；待 D/E 统一为 `memory_status` 后在 v1.0 中移除 |
-| `memory_status` | 记忆生命周期状态 | 同 Schema 枚举 2.7：`active` / `superseded` / `deprecated` / `expired` / `removed` / `candidate` |
+| `memory_status` | 记忆生命周期状态 | 同 Schema 枚举 2.8：`active` / `superseded` / `deprecated` / `expired` / `removed` / `candidate` |
 | `extracted_entities` | 抽取的实体列表 | 如 `["文件管理器", "月末", "目录整理"]` |
 | `evidence_event_ids` | 支撑该知识的事件 ID 列表 | 如 `["evt_001", "evt_002"]` |
 | `annotator` | 标注人标识 | 同偏好 |
@@ -130,7 +142,7 @@
 | `user_id` | 数据归属用户标识（用户隔离键） | string，required，派生自冲突涉及的条目，`*禁止模型生成` |
 | `left_item_id` | 冲突左方条目 ID | 如 `"pref_001"` |
 | `right_item_id` | 冲突右方条目 ID | 如 `"pref_002"` |
-| `conflict_type` | 冲突类型 | 同 Schema 枚举 2.10 |
+| `conflict_type` | 冲突类型 | 同 Schema 枚举 2.11 |
 | `conflict_description` | 冲突描述 | 自然语言，解释矛盾所在 |
 | `recommended_resolution` | 消解建议 | `keep_left` / `keep_right` / `merge` / `flag_for_review` / `keep_higher_confidence` |
 | `annotator` | 标注人标识 | 同偏好 |
@@ -149,7 +161,7 @@
 | `user_id` | 数据归属用户标识（用户隔离键） | string，required，来自宿主侧业务事件，`*禁止模型生成` |
 | `forget_request_turn_id` | 用户提出遗忘请求的 Turn ID | 如 `"turn_11"`；可选保留 Turn 粒度溯源，与 `evidence_event_ids` 正交 |
 | `target_selector` | 用户输入的遗忘目标选择器（原始描述） | 自然语言，如「忘掉我上周关于 Python 项目的所有内容」；对应 Schema `target_selector` |
-| `forget_mode` | 遗忘粒度 | 同 Schema 枚举 2.12 |
+| `forget_mode` | 遗忘粒度 | 同 Schema 枚举 2.13 |
 | `resolved_target_ids` | 系统解析后的目标 ID 列表 | 如 `["kn_003", "pref_005"]`；必须经预览确认后方可执行删除，`*禁止模型生成` |
 | `affected_count` | 实际影响的记录数量 | integer，`*禁止模型生成`，由系统在执行后产出；标注阶段可填写预期值 |
 | `preview_provided` | 执行前是否提供了预览 | `true` / `false` |
@@ -262,7 +274,7 @@
 
 | 字段 | 含义 | 取值说明 |
 |------|------|---------|
-| `sensitivity_level` | 敏感度等级 | `none` / `low` / `medium` / `high` / `critical`（同 Schema 枚举 2.9） |
+| `sensitivity_level` | 敏感度等级 | `none` / `low` / `medium` / `high` / `critical`（同 Schema 枚举 2.10） |
 | `sensitive_type` | 敏感类型编号 | 如 `S-01`、`S-03`（如含多种则记录多项） |
 | `should_ignore` | 是否应忽略该 Turn | `true` / `false`。含 S-01 至 S-04 或 S-08 的 Turn 必须标记 `true` |
 | `redacted_summary` | 脱敏后摘要 | 不包含任何敏感原文的简要描述，如「用户粘贴了一段 API Key」 |
@@ -802,7 +814,7 @@ Turn 04 | user_demo: 「说重点。」
 | HD-ANNO-06 | 制作首批开发集标注样本（≥50 条），验证本规范的标注字段完整性和分类覆盖率 | REQ-07 | E | D3 Gate 前 |
 | HD-ANNO-07 | 确认「数据查找选型与质量审计手册」中对标注流程的证据保留格式要求，如与本规范不一致则以手册为准 | REQ-07 | 团队/E | D3 Gate 前 |
 | HD-ANNO-08 | 导入「架构设计审查报告（Copilot 独立审查报告）」至 `docs/baseline/`，用报告建议复核本规范全部字段与标注规则，记录差异并决策是否追加修订（对应 HD-SCHEMA-11） | REQ-01–07 | E | D3 Gate 前 |
-| HD-ANNO-09 | E 确认 `expression_type` 最终术语选择（`inferred` v.s. `candidate`），统一本规范与业务 Schema（对应 HD-SCHEMA-14） | REQ-02 | E | D3 Gate 前 |
+| HD-ANNO-09 | E 终审 `expression_type` 已归一的 `explicit`/`implicit` 两值与候选生命周期表达方案（`inferred` 归一为 `implicit`，`candidate` 不作为表达类型值），对应 HD-SCHEMA-14 | REQ-02 | E | D3 Gate 前 |
 
 ---
 
@@ -812,6 +824,7 @@ Turn 04 | user_demo: 「说重点。」
 |------|------|---------|------|
 | v0.1 | 2026-07-30 | DRAFT 初稿：建立六类评测数据标注字段、七类开发集分类、Gold Label 人工复核规则、安全边界（九类敏感类型）、正例 6 条、反例 5 条、歧义/边界案例 4 条、数据集三类用途差异与当前未封存如实记录。基于 schema v0.1、需求矩阵 v0.1 和 datasets/README.md 事实编写。 | E 轨道 |
 | v0.1（修订） | 2026-07-30 | 标注规范与 Schema v0.1 修订对齐：引入 `user_id`/`actor_id` 用户隔离；`confidence` 更名为 `confidence_score`；`evidence_turn_ids` 更名为 `evidence_event_ids`，增加可选 `source_turn_ids`；偏好增加 `memory_status`/`should_persist`，候选判定改用 `memory_status=candidate`；知识增加 `knowledge_type` 枚举 2.5 六值；精准遗忘 `forget_target_description`→`target_selector`、`target_ids`→`resolved_target_ids`，新增 `affected_count`/`requires_confirmation`；开发集分类枚举引用号修正；§5.3 跨用户隔离增补 `user_id` 硬约束与正向/负向评测要点；案例库新增 Tool 成功不形成长期记忆反例（正例7）与跨用户正向（正例8）/负向（反例6）案例；更新 HD-ANNO-08/09 引用架构审查报告与 expression_type 术语终选。状态不变（v0.1 DRAFT），未声称测试集封存。 | E 轨道 |
+| v0.1（修订2） | 2026-07-31 | 与 Schema 修订2 及矩阵修订2 语义对齐：`expression_type` 归一为 `explicit`/`implicit` 两值（`inferred` 归一为 `implicit`，`candidate` 不作为表达类型值）；候选状态改由 `memory_status=candidate` 等生命周期字段表达；新增 `source_type` 七值与 `event_type` 三值层级区分说明；补充 `UNVERIFIED` 与 SDK 能力验证状态双轴映射说明；修正基线 DOCX 在库事实表述；Schema 枚举引用号顺延修正（2.2 `event_type` 新增所致）。Gold Label/用户隔离/敏感过滤/精准遗忘两阶段规则未弱化。 | E 轨道 |
 
 ---
 
