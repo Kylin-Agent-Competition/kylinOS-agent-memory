@@ -1,3 +1,78 @@
 schema_version: "1.0"
 project: "kylin-os-agent-memory"
-entries: []
+entries:
+  - id: "D2-C-OSAGENT-SPIKE"
+    task_id: "D2-C-OSAGENT-SPIKE"
+    gate: "gate0"
+    stage: "L2-kylin-vm"
+    track: "C"
+    owner: "刘承恩"
+    reviewer: "D(周子腾); E(谢嘉然)补审"
+    status: "READY_FOR_L2"
+    description: >-
+      D2-C OS Agent 宿主实验: H2C-PreChat Context 注入三路隔离、
+      H2C-PostTurn is_end 唯一性、H2C-Tool 真实事件观察。
+      脚本与执行手册就绪, 等待人在麒麟虚拟机执行并上传证据。
+    commit: "pending (D2 分支创建后回填)"
+    artifacts:
+      - path: "os-agent-integration/D2_C_宿主实验执行手册.md"
+        type: "manual"
+        desc: "D2-C 实验执行手册 (三项实验步骤、通过标准、失败路由)"
+      - path: "scripts/d2c_postturn_isend_counter.sh"
+        type: "probe-script"
+        desc: "H2C-PostTurn is_end 唯一性计数只读脚本"
+      - path: "scripts/d2c_prechat_context_probe.sh"
+        type: "probe-script"
+        desc: "H2C-PreChat Context 注入三路隔离探针脚本"
+      - path: "scripts/d2c_tool_event_observer.sh"
+        type: "probe-script"
+        desc: "H2C-Tool 真实 Tool 事件观察只读脚本"
+      - path: "scripts/d2c_evidence_collector.sh"
+        type: "collector-script"
+        desc: "D2-C 证据收集与打包脚本"
+    experiments:
+      - id: "H2C-PostTurn"
+        capability: "AGT-002"
+        goal: "验证最终回合只产生一次 TurnFinalizedEvent"
+        pass_criteria:
+          - "is_end_true_count == 1"
+          - "is_end_false_count >= 1"
+          - "RECORD rowid 新增 2 行"
+          - "is_end=true 后 15 秒内 rowid 不再变化"
+        evidence_pending:
+          - "postturn_*.log"
+          - "postturn_*.summary.json"
+          - "postturn_*.db_snapshots.json"
+      - id: "H2C-PreChat"
+        capability: "AGT-005"
+        goal: "验证 Memory Context 注入后 UI/聊天库/模型请求三路隔离"
+        pass_criteria:
+          - "UI 显示原始用户文本 (无 Memory Context)"
+          - "RECORD.message 不含 Memory Context"
+          - "模型请求含 Memory Context (注入后)"
+          - "MemoryClient 超时降级: 断开 UDS 后聊天继续"
+        evidence_pending:
+          - "prechat_*.baseline.json"
+          - "prechat_*.ui_screenshot.png"
+          - "prechat_*.db_message.txt"
+          - "prechat_*.model_request.jsonl"
+      - id: "H2C-Tool"
+        capability: "AGT-004"
+        goal: "捕获真实 Tool 成功/失败/取消事件, 验证 Prompt Skill 不被误判"
+        pass_criteria:
+          - "success_events 非空"
+          - "failure_events 非空"
+          - "cancelled_events 非空"
+          - "Prompt Skill 未生成 tool_call 证据"
+        evidence_pending:
+          - "tool_*.log"
+          - "tool_*.summary.json"
+    limitations:
+      - "脚本与手册就绪, 尚未在麒麟虚拟机执行"
+      - "真实证据需人在麒麟虚拟机采集 (02 §16.15 步骤 14)"
+      - "LD_PRELOAD 或 strace 可能受 KYSEC 限制, 失败时改用源码分支 instrument"
+    related_td:
+      - "TD-007 (真实 Tool Result Hook, High, OPEN)"
+    os: "银河麒麟 V10 SP1 x86_64 (待实测确认)"
+    virtualization: "VirtualBox 7.x (版本号待实测)"
+    checksum: "pending (证据包生成后回填)"
