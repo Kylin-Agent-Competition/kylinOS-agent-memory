@@ -19,7 +19,7 @@ PROBE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${PROBE_DIR}/out"
 mkdir -p "${OUT_DIR}"
 
-# 状态文件: 持久化 start 时的信息供 stop 读取 (修复时间戳不一致 bug)
+# 状态文件: 持久化 start 时的信息供 stop 读取
 PID_FILE="${OUT_DIR}/postturn_capture.pid"
 STATE_FILE="${OUT_DIR}/postturn_capture.state"
 
@@ -46,47 +46,57 @@ cmd_start() {
         exit 1
     fi
 
-    local ts log_file
+    local ts log_file raw_log
     ts="$(date +%Y%m%d_%H%M%S)"
     log_file="${OUT_DIR}/postturn_${ts}.log"
+    raw_log="${OUT_DIR}/postturn_${ts}.raw.log"
 
     # 检查 strace 权限
     if ! strace -p "${pid}" -e trace=write -c -o /dev/null 2>/dev/null; then
         echo "WARN: strace 附加失败, 可能需要 sudo 权限" >&2
-        echo "WARN: 将使用 sudo 重试, 请输入密码 (如需要)" >&2
+        echo "WARN: 请以 sudo 运行本脚本: sudo $0 start" >&2
+        echo "INFO: 仍将尝试启动, 若失败请改用 sudo" >&2
     fi
 
-    echo "INFO: 启动日志捕获 -> ${log_file}"
-    # 使用 strace 跟踪系统调用, 过滤 is_end/chatCallback/updateBubble 关键词
+    echo "INFO: 启动 strace 原始捕获 -> ${raw_log}"
+    # 使用 strace 跟踪系统调用, 输出到原始日志 (不过滤, 不触发 pipefail)
     # -s 4096 设置字符串最大长度
     # -f 跟踪子进程
     # -e trace=write,recvmsg 只跟踪写入和消息接收
-    # 优先用普通权限, 失败则提示 sudo
-    nohup strace -p "${pid}" -f -s 4096 -e trace=write,recvmsg 2>&1 \
-        | grep --line-buffered -E 'is_end|chatCallback|updateBubble' \
-        > "${log_file}" 2>&1 &
-    local cap_pid=$!
+    nohup strace -p "${pid}" -f -s 4096 -e trace=write,recvmsg 2>&1 > "${raw_log}" &
+    local strace_pid=$!
 
-    # 检查 strace 是否真的启动 (等待 2 秒)
+    echo "INFO: 启动关键词过滤 -> ${log_file}"
+    # 从原始日志中过滤关键词 (独立进程, 不影响 strace)
+    tail -f "${raw_log}" 2>/dev/null \
+        | grep --line-buffered -E 'is_end|chatCallback|updateBubble' > "${log_file}" 2>&1 &
+    local grep_pid=$!
+
+    # 等待 2 秒验证 strace 进程存活
     sleep 2
-    if ! kill -0 "${cap_pid}" 2>/dev/null; then
-        echo "WARN: 普通权限 strace 启动失败, 尝试 sudo 模式" >&2
-        echo "WARN: 请在另一终端执行: sudo strace -p ${pid} -f -s 4096 -e trace=write,recvmsg 2>&1 | grep --line-buffered -E 'is_end|chatCallback|updateBubble' > ${log_file}" >&2
-        echo "WARN: 或将本脚本以 sudo 运行: sudo $0 start" >&2
-        # 即使 strace 失败, 也继续记录状态 (数据库验证仍可用)
+    if ! kill -0 "${strace_pid}" 2>/dev/null; then
+        echo "WARN: strace 进程已退出 (PID ${strace_pid})" >&2
+        echo "WARN: 可能原因: 权限不足 (ptrace_scope=1) 或进程不存在" >&2
+        echo "WARN: 解决: 以 sudo 运行: sudo $0 start" >&2
+        echo "INFO: 即使 strace 失败, 数据库验证仍可用: $0 dbcheck" >&2
     fi
 
-    # 持久化状态: PID + 日志文件路径 + 时间戳
-    echo "${cap_pid}" > "${PID_FILE}"
+    # 持久化状态: 双 PID + 文件路径 + 时间戳
+    cat > "${PID_FILE}" <<EOF
+STRACE_PID=${strace_pid}
+GREP_PID=${grep_pid}
+EOF
     cat > "${STATE_FILE}" <<EOF
-CAP_PID=${cap_pid}
+STRACE_PID=${strace_pid}
+GREP_PID=${grep_pid}
 LOG_FILE=${log_file}
+RAW_LOG=${raw_log}
 TIMESTAMP=${ts}
 AI_PID=${pid}
 START_TIME=$(date -Iseconds)
 EOF
 
-    echo "INFO: 捕获进程 PID = ${cap_pid}"
+    echo "INFO: strace PID = ${strace_pid}, grep PID = ${grep_pid}"
     echo "INFO: 现在请在 AI 助手中发起一次普通文本问答"
     echo "INFO: 完成后运行: $0 stop"
 }
@@ -96,10 +106,13 @@ cmd_stop() {
         echo "ERROR: 未找到运行中的捕获任务" >&2
         exit 1
     fi
-    local cap_pid
-    cap_pid="$(cat "${PID_FILE}")"
 
-    # 从状态文件读取 start 时的日志文件路径 (修复时间戳不一致 bug)
+    # 读取双 PID
+    local strace_pid grep_pid
+    strace_pid="$(grep '^STRACE_PID=' "${PID_FILE}" | cut -d= -f2)"
+    grep_pid="$(grep '^GREP_PID=' "${PID_FILE}" | cut -d= -f2)"
+
+    # 从状态文件读取日志文件路径
     local log_file ts
     if [ -f "${STATE_FILE}" ]; then
         log_file="$(grep '^LOG_FILE=' "${STATE_FILE}" | cut -d= -f2-)"
@@ -111,11 +124,16 @@ cmd_stop() {
 
     local summary_file="${OUT_DIR}/postturn_${ts}.summary.json"
 
-    echo "INFO: 停止捕获进程 ${cap_pid}"
-    # 终止 strace 管道
-    kill "${cap_pid}" 2>/dev/null || true
-    # 终止可能的 strace 子进程
-    pkill -P "${cap_pid}" 2>/dev/null || true
+    echo "INFO: 停止 grep 进程 ${grep_pid}"
+    kill "${grep_pid}" 2>/dev/null || true
+    pkill -P "${grep_pid}" 2>/dev/null || true
+
+    echo "INFO: 停止 strace 进程 ${strace_pid}"
+    kill "${strace_pid}" 2>/dev/null || true
+    pkill -P "${strace_pid}" 2>/dev/null || true
+    # 也杀掉所有 tail -f 和 strace 残留子进程
+    pkill -f "tail -f.*postturn_" 2>/dev/null || true
+    pkill -f "strace -p.*kylin-aiassistant" 2>/dev/null || true
     rm -f "${PID_FILE}" "${STATE_FILE}"
 
     if [ ! -f "${log_file}" ]; then
@@ -126,13 +144,20 @@ cmd_stop() {
         exit 1
     fi
 
+    # 如果日志文件为空, 也给出警告 (grep 过滤后可能没有匹配)
+    if [ ! -s "${log_file}" ]; then
+        echo "WARN: 日志文件为空 (没有匹配到 is_end/chatCallback/updateBubble)" >&2
+        echo "WARN: strace 可能捕获了数据但关键词不匹配" >&2
+        echo "INFO: 可查看原始日志: ${OUT_DIR}/postturn_${ts}.raw.log" >&2
+    fi
+
     echo "INFO: 生成计数报告 -> ${summary_file}"
 
     local chat_callback_count is_end_false_count is_end_true_count update_bubble_count
-    chat_callback_count="$(grep -c 'chatCallback' "${log_file}" || echo 0)"
-    is_end_false_count="$(grep -c 'is_end.*false\|is_end":false\|is_end=false' "${log_file}" || echo 0)"
-    is_end_true_count="$(grep -c 'is_end.*true\|is_end":true\|is_end=true' "${log_file}" || echo 0)"
-    update_bubble_count="$(grep -c 'updateBubble' "${log_file}" || echo 0)"
+    chat_callback_count="$(grep -c 'chatCallback' "${log_file}" 2>/dev/null || echo 0)"
+    is_end_false_count="$(grep -c 'is_end.*false\|is_end":false\|is_end=false' "${log_file}" 2>/dev/null || echo 0)"
+    is_end_true_count="$(grep -c 'is_end.*true\|is_end":true\|is_end=true' "${log_file}" 2>/dev/null || echo 0)"
+    update_bubble_count="$(grep -c 'updateBubble' "${log_file}" 2>/dev/null || echo 0)"
 
     cat > "${summary_file}" <<EOF
 {
