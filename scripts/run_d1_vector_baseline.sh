@@ -23,6 +23,10 @@ COLLECTION="${DEFAULT_COLLECTION}"
 SERVICE_UNIT="${DEFAULT_SERVICE_UNIT}"
 PREVIOUS_INVOCATION_ID=""
 CURRENT_INVOCATION_ID=""
+SDK_SOURCE=""
+SDK_MODE=""
+SDK_VERSION=""
+SDK_BUILD_FLAGS=()
 BUILD_DIR=""
 
 log() {
@@ -58,6 +62,7 @@ Usage:
     [--app-id <id>] \
     [--collection <name>] \
     [--service-unit <systemd-user-unit>] \
+    [--sdk-source <absolute-path>] \
     [--previous-invocation-id <id>]
 
 Persistence workflow:
@@ -71,6 +76,12 @@ Persistence workflow:
 
 The script does not install packages, start/restart services, write evidence
 files, or upload results.
+
+SDK discovery:
+  1. The installed pkg-config module is preferred when available.
+  2. If the runtime package has no development files, pass the matching
+     official source checkout with --sdk-source. The runner then uses source
+     headers plus the installed runtime library without installing anything.
 EOF
 }
 
@@ -108,6 +119,11 @@ parse_arguments() {
             --service-unit)
                 require_value "$1" "$#"
                 SERVICE_UNIT="$2"
+                shift 2
+                ;;
+            --sdk-source)
+                require_value "$1" "$#"
+                SDK_SOURCE="$2"
                 shift 2
                 ;;
             --previous-invocation-id)
@@ -151,6 +167,9 @@ parse_arguments() {
     fi
     if [[ ! "${SERVICE_UNIT}" =~ ^[A-Za-z0-9_.@:-]+\.service$ ]]; then
         fail "arguments" "--service-unit must be a valid systemd .service unit name"
+    fi
+    if [[ -n "${SDK_SOURCE}" && "${SDK_SOURCE}" != /* ]]; then
+        fail "arguments" "--sdk-source must be an absolute path"
     fi
     if [[ "${PHASE}" == "verify" && -z "${PREVIOUS_INVOCATION_ID}" ]]; then
         fail "arguments" "--previous-invocation-id is required for the verify phase"
@@ -265,18 +284,87 @@ check_service() {
 }
 
 check_sdk() {
-    if ! pkg-config --exists "${PKG_CONFIG_MODULE}"; then
-        fail "sdk_pkg_config" \
-            "pkg-config module not found: ${PKG_CONFIG_MODULE}"
+    SDK_BUILD_FLAGS=()
+
+    if command -v pkg-config >/dev/null 2>&1 &&
+        pkg-config --exists "${PKG_CONFIG_MODULE}"; then
+        local cflags
+        local libs
+        local -a package_flags=()
+
+        SDK_MODE="pkg-config"
+        SDK_VERSION="$(pkg-config --modversion "${PKG_CONFIG_MODULE}")"
+        cflags="$(pkg-config --cflags "${PKG_CONFIG_MODULE}")"
+        libs="$(pkg-config --libs "${PKG_CONFIG_MODULE}")"
+
+        # pkg-config returns compiler/linker tokens separated by shell
+        # whitespace. Official Kylin package paths do not contain whitespace.
+        read -r -a package_flags <<<"$(
+            pkg-config --cflags --libs "${PKG_CONFIG_MODULE}"
+        )"
+        SDK_BUILD_FLAGS=("${package_flags[@]}")
+        pass "sdk_discovery" \
+            "mode=${SDK_MODE}; module=${PKG_CONFIG_MODULE}; version=${SDK_VERSION}; cflags=${cflags}; libs=${libs}"
+        return
     fi
 
-    local version
-    local cflags
-    local libs
-    version="$(pkg-config --modversion "${PKG_CONFIG_MODULE}")"
-    cflags="$(pkg-config --cflags "${PKG_CONFIG_MODULE}")"
-    libs="$(pkg-config --libs "${PKG_CONFIG_MODULE}")"
-    pass "sdk_pkg_config" "module=${PKG_CONFIG_MODULE}; version=${version}; cflags=${cflags}; libs=${libs}"
+    if [[ -z "${SDK_SOURCE}" ]]; then
+        fail "sdk_discovery" \
+            "pkg-config module ${PKG_CONFIG_MODULE} is unavailable; pass the matching official checkout with --sdk-source"
+    fi
+
+    require_command git
+    require_command ldconfig
+
+    local include_dir="${SDK_SOURCE%/}/include/kysdk-vector-engine-client"
+    local database_header="${include_dir}/Database.h"
+    local source_branch
+    local source_commit
+    local source_status
+    local runtime_version="unknown"
+
+    if [[ ! -d "${SDK_SOURCE}/.git" ]]; then
+        fail "sdk_source" "not a Git checkout: ${SDK_SOURCE}"
+    fi
+    if [[ ! -f "${database_header}" ]]; then
+        fail "sdk_source" "Database.h is missing: ${database_header}"
+    fi
+
+    source_branch="$(git -C "${SDK_SOURCE}" branch --show-current)"
+    source_commit="$(git -C "${SDK_SOURCE}" rev-parse HEAD)"
+    source_status="$(git -C "${SDK_SOURCE}" status --porcelain)"
+    if [[ -z "${source_branch}" ]]; then
+        fail "sdk_source" "official SDK checkout is in detached HEAD state"
+    fi
+    if [[ -n "${source_status}" ]]; then
+        fail "sdk_source" "official SDK checkout has uncommitted changes"
+    fi
+
+    if ! ldconfig -p 2>/dev/null |
+        grep -Fq "libkysdk-vector-engine-client.so.1"; then
+        fail "sdk_runtime_library" \
+            "installed libkysdk-vector-engine-client.so.1 was not found by ldconfig"
+    fi
+    if command -v dpkg-query >/dev/null 2>&1; then
+        runtime_version="$(
+            dpkg-query -W -f='${Version}' \
+                libkysdk-vector-engine-client 2>/dev/null || true
+        )"
+        if [[ -z "${runtime_version}" ]]; then
+            runtime_version="unknown"
+        fi
+    fi
+
+    SDK_MODE="source-headers+runtime-library"
+    SDK_VERSION="${runtime_version}"
+    SDK_BUILD_FLAGS=(
+        "-I${include_dir}"
+        "-lkysdk-vector-engine-client"
+    )
+    pass "sdk_source" \
+        "path=${SDK_SOURCE}; branch=${source_branch}; commit=${source_commit}; clean=true"
+    pass "sdk_discovery" \
+        "mode=${SDK_MODE}; runtime_version=${SDK_VERSION}; include=${include_dir}; library=libkysdk-vector-engine-client.so.1"
 }
 
 build_probe() {
@@ -287,11 +375,6 @@ build_probe() {
 
     BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/d1-vector-baseline.XXXXXX")"
     local output="${BUILD_DIR}/d1_vector_baseline"
-    local -a package_flags=()
-
-    # pkg-config returns compiler/linker tokens separated by shell whitespace.
-    # The official package paths do not contain whitespace.
-    read -r -a package_flags <<<"$(pkg-config --cflags --libs "${PKG_CONFIG_MODULE}")"
 
     if ! g++ \
         -std=c++17 \
@@ -301,10 +384,11 @@ build_probe() {
         -Werror \
         "${PROBE_SOURCE}" \
         -o "${output}" \
-        "${package_flags[@]}"; then
+        "${SDK_BUILD_FLAGS[@]}"; then
         fail "probe_build" "g++ failed to build the D1 Vector Engine probe"
     fi
-    pass "probe_build" "temporary binary built: ${output}"
+    pass "probe_build" \
+        "temporary binary built: ${output}; sdk_mode=${SDK_MODE}; sdk_version=${SDK_VERSION}"
 }
 
 run_probe() {
@@ -332,7 +416,6 @@ main() {
     check_operating_system
     require_command systemctl
     require_command g++
-    require_command pkg-config
     require_command mktemp
     check_database_path
     check_service
