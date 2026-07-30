@@ -7,10 +7,12 @@
 - **依据来源**：
   - `README.md`（项目定位、技术路线、责任轨道 A–E、当前阶段与明确未完成项）
   - 各模块 `README.md`（`memory-service/`、`cpp-bridge/`、`memory-client/`、`os-agent-integration/`、`evaluation/`、`datasets/`）中的职责边界与当前状态
+  - `docs/baseline/README.md` 第 02 项「总体架构、团队分工与标准开发 SOP v1.1」（当前状态：**待人工导入**；本稿 source_type 七值规范集合、event_type 层级区分与六档冲突优先级依据 SOP v1.1 规格回填，待 SOP 实体文件导入后复核）
   - `docs/project-management/REQUIREMENT_TRACEABILITY_MATRIX.md`（赛题要求与项目交付追踪矩阵 v0.1，REQ-01 至 REQ-07）
   - `datasets/ANNOTATION_GUIDELINE_V0.1.md`（数据标注与安全边界规范 v0.1 DRAFT，业务术语对齐与标注字段参照）
 - **局限声明**：
   - 赛题原文、总体架构 SOP、官方 SDK 与 OS Agent 能力边界基线文档尚未导入仓库（`docs/baseline/README.md` 均标注「待人工导入」）
+  - SOP v1.1 实体文件尚未导入仓库（`docs/baseline/README.md` 第 02 项）；本稿 source_type 七值规范集合、event_type 消息粒度层级区分与六档冲突优先级为按 SOP v1.1 任务规格回填，待 SOP 实体文件导入后须逐项复核
   - 架构设计审查报告（Copilot 独立审查报告）尚未导入仓库（`docs/baseline/README.md` 第 05 项，状态「待人工导入」），本稿无法核对其建议，待导入后须追加复核
   - 官方 AI 助手真实 Tool/Turn/Context 事件结构尚未取得麒麟 VM 证据（C 轨道 `os-agent-integration/` 当前仅建立目录和职责边界，尚无生产实现）
   - 官方偏好模型与宿主能力均未确认
@@ -61,20 +63,39 @@
 
 关联 REQ-01 多源数据。
 
+**依据**：SOP v1.1 §6.1 规范集合（待人工导入），本稿按任务规格回填七值。`source_type` 定义事件来源大类，与消息粒度的 `event_type`（枚举 2.2）处于不同层级，二者不得混用。
+
 | 候选值 | 中文含义 | 验证状态 | 备注 |
 |--------|---------|---------|------|
+| `chat` | 用户对话消息（含单轮或多轮 Turn） | UNVERIFIED | 依赖 C 轨道确认宿主对话通道与消息结构 |
 | `tool_result` | 官方 AI 助手 Tool 执行结果 | UNVERIFIED | 依赖 C 轨道在麒麟 VM 取证官方 Tool 调用格式 |
-| `user_message` | 用户直接对话消息 | UNVERIFIED | 依赖 C 轨道确认宿主消息通道 |
-| `agent_response` | 官方 AI 助手最终回复 | UNVERIFIED | 依赖 C 轨道确认宿主回复结构 |
-| `system_context` | 系统上下文（桌面状态、窗口焦点等） | UNVERIFIED | 依赖官方 SDK 确认宿主提供的系统上下文能力 |
-| `structured_knowledge` | 外部结构化知识注入 | UNVERIFIED | 依赖 E 定义知识注入业务协议 |
-| `implicit_feedback` | 隐式反馈（用户操作推断） | UNVERIFIED | 依赖 C 轨道确认宿主埋点能力 |
+| `manual_config` | 用户手动配置（偏好设置、系统配置等显式配置） | UNVERIFIED | 依赖 C 轨道确认宿主配置获取通道 |
+| `recollect` | 系统触发或用户发起的主动回忆/追溯 | UNVERIFIED | 依赖 C 轨道确认宿主回忆或回溯触发机制 |
+| `file` | 文件操作事件（创建、修改、删除、搜索等） | UNVERIFIED | 依赖 C 轨道确认宿主文件事件通知能力 |
+| `meeting` | 会议/协作场景事件 | UNVERIFIED | 依赖 C 轨道确认宿主会议/协作集成能力 |
+| `voice` | 语音交互事件 | UNVERIFIED | 依赖 C 轨道确认宿主语音通道集成能力 |
 
-### 2.2 source_business_status（来源事件业务结果状态）
+**注意**：对话消息粒度 `user_message`、`agent_response`、`system_message` 不再作为 `source_type` 候选值；其语义由 `event_type`（枚举 2.2）承载并用于区分单条消息的具体角色。
+
+### 2.2 event_type（事件消息粒度类型）
 
 关联 REQ-01 多源数据。
 
-**注意**：本枚举仅定义来源事件在业务层面的执行结果，不涉及 Memory Service 内部处理流水线状态。后者见枚举 2.3 `processing_status`，为技术候选，不视为已冻结业务枚举。
+**说明**：`event_type` 表达事件在消息/交互层面的粒度角色，与 `source_type`（来源大类）处于不同层级。一个 `source_type=chat` 的事件可包含多条 `event_type` 为 `user_message` 或 `agent_response` 的子记录。二者关系为：`source_type` 定义「数据从何而来」，`event_type` 定义「该数据在交互中的具体角色」。
+
+| 候选值 | 中文含义 | 验证状态 | 备注 |
+|--------|---------|---------|------|
+| `user_message` | 用户直接发出的消息 | UNVERIFIED | 依赖 C 轨道确认宿主消息通道与来源角色 |
+| `agent_response` | 官方 AI 助手生成的回复 | UNVERIFIED | 依赖 C 轨道确认宿主回复结构 |
+| `system_message` | 系统级消息（桌面状态通知、窗口焦点变更等） | UNVERIFIED | 依赖官方 SDK 确认宿主提供的系统消息能力 |
+
+**验证状态说明**：`event_type` 候选值依据 SOP v1.1 规范回填。本稿与标注规范 (`ANNOTATION_GUIDELINE_V0.1.md`) 当前 `source_type` 术语存在跨文档差异，列为技术债（见 `TECHNICAL_DEBT_REGISTER.md`），由独立任务处理。
+
+### 2.3 source_business_status（来源事件业务结果状态）
+
+关联 REQ-01 多源数据。
+
+**注意**：本枚举仅定义来源事件在业务层面的执行结果，不涉及 Memory Service 内部处理流水线状态。后者见枚举 2.4 `processing_status`，为技术候选，不视为已冻结业务枚举。
 
 | 候选值 | 中文含义 | 验证状态 | 备注 |
 |--------|---------|---------|------|
@@ -87,11 +108,11 @@
 | `timeout` | 事件执行超时 | UNVERIFIED | 依赖 C 轨道确认宿主超时阈值与通知 |
 | `ignored` | 已忽略（经敏感过滤或规则过滤） | PARTIAL | 待 E 确认敏感过滤与忽略策略 |
 
-### 2.3 processing_status（内部处理流水线状态）
+### 2.4 processing_status（内部处理流水线状态）
 
 关联 REQ-01、REQ-04。
 
-**注意**：本枚举为**技术候选**，`extracting`/`embedded`/`stored` 等值描述 Memory Service 内部处理阶段，**不视为已冻结业务枚举**。具体状态值和状态机条件由 A/B/D 轨道在 D2 确认。`processing_status` 与 `source_business_status`（枚举 2.2）语义正交：一个事件可能有业务上 `success` 但处理流水线中仍处于 `extracting`。
+**注意**：本枚举为**技术候选**，`extracting`/`embedded`/`stored` 等值描述 Memory Service 内部处理阶段，**不视为已冻结业务枚举**。具体状态值和状态机条件由 A/B/D 轨道在 D2 确认。`processing_status` 与 `source_business_status`（枚举 2.3）语义正交：一个事件可能有业务上 `success` 但处理流水线中仍处于 `extracting`。
 
 | 候选值 | 中文含义 | 验证状态 | 备注 |
 |--------|---------|---------|------|
@@ -101,19 +122,20 @@
 | `embedded` | 已生成 Embedding 向量 | PARTIAL | 待 A/B 确认 Embedding 流程状态管理 |
 | `stored` | 已持久化至 SQLite 结构化真源 | PARTIAL | 待 D 确认持久化状态跟踪需求 |
 
-### 2.4 expression_type（偏好表达类型）
+### 2.5 expression_type（偏好表达类型）
 
 关联 REQ-02 偏好动态捕捉。
 
+**说明**：`expression_type` 归一为 `explicit`（显式）与 `implicit`（隐式）两值。旧稿中的 `inferred` 不再作为 `expression_type` 候选值；候选/推断状态由 `memory_status=candidate`（见枚举 2.8）或 `PreferenceCandidate` 对象 / `preference_stage` 等生命周期字段表达。`candidate` 不是表达类型值，而是生命周期状态。
+
 | 候选值 | 中文含义 | 验证状态 | 备注 |
 |--------|---------|---------|------|
-| `explicit` | 显式表达 | UNVERIFIED | 用户以直接、不含糊的文字表达偏好（如「以后都使用中文」），与标注规范 `explicit` 定义一致 |
-| `implicit` | 隐式表达 | UNVERIFIED | 从用户反复行为或选择倾向推断的偏好（需 ≥2 个 Turn 的行为证据），与标注规范 `implicit` 定义一致 |
-| `inferred` | 推断/候选表达 | UNVERIFIED | 经模型辅助推断但尚未经行为验证或人工复核的候选偏好，与标注规范 `candidate` 对应。`inferred` 偏好在置信度达标且经复核确认前，不晋升为正式偏好 |
+| `explicit` | 显式表达 | UNVERIFIED | 用户以直接、不含糊的文字表达偏好（如「以后都使用中文」），或通过手动配置面板、设置界面显式指定 |
+| `implicit` | 隐式表达 | UNVERIFIED | 从用户反复行为或选择倾向推断的偏好（需 ≥2 个 Turn 的行为证据）；模型辅助推断但尚未复核的候选偏好通过 `memory_status=candidate` 表达，不归入 `expression_type` 取值 |
 
-**与标注规范的关系**：标注规范 `ANNOTATION_GUIDELINE_V0.1.md` 使用 `explicit`/`implicit`/`candidate` 三值。本稿使用 `explicit`/`implicit`/`inferred`，其中 `inferred` 与 `candidate` 语义对应（均表示待复核候选状态），术语差异在本稿中已明确记录。若后续需严格统一术语，由 E 轨道在 D3 Gate 前确认终选。
+**与标注规范的关系**：标注规范 `ANNOTATION_GUIDELINE_V0.1.md` 当前使用 `explicit`/`implicit`/`candidate` 三值，与本稿 `explicit`/`implicit` 归一存在术语差异。本差异列为技术债（见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`），由独立任务统一术语。`candidate` 在本稿中通过 `memory_status` 表达候选生命周期，语义等价但不复用为 `expression_type` 取值。
 
-### 2.5 knowledge_type（知识子类型）
+### 2.6 knowledge_type（知识子类型）
 
 关联 REQ-03 知识整合与冲突。
 
@@ -128,7 +150,7 @@
 
 **与 `primary_category` 的关系**：`primary_category` 保留为开放业务分类标签（如「文件操作」「系统设置」），用于语义检索和元数据过滤；**`primary_category` 不得替代 `knowledge_type`**。`knowledge_type` 是本稿定义的稳定业务枚举，用于知识结构化和冲突判定等核心业务逻辑。
 
-### 2.6 memory_type（记忆类型）
+### 2.7 memory_type（记忆类型）
 
 关联 REQ-06 短中长期流转。
 
@@ -141,7 +163,7 @@
 | `long_term` | 长期记忆 | UNVERIFIED | 对应经巩固后的稳定知识或持久偏好，归档策略 `待 D 确认` |
 | `ephemeral` | 瞬态记忆 | UNVERIFIED | 对应单次 Tool 调用或临时上下文，生命周期不超出当前 Turn，待 E 确认业务必要性 |
 
-### 2.7 memory_status（记忆生命周期状态）
+### 2.8 memory_status（记忆生命周期状态）
 
 关联 REQ-06 短中长期流转，REQ-05 精准遗忘。
 
@@ -156,7 +178,7 @@
 | `removed` | 已移除/遗忘 | UNVERIFIED | 经 ForgetPlan 执行遗忘后标记，具体移除方式（标记删除/物理删除）待 D 确认 |
 | `candidate` | 待复核候选 | UNVERIFIED | 临时要求、推断偏好等尚未确认其正式记忆资格的条目 |
 
-### 2.8 preference_scope（偏好作用域）
+### 2.9 preference_scope（偏好作用域）
 
 关联 REQ-02 偏好动态捕捉。
 
@@ -168,7 +190,7 @@
 | `session` | 会话级偏好 | UNVERIFIED | 限定于当前会话的临时偏好调整 |
 | `time_window` | 时间窗口偏好 | UNVERIFIED | 特定时间段内的偏好（如工作日/非工作日） |
 
-### 2.9 sensitivity（敏感度等级）
+### 2.10 sensitivity（敏感度等级）
 
 关联 REQ-05 敏感过滤与精准遗忘。
 
@@ -180,7 +202,7 @@
 | `high` | 高敏感（如个人身份、隐私内容） | UNVERIFIED | 待 E 定义敏感度分级标准 |
 | `critical` | 严重敏感（如密钥、密码、证件号） | UNVERIFIED | 待 E 定义识别规则与强制过滤策略 |
 
-### 2.10 conflict_type（冲突类型）
+### 2.11 conflict_type（冲突类型）
 
 关联 REQ-03 知识整合与冲突。
 
@@ -192,7 +214,7 @@
 | `preference_conflict` | 偏好冲突 | UNVERIFIED | 多条偏好对同一偏好 key 给出冲突取值 |
 | `scope_ambiguity` | 作用域歧义 | UNVERIFIED | 同一条知识在不同上下文中有不同解释 |
 
-### 2.11 resolution_status（冲突消解状态）
+### 2.12 resolution_status（冲突消解状态）
 
 关联 REQ-03 知识整合与冲突。
 
@@ -205,7 +227,7 @@
 | `deferred` | 暂缓处理 | UNVERIFIED | 待 B/E 确认暂缓策略 |
 | `unresolvable` | 无法消解 | UNVERIFIED | 待 B/E 确认无法消解的判定标准 |
 
-### 2.12 forget_mode（遗忘模式/粒度）
+### 2.13 forget_mode（遗忘模式/粒度）
 
 关联 REQ-05 精准遗忘。
 
@@ -245,17 +267,23 @@
 | `user_id` | 数据归属用户标识（用户隔离键） | `string` | required | 业务事件 `*禁止模型生成` | UNVERIFIED | `"user_demo_01"` |
 | `actor_id` | 行为主体标识（事件实际发起者：用户/系统/Tool） | `string` | required | 业务事件 `*禁止模型生成` | UNVERIFIED | `"user_default"` |
 | `source_type` | 来源类型（见枚举 2.1） | `string` | required | 系统生成 | UNVERIFIED | `"tool_result"` |
-| `source_business_status` | 来源事件业务结果状态（见枚举 2.2） | `string` | required | 系统生成 | PARTIAL | `"raw"` |
-| `processing_status` | 内部处理流水线状态（见枚举 2.3，技术候选，待 A/B/D 在 D2 确认） | `string` | optional | 系统生成 | PARTIAL | `"pending"` |
-| `memory_type` | 记忆类型（见枚举 2.6） | `string` | conditional | 派生计算 | UNVERIFIED | `"short_term"` |
+| `schema_version` | 事件契约版本号 | `string` | required | 系统生成 | PARTIAL | `"0.1"` |
+| `trace_id` | 跨服务追踪标识（用于关联上游宿主、Memory Service 和各轨道的请求链路） | `string` | optional | 业务事件 | UNVERIFIED | `"trc_20260730_a1b2c3"` |
+| `event_type` | 事件消息粒度类型（见枚举 2.2；定义消息角色，与 `source_type`（来源大类）处于不同层级） | `string` | required | 业务事件 | UNVERIFIED | `"user_message"` |
+| `source_reference` | 来源记录定位引用（记录定位/游标/脱敏引用，**非原始载荷**；用于定位来源记录，与 `raw_payload_ref` 的载荷引用区分） | `string` | conditional | 业务事件/系统生成 | UNVERIFIED | `"ref://sessions/sess_d4e5f6/turn_07"` |
+| `consent_scope` | 本事件数据使用与遗忘同意范围标注 | `string` | required | 外部输入/业务事件 | UNVERIFIED | `"memory_only"` |
+| `idempotency_key` | 接入幂等与去重键（用于接入侧去重和重放保护，**不可由 `event_id` 替代其业务语义**） | `string` | required | 业务事件/系统生成 | UNVERIFIED | `"idem_20260730_a1b2c3"` |
+| `source_business_status` | 来源事件业务结果状态（见枚举 2.3） | `string` | required | 系统生成 | PARTIAL | `"raw"` |
+| `processing_status` | 内部处理流水线状态（见枚举 2.4，技术候选，待 A/B/D 在 D2 确认） | `string` | optional | 系统生成 | PARTIAL | `"pending"` |
+| `memory_type` | 记忆类型（见枚举 2.7） | `string` | conditional | 派生计算 | UNVERIFIED | `"short_term"` |
 | `occurred_at` | 事件在宿主侧实际发生时间 | `timestamp` | required | 业务事件 `*禁止模型生成` | UNVERIFIED | `"2026-07-30T14:29:55+08:00"` |
 | `captured_at` | 事件捕获入库时间 | `timestamp` | required | 系统生成 | PARTIAL | `"2026-07-30T14:30:00+08:00"` |
 | `session_id` | 所属会话标识 | `string` | required | 业务事件 | UNVERIFIED | `"sess_d4e5f6"` |
 | `raw_payload_ref` | 原始载荷引用（摘要或索引引用，不存真实内容；**高敏正文不得以明文进入引用存储**） | `string` | optional | 系统生成 | UNVERIFIED | `"ref://events/evt_20260730_a1b2c3/raw"` |
 | `content_summary` | 事件内容简要摘要（**须经敏感过滤，高敏正文不得以明文进入摘要**） | `string` | optional | 派生计算 | UNVERIFIED | `"用户通过文件管理器搜索了近期文档"` |
-| `turn_id` | 所属对话 Turn 标识（**触发条件**：`source_type` 为 `user_message`、`agent_response` 或 `tool_result` 且宿主提供了 Turn 边界时必填，其余情况 optional） | `string` | conditional | 业务事件 | UNVERIFIED | `"turn_07"` |
+| `turn_id` | 所属对话 Turn 标识（**触发条件**：`event_type` 为 `user_message`、`agent_response` 且宿主提供了 Turn 边界时必填，其余情况 optional） | `string` | conditional | 业务事件 | UNVERIFIED | `"turn_07"` |
 | `tool_call_id` | 关联的 Tool 调用标识（**触发条件**：`source_type` 为 `tool_result` 时必填，其余情况为 N/A） | `string` | conditional | 业务事件 | UNVERIFIED | `"tool_file_search_v2_001"` |
-| `sensitivity` | 敏感度等级（见枚举 2.9） | `string` | required | 派生计算 | UNVERIFIED | `"low"` |
+| `sensitivity` | 敏感度等级（见枚举 2.10） | `string` | required | 派生计算 | UNVERIFIED | `"low"` |
 | `is_sensitive_matched` | 是否命中敏感过滤规则 | `boolean` | required | 派生计算 | UNVERIFIED | `false` |
 | `requires_embedding` | 是否需要生成 Embedding 向量 | `boolean` | required | 派生计算 | UNVERIFIED | `true` |
 | `has_structured_payload` | 是否包含可抽取的结构化载荷 | `boolean` | optional | 派生计算 | UNVERIFIED | `true` |
@@ -265,6 +293,9 @@
 - `user_id` 与 `actor_id` 的语义区分见头部「用户隔离约定」；二者均禁止由模型生成，必须来自宿主侧业务事件。`user_id` 是用户级数据隔离的硬约束，`actor_id` 描述事件实际发起者（同一 `user_id` 下可能有多个 `actor_id`，如系统代用户执行操作）。
 - `occurred_at` 与 `captured_at` 区分：前者是事件在宿主侧的实际发生时间，后者是系统捕获入库时间，二者可能存在传输/处理延迟。`occurred_at` 禁止由模型生成。
 - `source_business_status` 描述来源事件的业务结果，`processing_status` 描述 Memory Service 内部处理阶段，二者语义正交。`event_status` 字段被拆分为此二字段，不再作为单一字段使用。
+- **`source_reference` 与 `raw_payload_ref` 区分**：`source_reference` 用于定位来源记录（如会话 Turn 引用、游标、脱敏指针），其目标是描述「事件来自哪里」的位置信息；`raw_payload_ref` 指向受控原始载荷或脱敏载荷，其目标是数据内容本身。同一事件可同时拥有二者，但语义不得混同。
+- **`idempotency_key` 业务语义**：`idempotency_key` 用于接入侧幂等与去重，确保同一业务触发不被重复处理；`event_id` 是事件全局标识，不可替代 `idempotency_key` 的去重业务语义。`idempotency_key` **不属模型生成字段**，应由业务事件或系统在接入层生成。
+- **`event_type` 与 `source_type` 层级说明**：`source_type` 定义事件来源大类（「数据从何而来」），`event_type` 定义事件的消息粒度角色（「该数据在交互中的具体角色」）。二者处于不同层级，不得混用。例如：`source_type=chat`、`event_type=user_message` 表示来自对话大类中的一条用户消息。
 - `turn_id` 与 `tool_call_id` 的存在性依赖官方 AI 助手真实事件结构，当前 C 轨道尚未取得麒麟 VM 证据 → `UNVERIFIED`，D3 Gate 前待 C 轨道取证回填。二者已按触发条件标明 conditional 语义。
 - `raw_payload_ref` 的具体存储形态（内联摘要 vs. 外部引用 vs. 分片存储）待 D 确认，本稿不冻结 → `待 D 轨道确认`。
 - `memory_type` 与 `processing_status` 的具体状态机条件与流转规则待 A/E/D 后续 Detail Design 确认，本稿仅定义候选值范围。
@@ -280,12 +311,12 @@
 |--------|---------|---------|--------|------|---------|----------|
 | `preference_id` | 偏好全局唯一标识 | `string` | required | 系统生成 | PARTIAL | `"pref_20260730_x9y0z1"` |
 | `user_id` | 数据归属用户标识（用户隔离键） | `string` | required | 业务事件 `*禁止模型生成` | UNVERIFIED | `"user_demo_01"` |
-| `expression_type` | 偏好表达类型（见枚举 2.4） | `string` | required | 派生计算 | UNVERIFIED | `"explicit"` |
-| `preference_scope` | 偏好作用域（见枚举 2.8） | `string` | required | 派生计算 | UNVERIFIED | `"topic"` |
+| `expression_type` | 偏好表达类型（见枚举 2.5） | `string` | required | 派生计算 | UNVERIFIED | `"explicit"` |
+| `preference_scope` | 偏好作用域（见枚举 2.9） | `string` | required | 派生计算 | UNVERIFIED | `"topic"` |
 | `preference_key` | 偏好键名（业务语义标识） | `string` | required | 业务事件 | UNVERIFIED | `"file_search_sort_order"` |
 | `preference_value` | 偏好值 | `string` | required | 业务事件 | UNVERIFIED | `"by_modified_desc"` |
 | `confidence_score` | 置信度评分（0.0–1.0） | `float` | required | 派生计算 | UNVERIFIED | `0.85` |
-| `memory_status` | 记忆生命周期状态（见枚举 2.7，优先字段） | `string` | required | 派生计算 | UNVERIFIED | `"active"` |
+| `memory_status` | 记忆生命周期状态（见枚举 2.8，优先字段） | `string` | required | 派生计算 | UNVERIFIED | `"active"` |
 | `is_active` | 当前是否激活（**过渡字段**：待 D/E 统一为 `memory_status` 后在 v1.0 中移除） | `boolean` | required | 系统生成 | PARTIAL | `true` |
 | `is_temporary` | 是否为临时要求（`true` 时不得产生正式长期偏好，仅属候选判断阶段） | `boolean` | required | 派生计算 | UNVERIFIED | `false` |
 | `should_persist` | 是否应持久化为正式偏好（`false` 时等同 `is_temporary=true`，不晋升为正式长期偏好） | `boolean` | required | 派生计算 | UNVERIFIED | `true` |
@@ -306,7 +337,7 @@
 - `preference_key` 和 `preference_value` 的具体 schema 取决于官方 AI 助手偏好模型，当前官方模型未提供 → `UNVERIFIED`。
 - **版本化业务要求**：偏好每次更新时 `version` 递增，`previous_version_id` 指向上一版本的 `preference_id`，形成可回溯的版本链。具体 SQLite 实现（如版本号生成策略、并发控制、历史版本保留策略）标记 `待 D 确认`，本稿不冻结存储实现。
 - **`memory_status` 优先**：`memory_status` 是正式生命周期状态的唯一优先字段；`is_active` 和 `should_decay` 过渡保留，待 D/E 在 v1.0 中统一为 `memory_status` 后移除这些布尔字段。
-- `expression_type` 的 `inferred` 值表示经模型辅助推断的候选偏好，在置信度达标且经行为验证/人工复核确认前，不晋升为正式偏好（`memory_status` 保持 `candidate`）。
+- **候选/推断偏好说明**：经模型辅助推断但尚未经行为验证或人工复核的候选偏好，不由独立的 `expression_type` 值表达，而通过 `memory_status=candidate` 表达其候选生命周期状态。待置信度达标且经复核确认后，`memory_status` 晋升为 `active`，成为正式偏好。此设计替代了旧稿中 `expression_type=inferred` 的表达方式，避免将表达类型与生命周期状态混同。
 
 ### 3.3 Knowledge（结构化知识对象）
 
@@ -318,9 +349,9 @@
 |--------|---------|---------|--------|------|---------|----------|
 | `knowledge_id` | 知识条目全局唯一标识 | `string` | required | 系统生成 | PARTIAL | `"kn_20260730_m3n4o5"` |
 | `user_id` | 数据归属用户标识（用户隔离键） | `string` | required | 业务事件 `*禁止模型生成` | UNVERIFIED | `"user_demo_01"` |
-| `knowledge_type` | 知识子类型（见枚举 2.5） | `string` | required | 派生计算 | UNVERIFIED | `"workflow"` |
-| `memory_type` | 记忆类型（见枚举 2.6） | `string` | required | 派生计算 | UNVERIFIED | `"medium_term"` |
-| `memory_status` | 记忆生命周期状态（见枚举 2.7，优先字段） | `string` | required | 派生计算 | UNVERIFIED | `"active"` |
+| `knowledge_type` | 知识子类型（见枚举 2.6） | `string` | required | 派生计算 | UNVERIFIED | `"workflow"` |
+| `memory_type` | 记忆类型（见枚举 2.7） | `string` | required | 派生计算 | UNVERIFIED | `"medium_term"` |
+| `memory_status` | 记忆生命周期状态（见枚举 2.8，优先字段） | `string` | required | 派生计算 | UNVERIFIED | `"active"` |
 | `source_event_id` | 来源事件标识，关联 `MemorySourceEvent.event_id` | `string` | required | 系统生成 | UNVERIFIED | `"evt_20260730_a1b2c3"` |
 | `content_summary` | 知识内容摘要（可检索字段；**须经敏感过滤**） | `string` | required | 派生计算 | UNVERIFIED | `"用户频繁通过文件管理器按修改日期降序排列文件"` |
 | `content_ref` | 完整内容引用（不冻结具体存储形态） | `string` | optional | 系统生成 | UNVERIFIED | `"ref://knowledge/kn_20260730_m3n4o5/full"` |
@@ -354,12 +385,12 @@
 |--------|---------|---------|--------|------|---------|----------|
 | `conflict_id` | 冲突全局唯一标识 | `string` | required | 系统生成 | PARTIAL | `"cfl_20260730_p7q8r9"` |
 | `user_id` | 数据归属用户标识（用户隔离键） | `string` | required | 派生计算 `*禁止模型生成` | UNVERIFIED | `"user_demo_01"` |
-| `conflict_type` | 冲突类型（见枚举 2.10） | `string` | required | 派生计算 | UNVERIFIED | `"temporal_inconsistency"` |
+| `conflict_type` | 冲突类型（见枚举 2.11） | `string` | required | 派生计算 | UNVERIFIED | `"temporal_inconsistency"` |
 | `left_knowledge_id` | 冲突左方的知识条目 ID | `string` | required | 系统生成 | PARTIAL | `"kn_20260730_m3n4o5"` |
 | `right_knowledge_id` | 冲突右方的知识条目 ID | `string` | required | 系统生成 | PARTIAL | `"kn_20260728_a1b2c3"` |
 | `involved_knowledge_ids` | 涉及的全部知识条目 ID（用于多知识冲突） | `list[string]` | optional | 系统生成 | UNVERIFIED | `["kn_20260730_m3n4o5", "kn_20260728_a1b2c3"]` |
 | `conflict_summary` | 冲突内容简要描述 | `string` | required | 派生计算 | UNVERIFIED | `"知识条目 kn_*_m3n4o5 表明用户偏好按修改日期排序，而 kn_*_a1b2c3 表明用户偏好按文件名排序"` |
-| `resolution_status` | 消解状态（见枚举 2.11，**最终消解结果 `resolved_auto`/`resolved_manual`/`unresolvable` 不得由模型生成**） | `string` | required | 系统生成 | PARTIAL | `"detected"` |
+| `resolution_status` | 消解状态（见枚举 2.12，**最终消解结果 `resolved_auto`/`resolved_manual`/`unresolvable` 不得由模型生成**） | `string` | required | 系统生成 | PARTIAL | `"detected"` |
 | `resolution_strategy` | 消解策略（保留较新值/保留较高置信度/标记为冲突待确认/合并；**最终选择不得由模型生成**） | `string` | conditional | 派生计算 | UNVERIFIED | `"keep_higher_confidence"` |
 | `is_auto_resolvable` | 是否可自动消解 | `boolean` | required | 派生计算 | UNVERIFIED | `true` |
 | `resolution_confidence` | 消解结果的置信度（0.0–1.0；**最终值不得由模型生成**） | `float` | optional | 派生计算 | UNVERIFIED | `0.68` |
@@ -372,6 +403,15 @@
 - `conflict_type` 中 `contradiction`（逻辑矛盾）与 `temporal_inconsistency`（时间不一致）的判定阈值和判别逻辑由 B 轨道在冲突检测模块设计阶段确认 → `待 B 确认`。
 - `resolution_strategy` 的具体策略集合和优先级排序待 B/E 在 ADR 中确认 → `待 B/E 确认`。
 - `is_auto_resolvable` 的判定标准（置信度阈值/差异幅度/类型判定）待 B/E 确认 → `待 B/E 确认`。
+- **冲突优先级六档定级**（依据 SOP v1.1，待人工导入后复核）：冲突消解时，不同来源可信度按以下优先级排序（由高到低），高优先级来源的信息覆盖低优先级来源的冲突主张；同等优先级来源之间如存在矛盾，标记为 `detected` 待进一步消解。
+  1. **用户最新显式配置**：用户通过手动配置、设置面板或显式声明给出的最新偏好或事实。
+  2. **用户明确确认**：系统询问后用户以肯定回复（如「是」「确认」「对」）明确确认的内容。
+  3. **真实 Tool 执行结果**：Tool 在实际运行环境中返回的执行结果、输出或状态码。
+  4. **多次一致行为**：来自 ≥2 个独立 Turn/事件的一致行为模式，且各次行为之间无矛盾。
+  5. **单次行为推断**：从单次用户行为或单次事件中推断出的偏好或知识。
+  6. **模型自身推测**：LLM 基于上下文推理得出的推测性结论，未经行为验证或 Tool 执行确认。
+- **作用域差异判定**：当两条知识或偏好的 `preference_scope`/`knowledge_type`/`primary_category` 等作用域字段不同时，应优先判定为**可共存**而非冲突（如「文件操作」中的排序偏好与「浏览器」中的排序偏好分属不同作用域，不构成冲突）。仅在作用域相同或高度重叠的情况下，方进入冲突判定流程。
+- **模型自身推测约束**：第 6 档「模型自身推测」**不得覆盖**第 1–5 档中任何高可信来源，也不得直接成为事实真源。模型推测仅可作为候选提示供用户确认，在用户确认前 `memory_status` 必须保持 `candidate`。
 - **禁止模型生成规则**：`resolution_status` 的最终结果值（`resolved_auto`、`resolved_manual`、`unresolvable`）、`resolution_strategy` 的最终选择、`resolution_confidence` 的最终值和 `resolved_by` 的消解方标识**均不得由模型/LLM 生成**，必须由消解规则引擎或系统计算产出。
 
 ### 3.5 ForgetPlan（遗忘计划对象）
@@ -384,7 +424,7 @@
 |--------|---------|---------|--------|------|---------|----------|
 | `forget_plan_id` | 遗忘计划全局唯一标识 | `string` | required | 系统生成 | PARTIAL | `"fgp_20260730_s1t2u3"` |
 | `user_id` | 数据归属用户标识（用户隔离键） | `string` | required | 外部输入 `*禁止模型生成` | UNVERIFIED | `"user_demo_01"` |
-| `forget_mode` | 遗忘模式/粒度（见枚举 2.12） | `string` | required | 外部输入 | PARTIAL | `"single_item"` |
+| `forget_mode` | 遗忘模式/粒度（见枚举 2.13） | `string` | required | 外部输入 | PARTIAL | `"single_item"` |
 | `target_selector` | 用户输入的遗忘目标选择器（自然语言描述或条件表达式，如「忘掉上周二关于项目排期的所有内容」） | `string` | required | 外部输入 | UNVERIFIED | `"忘掉上周二关于项目排期的所有内容"` |
 | `resolved_target_ids` | 系统解析后的目标 ID 列表（必须经预览确认后方可执行删除；**不得由模型生成**） | `list[string]` | optional | 派生计算/系统生成 | UNVERIFIED | `["kn_20260730_m3n4o5", "kn_20260728_a1b2c3"]` |
 | `target_type` | 遗忘目标的业务类型（`knowledge`、`preference`、`event`、`all`） | `string` | required | 外部输入 | UNVERIFIED | `"knowledge"` |
@@ -435,6 +475,7 @@ E 轨道在本稿中定义必须表达的业务含义：
 | 冲突最终结果 | `resolution_status`（`resolved_auto`/`resolved_manual`/`unresolvable`）、`resolution_strategy`、`resolution_confidence`、`resolved_by` | 消解规则引擎/系统计算 |
 | 安全终判 | `sensitivity` 的最终定级（在敏感过滤规则引擎产出后，模型不得覆写） | 敏感过滤规则引擎 |
 | 遗忘最终决策 | `resolved_target_ids`、`requires_confirmation` 最终判定、`affected_count` 最终值、整体删除执行决策 | 遗忘规则引擎/系统计算 |
+| 幂等与去重 | `idempotency_key`（MemorySourceEvent） | 业务事件/系统生成（接入层） |
 
 违反上述规则可能导致：用户隔离被破坏、虚构时间戳、虚假消解结果、安全等级被降级、或错误遗忘范围。各轨道在实现层必须确保这些字段的生成链路不经过 LLM 调用。
 
@@ -449,7 +490,7 @@ E 轨道在本稿中定义必须表达的业务含义：
 
 - `is_temporary=true` 或 `should_persist=false` 的偏好条目**不得产生正式长期偏好**，其 `memory_status` 必须为 `candidate` 或 `expired`。
 - 临时要求的生命周期限定于当前会话或指定时间窗口，到期后自动标记 `memory_status=expired`，不进入用户级偏好检索链路，也不参与偏好冲突判定。
-- `expression_type=inferred` 的偏好条目在置信度达标且经行为验证/人工复核确认前，`memory_status` 保持 `candidate`，不晋升为正式偏好（`memory_status=active`）。
+- 经模型辅助推断但尚未经行为验证或人工复核的候选偏好，通过 `memory_status=candidate` 表达其候选生命周期状态，不归入 `expression_type` 取值。在置信度达标且经复核确认前，`memory_status` 保持 `candidate`，不晋升为正式偏好（`memory_status=active`）。
 - 临时要求和候选偏好可通过审核流程提升为正式偏好，但需版本化记录晋升事件（新 `version`，`previous_version_id` 指向临时/候选条目）。
 
 ### 4.5 本稿不冻结的技术实现
@@ -515,8 +556,8 @@ E 轨道在本稿中定义必须表达的业务含义：
 ### 5.3 C 轨道（OS Agent Hook、MemoryClient、Tool/Turn Adapter）
 
 **核对内容**：
-- `MemorySourceEvent.source_type`、`turn_id`、`tool_call_id`、`session_id`、`actor_id`、`user_id` 是否在真实官方 AI 助手 Tool/Turn/Context 事件中存在对应字段，字段语义是否一致
-- `source_type` 六项候选值是否覆盖真实宿主可提供的全部事件类型
+- `MemorySourceEvent.source_type`（七项候选值）、`event_type`（三项消息粒度值）、`turn_id`、`tool_call_id`、`session_id`、`actor_id`、`user_id`、`source_reference`、`consent_scope`、`idempotency_key`、`trace_id` 是否在真实官方 AI 助手 Tool/Turn/Context 事件中存在对应字段，字段语义是否一致
+- `source_type` 七项候选值是否覆盖真实宿主可提供的全部事件类型
 - `MemorySourceEvent.raw_payload_ref` 的事件封装方式是否与 C 的 Hook 数据流兼容
 - `MemorySourceEvent.occurred_at` 在宿主事件中是否存在可直接取证的对应字段
 
@@ -542,7 +583,7 @@ E 轨道在本稿中定义必须表达的业务含义：
 
 **核对内容**：
 - `user_id` 用户隔离业务规则是否与标注规范和安全边界一致
-- `expression_type`（explicit/implicit/inferred）与标注规范术语的对齐情况
+- `expression_type`（explicit/implicit）与标注规范术语的对齐情况；`inferred` 已归一为 `implicit`，候选状态由 `memory_status=candidate` 表达，待标注规范同步更新
 - `knowledge_type` 六项候选值是否覆盖全部业务场景（如不足，需补充）
 - `memory_status` 统一生命周期候选值与标注规范中的状态对应关系
 - 临时要求/正式偏好/候选偏好的边界规则是否与开发集分类一致
@@ -573,7 +614,9 @@ E 轨道在本稿中定义必须表达的业务含义：
 | HD-SCHEMA-11 | 导入架构设计审查报告（Copilot 独立审查报告）至 `docs/baseline/`，用报告建议复核本稿全部字段与约束，记录差异并决策是否追加修订 | REQ-01–07 | E | D3 Gate 前 |
 | HD-SCHEMA-12 | C 轨道在麒麟 VM 取证时确认宿主事件中 `user_id`/`actor_id` 字段是否存在及语义，回填本稿用户隔离约定的可行性 | REQ-01 | C | L2 取证窗口 |
 | HD-SCHEMA-13 | D/E 确认 `memory_status` 统一生命周期枚举与 SQLite 实现方案，决定是否在 v1.0 中移除 `is_active`/`is_outdated`/`should_decay` 等过渡布尔字段 | REQ-05、REQ-06 | D·E | D3 Gate 前 |
-| HD-SCHEMA-14 | E 确认 `expression_type` 最终术语选择（`inferred` v.s. `candidate`），统一本稿与标注规范 | REQ-02 | E | D3 Gate 前 |
+| HD-SCHEMA-14 | E 确认 `expression_type` 已按任务规格归一为 `explicit`/`implicit`，待 SOP v1.1 导入后终审；同步更新标注规范 `ANNOTATION_GUIDELINE_V0.1.md` 术语（当前仍使用 `explicit`/`implicit`/`candidate` 三值，跨文档不一致列为技术债） | REQ-02 | E | D3 Gate 前 |
+| HD-SCHEMA-15 | 导入 SOP v1.1「总体架构、团队分工与标准开发 SOP」实体文件至 `docs/baseline/`，逐项复核本稿按任务规格回填的 `source_type` 七值规范集合、`event_type` 消息粒度分层、六档冲突优先级与 `expression_type` 归一结果 | REQ-01–07 | 团队/E | D3 Gate 前 |
+| HD-SCHEMA-16 | C 轨道在麒麟 VM 取证 `source_type` 七值（`chat`、`tool_result`、`manual_config`、`recollect`、`file`、`meeting`、`voice`）与 `event_type` 三值（`user_message`、`agent_response`、`system_message`）在宿主真实事件结构中的覆盖情况，回填验证状态 | REQ-01 | C | L2 取证窗口 |
 
 ---
 
@@ -585,6 +628,7 @@ E 轨道在本稿中定义必须表达的业务含义：
 |------|------|---------|------|
 | v0.1 | 2026-07-30 | DRAFT 初稿，建立五核心业务对象字段初稿、命名规则、八组候选枚举、反馈责任矩阵和未确认能力清单。基于 README、各模块 README 和赛题追踪矩阵 v0.1 事实编写。所有涉及官方宿主能力的字段均如实标记 UNVERIFIED/PARTIAL。 | E 轨道 |
 | v0.1（修订） | 2026-07-30 | 业务 Schema 用户隔离与字段一致性修复：新增 `user_id` 对所有核心对象的用户归属；区分 `user_id`/`actor_id` 语义；新增 `expression_type`、`knowledge_type`、`memory_status` 三组枚举；拆分来源业务状态与内部处理流水线状态；新增 `occurred_at`、`target_selector`、`resolved_target_ids` 等字段；Preference 新增版本化（`version`/`previous_version_id`）、临时边界（`is_temporary`/`should_persist`）；补敏感载荷红线、禁止模型生成字段清单、临时与正式偏好边界规则；conditional 字段写明触发条件。仍为 v0.1 DRAFT，未冻结任何技术实现。 | E 轨道 |
+| v0.1（修订2） | 2026-07-30 | 对齐统一事件模型与冲突优先级基线（PR #10 审查修订）：`source_type` 替换为 SOP v1.1 七值规范集合（`chat`、`tool_result`、`manual_config`、`recollect`、`file`、`meeting`、`voice`）；新增 `event_type` 消息粒度枚举（`user_message`/`agent_response`/`system_message`）并说明与 `source_type` 的层级差异；`MemorySourceEvent` 新增 `schema_version`、`trace_id`、`event_type`、`source_reference`、`consent_scope`、`idempotency_key` 六个字段；明确 `source_reference` 与 `raw_payload_ref` 语义区分；`idempotency_key` 补入禁止模型生成清单；`expression_type` 归一为 `explicit`/`implicit`，移除 `inferred`，`candidate` 状态由 `memory_status` 表述；Conflict 标注完整引用六档冲突优先级与作用域可共存规则；枚举编号因新增 2.2 整体顺延。依据 SOP v1.1（待人工导入）按任务规格回填，待 SOP 实体文件导入后复核。仍为 v0.1 DRAFT。 | E 轨道 |
 
 ### 冻结为 v1.0 的条件
 
@@ -595,7 +639,7 @@ E 轨道在本稿中定义必须表达的业务含义：
 3. D3 Gate 经 D/E Reviewer 审查通过，且审查结论文档化
 4. A/B/C/D 各轨道字段差异清单已提交且全部闭合（差异项须有明确决议）
 5. 官方 AI 助手真实 Tool/Turn/Context 事件结构经麒麟 VM 取证，C 轨道已回填 `MemorySourceEvent` 中 `user_id`、`actor_id`、`turn_id`、`tool_call_id`、`occurred_at` 等字段的验证状态
-6. 六章「未确认能力与人工决策待办」中 HD-SCHEMA-01 至 HD-SCHEMA-14 均有明确决议
+6. 六章「未确认能力与人工决策待办」中 HD-SCHEMA-01 至 HD-SCHEMA-16 均有明确决议
 7. Evidence Reviewer 确认文档中所有字段的验证状态标注与当时实际证据等级一致
 8. 本文档中各枚举章节中所有的「UNVERIFIED」标记在实际确认后更新为「VERIFIED」，或确认为不可能确认后标记为「NOT_APPLICABLE」
 9. `memory_status` 统一生命周期枚举已被 D/E 确认，`is_active`/`is_outdated`/`should_decay` 等过渡布尔字段的移除决策已明确
