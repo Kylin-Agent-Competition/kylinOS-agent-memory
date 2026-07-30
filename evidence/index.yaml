@@ -1,3 +1,11 @@
 schema_version: "1.0"
 project: "kylin-os-agent-memory"
-entries: []
+entries:
+  - id: "d1-tools-validation-l2"
+    path: "d1-tools-validation-l2/"
+    title: "D1 工具脚本 L2 验证证据"
+    date: "2026-07-30T17:03:00+08:00"
+    commit: "824a3c38fb885387a16029c20940156d97e6d68d"
+    branch: "KylinOS-agent-memory/feat/d1-baseline-setup"
+    status: "verified"
+    summary: "6/6 测试通过，0 失败"
