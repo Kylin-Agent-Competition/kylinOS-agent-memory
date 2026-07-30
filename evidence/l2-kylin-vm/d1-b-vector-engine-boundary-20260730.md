@@ -2,7 +2,7 @@
 
 - 任务：Vector Engine 服务、Collection、CRUD、过滤与重启持久化基线
 - 分支：`test/B-vector-engine-baseline`
-- 对应提交：`05845a6426e670f34449225f3996f92b90a88ad2`
+- 对应提交：`4da5dedfbed27cbd7a1b2993ee9fcc0bc99b2c1e`
 - 环境：Kylin V11，x86_64，内核 `6.6.0-63-generic`
 - 审查状态：`gaoyizhe934` 已授权提交，未推送
 - 验证结论：`BLOCKED`
@@ -53,7 +53,7 @@ code=1002, message=Unexpected error in RPC handling
 - 测试仅使用唯一 Collection 名 `d1_vector_baseline`；由于
   `ShowCollections` 即失败，未创建该 Collection。
 - 未修改其他成员代码，未发现 Git 冲突。
-- 未提交，未 Push。
+- 本报告已提交；当前功能分支尚未 Push。
 
 ## 解除阻塞条件
 
