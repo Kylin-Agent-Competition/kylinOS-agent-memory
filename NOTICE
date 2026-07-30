@@ -12,6 +12,13 @@
 
 官方 SDK、系统组件、模型及 Kaiming 包归各自权利人所有。
 
+## 第三方参考副本
+
+`third_party/kylin-coreai-embedding/reference/embedding_api.h` 为上游仓库
+gitee.com/openkylin/kylin-coreai-embedding (openkylin/nile-sp2, commit 63aed6f3)
+的头文件副本，仅供离线参考，许可证为上游仓库的 LGPL-2.1+。
+此文件不参与正式构建。
+
 ## 第三方依赖记录要求
 
 后续引入任何第三方依赖时，必须在本文件中记录：

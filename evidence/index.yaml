@@ -1,3 +1,44 @@
 schema_version: "1.0"
 project: "kylin-os-agent-memory"
-entries: []
+entries:
+  - id: RUNTIME-001
+    description: "kylin-ai-runtime 二进制完整性验证"
+    status: HOST_VERIFIED
+    evidence_level: E4
+    source: evidence/l2-kylin-vm/runtime_identity.log
+    details: |
+      PID 5678, /usr/bin/kylin-ai-runtime
+      包版本 1.2.0.4-0k0.1 (内部自报 1.3.0, PARTIAL)
+      SHA-256: b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225
+      Build ID: d3201935767c5f4a3a89fc00b7223d8c4770313b
+      dpkg -V: 无输出
+    date: 2026-07-29
+    reviewer: Reviewer (Runtime 身份抽查)
+
+  - id: ABI-001
+    description: "Embedding SDK 动态库 ABI 验证"
+    status: ABI_VERIFIED
+    evidence_level: E3
+    source: evidence/l2-kylin-vm/embedding_abi_symbols.log
+    details: |
+      .so: /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1
+      包: libkylin-coreai-embedding 1.2.0.0-0k0.4
+      ldd: 全部解析，无 not found
+      nm -D: 260 个 T 段符号，18 个主要 C API 确认导出
+      nm 仅确认符号存在，不确认参数/返回类型
+    date: 2026-07-29
+    limitations: 函数签名源自头文件推断，需编译+宿主调用确认
+
+  - id: EMBED-CALL-001
+    description: "最小 Embedding 调用验证 (5 用例)"
+    status: HOST_VERIFIED
+    evidence_level: E4
+    source: evidence/l2-kylin-vm/minimal_embedding_run.log
+    details: |
+      中文(你好世界) / 英文(Hello world) / 偏好句子(我喜欢用表格输出)
+      / 单字符(A) / 空输入("")
+      全部通过，统一维度 768
+      Runtime 自动加载默认模型 ensemble-embd_gte-base_uint8-text
+      运行输出见原始日志
+    date: 2026-07-29
+    limitations: 异步/批量/并发/非 x86_64 架构不属于本项目验收范围
