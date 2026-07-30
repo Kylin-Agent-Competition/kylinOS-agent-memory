@@ -5,8 +5,10 @@ Documentation=https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
 
 [Service]
 Type=simple
-ExecStart=%h/projects/kylin-memory-sdk/.venv/bin/python -m memory_service
-WorkingDirectory=%h/projects/kylin-memory-sdk
+# ExecStart 指向 memory-service 目录下的 main.py 入口
+# 当前为占位模板，__REPO_ROOT__ 由安装脚本在安装时替换为实际仓库路径
+ExecStart=__REPO_ROOT__/.venv/bin/python __REPO_ROOT__/memory-service/main.py
+WorkingDirectory=__REPO_ROOT__
 Environment="LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends"
 Environment="PYTHONUNBUFFERED=1"
 Restart=on-failure

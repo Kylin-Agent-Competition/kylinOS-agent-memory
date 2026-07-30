@@ -6,6 +6,13 @@ set -euo pipefail
 # 使用：在麒麟虚拟机执行 ./tools/env_check.sh
 # ============================================================
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+if [[ ! "$REPO_ROOT" =~ /kylinOS-agent-memory$ ]]; then
+    echo "WARNING: Repository root not at expected name 'kylinOS-agent-memory', found: $REPO_ROOT"
+fi
+
 PASS=0
 FAIL=0
 
@@ -118,11 +125,10 @@ fi
 # ---- 7. Project Directories ----
 echo ""
 echo "--- 7. Project Directories ---"
-PROJECT_DIR="${HOME}/projects/kylin-memory-sdk"
-if [ -d "$PROJECT_DIR" ]; then
-    check_pass "Project dir: $PROJECT_DIR"
+if [ -d "$REPO_ROOT" ]; then
+    check_pass "Project dir: $REPO_ROOT"
 else
-    check_fail "Project dir" "$PROJECT_DIR not found"
+    check_fail "Project dir" "$REPO_ROOT not found"
 fi
 
 MEM_DIRS=(
