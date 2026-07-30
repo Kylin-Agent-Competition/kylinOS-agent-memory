@@ -1,0 +1,49 @@
+# Minimal Embedding Call Run Log
+# Date: 2026-07-29 (re-verified on Kylin VM)
+# Host: 银河麒麟桌面 V11 2603 x86_64 (VirtualBox)
+
+Git Commit: b3f9cff (docs(day1): 提交最小 Embedding 调用脚本与宿主运行输出)
+Binary: /tmp/embed_correct (compiled from embed_correct.cpp)
+
+## Compile Command
+
+$ g++ -std=c++17 /tmp/embed_correct.cpp -ldl -o /tmp/embed_correct
+
+Exit Code: 0 (success)
+
+## Run Command
+
+$ LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH /tmp/embed_correct
+
+Exit Code: 0 (success)
+
+## Full Output
+
+=== Embedding SDK 最小调用（已修正） ===
+
+✅ 创建会话
+[1785334696235] info  Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock
+[1785334696235] info  Runtime version is  1.3.0 InitEngine call new init_v2
+[1785334696254] info  Proxy init success,sessionId is: 1685130851
+✅ 初始化
+✅ 事件循环
+
+[1] 中文: "你好世界"
+[1785334696254] warn  Model was not initialized explicitly; SDK is loading the default model.
+[1785334696254] info  Try to get default model
+[1785334696259] info  Get default model success, model: ensemble-embd_gte-base_uint8-text
+[1785334696259] info  Try to init default model: ensemble-embd_gte-base_uint8-text
+[1785334696260] info  Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 1685130851
+[1785334696260] info  Init default model success, model: ensemble-embd_gte-base_uint8-text
+  ✅ 维度=768, 前5值: -0.0034 0.0366 -0.0618 0.0225 -0.0486 ...
+[2] 英文: "Hello world"
+  ✅ 维度=768, 前5值: -0.0399 0.0504 -0.0357 0.0012 -0.0234 ...
+[3] 偏好句子: "我喜欢用表格输出"
+  ✅ 维度=768, 前5值: -0.0201 0.0591 -0.0124 0.0056 -0.0389 ...
+[4] 单字符: "A"
+  ✅ 维度=768, 前5值: -0.0870 0.0824 -0.0238 0.0283 0.0312 ...
+[5] 空输入: ""
+  ✅ 维度=768, 前5值: -0.0726 0.0508 -0.0465 0.0409 0.0271 ...
+
+✅ 完成
+Exit Code: 0
