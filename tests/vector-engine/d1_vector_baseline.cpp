@@ -43,6 +43,7 @@ struct Options {
     std::string collection = "d1_vector_baseline";
     std::string db_file;
     bool encrypted = false;
+    bool service_managed_database = false;
     std::string key;
 };
 
@@ -131,7 +132,7 @@ void PrintUsage(const char* program) {
         << "Usage: " << program
         << " --phase <prepare|verify|cleanup> --db-file <path>"
            " [--app-id <id>] [--collection <name>]"
-           " [--encrypted --key <key>]\n\n"
+           " [--encrypted --key <key>] [--service-managed-database]\n\n"
         << "Persistence workflow:\n"
         << "  1. Run --phase prepare.\n"
         << "  2. Restart the Vector Engine service outside this probe.\n"
@@ -163,6 +164,8 @@ Options ParseOptions(int argc, char** argv) {
             options.collection = require_value(argument);
         } else if (argument == "--encrypted") {
             options.encrypted = true;
+        } else if (argument == "--service-managed-database") {
+            options.service_managed_database = true;
         } else if (argument == "--key") {
             options.key = require_value(argument);
         } else if (argument == "--help" || argument == "-h") {
@@ -192,6 +195,10 @@ Options ParseOptions(int argc, char** argv) {
     if (!options.encrypted && !options.key.empty()) {
         throw std::invalid_argument("--key requires --encrypted");
     }
+    if (options.service_managed_database && options.encrypted) {
+        throw std::invalid_argument(
+            "--service-managed-database cannot be combined with --encrypted");
+    }
 
     return options;
 }
@@ -202,9 +209,13 @@ void ConnectAndLoad(const std::shared_ptr<VectorDB::Database>& client, const Opt
     RequireStatus("service_connect", client->Connect(connect_param));
     Pass("service_connect", "SDK data-plane connection established");
 
-    RequireStatus("database_load",
-                  client->LoadDBFile(options.db_file, options.encrypted, options.key));
-    Pass("database_load", "database file loaded: " + options.db_file);
+    if (options.service_managed_database) {
+        Pass("database_mode", "using database preloaded by service: " + options.db_file);
+    } else {
+        RequireStatus("database_load",
+                      client->LoadDBFile(options.db_file, options.encrypted, options.key));
+        Pass("database_load", "database file loaded: " + options.db_file);
+    }
 
     std::vector<std::string> collections;
     RequireStatus("service_ready", client->ShowCollections(collections));

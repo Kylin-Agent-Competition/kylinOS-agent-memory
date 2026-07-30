@@ -28,6 +28,7 @@ SDK_MODE=""
 SDK_VERSION=""
 SDK_BUILD_FLAGS=()
 BUILD_DIR=""
+SERVICE_MANAGED_DATABASE=false
 
 log() {
     local step="$1"
@@ -63,6 +64,7 @@ Usage:
     [--collection <name>] \
     [--service-unit <systemd-user-unit>] \
     [--sdk-source <absolute-path>] \
+    [--service-managed-database] \
     [--previous-invocation-id <id>]
 
 Persistence workflow:
@@ -76,6 +78,11 @@ Persistence workflow:
 
 The script does not install packages, start/restart services, write evidence
 files, or upload results.
+
+Service-managed database workflow:
+  Pass --service-managed-database when the systemd service preloads the
+  database. The runner verifies the engine process holds the exact --db-file
+  path and the probe does not call the unsupported runtime LoadDBFile RPC.
 
 SDK discovery:
   1. The installed pkg-config module is preferred when available.
@@ -125,6 +132,10 @@ parse_arguments() {
                 require_value "$1" "$#"
                 SDK_SOURCE="$2"
                 shift 2
+                ;;
+            --service-managed-database)
+                SERVICE_MANAGED_DATABASE=true
+                shift
                 ;;
             --previous-invocation-id)
                 require_value "$1" "$#"
@@ -224,6 +235,16 @@ check_database_path() {
     local parent
     parent="$(dirname -- "${DB_FILE}")"
 
+    if [[ "${SERVICE_MANAGED_DATABASE}" == true ]]; then
+        if [[ ! -f "${DB_FILE}" || ! -r "${DB_FILE}" ]]; then
+            fail "database_path" \
+                "service-managed database file is missing or unreadable: ${DB_FILE}"
+        fi
+        pass "database_path" \
+            "service-managed database file is readable: ${DB_FILE}"
+        return
+    fi
+
     if [[ "${PHASE}" == "prepare" ]]; then
         if [[ ! -d "${parent}" ]]; then
             fail "database_path" "parent directory does not exist: ${parent}"
@@ -242,6 +263,60 @@ check_database_path() {
         fail "database_path" "database file is not readable: ${DB_FILE}"
     fi
     pass "database_path" "existing database file is readable: ${DB_FILE}"
+}
+
+check_service_database() {
+    local main_pid
+    local process_pid
+    local argument
+    local engine_seen
+    local database_seen
+    local -a process_pids=()
+    local -a process_args=()
+
+    if [[ "${SERVICE_MANAGED_DATABASE}" != true ]]; then
+        return
+    fi
+
+    main_pid="$(
+        systemctl --user show "${SERVICE_UNIT}" --property=MainPID --value
+    )"
+    if [[ ! "${main_pid}" =~ ^[1-9][0-9]*$ ]]; then
+        fail "service_database" "service returned an invalid MainPID: ${main_pid}"
+    fi
+
+    process_pids=("${main_pid}")
+    for process_pid in $(<"/proc/${main_pid}/task/${main_pid}/children"); do
+        process_pids+=("${process_pid}")
+    done
+
+    for process_pid in "${process_pids[@]}"; do
+        if [[ ! -r "/proc/${process_pid}/cmdline" ]]; then
+            continue
+        fi
+        process_args=()
+        while IFS= read -r -d '' argument; do
+            process_args+=("${argument}")
+        done <"/proc/${process_pid}/cmdline"
+        engine_seen=false
+        database_seen=false
+        for argument in "${process_args[@]}"; do
+            if [[ "${argument##*/}" == "kylin-ai-vector-engine" ]]; then
+                engine_seen=true
+            fi
+            if [[ "${argument}" == "${DB_FILE}" ]]; then
+                database_seen=true
+            fi
+        done
+        if [[ "${engine_seen}" == true && "${database_seen}" == true ]]; then
+            pass "service_database" \
+                "engine_pid=${process_pid}; preloaded_db=${DB_FILE}"
+            return
+        fi
+    done
+
+    fail "service_database" \
+        "no child engine process for ${SERVICE_UNIT} holds ${DB_FILE}"
 }
 
 check_service() {
@@ -272,6 +347,7 @@ check_service() {
     fi
     pass "service_status" \
         "unit=${SERVICE_UNIT}; load=${load_state}; active=${active_state}; sub=${sub_state}; fragment=${fragment_path}; invocation_id=${CURRENT_INVOCATION_ID}"
+    check_service_database
 
     if [[ "${PHASE}" == "verify" ]]; then
         if [[ "${CURRENT_INVOCATION_ID,,}" == "${PREVIOUS_INVOCATION_ID,,}" ]]; then
@@ -321,6 +397,8 @@ check_sdk() {
     local source_branch
     local source_commit
     local source_status
+    local ldconfig_output
+    local runtime_library
     local runtime_version="unknown"
 
     if [[ ! -d "${SDK_SOURCE}/.git" ]]; then
@@ -340,8 +418,12 @@ check_sdk() {
         fail "sdk_source" "official SDK checkout has uncommitted changes"
     fi
 
-    if ! ldconfig -p 2>/dev/null |
-        grep -Fq "libkysdk-vector-engine-client.so.1"; then
+    ldconfig_output="$(ldconfig -p 2>/dev/null)"
+    runtime_library="$(
+        awk '$1 == "libkysdk-vector-engine-client.so.1" { print $NF; exit }' \
+            <<<"${ldconfig_output}"
+    )"
+    if [[ -z "${runtime_library}" || ! -f "${runtime_library}" ]]; then
         fail "sdk_runtime_library" \
             "installed libkysdk-vector-engine-client.so.1 was not found by ldconfig"
     fi
@@ -358,13 +440,14 @@ check_sdk() {
     SDK_MODE="source-headers+runtime-library"
     SDK_VERSION="${runtime_version}"
     SDK_BUILD_FLAGS=(
-        "-I${include_dir}"
-        "-lkysdk-vector-engine-client"
+        "-isystem"
+        "${include_dir}"
+        "${runtime_library}"
     )
     pass "sdk_source" \
         "path=${SDK_SOURCE}; branch=${source_branch}; commit=${source_commit}; clean=true"
     pass "sdk_discovery" \
-        "mode=${SDK_MODE}; runtime_version=${SDK_VERSION}; include=${include_dir}; library=libkysdk-vector-engine-client.so.1"
+        "mode=${SDK_MODE}; runtime_version=${SDK_VERSION}; include=${include_dir}; library=${runtime_library}"
 }
 
 build_probe() {
@@ -393,14 +476,20 @@ build_probe() {
 
 run_probe() {
     local binary="${BUILD_DIR}/d1_vector_baseline"
-    log "probe_execute" "INFO" \
-        "phase=${PHASE}; collection=${COLLECTION}; db_file=${DB_FILE}; app_id=${APP_ID}"
+    local probe_arguments=(
+        --phase "${PHASE}"
+        --db-file "${DB_FILE}"
+        --app-id "${APP_ID}"
+        --collection "${COLLECTION}"
+    )
+    if [[ "${SERVICE_MANAGED_DATABASE}" == true ]]; then
+        probe_arguments+=(--service-managed-database)
+    fi
 
-    if ! "${binary}" \
-        --phase "${PHASE}" \
-        --db-file "${DB_FILE}" \
-        --app-id "${APP_ID}" \
-        --collection "${COLLECTION}"; then
+    log "probe_execute" "INFO" \
+        "phase=${PHASE}; collection=${COLLECTION}; db_file=${DB_FILE}; app_id=${APP_ID}; service_managed_database=${SERVICE_MANAGED_DATABASE}"
+
+    if ! "${binary}" "${probe_arguments[@]}"; then
         fail "probe_execute" "probe phase ${PHASE} failed"
     fi
     pass "probe_execute" "probe phase ${PHASE} completed successfully"
