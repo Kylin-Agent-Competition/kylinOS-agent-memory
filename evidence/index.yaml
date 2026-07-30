@@ -23,6 +23,8 @@ entries:
     details: |
       .so: /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1
       包: libkylin-coreai-embedding 1.2.0.0-0k0.4
+      SHA-256: 028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48
+      Build ID: 845092235636ed78acc0710fe49bef7c67235253
       ldd: 全部解析，无 not found
       nm -D: 260 个 T 段符号，18 个主要 C API 确认导出
       nm 仅确认符号存在，不确认参数/返回类型
@@ -42,3 +44,19 @@ entries:
       运行输出见原始日志
     date: 2026-07-29
     limitations: 异步/批量/并发/非 x86_64 架构不属于本项目验收范围
+
+  - id: EMBED-CALL-002
+    description: "Day 2 扩展边界 Embedding 调用验证 (10 用例)"
+    status: HOST_VERIFIED
+    evidence_level: E4
+    source: evidence/l2-kylin-vm/day2_smoke_run.log
+    details: |
+      基线(中文/英文/单字符) + 超长文本(2170 bytes) + 纯空白字符
+      + 特殊Unicode(emoji/CJK扩展) + 纯数字 + 纯标点 + 任意文本传参
+      + 混合代码 + 重复调用稳定性(5次)
+      全部通过，统一维度 768，L2 范数=1.000000（单位向量确认）
+      超长文本(2170 bytes)不截断不崩溃
+      纯空白字符前5维与空输入一致
+      重复调用5次无差异（本次测试范围内确定性）
+    date: 2026-07-29
+    limitations: 异步/并发/线程安全/多模态未覆盖
