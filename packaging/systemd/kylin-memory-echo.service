@@ -1,0 +1,23 @@
+[Unit]
+Description=Kylin Memory Service - UDS Echo (Gate 0 SPIKE)
+Documentation=https://github.com/Ducknesses/kylinOS-agent-memory
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/kylin-memory/echo/memory_echo_server.py
+ExecStop=/bin/rm -f %t/kylin-memory/memory.sock
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+
+# 安全加固
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%t/kylin-memory
+ReadOnlyPaths=/opt/kylin-memory
+
+[Install]
+WantedBy=default.target

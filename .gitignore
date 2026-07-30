@@ -59,3 +59,11 @@ models/
 reasonix.toml
 .DS_Store
 Thumbs.db
+01_麒麟OS_Agent_官方SDK与现有系统能力边界及验证矩阵_v1.0_20260726.docx
+02_麒麟OS_Agent记忆系统_总体架构_团队分工与标准开发SOP_v1.0_20260726.docx
+04_麒麟OS_Agent记忆系统_Agent_LLM与CodeAgent使用指南_v1.0_20260726.docx
+03_麒麟OS_Agent记忆系统_开发与Runtime环境快速配置手册_v1.0_20260726.docx
+麒麟虚拟机ssh.txt
+scripts/
+AGENTS.md
+reviewDocuments/
