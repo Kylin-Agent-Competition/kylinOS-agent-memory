@@ -42,3 +42,13 @@ entries:
       运行输出见原始日志
     date: 2026-07-29
     limitations: 异步/批量/并发/非 x86_64 架构不属于本项目验收范围
+
+  - task_id: "D1-B-01"
+    level: "l2-kylin-vm"
+    result: "blocked"
+    commit: "05845a6426e670f34449225f3996f92b90a88ad2"
+    report: "l2-kylin-vm/d1-b-vector-engine-boundary-20260730.md"
+    artifact: "l2-kylin-vm/d1-b-vector-engine-boundary-20260730.log"
+    checksum_sha256: "b9c947d949917343cfb077f32fac23124a6f9c182650f7fc937112ab47ae2e3d"
+    reviewer: "gaoyizhe934"
+    limitation: "Vector Engine ShowCollections returns RPC 1002 before CRUD execution"
