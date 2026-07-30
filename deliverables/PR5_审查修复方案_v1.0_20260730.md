@@ -4,7 +4,11 @@
 > 审查人: lovezy0730-create (周子腾)
 > 审查日期: 2026-07-30
 > 方案制定日期: 2026-07-30
-> 状态: 待实施
+> 状态: 已实施 ✅
+> 实施日期: 2026-07-30
+> 实施人: ZhouYifan (Agentic Coding 辅助)
+> L2 验证: 麒麟虚拟机 Kylin V11, 6/6 PASS
+> 提交: da36092 (Ducknesses/kylinOS-memory-service)
 
 ---
 
@@ -1083,3 +1087,55 @@ B. 骨架已建立，待完整验证（脚本类）:
 ---
 
 *编制: 2026-07-30 · 基于 PR #5 审查报告 (Review ID: 4815666931)*
+
+---
+
+## 实施结果总结
+
+> 实施日期: 2026-07-30
+> 实施人: ZhouYifan (Agentic Coding 辅助)
+> 验证环境: 银河麒麟桌面操作系统 V11 (x86_64), SSH 127.0.0.1:2222
+> 提交: da36092 → Ducknesses/kylinOS-memory-service, branch: KylinOS-agent-memory/feat/d1-baseline-setup
+
+### 问题修复状态
+
+| 编号 | 问题 | 优先级 | 状态 | 验证方式 |
+|------|------|--------|------|----------|
+| 1 | 统一项目路径 | P0 | ✅ 已修复 | L2 实测: env_check.sh 正确输出 WARNING 并继续 |
+| 2 | 明确 Memory Service 来源 | P0 | ✅ 已修复 | L2 实测: install 脚本验证 Python 入口存在 |
+| 3 | 修复安装成功判据 | P0 | ✅ 已修复 | L2 实测: 5/5 验证项全部 PASS, service active |
+| 4 | 修复卸载结果验证 | P0 | ✅ 已修复 | L2 实测: 3/3 验证项 PASS, unit 已删除 |
+| 5 | 修正软件包备份表述 | P0 | ✅ 已修复 | L2 实测: 13/13 包采集, manifest 含6列 |
+| 6 | 重写回退安全逻辑 | P0 | ✅ 已修复 | L2 实测: 维护模式检查正常, SHA-256 校验代码已验证 |
+| 7 | 限制 KYSEC 目标 | P0 | ✅ 已修复 | L2 实测: /usr/bin/ls 被正确拒绝 |
+| 8 | 修正测试层级 | P1 | ✅ 已修复 | D1 交付物 L1 表格已更新 (10/13 PASS) |
+| 9 | 补充 L2 原始证据 | P1 | ✅ 已修复 | evidence/d1-tools-validation-l2/ 下6个证据文件 |
+| 10 | 修正文档状态 | P1 | ✅ 已修复 | D1 检查清单全部更新, PR 状态区分明确 |
+
+### 麒麟虚拟机 L2 测试结果汇总
+
+| # | 测试脚本 | 退出码 | 结果 | 关键指标 |
+|---|---------|--------|------|----------|
+| 1 | env_check.sh | 0 | PASS | 32 PASSED, 0 FAILED |
+| 2 | snapshot_package_versions.sh | 0 | PASS | 13/13 包采集完成 |
+| 3 | install_memory_service.sh | 0 | PASS | Unit语法/Python入口/模块路径/active/enable 五项全通过 |
+| 4 | uninstall_memory_service.sh | 0 | PASS | active/enabled/unit文件 三项验证全通过 |
+| 5 | kysec_allow.sh | 1 | PASS | 无参数显示usage, /usr/bin/ls 被拒绝 |
+| 6 | rollback_packages.sh | 0 | PASS | 维护模式检查正常工作, 确认提示正确 |
+
+**总计: 6/6 测试通过, 0 失败**
+
+### 关键验收项确认
+
+- [x] 所有 Shell 脚本使用 `BASH_SOURCE[0]` 动态路径解析
+- [x] systemd unit 文件的 `__REPO_ROOT__` 在安装时正确替换为实际路径
+- [x] 安装脚本 5 项验证全部通过, 失败时自动回滚
+- [x] 卸载脚本 3 项验证全部通过, 默认保留用户数据
+- [x] snapshot 脚本明确标注 "version metadata only"
+- [x] rollback 脚本包含 manifest 驱动 + SHA-256 校验 + 维护模式检查 + smoke test
+- [x] kysec 脚本限制 build/ 目录, 拒绝符号链接和系统目录
+- [x] memory-service/main.py 占位入口存在并说明 status/version
+- [x] L1 测试表格 10/13 PASS (3 项 N/A 因同一次会话未重复测试)
+- [x] L2 证据 6 文件完整, 含所有必填字段和原始输出
+- [x] D1 检查清单状态准确反映实际完成度
+- [x] 代码已提交并推送至 Ducknesses/kylinOS-memory-service (da36092)
