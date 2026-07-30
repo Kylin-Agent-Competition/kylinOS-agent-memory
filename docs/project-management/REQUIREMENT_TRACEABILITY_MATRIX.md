@@ -27,8 +27,17 @@
 | 输入数据 | 该能力运转所需的输入 | 包括 IPC 请求、数据集、配置 Schema、上游模块输出等 |
 | 交付物 | 该要求对应的预期交付物 | 可对应模块目录下的代码、数据集、评测报告、配置等 |
 | 验收证据 | 该要求对应的验收证据目标 | 标注目标 Gate（Gate 0 / L0 / L1 / L2 / L3）和关键验收点；当前证据均标注「尚未产生」 |
-| 当前状态 | 该要求相关的实现/验证进展 | 取值限定为 `UNTESTED`、`PENDING`、`SOURCE_VERIFIED`、`PARTIAL`、`DONE`；本 v0.1 仅使用 `PENDING` 或 `UNTESTED` |
+| 业务状态 | 该要求相关的业务/项目进展 | 取值：`PENDING`、`UNVERIFIED`、`PARTIAL`、`DONE`；本 v0.1 仅使用 `PENDING` 或 `UNVERIFIED`，表示业务功能尚未实现或尚未完成整体验证 |
+| SDK 能力验证状态 | 该要求在 SDK/系统能力层面的验证进展 | 取值：`HOST_VERIFIED`、`SOURCE_VERIFIED`、`ABI_VERIFIED`、`PARTIAL`、`UNTESTED`、`NOT_FOUND`、`BLOCKED`；两轴非一一对应，参见第五节双轴映射说明 |
 | 风险 / 依赖 | 已知阻塞、前置条件或技术依赖 | 包括基线文档未导入、协议未定稿、ADR 未建立、SDK/Hook 待取证等 |
+
+### 基线在库事实
+
+以下事实以当前 Git 工作区与 `git ls-files` 为准：
+
+- 01–04 基线 DOCX（官方 SDK 能力边界 v1.1、总体架构 SOP v1.1、环境配置手册、Agent/LLM 使用指南）当前**未被 Git 仓库跟踪**，`docs/baseline/` 目录下不存在这些实体文件。团队可能持有或审查过程曾引用外部基线材料，但这些材料不可作为仓库内已导入证据。
+- 仓库内现有 Markdown（如 `docs/architecture/MEMORY_BUSINESS_SCHEMA_V0.1.md`）引用的「SOP v1.1」「官方 SDK 与 OS Agent 能力边界 v1.1」等版本号属于**文档引用**，源 DOCX 尚未入库、仍待导入后源文件复核。项目当前不得声称已从实体 DOCX 独立核验 v1.0 或 v1.1。
+- `docs/baseline/README.md` 已将 01–06 基线文档标注为「待人工导入」；`docs/baseline/` 正式索引待基线 DOCX 导入后人工建立。
 
 ---
 
@@ -88,6 +97,29 @@
 
 本 v0.1 初稿中，七项核心要求的状态均为 **`PENDING`**，与 `README.md`「当前仅完成工程仓库与协作基线初始化，业务代码尚未开始」的事实一致。最终比赛交付物（第八节）与四项比赛性能指标（第九节）当前均处于 **`PENDING`** 或 **`UNVERIFIED`** 状态，尚未在目标评测环境中执行。
 
+### 双轴状态映射
+
+本矩阵同时追踪「业务/项目状态」与「SDK 能力验证状态」两个独立维度，两轴**非一一对应**。业务状态反映需求实现/交付的整体进展，SDK 能力验证状态反映具体系统能力的验证程度。同一业务状态在不同证据条件下可对应不同能力验证状态：
+
+| 业务状态 | 可能的 SDK 能力验证状态 | 说明 |
+|---------|----------------------|------|
+| `PENDING` | `UNTESTED` / `NOT_FOUND` / `BLOCKED` / `SOURCE_VERIFIED` / `ABI_VERIFIED` / `PARTIAL` | 业务尚未完成，但上游 SDK/系统能力可能有不同程度验证：如基线文档已确认 (`SOURCE_VERIFIED`)、ABI 已验证 (`ABI_VERIFIED`)、部分能力已验证 (`PARTIAL`)、或能力尚不可用 (`NOT_FOUND`/`BLOCKED`) |
+| `UNVERIFIED` | `UNTESTED` / `NOT_FOUND` / `BLOCKED` / `SOURCE_VERIFIED` / `ABI_VERIFIED` / `HOST_VERIFIED` / `PARTIAL` | 业务层面未在目标环境中验证；能力层面可能已有麒麟宿主证据 (`HOST_VERIFIED`)、源码/文档确认 (`SOURCE_VERIFIED`)、ABI 兼容性确认 (`ABI_VERIFIED`)、或完全未测试 (`UNTESTED`) |
+| `PARTIAL` | `PARTIAL` | 业务部分完成时，能力验证通常也为部分状态 |
+| `DONE` | `HOST_VERIFIED` / `ABI_VERIFIED` / `SOURCE_VERIFIED` | 业务完成时，必须已取得对应能力验证证据；不得以 `UNTESTED` 或 `NOT_FOUND` 标注已完成需求 |
+
+### SDK 能力验证状态定义
+
+| 状态 | 含义 | 证据要求 |
+|------|------|---------|
+| **`HOST_VERIFIED`** | 已在目标银河麒麟宿主环境验证通过 | **仅能由真实银河麒麟 V11 x86_64 虚拟机中实际执行的 L2/L3 Runtime Test 证据支持**；不得以 WSL、Mock、静态检查或代码阅读替代 |
+| **`SOURCE_VERIFIED`** | 上游源码、文档或基线已确认能力声明 | 通过阅读上游源码、官方文档或权威基线确认能力存在；**不得写成宿主行为已通过** |
+| **`ABI_VERIFIED`** | 二进制接口/动态库兼容性已验证 | 通过符号检查、链接验证或头文件对照确认 ABI 兼容；**不得写成宿主行为已通过** |
+| **`PARTIAL`** | 部分能力已验证，关键链路仍有缺失 | 需附具体缺失项清单 |
+| **`UNTESTED`** | 尚未执行任何验证 | 默认初始状态 |
+| **`NOT_FOUND`** | 所需 SDK/组件/能力在目标环境中未找到 | 需记录缺失项与搜寻结果 |
+| **`BLOCKED`** | 验证因环境、权限或其他外部因素无法执行 | 需记录阻塞原因与解除条件，参见 `runtime-validation.md` 中 `ENVIRONMENT_BLOCKED` 规则 |
+
 ---
 
 ## 六、版本与冻结门槛
@@ -96,6 +128,7 @@
 |------|------|---------|------|
 | v0.1 | 2026-07-30 | DRAFT 初稿，基于 README 及各模块 README 事实与任务 JSON 七项要求建立能力对照基线。赛题原文/SOP/SDK 能力边界基线文档未导入，状态均为 PENDING | E 轨道 |
 | v0.1（修订） | 2026-07-30 | 审查修复：依据来源修正为比赛方案及项目需求基线；补全六类最终比赛交付物追踪、四项比赛性能指标追踪、计划窗口与 D3 Gate 约束说明；状态均保持 PENDING/UNVERIFIED，仍为 v0.1 DRAFT | E 轨道 |
+| v0.1（修订2） | 2026-07-31 | 补充业务状态与 SDK 能力验证状态双轴映射体系；新增七项 SDK 能力验证状态定义及 HOST_VERIFIED 宿主证据要求；修正基线在库事实表述（01–04 DOCX 未被 Git 跟踪，源 DOCX 待导入复核）；细化 HD-01 为 HD-01a/b/c 三项子待办 | E 轨道 |
 
 **冻结条件**（满足全部方可视为冻结基线 v1.0）：
 
@@ -115,7 +148,9 @@
 
 | 编号 | 待办事项 | 优先级 | 计划窗口 |
 |------|---------|--------|---------|
-| HD-01 | 将赛题原文、总体架构 SOP、官方 SDK 与 OS Agent 能力边界文档导入 `docs/baseline/`，并更新 `docs/baseline/README.md` 状态 | 高 | D3 Gate 前 |
+| HD-01a | 将 01–04 基线 DOCX（官方 SDK 能力边界 v1.1、总体架构 SOP v1.1、环境配置手册、Agent/LLM 使用指南）导入 `docs/baseline/` | 高 | D3 Gate 前 |
+| HD-01b | 对导入的基线 DOCX 进行版本核验（v1.0/v1.1 等版本号以源文件为准），与仓库内现有 Markdown 引用逐项复核 | 高 | D3 Gate 前 |
+| HD-01c | 在基线 DOCX 入库后建立 `docs/baseline/` 正式索引（当前仅 `docs/baseline/README.md` 清单式占位） | 中 | D3 Gate 前 |
 | HD-02 | 用导入后的权威基线全文复核矩阵 REQ-01–REQ-07 的「赛题原始要求」列 | 高 | D3 Gate 前 |
 | HD-03 | 与 `docs/project-management/README.md` 中的 15 天 75 项台账对齐，回填绝对计划日期 | 中 | D3 Gate 前 |
 | HD-04 | 考虑是否将本矩阵链接入 `docs/project-management/README.md` 的索引（当前记为独立任务，不属于本任务范围） | 低 | 后续维护 |
