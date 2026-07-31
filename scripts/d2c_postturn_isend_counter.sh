@@ -215,6 +215,28 @@ cmd_dbcheck() {
     rowid_max="$(sqlite3 "${DB_PATH}" "SELECT MAX(rowid) FROM RECORD;" 2>/dev/null || echo "N/A")"
     row_count="$(sqlite3 "${DB_PATH}" "SELECT COUNT(*) FROM RECORD;" 2>/dev/null || echo "N/A")"
 
+    # 最新 5 条记录, 从 message JSON 中提取 author 和 message 内容
+    local latest_records
+    latest_records="$(sqlite3 -separator ' | ' "${DB_PATH}" \
+        "SELECT rowid,
+                json_extract(message, '$.author') as author,
+                json_extract(message, '$.isEnd') as is_end,
+                length(message) as msg_len,
+                substr(json_extract(message, '$.message'), 1, 80) as preview
+         FROM RECORD ORDER BY rowid DESC LIMIT 5;" 2>/dev/null)"
+
+    # 统计用户消息和 Bot 回复数量
+    local user_count bot_count
+    user_count="$(sqlite3 "${DB_PATH}" \
+        "SELECT COUNT(*) FROM RECORD WHERE json_extract(message, '$.author') = 'User';" 2>/dev/null || echo "0")"
+    bot_count="$(sqlite3 "${DB_PATH}" \
+        "SELECT COUNT(*) FROM RECORD WHERE json_extract(message, '$.author') = 'Bot';" 2>/dev/null || echo "0")"
+
+    # 统计 isEnd=true 的记录数 (即回合结束事件)
+    local is_end_count
+    is_end_count="$(sqlite3 "${DB_PATH}" \
+        "SELECT COUNT(*) FROM RECORD WHERE json_extract(message, '$.isEnd') = 1;" 2>/dev/null || echo "0")"
+
     cat > "${db_snapshot_file}" <<EOF
 {
   "experiment": "H2C-PostTurn-dbcheck",
@@ -223,9 +245,17 @@ cmd_dbcheck() {
   "record_table": {
     "rowid_min": "${rowid_min}",
     "rowid_max": "${rowid_max}",
-    "row_count": "${row_count}"
+    "row_count": "${row_count}",
+    "user_messages": ${user_count},
+    "bot_messages": ${bot_count},
+    "is_end_true_count": ${is_end_count}
   },
-  "note": "实验前后对比 rowid 变化, 期望新增 2 行 (用户+助手)"
+  "note": "实验前后对比 rowid 变化, 期望新增 2 行 (用户+助手); isEnd=true 对应 TurnFinalizedEvent",
+  "latest_records": [
+$(echo "${latest_records}" | while IFS= read -r line; do
+    echo "    \"${line}\","
+done | sed '$ s/,$//')
+  ]
 }
 EOF
 
@@ -234,6 +264,16 @@ EOF
     echo "=============================================="
     echo "  rowid 范围: ${rowid_min} ~ ${rowid_max}"
     echo "  总行数:     ${row_count}"
+    echo "  用户消息:   ${user_count}"
+    echo "  Bot 回复:   ${bot_count}"
+    echo "  isEnd=true: ${is_end_count}  (对应 TurnFinalizedEvent)"
+    echo ""
+    echo "  最新 5 条记录:"
+    echo "  rowid | author | isEnd | len | preview"
+    echo "  ------|--------|-------|-----|--------"
+    echo "${latest_records}" | while IFS= read -r line; do
+        echo "  ${line}"
+    done
     echo ""
     echo " 快照: ${db_snapshot_file}"
     echo "=============================================="
