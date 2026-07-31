@@ -1,0 +1,83 @@
+# Day 2 Embedding Smoke Test Run Log
+# Date: 2026-07-29 (麒麟 VM 实测，共享文件夹同步)
+# Host: 银河麒麟桌面 V11 2603 x86_64 (VirtualBox 7.2.14)
+# VM Snapshot: Kylin-V11-2603-Memory-Runtime-Passed
+# Binary: /tmp/day2_smoke (compiled from day2_smoke_test.cpp, 共享文件夹同步)
+
+Git Commit: 9242bfa (fix: 完成A轨Day1兼容头文件与环境口径收口)
+SHA-256 (.so): 028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48
+Build ID (.so): 845092235636ed78acc0710fe49bef7c67235253
+
+## Compile Command
+
+$ g++ -std=c++17 evidence/l2-kylin-vm/day2_smoke_test.cpp -ldl -o /tmp/day2_smoke
+
+## Run Command
+
+$ LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH /tmp/day2_smoke
+$ echo "EXIT_CODE=$?"
+
+## Full Output
+
+✅ 创建会话
+[1785392973150] info  Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock
+[1785392973150] info  Runtime version is  1.3.0 InitEngine call new init_v2
+[1785392973223] info  Proxy init success,sessionId is: 1713787533
+✅ 初始化
+✅ 事件循环
+
+超长文本实际长度: 2170 bytes
+
+[1] 中文短句: "你好世界"
+[1785392973223] warn  Model was not initialized explicitly; SDK is loading the default model.
+[1785392973223] info  Try to get default model
+[1785392973259] info  Get default model success, model: ensemble-embd_gte-base_uint8-text
+[1785392973259] info  Try to init default model: ensemble-embd_gte-base_uint8-text
+[1785392973261] info  Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 1713787533
+[1785392973262] info  Init default model success, model: ensemble-embd_gte-base_uint8-text
+  ✅ dim=768, L2=1.000000, 前5值: -0.0034 0.0366 -0.0618 0.0225 -0.0486 ...
+
+[2] 英文短句: "Hello world"
+  ✅ dim=768, L2=1.000000, 前5值: -0.0399 0.0504 -0.0357 0.0012 -0.0234 ...
+
+[3] 单字符: "A"
+  ✅ dim=768, L2=0.999999, 前5值: -0.0870 0.0824 -0.0238 0.0283 0.0312 ...
+
+[4] 超长文本(2000字): "麒麟操作系统嵌入式AI能力边界验证测试用例。..."
+  ✅ dim=768, L2=1.000000, 前5值: -0.0237 0.0006 -0.0221 0.0457 0.0113 ...
+
+[5] 纯空白字符: "   \t\t\n\n  \t"
+  ✅ dim=768, L2=1.000000, 前5值: -0.0726 0.0508 -0.0465 0.0409 0.0271 ...
+
+[6] 特殊Unicode: "Hello 😀 你好 ∑∫√ の ★ 㐀𠀀"
+  ✅ dim=768, L2=1.000000, 前5值: -0.0287 0.0572 -0.0094 -0.0255 0.0170 ...
+
+[7] 纯数字: "1234567890 3.1415926 0x1A2B"
+  ✅ dim=768, L2=1.000000, 前5值: -0.0614 0.1153 -0.0224 0.0191 0.0038 ...
+
+[8] 纯标点: "!@#$%^&*()_+-=[]{}|;:',.<>?/~`"
+  ✅ dim=768, L2=1.000000, 前5值: -0.0189 0.0717 -0.0499 0.0770 0.0284 ...
+
+[9] 任意文本传参: "任意字符串输入测试"
+  ✅ dim=768, L2=1.000000, 前5值: -0.0291 0.0569 -0.0180 0.0399 0.0479 ...
+
+[10] 混合代码: "int main() { printf("hello 世界\n"); return 0; }"
+  ✅ dim=768, L2=1.000000, 前5值: 0.0015 0.0281 -0.0429 -0.0165 -0.0016 ...
+
+═══════════════════════════════
+
+═══════ TC-8: 重复调用稳定性 ═══════
+  [1] dim=768, L2=1.000000, 前5值: -0.0153 0.0359 -0.0141 0.0684 -0.0271 ...
+  [2] dim=768, L2=1.000000, 前5值: -0.0153 0.0359 -0.0141 0.0684 -0.0271 ...
+  [3] dim=768, L2=1.000000, 前5值: -0.0153 0.0359 -0.0141 0.0684 -0.0271 ...
+  [4] dim=768, L2=1.000000, 前5值: -0.0153 0.0359 -0.0141 0.0684 -0.0271 ...
+  [5] dim=768, L2=1.000000, 前5值: -0.0153 0.0359 -0.0141 0.0684 -0.0271 ...
+  → 确定性: ✅ 是 (5 次完全一致)
+
+═══════════ 结果汇总 ═══════════
+  通过:       10
+  预期错误:   0
+  失败:       0
+  总计:       10
+═══════════════════════════════
+EXIT_CODE=0
