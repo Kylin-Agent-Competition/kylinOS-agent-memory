@@ -1,63 +1,121 @@
-schema_version: "1.0"
+schema_version: "1.1"
 project: "kylin-os-agent-memory"
+index_contract:
+  required_fields:
+    - id
+    - task_id
+    - description
+    - status
+    - evidence_level
+    - source
+    - date
+    - reviewer
+    - limitations
+    - checksum_sha256
+  optional_fields:
+    - commit
+    - source_commit
+    - report
+    - runtime_result
+    - details
 entries:
-  - id: RUNTIME-001
+  - id: "RUNTIME-001"
+    task_id: "D1-A"
     description: "kylin-ai-runtime 二进制完整性验证"
-    status: HOST_VERIFIED
-    evidence_level: E4
-    source: evidence/l2-kylin-vm/runtime_identity.log
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/runtime_identity.log"
+    commit: "bc51c372c532fa65259672d4e0a43dee5af340d0"
+    date: "2026-07-29"
+    reviewer: "Reviewer (Runtime 身份抽查)"
+    limitations: "Runtime 内部自报 1.3.0，与安装包版本 1.2.0.4-0k0.1 不一致"
+    checksum_sha256: "8b4535378628645e3364cabfb096dbd25359173c7ac672214208f630556a9803"
     details: |
       PID 5678, /usr/bin/kylin-ai-runtime
       包版本 1.2.0.4-0k0.1 (内部自报 1.3.0, PARTIAL)
       SHA-256: b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225
       Build ID: d3201935767c5f4a3a89fc00b7223d8c4770313b
       dpkg -V: 无输出
-    date: 2026-07-29
-    reviewer: Reviewer (Runtime 身份抽查)
 
-  - id: ABI-001
+  - id: "ABI-001"
+    task_id: "D1-A"
     description: "Embedding SDK 动态库 ABI 验证"
-    status: ABI_VERIFIED
-    evidence_level: E3
-    source: evidence/l2-kylin-vm/embedding_abi_symbols.log
+    status: "ABI_VERIFIED"
+    evidence_level: "E3"
+    source: "evidence/l2-kylin-vm/embedding_abi_symbols.log"
+    commit: "bc51c372c532fa65259672d4e0a43dee5af340d0"
+    date: "2026-07-29"
+    reviewer: "pending"
+    limitations: "函数签名源自头文件推断，需编译和宿主调用确认"
+    checksum_sha256: "4db4df7f17c623ce22b2c9b9e8cb6f49f5b0a14fe6ca7549610e868a98602f45"
     details: |
       .so: /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1
       包: libkylin-coreai-embedding 1.2.0.0-0k0.4
-      SHA-256: 028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48
-      Build ID: 845092235636ed78acc0710fe49bef7c67235253
       ldd: 全部解析，无 not found
       nm -D: 260 个 T 段符号，18 个主要 C API 确认导出
       nm 仅确认符号存在，不确认参数/返回类型
-    date: 2026-07-29
-    limitations: 函数签名源自头文件推断，需编译+宿主调用确认
 
-  - id: EMBED-CALL-001
-    description: "最小 Embedding 调用验证 (5 用例)"
-    status: HOST_VERIFIED
-    evidence_level: E4
-    source: evidence/l2-kylin-vm/minimal_embedding_run.log
+  - id: "EMBED-CALL-001"
+    task_id: "D1-A"
+    description: "最小 Embedding 调用验证（5 用例）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/minimal_embedding_run.log"
+    commit: "bc51c372c532fa65259672d4e0a43dee5af340d0"
+    date: "2026-07-29"
+    reviewer: "pending"
+    limitations: "异步、批量、并发和非 x86_64 架构不属于本项目验收范围"
+    checksum_sha256: "23dcba03263fef8b4d7659c70d195e87e7bc4cec5c9b88e05ec6fd342d41eb63"
     details: |
       中文(你好世界) / 英文(Hello world) / 偏好句子(我喜欢用表格输出)
       / 单字符(A) / 空输入("")
       全部通过，统一维度 768
       Runtime 自动加载默认模型 ensemble-embd_gte-base_uint8-text
       运行输出见原始日志
-    date: 2026-07-29
-    limitations: 异步/批量/并发/非 x86_64 架构不属于本项目验收范围
 
-  - id: EMBED-CALL-002
-    description: "Day 2 扩展边界 Embedding 调用验证 (10 用例)"
-    status: HOST_VERIFIED
-    evidence_level: E4
-    source: evidence/l2-kylin-vm/day2_smoke_run.log
+  - id: "D1-B-01"
+    task_id: "D1-B-01"
+    description: "Vector Engine 服务、Collection、CRUD、过滤与持久化基线"
+    status: "BLOCKED"
+    evidence_level: "E3"
+    source: "evidence/l2-kylin-vm/d1-b-vector-engine-boundary-20260730.log"
+    commit: "4da5dedfbed27cbd7a1b2993ee9fcc0bc99b2c1e"
+    report: "evidence/l2-kylin-vm/d1-b-vector-engine-boundary-20260730.md"
+    runtime_result: "BLOCKED"
+    date: "2026-07-30"
+    reviewer: "gaoyizhe934"
+    limitations: "Vector Engine ShowCollections 在 CRUD 前返回 RPC 1002"
+    checksum_sha256: "b9c947d949917343cfb077f32fac23124a6f9c182650f7fc937112ab47ae2e3d"
+
+  - id: "D1-B-02"
+    task_id: "D1-B-02"
+    description: "原生 Hybrid/RRF 证据等级核定"
+    status: "ABI_VERIFIED"
+    evidence_level: "E3"
+    source: "evidence/l2-kylin-vm/d1-b-native-hybrid-rrf-evidence-20260731.log"
+    commit: "dd72bbc02599f3bf8fc548eb180db32333d3e86c"
+    source_commit: "bed675f418d32c052a6ab4c5c49bae148d90f678"
+    report: "evidence/l2-kylin-vm/d1-b-native-hybrid-rrf-evidence-20260731.md"
+    runtime_result: "UNTESTED"
+    date: "2026-07-31"
+    reviewer: "pending-gaoyizhe934"
+    limitations: "已安装客户端 ABI 存在，但原生 Hybrid/RRF 没有成功的 E4 运行证据"
+    checksum_sha256: "871114c58101f20e0de8f64e0ab97bf0a6eb75099cdeb0fbb66587768dde4197"
+
+  - id: "EMBED-CALL-002"
+    task_id: "D2-A"
+    description: "Day 2 扩展边界 Embedding 调用验证"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/day2_smoke_run.log"
+    commit: "63b899b963bc22bcf048b64e6c7399a37d99cfd9"
+    date: "2026-07-31"
+    reviewer: "pending"
+    limitations: "异步、并发、线程安全、多模态未覆盖"
+    checksum_sha256: "ef466ec53c300f25bd754f6d814ee5341464a8159737ea6920b00f4d1b7c15e7"
     details: |
-      基线(中文/英文/单字符) + 超长文本(2170 bytes) + 纯空白字符
-      + 特殊Unicode(emoji/CJK扩展) + 纯数字 + 纯标点 + 任意文本传参
-      + 混合代码 + 重复调用稳定性(5次)
+      基线(中文/英文/单字符) + 空字符串 + 超长文本(2170 bytes) + 纯空白字符
+      + 特殊Unicode(emoji/CJK扩展) + 纯数字 + 纯标点 + 混合代码
+      + 重复调用稳定性(5次) + 错误模型名(errorCode=10, fallback 恢复)
       全部通过，统一维度 768，L2 范数=1.000000（单位向量确认）
-      超长文本(2170 bytes)不截断不崩溃
-      纯空白字符前5维与空输入一致
-      重复调用5次无差异（本次测试范围内确定性）
-    date: 2026-07-29
-    limitations: 异步/并发/线程安全/多模态未覆盖
-
+      运行输出见原始日志
