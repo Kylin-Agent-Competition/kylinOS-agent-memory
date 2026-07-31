@@ -1,0 +1,127 @@
+D1-B-02 native Hybrid/RRF evidence audit
+2026-07-31T00:45:02+08:00
+
+[HOST]
+Linux yanmouren778-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+[INSTALLED CLIENT]
+package=libkysdk-vector-engine-client:amd64
+version=1.2.0.0-0k1.1
+library=/usr/lib/x86_64-linux-gnu/libkysdk-vector-engine-client.so.0.0.1
+sha256=14cce29888cdd1fb086f6e8433dd69718656f68548e3bdb4287ec157d626cbc6
+
+[OFFICIAL SDK SOURCE]
+path=/home/yanmouren778/projects/kylin-sdk-sources/libkysdk-vector-engine-client
+branch=openkylin/nile-sp2
+commit=bed675f418d32c052a6ab4c5c49bae148d90f678
+clean=true
+
+[SOURCE: include/kysdk-vector-engine-client/Database.h]
+150 virtual Status HybridSearch(SearchResults& results, const std::string& collection_name,
+151                             const std::vector<AnnSearchRequest>& reqs, const BaseRanker& ranker, int limit,
+152                             const std::vector<std::string>& output_fields = {},
+153                             const std::vector<std::pair<std::string, std::string>>& params = {},
+154                             int timeout = 0) = 0;
+
+[SOURCE: include/kysdk-vector-engine-client/types/Ranker.h]
+26 class BaseRanker {
+29     virtual std::map<std::string, std::string> GetParams() const = 0;
+30     virtual std::string GetStrategy() const = 0;
+31     virtual nlohmann::json Dict() const;
+34 class RRFRanker : public BaseRanker {
+36     explicit RRFRanker(float k = 60.0);
+44 class WeightedRanker : public BaseRanker {
+46     explicit WeightedRanker(std::vector<float> weights);
+
+[SOURCE: src/types/Ranker.cpp]
+21 nlohmann::json BaseRanker::Dict() const {
+23     json["strategy"] = GetStrategy();
+24     json["params"] = GetParams();
+28 RRFRanker::RRFRanker(float k) : k_(k) {}
+30 std::map<std::string, std::string> RRFRanker::GetParams() const { return {{"k", std::to_string(k_)}}; }
+32 std::string RRFRanker::GetStrategy() const { return "rrf"; }
+34 WeightedRanker::WeightedRanker(std::vector<float> weights) : weights_(weights) {}
+46     return {{"weights", weights_str}};
+49 std::string WeightedRanker::GetStrategy() const { return "weighted"; }
+
+[SOURCE: src/impl/MilvusClientImpl.cpp]
+431 Status MilvusClientImpl::HybridSearch(SearchResults& results, const std::string& collection_name,
+432                                       const std::vector<AnnSearchRequest>& reqs, const BaseRanker& ranker, int limit,
+435     auto validate = [this, &collection_name, &reqs, limit]() {
+448         CollectionDesc collection_desc;
+449         auto status = DescribeCollection(collection_name, collection_desc);
+450         if (!status.IsOk()) {
+451             return status;
+535         auto ranker_dict = ranker.Dict();
+537         for (const auto& ranker_dict_item : ranker_dict.items()) {
+538             auto* kv_pair = hybrid_search_request.add_rank_params();
+539             kv_pair->set_key(ranker_dict_item.key());
+557         auto* kv_pair = hybrid_search_request.add_rank_params();
+558         kv_pair->set_key("limit");
+559         kv_pair->set_value(std::to_string(limit));
+604     return apiHandler<proto::milvus::HybridSearchRequest, proto::milvus::SearchResults>(
+605         validate, pre, &MilvusConnection::HybridSearch, nullptr, post, GrpcOpts{timeout});
+
+[SOURCE: src/impl/MilvusConnection.cpp]
+136 Status MilvusConnection::HybridSearch(const proto::milvus::HybridSearchRequest& request,
+137                                       proto::milvus::SearchResults& response, const GrpcContextOptions& options) {
+138     return grpcCall("HybridSearch", &Stub::HybridSearch, request, response, options);
+
+[SOURCE: demo/client/exampleHybridSearch.cpp]
+219 void HybridSearch() {
+220     VectorDB::AnnSearchRequest request1(field_vector_name, 10);
+224     VectorDB::AnnSearchRequest request2(field_sparse_vector_name, 10);
+228     VectorDB::RRFRanker ranker;
+231     VectorDB::Status status =
+232         client->HybridSearch(results, collection_name, {request1, request2}, ranker, 10,
+233                              {field_id_name, field_context_name, field_vector_name, field_sparse_vector_name});
+
+[SOURCE: demo/client/CMakeLists.txt]
+13 add_executable(client-hybrid exampleHybridSearch.cpp)
+14 target_link_libraries(client-hybrid PUBLIC kysdk-vector-engine-client)
+16 add_executable(client-dynamic-hybrid exampleDynamicHybridSearch.cpp)
+17 target_link_libraries(client-dynamic-hybrid PUBLIC kysdk-vector-engine-client)
+
+[INSTALLED ABI: nm -D -C selected symbols]
+0000000000140c80 T VectorDB::MilvusClientImpl::HybridSearch(...)
+000000000014c040 T VectorDB::MilvusConnection::HybridSearch(...)
+0000000000177310 T VectorDB::RRFRanker::RRFRanker(float)
+0000000000174040 T VectorDB::RRFRanker::GetStrategy[abi:cxx11]() const
+00000000001743e0 T VectorDB::RRFRanker::GetParams[abi:cxx11]() const
+0000000000177330 T VectorDB::WeightedRanker::WeightedRanker(std::vector<float, std::allocator<float> >)
+0000000000174070 T VectorDB::WeightedRanker::GetStrategy[abi:cxx11]() const
+00000000001746f0 T VectorDB::WeightedRanker::GetParams[abi:cxx11]() const
+
+[EVIDENCE LEVEL DEFINITIONS]
+source=01_麒麟OS_Agent_官方SDK与现有系统能力边界及验证矩阵_v1.1_20260728.docx
+E1=官方说明、头文件、包元数据
+E2=源码静态分析
+E3=真实宿主 ABI、依赖、配置、数据库 Schema
+E4=银河麒麟宿主成功运行
+E5=多场景、异常、服务/系统重启回归
+
+[PREVIOUS MATRIX BASELINE]
+item=VEC-005
+capability=Hybrid/RRF
+status=SOURCE_VERIFIED
+evidence=E2
+result=接口与 Ranker 存在
+limitation=宿主未跑
+next=P2 原生路径对比；应用层 RRF 为默认
+
+[CURRENT RUNTIME BOUNDARY]
+source=evidence/l2-kylin-vm/d1-b-vector-engine-boundary-20260730.log
+first_data_plane_ready_call=ShowCollections
+result=FAIL
+code=1002
+message=Unexpected error in RPC handling
+impact=Collection access failed before a valid HybridSearch runtime probe could be constructed
+
+[CLASSIFICATION]
+static_source=SOURCE_VERIFIED/E2
+installed_client_abi=ABI_VERIFIED/E3
+native_hybrid_rrf_end_to_end=UNTESTED
+highest_current_evidence=E3
+e4_runtime_success=false
+product_support_claim=false
+default_product_path=application-layer RRF
