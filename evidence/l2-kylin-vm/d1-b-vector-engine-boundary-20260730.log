@@ -1,0 +1,47 @@
+D1-B Vector Engine baseline boundary evidence
+2026-07-31T00:07:25+08:00
+Linux yanmouren778-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+kylin-ai-vector-engine	1.2.0.1-0k0.11
+libkysdk-vector-engine-client:amd64	1.2.0.0-0k1.1
+kylin-ai-vector-engine:
+  Installed: 1.2.0.1-0k0.11
+  Candidate: 1.2.0.1-0k1.0
+  Version table:
+     1.2.0.1-0k1.0 550
+        550 http://archive.kylinos.cn/kylin/KYLIN-ALL 11.0-kylin-2603/main amd64 Packages
+ *** 1.2.0.1-0k0.11 100
+        100 /var/lib/dpkg/status
+libkysdk-vector-engine-client:
+  Installed: 1.2.0.0-0k1.1
+  Candidate: 1.2.0.0-0k1.1
+  Version table:
+ *** 1.2.0.0-0k1.1 550
+        550 http://archive.kylinos.cn/kylin/KYLIN-ALL 11.0-kylin-2603/main amd64 Packages
+        100 /var/lib/dpkg/status
+1d5c519374b11d291899b204c6a421f92d454bb86219e512b3c7c83b4c4792cc  /home/yanmouren778/d1-vector-baseline-run/scripts/run_d1_vector_baseline.sh
+c42c3460b95acecbe3042bf99ddd9aa10951bd14ddcb2937797cb9c63d6c0a55  /home/yanmouren778/d1-vector-baseline-run/tests/vector-engine/d1_vector_baseline.cpp
+COMMAND: run_d1_vector_baseline.sh prepare service-managed database
+D1_VECTOR_RUNNER step=runner_start result=INFO detail="phase=prepare; service_unit=kylin-ai-vector-engine.service; project_root=/home/yanmouren778/d1-vector-baseline-run"
+D1_VECTOR_RUNNER step=os_check result=PASS detail="os=Kylin V11; arch=x86_64"
+D1_VECTOR_RUNNER step=dependency_systemctl result=PASS detail="/usr/bin/systemctl"
+D1_VECTOR_RUNNER step=dependency_g++ result=PASS detail="/usr/bin/g++"
+D1_VECTOR_RUNNER step=dependency_mktemp result=PASS detail="/usr/bin/mktemp"
+D1_VECTOR_RUNNER step=database_path result=PASS detail="service-managed database file is readable: /home/yanmouren778/.local/share/kylin-ai-vector-engine/default.db"
+D1_VECTOR_RUNNER step=service_status result=PASS detail="unit=kylin-ai-vector-engine.service; load=loaded; active=active; sub=running; fragment=/usr/lib/systemd/user/kylin-ai-vector-engine.service; invocation_id=86ea2497de5e404a960283a398e0a36a"
+D1_VECTOR_RUNNER step=service_database result=PASS detail="engine_pid=26370; preloaded_db=/home/yanmouren778/.local/share/kylin-ai-vector-engine/default.db"
+D1_VECTOR_RUNNER step=dependency_git result=PASS detail="/usr/bin/git"
+D1_VECTOR_RUNNER step=dependency_ldconfig result=PASS detail="/usr/sbin/ldconfig"
+D1_VECTOR_RUNNER step=sdk_source result=PASS detail="path=/home/yanmouren778/projects/kylin-sdk-sources/libkysdk-vector-engine-client; branch=openkylin/nile-sp2; commit=bed675f418d32c052a6ab4c5c49bae148d90f678; clean=true"
+D1_VECTOR_RUNNER step=sdk_discovery result=PASS detail="mode=source-headers+runtime-library; runtime_version=1.2.0.0-0k1.1; include=/home/yanmouren778/projects/kylin-sdk-sources/libkysdk-vector-engine-client/include/kysdk-vector-engine-client; library=/lib/x86_64-linux-gnu/libkysdk-vector-engine-client.so.1"
+D1_VECTOR_RUNNER step=probe_source result=PASS detail="/home/yanmouren778/d1-vector-baseline-run/tests/vector-engine/d1_vector_baseline.cpp"
+D1_VECTOR_RUNNER step=probe_build result=PASS detail="temporary binary built: /tmp/d1-vector-baseline.4l5HrM/d1_vector_baseline; sdk_mode=source-headers+runtime-library; sdk_version=1.2.0.0-0k1.1"
+D1_VECTOR_RUNNER step=probe_execute result=INFO detail="phase=prepare; collection=d1_vector_baseline; db_file=/home/yanmouren778/.local/share/kylin-ai-vector-engine/default.db; app_id=d1-vector-baseline; service_managed_database=true"
+D1_VECTOR_BASELINE step=probe_start result=INFO detail="phase=prepare, collection=d1_vector_baseline"
+D1_VECTOR_BASELINE step=client_create result=PASS detail="official Vector Engine client created"
+D1_VECTOR_BASELINE step=service_connect result=PASS detail="SDK data-plane connection established"
+D1_VECTOR_BASELINE step=database_mode result=PASS detail="using database preloaded by service: /home/yanmouren778/.local/share/kylin-ai-vector-engine/default.db"
+D1_VECTOR_BASELINE step=service_ready result=FAIL detail="code=1002, message=Unexpected error in RPC handling"
+D1_VECTOR_BASELINE step=probe_complete result=FAIL detail="service_ready: code=1002, message=Unexpected error in RPC handling"
+D1_VECTOR_RUNNER step=probe_execute result=FAIL detail="probe phase prepare failed"
+runner_exit_code=1
+CANDIDATE_PACKAGE_DIAGNOSTIC: version=1.2.0.1-0k1.0 config_present=true missing_runtime_module=libtcm.so.1 exit_code=255
