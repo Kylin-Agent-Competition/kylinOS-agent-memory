@@ -1,8 +1,10 @@
 # Day 2 PR 复审材料
 
-## 最终 HEAD
+## Commit 信息
 
-`57a99fdb0cfa72d880dc63623f7a68b940a25389`（分支 `feat/day2-embedding-smoke-v2`）
+- **受测 Commit**：`63b899b`（麒麟 VM 实际执行测试时的 Commit）
+- **材料创建前 HEAD**：`57a99fd`（本材料撰写时的分支 HEAD）
+- **最终 PR HEAD**：以 PR 页面或 `git rev-parse HEAD` 为准
 
 ## origin/main...HEAD 文件列表
 

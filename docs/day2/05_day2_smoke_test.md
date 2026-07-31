@@ -29,7 +29,7 @@
 | 头文件上游仓库 | gitee.com/openkylin/kylin-coreai-embedding | `embedding_api.h:5` / `NOTICE:18` |
 | 上游 Commit | 63aed6f3 (nile-sp2) | `embedding_api.h:6` / `LICENSE:16` |
 | 许可证 | LGPL-2.1-or-later | `LICENSE` / `NOTICE:19` |
-| ABI 兼容头 | cpp-bridge/embedding_abi_compat.h | 仓库已提交 `45a87ff` |
+| ABI 兼容头 | cpp-bridge/embedding_abi_compat.h | 仓库文件，见 `cpp-bridge/embedding_abi_compat.h` |
 | 测试日期 | 2026-07-31 | `day2_smoke_run.log` |
 
 ## 测试结果（已实测，2026-07-31）
