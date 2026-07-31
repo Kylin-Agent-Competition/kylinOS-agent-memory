@@ -1,0 +1,11 @@
+ZhouYifan@ZhouYifan-pc:/tmp/kylin-memory-test/scripts$ KYLIN_MEMORY_SOCK=/run/user/1000/kylin-memory/memory.sock /opt/kylin-memory/echo/echo_client
+[EchoClient] connecting to "/run/user/1000/kylin-memory/memory.sock"
+[EchoClient] connected
+[EchoClient] RESPONSE 1: "{\"echo\":{\"method\":\"memory.retrieve\",\"received_payload\":{\"max_context_tokens\":800,\"query_text\":\"\xE8\xBF\x99\xE6\x98\xAF\xE6\xB5\x8B\xE8\xAF\x95\xE7\x94\xA8\xE6\x88\xB7\xE9\x97\xAE\xE9\xA2\x98\",\"scene\":\"software_development\",\"session_id\":\"session-echo-test\",\"user_id\":\"local-user\"}},\"protocol_version\":\"1.0\",\"request_id\":\"echo_test_001\",\"status\":\"ok\"}"
+[EchoClient] TEST 1 PASSED (memory.retrieve)
+[EchoClient] RESPONSE 2: "{\"echo\":{\"method\":\"memory.observe_turn\",\"received_payload\":{\"assistant_text\":\"\xE4\xBB\x8A\xE5\xA4\xA9\xE5\xA4\x9A\xE4\xBA\x91\xEF\xBC\x8C\xE6\xB0\x94\xE6\xB8\xA9 25\xC2\xB0""C\",\"session_id\":\"session-echo-test\",\"source\":\"text_chat\",\"status\":\"completed\",\"user_id\":\"local-user\",\"user_text\":\"\xE4\xBB\x8A\xE5\xA4\xA9\xE5\xA4\xA9\xE6\xB0\x94\xE6\x80\x8E\xE4\xB9\x88\xE6\xA0\xB7\"}},\"protocol_version\":\"1.0\",\"request_id\":\"echo_test_002\",\"status\":\"ok\"}"
+[EchoClient] TEST 2 PASSED (memory.observe_turn)
+[EchoClient] reconnected successfully
+[EchoClient] RESPONSE 3: "{\"echo\":{\"method\":\"memory.health_check\",\"received_payload\":{\"ping\":true}},\"protocol_version\":\"1.0\",\"request_id\":\"echo_test_003\",\"status\":\"ok\"}"
+[EchoClient] TEST 3 PASSED (health_check)
+[EchoClient] ALL TESTS PASSED

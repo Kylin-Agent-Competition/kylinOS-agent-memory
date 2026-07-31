@@ -1,0 +1,22 @@
+ZhouYifan@ZhouYifan-pc:/tmp/kylin-memory-test/scripts$ systemctl --user status kylin-memory-echo
+● kylin-memory-echo.service - Kylin Memory Service - UDS Echo (Gate 0 SPIKE)
+     Loaded: loaded (/home/ZhouYifan/.config/systemd/user/kylin-memory-echo.service; disabled; preset: enabled)
+     Active: active (running) since Fri 2026-07-31 10:03:29 CST; 14min ago
+       Docs: https://github.com/Ducknesses/kylinOS-agent-memory
+   Main PID: 506675 (python3)
+      Tasks: 1 (limit: 9405)
+     Memory: 6.2M (peak: 6.5M)
+        CPU: 49ms
+     CGroup: /user.slice/user-1000.slice/user@1000.service/app.slice/kylin-memory-echo.service
+             └─506675 /usr/bin/python3 /opt/kylin-memory/echo/memory_echo_server.py
+
+7月 31 10:03:29 ZhouYifan-pc python3[506675]: 2026-07-31 10:03:29,583 [INFO] Memory Echo Server listening on /run/user/1000/kylin-memory/memory.sock
+7月 31 10:06:03 ZhouYifan-pc python3[506675]: 2026-07-31 10:06:03,570 [INFO] client connected:
+7月 31 10:06:03 ZhouYifan-pc python3[506675]: 2026-07-31 10:06:03,571 [INFO] request id=echo_test_001 method=memory.retrieve payload={"deadline_ms": 150, "method": "memory.retrieve", "payload": {"max_context_tok>
+7月 31 10:06:03 ZhouYifan-pc python3[506675]: 2026-07-31 10:06:03,571 [INFO] request id=echo_test_002 method=memory.observe_turn payload={"deadline_ms": 200, "method": "memory.observe_turn", "payload": {"assista>
+7月 31 10:06:03 ZhouYifan-pc python3[506675]: 2026-07-31 10:06:03,572 [INFO] client disconnected (EOF before header)
+7月 31 10:06:03 ZhouYifan-pc python3[506675]: 2026-07-31 10:06:03,572 [INFO] connection closed
+7月 31 10:06:03 ZhouYifan-pc python3[506675]: 2026-07-31 10:06:03,572 [INFO] client connected:
+7月 31 10:06:03 ZhouYifan-pc python3[506675]: 2026-07-31 10:06:03,572 [INFO] request id=echo_test_003 method=memory.health_check payload={"deadline_ms": 500, "method": "memory.health_check", "payload": {"ping": >
+7月 31 10:06:03 ZhouYifan-pc python3[506675]: 2026-07-31 10:06:03,573 [INFO] client disconnected (EOF before header)
+7月 31 10:06:03 ZhouYifan-pc python3[506675]: 2026-07-31 10:06:03,573 [INFO] connection closed

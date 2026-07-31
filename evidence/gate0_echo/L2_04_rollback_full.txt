@@ -1,0 +1,43 @@
+ZhouYifan@ZhouYifan-pc:/tmp/kylin-memory-test/scripts$ cd /tmp/kylin-memory-test/scripts
+ZhouYifan@ZhouYifan-pc:/tmp/kylin-memory-test/scripts$ sudo bash deploy_echo.sh backup
+[INFO] Creating backup: backup_20260731_102555
+[INFO] Backup saved to /opt/kylin-memory/echo/backups/backup_20260731_102555
+ZhouYifan@ZhouYifan-pc:/tmp/kylin-memory-test/scripts$ echo "# corrupted" | sudo tee -a /opt/kylin-memory/echo/memory_echo_server.py
+# corrupted
+ZhouYifan@ZhouYifan-pc:/tmp/kylin-memory-test/scripts$ tail -l /opt/kylin-memory/echo/memory_echo_server.py
+    signal.signal(signal.SIGTERM, shutdown)
+
+    while True:
+        conn, _ = server.accept()
+        # 单线程串行处理（SPIKE 阶段）
+        handle_client(conn)
+
+
+if __name__ == "__main__":
+    main()# corrupted
+
+ZhouYifan@ZhouYifan-pc:/tmp/kylin-memory-test/scripts$ sudo bash deploy_echo.sh rollback
+[WARN] Rolling back to: backup_20260731_172007
+[INFO] Stopping Memory Echo Server...
+[INFO] Stopped
+[INFO] Restored: memory_echo_server.py
+[INFO] Restored: echo_client
+[WARN] Running as root via sudo - service MUST be started manually as ZhouYifan:
+[WARN]   systemctl --user daemon-reload
+[WARN]   systemctl --user start kylin-memory-echo
+[INFO] Files restored successfully. Service NOT auto-started (root cannot manage user systemd).
+[INFO] Rollback complete
+
+
+ZhouYifan@ZhouYifan-pc:/tmp/kylin-memory-test/scripts$ systemctl --user daemon-reload && systemctl --user start kylin-memory-echo
+ZhouYifan@ZhouYifan-pc:/tmp/kylin-memory-test/scripts$ KYLIN_MEMORY_SOCK=/run/user/1000/kylin-memory/memory.sock /opt/kylin-memory/echo/echo_client
+[EchoClient] connecting to "/run/user/1000/kylin-memory/memory.sock"
+[EchoClient] connected
+[EchoClient] RESPONSE 1: "{\"echo\":{\"method\":\"memory.retrieve\",\"received_payload\":{\"max_context_tokens\":800,\"query_text\":\"\xE8\xBF\x99\xE6\x98\xAF\xE6\xB5\x8B\xE8\xAF\x95\xE7\x94\xA8\xE6\x88\xB7\xE9\x97\xAE\xE9\xA2\x98\",\"scene\":\"software_development\",\"session_id\":\"session-echo-test\",\"user_id\":\"local-user\"}},\"protocol_version\":\"1.0\",\"request_id\":\"echo_test_001\",\"status\":\"ok\"}"
+[EchoClient] TEST 1 PASSED (memory.retrieve)
+[EchoClient] RESPONSE 2: "{\"echo\":{\"method\":\"memory.observe_turn\",\"received_payload\":{\"assistant_text\":\"\xE4\xBB\x8A\xE5\xA4\xA9\xE5\xA4\x9A\xE4\xBA\x91\xEF\xBC\x8C\xE6\xB0\x94\xE6\xB8\xA9 25\xC2\xB0""C\",\"session_id\":\"session-echo-test\",\"source\":\"text_chat\",\"status\":\"completed\",\"user_id\":\"local-user\",\"user_text\":\"\xE4\xBB\x8A\xE5\xA4\xA9\xE5\xA4\xA9\xE6\xB0\x94\xE6\x80\x8E\xE4\xB9\x88\xE6\xA0\xB7\"}},\"protocol_version\":\"1.0\",\"request_id\":\"echo_test_002\",\"status\":\"ok\"}"
+[EchoClient] TEST 2 PASSED (memory.observe_turn)
+[EchoClient] reconnected successfully
+[EchoClient] RESPONSE 3: "{\"echo\":{\"method\":\"memory.health_check\",\"received_payload\":{\"ping\":true}},\"protocol_version\":\"1.0\",\"request_id\":\"echo_test_003\",\"status\":\"ok\"}"
+[EchoClient] TEST 3 PASSED (health_check)
+[EchoClient] ALL TESTS PASSED

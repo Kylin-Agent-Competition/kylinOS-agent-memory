@@ -71,10 +71,41 @@ cmd_install() {
         sudo chmod 755 "$INSTALL_DIR/echo_client"
     fi
 
-    # 安装 systemd user service
-    mkdir -p "$HOME/.config/systemd/user/"
-    cp "$PROJECT_ROOT/packaging/systemd/kylin-memory-echo.service" "$HOME/.config/systemd/user/"
+    # 内嵌 systemd user service 文件，不依赖外部路径
+    # 注意：sudo 下 $HOME=/root，需要用 $SUDO_USER 获取真实用户
+    REAL_USER="${SUDO_USER:-$USER}"
+    REAL_HOME=$(eval echo "~$REAL_USER")
+    log_info "Installing systemd user service for $REAL_USER ($REAL_HOME)..."
+    mkdir -p "$REAL_HOME/.config/systemd/user/"
+    cat > "$REAL_HOME/.config/systemd/user/kylin-memory-echo.service" << 'SERVICEEOF'
+[Unit]
+Description=Kylin Memory Service - UDS Echo (Gate 0 SPIKE)
+Documentation=https://github.com/Ducknesses/kylinOS-agent-memory
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/kylin-memory/echo/memory_echo_server.py
+ExecStop=/bin/rm -f %t/kylin-memory/memory.sock
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%t/kylin-memory
+ReadOnlyPaths=/opt/kylin-memory
+
+[Install]
+WantedBy=default.target
+SERVICEEOF
+    # 修正 sudo 导致的 root 属主问题
+    chown "$REAL_USER:$REAL_USER" "$REAL_HOME/.config/systemd/user/kylin-memory-echo.service" 2>/dev/null || \
+        sudo chown "$REAL_USER:$REAL_USER" "$REAL_HOME/.config/systemd/user/kylin-memory-echo.service" 2>/dev/null || \
+        log_warn "Could not chown service file (may need manual: sudo chown $REAL_USER:$REAL_USER ~/.config/systemd/user/kylin-memory-echo.service)"
     systemctl --user daemon-reload 2>/dev/null || true
+    log_info "Systemd service installed (embedded)"
 
     log_info "Install complete"
     log_info "  Server: $INSTALL_DIR/memory_echo_server.py"
@@ -90,22 +121,46 @@ cmd_start() {
     mkdir -p "$SOCK_DIR"
     chmod 700 "$SOCK_DIR"
 
-    # 清理残留 socket
+    # 清理残留 socket 和旧日志文件（可能属主为 root）
     rm -f "$SOCK_PATH"
+    sudo rm -f /tmp/kylin-memory-echo.log /tmp/kylin-memory-echo.pid 2>/dev/null || \
+        rm -f /tmp/kylin-memory-echo.log /tmp/kylin-memory-echo.pid 2>/dev/null || true
+    rm -f /tmp/kylin-memory-echo.pid
+
+    # 检测是否在 sudo/root 上下文中
+    REAL_USER="${SUDO_USER:-$USER}"
 
     # 启动方式 1: systemd --user (推荐)
     if command -v systemctl &>/dev/null; then
-        log_info "Using systemd --user"
-        systemctl --user start kylin-memory-echo 2>/dev/null || {
-            log_warn "systemd start failed, trying direct"
-            nohup python3 "$INSTALL_DIR/memory_echo_server.py" > /tmp/kylin-memory-echo.log 2>&1 &
-            echo $! > /tmp/kylin-memory-echo.pid
-        }
+        if [ "$REAL_USER" != "root" ] && [ "$(id -u)" = "0" ]; then
+            # 当前为 root 但真实用户非 root → 使用 runuser 切换到真实用户启动 systemd
+            log_info "Using systemd --user via runuser (for $REAL_USER)"
+            runuser -u "$REAL_USER" -- systemctl --user daemon-reload 2>/dev/null || true
+            runuser -u "$REAL_USER" -- systemctl --user start kylin-memory-echo 2>/dev/null || {
+                log_warn "systemd start via runuser failed, trying direct (fallback)"
+                # 直接启动需要正确设置 XDG_RUNTIME_DIR
+                log_error "Cannot start service from sudo context."
+                log_error "systemd --user requires the real user session."
+                log_error "Files are restored. Please run manually as $REAL_USER:"
+                log_error "  systemctl --user daemon-reload"
+                log_error "  systemctl --user start kylin-memory-echo"
+                return 1
+            }
+        else
+            log_info "Using systemd --user"
+            systemctl --user daemon-reload 2>/dev/null || true
+            systemctl --user start kylin-memory-echo 2>/dev/null || {
+                log_warn "systemd start failed, trying direct (fallback)"
+                nohup python3 "$INSTALL_DIR/memory_echo_server.py" >> /tmp/kylin-memory-echo.log 2>&1 &
+                echo $! > /tmp/kylin-memory-echo.pid
+                log_info "Started directly (PID: $(cat /tmp/kylin-memory-echo.pid))"
+            }
+        fi
     else
         # 启动方式 2: 直接前台
-        nohup python3 "$INSTALL_DIR/memory_echo_server.py" > /tmp/kylin-memory-echo.log 2>&1 &
+        nohup python3 "$INSTALL_DIR/memory_echo_server.py" >> /tmp/kylin-memory-echo.log 2>&1 &
         echo $! > /tmp/kylin-memory-echo.pid
-        log_info "Started (PID: $(cat /tmp/kylin-memory-echo.pid))"
+        log_info "Started directly (PID: $(cat /tmp/kylin-memory-echo.pid))"
     fi
 
     # 等待 socket 就绪
@@ -116,7 +171,7 @@ cmd_start() {
         fi
         sleep 0.5
     done
-    log_error "Socket not ready after 5s"
+    log_error "Socket not ready after 5s (path: $SOCK_PATH)"
     return 1
 }
 
@@ -124,8 +179,15 @@ cmd_start() {
 cmd_stop() {
     log_info "Stopping Memory Echo Server..."
 
+    # 检测是否在 sudo/root 上下文中
+    REAL_USER="${SUDO_USER:-$USER}"
+
     # systemd stop
-    systemctl --user stop kylin-memory-echo 2>/dev/null || true
+    if [ "$REAL_USER" != "root" ] && [ "$(id -u)" = "0" ]; then
+        runuser -u "$REAL_USER" -- systemctl --user stop kylin-memory-echo 2>/dev/null || true
+    else
+        systemctl --user stop kylin-memory-echo 2>/dev/null || true
+    fi
 
     # 直接 kill
     if [ -f /tmp/kylin-memory-echo.pid ]; then
@@ -134,8 +196,15 @@ cmd_stop() {
         rm -f /tmp/kylin-memory-echo.pid
     fi
 
+    # 兜底: pkill 所有 memory_echo_server 进程
+    pkill -f memory_echo_server.py 2>/dev/null || true
+    sleep 1
+
     # 清理 socket
-    rm -f "$SOCK_PATH"
+    rm -f "$SOCK_PATH" 2>/dev/null || true
+    # 也清理可能的备用路径
+    REAL_XDG=$(bash -c 'echo $XDG_RUNTIME_DIR' 2>/dev/null || echo "/run/user/$(id -u "$REAL_USER")")
+    rm -f "$REAL_XDG/kylin-memory/memory.sock" 2>/dev/null || true
     log_info "Stopped"
 }
 
@@ -222,7 +291,15 @@ cmd_rollback() {
     fi
 
     # 重启服务
-    cmd_start
+    REAL_USER="${SUDO_USER:-$USER}"
+    if [ "$REAL_USER" != "root" ] && [ "$(id -u)" = "0" ]; then
+        log_warn "Running as root via sudo - service MUST be started manually as $REAL_USER:"
+        log_warn "  systemctl --user daemon-reload"
+        log_warn "  systemctl --user start kylin-memory-echo"
+        log_info "Files restored successfully. Service NOT auto-started (root cannot manage user systemd)."
+    else
+        cmd_start
+    fi
     log_info "Rollback complete"
 }
 

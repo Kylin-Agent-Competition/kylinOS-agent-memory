@@ -1,0 +1,4 @@
+ZhouYifan@ZhouYifan-pc:/tmp/kylin-memory-test/scripts$ sudo getfattr -n security.kysec /opt/kylin-memory/echo/echo_client
+getfattr：删去绝对路径名最前面的'/'
+# file: opt/kylin-memory/echo/echo_client
+security.kysec="verfied"

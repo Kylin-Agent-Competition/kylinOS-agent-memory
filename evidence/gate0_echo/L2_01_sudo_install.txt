@@ -1,0 +1,7 @@
+ZhouYifan@ZhouYifan-pc:/tmp/kylin-memory-test/scripts$ ls -la /opt/kylin-memory/echo/
+总计 80
+drwxr-xr-x 3 root root  4096  7月31日 00:46 .
+drwxr-xr-x 3 root root  4096  7月31日 00:46 ..
+drwxr-xr-x 5 root root  4096  7月31日 09:57 backups
+-rwxr-xr-x 1 root root 37936  7月31日 09:57 echo_client
+-rwxr-xr-x 1 root root  5313  7月31日 09:57 memory_echo_server.py
