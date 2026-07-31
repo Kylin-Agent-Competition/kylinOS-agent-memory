@@ -101,21 +101,3 @@ entries:
     reviewer: "pending-gaoyizhe934"
     limitations: "已安装客户端 ABI 存在，但原生 Hybrid/RRF 没有成功的 E4 运行证据"
     checksum_sha256: "871114c58101f20e0de8f64e0ab97bf0a6eb75099cdeb0fbb66587768dde4197"
-
-  - id: "EMBED-CALL-002"
-    task_id: "D2-A"
-    description: "Day 2 扩展边界 Embedding 调用验证"
-    status: "HOST_VERIFIED"
-    evidence_level: "E4"
-    source: "evidence/l2-kylin-vm/day2_smoke_run.log"
-    commit: "63b899b963bc22bcf048b64e6c7399a37d99cfd9"
-    date: "2026-07-31"
-    reviewer: "pending"
-    limitations: "异步、并发、线程安全、多模态未覆盖"
-    checksum_sha256: "ef466ec53c300f25bd754f6d814ee5341464a8159737ea6920b00f4d1b7c15e7"
-    details: |
-      基线(中文/英文/单字符) + 空字符串 + 超长文本(2170 bytes) + 纯空白字符
-      + 特殊Unicode(emoji/CJK扩展) + 纯数字 + 纯标点 + 混合代码
-      + 重复调用稳定性(5次) + 错误模型名(errorCode=10, fallback 恢复)
-      全部通过，统一维度 768，L2 范数=1.000000（单位向量确认）
-      运行输出见原始日志
