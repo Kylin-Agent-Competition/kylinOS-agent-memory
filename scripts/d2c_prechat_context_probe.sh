@@ -48,8 +48,41 @@ MODEL_REQUEST_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.model_request.jsonl"
 DB_MESSAGE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.db_message.txt"
 UI_SCREENSHOT_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.ui_screenshot.png"
 
-DB_PATH="${HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
+# 确定实际登录用户的 HOME (避免 sudo 下 $HOME 变成 /root)
+# 优先级: SUDO_USER -> AI 进程 owner -> 当前 $HOME
+get_user_home() {
+    if [ -n "${SUDO_USER:-}" ]; then
+        local uhome
+        uhome="$(eval echo "~${SUDO_USER}" 2>/dev/null || true)"
+        if [ -d "${uhome}" ]; then
+            echo "${uhome}"
+            return
+        fi
+    fi
+    # 通过 AI 进程的 /proc/<pid>/environ 反查 HOME
+    local apid
+    apid="$(pgrep -f "/files/bin/kylin-aiassistant" 2>/dev/null | head -n 1 || true)"
+    if [ -n "${apid}" ] && [ -r "/proc/${apid}/environ" ]; then
+        local ehome
+        ehome="$(tr '\0' '\n' < "/proc/${apid}/environ" 2>/dev/null \
+            | grep '^HOME=' | cut -d= -f2- || true)"
+        if [ -n "${ehome}" ] && [ -d "${ehome}" ]; then
+            echo "${ehome}"
+            return
+        fi
+    fi
+    echo "${HOME}"
+}
+USER_HOME="$(get_user_home)"
+
+DB_PATH="${USER_HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
 AI_PROC_NAME="kylin-aiassistant"
+
+# 同样保证状态文件/输出目录落在真实用户 HOME 下 (避免 sudo/非sudo 状态文件割裂)
+STATE_DIR="${USER_HOME}/.d2c-probe-state"
+mkdir -p "${STATE_DIR}"
+OUT_DIR="${PROBE_DIR}/out"
+mkdir -p "${OUT_DIR}"
 
 # AI Runtime 服务进程名 (模型请求 + memory_context 注入在此发生)
 AI_RUNTIME_NAME="kylin-ai-runtime"
@@ -296,15 +329,31 @@ cmd_capture_stop() {
     echo "INFO: 原始捕获日志大小: ${log_size} bytes"
 
     # 离线过滤: 从原始 strace 日志 grep 生成 MODEL_REQUEST_FILE
+    # 注: MARKER 含方括号 [D2C-MARKER-PRECHAT-001], 在正则中是字符集, 必须用 grep -F (固定字符串) 匹配
+    # memory_context 关键词扩到常见变体 (驼峰/中文/前缀名)
     echo "INFO: 从原始日志离线过滤关键词 -> ${MODEL_REQUEST_FILE}"
     if [ -f "${CAPTURE_LOG_FILE}" ]; then
-        grep -E "${MARKER}|chatAsync|model_request|memory_context" "${CAPTURE_LOG_FILE}" \
-            > "${MODEL_REQUEST_FILE}" 2>/dev/null || true
+        {
+            # 1) 固定字符串匹配 marker (含 [], 不能用正则)
+            grep -F "${MARKER}" "${CAPTURE_LOG_FILE}" 2>/dev/null || true
+            # 2) 正则匹配其他关键词 (message_type/chat/model_request/memory 常见变体)
+            grep -E 'message_type|"chat"|model_request|memory[_-]?[Cc]ontext|MemoryContext|记忆上下文|记忆\s*上下|prompt|system_prompt|context' \
+                "${CAPTURE_LOG_FILE}" 2>/dev/null || true
+        } | sort -u > "${MODEL_REQUEST_FILE}" 2>/dev/null || true
     fi
 
     local line_count=0
     if [ -f "${MODEL_REQUEST_FILE}" ]; then
         line_count="$(wc -l < "${MODEL_REQUEST_FILE}" || echo 0)"
+    fi
+    # 如果 grep 过滤仍为 0, 退一步: 只过滤 sendmsg+assistant.sock 的所有行 (DBus 回调)
+    if [ "${line_count}" -eq 0 ] && [ -f "${CAPTURE_LOG_FILE}" ]; then
+        echo "WARN: 关键词过滤 0 行, 退化为提取所有 sendmsg 到 assistant.sock 的 DBus 行"
+        grep -E 'sendmsg.*assistant\.sock' "${CAPTURE_LOG_FILE}" \
+            > "${MODEL_REQUEST_FILE}" 2>/dev/null || true
+        if [ -f "${MODEL_REQUEST_FILE}" ]; then
+            line_count="$(wc -l < "${MODEL_REQUEST_FILE}" || echo 0)"
+        fi
     fi
 
     echo "=============================================="
@@ -313,6 +362,12 @@ cmd_capture_stop() {
     echo "  原始日志: ${CAPTURE_LOG_FILE}"
     echo "  过滤行数: ${line_count}"
     echo "  输出文件: ${MODEL_REQUEST_FILE}"
+    if [ "${line_count}" -eq 0 ] && [ -f "${CAPTURE_LOG_FILE}" ]; then
+        local raw_total
+        raw_total="$(wc -l < "${CAPTURE_LOG_FILE}" 2>/dev/null || echo 0)"
+        echo "  HINT: 原始日志 ${raw_total} 行, 但关键词未命中; 可能字段名与预期不同"
+        echo "        建议人工快速浏览: tail -n 200 ${CAPTURE_LOG_FILE} | head -n 100"
+    fi
     echo "=============================================="
 }
 
@@ -372,19 +427,28 @@ cmd_collect() {
         echo "  ✗ 模型请求文件不存在, 请先运行 capture-start/capture-stop"
     else
         local raw_mm raw_mir
-        raw_mm="$(grep -c "${MARKER}" "${MODEL_REQUEST_FILE}" 2>/dev/null || echo 0)"
+        # MARKER 含 [], 必须 grep -F (固定字符串), 不能用正则
+        raw_mm="$(grep -cF "${MARKER}" "${MODEL_REQUEST_FILE}" 2>/dev/null || echo 0)"
         local model_match_count
         model_match_count="$(to_int "${raw_mm}")"
         echo "  含标记的请求行数: ${model_match_count}"
 
-        raw_mir="$(grep -cE 'memory_context|MemoryContext|记忆上下文' "${MODEL_REQUEST_FILE}" 2>/dev/null || echo 0)"
+        raw_mir="$(grep -cE 'memory[_-]?[Cc]ontext|MemoryContext|记忆上下文|system_prompt|prompt.*context|context' \
+            "${MODEL_REQUEST_FILE}" 2>/dev/null || echo 0)"
         local memory_in_request
         memory_in_request="$(to_int "${raw_mir}")"
         if [ "${memory_in_request}" -gt 0 ]; then
             echo "  ✓ H2C-PreChat-3 通过: 模型请求含 Memory Context"
         else
             echo "  ! H2C-PreChat-3 未确认: 模型请求未观察到 Memory Context"
-            echo "    (可能 Hook 点 A 未注入或 MemoryClient 未连接)"
+            echo "    (可能 Hook 点 A 未注入 或 MemoryClient 未连接 或 关键词仍需扩展)"
+            # 辅助: 打印 MODEL_REQUEST_FILE 内容提示（最多 30 行）
+            local fl
+            fl="$(wc -l < "${MODEL_REQUEST_FILE}" 2>/dev/null || echo 0)"
+            if [ "${fl}" -gt 0 ]; then
+                echo "    提示: ${MODEL_REQUEST_FILE} 共 ${fl} 行, 截取前 10 行供人工定位实际关键词:"
+                head -n 10 "${MODEL_REQUEST_FILE}" 2>/dev/null | sed 's/^/    > /' || true
+            fi
         fi
     fi
 
