@@ -12,7 +12,10 @@ readonly EXPECTED_ENGINE_VERSION="1.2.0.1-0k0.11"
 readonly EXPECTED_SDK_COMMIT="2213447ef765e709e93f94d4177f4417478fe8ea"
 readonly DEFAULT_SERVICE_UNIT="d2-vector-engine.service"
 readonly DEFAULT_APP_ID="d2-vector-smoke"
-readonly DEFAULT_COLLECTION="d2_vector_smoke"
+readonly COLLECTION_PREFIX="d2_vector_smoke_"
+readonly TEST_ROOT_PREFIX="d2-b-vector-smoke-"
+readonly MANIFEST_NAME="d2-vector-smoke.manifest"
+readonly DEFAULT_DATABASE_RELATIVE=".local/share/kylin-ai-vector-engine/default.db"
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly PROJECT_ROOT
@@ -24,14 +27,27 @@ ACTION=""
 PHASE=""
 DB_FILE=""
 APP_ID="${DEFAULT_APP_ID}"
-COLLECTION="${DEFAULT_COLLECTION}"
+RUN_ID=""
+COLLECTION=""
 SERVICE_UNIT="${DEFAULT_SERVICE_UNIT}"
-PREVIOUS_INVOCATION_ID=""
 SDK_SOURCE=""
 BINARY=""
 BUILD_DIR=""
 RUNTIME_LIBRARY=""
 CURRENT_INVOCATION_ID=""
+TEST_ROOT=""
+TEST_ROOT_CANONICAL=""
+MANIFEST_FILE=""
+MANIFEST_TEMP=""
+MANIFEST_PREPARE_INVOCATION_ID=""
+DATABASE_CANONICAL=""
+DATABASE_IDENTITY=""
+BINARY_HASH=""
+PROJECT_COMMIT=""
+PROBE_SOURCE_HASH=""
+RUNNER_SOURCE_HASH=""
+ABI_PATCH_HASH=""
+ABI_ASSERTS_HASH=""
 
 log() {
     local step="$1"
@@ -69,15 +85,18 @@ After an operator verifies the hash and grants temporary KySec trust, run:
   scripts/run_d2_vector_smoke.sh \
     --action run \
     --phase <prepare|verify|cleanup> \
+    --run-id <6-32-lowercase-letters-or-digits> \
     --db-file <absolute-path> \
     --binary <absolute-trusted-probe-path> \
     [--app-id <id>] \
     [--collection <name>] \
-    [--service-unit <systemd-user-unit>] \
-    [--previous-invocation-id <32-hex-id>]
+    [--service-unit <systemd-user-unit>]
 
-For verify, --previous-invocation-id is required and must differ from the
-current service InvocationID. The service must already preload --db-file.
+For run, the approved test root is fixed to:
+  $HOME/d2-b-vector-smoke-<run-id>
+The database must be a canonical regular file below that root. The collection
+must exactly equal d2_vector_smoke_<run-id>. Prepare creates a hash-bound
+manifest in the test root; verify and cleanup must match that same manifest.
 
 This runner never installs dependencies, changes KySec trust, starts/restarts
 services, copies databases, writes evidence, or performs Git operations on the
@@ -111,6 +130,11 @@ parse_arguments() {
                 DB_FILE="$2"
                 shift 2
                 ;;
+            --run-id)
+                require_value "$1" "$#"
+                RUN_ID="$2"
+                shift 2
+                ;;
             --app-id)
                 require_value "$1" "$#"
                 APP_ID="$2"
@@ -124,11 +148,6 @@ parse_arguments() {
             --service-unit)
                 require_value "$1" "$#"
                 SERVICE_UNIT="$2"
-                shift 2
-                ;;
-            --previous-invocation-id)
-                require_value "$1" "$#"
-                PREVIOUS_INVOCATION_ID="$2"
                 shift 2
                 ;;
             --sdk-source)
@@ -170,8 +189,9 @@ parse_arguments() {
         if [[ -z "${SDK_SOURCE}" || "${SDK_SOURCE}" != /* ]]; then
             fail "arguments" "--sdk-source must be an absolute path for build"
         fi
-        if [[ -n "${PHASE}" || -n "${DB_FILE}" || -n "${PREVIOUS_INVOCATION_ID}" ]]; then
-            fail "arguments" "build does not accept phase, database, or restart-token options"
+        if [[ -n "${PHASE}" || -n "${DB_FILE}" || -n "${RUN_ID}" ||
+              -n "${COLLECTION}" ]]; then
+            fail "arguments" "build does not accept run-phase or collection options"
         fi
         return
     fi
@@ -195,20 +215,23 @@ parse_arguments() {
     if [[ -z "${APP_ID}" ]]; then
         fail "arguments" "--app-id cannot be empty"
     fi
-    if [[ ! "${COLLECTION}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    if [[ ! "${RUN_ID}" =~ ^[a-z0-9]{6,32}$ ]]; then
         fail "arguments" \
-            "--collection must start with a letter or underscore and contain only letters, digits, or underscores"
+            "--run-id must contain 6-32 lowercase ASCII letters or digits"
+    fi
+    local expected_collection="${COLLECTION_PREFIX}${RUN_ID}"
+    if [[ -z "${COLLECTION}" ]]; then
+        COLLECTION="${expected_collection}"
+    fi
+    if [[ "${COLLECTION}" != "${expected_collection}" ]]; then
+        fail "arguments" \
+            "--collection must exactly equal ${expected_collection}"
     fi
     if [[ ! "${SERVICE_UNIT}" =~ ^[A-Za-z0-9][A-Za-z0-9_.@:-]*\.service$ ]]; then
         fail "arguments" "--service-unit must be a valid systemd .service unit name"
     fi
-    if [[ "${PHASE}" == "verify" && -z "${PREVIOUS_INVOCATION_ID}" ]]; then
-        fail "arguments" "--previous-invocation-id is required for verify"
-    fi
-    if [[ -n "${PREVIOUS_INVOCATION_ID}" &&
-          ! "${PREVIOUS_INVOCATION_ID}" =~ ^[[:xdigit:]]{32}$ ]]; then
-        fail "arguments" "--previous-invocation-id must be 32 hexadecimal characters"
-    fi
+    TEST_ROOT="${HOME}/${TEST_ROOT_PREFIX}${RUN_ID}"
+    MANIFEST_FILE="${TEST_ROOT}/${MANIFEST_NAME}"
 }
 
 cleanup_build_dir() {
@@ -225,6 +248,17 @@ cleanup_build_dir() {
                 "refusing to remove unexpected path: ${BUILD_DIR}"
             ;;
     esac
+}
+
+cleanup_manifest_temp() {
+    if [[ -n "${MANIFEST_TEMP}" && -f "${MANIFEST_TEMP}" ]]; then
+        rm -- "${MANIFEST_TEMP}"
+    fi
+}
+
+cleanup_temporary_files() {
+    cleanup_build_dir
+    cleanup_manifest_temp
 }
 
 require_command() {
@@ -291,13 +325,27 @@ check_runtime_packages() {
 }
 
 check_project_inputs() {
+    require_command git
+    require_command sha256sum
     local path
     for path in "${PROBE_SOURCE}" "${ABI_PATCH}" "${ABI_ASSERTS}"; do
         if [[ ! -f "${path}" || ! -r "${path}" ]]; then
             fail "project_input" "missing or unreadable: ${path}"
         fi
     done
-    pass "project_input" "probe, ABI patch, and ABI assertions are readable"
+    if [[ ! -d "${PROJECT_ROOT}/.git" ]]; then
+        fail "project_input" "project root is not a Git checkout: ${PROJECT_ROOT}"
+    fi
+    PROJECT_COMMIT="$(git -C "${PROJECT_ROOT}" rev-parse HEAD)"
+    if [[ ! "${PROJECT_COMMIT}" =~ ^[[:xdigit:]]{40}$ ]]; then
+        fail "project_input" "project returned an invalid commit ID"
+    fi
+    PROBE_SOURCE_HASH="$(sha256sum "${PROBE_SOURCE}" | awk '{print $1}')"
+    RUNNER_SOURCE_HASH="$(sha256sum "${BASH_SOURCE[0]}" | awk '{print $1}')"
+    ABI_PATCH_HASH="$(sha256sum "${ABI_PATCH}" | awk '{print $1}')"
+    ABI_ASSERTS_HASH="$(sha256sum "${ABI_ASSERTS}" | awk '{print $1}')"
+    pass "project_identity" \
+        "project_commit=${PROJECT_COMMIT}; probe_source_sha256=${PROBE_SOURCE_HASH}; runner_source_sha256=${RUNNER_SOURCE_HASH}; abi_patch_sha256=${ABI_PATCH_HASH}; abi_asserts_sha256=${ABI_ASSERTS_HASH}"
 }
 
 build_probe() {
@@ -371,21 +419,165 @@ check_binary_trust() {
     fi
 
     local trust_state
-    local binary_hash
     trust_state="$(/usr/sbin/kyexectl -g "${BINARY}")"
     if [[ "${trust_state}" != *": verified" ]]; then
         fail "kysec" "probe is not temporarily trusted: ${trust_state}"
     fi
-    binary_hash="$(sha256sum "${BINARY}" | awk '{print $1}')"
-    pass "binary" "path=${BINARY}; sha256=${binary_hash}; kysec=verified"
+    BINARY_HASH="$(sha256sum "${BINARY}" | awk '{print $1}')"
+    pass "binary" "path=${BINARY}; sha256=${BINARY_HASH}; kysec=verified"
 }
 
 check_database_path() {
+    require_command realpath
+    require_command stat
     if [[ ! -f "${DB_FILE}" || ! -r "${DB_FILE}" ]]; then
         fail "database_path" \
             "service-managed database is missing or unreadable: ${DB_FILE}"
     fi
-    pass "database_path" "service-managed database is readable: ${DB_FILE}"
+    if [[ -L "${DB_FILE}" ]]; then
+        fail "database_path" "database path must not be a symbolic link: ${DB_FILE}"
+    fi
+    if [[ ! -d "${TEST_ROOT}" ]]; then
+        fail "database_path" "approved D2 test root is missing: ${TEST_ROOT}"
+    fi
+    if [[ -L "${TEST_ROOT}" ]]; then
+        fail "database_path" "approved D2 test root must not be a symbolic link: ${TEST_ROOT}"
+    fi
+
+    TEST_ROOT_CANONICAL="$(realpath -e -- "${TEST_ROOT}")"
+    DATABASE_CANONICAL="$(realpath -e -- "${DB_FILE}")"
+    if [[ "${TEST_ROOT_CANONICAL}" != "${TEST_ROOT}" ]]; then
+        fail "database_path" \
+            "approved D2 test root must already be canonical: ${TEST_ROOT}"
+    fi
+    if [[ "${DATABASE_CANONICAL}" != "${DB_FILE}" ]]; then
+        fail "database_path" \
+            "database path must already be canonical: ${DB_FILE}; canonical=${DATABASE_CANONICAL}"
+    fi
+    case "${DATABASE_CANONICAL}" in
+        "${TEST_ROOT_CANONICAL}"/*)
+            ;;
+        *)
+            fail "database_path" \
+                "database is outside approved D2 test root: ${TEST_ROOT_CANONICAL}"
+            ;;
+    esac
+
+    DATABASE_IDENTITY="$(stat -Lc '%d:%i' -- "${DATABASE_CANONICAL}")"
+    local default_database="${HOME}/${DEFAULT_DATABASE_RELATIVE}"
+    if [[ -e "${default_database}" ]]; then
+        local default_canonical
+        local default_identity
+        default_canonical="$(realpath -e -- "${default_database}")"
+        default_identity="$(stat -Lc '%d:%i' -- "${default_canonical}")"
+        if [[ "${DATABASE_CANONICAL}" == "${default_canonical}" ||
+              "${DATABASE_IDENTITY}" == "${default_identity}" ]]; then
+            fail "database_path" \
+                "refusing the default Vector Engine database by path or file identity"
+        fi
+    fi
+
+    DB_FILE="${DATABASE_CANONICAL}"
+    MANIFEST_FILE="${TEST_ROOT_CANONICAL}/${MANIFEST_NAME}"
+    pass "database_path" \
+        "canonical=${DATABASE_CANONICAL}; identity=${DATABASE_IDENTITY}; approved_root=${TEST_ROOT_CANONICAL}; default_db_rejected=true"
+}
+
+write_manifest() {
+    require_command chmod
+    require_command ln
+    require_command mktemp
+    if [[ -e "${MANIFEST_FILE}" || -L "${MANIFEST_FILE}" ]]; then
+        fail "manifest_write" \
+            "refusing to overwrite an existing run manifest: ${MANIFEST_FILE}"
+    fi
+
+    MANIFEST_TEMP="$(mktemp "${TEST_ROOT_CANONICAL}/.d2-vector-smoke.manifest.XXXXXX")"
+    chmod 0600 "${MANIFEST_TEMP}"
+    {
+        printf 'format_version=1\n'
+        printf 'run_id=%s\n' "${RUN_ID}"
+        printf 'database_path=%s\n' "${DATABASE_CANONICAL}"
+        printf 'database_identity=%s\n' "${DATABASE_IDENTITY}"
+        printf 'collection=%s\n' "${COLLECTION}"
+        printf 'app_id=%s\n' "${APP_ID}"
+        printf 'binary_sha256=%s\n' "${BINARY_HASH}"
+        printf 'project_commit=%s\n' "${PROJECT_COMMIT}"
+        printf 'probe_source_sha256=%s\n' "${PROBE_SOURCE_HASH}"
+        printf 'runner_source_sha256=%s\n' "${RUNNER_SOURCE_HASH}"
+        printf 'abi_patch_sha256=%s\n' "${ABI_PATCH_HASH}"
+        printf 'abi_asserts_sha256=%s\n' "${ABI_ASSERTS_HASH}"
+        printf 'sdk_source_commit=%s\n' "${EXPECTED_SDK_COMMIT}"
+        printf 'service_unit=%s\n' "${SERVICE_UNIT}"
+        printf 'prepare_invocation_id=%s\n' "${CURRENT_INVOCATION_ID}"
+    } >"${MANIFEST_TEMP}"
+
+    if ! ln -- "${MANIFEST_TEMP}" "${MANIFEST_FILE}"; then
+        fail "manifest_write" \
+            "atomic manifest creation failed; a competing file may exist"
+    fi
+    rm -- "${MANIFEST_TEMP}"
+    MANIFEST_TEMP=""
+    pass "manifest_write" \
+        "path=${MANIFEST_FILE}; run_id=${RUN_ID}; project_commit=${PROJECT_COMMIT}; binary_sha256=${BINARY_HASH}; prepare_invocation_id=${CURRENT_INVOCATION_ID}"
+}
+
+MANIFEST_VALUE=""
+
+read_manifest_value() {
+    local key="$1"
+    local -a matches=()
+    mapfile -t matches < <(awk -v prefix="${key}=" \
+        'index($0, prefix) == 1 { print substr($0, length(prefix) + 1) }' \
+        "${MANIFEST_FILE}")
+    if [[ "${#matches[@]}" -ne 1 ]]; then
+        fail "manifest_read" \
+            "manifest key must occur exactly once: ${key}; count=${#matches[@]}"
+    fi
+    MANIFEST_VALUE="${matches[0]}"
+}
+
+expect_manifest_value() {
+    local key="$1"
+    local expected="$2"
+    read_manifest_value "${key}"
+    if [[ "${MANIFEST_VALUE}" != "${expected}" ]]; then
+        fail "manifest_mismatch" \
+            "key=${key}; expected=${expected}; actual=${MANIFEST_VALUE}"
+    fi
+}
+
+validate_manifest() {
+    require_command awk
+    if [[ ! -f "${MANIFEST_FILE}" || ! -r "${MANIFEST_FILE}" ]]; then
+        fail "manifest_read" "run manifest is missing or unreadable: ${MANIFEST_FILE}"
+    fi
+    if [[ -L "${MANIFEST_FILE}" ]]; then
+        fail "manifest_read" "run manifest must not be a symbolic link: ${MANIFEST_FILE}"
+    fi
+
+    expect_manifest_value "format_version" "1"
+    expect_manifest_value "run_id" "${RUN_ID}"
+    expect_manifest_value "database_path" "${DATABASE_CANONICAL}"
+    expect_manifest_value "database_identity" "${DATABASE_IDENTITY}"
+    expect_manifest_value "collection" "${COLLECTION}"
+    expect_manifest_value "app_id" "${APP_ID}"
+    expect_manifest_value "binary_sha256" "${BINARY_HASH}"
+    expect_manifest_value "project_commit" "${PROJECT_COMMIT}"
+    expect_manifest_value "probe_source_sha256" "${PROBE_SOURCE_HASH}"
+    expect_manifest_value "runner_source_sha256" "${RUNNER_SOURCE_HASH}"
+    expect_manifest_value "abi_patch_sha256" "${ABI_PATCH_HASH}"
+    expect_manifest_value "abi_asserts_sha256" "${ABI_ASSERTS_HASH}"
+    expect_manifest_value "sdk_source_commit" "${EXPECTED_SDK_COMMIT}"
+    expect_manifest_value "service_unit" "${SERVICE_UNIT}"
+
+    read_manifest_value "prepare_invocation_id"
+    if [[ ! "${MANIFEST_VALUE}" =~ ^[[:xdigit:]]{32}$ ]]; then
+        fail "manifest_mismatch" "prepare_invocation_id is not 32 hexadecimal characters"
+    fi
+    MANIFEST_PREPARE_INVOCATION_ID="${MANIFEST_VALUE}"
+    pass "manifest_validate" \
+        "phase=${PHASE}; path=${MANIFEST_FILE}; all identity fields match; prepare_invocation_id=${MANIFEST_PREPARE_INVOCATION_ID}"
 }
 
 check_service_database() {
@@ -469,18 +661,19 @@ check_service() {
     check_service_database
 
     if [[ "${PHASE}" == "verify" ]]; then
-        if [[ "${CURRENT_INVOCATION_ID,,}" == "${PREVIOUS_INVOCATION_ID,,}" ]]; then
+        if [[ "${CURRENT_INVOCATION_ID,,}" == "${MANIFEST_PREPARE_INVOCATION_ID,,}" ]]; then
             fail "service_restart" \
                 "InvocationID is unchanged; restart ${SERVICE_UNIT} before verify"
         fi
         pass "service_restart" \
-            "InvocationID changed from ${PREVIOUS_INVOCATION_ID} to ${CURRENT_INVOCATION_ID}"
+            "InvocationID changed from ${MANIFEST_PREPARE_INVOCATION_ID} to ${CURRENT_INVOCATION_ID}"
     fi
 }
 
 run_probe() {
     local -a arguments=(
         --phase "${PHASE}"
+        --run-id "${RUN_ID}"
         --db-file "${DB_FILE}"
         --app-id "${APP_ID}"
         --collection "${COLLECTION}"
@@ -497,13 +690,13 @@ run_probe() {
     if [[ "${PHASE}" == "prepare" ]]; then
         log "restart_token" "INFO" "invocation_id=${CURRENT_INVOCATION_ID}"
         log "manual_restart_required" "INFO" \
-            "restart ${SERVICE_UNIT}, then pass this invocation ID to verify"
+            "restart ${SERVICE_UNIT}; verify will read the prepare InvocationID from ${MANIFEST_FILE}"
     fi
 }
 
 main() {
     parse_arguments "$@"
-    trap cleanup_build_dir EXIT
+    trap cleanup_temporary_files EXIT
 
     log "runner_start" "INFO" "action=${ACTION}; project_root=${PROJECT_ROOT}"
     check_operating_system
@@ -519,10 +712,24 @@ main() {
 
     check_binary_trust
     check_database_path
+    if [[ "${PHASE}" == "prepare" ]]; then
+        if [[ -e "${MANIFEST_FILE}" || -L "${MANIFEST_FILE}" ]]; then
+            fail "manifest_precondition" \
+                "prepare requires an unused manifest path: ${MANIFEST_FILE}"
+        fi
+        pass "manifest_precondition" "manifest path is unused: ${MANIFEST_FILE}"
+    else
+        validate_manifest
+    fi
     check_service
+    if [[ "${PHASE}" == "prepare" ]]; then
+        write_manifest
+    fi
     run_probe
     pass "runner_complete" \
         "run completed; no trust, service restart, or evidence upload was performed"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

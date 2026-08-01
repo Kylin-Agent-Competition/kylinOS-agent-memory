@@ -31,6 +31,7 @@ constexpr char kCategoryField[] = "category";
 constexpr char kContentField[] = "content";
 constexpr char kVectorField[] = "embedding";
 constexpr char kIndexName[] = "d2_vector_smoke_index";
+constexpr char kCollectionPrefix[] = "d2_vector_smoke_";
 constexpr char kAlphaUser[] = "user-alpha";
 constexpr char kBetaUser[] = "user-beta";
 constexpr std::uint32_t kDimension = 4;
@@ -44,7 +45,8 @@ enum class Phase {
 struct Options {
     Phase phase = Phase::kPrepare;
     std::string app_id = "d2-vector-smoke";
-    std::string collection = "d2_vector_smoke";
+    std::string run_id;
+    std::string collection;
     std::string db_file;
     bool service_managed_database = false;
 };
@@ -91,18 +93,17 @@ void Require(bool condition, const std::string& step, const std::string& detail)
     }
 }
 
-bool IsValidCollectionName(const std::string& value) {
-    if (value.empty()) {
+bool IsValidRunId(const std::string& value) {
+    if (value.size() < 6 || value.size() > 32) {
         return false;
     }
-    const auto first = static_cast<unsigned char>(value.front());
-    if (!(std::isalpha(first) || value.front() == '_')) {
-        return false;
-    }
-    return std::all_of(value.begin() + 1, value.end(), [](char ch) {
-        const auto byte = static_cast<unsigned char>(ch);
-        return std::isalnum(byte) || ch == '_';
+    return std::all_of(value.begin(), value.end(), [](char ch) {
+        return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9');
     });
+}
+
+std::string ExpectedCollectionName(const std::string& run_id) {
+    return std::string(kCollectionPrefix) + run_id;
 }
 
 Phase ParsePhase(const std::string& value) {
@@ -133,8 +134,9 @@ std::string PhaseName(Phase phase) {
 void PrintUsage(const char* program) {
     std::cout
         << "Usage: " << program
-        << " --phase <prepare|verify|cleanup> --db-file <absolute-path>"
-           " [--app-id <id>] [--collection <name>] --service-managed-database\n\n"
+        << " --phase <prepare|verify|cleanup> --run-id <lowercase-id>"
+           " --db-file <absolute-path> [--app-id <id>] [--collection <name>]"
+           " --service-managed-database\n\n"
         << "Persistence workflow:\n"
         << "  1. Run --phase prepare.\n"
         << "  2. Restart the service that preloads the same --db-file.\n"
@@ -160,6 +162,8 @@ Options ParseOptions(int argc, char** argv) {
             phase_seen = true;
         } else if (argument == "--db-file") {
             options.db_file = require_value(argument);
+        } else if (argument == "--run-id") {
+            options.run_id = require_value(argument);
         } else if (argument == "--app-id") {
             options.app_id = require_value(argument);
         } else if (argument == "--collection") {
@@ -183,9 +187,17 @@ Options ParseOptions(int argc, char** argv) {
     if (options.app_id.empty()) {
         throw std::invalid_argument("--app-id cannot be empty");
     }
-    if (!IsValidCollectionName(options.collection)) {
+    if (!IsValidRunId(options.run_id)) {
         throw std::invalid_argument(
-            "--collection must start with a letter or underscore and contain only letters, digits, or underscores");
+            "--run-id must contain 6-32 lowercase ASCII letters or digits");
+    }
+    const std::string expected_collection = ExpectedCollectionName(options.run_id);
+    if (options.collection.empty()) {
+        options.collection = expected_collection;
+    }
+    if (options.collection != expected_collection) {
+        throw std::invalid_argument(
+            "--collection must exactly equal d2_vector_smoke_<run-id>");
     }
     if (!options.service_managed_database) {
         throw std::invalid_argument(
@@ -213,14 +225,17 @@ bool HasCollection(const std::shared_ptr<VectorDB::Database>& client,
     return exists;
 }
 
-void DropCollectionIfPresent(const std::shared_ptr<VectorDB::Database>& client,
+bool CollectionNameAvailable(const std::shared_ptr<VectorDB::Database>& client,
                              const std::string& collection) {
-    if (!HasCollection(client, collection)) {
-        Pass("collection_drop_preexisting", "no pre-existing collection");
-        return;
-    }
-    RequireStatus("collection_drop_preexisting", client->DropCollection(collection));
-    Pass("collection_drop_preexisting", "pre-existing collection removed");
+    return !HasCollection(client, collection);
+}
+
+void RequireCollectionAbsent(const std::shared_ptr<VectorDB::Database>& client,
+                             const std::string& collection,
+                             const std::string& step) {
+    Require(CollectionNameAvailable(client, collection), step,
+            "refusing to modify pre-existing collection: " + collection);
+    Pass(step, "collection name is unused; safe to create: " + collection);
 }
 
 void CreateCollection(const std::shared_ptr<VectorDB::Database>& client,
@@ -363,18 +378,29 @@ void VerifyVectorSearch(const std::shared_ptr<VectorDB::Database>& client,
     Require(results.Results().size() == 1, step,
             "expected one result set for one query vector");
 
-    const auto& ids = results.Results().front().Ids().IntIDArray();
-    Require(!ids.empty(), step, "vector search returned no rows");
+    const auto& result = results.Results().front();
+    const auto& ids = result.Ids().IntIDArray();
+    const auto user_field = result.OutputField(kUserField);
+    Require(user_field != nullptr, step,
+            "vector search response is missing required user_id output field");
+    const auto users = std::static_pointer_cast<VectorDB::VarCharFieldData>(user_field);
+    Require(ids.size() == users->Count(), step,
+            "vector search ID and user_id output lengths differ");
+    Require(ids.size() == 2 &&
+                std::set<std::int64_t>(ids.begin(), ids.end()) ==
+                std::set<std::int64_t>({101, 102}),
+            step, "vector search did not return exactly target-user ids {101,102}");
+    Require(std::all_of(users->Data().begin(), users->Data().end(),
+                        [](const std::string& user_id) {
+                            return user_id == kAlphaUser;
+                        }),
+            step, "vector search returned a row owned by another user");
     Require(ids.front() == 101, step,
             "expected target-user id 101 as the nearest allowed match");
-    Require(std::all_of(ids.begin(), ids.end(), [](std::int64_t id) {
-                return id == 101 || id == 102;
-            }),
-            step, "vector search returned a cross-user row");
     Require(std::find(ids.begin(), ids.end(), 201) == ids.end(), step,
             "exact-vector cross-user decoy id 201 bypassed user_id filter");
     Pass(step,
-         "vector search excluded exact-vector cross-user decoy and returned id 101");
+         "vector search returned exactly ids {101,102}, all owned by user-alpha; id 101 ranked first");
 }
 
 void UpsertRow(const std::shared_ptr<VectorDB::Database>& client,
@@ -412,14 +438,44 @@ void UpsertRow(const std::shared_ptr<VectorDB::Database>& client,
 void DeleteRow(const std::shared_ptr<VectorDB::Database>& client,
                const std::string& collection) {
     VectorDB::DmlResults results;
-    RequireStatus("crud_delete", client->Delete(collection, "id in [202]", results));
+    RequireStatus("crud_delete",
+                  client->Delete(collection,
+                                 "user_id == \"user-beta\" && id in [202]", results));
 
     const QueryRows rows = Query(
         client, collection, "id in [101,102,201,202]", "crud_delete_verify");
     const std::set<std::int64_t> actual(rows.ids.begin(), rows.ids.end());
     Require(actual == std::set<std::int64_t>({101, 102, 201}),
             "crud_delete_verify", "expected ids {101,102,201} after deleting id 202");
-    Pass("crud_delete", "id 202 deleted; ids {101,102,201} remain");
+    Pass("crud_delete",
+         "user-scoped delete removed beta id 202; ids {101,102,201} remain");
+}
+
+void VerifyCollisionGuard(const std::shared_ptr<VectorDB::Database>& client,
+                          const std::string& collection) {
+    RequireCollectionAbsent(client, collection, "collision_guard_precondition");
+    CreateCollection(client, collection);
+    InsertRows(client, collection);
+
+    Require(!CollectionNameAvailable(client, collection), "collision_guard_refusal",
+            "same-name collection was incorrectly considered safe to create");
+    Pass("collision_guard_refusal",
+         "same-name creation is refused without dropping the existing collection");
+
+    const QueryRows rows = Query(
+        client, collection, "id in [101,102,201,202]", "collision_guard_preserved");
+    Require(std::set<std::int64_t>(rows.ids.begin(), rows.ids.end()) ==
+                std::set<std::int64_t>({101, 102, 201, 202}),
+            "collision_guard_preserved",
+            "collision fixture changed while creation was refused");
+    Pass("collision_guard_preserved",
+         "pre-existing same-name collection retained all four sentinel rows");
+
+    RequireStatus("collision_guard_owned_cleanup", client->DropCollection(collection));
+    Require(!HasCollection(client, collection), "collision_guard_owned_cleanup",
+            "owned collision fixture still exists after explicit cleanup");
+    Pass("collision_guard_owned_cleanup",
+         "only the collection created by this regression run was removed");
 }
 
 void VerifyPersistedState(const std::shared_ptr<VectorDB::Database>& client,
@@ -450,7 +506,8 @@ void VerifyPersistedState(const std::shared_ptr<VectorDB::Database>& client,
 
 void RunPrepare(const std::shared_ptr<VectorDB::Database>& client,
                 const Options& options) {
-    DropCollectionIfPresent(client, options.collection);
+    VerifyCollisionGuard(client, options.collection);
+    RequireCollectionAbsent(client, options.collection, "collection_precondition");
     CreateCollection(client, options.collection);
     InsertRows(client, options.collection);
     VerifyUserFilters(client, options.collection, "prepare");
