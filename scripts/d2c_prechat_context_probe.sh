@@ -21,15 +21,28 @@ PROBE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${PROBE_DIR}/out"
 mkdir -p "${OUT_DIR}"
 
-TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+TIMESTAMP_FILE="${OUT_DIR}/.prechat_last_timestamp"
+META_FILE="${OUT_DIR}/prechat_capture.meta"
+CAPTURE_PID_FILE="${OUT_DIR}/prechat_capture.pid"
 MARKER="[D2C-MARKER-PRECHAT-001]"
 
+get_or_set_timestamp() {
+    if [ -n "${1:-}" ]; then
+        echo "${1}" > "${TIMESTAMP_FILE}"
+        echo "${1}"
+    elif [ -f "${TIMESTAMP_FILE}" ]; then
+        cat "${TIMESTAMP_FILE}"
+    else
+        date +%Y%m%d_%H%M%S
+    fi
+}
+
+TIMESTAMP="$(get_or_set_timestamp)"
 BASELINE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.baseline.json"
+CAPTURE_LOG_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.capture.log"
 MODEL_REQUEST_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.model_request.jsonl"
 DB_MESSAGE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.db_message.txt"
 UI_SCREENSHOT_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.ui_screenshot.png"
-CAPTURE_PID_FILE="${OUT_DIR}/prechat_capture.pid"
-CAPTURE_LOG_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.capture.log"
 
 DB_PATH="${HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
 AI_PROC_NAME="kylin-aiassistant"
@@ -38,7 +51,28 @@ find_ai_pid() {
     pgrep -f "${AI_PROC_NAME}" | head -n 1 || true
 }
 
+# 重新解析文件路径 (capture-stop / collect 调用时从 meta/timestamp_file 恢复)
+reload_paths() {
+    local ts_from_meta=""
+    if [ -f "${META_FILE}" ]; then
+        ts_from_meta="$(grep '^timestamp=' "${META_FILE}" | cut -d= -f2-)"
+    fi
+    if [ -n "${ts_from_meta}" ]; then
+        TIMESTAMP="${ts_from_meta}"
+    fi
+    BASELINE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.baseline.json"
+    CAPTURE_LOG_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.capture.log"
+    MODEL_REQUEST_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.model_request.jsonl"
+    DB_MESSAGE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.db_message.txt"
+    UI_SCREENSHOT_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.ui_screenshot.png"
+}
+
 cmd_baseline() {
+    # 每次 baseline 生成新时间戳, 作为后续 capture / collect 共用
+    TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+    TIMESTAMP="$(get_or_set_timestamp "${TIMESTAMP}")"
+    reload_paths
+
     local pid
     pid="$(find_ai_pid)"
     if [ -z "${pid}" ]; then
@@ -78,6 +112,7 @@ EOF
 }
 
 cmd_capture_start() {
+    reload_paths
     local pid
     pid="$(find_ai_pid)"
     if [ -z "${pid}" ]; then
@@ -90,16 +125,34 @@ cmd_capture_start() {
         exit 1
     fi
 
-    echo "INFO: 启动模型请求捕获 (strace write 跟踪) -> ${MODEL_REQUEST_FILE}"
-    # 使用 strace 跟踪 socket 写入, 捕获 chatAsync 入参
-    # 过滤包含标记字符串的行
-    nohup strace -p "${pid}" -f -s 8192 -e trace=write 2>&1 \
-        | grep --line-buffered -E "${MARKER}|chatAsync|model_request|memory_context" \
-        > "${MODEL_REQUEST_FILE}" &
+    echo "INFO: 启动模型请求捕获 (strace write 跟踪) -> ${CAPTURE_LOG_FILE}"
+    echo "INFO: strace 直接写入原始日志 (不经过 grep 管道), capture-stop 时离线生成 MODEL_REQUEST_FILE"
 
+    # strace 独立 nohup 直接写原始日志文件, 不经过 shell 管道
+    # 避免 grep 管道导致终端阻塞, 并保证 $! 为 strace 自身 PID
+    nohup strace -p "${pid}" -f -s 8192 -e trace=write \
+        > "${CAPTURE_LOG_FILE}" 2>&1 </dev/null &
     local cap_pid=$!
+    disown "${cap_pid}" 2>/dev/null || true
+
+    sleep 1
+    if ! kill -0 "${cap_pid}" 2>/dev/null; then
+        echo "ERROR: strace 启动失败, 请检查 strace 是否可用 (sudo apt install strace) 或是否需要 sudo 权限" >&2
+        echo "HINT: 如果 strace -p 需要 root, 使用: sudo $0 capture-start" >&2
+        exit 1
+    fi
+
     echo "${cap_pid}" > "${CAPTURE_PID_FILE}"
-    echo "INFO: 捕获进程 PID = ${cap_pid}"
+    cat > "${META_FILE}" <<EOF
+strace_pid=${cap_pid}
+ai_pid=${pid}
+capture_log=${CAPTURE_LOG_FILE}
+model_request_file=${MODEL_REQUEST_FILE}
+timestamp=${TIMESTAMP}
+started_at=$(date '+%Y-%m-%d %H:%M:%S')
+EOF
+
+    echo "INFO: strace 进程 PID = ${cap_pid} (已脱离终端, 可以继续输入命令)"
     echo "INFO: 现在请在 AI 助手中输入带标记的文本"
 }
 
@@ -108,13 +161,36 @@ cmd_capture_stop() {
         echo "ERROR: 未找到运行中的捕获任务" >&2
         exit 1
     fi
-    local cap_pid
+    reload_paths
+    # 从 meta 文件恢复 capture_log / model_request 路径
+    local cap_pid capture_log_from_meta model_request_from_meta
     cap_pid="$(cat "${CAPTURE_PID_FILE}")"
+    if [ -f "${META_FILE}" ]; then
+        capture_log_from_meta="$(grep '^capture_log=' "${META_FILE}" | cut -d= -f2-)"
+        model_request_from_meta="$(grep '^model_request_file=' "${META_FILE}" | cut -d= -f2-)"
+        [ -n "${capture_log_from_meta}" ] && CAPTURE_LOG_FILE="${capture_log_from_meta}"
+        [ -n "${model_request_from_meta}" ] && MODEL_REQUEST_FILE="${model_request_from_meta}"
+    fi
 
-    echo "INFO: 停止捕获进程 ${cap_pid}"
+    echo "INFO: 停止 strace 进程 ${cap_pid}"
     kill "${cap_pid}" 2>/dev/null || true
     pkill -P "${cap_pid}" 2>/dev/null || true
+    pkill -f "strace -p.*kylin" 2>/dev/null || true
+    sleep 0.5
     rm -f "${CAPTURE_PID_FILE}"
+
+    local log_size=0
+    if [ -f "${CAPTURE_LOG_FILE}" ]; then
+        log_size="$(wc -c < "${CAPTURE_LOG_FILE}" 2>/dev/null || echo 0)"
+    fi
+    echo "INFO: 原始捕获日志大小: ${log_size} bytes"
+
+    # 离线过滤: 从原始 strace 日志 grep 生成 MODEL_REQUEST_FILE
+    echo "INFO: 从原始日志离线过滤关键词 -> ${MODEL_REQUEST_FILE}"
+    if [ -f "${CAPTURE_LOG_FILE}" ]; then
+        grep -E "${MARKER}|chatAsync|model_request|memory_context" "${CAPTURE_LOG_FILE}" \
+            > "${MODEL_REQUEST_FILE}" 2>/dev/null || true
+    fi
 
     local line_count=0
     if [ -f "${MODEL_REQUEST_FILE}" ]; then
@@ -124,12 +200,14 @@ cmd_capture_stop() {
     echo "=============================================="
     echo " 模型请求捕获完成"
     echo "=============================================="
-    echo "  捕获行数: ${line_count}"
+    echo "  原始日志: ${CAPTURE_LOG_FILE}"
+    echo "  过滤行数: ${line_count}"
     echo "  输出文件: ${MODEL_REQUEST_FILE}"
     echo "=============================================="
 }
 
 cmd_collect() {
+    reload_paths
     echo "=============================================="
     echo " H2C-PreChat 三路证据采集"
     echo "=============================================="
