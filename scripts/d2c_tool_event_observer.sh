@@ -44,6 +44,9 @@ SUMMARY_FILE="${OUT_DIR}/tool_${TIMESTAMP}.summary.json"
 
 AI_PROC_NAME="kylin-aiassistant"
 
+# AI Runtime 服务进程名 (Tool 执行结果通过 Runtime 回调上报)
+AI_RUNTIME_NAME="kylin-ai-runtime"
+
 # Tool 事件关键词 (基于源码 sendToolMessage 等)
 TOOL_KEYWORDS="sendToolMessage|tool_call|tool_result|tool_use|tool_name|tool_call_id|function_call"
 
@@ -63,7 +66,9 @@ to_int() {
 }
 
 find_ai_pid() {
-    # 优先选择实际运行的 kylin-aiassistant 主进程（带 --silence 或 -platform 的）
+    # 优先选择真正的 AI 助手主进程, 排除 bash launcher 包装进程
+    # 实际进程 cmdline: /opt/apps/cn.kylin.kylin-aiassistant/files/bin/kylin-aiassistant
+    # bash launcher:    /bin/bash /opt/apps/kaiming/bin/cn.kylin.kylin-aiassistant ...
     local pids
     pids="$(pgrep -f "${AI_PROC_NAME}" 2>/dev/null || true)"
     if [ -z "${pids}" ]; then
@@ -71,20 +76,47 @@ find_ai_pid() {
         return
     fi
     local best_pid=""
+    # 1) 优先: cmdline 含 /files/bin/kylin-aiassistant (真实二进制路径)
     for p in ${pids}; do
         local cmdline
         cmdline="$(tr '\0' ' ' < /proc/"${p}"/cmdline 2>/dev/null || true)"
         case "${cmdline}" in
-            *--silence*|*-platform*)
+            */files/bin/kylin-aiassistant*)
                 best_pid="${p}"
                 break
                 ;;
         esac
     done
+    # 2) 次选: cmdline 不以 /bin/bash 开头 (排除 launcher)
+    if [ -z "${best_pid}" ]; then
+        for p in ${pids}; do
+            local cmdline
+            cmdline="$(tr '\0' ' ' < /proc/"${p}"/cmdline 2>/dev/null || true)"
+            case "${cmdline}" in
+                /bin/bash\ *|/bin/sh\ *)
+                    continue
+                    ;;
+                *)
+                    best_pid="${p}"
+                    break
+                    ;;
+            esac
+        done
+    fi
+    # 3) 兜底: 取第一个 PID
     if [ -n "${best_pid}" ]; then
         echo "${best_pid}"
     else
         echo "${pids}" | head -n 1
+    fi
+}
+
+find_runtime_pid() {
+    # 定位 kylin-ai-runtime 进程 (Tool 执行结果回调经 Runtime 上报)
+    local pid
+    pid="$(pgrep -f "${AI_RUNTIME_NAME}" 2>/dev/null | head -n 1 || true)"
+    if [ -n "${pid}" ]; then
+        echo "${pid}"
     fi
 }
 
@@ -111,6 +143,15 @@ cmd_start() {
     fi
     echo "INFO: AI 助手 PID = ${pid}"
 
+    # 同时定位 kylin-ai-runtime (Tool 执行结果回调经 Runtime 上报)
+    local runtime_pid
+    runtime_pid="$(find_runtime_pid)"
+    if [ -n "${runtime_pid}" ]; then
+        echo "INFO: AI Runtime PID = ${runtime_pid} (将同时跟踪以捕获 Tool 回调)"
+    else
+        echo "WARN: 未找到 ${AI_RUNTIME_NAME} 进程, 仅跟踪 AI 主进程 (可能漏掉 Tool 回调证据)"
+    fi
+
     if [ -f "${PID_FILE}" ]; then
         echo "ERROR: 已有捕获任务运行中" >&2
         exit 1
@@ -126,9 +167,18 @@ cmd_start() {
     echo "INFO: 捕获范围: write,writev,sendmsg,sendto,recvmsg,read,poll (扩至常见 IPC)"
 
     # strace 独立 nohup 直接写原始日志文件
-    # - 扩过滤, -s 32768 (含 tool_call 大 JSON), -yy 打印 socket 路径
-    nohup strace -p "${pid}" -f -s 32768 -yy \
-        -e trace=write,writev,sendmsg,sendto,recvmsg,read,poll \
+    # - 同时 attach 到 AI 主进程 + Runtime 服务进程 (strace 支持多个 -p)
+    # - -f 跟踪子进程/线程
+    # - -s 32768 (含 tool_call 大 JSON)
+    # - -yy 打印 socket 路径
+    local strace_args=(-p "${pid}" -f -s 32768 -yy \
+        -e trace=write,writev,sendmsg,sendto,recvmsg,read,poll)
+    if [ -n "${runtime_pid}" ] && [ "${runtime_pid}" != "${pid}" ]; then
+        strace_args=(-p "${pid}" -p "${runtime_pid}" -f -s 32768 -yy \
+            -e trace=write,writev,sendmsg,sendto,recvmsg,read,poll)
+    fi
+
+    nohup strace "${strace_args[@]}" \
         > "${RAW_LOG_FILE}" 2>&1 </dev/null &
     local cap_pid=$!
     disown "${cap_pid}" 2>/dev/null || true
@@ -147,11 +197,21 @@ cmd_start() {
     else
         echo "INFO: 已确认 strace attach 到 AI PID=${pid}"
     fi
+    if [ -n "${runtime_pid}" ] && [ "${runtime_pid}" != "${pid}" ]; then
+        local attached_rt=""
+        attached_rt="$(ps -o args= -p "${cap_pid}" 2>/dev/null | grep -o -- "-p *${runtime_pid}" || true)"
+        if [ -n "${attached_rt}" ]; then
+            echo "INFO: 已确认 strace attach 到 Runtime PID=${runtime_pid}"
+        else
+            echo "WARN: 无法确认 strace attach 到 Runtime PID=${runtime_pid} (可能已成功, ps 输出截断)"
+        fi
+    fi
 
     echo "${cap_pid}" > "${PID_FILE}"
     cat > "${META_FILE}" <<EOF
 strace_pid=${cap_pid}
 ai_pid=${pid}
+runtime_pid=${runtime_pid:-}
 raw_log=${RAW_LOG_FILE}
 filtered_log=${LOG_FILE}
 timestamp=${TIMESTAMP}
