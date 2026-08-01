@@ -19,8 +19,33 @@ PROBE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${PROBE_DIR}/out"
 mkdir -p "${OUT_DIR}"
 
-# 状态文件 (PID/meta/timestamp) 统一放到 $HOME 下, 避免 sudo 与非 sudo 混用时权限冲突
-STATE_DIR="${HOME}/.d2c-probe-state"
+# 确定实际登录用户的 HOME (避免 sudo 下 $HOME 变成 /root)
+get_user_home() {
+    if [ -n "${SUDO_USER:-}" ]; then
+        local uhome
+        uhome="$(eval echo "~${SUDO_USER}" 2>/dev/null || true)"
+        if [ -d "${uhome}" ]; then
+            echo "${uhome}"
+            return
+        fi
+    fi
+    local apid
+    apid="$(pgrep -f "/files/bin/kylin-aiassistant" 2>/dev/null | head -n 1 || true)"
+    if [ -n "${apid}" ] && [ -r "/proc/${apid}/environ" ]; then
+        local ehome
+        ehome="$(tr '\0' '\n' < "/proc/${apid}/environ" 2>/dev/null \
+            | grep '^HOME=' | cut -d= -f2- || true)"
+        if [ -n "${ehome}" ] && [ -d "${ehome}" ]; then
+            echo "${ehome}"
+            return
+        fi
+    fi
+    echo "${HOME}"
+}
+USER_HOME="$(get_user_home)"
+
+# 状态文件 (PID/meta/timestamp) 统一放到真实用户 HOME 下, 避免 sudo/非sudo 混用割裂
+STATE_DIR="${USER_HOME}/.d2c-probe-state"
 mkdir -p "${STATE_DIR}"
 
 TIMESTAMP_FILE="${STATE_DIR}/postturn_last_timestamp"
@@ -44,7 +69,7 @@ LOG_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.log"
 SUMMARY_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.summary.json"
 DB_SNAPSHOT_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.db_snapshots.json"
 
-DB_PATH="${HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
+DB_PATH="${USER_HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
 
 # AI 助手进程名
 AI_PROC_NAME="kylin-aiassistant"
