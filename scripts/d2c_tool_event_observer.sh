@@ -18,8 +18,23 @@ PROBE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${PROBE_DIR}/out"
 mkdir -p "${OUT_DIR}"
 
-TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+TIMESTAMP_FILE="${OUT_DIR}/.tool_last_timestamp"
+META_FILE="${OUT_DIR}/tool_capture.meta"
 PID_FILE="${OUT_DIR}/tool_capture.pid"
+
+get_or_set_timestamp() {
+    if [ -n "${1:-}" ]; then
+        echo "${1}" > "${TIMESTAMP_FILE}"
+        echo "${1}"
+    elif [ -f "${TIMESTAMP_FILE}" ]; then
+        cat "${TIMESTAMP_FILE}"
+    else
+        date +%Y%m%d_%H%M%S
+    fi
+}
+
+TIMESTAMP="$(get_or_set_timestamp)"
+RAW_LOG_FILE="${OUT_DIR}/tool_${TIMESTAMP}.raw.log"
 LOG_FILE="${OUT_DIR}/tool_${TIMESTAMP}.log"
 SUMMARY_FILE="${OUT_DIR}/tool_${TIMESTAMP}.summary.json"
 
@@ -35,7 +50,21 @@ find_ai_pid() {
     pgrep -f "${AI_PROC_NAME}" | head -n 1 || true
 }
 
+reload_paths() {
+    local ts_from_meta=""
+    if [ -f "${META_FILE}" ]; then
+        ts_from_meta="$(grep '^timestamp=' "${META_FILE}" | cut -d= -f2-)"
+    fi
+    if [ -n "${ts_from_meta}" ]; then
+        TIMESTAMP="${ts_from_meta}"
+    fi
+    RAW_LOG_FILE="${OUT_DIR}/tool_${TIMESTAMP}.raw.log"
+    LOG_FILE="${OUT_DIR}/tool_${TIMESTAMP}.log"
+    SUMMARY_FILE="${OUT_DIR}/tool_${TIMESTAMP}.summary.json"
+}
+
 cmd_start() {
+    reload_paths
     local pid
     pid="$(find_ai_pid)"
     if [ -z "${pid}" ]; then
@@ -49,15 +78,38 @@ cmd_start() {
         exit 1
     fi
 
-    echo "INFO: 启动 Tool 事件观察 -> ${LOG_FILE}"
-    # 跟踪 write/recvmsg, 过滤 Tool 与 Prompt Skill 关键词
-    nohup strace -p "${pid}" -f -s 8192 -e trace=write,recvmsg 2>&1 \
-        | grep --line-buffered -E "${TOOL_KEYWORDS}|${PROMPT_SKILL_KEYWORDS}" \
-        > "${LOG_FILE}" &
+    # 每次 start 生成新时间戳
+    TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+    TIMESTAMP="$(get_or_set_timestamp "${TIMESTAMP}")"
+    reload_paths
 
+    echo "INFO: 启动 Tool 事件观察 (strace 原始日志) -> ${RAW_LOG_FILE}"
+    echo "INFO: strace 直接写入原始日志 (不经过 grep 管道), stop 时离线过滤"
+
+    # strace 独立 nohup 直接写原始日志文件, 不经过 shell 管道
+    nohup strace -p "${pid}" -f -s 8192 -e trace=write,recvmsg \
+        > "${RAW_LOG_FILE}" 2>&1 </dev/null &
     local cap_pid=$!
+    disown "${cap_pid}" 2>/dev/null || true
+
+    sleep 1
+    if ! kill -0 "${cap_pid}" 2>/dev/null; then
+        echo "ERROR: strace 启动失败, 请检查 strace 是否可用 (sudo apt install strace) 或是否需要 sudo 权限" >&2
+        echo "HINT: 如果 strace -p 需要 root, 使用: sudo $0 start" >&2
+        exit 1
+    fi
+
     echo "${cap_pid}" > "${PID_FILE}"
-    echo "INFO: 捕获进程 PID = ${cap_pid}"
+    cat > "${META_FILE}" <<EOF
+strace_pid=${cap_pid}
+ai_pid=${pid}
+raw_log=${RAW_LOG_FILE}
+filtered_log=${LOG_FILE}
+timestamp=${TIMESTAMP}
+started_at=$(date '+%Y-%m-%d %H:%M:%S')
+EOF
+
+    echo "INFO: strace 进程 PID = ${cap_pid} (已脱离终端, 可以继续输入命令)"
     echo ""
     echo "=============================================="
     echo " 请按顺序执行以下场景:"
@@ -78,18 +130,35 @@ cmd_stop() {
         echo "ERROR: 未找到运行中的捕获任务" >&2
         exit 1
     fi
-    local cap_pid
+    reload_paths
+    local cap_pid raw_log_from_meta filtered_log_from_meta
     cap_pid="$(cat "${PID_FILE}")"
+    if [ -f "${META_FILE}" ]; then
+        raw_log_from_meta="$(grep '^raw_log=' "${META_FILE}" | cut -d= -f2-)"
+        filtered_log_from_meta="$(grep '^filtered_log=' "${META_FILE}" | cut -d= -f2-)"
+        [ -n "${raw_log_from_meta}" ] && RAW_LOG_FILE="${raw_log_from_meta}"
+        [ -n "${filtered_log_from_meta}" ] && LOG_FILE="${filtered_log_from_meta}"
+    fi
 
-    echo "INFO: 停止捕获进程 ${cap_pid}"
+    echo "INFO: 停止 strace 进程 ${cap_pid}"
     kill "${cap_pid}" 2>/dev/null || true
     pkill -P "${cap_pid}" 2>/dev/null || true
+    pkill -f "strace -p.*kylin" 2>/dev/null || true
+    sleep 0.5
     rm -f "${PID_FILE}"
 
-    if [ ! -f "${LOG_FILE}" ]; then
-        echo "ERROR: 日志文件不存在: ${LOG_FILE}" >&2
+    if [ ! -f "${RAW_LOG_FILE}" ]; then
+        echo "ERROR: 原始日志文件不存在: ${RAW_LOG_FILE}" >&2
         exit 1
     fi
+    local log_size
+    log_size="$(wc -c < "${RAW_LOG_FILE}" 2>/dev/null || echo 0)"
+    echo "INFO: 原始 strace 日志大小: ${log_size} bytes"
+
+    # 离线过滤: 从原始日志生成过滤后的日志
+    echo "INFO: 从原始日志离线过滤 Tool/PromptSkill 关键词 -> ${LOG_FILE}"
+    grep -E "${TOOL_KEYWORDS}|${PROMPT_SKILL_KEYWORDS}" "${RAW_LOG_FILE}" \
+        > "${LOG_FILE}" 2>/dev/null || true
 
     echo "INFO: 生成 Tool 事件报告 -> ${SUMMARY_FILE}"
 
