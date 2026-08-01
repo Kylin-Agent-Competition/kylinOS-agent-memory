@@ -201,3 +201,20 @@ entries:
       + 重复调用稳定性(5次) + 错误模型名(errorCode=10, fallback 恢复)
       全部通过，统一维度 768，L2 范数=1.000000（单位向量确认）
       运行输出见原始日志
+
+  - id: "EMBED-CALL-003"
+    task_id: "D4-A"
+    description: "Day 4 Bridge/Provider 最小真实 SDK 调用验证"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/day4_bridge_smoke_run.log"
+    commit: "c7afbc14627569386fac3dc7df3c7bd998f7e15f"
+    date: "2026-08-01"
+    reviewer: "pending"
+    limitations: "异步、并发、超时中断、多模态未覆盖；错误模型属 Day2 范围"
+    checksum_sha256: "50a3fbc43d35139a410012fb553477bd4c0ce7abcd922cdeb87f47ace88d6ac2"
+    details: |
+      C++ Bridge(dlopen/dlsym) + pybind11 模块 + Python EmbeddingProvider 最小真实调用
+      构建/CTest/异常映射/真实 SDK 冒烟(11项)/load+create_session 幂等(6项)
+      两轮审查 21 项处理（19 修复 + 2 备案），麒麟 VM 复测全部通过
+      运行输出见原始日志
