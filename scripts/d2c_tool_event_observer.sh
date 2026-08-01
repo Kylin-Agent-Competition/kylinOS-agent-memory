@@ -46,8 +46,42 @@ TOOL_KEYWORDS="sendToolMessage|tool_call|tool_result|tool_use|tool_name|tool_cal
 # Prompt Skill 关键词 (用于验证不被误判)
 PROMPT_SKILL_KEYWORDS="translate|翻译|polish|润色|summarize|总结|rewrite|改写"
 
+# 安全地将字符串转为非负整数: 去掉非数字和多余换行, 空值默认 0
+to_int() {
+    local raw="$1"
+    local cleaned
+    cleaned="$(printf '%s' "${raw}" | tail -n 1 | tr -cd '0-9')"
+    if [ -z "${cleaned}" ]; then
+        printf '0'
+    else
+        printf '%s' "${cleaned}"
+    fi
+}
+
 find_ai_pid() {
-    pgrep -f "${AI_PROC_NAME}" | head -n 1 || true
+    # 优先选择实际运行的 kylin-aiassistant 主进程（带 --silence 或 -platform 的）
+    local pids
+    pids="$(pgrep -f "${AI_PROC_NAME}" 2>/dev/null || true)"
+    if [ -z "${pids}" ]; then
+        true
+        return
+    fi
+    local best_pid=""
+    for p in ${pids}; do
+        local cmdline
+        cmdline="$(tr '\0' ' ' < /proc/"${p}"/cmdline 2>/dev/null || true)"
+        case "${cmdline}" in
+            *--silence*|*-platform*)
+                best_pid="${p}"
+                break
+                ;;
+        esac
+    done
+    if [ -n "${best_pid}" ]; then
+        echo "${best_pid}"
+    else
+        echo "${pids}" | head -n 1
+    fi
 }
 
 reload_paths() {
@@ -85,18 +119,29 @@ cmd_start() {
 
     echo "INFO: 启动 Tool 事件观察 (strace 原始日志) -> ${RAW_LOG_FILE}"
     echo "INFO: strace 直接写入原始日志 (不经过 grep 管道), stop 时离线过滤"
+    echo "INFO: 捕获范围: write,writev,sendmsg,sendto,recvmsg,read,poll (扩至常见 IPC)"
 
-    # strace 独立 nohup 直接写原始日志文件, 不经过 shell 管道
-    nohup strace -p "${pid}" -f -s 8192 -e trace=write,recvmsg \
+    # strace 独立 nohup 直接写原始日志文件
+    # - 扩过滤, -s 32768 (含 tool_call 大 JSON), -yy 打印 socket 路径
+    nohup strace -p "${pid}" -f -s 32768 -yy \
+        -e trace=write,writev,sendmsg,sendto,recvmsg,read,poll \
         > "${RAW_LOG_FILE}" 2>&1 </dev/null &
     local cap_pid=$!
     disown "${cap_pid}" 2>/dev/null || true
 
-    sleep 1
+    sleep 2
     if ! kill -0 "${cap_pid}" 2>/dev/null; then
         echo "ERROR: strace 启动失败, 请检查 strace 是否可用 (sudo apt install strace) 或是否需要 sudo 权限" >&2
-        echo "HINT: 如果 strace -p 需要 root, 使用: sudo $0 start" >&2
+        echo "HINT: 如果 strace -p 需要 root 或 ptrace_scope=2, 使用: sudo $0 start" >&2
+        echo "HINT: 可临时放宽:  sudo sysctl -w kernel.yama.ptrace_scope=0" >&2
         exit 1
+    fi
+    local attached=""
+    attached="$(ps -o args= -p "${cap_pid}" 2>/dev/null | grep -o -- "-p *${pid}" || true)"
+    if [ -z "${attached}" ]; then
+        echo "WARN: strace PID=${cap_pid} 已启动, 但无法确认 attach 到 AI PID=${pid}; 请检查日志是否增长" >&2
+    else
+        echo "INFO: 已确认 strace attach 到 AI PID=${pid}"
     fi
 
     echo "${cap_pid}" > "${PID_FILE}"
@@ -162,15 +207,17 @@ cmd_stop() {
 
     echo "INFO: 生成 Tool 事件报告 -> ${SUMMARY_FILE}"
 
-    # 统计各类事件
-    local tool_call_count tool_result_count send_tool_count
-    tool_call_count="$(grep -cE 'tool_call|tool_use|function_call' "${LOG_FILE}" || echo 0)"
-    tool_result_count="$(grep -cE 'tool_result' "${LOG_FILE}" || echo 0)"
-    send_tool_count="$(grep -cE 'sendToolMessage' "${LOG_FILE}" || echo 0)"
-
-    # Prompt Skill 关键词出现次数 (用于验证不被误判)
-    local prompt_skill_count
-    prompt_skill_count="$(grep -cE "${PROMPT_SKILL_KEYWORDS}" "${LOG_FILE}" || echo 0)"
+    # 统计各类事件 (to_int 清洗避免 "需要整数表达式")
+    local raw_tc raw_tr raw_st raw_ps
+    raw_tc="$(grep -cE 'tool_call|tool_use|function_call' "${LOG_FILE}" 2>/dev/null || echo 0)"
+    raw_tr="$(grep -cE 'tool_result'                    "${LOG_FILE}" 2>/dev/null || echo 0)"
+    raw_st="$(grep -cE 'sendToolMessage'                "${LOG_FILE}" 2>/dev/null || echo 0)"
+    raw_ps="$(grep -cE "${PROMPT_SKILL_KEYWORDS}"       "${LOG_FILE}" 2>/dev/null || echo 0)"
+    local tool_call_count tool_result_count send_tool_count prompt_skill_count
+    tool_call_count="$(to_int "${raw_tc}")"
+    tool_result_count="$(to_int "${raw_tr}")"
+    send_tool_count="$(to_int "${raw_st}")"
+    prompt_skill_count="$(to_int "${raw_ps}")"
 
     # 判断是否捕获到独立 Tool 事件
     local tool_event_captured=false

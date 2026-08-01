@@ -45,8 +45,46 @@ DB_PATH="${HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
 # AI 助手进程名
 AI_PROC_NAME="kylin-aiassistant"
 
+# 安全地将字符串转为非负整数: 去掉非数字和多余换行, 空值默认 0
+to_int() {
+    local raw="$1"
+    # 取最后一行（抵制 grep -c ... || echo 0 导致的双行输出），去除非数字字符
+    local cleaned
+    cleaned="$(printf '%s' "${raw}" | tail -n 1 | tr -cd '0-9')"
+    if [ -z "${cleaned}" ]; then
+        printf '0'
+    else
+        printf '%s' "${cleaned}"
+    fi
+}
+
 find_ai_pid() {
-    pgrep -f "${AI_PROC_NAME}" | head -n 1 || true
+    # 优先选择实际运行的 kylin-aiassistant 主进程（带 --silence 或 -platform 的）
+    # 而非 kaiming launcher 包装进程
+    local pids
+    pids="$(pgrep -f "${AI_PROC_NAME}" 2>/dev/null || true)"
+    if [ -z "${pids}" ]; then
+        true
+        return
+    fi
+    # 优先：通过命令行参数区分实际主进程（含 '--silence' 或 '-platform'）
+    local best_pid=""
+    for p in ${pids}; do
+        local cmdline
+        cmdline="$(tr '\0' ' ' < /proc/"${p}"/cmdline 2>/dev/null || true)"
+        case "${cmdline}" in
+            *--silence*|*-platform*)
+                best_pid="${p}"
+                break
+                ;;
+        esac
+    done
+    if [ -n "${best_pid}" ]; then
+        echo "${best_pid}"
+    else
+        # 兜底：取第一个 PID
+        echo "${pids}" | head -n 1
+    fi
 }
 
 cmd_start() {
@@ -70,20 +108,33 @@ cmd_start() {
 
     echo "INFO: 启动 strace 日志捕获 -> ${LOG_FILE}"
     echo "INFO: strace 直接写入原始日志 (不经过 grep 管道), stop 时离线统计"
+    echo "INFO: 捕获范围: write,writev,sendmsg,sendto,recvmsg,read,poll (扩至常见 IPC)"
 
-    # strace 独立 nohup 直接写日志文件, 不经过 shell 管道
-    # 这样 $! 拿到的是 strace 自身 PID, 且进程完全脱离终端
-    nohup strace -p "${pid}" -f -s 4096 -e trace=write,recvmsg \
+    # strace 独立 nohup 直接写日志文件
+    # - 过滤扩至 writev/sendmsg/sendto/read/poll (AI 助手 IPC 可能走其中任一种)
+    # - -s 16384 (增加字符串长度以覆盖 memory_context 大 JSON)
+    # - -yy (打印 socket 路径/文件描述符类型,便于调试)
+    nohup strace -p "${pid}" -f -s 16384 -yy \
+        -e trace=write,writev,sendmsg,sendto,recvmsg,read,poll \
         > "${LOG_FILE}" 2>&1 </dev/null &
     local cap_pid=$!
     disown "${cap_pid}" 2>/dev/null || true
 
-    # 验证 strace 进程已启动
-    sleep 1
+    # 验证 strace 进程已启动且确实 attach 到目标 AI PID
+    sleep 2
     if ! kill -0 "${cap_pid}" 2>/dev/null; then
         echo "ERROR: strace 启动失败, 请检查 strace 是否可用 (sudo apt install strace) 或是否需要 sudo 权限" >&2
-        echo "HINT: 如果 strace -p 需要 root, 使用: sudo $0 start" >&2
+        echo "HINT: 如果 strace -p 需要 root 或 ptrace_scope=2, 使用: sudo $0 start" >&2
+        echo "HINT: 可临时放宽:  sudo sysctl -w kernel.yama.ptrace_scope=0" >&2
         exit 1
+    fi
+    # 再确认 strace 正在监控目标 PID
+    local attached=""
+    attached="$(ps -o args= -p "${cap_pid}" 2>/dev/null | grep -o -- "-p *${pid}" || true)"
+    if [ -z "${attached}" ]; then
+        echo "WARN: strace PID=${cap_pid} 启动, 但无法确认 attach 到 AI PID=${pid}; 请在聊天后检查日志大小" >&2
+    else
+        echo "INFO: 已确认 strace attach 到 AI PID=${pid}"
     fi
 
     # 写入 PID 和元信息 (strace PID + 目标 AI PID + 日志路径 + 时间戳)
@@ -142,17 +193,43 @@ cmd_stop() {
     echo "INFO: 原始日志大小: ${log_size} bytes"
     echo "INFO: 生成计数报告 -> ${SUMMARY_FILE}"
 
+    # grep -c 当无匹配时 exit code=1, 直接 `|| echo 0` 会产生双行输出;
+    # 统一用 to_int() 清洗为单行非负整数
+    local raw_chat raw_endf raw_endt raw_upd
     local chat_callback_count is_end_false_count is_end_true_count update_bubble_count
-    chat_callback_count="$(grep -c 'chatCallback' "${LOG_FILE}" || echo 0)"
-    is_end_false_count="$(grep -c 'is_end.*false\|is_end":false\|is_end=false' "${LOG_FILE}" || echo 0)"
-    is_end_true_count="$(grep -c 'is_end.*true\|is_end":true\|is_end=true' "${LOG_FILE}" || echo 0)"
-    update_bubble_count="$(grep -c 'updateBubble' "${LOG_FILE}" || echo 0)"
+    raw_chat="$(grep -c 'chatCallback'   "${LOG_FILE}" 2>/dev/null || echo 0)"
+    raw_endf="$(grep -cE 'is_end.*false|is_end":false|is_end=false' "${LOG_FILE}" 2>/dev/null || echo 0)"
+    raw_endt="$(grep -cE 'is_end.*true|is_end":true|is_end=true'    "${LOG_FILE}" 2>/dev/null || echo 0)"
+    raw_upd ="$(grep -c 'updateBubble'   "${LOG_FILE}" 2>/dev/null || echo 0)"
+    chat_callback_count="$(to_int "${raw_chat}")"
+    is_end_false_count="$(to_int "${raw_endf}")"
+    is_end_true_count="$(to_int  "${raw_endt}")"
+    update_bubble_count="$(to_int   "${raw_upd}")"
+
+    # 如果主关键词 0 命中, 给出调试建议 (并放宽匹配再试一次)
+    local total_hits=0
+    total_hits=$(( chat_callback_count + is_end_false_count + is_end_true_count + update_bubble_count ))
+    if [ "${total_hits}" -eq 0 ]; then
+        echo "WARN: 主关键词 0 命中; 尝试放宽匹配: 搜索所有含 chat / bubble / end 字样的系统调用"
+        local fallback
+        fallback="$(grep -ciE 'chat|bubble|end|stream|token' "${LOG_FILE}" 2>/dev/null || true)"
+        fallback="$(to_int "${fallback}")"
+        if [ "${fallback}" -gt 0 ]; then
+            echo "INFO: 放宽匹配命中 ${fallback} 行 (说明有相关流量, 只是关键词不同; 可人工 inspect)"
+        else
+            echo "WARN: 放宽匹配也为 0, 很可能 strace 未真正 attach 到 AI 进程"
+            echo "HINT: 1) 下次 start 前先 killall -9 strace 清理残留; 2) 改用 sudo 运行 start;"
+            echo "HINT: 3) sudo sysctl -w kernel.yama.ptrace_scope=0; 4) 确认 AI PID 确实正确:"
+            echo "HINT:    pgrep -af kylin-aiassistant  (挑含 --silence/-platform 的实际进程)"
+        fi
+    fi
 
     cat > "${SUMMARY_FILE}" <<EOF
 {
   "experiment": "H2C-PostTurn",
   "timestamp": "${TIMESTAMP}",
   "log_file": "$(basename "${LOG_FILE}")",
+  "raw_log_bytes": ${log_size},
   "metrics": {
     "chatCallback_count": ${chat_callback_count},
     "is_end_false_count": ${is_end_false_count},
@@ -173,6 +250,7 @@ EOF
     echo "=============================================="
     echo " H2C-PostTurn 计数报告"
     echo "=============================================="
+    echo "  原始日志字节:         ${log_size}"
     echo "  chatCallback 关键词: ${chat_callback_count}"
     echo "  is_end=false:        ${is_end_false_count}"
     echo "  is_end=true:         ${is_end_true_count}  (期望: 1)"

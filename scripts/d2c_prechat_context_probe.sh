@@ -47,8 +47,43 @@ UI_SCREENSHOT_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.ui_screenshot.png"
 DB_PATH="${HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
 AI_PROC_NAME="kylin-aiassistant"
 
+# 安全地将字符串转为非负整数: 去掉非数字和多余换行, 空值默认 0
+to_int() {
+    local raw="$1"
+    local cleaned
+    cleaned="$(printf '%s' "${raw}" | tail -n 1 | tr -cd '0-9')"
+    if [ -z "${cleaned}" ]; then
+        printf '0'
+    else
+        printf '%s' "${cleaned}"
+    fi
+}
+
 find_ai_pid() {
-    pgrep -f "${AI_PROC_NAME}" | head -n 1 || true
+    # 优先选择实际运行的 kylin-aiassistant 主进程（带 --silence 或 -platform 的）
+    # 而非 kaiming launcher 包装进程
+    local pids
+    pids="$(pgrep -f "${AI_PROC_NAME}" 2>/dev/null || true)"
+    if [ -z "${pids}" ]; then
+        true
+        return
+    fi
+    local best_pid=""
+    for p in ${pids}; do
+        local cmdline
+        cmdline="$(tr '\0' ' ' < /proc/"${p}"/cmdline 2>/dev/null || true)"
+        case "${cmdline}" in
+            *--silence*|*-platform*)
+                best_pid="${p}"
+                break
+                ;;
+        esac
+    done
+    if [ -n "${best_pid}" ]; then
+        echo "${best_pid}"
+    else
+        echo "${pids}" | head -n 1
+    fi
 }
 
 # 重新解析文件路径 (capture-stop / collect 调用时从 meta/timestamp_file 恢复)
@@ -125,21 +160,34 @@ cmd_capture_start() {
         exit 1
     fi
 
-    echo "INFO: 启动模型请求捕获 (strace write 跟踪) -> ${CAPTURE_LOG_FILE}"
+    echo "INFO: 启动模型请求捕获 (strace IPC 跟踪) -> ${CAPTURE_LOG_FILE}"
     echo "INFO: strace 直接写入原始日志 (不经过 grep 管道), capture-stop 时离线生成 MODEL_REQUEST_FILE"
+    echo "INFO: 捕获范围: write,writev,sendmsg,sendto,recvmsg,read,poll (扩至常见 IPC)"
 
-    # strace 独立 nohup 直接写原始日志文件, 不经过 shell 管道
-    # 避免 grep 管道导致终端阻塞, 并保证 $! 为 strace 自身 PID
-    nohup strace -p "${pid}" -f -s 8192 -e trace=write \
+    # strace 独立 nohup 直接写原始日志文件
+    # - 过滤扩至 writev/sendmsg/sendto/recvmsg/read/poll
+    # - -s 32768 (覆盖 memory_context 大 JSON)
+    # - -yy (打印 socket 路径/文件描述符类型)
+    nohup strace -p "${pid}" -f -s 32768 -yy \
+        -e trace=write,writev,sendmsg,sendto,recvmsg,read,poll \
         > "${CAPTURE_LOG_FILE}" 2>&1 </dev/null &
     local cap_pid=$!
     disown "${cap_pid}" 2>/dev/null || true
 
-    sleep 1
+    sleep 2
     if ! kill -0 "${cap_pid}" 2>/dev/null; then
         echo "ERROR: strace 启动失败, 请检查 strace 是否可用 (sudo apt install strace) 或是否需要 sudo 权限" >&2
-        echo "HINT: 如果 strace -p 需要 root, 使用: sudo $0 capture-start" >&2
+        echo "HINT: 如果 strace -p 需要 root 或 ptrace_scope=2, 使用: sudo $0 capture-start" >&2
+        echo "HINT: 可临时放宽:  sudo sysctl -w kernel.yama.ptrace_scope=0" >&2
         exit 1
+    fi
+    # 确认 attach
+    local attached=""
+    attached="$(ps -o args= -p "${cap_pid}" 2>/dev/null | grep -o -- "-p *${pid}" || true)"
+    if [ -z "${attached}" ]; then
+        echo "WARN: strace PID=${cap_pid} 已启动, 但无法确认 attach 到 AI PID=${pid}; 聊天后请检查日志是否增长" >&2
+    else
+        echo "INFO: 已确认 strace attach 到 AI PID=${pid}"
     fi
 
     echo "${cap_pid}" > "${CAPTURE_PID_FILE}"
@@ -236,14 +284,18 @@ cmd_collect() {
             "SELECT rowid, sessionID, msgIndex, message, operateTime FROM RECORD WHERE message LIKE '%${MARKER}%';" \
             > "${DB_MESSAGE_FILE}" 2>/dev/null || true
 
+        local raw_dbm
+        raw_dbm="$(wc -l < "${DB_MESSAGE_FILE}" 2>/dev/null || echo 0)"
         local db_match_count
-        db_match_count="$(wc -l < "${DB_MESSAGE_FILE}" || echo 0)"
+        db_match_count="$(to_int "${raw_dbm}")"
         echo "  匹配行数: ${db_match_count}"
         echo "  输出文件: ${DB_MESSAGE_FILE}"
 
         # 检查是否包含 memory_context 字样 (污染检测)
+        local raw_pol
+        raw_pol="$(grep -cE 'memory_context|MemoryContext|记忆上下文' "${DB_MESSAGE_FILE}" 2>/dev/null || echo 0)"
         local pollution_check
-        pollution_check="$(grep -c 'memory_context\|MemoryContext\|记忆上下文' "${DB_MESSAGE_FILE}" || echo 0)"
+        pollution_check="$(to_int "${raw_pol}")"
         if [ "${pollution_check}" -eq 0 ]; then
             echo "  ✓ H2C-PreChat-2 通过: 数据库 message 不含 Memory Context"
         else
@@ -257,12 +309,15 @@ cmd_collect() {
     if [ ! -f "${MODEL_REQUEST_FILE}" ]; then
         echo "  ✗ 模型请求文件不存在, 请先运行 capture-start/capture-stop"
     else
+        local raw_mm raw_mir
+        raw_mm="$(grep -c "${MARKER}" "${MODEL_REQUEST_FILE}" 2>/dev/null || echo 0)"
         local model_match_count
-        model_match_count="$(grep -c "${MARKER}" "${MODEL_REQUEST_FILE}" || echo 0)"
+        model_match_count="$(to_int "${raw_mm}")"
         echo "  含标记的请求行数: ${model_match_count}"
 
+        raw_mir="$(grep -cE 'memory_context|MemoryContext|记忆上下文' "${MODEL_REQUEST_FILE}" 2>/dev/null || echo 0)"
         local memory_in_request
-        memory_in_request="$(grep -c 'memory_context\|MemoryContext\|记忆上下文' "${MODEL_REQUEST_FILE}" || echo 0)"
+        memory_in_request="$(to_int "${raw_mir}")"
         if [ "${memory_in_request}" -gt 0 ]; then
             echo "  ✓ H2C-PreChat-3 通过: 模型请求含 Memory Context"
         else
