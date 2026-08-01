@@ -254,22 +254,47 @@ cmd_stop() {
 
     # grep -c 当无匹配时 exit code=1, 直接 `|| echo 0` 会产生双行输出;
     # 统一用 to_int() 清洗为单行非负整数
+    #
+    # 关键: 同一次 is_end 事件会被 kylin-ai-runtime 写入 3 个地方:
+    #   1) write(1</dev/null>)                    — stdout (丢弃)
+    #   2) write(4<.../kylin-ai-runtime.log>)     — 本地日志文件 (副本)
+    #   3) sendmsg(N<...assistant.sock>)          — DBus 业务回调 (真正的事件)
+    # 只有 sendmsg 到 assistant.sock 的才是真正的 TurnFinalized 业务事件,
+    # 所以优先精确匹配 "sendmsg + assistant.sock + is_end" 的行。
+    # chatCallback 关键词实际不存在, 真正的 DBus signal 名是 ChatResult。
     local raw_chat raw_endf raw_endt raw_upd
     local chat_callback_count is_end_false_count is_end_true_count update_bubble_count
-    raw_chat="$(grep -c 'chatCallback'   "${LOG_FILE}" 2>/dev/null || echo 0)"
-    raw_endf="$(grep -cE 'is_end.*false|is_end":false|is_end=false' "${LOG_FILE}" 2>/dev/null || echo 0)"
-    raw_endt="$(grep -cE 'is_end.*true|is_end":true|is_end=true'    "${LOG_FILE}" 2>/dev/null || echo 0)"
-    raw_upd="$(grep -c 'updateBubble'   "${LOG_FILE}" 2>/dev/null || echo 0)"
+    local match_mode="precise"
+    raw_chat="$(grep -cE 'sendmsg.*assistant\.sock.*ChatResult'       "${LOG_FILE}" 2>/dev/null || echo 0)"
+    raw_endf="$(grep -cE 'sendmsg.*assistant\.sock.*is_end.*false'    "${LOG_FILE}" 2>/dev/null || echo 0)"
+    raw_endt="$(grep -cE 'sendmsg.*assistant\.sock.*is_end.*true'     "${LOG_FILE}" 2>/dev/null || echo 0)"
+    raw_upd="$(grep -cE 'sendmsg.*assistant\.sock.*updateBubble'      "${LOG_FILE}" 2>/dev/null || echo 0)"
     chat_callback_count="$(to_int "${raw_chat}")"
     is_end_false_count="$(to_int "${raw_endf}")"
     is_end_true_count="$(to_int  "${raw_endt}")"
     update_bubble_count="$(to_int   "${raw_upd}")"
 
-    # 如果主关键词 0 命中, 给出调试建议 (并放宽匹配再试一次)
+    # 如果精确匹配 (sendmsg+assistant.sock) 全为 0, 回退到宽松匹配
+    # (兼容 assistant.sock 路径变化或 -s 截断导致 sendmsg 行不含 is_end 的情况)
     local total_hits=0
     total_hits=$(( chat_callback_count + is_end_false_count + is_end_true_count + update_bubble_count ))
     if [ "${total_hits}" -eq 0 ]; then
-        echo "WARN: 主关键词 0 命中; 尝试放宽匹配: 搜索所有含 chat / bubble / end 字样的系统调用"
+        match_mode="fallback"
+        echo "WARN: 精确匹配 (sendmsg+assistant.sock) 0 命中; 回退到宽松匹配"
+        raw_chat="$(grep -cE 'ChatResult'                                          "${LOG_FILE}" 2>/dev/null || echo 0)"
+        raw_endf="$(grep -cE 'is_end.*false|is_end":false|is_end=false'            "${LOG_FILE}" 2>/dev/null || echo 0)"
+        raw_endt="$(grep -cE 'is_end.*true|is_end":true|is_end=true'               "${LOG_FILE}" 2>/dev/null || echo 0)"
+        raw_upd="$(grep -c 'updateBubble'                                          "${LOG_FILE}" 2>/dev/null || echo 0)"
+        chat_callback_count="$(to_int "${raw_chat}")"
+        is_end_false_count="$(to_int "${raw_endf}")"
+        is_end_true_count="$(to_int  "${raw_endt}")"
+        update_bubble_count="$(to_int   "${raw_upd}")"
+        total_hits=$(( chat_callback_count + is_end_false_count + is_end_true_count + update_bubble_count ))
+    fi
+
+    # 如果宽松匹配仍为 0, 给出调试建议
+    if [ "${total_hits}" -eq 0 ]; then
+        echo "WARN: 宽松匹配也为 0; 尝试搜索所有含 chat / bubble / end 字样的系统调用"
         local fallback
         fallback="$(grep -ciE 'chat|bubble|end|stream|token' "${LOG_FILE}" 2>/dev/null || true)"
         fallback="$(to_int "${fallback}")"
@@ -279,8 +304,19 @@ cmd_stop() {
             echo "WARN: 放宽匹配也为 0, 很可能 strace 未真正 attach 到 AI 进程"
             echo "HINT: 1) 下次 start 前先 killall -9 strace 清理残留; 2) 改用 sudo 运行 start;"
             echo "HINT: 3) sudo sysctl -w kernel.yama.ptrace_scope=0; 4) 确认 AI PID 确实正确:"
-            echo "HINT:    pgrep -af kylin-aiassistant  (挑含 --silence/-platform 的实际进程)"
+            echo "HINT:    pgrep -af kylin-aiassistant  (挑含 /files/bin/ 的实际进程)"
         fi
+    fi
+
+    # 宽松匹配下, is_end 会被 write(stdout) + write(log) + sendmsg 重复计数 (3x)
+    # 检测到 3 的倍数时自动除以 3, 还原真实业务事件数
+    if [ "${match_mode}" = "fallback" ] && [ "${is_end_true_count}" -gt 0 ] \
+       && [ $(( is_end_true_count % 3 )) -eq 0 ]; then
+        echo "INFO: 宽松匹配检测到 3x 重复写入 (stdout+log+dbus), 自动除以 3 还原真实事件数"
+        echo "      is_end=true:  ${is_end_true_count} -> $(( is_end_true_count / 3 ))"
+        echo "      is_end=false: ${is_end_false_count} -> $(( is_end_false_count / 3 ))"
+        is_end_true_count=$(( is_end_true_count / 3 ))
+        is_end_false_count=$(( is_end_false_count / 3 ))
     fi
 
     cat > "${SUMMARY_FILE}" <<EOF
@@ -289,8 +325,9 @@ cmd_stop() {
   "timestamp": "${TIMESTAMP}",
   "log_file": "$(basename "${LOG_FILE}")",
   "raw_log_bytes": ${log_size},
+  "match_mode": "${match_mode}",
   "metrics": {
-    "chatCallback_count": ${chat_callback_count},
+    "ChatResult_signal_count": ${chat_callback_count},
     "is_end_false_count": ${is_end_false_count},
     "is_end_true_count": ${is_end_true_count},
     "updateBubble_count": ${update_bubble_count}
@@ -302,7 +339,8 @@ cmd_stop() {
   "pass_criteria": {
     "H2C-PostTurn-1": $([ "${is_end_true_count}" -eq 1 ] && echo true || echo false),
     "H2C-PostTurn-2": $([ "${is_end_false_count}" -ge 1 ] && echo true || echo false)
-  }
+  },
+  "note": "精确模式只统计 sendmsg 到 assistant.sock 的 DBus 业务回调; 宽松模式统计所有 is_end 匹配并自动除以 3 去重"
 }
 EOF
 
@@ -310,7 +348,8 @@ EOF
     echo " H2C-PostTurn 计数报告"
     echo "=============================================="
     echo "  原始日志字节:         ${log_size}"
-    echo "  chatCallback 关键词: ${chat_callback_count}"
+    echo "  匹配模式:             ${match_mode}"
+    echo "  ChatResult 信号:     ${chat_callback_count}"
     echo "  is_end=false:        ${is_end_false_count}"
     echo "  is_end=true:         ${is_end_true_count}  (期望: 1)"
     echo "  updateBubble:        ${update_bubble_count}"
