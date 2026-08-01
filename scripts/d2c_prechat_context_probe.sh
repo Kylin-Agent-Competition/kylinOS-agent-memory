@@ -21,9 +21,13 @@ PROBE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${PROBE_DIR}/out"
 mkdir -p "${OUT_DIR}"
 
-TIMESTAMP_FILE="${OUT_DIR}/.prechat_last_timestamp"
-META_FILE="${OUT_DIR}/prechat_capture.meta"
-CAPTURE_PID_FILE="${OUT_DIR}/prechat_capture.pid"
+# 状态文件统一放到 $HOME 下, 避免 sudo 与非 sudo 混用时权限冲突
+STATE_DIR="${HOME}/.d2c-probe-state"
+mkdir -p "${STATE_DIR}"
+
+TIMESTAMP_FILE="${STATE_DIR}/prechat_last_timestamp"
+META_FILE="${STATE_DIR}/prechat_capture.meta"
+CAPTURE_PID_FILE="${STATE_DIR}/prechat_capture.pid"
 MARKER="[D2C-MARKER-PRECHAT-001]"
 
 get_or_set_timestamp() {

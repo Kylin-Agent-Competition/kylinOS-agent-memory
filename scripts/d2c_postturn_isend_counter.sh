@@ -19,9 +19,13 @@ PROBE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${PROBE_DIR}/out"
 mkdir -p "${OUT_DIR}"
 
-TIMESTAMP_FILE="${OUT_DIR}/.postturn_last_timestamp"
-PID_FILE="${OUT_DIR}/postturn_capture.pid"
-META_FILE="${OUT_DIR}/postturn_capture.meta"
+# 状态文件 (PID/meta/timestamp) 统一放到 $HOME 下, 避免 sudo 与非 sudo 混用时权限冲突
+STATE_DIR="${HOME}/.d2c-probe-state"
+mkdir -p "${STATE_DIR}"
+
+TIMESTAMP_FILE="${STATE_DIR}/postturn_last_timestamp"
+PID_FILE="${STATE_DIR}/postturn_capture.pid"
+META_FILE="${STATE_DIR}/postturn_capture.meta"
 
 # 每次 start 生成一个时间戳并持久化, stop/dbcheck 复用
 get_or_set_timestamp() {
@@ -200,7 +204,7 @@ cmd_stop() {
     raw_chat="$(grep -c 'chatCallback'   "${LOG_FILE}" 2>/dev/null || echo 0)"
     raw_endf="$(grep -cE 'is_end.*false|is_end":false|is_end=false' "${LOG_FILE}" 2>/dev/null || echo 0)"
     raw_endt="$(grep -cE 'is_end.*true|is_end":true|is_end=true'    "${LOG_FILE}" 2>/dev/null || echo 0)"
-    raw_upd ="$(grep -c 'updateBubble'   "${LOG_FILE}" 2>/dev/null || echo 0)"
+    raw_upd="$(grep -c 'updateBubble'   "${LOG_FILE}" 2>/dev/null || echo 0)"
     chat_callback_count="$(to_int "${raw_chat}")"
     is_end_false_count="$(to_int "${raw_endf}")"
     is_end_true_count="$(to_int  "${raw_endt}")"
@@ -302,6 +306,79 @@ EOF
     echo "=============================================="
 }
 
+# diagnose: 当 stop 报告 0 命中时, 用来排查 strace 到底抓到了什么
+# 用法: ./d2c_postturn_isend_counter.sh diagnose [log_file]
+#   不传 log_file 则使用最近一次的 LOG_FILE
+cmd_diagnose() {
+    local target_log="${1:-}"
+    if [ -z "${target_log}" ]; then
+        local ts
+        ts="$(get_or_set_timestamp)"
+        target_log="${OUT_DIR}/postturn_${ts}.log"
+    fi
+    if [ ! -f "${target_log}" ]; then
+        echo "ERROR: 日志文件不存在: ${target_log}" >&2
+        echo "HINT: 请传入日志路径, 或先运行 start/stop" >&2
+        exit 1
+    fi
+
+    local size
+    size="$(wc -c < "${target_log}" 2>/dev/null || echo 0)"
+    size="$(to_int "${size}")"
+    local lines
+    lines="$(wc -l < "${target_log}" 2>/dev/null || echo 0)"
+    lines="$(to_int "${lines}")"
+
+    echo "=============================================="
+    echo " strace 日志诊断"
+    echo "=============================================="
+    echo "  文件:     ${target_log}"
+    echo "  大小:     ${size} bytes"
+    echo "  行数:     ${lines}"
+    echo ""
+
+    if [ "${size}" -lt 200 ]; then
+        echo "⚠ 日志过小 (${size} bytes), 说明 strace 虽然启动了, 但"
+        echo "  目标 AI 进程在聊天期间未产生被跟踪的系统调用。"
+        echo "  常见原因:"
+        echo "  1) 聊天流量走子进程/线程 (strace -f 应能捕获, 已加);"
+        echo "  2) 聊天流量走 mmap 共享内存而非 write/sendmsg;"
+        echo "  3) AI 助手把请求委托给独立的 services 子进程 (kaiming services)"
+        echo ""
+        echo "  完整日志内容如下:"
+        echo "  --------------------------------------------"
+        cat "${target_log}"
+        echo "  --------------------------------------------"
+        echo ""
+        echo "  建议: 运行下面的命令列出所有 kylin 相关进程, 找出"
+        echo "        真正处理模型请求的那个进程, 重新 start:"
+        echo "    pgrep -af kylin"
+        echo "    pgrep -af 'ai-runtime|aiservice|kylin-ai'"
+        echo ""
+        echo "  也可以全进程跟踪 5 秒看哪个进程有 IPC 流量:"
+        echo "    for p in \$(pgrep -f kylin); do"
+        echo "      echo \"=== PID \$p ===\""
+        echo "      sudo timeout 5 strace -p \$p -f -e trace=write,sendmsg,recvmsg -c 2>&1 | tail -20"
+        echo "    done"
+    else
+        echo "✓ 日志大小正常 (${size} bytes), 前 20 行预览:"
+        echo "  --------------------------------------------"
+        head -n 20 "${target_log}" | sed 's/^/  /'
+        echo "  --------------------------------------------"
+        echo ""
+        echo "  系统调用类型分布:"
+        # 提取系统调用名 (strace 输出格式: PID syscall(args) = ret)
+        grep -oE '^[0-9]+ +[a-zA-Z0-9_]+' "${target_log}" 2>/dev/null \
+            | awk '{print $2}' | sort | uniq -c | sort -rn | head -15 \
+            | sed 's/^/    /'
+        echo ""
+        echo "  含 chat/is_end/bubble 关键词的行 (前 10):"
+        grep -nE 'chat|is_end|bubble|stream|token' "${target_log}" 2>/dev/null \
+            | head -10 | sed 's/^/    /'
+    fi
+    echo "=============================================="
+}
+
 case "${1:-}" in
     start)
         cmd_start
@@ -312,12 +389,16 @@ case "${1:-}" in
     dbcheck)
         cmd_dbcheck
         ;;
+    diagnose)
+        cmd_diagnose "${2:-}"
+        ;;
     *)
-        echo "用法: $0 {start|stop|dbcheck}"
+        echo "用法: $0 {start|stop|dbcheck|diagnose [log_file]}"
         echo ""
-        echo "  start   - 启动日志捕获"
-        echo "  stop    - 停止捕获并生成计数报告"
-        echo "  dbcheck - 查询 RECORD 表快照"
+        echo "  start    - 启动日志捕获"
+        echo "  stop     - 停止捕获并生成计数报告"
+        echo "  dbcheck  - 查询 RECORD 表快照"
+        echo "  diagnose - 分析最近一次日志, 排查 0 命中原因"
         exit 1
         ;;
 esac
