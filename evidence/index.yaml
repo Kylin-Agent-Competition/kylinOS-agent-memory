@@ -87,6 +87,25 @@ entries:
     limitations: "Vector Engine ShowCollections 在 CRUD 前返回 RPC 1002"
     checksum_sha256: "b9c947d949917343cfb077f32fac23124a6f9c182650f7fc937112ab47ae2e3d"
 
+  - id: "VECTOR-CALL-001"
+    task_id: "D2-B"
+    description: "Vector Engine 真实数据面、用户隔离与重启持久性验证"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d2-vector-smoke-verify-20260731.log"
+    commit: "daeed0c9a4273c2391fe0c766eeb70db27416960"
+    source_commit: "2213447ef765e709e93f94d4177f4417478fe8ea"
+    report: "evidence/l2-kylin-vm/d2-vector-smoke-evidence-20260731.md"
+    runtime_result: "PASS"
+    date: "2026-07-31"
+    reviewer: "pending"
+    limitations: "仅验证麒麟 V11 x86_64 指定客户端/服务端组合；并发、原生 Hybrid/RRF 和生产 Schema 不在范围内"
+    checksum_sha256: "af58e9c7d97190bde289b035424bc6aa904f72c0ac4882ec105d219cb58b7776"
+    details: |
+      prepare 28 PASS / 0 FAIL，完成 Collection、CRUD、组合过滤与跨用户向量诱饵隔离。
+      服务重启后 verify 26 PASS / 0 FAIL，Collection、CRUD 终态、用户过滤和向量搜索均保持。
+      cleanup 21 PASS / 0 FAIL；默认数据库哈希未变化，临时 KySec 信任和测试资源已清理。
+
   - id: "D1-B-02"
     task_id: "D1-B-02"
     description: "原生 Hybrid/RRF 证据等级核定"
