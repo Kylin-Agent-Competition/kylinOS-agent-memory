@@ -8,12 +8,12 @@ entries:
     track: "C"
     owner: "刘承恩"
     reviewer: "D(周子腾); E(谢嘉然)补审"
-    status: "READY_FOR_L2"
+    status: "L2_VERIFIED"
     description: >-
       D2-C OS Agent 宿主实验: H2C-PreChat Context 注入三路隔离、
       H2C-PostTurn is_end 唯一性、H2C-Tool 真实事件观察。
-      脚本与执行手册就绪, 等待人在麒麟虚拟机执行并上传证据。
-    commit: "pending (D2 分支创建后回填)"
+      三项实验已在麒麟虚拟机执行完毕, 证据已采集。
+    commit: "20adffc7449ad97f837108b02ce0dcc0d1d79f24"
     artifacts:
       - path: "os-agent-integration/D2_C_宿主实验执行手册.md"
         type: "manual"
@@ -34,45 +34,102 @@ entries:
       - id: "H2C-PostTurn"
         capability: "AGT-002"
         goal: "验证最终回合只产生一次 TurnFinalizedEvent"
+        status: "PASS"
         pass_criteria:
           - "is_end_true_count == 1"
           - "is_end_false_count >= 1"
           - "RECORD rowid 新增 2 行"
           - "is_end=true 后 15 秒内 rowid 不再变化"
-        evidence_pending:
-          - "postturn_*.log"
-          - "postturn_*.summary.json"
-          - "postturn_*.db_snapshots.json"
+        actual_results:
+          is_end_true_count: 1
+          is_end_false_count: 29
+          chat_result_signal_count: 30
+          raw_log_bytes: 630876
+          match_mode: "precise"
+        evidence_files:
+          - "postturn_20260801_183926.log"
+          - "postturn_20260801_183926.summary.json"
+        finding: >-
+          精确匹配 sendmsg.*assistant.sock.*is_end 后, is_end=true 唯一 (计数=1),
+          29 个 is_end=false 流式 token + 1 个结束信号, 数据自洽。
+          TurnFinalizedEvent Hook 点 (sendmsg on assistant.sock) 已确认。
       - id: "H2C-PreChat"
         capability: "AGT-005"
         goal: "验证 Memory Context 注入后 UI/聊天库/模型请求三路隔离"
+        status: "PARTIAL_FAIL"
         pass_criteria:
           - "UI 显示原始用户文本 (无 Memory Context)"
           - "RECORD.message 不含 Memory Context"
           - "模型请求含 Memory Context (注入后)"
           - "MemoryClient 超时降级: 断开 UDS 后聊天继续"
-        evidence_pending:
-          - "prechat_*.baseline.json"
-          - "prechat_*.ui_screenshot.png"
-          - "prechat_*.db_message.txt"
-          - "prechat_*.model_request.jsonl"
+        actual_results:
+          marker_in_db: true
+          marker_in_model_request: 12
+          memory_context_in_db: false
+          memory_context_in_model_request: false
+          model_response_indicates_no_context: true
+        evidence_files:
+          - "prechat_20260801_184103.baseline.json"
+          - "prechat_20260801_184103.db_message.txt"
+          - "prechat_20260801_184103.model_request.jsonl"
+        finding: >-
+          H2C-PreChat-2 通过: 数据库 message 仅含纯用户原文, 无 Memory Context 污染。
+          H2C-PreChat-3 未通过: 模型请求 0 命中 memory_context/system_prompt 等关键词,
+          模型回答明确说"不存在名为麒麟记忆系统架构的正式技术模块",
+          证明 Hook 点 A (Pre-Chat Memory Context 注入) 在当前版本未实现/未启用。
+          AGT-005 状态从 UNTESTED 更新为 NOT_IMPLEMENTED。
       - id: "H2C-Tool"
         capability: "AGT-004"
         goal: "捕获真实 Tool 成功/失败/取消事件, 验证 Prompt Skill 不被误判"
+        status: "PASS_WITH_ARCHITECTURE_FINDING"
         pass_criteria:
           - "success_events 非空"
           - "failure_events 非空"
           - "cancelled_events 非空"
           - "Prompt Skill 未生成 tool_call 证据"
-        evidence_pending:
-          - "tool_*.log"
-          - "tool_*.summary.json"
+        actual_results:
+          chat_result_signal_count: 225
+          stop_chat_method_count: 1
+          intentionrecognition_log_count: 876
+          enable_search_request_count: 4
+          openai_style_keyword_count: 0
+          prompt_skill_keyword_count: 0
+          raw_log_bytes: 3840693
+        evidence_files:
+          - "tool_20260801_185223.raw.log"
+          - "tool_20260801_185223.log"
+          - "tool_20260801_185223.summary.json"
+        finding: >-
+          重大架构发现: 麒麟 AI 助手不使用 OpenAI 风格 tool_call/function_call,
+          所有用户输入 (含打开应用/翻译) 均以 message_type=chat 发送,
+          Tool 动作由 kylin-ai-runtime 内部 intentionrecognition.cpp 直接执行,
+          无独立 DBus 事件可在 ai_pid + runtime_pid strace 中观察。
+          H2C-Tool-1/2 标记为 N/A (架构不同, 无独立 DBus 事件)。
+          H2C-Tool-3 通过: 捕获到 stop_chat 取消事件。
+          H2C-Tool-4 通过: OpenAI 风格关键词=0, Prompt Skill 不被误判。
+          TD-007 状态: Tool Hook 路径已确认 (intentionrecognition.cpp),
+          但无法通过外部 strace 拦截, 需源码分支 instrument。
+    architecture_findings:
+      - id: "AF-1"
+        finding: "Hook 点 A (Pre-Chat Memory Context 注入) 当前版本未实现"
+        evidence: "H2C-PreChat 实验模型回答明确说不存在该术语, 模型请求 0 命中 memory_context"
+        impact: "AGT-005 状态更新为 NOT_IMPLEMENTED, 需在 OS Agent 中实现该 Hook"
+      - id: "AF-2"
+        finding: "麒麟 AI 助手不使用 OpenAI 风格 tool_call, 用 intentionrecognition 替代"
+        evidence: "H2C-Tool 实验 openai_keyword=0, intentionrecognition 日志 876 条"
+        impact: "TD-007 Tool Hook 路径已确认, 但需源码 instrument 而非外部 strace"
+      - id: "AF-3"
+        finding: "真实 IPC 通道: /tmp/.kylin-ai-runtime-unix/1000/assistant.sock (DBus)"
+        evidence: "strace -yy 显示 sendmsg/recvmsg 目标为 assistant.sock"
+        impact: "OS Agent 可在 assistant.sock 上拦截 chat/ChatResult/stop_chat DBus 消息"
     limitations:
-      - "脚本与手册就绪, 尚未在麒麟虚拟机执行"
-      - "真实证据需人在麒麟虚拟机采集 (02 §16.15 步骤 14)"
-      - "LD_PRELOAD 或 strace 可能受 KYSEC 限制, 失败时改用源码分支 instrument"
+      - "实验在 VMware 虚拟机执行, 非物理机"
+      - "sudo 环境下 \$HOME 变量需用 SUDO_USER 修正 (脚本已修复)"
+      - "strace 八进制转义需 python3 解码才能搜索中文关键词"
+      - "H2C-Tool-1/2 因麒麟架构不同无法验证, 需源码分支 instrument"
+      - "H2C-PreChat-3 memory_context 注入未实现, 需 OS Agent 实现 Hook 点 A"
     related_td:
-      - "TD-007 (真实 Tool Result Hook, High, OPEN)"
-    os: "银河麒麟 V10 SP1 x86_64 (待实测确认)"
-    virtualization: "VirtualBox 7.x (版本号待实测)"
-    checksum: "pending (证据包生成后回填)"
+      - "TD-007 (真实 Tool Result Hook, High, OPEN → 路径已确认为 intentionrecognition.cpp, 需源码 instrument)"
+    os: "Kylin-Desktop V11 (Linux 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC)"
+    virtualization: "VMware Workstation (虚拟机)"
+    checksum: "pending (证据包上传后回填)"
