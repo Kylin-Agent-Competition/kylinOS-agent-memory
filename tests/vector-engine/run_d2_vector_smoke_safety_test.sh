@@ -46,8 +46,14 @@ reset_run_contract() {
     TEST_ROOT_CANONICAL=""
     MANIFEST_FILE="${TEST_ROOT}/${MANIFEST_NAME}"
     MANIFEST_TEMP=""
+    MANIFEST_HASH=""
+    MANIFEST_CREATED_AT_UTC=""
     DATABASE_CANONICAL=""
     DATABASE_IDENTITY=""
+    DATABASE_DEVICE=""
+    DATABASE_INODE=""
+    DATABASE_SIZE_AT_RESERVATION=""
+    DATABASE_SHA256_AT_RESERVATION=""
 }
 
 run_database_check() {
@@ -93,6 +99,9 @@ else
     printf 'D2_VECTOR_SAFETY_TEST name=database_rejects_symlink result=SKIP reason=host_did_not_create_symlink\n'
 fi
 expect_failure "database_rejects_default_file_identity" run_database_check "${DEFAULT_ALIAS}"
+expect_failure "database_rejects_relative_path" run_argument_check \
+    --action run --phase prepare --run-id abc123 --db-file relative.db \
+    --binary /tmp/probe
 
 expect_success "collection_derives_from_run_id" run_argument_check \
     --action run --phase prepare --run-id abc123 --db-file /tmp/db \
@@ -115,14 +124,34 @@ ABI_PATCH_HASH="$(printf '5%.0s' {1..64})"
 ABI_ASSERTS_HASH="$(printf '6%.0s' {1..64})"
 CURRENT_INVOCATION_ID="$(printf '7%.0s' {1..32})"
 PHASE="prepare"
+expect_failure "manifest_rejects_missing" validate_manifest "true"
 write_manifest >/dev/null
 PHASE="verify"
-expect_success "manifest_accepts_exact_identity" validate_manifest
+expect_failure "manifest_rejects_unowned_prepare" validate_manifest "true"
+PHASE="prepare"
+finalize_manifest_after_prepare >/dev/null
+PHASE="verify"
+expect_success "manifest_accepts_exact_identity" validate_manifest "true"
+if [[ "${MANIFEST_HASH}" =~ ^[[:xdigit:]]{64}$ ]]; then
+    pass_test "manifest_records_sha256"
+else
+    printf 'D2_VECTOR_SAFETY_TEST name=manifest_records_sha256 result=FAIL\n' >&2
+    exit 1
+fi
 ORIGINAL_BINARY_HASH="${BINARY_HASH}"
 BINARY_HASH="$(printf '8%.0s' {1..64})"
-expect_failure "manifest_rejects_binary_hash_mismatch" validate_manifest
+expect_failure "manifest_rejects_binary_hash_mismatch" validate_manifest "true"
 BINARY_HASH="${ORIGINAL_BINARY_HASH}"
 PROJECT_COMMIT="$(printf '9%.0s' {1..40})"
-expect_failure "manifest_rejects_project_commit_mismatch" validate_manifest
+expect_failure "manifest_rejects_project_commit_mismatch" validate_manifest "true"
+PROJECT_COMMIT="$(printf '2%.0s' {1..40})"
+
+ORIGINAL_DB="${TEST_TEMP}/original-runtime.db"
+mv -- "${VALID_DB}" "${ORIGINAL_DB}"
+printf 'replacement\n' >"${VALID_DB}"
+check_database_path >/dev/null
+expect_failure "manifest_rejects_replaced_database" validate_manifest "true"
+rm -- "${VALID_DB}"
+mv -- "${ORIGINAL_DB}" "${VALID_DB}"
 
 printf 'D2_VECTOR_SAFETY_TEST result=PASS tests=%d\n' "${TESTS_PASSED}"

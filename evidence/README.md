@@ -47,9 +47,19 @@ evidence/
 `status: BLOCKED`，同时以 `evidence_level` 记录失败前已正向验证到的最高
 等级；不得把失败日志写成宿主成功证据。
 
+`status`、`evidence_level` 和 `runtime_result` 只描述技术证据，不代表代码
+审查通过或具备合并资格。审查与准入必须分别使用 `review_status`、
+`reviewer` 和 `merge_qualified`；`runtime_result: PASS` 与
+`review_status: PENDING/REWORK` 可以同时成立。
+
 可选字段包括对应代码 `commit`、外部源码 `source_commit`、补充报告
-`report`、端到端状态 `runtime_result` 和可审计摘要 `details`。新增字段时
-必须先更新 `index_contract`，不得在同一索引中继续引入未声明的字段变体。
+`report`、端到端状态 `runtime_result` 和可审计摘要 `details`。需要消除
+Commit 或哈希歧义时，应优先使用语义明确的 `tested_commit`、
+`evidence_commit`、`sdk_source_commit`、`probe_source_sha256`、
+`probe_binary_sha256`、`runner_source_sha256` 和 `manifest_sha256`。
+`evidence_commit` 在证据尚未提交时可以省略，不得预填未来 Commit。
+新增字段时必须先更新 `index_contract`，不得在同一索引中继续引入未声明的
+字段变体。
 
 ## 存储策略
 

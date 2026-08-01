@@ -18,6 +18,15 @@ index_contract:
     - report
     - runtime_result
     - details
+    - tested_commit
+    - evidence_commit
+    - sdk_source_commit
+    - probe_source_sha256
+    - probe_binary_sha256
+    - runner_source_sha256
+    - manifest_sha256
+    - review_status
+    - merge_qualified
 entries:
   - id: "RUNTIME-001"
     task_id: "D1-A"
@@ -89,7 +98,7 @@ entries:
 
   - id: "VECTOR-CALL-001"
     task_id: "D2-B"
-    description: "Vector Engine 真实数据面、用户隔离与重启持久性验证"
+    description: "Vector Engine 真实数据面、用户隔离与重启持久性验证（历史证据）"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d2-vector-smoke-verify-20260731.log"
@@ -97,14 +106,41 @@ entries:
     source_commit: "2213447ef765e709e93f94d4177f4417478fe8ea"
     report: "evidence/l2-kylin-vm/d2-vector-smoke-evidence-20260731.md"
     runtime_result: "PASS"
+    review_status: "REWORK"
+    merge_qualified: false
     date: "2026-07-31"
     reviewer: "pending"
-    limitations: "仅验证麒麟 V11 x86_64 指定客户端/服务端组合；并发、原生 Hybrid/RRF 和生产 Schema 不在范围内"
+    limitations: "历史探针虽取得宿主 PASS，但未绑定被测 PR Commit，且缺少同名集合、默认数据库、Manifest 和恢复证据门禁；不得用于证明返工后代码或合并准入"
     checksum_sha256: "af58e9c7d97190bde289b035424bc6aa904f72c0ac4882ec105d219cb58b7776"
     details: |
-      prepare 28 PASS / 0 FAIL，完成 Collection、CRUD、组合过滤与跨用户向量诱饵隔离。
-      服务重启后 verify 26 PASS / 0 FAIL，Collection、CRUD 终态、用户过滤和向量搜索均保持。
-      cleanup 21 PASS / 0 FAIL；默认数据库哈希未变化，临时 KySec 信任和测试资源已清理。
+      旧版探针曾取得 prepare / verify / cleanup 宿主 PASS。
+      PR #15 第一、二轮 Review 均为 REQUEST CHANGES；该记录仅保留历史事实。
+
+  - id: "VECTOR-CALL-002"
+    task_id: "D2-B"
+    description: "Vector Engine 用户隔离、安全门禁与重启恢复复核"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d2-vector-verify-20260802.log"
+    tested_commit: "278d2bc1041ec884b4285ad9f8195a9080e5cb53"
+    sdk_source_commit: "2213447ef765e709e93f94d4177f4417478fe8ea"
+    probe_source_sha256: "49c6771427082708d8f7b9b46c079167dc9a63b91bf32a2cb2c45421ebcbce16"
+    probe_binary_sha256: "2c9f7c25edca1415e606b936222f4400092f9dae47a3488d89e0ec29d5332d77"
+    runner_source_sha256: "4d3baeba4d3fff0a5ee71e6728326f98140a98feab9802857a62d5c723dda093"
+    manifest_sha256: "c01a01d9ea31d59b763b1dfe5b8fa77f92a98f3cfcea9ea50a3f0b974805cf1e"
+    report: "evidence/l2-kylin-vm/d2-vector-smoke-evidence-20260802.md"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    date: "2026-08-02"
+    reviewer: "pending"
+    limitations: "仅证明 tested_commit 278d2bc 的指定麒麟环境运行结果；不覆盖随后未提交的 Manifest 所有权状态加固，后者必须在提交后重新执行 L2；并发、性能、原生 Hybrid/RRF、D3 Provider/IPC 和生产 Schema 不在范围内"
+    checksum_sha256: "c673fe574903bcc083eb60060c92b86885993a838b3205fff342fa680c298351"
+    details: |
+      安全回归 10 PASS / 0 FAIL；prepare 43 PASS / 0 FAIL，完成 Collection、CRUD、严格用户隔离和同名集合保护。
+      三项预期负向门禁均以非零状态拒绝且无超时；未重启和 manifest 不匹配均未执行探针。
+      重启后 verify 32 PASS / 0 FAIL，cleanup 27 PASS / 0 FAIL；默认数据库哈希不变，KySec、测试单元、临时 SSH key 与 NAT 转发均已恢复或清理。
+      技术 Runtime PASS 不代表 Review 通过或具备合并资格。
 
   - id: "D1-B-02"
     task_id: "D1-B-02"

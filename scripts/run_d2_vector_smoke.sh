@@ -40,8 +40,14 @@ TEST_ROOT_CANONICAL=""
 MANIFEST_FILE=""
 MANIFEST_TEMP=""
 MANIFEST_PREPARE_INVOCATION_ID=""
+MANIFEST_HASH=""
+MANIFEST_CREATED_AT_UTC=""
 DATABASE_CANONICAL=""
 DATABASE_IDENTITY=""
+DATABASE_DEVICE=""
+DATABASE_INODE=""
+DATABASE_SIZE_AT_RESERVATION=""
+DATABASE_SHA256_AT_RESERVATION=""
 BINARY_HASH=""
 PROJECT_COMMIT=""
 PROBE_SOURCE_HASH=""
@@ -429,6 +435,7 @@ check_binary_trust() {
 
 check_database_path() {
     require_command realpath
+    require_command sha256sum
     require_command stat
     if [[ ! -f "${DB_FILE}" || ! -r "${DB_FILE}" ]]; then
         fail "database_path" \
@@ -463,7 +470,13 @@ check_database_path() {
             ;;
     esac
 
-    DATABASE_IDENTITY="$(stat -Lc '%d:%i' -- "${DATABASE_CANONICAL}")"
+    DATABASE_DEVICE="$(stat -Lc '%d' -- "${DATABASE_CANONICAL}")"
+    DATABASE_INODE="$(stat -Lc '%i' -- "${DATABASE_CANONICAL}")"
+    DATABASE_IDENTITY="${DATABASE_DEVICE}:${DATABASE_INODE}"
+    DATABASE_SIZE_AT_RESERVATION="$(stat -Lc '%s' -- "${DATABASE_CANONICAL}")"
+    DATABASE_SHA256_AT_RESERVATION="$(
+        sha256sum "${DATABASE_CANONICAL}" | awk '{print $1}'
+    )"
     local default_database="${HOME}/${DEFAULT_DATABASE_RELATIVE}"
     if [[ -e "${default_database}" ]]; then
         local default_canonical
@@ -480,25 +493,27 @@ check_database_path() {
     DB_FILE="${DATABASE_CANONICAL}"
     MANIFEST_FILE="${TEST_ROOT_CANONICAL}/${MANIFEST_NAME}"
     pass "database_path" \
-        "canonical=${DATABASE_CANONICAL}; identity=${DATABASE_IDENTITY}; approved_root=${TEST_ROOT_CANONICAL}; default_db_rejected=true"
+        "canonical=${DATABASE_CANONICAL}; device=${DATABASE_DEVICE}; inode=${DATABASE_INODE}; size=${DATABASE_SIZE_AT_RESERVATION}; sha256=${DATABASE_SHA256_AT_RESERVATION}; approved_root=${TEST_ROOT_CANONICAL}; default_db_rejected=true"
 }
 
-write_manifest() {
-    require_command chmod
-    require_command ln
-    require_command mktemp
-    if [[ -e "${MANIFEST_FILE}" || -L "${MANIFEST_FILE}" ]]; then
-        fail "manifest_write" \
-            "refusing to overwrite an existing run manifest: ${MANIFEST_FILE}"
-    fi
+render_manifest() {
+    local target="$1"
+    local created_by_prepare="$2"
+    local prepared_at_utc="$3"
+    local database_size_after_prepare="$4"
+    local database_sha256_after_prepare="$5"
 
-    MANIFEST_TEMP="$(mktemp "${TEST_ROOT_CANONICAL}/.d2-vector-smoke.manifest.XXXXXX")"
-    chmod 0600 "${MANIFEST_TEMP}"
     {
-        printf 'format_version=1\n'
+        printf 'format_version=2\n'
         printf 'run_id=%s\n' "${RUN_ID}"
         printf 'database_path=%s\n' "${DATABASE_CANONICAL}"
         printf 'database_identity=%s\n' "${DATABASE_IDENTITY}"
+        printf 'database_device=%s\n' "${DATABASE_DEVICE}"
+        printf 'database_inode=%s\n' "${DATABASE_INODE}"
+        printf 'database_size_at_reservation=%s\n' \
+            "${DATABASE_SIZE_AT_RESERVATION}"
+        printf 'database_sha256_at_reservation=%s\n' \
+            "${DATABASE_SHA256_AT_RESERVATION}"
         printf 'collection=%s\n' "${COLLECTION}"
         printf 'app_id=%s\n' "${APP_ID}"
         printf 'binary_sha256=%s\n' "${BINARY_HASH}"
@@ -510,7 +525,37 @@ write_manifest() {
         printf 'sdk_source_commit=%s\n' "${EXPECTED_SDK_COMMIT}"
         printf 'service_unit=%s\n' "${SERVICE_UNIT}"
         printf 'prepare_invocation_id=%s\n' "${CURRENT_INVOCATION_ID}"
-    } >"${MANIFEST_TEMP}"
+        printf 'created_by_prepare=%s\n' "${created_by_prepare}"
+        printf 'created_at_utc=%s\n' "${MANIFEST_CREATED_AT_UTC}"
+        printf 'prepared_at_utc=%s\n' "${prepared_at_utc}"
+        printf 'database_size_after_prepare=%s\n' \
+            "${database_size_after_prepare}"
+        printf 'database_sha256_after_prepare=%s\n' \
+            "${database_sha256_after_prepare}"
+    } >"${target}"
+}
+
+update_manifest_hash() {
+    MANIFEST_HASH="$(sha256sum "${MANIFEST_FILE}" | awk '{print $1}')"
+    if [[ ! "${MANIFEST_HASH}" =~ ^[[:xdigit:]]{64}$ ]]; then
+        fail "manifest_hash" "manifest returned an invalid SHA-256"
+    fi
+}
+
+write_manifest() {
+    require_command chmod
+    require_command date
+    require_command ln
+    require_command mktemp
+    if [[ -e "${MANIFEST_FILE}" || -L "${MANIFEST_FILE}" ]]; then
+        fail "manifest_write" \
+            "refusing to overwrite an existing run manifest: ${MANIFEST_FILE}"
+    fi
+
+    MANIFEST_TEMP="$(mktemp "${TEST_ROOT_CANONICAL}/.d2-vector-smoke.manifest.XXXXXX")"
+    chmod 0600 "${MANIFEST_TEMP}"
+    MANIFEST_CREATED_AT_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    render_manifest "${MANIFEST_TEMP}" "false" "pending" "pending" "pending"
 
     if ! ln -- "${MANIFEST_TEMP}" "${MANIFEST_FILE}"; then
         fail "manifest_write" \
@@ -518,8 +563,9 @@ write_manifest() {
     fi
     rm -- "${MANIFEST_TEMP}"
     MANIFEST_TEMP=""
+    update_manifest_hash
     pass "manifest_write" \
-        "path=${MANIFEST_FILE}; run_id=${RUN_ID}; project_commit=${PROJECT_COMMIT}; binary_sha256=${BINARY_HASH}; prepare_invocation_id=${CURRENT_INVOCATION_ID}"
+        "path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; created_by_prepare=false; run_id=${RUN_ID}; project_commit=${PROJECT_COMMIT}; binary_sha256=${BINARY_HASH}; prepare_invocation_id=${CURRENT_INVOCATION_ID}"
 }
 
 MANIFEST_VALUE=""
@@ -548,6 +594,7 @@ expect_manifest_value() {
 }
 
 validate_manifest() {
+    local expected_created_by_prepare="${1:-true}"
     require_command awk
     if [[ ! -f "${MANIFEST_FILE}" || ! -r "${MANIFEST_FILE}" ]]; then
         fail "manifest_read" "run manifest is missing or unreadable: ${MANIFEST_FILE}"
@@ -556,10 +603,12 @@ validate_manifest() {
         fail "manifest_read" "run manifest must not be a symbolic link: ${MANIFEST_FILE}"
     fi
 
-    expect_manifest_value "format_version" "1"
+    expect_manifest_value "format_version" "2"
     expect_manifest_value "run_id" "${RUN_ID}"
     expect_manifest_value "database_path" "${DATABASE_CANONICAL}"
     expect_manifest_value "database_identity" "${DATABASE_IDENTITY}"
+    expect_manifest_value "database_device" "${DATABASE_DEVICE}"
+    expect_manifest_value "database_inode" "${DATABASE_INODE}"
     expect_manifest_value "collection" "${COLLECTION}"
     expect_manifest_value "app_id" "${APP_ID}"
     expect_manifest_value "binary_sha256" "${BINARY_HASH}"
@@ -570,14 +619,97 @@ validate_manifest() {
     expect_manifest_value "abi_asserts_sha256" "${ABI_ASSERTS_HASH}"
     expect_manifest_value "sdk_source_commit" "${EXPECTED_SDK_COMMIT}"
     expect_manifest_value "service_unit" "${SERVICE_UNIT}"
+    expect_manifest_value "created_by_prepare" "${expected_created_by_prepare}"
+
+    read_manifest_value "database_size_at_reservation"
+    if [[ ! "${MANIFEST_VALUE}" =~ ^[0-9]+$ ]]; then
+        fail "manifest_mismatch" \
+            "database_size_at_reservation is not an unsigned integer"
+    fi
+    read_manifest_value "database_sha256_at_reservation"
+    if [[ ! "${MANIFEST_VALUE}" =~ ^[[:xdigit:]]{64}$ ]]; then
+        fail "manifest_mismatch" \
+            "database_sha256_at_reservation is not a SHA-256"
+    fi
+
+    read_manifest_value "created_at_utc"
+    if [[ ! "${MANIFEST_VALUE}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+        fail "manifest_mismatch" "created_at_utc is not canonical UTC"
+    fi
 
     read_manifest_value "prepare_invocation_id"
     if [[ ! "${MANIFEST_VALUE}" =~ ^[[:xdigit:]]{32}$ ]]; then
         fail "manifest_mismatch" "prepare_invocation_id is not 32 hexadecimal characters"
     fi
     MANIFEST_PREPARE_INVOCATION_ID="${MANIFEST_VALUE}"
+
+    if [[ "${expected_created_by_prepare}" == "true" ]]; then
+        read_manifest_value "prepared_at_utc"
+        if [[ ! "${MANIFEST_VALUE}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+            fail "manifest_mismatch" "prepared_at_utc is not canonical UTC"
+        fi
+        read_manifest_value "database_size_after_prepare"
+        if [[ ! "${MANIFEST_VALUE}" =~ ^[0-9]+$ ]]; then
+            fail "manifest_mismatch" \
+                "database_size_after_prepare is not an unsigned integer"
+        fi
+        read_manifest_value "database_sha256_after_prepare"
+        if [[ ! "${MANIFEST_VALUE}" =~ ^[[:xdigit:]]{64}$ ]]; then
+            fail "manifest_mismatch" \
+                "database_sha256_after_prepare is not a SHA-256"
+        fi
+    else
+        expect_manifest_value "prepared_at_utc" "pending"
+        expect_manifest_value "database_size_after_prepare" "pending"
+        expect_manifest_value "database_sha256_after_prepare" "pending"
+    fi
+
+    update_manifest_hash
     pass "manifest_validate" \
-        "phase=${PHASE}; path=${MANIFEST_FILE}; all identity fields match; prepare_invocation_id=${MANIFEST_PREPARE_INVOCATION_ID}"
+        "phase=${PHASE}; path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; created_by_prepare=${expected_created_by_prepare}; all identity fields match; prepare_invocation_id=${MANIFEST_PREPARE_INVOCATION_ID}"
+}
+
+finalize_manifest_after_prepare() {
+    require_command chmod
+    require_command date
+    require_command mktemp
+    require_command mv
+
+    validate_manifest "false"
+
+    local current_device
+    local current_inode
+    local database_size_after_prepare
+    local database_sha256_after_prepare
+    local prepared_at_utc
+    current_device="$(stat -Lc '%d' -- "${DATABASE_CANONICAL}")"
+    current_inode="$(stat -Lc '%i' -- "${DATABASE_CANONICAL}")"
+    if [[ "${current_device}" != "${DATABASE_DEVICE}" ||
+          "${current_inode}" != "${DATABASE_INODE}" ]]; then
+        fail "manifest_finalize" \
+            "database file identity changed while prepare was running"
+    fi
+    database_size_after_prepare="$(stat -Lc '%s' -- "${DATABASE_CANONICAL}")"
+    database_sha256_after_prepare="$(
+        sha256sum "${DATABASE_CANONICAL}" | awk '{print $1}'
+    )"
+    prepared_at_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+    read_manifest_value "created_at_utc"
+    MANIFEST_CREATED_AT_UTC="${MANIFEST_VALUE}"
+    MANIFEST_TEMP="$(mktemp "${TEST_ROOT_CANONICAL}/.d2-vector-smoke.manifest.XXXXXX")"
+    chmod 0600 "${MANIFEST_TEMP}"
+    render_manifest \
+        "${MANIFEST_TEMP}" \
+        "true" \
+        "${prepared_at_utc}" \
+        "${database_size_after_prepare}" \
+        "${database_sha256_after_prepare}"
+    mv -fT -- "${MANIFEST_TEMP}" "${MANIFEST_FILE}"
+    MANIFEST_TEMP=""
+    update_manifest_hash
+    pass "manifest_finalize" \
+        "path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; created_by_prepare=true; prepared_at_utc=${prepared_at_utc}; database_size=${database_size_after_prepare}; database_sha256=${database_sha256_after_prepare}"
 }
 
 check_service_database() {
@@ -687,11 +819,6 @@ run_probe() {
     fi
     pass "probe_execute" "probe phase ${PHASE} completed successfully"
 
-    if [[ "${PHASE}" == "prepare" ]]; then
-        log "restart_token" "INFO" "invocation_id=${CURRENT_INVOCATION_ID}"
-        log "manual_restart_required" "INFO" \
-            "restart ${SERVICE_UNIT}; verify will read the prepare InvocationID from ${MANIFEST_FILE}"
-    fi
 }
 
 main() {
@@ -719,13 +846,19 @@ main() {
         fi
         pass "manifest_precondition" "manifest path is unused: ${MANIFEST_FILE}"
     else
-        validate_manifest
+        validate_manifest "true"
     fi
     check_service
     if [[ "${PHASE}" == "prepare" ]]; then
         write_manifest
     fi
     run_probe
+    if [[ "${PHASE}" == "prepare" ]]; then
+        finalize_manifest_after_prepare
+        log "restart_token" "INFO" "invocation_id=${CURRENT_INVOCATION_ID}"
+        log "manual_restart_required" "INFO" \
+            "restart ${SERVICE_UNIT}; verify will read the prepare InvocationID from ${MANIFEST_FILE}"
+    fi
     pass "runner_complete" \
         "run completed; no trust, service restart, or evidence upload was performed"
 }
