@@ -19,9 +19,26 @@ PROBE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${PROBE_DIR}/out"
 mkdir -p "${OUT_DIR}"
 
-# 状态文件: 持久化 start 时的信息供 stop 读取
+TIMESTAMP_FILE="${OUT_DIR}/.postturn_last_timestamp"
 PID_FILE="${OUT_DIR}/postturn_capture.pid"
-STATE_FILE="${OUT_DIR}/postturn_capture.state"
+META_FILE="${OUT_DIR}/postturn_capture.meta"
+
+# 每次 start 生成一个时间戳并持久化, stop/dbcheck 复用
+get_or_set_timestamp() {
+    if [ -n "${1:-}" ]; then
+        echo "${1}" > "${TIMESTAMP_FILE}"
+        echo "${1}"
+    elif [ -f "${TIMESTAMP_FILE}" ]; then
+        cat "${TIMESTAMP_FILE}"
+    else
+        date +%Y%m%d_%H%M%S
+    fi
+}
+
+TIMESTAMP="$(get_or_set_timestamp)"
+LOG_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.log"
+SUMMARY_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.summary.json"
+DB_SNAPSHOT_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.db_snapshots.json"
 
 DB_PATH="${HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
 
@@ -46,57 +63,40 @@ cmd_start() {
         exit 1
     fi
 
-    local ts log_file raw_log
-    ts="$(date +%Y%m%d_%H%M%S)"
-    log_file="${OUT_DIR}/postturn_${ts}.log"
-    raw_log="${OUT_DIR}/postturn_${ts}.raw.log"
+    # 启动时生成新时间戳
+    TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+    TIMESTAMP="$(get_or_set_timestamp "${TIMESTAMP}")"
+    LOG_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.log"
 
-    # 检查 strace 权限
-    if ! strace -p "${pid}" -e trace=write -c -o /dev/null 2>/dev/null; then
-        echo "WARN: strace 附加失败, 可能需要 sudo 权限" >&2
-        echo "WARN: 请以 sudo 运行本脚本: sudo $0 start" >&2
-        echo "INFO: 仍将尝试启动, 若失败请改用 sudo" >&2
+    echo "INFO: 启动 strace 日志捕获 -> ${LOG_FILE}"
+    echo "INFO: strace 直接写入原始日志 (不经过 grep 管道), stop 时离线统计"
+
+    # strace 独立 nohup 直接写日志文件, 不经过 shell 管道
+    # 这样 $! 拿到的是 strace 自身 PID, 且进程完全脱离终端
+    nohup strace -p "${pid}" -f -s 4096 -e trace=write,recvmsg \
+        > "${LOG_FILE}" 2>&1 </dev/null &
+    local cap_pid=$!
+    disown "${cap_pid}" 2>/dev/null || true
+
+    # 验证 strace 进程已启动
+    sleep 1
+    if ! kill -0 "${cap_pid}" 2>/dev/null; then
+        echo "ERROR: strace 启动失败, 请检查 strace 是否可用 (sudo apt install strace) 或是否需要 sudo 权限" >&2
+        echo "HINT: 如果 strace -p 需要 root, 使用: sudo $0 start" >&2
+        exit 1
     fi
 
-    echo "INFO: 启动 strace 原始捕获 -> ${raw_log}"
-    # 使用 strace 跟踪系统调用, 输出到原始日志 (不过滤, 不触发 pipefail)
-    # -s 4096 设置字符串最大长度
-    # -f 跟踪子进程
-    # -e trace=write,recvmsg 只跟踪写入和消息接收
-    nohup strace -p "${pid}" -f -s 4096 -e trace=write,recvmsg 2>&1 > "${raw_log}" &
-    local strace_pid=$!
-
-    echo "INFO: 启动关键词过滤 -> ${log_file}"
-    # 从原始日志中过滤关键词 (独立进程, 不影响 strace)
-    tail -f "${raw_log}" 2>/dev/null \
-        | grep --line-buffered -E 'is_end|chatCallback|updateBubble' > "${log_file}" 2>&1 &
-    local grep_pid=$!
-
-    # 等待 2 秒验证 strace 进程存活
-    sleep 2
-    if ! kill -0 "${strace_pid}" 2>/dev/null; then
-        echo "WARN: strace 进程已退出 (PID ${strace_pid})" >&2
-        echo "WARN: 可能原因: 权限不足 (ptrace_scope=1) 或进程不存在" >&2
-        echo "WARN: 解决: 以 sudo 运行: sudo $0 start" >&2
-        echo "INFO: 即使 strace 失败, 数据库验证仍可用: $0 dbcheck" >&2
-    fi
-
-    # 持久化状态: 双 PID + 文件路径 + 时间戳
-    cat > "${PID_FILE}" <<EOF
-STRACE_PID=${strace_pid}
-GREP_PID=${grep_pid}
-EOF
-    cat > "${STATE_FILE}" <<EOF
-STRACE_PID=${strace_pid}
-GREP_PID=${grep_pid}
-LOG_FILE=${log_file}
-RAW_LOG=${raw_log}
-TIMESTAMP=${ts}
-AI_PID=${pid}
-START_TIME=$(date -Iseconds)
+    # 写入 PID 和元信息 (strace PID + 目标 AI PID + 日志路径 + 时间戳)
+    echo "${cap_pid}" > "${PID_FILE}"
+    cat > "${META_FILE}" <<EOF
+strace_pid=${cap_pid}
+ai_pid=${pid}
+log_file=${LOG_FILE}
+timestamp=${TIMESTAMP}
+started_at=$(date '+%Y-%m-%d %H:%M:%S')
 EOF
 
-    echo "INFO: strace PID = ${strace_pid}, grep PID = ${grep_pid}"
+    echo "INFO: strace 进程 PID = ${cap_pid} (已脱离终端, 可以继续输入命令)"
     echo "INFO: 现在请在 AI 助手中发起一次普通文本问答"
     echo "INFO: 完成后运行: $0 stop"
 }
@@ -106,64 +106,53 @@ cmd_stop() {
         echo "ERROR: 未找到运行中的捕获任务" >&2
         exit 1
     fi
+    # 从 meta 文件读取 start 时的时间戳和日志路径, 确保 stop 与 start 一致
+    local cap_pid log_file_from_meta ts_from_meta
+    cap_pid="$(cat "${PID_FILE}")"
+    if [ -f "${META_FILE}" ]; then
+        log_file_from_meta="$(grep '^log_file=' "${META_FILE}" | cut -d= -f2-)"
+        ts_from_meta="$(grep '^timestamp=' "${META_FILE}" | cut -d= -f2-)"
+        if [ -n "${ts_from_meta}" ]; then
+            TIMESTAMP="${ts_from_meta}"
+            get_or_set_timestamp "${TIMESTAMP}" >/dev/null
+            LOG_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.log"
+            SUMMARY_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.summary.json"
+            DB_SNAPSHOT_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.db_snapshots.json"
+        fi
+        if [ -n "${log_file_from_meta}" ] && [ -f "${log_file_from_meta}" ]; then
+            LOG_FILE="${log_file_from_meta}"
+        fi
+    fi
 
-    # 读取双 PID
-    local strace_pid grep_pid
-    strace_pid="$(grep '^STRACE_PID=' "${PID_FILE}" | cut -d= -f2)"
-    grep_pid="$(grep '^GREP_PID=' "${PID_FILE}" | cut -d= -f2)"
+    echo "INFO: 停止 strace 进程 ${cap_pid}"
+    # 终止 strace 及其可能的子进程
+    kill "${cap_pid}" 2>/dev/null || true
+    pkill -P "${cap_pid}" 2>/dev/null || true
+    # 再给个 SIGTERM 给可能残留的 strace 进程 (strace -f 会 fork 监控子线程)
+    pkill -f "strace -p.*kylin" 2>/dev/null || true
+    sleep 0.5
+    rm -f "${PID_FILE}"
 
-    # 从状态文件读取日志文件路径
-    local log_file ts
-    if [ -f "${STATE_FILE}" ]; then
-        log_file="$(grep '^LOG_FILE=' "${STATE_FILE}" | cut -d= -f2-)"
-        ts="$(grep '^TIMESTAMP=' "${STATE_FILE}" | cut -d= -f2-)"
-    else
-        echo "ERROR: 状态文件不存在, 无法确定日志文件路径" >&2
+    if [ ! -f "${LOG_FILE}" ]; then
+        echo "ERROR: 日志文件不存在: ${LOG_FILE}" >&2
         exit 1
     fi
-
-    local summary_file="${OUT_DIR}/postturn_${ts}.summary.json"
-
-    echo "INFO: 停止 grep 进程 ${grep_pid}"
-    kill "${grep_pid}" 2>/dev/null || true
-    pkill -P "${grep_pid}" 2>/dev/null || true
-
-    echo "INFO: 停止 strace 进程 ${strace_pid}"
-    kill "${strace_pid}" 2>/dev/null || true
-    pkill -P "${strace_pid}" 2>/dev/null || true
-    # 也杀掉所有 tail -f 和 strace 残留子进程
-    pkill -f "tail -f.*postturn_" 2>/dev/null || true
-    pkill -f "strace -p.*kylin-aiassistant" 2>/dev/null || true
-    rm -f "${PID_FILE}" "${STATE_FILE}"
-
-    if [ ! -f "${log_file}" ]; then
-        echo "ERROR: 日志文件不存在: ${log_file}" >&2
-        echo "ERROR: strace 可能因权限不足未捕获到数据" >&2
-        echo "INFO: 数据库落库验证仍可执行: $0 dbcheck" >&2
-        echo "INFO: 如需 strace 捕获, 请以 sudo 重新运行: sudo $0 start" >&2
-        exit 1
-    fi
-
-    # 如果日志文件为空, 也给出警告 (grep 过滤后可能没有匹配)
-    if [ ! -s "${log_file}" ]; then
-        echo "WARN: 日志文件为空 (没有匹配到 is_end/chatCallback/updateBubble)" >&2
-        echo "WARN: strace 可能捕获了数据但关键词不匹配" >&2
-        echo "INFO: 可查看原始日志: ${OUT_DIR}/postturn_${ts}.raw.log" >&2
-    fi
-
-    echo "INFO: 生成计数报告 -> ${summary_file}"
+    local log_size
+    log_size="$(wc -c < "${LOG_FILE}" 2>/dev/null || echo 0)"
+    echo "INFO: 原始日志大小: ${log_size} bytes"
+    echo "INFO: 生成计数报告 -> ${SUMMARY_FILE}"
 
     local chat_callback_count is_end_false_count is_end_true_count update_bubble_count
-    chat_callback_count="$(grep -c 'chatCallback' "${log_file}" 2>/dev/null || echo 0)"
-    is_end_false_count="$(grep -c 'is_end.*false\|is_end":false\|is_end=false' "${log_file}" 2>/dev/null || echo 0)"
-    is_end_true_count="$(grep -c 'is_end.*true\|is_end":true\|is_end=true' "${log_file}" 2>/dev/null || echo 0)"
-    update_bubble_count="$(grep -c 'updateBubble' "${log_file}" 2>/dev/null || echo 0)"
+    chat_callback_count="$(grep -c 'chatCallback' "${LOG_FILE}" || echo 0)"
+    is_end_false_count="$(grep -c 'is_end.*false\|is_end":false\|is_end=false' "${LOG_FILE}" || echo 0)"
+    is_end_true_count="$(grep -c 'is_end.*true\|is_end":true\|is_end=true' "${LOG_FILE}" || echo 0)"
+    update_bubble_count="$(grep -c 'updateBubble' "${LOG_FILE}" || echo 0)"
 
-    cat > "${summary_file}" <<EOF
+    cat > "${SUMMARY_FILE}" <<EOF
 {
   "experiment": "H2C-PostTurn",
-  "timestamp": "${ts}",
-  "log_file": "$(basename "${log_file}")",
+  "timestamp": "${TIMESTAMP}",
+  "log_file": "$(basename "${LOG_FILE}")",
   "metrics": {
     "chatCallback_count": ${chat_callback_count},
     "is_end_false_count": ${is_end_false_count},
@@ -195,7 +184,7 @@ EOF
         echo "  ✗ H2C-PostTurn-1 失败: is_end=true 计数=${is_end_true_count} (期望 1)"
     fi
     echo ""
-    echo " 报告: ${summary_file}"
+    echo " 报告: ${SUMMARY_FILE}"
     echo "=============================================="
 }
 
@@ -206,56 +195,22 @@ cmd_dbcheck() {
     fi
 
     echo "INFO: 查询聊天数据库 RECORD 表"
-    local ts db_snapshot_file
-    ts="$(date +%Y%m%d_%H%M%S)"
-    db_snapshot_file="${OUT_DIR}/postturn_${ts}.db_snapshots.json"
-
     local rowid_min rowid_max row_count
     rowid_min="$(sqlite3 "${DB_PATH}" "SELECT MIN(rowid) FROM RECORD;" 2>/dev/null || echo "N/A")"
     rowid_max="$(sqlite3 "${DB_PATH}" "SELECT MAX(rowid) FROM RECORD;" 2>/dev/null || echo "N/A")"
     row_count="$(sqlite3 "${DB_PATH}" "SELECT COUNT(*) FROM RECORD;" 2>/dev/null || echo "N/A")"
 
-    # 最新 5 条记录, 从 message JSON 中提取 author 和 message 内容
-    local latest_records
-    latest_records="$(sqlite3 -separator ' | ' "${DB_PATH}" \
-        "SELECT rowid,
-                json_extract(message, '$.author') as author,
-                json_extract(message, '$.isEnd') as is_end,
-                length(message) as msg_len,
-                substr(json_extract(message, '$.message'), 1, 80) as preview
-         FROM RECORD ORDER BY rowid DESC LIMIT 5;" 2>/dev/null)"
-
-    # 统计用户消息和 Bot 回复数量
-    local user_count bot_count
-    user_count="$(sqlite3 "${DB_PATH}" \
-        "SELECT COUNT(*) FROM RECORD WHERE json_extract(message, '$.author') = 'User';" 2>/dev/null || echo "0")"
-    bot_count="$(sqlite3 "${DB_PATH}" \
-        "SELECT COUNT(*) FROM RECORD WHERE json_extract(message, '$.author') = 'Bot';" 2>/dev/null || echo "0")"
-
-    # 统计 isEnd=true 的记录数 (即回合结束事件)
-    local is_end_count
-    is_end_count="$(sqlite3 "${DB_PATH}" \
-        "SELECT COUNT(*) FROM RECORD WHERE json_extract(message, '$.isEnd') = 1;" 2>/dev/null || echo "0")"
-
-    cat > "${db_snapshot_file}" <<EOF
+    cat > "${DB_SNAPSHOT_FILE}" <<EOF
 {
   "experiment": "H2C-PostTurn-dbcheck",
-  "timestamp": "${ts}",
+  "timestamp": "${TIMESTAMP}",
   "db_path": "${DB_PATH}",
   "record_table": {
     "rowid_min": "${rowid_min}",
     "rowid_max": "${rowid_max}",
-    "row_count": "${row_count}",
-    "user_messages": ${user_count},
-    "bot_messages": ${bot_count},
-    "is_end_true_count": ${is_end_count}
+    "row_count": "${row_count}"
   },
-  "note": "实验前后对比 rowid 变化, 期望新增 2 行 (用户+助手); isEnd=true 对应 TurnFinalizedEvent",
-  "latest_records": [
-$(echo "${latest_records}" | while IFS= read -r line; do
-    echo "    \"${line}\","
-done | sed '$ s/,$//')
-  ]
+  "note": "实验前后对比 rowid 变化, 期望新增 2 行 (用户+助手)"
 }
 EOF
 
@@ -264,18 +219,8 @@ EOF
     echo "=============================================="
     echo "  rowid 范围: ${rowid_min} ~ ${rowid_max}"
     echo "  总行数:     ${row_count}"
-    echo "  用户消息:   ${user_count}"
-    echo "  Bot 回复:   ${bot_count}"
-    echo "  isEnd=true: ${is_end_count}  (对应 TurnFinalizedEvent)"
     echo ""
-    echo "  最新 5 条记录:"
-    echo "  rowid | author | isEnd | len | preview"
-    echo "  ------|--------|-------|-----|--------"
-    echo "${latest_records}" | while IFS= read -r line; do
-        echo "  ${line}"
-    done
-    echo ""
-    echo " 快照: ${db_snapshot_file}"
+    echo " 快照: ${DB_SNAPSHOT_FILE}"
     echo "=============================================="
 }
 
