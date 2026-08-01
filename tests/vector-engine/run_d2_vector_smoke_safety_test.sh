@@ -6,6 +6,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${PROJECT_ROOT}/scripts/run_d2_vector_smoke.sh"
 
 TEST_TEMP="$(mktemp -d "${TMPDIR:-/tmp}/d2-vector-safety.XXXXXX")"
+TEST_TEMP="$(realpath -e "${TEST_TEMP}")"
 trap 'rm -rf -- "${TEST_TEMP}"' EXIT
 
 TESTS_PASSED=0
