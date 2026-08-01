@@ -55,7 +55,7 @@ Vector 中的 `content` 或元数据只能帮助召回和诊断。候选进入�
 | `channel` | string | D2 仅为 `fts5` 或 `vector` |
 | `rank` | integer | 通道内 1 起始排名 |
 | `raw_score` | number/null | 仅诊断，不跨通道直接比较 |
-| `score_semantics` | string | 例如 `bm25`、`cosine_similarity` |
+| `score_semantics` | string | 例如 `bm25`、`sdk_score_unverified`；未验证前不得宣称相似度或距离语义 |
 | `provider` | string | 例如 `sqlite_fts5`、`kylin_vector_0k0.7` |
 | `retrieved_at` | UTC datetime | 本次命中时间 |
 | `filter_context` | object | 本次请求使用的用户/场景/作用域条件 |
@@ -73,11 +73,15 @@ Vector 中的 `content` 或元数据只能帮助召回和诊断。候选进入�
 | `user_id` | SQL `WHERE user_id = ?` | Search `user_id == "..."` 表达式 |
 | `rank` | BM25 排序后的 1 起始位置 | Search 返回顺序的 1 起始位置 |
 | `raw_score` | SQLite `bm25(...)` | COSINE 相似度或 SDK 返回距离 |
-| `score_semantics` | `bm25` | `cosine_similarity` |
+| `score_semantics` | `bm25` | `sdk_score_unverified` |
 | `provider` | `sqlite_fts5` | `kylin_vector_0k0.7` |
 
 实现必须使用参数绑定或受控表达式构造，不得把未经校验的用户输入
 直接拼接为 SQL 或 Vector 过滤表达式。
+
+`sdk_score_unverified` 仅表示保留当前固定 SDK/服务端组合返回的原始浮点值用于诊断；
+D2 未完成该值究竟是 COSINE 相似度还是距离的独立验证，因此不据此跨通道比较、归一化
+或冻结正式字段语义。
 
 ## 5. 聚合候选 `RetrievalCandidateSample`
 
