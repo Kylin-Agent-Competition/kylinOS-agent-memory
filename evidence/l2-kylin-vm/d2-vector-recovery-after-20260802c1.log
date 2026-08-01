@@ -1,0 +1,42 @@
+D2_RECOVERY phase=after requested_status=0
+2026-08-01T18:20:03+00:00
+project_commit=b4b268e7c309308c97b1723a4554ebb68733650f
+binary_sha256=2c9f7c25edca1415e606b936222f4400092f9dae47a3488d89e0ec29d5332d77
+kysec_state=/home/yanmouren778/d2-b-vector-smoke-20260802c1/bin/d2_vector_smoke_b4b268e: verified
+default_db=/home/yanmouren778/.local/share/kylin-ai-vector-engine/default.db
+default_db_sha256_before=54a1ecb52a7dfd7f05c0fea5cc3ffdc6f0a12fb607c9f7fc921c0ecc97a4f768
+default_pid_before=50261
+default_invocation_before=6cbc7faf5cd244f59f5826e8b4ba03ff
+D2_RECOVERY_CHECK result=PASS detail=stale_owned_socket_removed
+default_db_sha256_after=54a1ecb52a7dfd7f05c0fea5cc3ffdc6f0a12fb607c9f7fc921c0ecc97a4f768
+default_pid_after=64498
+default_invocation_after=0d3ba870c03e4659b1b90c054f40d323
+D2_SERVICE_STATE label=restored_default unit=kylin-ai-vector-engine.service
+MainPID=64498
+LoadState=loaded
+ActiveState=active
+SubState=running
+FragmentPath=/usr/lib/systemd/user/kylin-ai-vector-engine.service
+InvocationID=0d3ba870c03e4659b1b90c054f40d323
+D2_SERVICE_STATE label=removed_test unit=d2-vector-engine.service
+MainPID=0
+LoadState=not-found
+ActiveState=inactive
+SubState=dead
+FragmentPath=
+InvocationID=
+default_processes_begin
+  64498    1514 /bin/bash /usr/bin/kylin-ai-vector-engine-default
+  64515   64498 /usr/bin/kylin-ai-vector-engine /home/yanmouren778/.local/share/kylin-ai-vector-engine/default.db unix:/tmp/kylin-ai-vector-engine-1000.sock ERROR
+default_processes_end
+socket_path=/tmp/kylin-ai-vector-engine-1000.sock
+u_str LISTEN 0      4096                                                                          /tmp/kylin-ai-vector-engine-1000.sock 248915            * 0    users:(("kylin-ai-vector",pid=64515,fd=9))
+test_unit_file_present=false
+temporary_ssh_key_count=1
+D2_RECOVERY_CHECK result=PASS detail=default_db_hash_unchanged
+D2_RECOVERY_CHECK result=PASS detail=default_invocation_refreshed
+D2_RECOVERY_CHECK result=PASS detail=default_pid_refreshed
+D2_RECOVERY_CHECK result=PASS detail=default_engine_uses_default_db
+D2_RECOVERY_CHECK result=PASS detail=test_unit_removed
+D2_RECOVERY_CHECK result=PASS detail=test_unit_not_found
+D2_RECOVERY result=PASS

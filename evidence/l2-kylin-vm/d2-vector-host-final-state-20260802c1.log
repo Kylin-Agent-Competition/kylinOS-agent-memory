@@ -1,0 +1,12 @@
+D2_HOST_FINAL_STATE phase=after
+2026-08-02T02:56:44+08:00
+tested_commit=b4b268e7c309308c97b1723a4554ebb68733650f
+run_id=20260802c1
+vm_name=Kylin-V11-D2-OldClient-20260727
+vm_state=saved
+vm_state_change_time_utc=2026-08-01T18:56:44.255000000
+nat_forwarding_count=0
+nat_mapping_d2_ssh_win=absent
+nat_mapping_d2_ssh_wsl=absent
+remote_final_state_log_sha256=85972d69bd23aa4037f5320d5b770a79434c7ef13ffe02b7e2b6578407db5dd7
+D2_HOST_FINAL_STATE result=PASS

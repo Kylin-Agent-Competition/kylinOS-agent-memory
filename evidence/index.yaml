@@ -134,12 +134,38 @@ entries:
     merge_qualified: false
     date: "2026-08-02"
     reviewer: "pending"
-    limitations: "仅证明 tested_commit 278d2bc 的指定麒麟环境运行结果；不覆盖随后未提交的 Manifest 所有权状态加固，后者必须在提交后重新执行 L2；并发、性能、原生 Hybrid/RRF、D3 Provider/IPC 和生产 Schema 不在范围内"
+    limitations: "历史复核仅证明 tested_commit 278d2bc；不覆盖后续 b4b268e 的 Manifest v2 所有权状态加固，后者的独立 L2 结果见 VECTOR-CALL-003；并发、性能、原生 Hybrid/RRF、D3 Provider/IPC 和生产 Schema 不在范围内"
     checksum_sha256: "c673fe574903bcc083eb60060c92b86885993a838b3205fff342fa680c298351"
     details: |
       安全回归 10 PASS / 0 FAIL；prepare 43 PASS / 0 FAIL，完成 Collection、CRUD、严格用户隔离和同名集合保护。
       三项预期负向门禁均以非零状态拒绝且无超时；未重启和 manifest 不匹配均未执行探针。
       重启后 verify 32 PASS / 0 FAIL，cleanup 27 PASS / 0 FAIL；默认数据库哈希不变，KySec、测试单元、临时 SSH key 与 NAT 转发均已恢复或清理。
+      技术 Runtime PASS 不代表 Review 通过或具备合并资格。
+
+  - id: "VECTOR-CALL-003"
+    task_id: "D2-B"
+    description: "Vector Engine 最终修复提交的 Manifest v2、安全门禁、用户隔离与恢复复核"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d2-vector-verify-20260802c1.log"
+    tested_commit: "b4b268e7c309308c97b1723a4554ebb68733650f"
+    sdk_source_commit: "2213447ef765e709e93f94d4177f4417478fe8ea"
+    probe_source_sha256: "49c6771427082708d8f7b9b46c079167dc9a63b91bf32a2cb2c45421ebcbce16"
+    probe_binary_sha256: "2c9f7c25edca1415e606b936222f4400092f9dae47a3488d89e0ec29d5332d77"
+    runner_source_sha256: "764860e3862c19720d98baf604874a443855b9c42bdf3860638845d180d00f6a"
+    manifest_sha256: "e03167d99867fa89ca328d42212d664c318802d2f09dba1034ac5cd4b26ff05d"
+    report: "evidence/l2-kylin-vm/d2-vector-smoke-evidence-20260802c1.md"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    date: "2026-08-02"
+    reviewer: "pending"
+    limitations: "仅证明 tested_commit b4b268e 在指定麒麟环境的运行结果；独立复审尚未完成，不代表允许合并；并发、性能、原生 Hybrid/RRF、D3 Provider/IPC 和生产 Schema 不在范围内"
+    checksum_sha256: "9b027adaa4c6ce6d02024af2e91c06cf4abcadba2cf75ac925f869c901727c1f"
+    details: |
+      安全回归 15 用例通过；prepare 52 PASS / 0 FAIL，Manifest v2 仅在 prepare 成功后取得所有权并记录数据库快照。
+      同名 Collection、未重启 verify 和 Manifest 不匹配三项负向门禁均按预期拒绝且无超时；同名数据保持完整。
+      重启后 verify 33 PASS / 0 FAIL，cleanup 28 PASS / 0 FAIL，恢复 8 PASS / 0 FAIL；默认数据库哈希不变，测试服务、KySec、临时 SSH key 与 NAT 转发均已恢复或清理。
       技术 Runtime PASS 不代表 Review 通过或具备合并资格。
 
   - id: "D1-B-02"

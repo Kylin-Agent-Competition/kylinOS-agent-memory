@@ -1,0 +1,11 @@
+D2_RESTART prepare_invocation_id=7793981615914e2995d252d0c70408d1
+D2_RESTART current_invocation_id=50c605e541fe4c29897747261b06c6d3
+D2_SERVICE_STATE label=test_restarted unit=d2-vector-engine.service
+MainPID=64199
+LoadState=loaded
+ActiveState=active
+SubState=running
+FragmentPath=/home/yanmouren778/.config/systemd/user/d2-vector-engine.service
+InvocationID=50c605e541fe4c29897747261b06c6d3
+  64199    1514 /usr/bin/kylin-ai-vector-engine /home/yanmouren778/d2-b-vector-smoke-20260802c1/runtime/d2-vector-smoke.db unix:/tmp/kylin-ai-vector-engine-1000.sock ERROR
+D2_RESTART result=PASS
