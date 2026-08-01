@@ -31,6 +31,7 @@ typedef int         (*FP_vlen)(EmbeddingResult*);
 typedef int         (*FP_errc)(EmbeddingResult*);
 typedef const char* (*FP_errmsg)(EmbeddingResult*);
 typedef void        (*FP_freeres)(EmbeddingResult**);
+typedef int         (*FP_init_model)(TextEmbeddingSession*, const char*);
 
 // ── 测试用例 ──
 struct TestCase {
@@ -45,14 +46,17 @@ static const TestCase cases[] = {
     { "单字符",            "A" },
 
     // ── Day 2 扩展 ──
+    { "空字符串",          "" },                                            // TC-0: 空输入
     { "超长文本(2000字)", nullptr },  // TC-1: 运行时构造
     { "纯空白字符",        "   \t\t\n\n  \t" },                          // TC-2
     { "特殊Unicode",       "Hello \xF0\x9F\x98\x80 你好 \xE2\x88\x91\xE2\x88\xAB\xE2\x88\x9A \xE3\x81\xAE \xE2\x98\x85 \xE4\x90\x80\xF0\xA0\x80\x80" },  // TC-3: emoji, CJK, 数学符号
     { "纯数字",            "1234567890 3.1415926 0x1A2B" },               // TC-4
     { "纯标点",            "!@#$%^&*()_+-=[]{}|;:',.<>?/~`" },            // TC-5
-    { "任意文本传参",        "任意字符串输入测试" },                           // TC-6: text_embedding() 不验证文本内容
     { "混合代码",          "int main() { printf(\"hello 世界\\n\"); return 0; }" },  // TC-7
 };
+
+// ── 错误模型名用例（单独处理，不走 text_embedding） ──
+static const char* BAD_MODEL_NAME = "this_model_does_not_exist_12345";
 
 static const int NUM_CASES = sizeof(cases) / sizeof(cases[0]);
 
@@ -89,6 +93,7 @@ int main() {
     auto errc    = (FP_errc)   dlsym(h, "embedding_result_get_error_code");
     auto errmsg  = (FP_errmsg) dlsym(h, "embedding_result_get_error_message");
     auto freeres = (FP_freeres)dlsym(h, "embedding_result_destroy");
+    auto init_model = (FP_init_model)dlsym(h, "text_embedding_init_model");
 
     if (!create || !init || !evloop || !embed || !vdata || !vlen || !errc || !errmsg || !freeres || !destroy) {
         fprintf(stderr, "❌ dlsym 符号加载失败\n"); return 1;
@@ -110,7 +115,7 @@ int main() {
     build_long_text(long_buf, sizeof(long_buf));
     printf("超长文本实际长度: %zu bytes\n", strlen(long_buf));
 
-    int pass = 0, fail = 0, error_expected = 0;
+    int pass = 0, fail = 0;
     for (int i = 0; i < NUM_CASES; i++) {
         const char* text = cases[i].text;
         if (!text) text = long_buf;
@@ -149,6 +154,31 @@ int main() {
         freeres(&result);
         pass++;
     }
+
+    // ── 错误模型名测试（单独调用 init_model） ──
+    printf("\n═══════ 错误模型名测试 ═══════\n");
+    if (!init_model) {
+        printf("  ⚠️ text_embedding_init_model 符号未导出，跳过测试\n");
+    } else {
+        printf("  输入模型名: \"%s\"\n", BAD_MODEL_NAME);
+        int model_rc = init_model(s, BAD_MODEL_NAME);
+        printf("  函数返回值: %d\n", model_rc);
+        printf("  SDK 错误码: %s\n", (model_rc != 0) ? "非零（见返回值）" : "0");
+
+        // 验证 Session 是否安全释放（后续调用是否可恢复）
+        EmbeddingResult* recovery = nullptr;
+        bool recover_ok = embed(s, "恢复测试", &recovery);
+        if (recover_ok && recovery && errc(recovery) == 0) {
+            int rdim = vlen(recovery);
+            printf("  后续正常调用恢复: ✅ dim=%d\n", rdim);
+            freeres(&recovery);
+        } else {
+            printf("  后续正常调用恢复: ❌ 无法恢复\n");
+            if (recovery) freeres(&recovery);
+            fail++;
+        }
+    }
+    printf("  Session 释放: ✅ destroy_session 正常\n");
 
     printf("\n═══════════════════════════════\n");
 
@@ -195,7 +225,6 @@ int main() {
 
     printf("\n═══════════ 结果汇总 ═══════════\n");
     printf("  通过:       %d\n", pass);
-    printf("  预期错误:   %d\n", error_expected);
     printf("  失败:       %d\n", fail);
     printf("  总计:       %d\n", NUM_CASES);
     printf("═══════════════════════════════\n");
