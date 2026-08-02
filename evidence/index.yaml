@@ -123,13 +123,18 @@ entries:
         evidence: "strace -yy 显示 sendmsg/recvmsg 目标为 assistant.sock"
         impact: "OS Agent 可在 assistant.sock 上拦截 chat/ChatResult/stop_chat DBus 消息"
     limitations:
-      - "实验在 VMware 虚拟机执行, 非物理机"
+      - "实验在 VirtualBox 虚拟机执行, 非物理机"
       - "sudo 环境下 \$HOME 变量需用 SUDO_USER 修正 (脚本已修复)"
       - "strace 八进制转义需 python3 解码才能搜索中文关键词"
       - "H2C-Tool-1/2 因麒麟架构不同无法验证, 需源码分支 instrument"
-      - "H2C-PreChat-3 memory_context 注入未实现, 需 OS Agent 实现 Hook 点 A"
+      - "H2C-PreChat-3 memory_context 未观察到, 需源码 instrument 确认 Hook 点 A 实现状态"
+      - "证据包由旧版脚本(commit 20adffc)生成, 返工修复版脚本(b1b649f)后续重跑将替换"
     related_td:
       - "TD-007 (真实 Tool Result Hook, High, OPEN → 路径已确认为 intentionrecognition.cpp, 需源码 instrument)"
     os: "Kylin-Desktop V11 (Linux 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC)"
-    virtualization: "VMware Workstation (虚拟机)"
-    checksum: "pending (证据包上传后回填)"
+    virtualization: "VirtualBox"
+    checksum_sha256:
+      evidence_dir: "evidence/l2-kylin-vm/d2c/d2c_evidence_20260801_195043"
+      checksums_file: "checksums.sha256"
+      file_count: 32
+      checksums_sha256_of_checksums_file: "pending (提交后由 git hash-object 计算)"

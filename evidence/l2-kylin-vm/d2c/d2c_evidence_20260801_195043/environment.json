@@ -1,0 +1,17 @@
+{
+  "task_id": "D2-C-OSAGENT-SPIKE",
+  "timestamp": "20260801_195043",
+  "os": {
+    "kylin_build": "Kylin-Desktop V11",
+    "uname": "Linux bacon-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux"
+  },
+  "host_app": {
+    "process": "179346 /bin/bash /opt/apps/kaiming/bin/cn.kylin.kylin-aiassistant cn.kylin.kylin-aiassistant 0 /opt/apps/cn.kylin.kylin-aiassistant/files/bin/kylin-aiassistant
+179350 /opt/apps/cn.kylin.kylin-aiassistant/files/bin/kylin-aiassistant",
+    "database": "/home/bacon/.config/kylin-aiassistant/kylin_aiassistant_database.db (61KB, 实测存在, baseline rowid_max=32)"
+  },
+  "commit": "20adffc7449ad97f837108b02ce0dcc0d1d79f24",
+  "virtualization": "VirtualBox",
+  "reviewer": "D(周子腾); E(谢嘉然)补审",
+  "probe_scripts_version": "D2-C v1.0 (commit 20adffc, 返工修复版脚本为 b1b649f, 后续重跑将使用最新版)"
+}
