@@ -62,6 +62,8 @@ fi
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
 python -c 'import pybind11' 2>/dev/null || pip install pybind11
+# pytest 用于 Step 4 统一收集（P0-4）
+python -c 'import pytest' 2>/dev/null || pip install pytest
 python -m pybind11 --cmakedir >/dev/null 2>&1 && pass "pybind11 可用" || fail "pybind11 不可用"
 
 # ── 第 3 步：CMake 构建 + CTest（P0-2/P0-3/P1-2/P1-3 编译验证） ──
