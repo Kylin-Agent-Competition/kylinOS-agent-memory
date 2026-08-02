@@ -209,7 +209,7 @@ entries:
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day4_bridge_smoke_run.log"
     source_commit: "d86abe14c85a3b2623d9131ab5937284c8d2992d"
-    commit: "pending"  # 证据提交的 Commit，收尾提交后补填
+    commit: "805649c"  # 证据文件提交的 Commit（docs(evidence) 更新 Day4 证据）
     date: "2026-08-01"
     reviewer: "pending"
     limitations: "异步、并发、超时中断、多模态未覆盖；错误模型属 Day2 范围；SDK 同进程重载会崩溃（测试已拆独立进程规避）"
