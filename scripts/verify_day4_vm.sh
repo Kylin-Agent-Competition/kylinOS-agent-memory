@@ -13,6 +13,14 @@
 #
 # 依赖：
 #   - 共享文件夹已挂载（/mnt/shared = WSL 仓库根目录）
+
+# 自清理：vboxsf/autocrlf 可能给脚本注入 CRLF，先移除行尾 \r 再执行
+# （bash 会把 "2>&1\r" 解析成独立命令 "2"，导致 "行 N: 2: 未找到命令"）
+if head -1 "$0" | grep -q $'\r'; then
+  tmpf="$(mktemp)"
+  sed 's/\r$//' "$0" > "$tmpf"
+  exec bash "$tmpf" "$@"
+fi
 #   - python3 可用；venv 缺失时自动重建到 /tmp/day4-venv
 
 set -u
