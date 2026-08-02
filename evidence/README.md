@@ -56,7 +56,8 @@ evidence/
 `report`、端到端状态 `runtime_result` 和可审计摘要 `details`。需要消除
 Commit 或哈希歧义时，应优先使用语义明确的 `tested_commit`、
 `evidence_commit`、`sdk_source_commit`、`probe_source_sha256`、
-`probe_binary_sha256`、`runner_source_sha256` 和 `manifest_sha256`。
+`cleanup_manifest_header_sha256`、`probe_binary_sha256`、
+`runner_source_sha256` 和 `manifest_sha256`。
 `evidence_commit` 在证据尚未提交时可以省略，不得预填未来 Commit。
 新增字段时必须先更新 `index_contract`，不得在同一索引中继续引入未声明的
 字段变体。

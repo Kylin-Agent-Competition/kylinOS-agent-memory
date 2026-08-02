@@ -29,3 +29,7 @@ C++ 探针会在创建客户端前复核 Manifest 与数据库文件身份，并
 `cleanup_completed=true`、完成时间、InvocationID 和 Collection 缺失确认，
 并将 token 标记为 `consumed`。已清理 Manifest 不能再次触发破坏性 cleanup；
 需要重复确认时，只能运行只读的 `verify-cleanup` 阶段。
+
+Manifest 同时绑定探针主源码 `d2_vector_smoke.cpp`、cleanup 授权与运行时身份
+头文件 `d2_cleanup_manifest.h`、runner、ABI 补丁、ABI 断言和最终二进制的
+独立 SHA-256，避免新增头文件逻辑只被提交号或二进制哈希间接覆盖。

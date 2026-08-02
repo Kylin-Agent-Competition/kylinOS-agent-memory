@@ -195,6 +195,7 @@ check_database_path >/dev/null
 BINARY_HASH="$(printf '1%.0s' {1..64})"
 PROJECT_COMMIT="$(printf '2%.0s' {1..40})"
 PROBE_SOURCE_HASH="$(printf '3%.0s' {1..64})"
+CLEANUP_MANIFEST_HEADER_HASH="$(printf 'a%.0s' {1..64})"
 RUNNER_SOURCE_HASH="$(printf '4%.0s' {1..64})"
 ABI_PATCH_HASH="$(printf '5%.0s' {1..64})"
 ABI_ASSERTS_HASH="$(printf '6%.0s' {1..64})"
@@ -214,6 +215,14 @@ else
     printf 'D2_VECTOR_SAFETY_TEST name=manifest_records_sha256 result=FAIL\n' >&2
     exit 1
 fi
+if grep -Fxq \
+    "cleanup_manifest_header_sha256=${CLEANUP_MANIFEST_HEADER_HASH}" \
+    "${MANIFEST_FILE}"; then
+    pass_test "manifest_records_cleanup_header_sha256"
+else
+    printf 'D2_VECTOR_SAFETY_TEST name=manifest_records_cleanup_header_sha256 result=FAIL\n' >&2
+    exit 1
+fi
 ORIGINAL_BINARY_HASH="${BINARY_HASH}"
 BINARY_HASH="$(printf '8%.0s' {1..64})"
 expect_failure "manifest_rejects_binary_hash_mismatch" validate_manifest "true"
@@ -221,6 +230,12 @@ BINARY_HASH="${ORIGINAL_BINARY_HASH}"
 PROJECT_COMMIT="$(printf '9%.0s' {1..40})"
 expect_failure "manifest_rejects_project_commit_mismatch" validate_manifest "true"
 PROJECT_COMMIT="$(printf '2%.0s' {1..40})"
+
+ORIGINAL_CLEANUP_MANIFEST_HEADER_HASH="${CLEANUP_MANIFEST_HEADER_HASH}"
+CLEANUP_MANIFEST_HEADER_HASH="$(printf 'b%.0s' {1..64})"
+expect_failure "manifest_rejects_cleanup_header_hash_mismatch" \
+    validate_manifest "true"
+CLEANUP_MANIFEST_HEADER_HASH="${ORIGINAL_CLEANUP_MANIFEST_HEADER_HASH}"
 
 ORIGINAL_DB="${TEST_TEMP}/original-runtime.db"
 mv -- "${VALID_DB}" "${ORIGINAL_DB}"
@@ -241,20 +256,39 @@ PHASE="cleanup"
 CLEANUP_LOCK_ENTRANTS="${TEST_TEMP}/cleanup-lock-entrants"
 CLEANUP_LOCK_READY="${TEST_TEMP}/cleanup-lock-ready"
 CLEANUP_LOCK_RELEASE="${TEST_TEMP}/cleanup-lock-release"
+CONCURRENT_CLEANUP_PROBE="${TEST_TEMP}/concurrent-cleanup-probe"
+VERIFIED_MANIFEST_SNAPSHOT="${TEST_TEMP}/verified-manifest-snapshot"
+cp --preserve=mode -- "${MANIFEST_FILE}" "${VERIFIED_MANIFEST_SNAPSHOT}"
+cat >"${CONCURRENT_CLEANUP_PROBE}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "${D2_TEST_CLEANUP_LABEL}" >>"${D2_TEST_CLEANUP_ENTRANTS}"
+: >"${D2_TEST_CLEANUP_READY}"
+attempts=0
+while [[ ! -e "${D2_TEST_CLEANUP_RELEASE}" && "${attempts}" -lt 200 ]]; do
+    sleep 0.01
+    attempts=$((attempts + 1))
+done
+[[ -e "${D2_TEST_CLEANUP_RELEASE}" ]]
+EOF
+chmod 0755 "${CONCURRENT_CLEANUP_PROBE}"
 first_concurrent_cleanup() {
+    BINARY="${CONCURRENT_CLEANUP_PROBE}"
+    D2_TEST_CLEANUP_ENTRANTS="${CLEANUP_LOCK_ENTRANTS}"
+    D2_TEST_CLEANUP_LABEL="first"
+    D2_TEST_CLEANUP_READY="${CLEANUP_LOCK_READY}"
+    D2_TEST_CLEANUP_RELEASE="${CLEANUP_LOCK_RELEASE}"
+    export D2_TEST_CLEANUP_ENTRANTS
+    export D2_TEST_CLEANUP_LABEL
+    export D2_TEST_CLEANUP_READY
+    export D2_TEST_CLEANUP_RELEASE
     acquire_cleanup_lock >/dev/null
     require_cleanup_lock_held
-    printf 'first\n' >>"${CLEANUP_LOCK_ENTRANTS}"
-    : >"${CLEANUP_LOCK_READY}"
-    local attempts=0
-    while [[ ! -e "${CLEANUP_LOCK_RELEASE}" && "${attempts}" -lt 200 ]]; do
-        sleep 0.01
-        attempts=$((attempts + 1))
-    done
-    if [[ ! -e "${CLEANUP_LOCK_RELEASE}" ]]; then
-        return 1
-    fi
+    validate_manifest "true" "verified" "false" >/dev/null
+    authorize_manifest_for_cleanup >/dev/null
+    run_probe >/dev/null
     require_cleanup_lock_held
+    finalize_manifest_after_cleanup >/dev/null
     release_cleanup_lock
 }
 
@@ -275,9 +309,21 @@ fi
 pass_test "cleanup_lock_first_process_ready"
 
 (
+    BINARY="${CONCURRENT_CLEANUP_PROBE}"
+    D2_TEST_CLEANUP_ENTRANTS="${CLEANUP_LOCK_ENTRANTS}"
+    D2_TEST_CLEANUP_LABEL="second"
+    D2_TEST_CLEANUP_READY="${CLEANUP_LOCK_READY}"
+    D2_TEST_CLEANUP_RELEASE="${CLEANUP_LOCK_RELEASE}"
+    export D2_TEST_CLEANUP_ENTRANTS
+    export D2_TEST_CLEANUP_LABEL
+    export D2_TEST_CLEANUP_READY
+    export D2_TEST_CLEANUP_RELEASE
     acquire_cleanup_lock >/dev/null
     require_cleanup_lock_held
-    printf 'second\n' >>"${CLEANUP_LOCK_ENTRANTS}"
+    validate_manifest "true" "verified" "false" >/dev/null
+    authorize_manifest_for_cleanup >/dev/null
+    run_probe >/dev/null
+    finalize_manifest_after_cleanup >/dev/null
     release_cleanup_lock
 ) >/dev/null 2>&1 &
 SECOND_CLEANUP_PID=$!
@@ -292,6 +338,8 @@ if ! wait "${FIRST_CLEANUP_PID}"; then
     exit 1
 fi
 pass_test "cleanup_lock_first_process_completes"
+expect_success "cleanup_lock_first_process_finalizes_manifest" \
+    validate_manifest "true" "cleaned" "true"
 if [[ "$(wc -l <"${CLEANUP_LOCK_ENTRANTS}")" -eq 1 &&
       "$(<"${CLEANUP_LOCK_ENTRANTS}")" == "first" ]]; then
     pass_test "cleanup_lock_allows_only_one_probe_entry"
@@ -299,6 +347,8 @@ else
     printf 'D2_VECTOR_SAFETY_TEST name=cleanup_lock_allows_only_one_probe_entry result=FAIL\n' >&2
     exit 1
 fi
+cp --preserve=mode -- "${VERIFIED_MANIFEST_SNAPSHOT}" "${MANIFEST_FILE}"
+validate_manifest "true" "verified" "false" >/dev/null
 
 acquire_cleanup_lock >/dev/null
 authorize_manifest_for_cleanup >/dev/null

@@ -20,6 +20,7 @@ readonly DEFAULT_DATABASE_RELATIVE=".local/share/kylin-ai-vector-engine/default.
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly PROJECT_ROOT
 readonly PROBE_SOURCE="${PROJECT_ROOT}/tests/vector-engine/d2_vector_smoke.cpp"
+readonly CLEANUP_MANIFEST_HEADER="${PROJECT_ROOT}/tests/vector-engine/d2_cleanup_manifest.h"
 readonly ABI_PATCH="${PROJECT_ROOT}/tests/vector-engine/compat/kysdk-vector-engine-client-1.2.0.0-0k0.7.patch"
 readonly ABI_ASSERTS="${PROJECT_ROOT}/tests/vector-engine/compat/d2_legacy_abi_asserts.h"
 
@@ -57,6 +58,7 @@ DATABASE_SHA256_AT_RESERVATION=""
 BINARY_HASH=""
 PROJECT_COMMIT=""
 PROBE_SOURCE_HASH=""
+CLEANUP_MANIFEST_HEADER_HASH=""
 RUNNER_SOURCE_HASH=""
 ABI_PATCH_HASH=""
 ABI_ASSERTS_HASH=""
@@ -366,7 +368,11 @@ check_project_inputs() {
     require_command git
     require_command sha256sum
     local path
-    for path in "${PROBE_SOURCE}" "${ABI_PATCH}" "${ABI_ASSERTS}"; do
+    for path in \
+        "${PROBE_SOURCE}" \
+        "${CLEANUP_MANIFEST_HEADER}" \
+        "${ABI_PATCH}" \
+        "${ABI_ASSERTS}"; do
         if [[ ! -f "${path}" || ! -r "${path}" ]]; then
             fail "project_input" "missing or unreadable: ${path}"
         fi
@@ -379,11 +385,14 @@ check_project_inputs() {
         fail "project_input" "project returned an invalid commit ID"
     fi
     PROBE_SOURCE_HASH="$(sha256sum "${PROBE_SOURCE}" | awk '{print $1}')"
+    CLEANUP_MANIFEST_HEADER_HASH="$(
+        sha256sum "${CLEANUP_MANIFEST_HEADER}" | awk '{print $1}'
+    )"
     RUNNER_SOURCE_HASH="$(sha256sum "${BASH_SOURCE[0]}" | awk '{print $1}')"
     ABI_PATCH_HASH="$(sha256sum "${ABI_PATCH}" | awk '{print $1}')"
     ABI_ASSERTS_HASH="$(sha256sum "${ABI_ASSERTS}" | awk '{print $1}')"
     pass "project_identity" \
-        "project_commit=${PROJECT_COMMIT}; probe_source_sha256=${PROBE_SOURCE_HASH}; runner_source_sha256=${RUNNER_SOURCE_HASH}; abi_patch_sha256=${ABI_PATCH_HASH}; abi_asserts_sha256=${ABI_ASSERTS_HASH}"
+        "project_commit=${PROJECT_COMMIT}; probe_source_sha256=${PROBE_SOURCE_HASH}; cleanup_manifest_header_sha256=${CLEANUP_MANIFEST_HEADER_HASH}; runner_source_sha256=${RUNNER_SOURCE_HASH}; abi_patch_sha256=${ABI_PATCH_HASH}; abi_asserts_sha256=${ABI_ASSERTS_HASH}"
 }
 
 build_probe() {
@@ -552,6 +561,8 @@ render_manifest() {
         printf 'binary_sha256=%s\n' "${BINARY_HASH}"
         printf 'project_commit=%s\n' "${PROJECT_COMMIT}"
         printf 'probe_source_sha256=%s\n' "${PROBE_SOURCE_HASH}"
+        printf 'cleanup_manifest_header_sha256=%s\n' \
+            "${CLEANUP_MANIFEST_HEADER_HASH}"
         printf 'runner_source_sha256=%s\n' "${RUNNER_SOURCE_HASH}"
         printf 'abi_patch_sha256=%s\n' "${ABI_PATCH_HASH}"
         printf 'abi_asserts_sha256=%s\n' "${ABI_ASSERTS_HASH}"
@@ -802,6 +813,9 @@ validate_manifest() {
     expect_manifest_value "binary_sha256" "${BINARY_HASH}"
     expect_manifest_value "project_commit" "${PROJECT_COMMIT}"
     expect_manifest_value "probe_source_sha256" "${PROBE_SOURCE_HASH}"
+    expect_manifest_value \
+        "cleanup_manifest_header_sha256" \
+        "${CLEANUP_MANIFEST_HEADER_HASH}"
     expect_manifest_value "runner_source_sha256" "${RUNNER_SOURCE_HASH}"
     expect_manifest_value "abi_patch_sha256" "${ABI_PATCH_HASH}"
     expect_manifest_value "abi_asserts_sha256" "${ABI_ASSERTS_HASH}"

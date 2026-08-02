@@ -22,6 +22,7 @@ index_contract:
     - evidence_commit
     - sdk_source_commit
     - probe_source_sha256
+    - cleanup_manifest_header_sha256
     - probe_binary_sha256
     - runner_source_sha256
     - manifest_sha256
@@ -144,7 +145,7 @@ entries:
 
   - id: "VECTOR-CALL-003"
     task_id: "D2-B"
-    description: "Vector Engine 最终修复提交的 Manifest v2、安全门禁、用户隔离与恢复复核"
+    description: "Vector Engine 历史修复提交 b4b268e 的 Manifest v2、安全门禁、用户隔离与恢复复核"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d2-vector-verify-20260802c1.log"
@@ -156,11 +157,11 @@ entries:
     manifest_sha256: "e03167d99867fa89ca328d42212d664c318802d2f09dba1034ac5cd4b26ff05d"
     report: "evidence/l2-kylin-vm/d2-vector-smoke-evidence-20260802c1.md"
     runtime_result: "PASS"
-    review_status: "PENDING"
+    review_status: "REWORK"
     merge_qualified: false
     date: "2026-08-02"
-    reviewer: "pending"
-    limitations: "仅证明 tested_commit b4b268e 在指定麒麟环境的运行结果；独立复审尚未完成，不代表允许合并；并发、性能、原生 Hybrid/RRF、D3 Provider/IPC 和生产 Schema 不在范围内"
+    reviewer: "PR #15 Reviewer"
+    limitations: "历史证据仅证明 tested_commit b4b268e 在指定麒麟环境的运行结果；PR #15 后续 Review 又提出 C-07 至 C-10，不覆盖其后修复且不代表允许合并；性能、原生 Hybrid/RRF、D3 Provider/IPC 和生产 Schema 不在范围内"
     checksum_sha256: "9b027adaa4c6ce6d02024af2e91c06cf4abcadba2cf75ac925f869c901727c1f"
     details: |
       安全回归 15 用例通过；prepare 52 PASS / 0 FAIL，Manifest v2 仅在 prepare 成功后取得所有权并记录数据库快照。
