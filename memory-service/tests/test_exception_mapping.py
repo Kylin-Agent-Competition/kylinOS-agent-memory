@@ -4,76 +4,83 @@ test_exception_mapping.py
 轨道 A — BridgeError → Python 异常映射测试（Day4）
 
 验证 kylin_embedding 模块的异常层次结构与错误码映射规则。
-仅在 kylin_embedding 已编译的环境（麒麟 VM）运行；缺失时给出明确跳过说明。
+pytest 风格（P0-4）：正式可被 pytest 收集。
+
+环境区分（P0-4）：
+- WSL 非宿主环境：kylin_embedding 缺失 → pytest.mark.skip（允许跳过）。
+- 麒麟 L1/L2 环境：kylin_embedding 缺失 → 必须失败。
+  由环境变量 KYLIN_L2=1 标记麒麟宿主环境；未设置时视为非宿主（WSL），允许跳过。
 """
 
-import sys
-from pathlib import Path
+import os
 
-failures = 0
+import pytest
+
+# 环境标记：麒麟 L1/L2 宿主（KYLIN_L2=1）时，kylin_embedding 缺失必须失败
+IS_L2_HOST = os.environ.get("KYLIN_L2") == "1"
+
+try:
+    import kylin_embedding as kb
+except ImportError as exc:  # pragma: no cover
+    kb = None
+    _IMPORT_ERROR = exc
 
 
-def check(cond, name):
-    global failures
-    if cond:
-        print(f"  [PASS] {name}")
-    else:
-        print(f"  [FAIL] {name}")
-        failures += 1
+def _require_module():
+    """麒麟 L2 环境缺失 kylin_embedding 必须失败；WSL 允许 skip。"""
+    if kb is None:
+        if IS_L2_HOST:
+            pytest.fail(f"麒麟 L2 环境缺少 kylin_embedding 模块: {_IMPORT_ERROR}")
+        pytest.skip(f"kylin_embedding 未编译（WSL 非宿主环境可跳过）: {_IMPORT_ERROR}")
 
 
-def main():
-    print("=== test_exception_mapping ===")
+@pytest.fixture(autouse=True)
+def _module_guard():
+    _require_module()
 
-    try:
-        import kylin_embedding as kb
-    except ImportError:
-        print("  [SKIP] kylin_embedding 未编译，跳过（需麒麟 VM 构建）")
-        return 0
 
-    # 1. 异常类型层次：所有子类继承 BridgeError
-    for name in [
-        "BridgeSoNotFoundError", "BridgeLoadError", "BridgeSymbolError",
-        "BridgeSessionError", "BridgeEmbedError", "BridgeSdkError",
-        "BridgeTimeoutError", "BridgeCancelledError", "BridgeModelError",
-    ]:
-        exc_cls = getattr(kb, name, None)
-        check(exc_cls is not None, f"异常类型 {name} 存在")
-        if exc_cls is not None:
-            check(issubclass(exc_cls, kb.BridgeError), f"{name} 继承 BridgeError")
+# ── 1. 异常类型层次 ──
 
-    # 2. 未加载时调用 embed → BridgeLoadError（映射自 ERR_DLOPEN_FAILED）
-    try:
+@pytest.mark.parametrize("name", [
+    "BridgeSoNotFoundError", "BridgeLoadError", "BridgeSymbolError",
+    "BridgeSessionError", "BridgeEmbedError", "BridgeSdkError",
+    "BridgeTimeoutError", "BridgeCancelledError", "BridgeModelError",
+])
+def test_exception_type_exists(name):
+    exc_cls = getattr(kb, name, None)
+    assert exc_cls is not None, f"异常类型 {name} 应存在"
+
+
+@pytest.mark.parametrize("name", [
+    "BridgeSoNotFoundError", "BridgeLoadError", "BridgeSymbolError",
+    "BridgeSessionError", "BridgeEmbedError", "BridgeSdkError",
+    "BridgeTimeoutError", "BridgeCancelledError", "BridgeModelError",
+])
+def test_exception_inherits_bridge_error(name):
+    exc_cls = getattr(kb, name)
+    assert issubclass(exc_cls, kb.BridgeError), f"{name} 应继承 BridgeError"
+
+
+# ── 2. 未加载时 embed → BridgeLoadError ──
+
+def test_embed_without_load_raises_load_error():
+    with pytest.raises(kb.BridgeLoadError):
         bridge = kb.EmbeddingBridge()
         bridge.embed("hello")
-        check(False, "未加载时 embed 应抛异常")
-    except kb.BridgeLoadError:
-        check(True, "未加载时 embed → BridgeLoadError")
-    except kb.BridgeError as exc:
-        check(False, f"未加载时 embed 抛错但类型不符: {type(exc).__name__}")
-    except Exception as exc:  # noqa: BLE001
-        check(False, f"未加载时 embed 抛非 Bridge 异常: {type(exc).__name__}: {exc}")
 
-    # 3. so 不存在 → BridgeSoNotFoundError
-    try:
-        params = kb.BridgeInitParams()
-        params.so_path = "/tmp/definitely_not_exist.so.1"
-        bridge2 = kb.EmbeddingBridge(params)
-        bridge2.load()
-        check(False, "so 不存在时 load 应抛异常")
-    except kb.BridgeSoNotFoundError:
-        check(True, "so 不存在时 load → BridgeSoNotFoundError")
-    except kb.BridgeError as exc:
-        check(False, f"so 不存在时 load 抛错但类型不符: {type(exc).__name__}")
 
-    # 4. BridgeInitParams 默认 so_path 是 x86_64 路径
+# ── 3. so 不存在 → BridgeSoNotFoundError ──
+
+def test_load_missing_so_raises_not_found():
     params = kb.BridgeInitParams()
-    check("libkysdk-coreai-embedding" in params.so_path,
-          f"默认 so_path 含核心库名（实际: {params.so_path}）")
+    params.so_path = "/tmp/definitely_not_exist.so.1"
+    bridge = kb.EmbeddingBridge(params)
+    with pytest.raises(kb.BridgeSoNotFoundError):
+        bridge.load()
 
-    print(f"=== 结果: {'PASS' if failures == 0 else 'FAIL'} ({failures} failures) ===")
-    return 0 if failures == 0 else 1
 
+# ── 4. BridgeInitParams 默认 so_path ──
 
-if __name__ == "__main__":
-    sys.exit(main())
+def test_default_so_path_contains_core_lib():
+    params = kb.BridgeInitParams()
+    assert "libkysdk-coreai-embedding" in params.so_path

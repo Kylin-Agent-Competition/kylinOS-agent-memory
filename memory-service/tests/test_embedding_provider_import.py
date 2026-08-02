@@ -6,65 +6,59 @@ test_embedding_provider_import.py
 验证:
   1. providers 包可导入（即使 kylin_embedding 未编译，也应给出明确报错）
   2. 契约字段存在（embed/embed_batch/get_dimension/model_info）
-  3. 类型校验（非 str 输入抛 TypeError）
+  3. 类型校验（非 str 输入抛 ProviderError.ERR_INVALID_TEXT）
 
-不依赖麒麟 SDK（kylin_embedding 模块缺失时跳过真实调用测试）。
+pytest 风格（P0-4）：正式可被 pytest 收集。
+本文件不依赖麒麟 SDK（纯契约/导入检查，WSL 可运行）。
 """
 
-import importlib
+import dataclasses
 import sys
 from pathlib import Path
+
+import pytest
 
 # 把 memory-service 加入导入路径
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "memory-service"))
 
-failures = 0
+
+@pytest.fixture()
+def provider_module():
+    from providers import EmbeddingProvider, EmbeddingResult, ModelInfo, ProviderError
+    return EmbeddingProvider, EmbeddingResult, ModelInfo, ProviderError
 
 
-def check(cond, name):
-    global failures
-    if cond:
-        print(f"  [PASS] {name}")
-    else:
-        print(f"  [FAIL] {name}")
-        failures += 1
+def test_providers_package_importable(provider_module):
+    assert provider_module is not None
 
 
-def main():
-    print("=== test_embedding_provider_import ===")
-
-    # 1. providers 包可导入
-    try:
-        from providers import EmbeddingProvider, EmbeddingResult, ModelInfo
-        check(True, "providers 包导入成功")
-    except ImportError as exc:
-        check(False, f"providers 包导入失败: {exc}")
-        return 1
-
-    # 2. 契约接口存在
+def test_provider_contract_methods_exist(provider_module):
+    EmbeddingProvider, _, _, _ = provider_module
     for attr in ["embed", "embed_batch", "get_dimension", "model_info"]:
-        check(hasattr(EmbeddingProvider, attr), f"EmbeddingProvider.{attr} 存在")
+        assert hasattr(EmbeddingProvider, attr), f"EmbeddingProvider.{attr} 应存在"
 
-    # 3. 数据结构字段
-    import dataclasses
+
+def test_embedding_result_fields(provider_module):
+    _, EmbeddingResult, _, _ = provider_module
     fields = {f.name for f in dataclasses.fields(EmbeddingResult)}
     for fld in ["vector", "dimension", "l2_norm", "error_code", "error_message"]:
-        check(fld in fields, f"EmbeddingResult.{fld} 存在")
+        assert fld in fields, f"EmbeddingResult.{fld} 应存在"
 
-    mf = {f.name for f in dataclasses.fields(ModelInfo)}
+
+def test_model_info_fields(provider_module):
+    _, _, ModelInfo, _ = provider_module
+    fields = {f.name for f in dataclasses.fields(ModelInfo)}
     for fld in ["name", "dimension", "ondevice", "loaded"]:
-        check(fld in mf, f"ModelInfo.{fld} 存在")
-
-    # 4. kylin_embedding 模块状态提示
-    try:
-        import kylin_embedding  # noqa: F401
-        check(True, "kylin_embedding 模块已编译（麒麟 VM 环境）")
-    except ImportError:
-        print("  [SKIP] kylin_embedding 未编译，跳过真实调用测试（WSL/开发环境正常）")
-
-    print(f"=== 结果: {'PASS' if failures == 0 else 'FAIL'} ({failures} failures) ===")
-    return 0 if failures == 0 else 1
+        assert fld in fields, f"ModelInfo.{fld} 应存在"
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+def test_provider_error_code_enum(provider_module):
+    _, _, _, ProviderError = provider_module
+    from providers import ProviderErrorCode
+    # Day3 契约的 6 个 Provider 错误码必须存在
+    for code in ["ERR_SDK_NOT_LOADED", "ERR_SESSION_FAILED", "ERR_EMBED_FAILED",
+                 "ERR_SDK_ERROR", "ERR_TIMEOUT", "ERR_INVALID_TEXT"]:
+        assert hasattr(ProviderErrorCode, code), f"ProviderErrorCode.{code} 应存在"
+    # ProviderError 异常可实例化
+    err = ProviderError(ProviderErrorCode.ERR_INVALID_TEXT, "test")
+    assert err.code == ProviderErrorCode.ERR_INVALID_TEXT

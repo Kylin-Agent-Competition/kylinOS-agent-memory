@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from enum import IntEnum
 from typing import List, Optional
 
 try:
@@ -27,6 +28,33 @@ except ImportError as exc:  # pragma: no cover - 骨架阶段未编译时给出�
     _IMPORT_ERROR = f"kylin_embedding 模块不可用: {exc}. 请先在麒麟 VM 用 CMake 构建 pybind11 模块。"
 else:
     _IMPORT_ERROR = None
+
+
+# ── Provider 级错误码（Day3 契约冻结） ──
+
+class ProviderErrorCode(IntEnum):
+    """Provider 层错误码，与 Day3 06_provider_contract_v1.md 一致。"""
+
+    ERR_SDK_NOT_LOADED = 0x0101  # dlopen/dlsym 失败（Bridge ERR_SO/DLOPEN/DLSYM）
+    ERR_SESSION_FAILED = 0x0201  # create/init 会话失败（Bridge ERR_SESSION_*）
+    ERR_EMBED_FAILED = 0x0301    # text_embedding 返回 false（Bridge ERR_EMBED_CALL）
+    ERR_SDK_ERROR = 0x0303       # SDK 返回非零 errorCode（Bridge ERR_EMBED_ERROR）
+    ERR_TIMEOUT = 0x0401         # 超过 timeout_ms（Bridge ERR_TIMEOUT）
+    ERR_INVALID_TEXT = 0x0500    # text 非 str 类型（应用层校验，不进 Bridge）
+    ERR_UNKNOWN = 0x0001         # 未分类错误
+
+
+class ProviderError(Exception):
+    """Provider 层统一异常：隐藏 Bridge 底层细节（P1-1）。"""
+
+    def __init__(self, code: ProviderErrorCode, message: str, *, bridge_error: str = "") -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.bridge_error = bridge_error  # 原始 Bridge 错误码（诊断用）
+
+    def __str__(self) -> str:
+        return f"[{self.code.name}] {self.message}"
 
 
 @dataclass
@@ -59,6 +87,28 @@ class EmbeddingProvider:
     每次调用通过 C++ Bridge 走 dlopen → dlsym → text_embedding 路径。
     """
 
+    # Bridge 异常 → Provider 错误码映射（P1-1：隐藏 Bridge 细节）
+    _BRIDGE_ERROR_MAP = {
+        "BridgeSoNotFoundError": ProviderErrorCode.ERR_SDK_NOT_LOADED,
+        "BridgeLoadError": ProviderErrorCode.ERR_SDK_NOT_LOADED,
+        "BridgeSymbolError": ProviderErrorCode.ERR_SDK_NOT_LOADED,
+        "BridgeSessionError": ProviderErrorCode.ERR_SESSION_FAILED,
+        "BridgeEmbedError": ProviderErrorCode.ERR_EMBED_FAILED,
+        "BridgeSdkError": ProviderErrorCode.ERR_SDK_ERROR,
+        "BridgeTimeoutError": ProviderErrorCode.ERR_TIMEOUT,
+        "BridgeCancelledError": ProviderErrorCode.ERR_TIMEOUT,
+        "BridgeModelError": ProviderErrorCode.ERR_SDK_ERROR,
+    }
+
+    @staticmethod
+    def _map_bridge_error(exc: Exception) -> ProviderError:
+        """把 Bridge 异常映射为 Provider 级错误（保持 Day3 契约语义）。"""
+        cls_name = type(exc).__name__
+        code = EmbeddingProvider._BRIDGE_ERROR_MAP.get(
+            cls_name, ProviderErrorCode.ERR_UNKNOWN
+        )
+        return ProviderError(code, str(exc), bridge_error=cls_name)
+
     def __init__(self, so_path: Optional[str] = None) -> None:
         if _bridge is None:
             raise RuntimeError(_IMPORT_ERROR)
@@ -74,12 +124,23 @@ class EmbeddingProvider:
 
     def start(self) -> None:
         """加载 SDK 并创建会话。重复调用安全（幂等）。"""
-        self._bridge.load()
-        self._bridge.create_session()
+        try:
+            self._bridge.load()
+            self._bridge.create_session()
+        except Exception as exc:  # noqa: BLE001 - 统一映射为 Provider 错误
+            raise self._map_bridge_error(exc) from exc
 
     def close(self) -> None:
         """销毁会话并释放 SDK。重复调用安全。"""
-        self._bridge.destroy_session()
+        try:
+            self._bridge.destroy_session()
+        except Exception as exc:  # noqa: BLE001
+            raise self._map_bridge_error(exc) from exc
+
+        except ProviderError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise self._map_bridge_error(exc) from exc
 
     def __enter__(self) -> "EmbeddingProvider":
         self.start()
@@ -106,13 +167,17 @@ class EmbeddingProvider:
             映射自 BridgeError 的 Python 异常（BridgeError 子类）。
         """
         if not isinstance(text, str):
-            raise TypeError(f"text 必须为 str, 实际 {type(text).__name__}")
+            raise ProviderError(ProviderErrorCode.ERR_INVALID_TEXT,
+                                f"text 必须为 str, 实际 {type(text).__name__}")
         if timeout_ms < 0:
             raise ValueError(f"timeout_ms 不能为负数，实际 {timeout_ms}")
 
         t0 = time.monotonic()
-        vec = self._bridge.embed(text, timeout_ms)
-        # [TODO Day5] 超时检测占位：_elapsed_ms 当前未用于强制中断，届时启用
+        try:
+            vec = self._bridge.embed(text, timeout_ms)
+        except Exception as exc:  # noqa: BLE001 - 统一映射为 Provider 错误
+            raise self._map_bridge_error(exc) from exc
+        # [TD-A-005-01 主动超时] 超时检测占位：_elapsed_ms 当前未用于强制中断，Day5 启用
         _elapsed_ms = (time.monotonic() - t0) * 1000.0  # noqa: F841
 
         result = EmbeddingResult(
@@ -131,7 +196,7 @@ class EmbeddingProvider:
         输入:
             texts: 文本列表。
             timeout_ms: 整批完成的墙钟时间上限（毫秒），默认 30000。
-                        [PLACEHOLDER] 并行策略未定，此值为占位，待实测后调整。
+                        [TD-A-005-02 Batch 并行] 并行策略未定，此值为占位，待实测后调整。
                         当前实现假设顺序调用，单批总超时 = timeout_ms。
 
         返回:
@@ -148,7 +213,7 @@ class EmbeddingProvider:
             # 仅用剩余时间：每次调用可用 = 剩余墙钟时间（语义清晰，不叠加静态均分）
             remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
             results.append(self.embed(text, timeout_ms=remaining_ms))
-        # [PLACEHOLDER] 超时语义待实测：当前仅顺序调用，未强制墙钟中断
+        # [TD-A-005-02 Batch 并行] 超时语义待实测：当前仅顺序调用，未强制墙钟中断
         # [NOTE] timeout_ms=0 时 remaining_ms 立即衰减为 1ms（最大努力），未定义"无超时"语义
         return results
 
@@ -157,7 +222,8 @@ class EmbeddingProvider:
         返回当前模型向量维度。
 
         NOTE: 首次调用若维度未知，会用空串触发一次 embed() 获取维度（有 IPC 副作用）。
-        骨架阶段临时方案：Day2 已实测空串返回 768。后续应改用 SDK 元信息接口无副作用获取。
+        [TD-A-005-03 get_dimension 副作用] 骨架阶段临时方案：Day2 已实测空串返回 768。
+        后续应改用 SDK 元信息接口无副作用获取。
         """
         if self._dimension is None:
             r = self.embed("")
@@ -177,8 +243,8 @@ class EmbeddingProvider:
         """
         dim = self.get_dimension()
         return ModelInfo(
-            name="ensemble-embd_gte-base_uint8-text",  # Day2 运行日志确认的默认模型
+            name="ensemble-embd_gte-base_uint8-text",  # [TD-A-005-04 硬编码模型名] Day2 运行日志确认的默认模型，Day5 接入 get_model_list
             dimension=dim,
             ondevice=True,
-            loaded=True,  # get_dimension 已成功即代表模型可用
+            loaded=True,  # [TD-A-005-05 loaded 临时语义] get_dimension 已成功即代表模型可用，Day5 精确化
         )
