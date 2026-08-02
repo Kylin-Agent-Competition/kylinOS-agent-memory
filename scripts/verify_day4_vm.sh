@@ -29,6 +29,9 @@ cd "$REPO" || { echo "无法进入 $REPO（共享文件夹未挂载？）"; exit
 
 # ── 第 1 步：干净工作区证据（P0-1） ──
 log "Step 1: git 状态证据 (P0-1)"
+# vboxsf 共享文件夹 stat 缓存会导致 git 误报文件修改：
+# 先强制刷新 index stat（只更新 stat 信息，不改内容），再检查状态
+git update-index --refresh >/dev/null 2>&1 || true
 git rev-parse HEAD
 git status --porcelain
 if git diff --exit-code >/dev/null 2>&1; then
