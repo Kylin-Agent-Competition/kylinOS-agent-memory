@@ -14,6 +14,8 @@ pytest 风格（P0-4）：正式可被 pytest 收集。
 原因：SDK 在 dlopen→dlclose→再次 dlopen 的重载路径上会触发崩溃
 （麒麟 VM 实测 Fatal Python error: Aborted），因此不能每个断言单独
 创建 fixture；单实例顺序执行与 Day2 宿主实测路径一致。
+另外：create_session 后必须完成至少一次 embed 再 destroy（对齐 run_smoke
+稳定路径），否则 SDK 半初始化状态 dlclose 会 abort（麒麟 VM 实测）。
 """
 
 import os
@@ -68,6 +70,12 @@ def test_load_and_session_idempotent():
     # 4. 二次 create_session 幂等
     bridge.create_session()
     assert bridge.has_session is True, "二次 create_session() 幂等"
+
+    # 4.5 真实 embed 一次（对齐 run_smoke 已验证的稳定路径）
+    # 麒麟实测：create_session 后未 embed 就 destroy 会触发 SDK 崩溃
+    # （Fatal Python error: Aborted）；先完成一次真实调用再清理可避免。
+    vec = bridge.embed("")
+    assert vec.dimension == 768, f"embed 返回维度 768（实际 {vec.dimension}）"
 
     # 5. destroy 清理
     bridge.destroy_session()
