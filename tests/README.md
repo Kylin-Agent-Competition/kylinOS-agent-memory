@@ -7,7 +7,9 @@
 已建立目录和职责边界，并包含 D1/D2 Vector Engine 探针与安全回归。
 `tests/vector-engine/run_d2_vector_smoke_safety_test.sh` 覆盖数据库路径、
 Collection 命名、Manifest 身份、直接绕过 cleanup、重复 cleanup 和 stale
-Manifest 等门禁；真实数据面仍只在麒麟 VM 中执行。
+Manifest 等门禁；同时覆盖 C++ 对真实二进制、InvocationID、engine DB 与
+Socket 所有者的校验，以及双进程并发 cleanup 只有一个进程可进入探针。
+真实数据面仍只在麒麟 VM 中执行。
 
 ## 测试层级说明
 

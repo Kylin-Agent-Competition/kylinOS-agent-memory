@@ -20,9 +20,12 @@
 
 `run_d2_vector_smoke.sh` 的 Manifest v2 使用
 `reserved → prepared → verified → cleanup_in_progress → cleaned` 状态机。
-cleanup 前，runner 原子领取一次性 token；C++ 探针会在创建客户端及连接
-Unix Socket 前复核 Manifest、数据库文件身份、Collection、InvocationID 与
-token。cleanup 成功后 runner 原子写入 `cleanup_completed=true`、完成时间、
-InvocationID 和 Collection 缺失确认，并将 token 标记为 `consumed`。已清理
-Manifest 不能再次触发破坏性 cleanup；需要重复确认时，只能运行只读的
-`verify-cleanup` 阶段。
+cleanup 时，runner 持有 run-specific `flock`，锁覆盖
+`validate → authorize → probe → finalize`，并在锁内领取一次性 token。
+C++ 探针会在创建客户端前复核 Manifest 与数据库文件身份，并独立核验
+`/proc/self/exe` 对应真实二进制 SHA-256、systemd InvocationID、engine PID、
+进程实际 DB 参数和 Unix Socket 所有者；执行 `DropCollection()` 前还会再次
+核验实时身份。cleanup 成功后 runner 在同一把锁内原子写入
+`cleanup_completed=true`、完成时间、InvocationID 和 Collection 缺失确认，
+并将 token 标记为 `consumed`。已清理 Manifest 不能再次触发破坏性 cleanup；
+需要重复确认时，只能运行只读的 `verify-cleanup` 阶段。

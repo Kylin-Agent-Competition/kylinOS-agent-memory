@@ -44,6 +44,10 @@ MANIFEST_PREPARE_INVOCATION_ID=""
 MANIFEST_HASH=""
 MANIFEST_CREATED_AT_UTC=""
 MANIFEST_CLEANUP_TOKEN=""
+CLEANUP_LOCK_FILE=""
+CLEANUP_LOCK_TEMP=""
+CLEANUP_LOCK_FD=""
+CLEANUP_LOCK_HELD=false
 DATABASE_CANONICAL=""
 DATABASE_IDENTITY=""
 DATABASE_DEVICE=""
@@ -105,9 +109,12 @@ For run, the approved test root is fixed to:
 The database must be a canonical regular file below that root. The collection
 must exactly equal d2_vector_smoke_<run-id>. Prepare creates a hash-bound
   manifest in the test root; verify and cleanup must match that same manifest.
-Cleanup uses a one-time token and an atomic manifest state transition. The C++
-probe refuses cleanup before connecting unless the manifest is in the
-cleanup_in_progress state and all cleanup identity fields match.
+Cleanup uses a one-time token plus a run-specific lifecycle lock held across
+validate, authorize, probe, and finalize. The C++ probe refuses cleanup before
+connecting unless the manifest is in the cleanup_in_progress state, then
+independently verifies the real executable hash, systemd InvocationID, engine
+PID, database argument, and Unix Socket owner. It repeats that live check
+immediately before DropCollection.
 
 This runner never installs dependencies, changes KySec trust, starts/restarts
 services, copies databases, writes evidence, or performs Git operations on the
@@ -243,6 +250,7 @@ parse_arguments() {
     fi
     TEST_ROOT="${HOME}/${TEST_ROOT_PREFIX}${RUN_ID}"
     MANIFEST_FILE="${TEST_ROOT}/${MANIFEST_NAME}"
+    CLEANUP_LOCK_FILE="${TEST_ROOT}/.d2-vector-smoke.cleanup.lock"
 }
 
 cleanup_build_dir() {
@@ -267,9 +275,28 @@ cleanup_manifest_temp() {
     fi
 }
 
+release_cleanup_lock() {
+    if [[ "${CLEANUP_LOCK_HELD}" != true ||
+          ! "${CLEANUP_LOCK_FD}" =~ ^[0-9]+$ ]]; then
+        return
+    fi
+    flock -u "${CLEANUP_LOCK_FD}" >/dev/null 2>&1 || true
+    exec {CLEANUP_LOCK_FD}>&-
+    CLEANUP_LOCK_FD=""
+    CLEANUP_LOCK_HELD=false
+}
+
+cleanup_lock_temp() {
+    if [[ -n "${CLEANUP_LOCK_TEMP}" && -f "${CLEANUP_LOCK_TEMP}" ]]; then
+        rm -- "${CLEANUP_LOCK_TEMP}"
+    fi
+}
+
 cleanup_temporary_files() {
     cleanup_build_dir
     cleanup_manifest_temp
+    cleanup_lock_temp
+    release_cleanup_lock
 }
 
 require_command() {
@@ -650,6 +677,76 @@ atomic_update_manifest() {
     update_manifest_hash
 }
 
+require_cleanup_lock_held() {
+    if [[ "${PHASE}" != "cleanup" ||
+          "${CLEANUP_LOCK_HELD}" != true ||
+          ! "${CLEANUP_LOCK_FD}" =~ ^[0-9]+$ ]]; then
+        fail "cleanup_lock" \
+            "destructive cleanup requires the run-specific lock to remain held"
+    fi
+}
+
+acquire_cleanup_lock() {
+    require_command chmod
+    require_command flock
+    require_command id
+    require_command ln
+    require_command mktemp
+    require_command stat
+    if [[ "${PHASE}" != "cleanup" ]]; then
+        fail "cleanup_lock" "cleanup lock is only valid for the cleanup phase"
+    fi
+    if [[ "${CLEANUP_LOCK_HELD}" == true || -n "${CLEANUP_LOCK_FD}" ]]; then
+        fail "cleanup_lock" "cleanup lock is already held by this runner"
+    fi
+
+    CLEANUP_LOCK_FILE="${TEST_ROOT_CANONICAL}/.d2-vector-smoke.cleanup.lock"
+    if [[ ! -e "${CLEANUP_LOCK_FILE}" && ! -L "${CLEANUP_LOCK_FILE}" ]]; then
+        CLEANUP_LOCK_TEMP="$(
+            mktemp "${TEST_ROOT_CANONICAL}/.d2-vector-smoke.cleanup.lock.XXXXXX"
+        )"
+        chmod 0600 "${CLEANUP_LOCK_TEMP}"
+        if ln -- "${CLEANUP_LOCK_TEMP}" "${CLEANUP_LOCK_FILE}" 2>/dev/null; then
+            rm -- "${CLEANUP_LOCK_TEMP}"
+            CLEANUP_LOCK_TEMP=""
+        else
+            rm -- "${CLEANUP_LOCK_TEMP}"
+            CLEANUP_LOCK_TEMP=""
+        fi
+    fi
+    if [[ ! -f "${CLEANUP_LOCK_FILE}" || -L "${CLEANUP_LOCK_FILE}" ]]; then
+        fail "cleanup_lock" \
+            "cleanup lock must be a regular non-symlink file: ${CLEANUP_LOCK_FILE}"
+    fi
+
+    local lock_owner
+    local lock_mode
+    lock_owner="$(stat -Lc '%u' -- "${CLEANUP_LOCK_FILE}")"
+    lock_mode="$(stat -Lc '%a' -- "${CLEANUP_LOCK_FILE}")"
+    if [[ "${lock_owner}" != "$(id -u)" || "${lock_mode}" != "600" ]]; then
+        fail "cleanup_lock" \
+            "cleanup lock must be owned by the current user with mode 0600"
+    fi
+
+    exec {CLEANUP_LOCK_FD}<>"${CLEANUP_LOCK_FILE}"
+    CLEANUP_LOCK_HELD=true
+    local path_identity
+    local descriptor_identity
+    path_identity="$(stat -Lc '%d:%i' -- "${CLEANUP_LOCK_FILE}")"
+    descriptor_identity="$(
+        stat -Lc '%d:%i' -- "/proc/self/fd/${CLEANUP_LOCK_FD}"
+    )"
+    if [[ "${path_identity}" != "${descriptor_identity}" ]]; then
+        fail "cleanup_lock" "cleanup lock file changed while it was opened"
+    fi
+    if ! flock -n "${CLEANUP_LOCK_FD}"; then
+        fail "cleanup_lock" \
+            "another cleanup already holds the run-specific lifecycle lock"
+    fi
+    pass "cleanup_lock" \
+        "path=${CLEANUP_LOCK_FILE}; device_inode=${descriptor_identity}; held=true; scope=validate-authorize-probe-finalize"
+}
+
 MANIFEST_VALUE=""
 
 read_manifest_value() {
@@ -884,6 +981,7 @@ finalize_manifest_after_verify() {
 }
 
 authorize_manifest_for_cleanup() {
+    require_cleanup_lock_held
     require_command date
     validate_manifest "true" "prepared|verified" "false"
     local cleanup_started_at_utc
@@ -895,10 +993,11 @@ authorize_manifest_for_cleanup() {
         "cleanup_binary_sha256" "${BINARY_HASH}"
     validate_manifest "true" "cleanup_in_progress" "false"
     pass "manifest_cleanup_authorize" \
-        "path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; run_state=cleanup_in_progress; cleanup token claimed atomically; invocation_id=${CURRENT_INVOCATION_ID}; binary_sha256=${BINARY_HASH}"
+        "path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; run_state=cleanup_in_progress; cleanup token claimed while run-specific lifecycle lock is held; invocation_id=${CURRENT_INVOCATION_ID}; binary_sha256=${BINARY_HASH}"
 }
 
 finalize_manifest_after_cleanup() {
+    require_cleanup_lock_held
     require_command date
     validate_manifest "true" "cleanup_in_progress" "false"
     expect_manifest_value "cleanup_invocation_id" "${CURRENT_INVOCATION_ID}"
@@ -1062,6 +1161,7 @@ run_probe() {
         --service-managed-database
     )
     if [[ "${PHASE}" == "cleanup" ]]; then
+        require_cleanup_lock_held
         arguments+=(
             --manifest "${MANIFEST_FILE}"
             --cleanup-token "${MANIFEST_CLEANUP_TOKEN}"
@@ -1071,7 +1171,11 @@ run_probe() {
 
     log "probe_execute" "INFO" \
         "phase=${PHASE}; collection=${COLLECTION}; db_file=${DB_FILE}; app_id=${APP_ID}"
-    if ! "${BINARY}" "${arguments[@]}"; then
+    if [[ "${PHASE}" == "cleanup" ]]; then
+        if ! "${BINARY}" "${arguments[@]}" {CLEANUP_LOCK_FD}>&-; then
+            fail "probe_execute" "probe phase ${PHASE} failed"
+        fi
+    elif ! "${BINARY}" "${arguments[@]}"; then
         fail "probe_execute" "probe phase ${PHASE} failed"
     fi
     pass "probe_execute" "probe phase ${PHASE} completed successfully"
@@ -1096,6 +1200,9 @@ main() {
 
     check_binary_trust
     check_database_path
+    if [[ "${PHASE}" == "cleanup" ]]; then
+        acquire_cleanup_lock
+    fi
     if [[ "${PHASE}" == "prepare" ]]; then
         if [[ -e "${MANIFEST_FILE}" || -L "${MANIFEST_FILE}" ]]; then
             fail "manifest_precondition" \
@@ -1126,6 +1233,7 @@ main() {
             ;;
         cleanup)
             finalize_manifest_after_cleanup
+            release_cleanup_lock
             ;;
         verify-cleanup)
             pass "manifest_cleanup_verify" \

@@ -560,12 +560,39 @@ void RunVerify(const std::shared_ptr<VectorDB::Database>& client,
     Pass("verify_complete", "post-restart persistence and user isolation passed");
 }
 
+D2Cleanup::Request CleanupRequest(const Options& options) {
+    return {options.manifest,
+            options.cleanup_token,
+            options.cleanup_invocation_id,
+            options.run_id,
+            options.collection,
+            options.app_id,
+            options.db_file};
+}
+
+D2Cleanup::RuntimeIdentity ValidateCleanupRuntimeIdentity(
+    const Options& options) {
+    const D2Cleanup::Request request = CleanupRequest(options);
+    const auto manifest = D2Cleanup::ValidateManifest(request);
+    return D2Cleanup::ValidateRuntimeIdentity(request, manifest);
+}
+
 void RunCleanup(const std::shared_ptr<VectorDB::Database>& client,
                 const Options& options) {
     if (!HasCollection(client, options.collection)) {
         Pass("cleanup", "collection already absent");
         return;
     }
+    const auto runtime_identity = ValidateCleanupRuntimeIdentity(options);
+    Pass("cleanup_runtime_identity_pre_drop",
+         "destructive operation revalidated immediately before DropCollection;"
+         " engine_pid=" +
+             std::to_string(runtime_identity.engine_pid) +
+             "; invocation_id=" + runtime_identity.invocation_id +
+             "; executable_sha256=" + runtime_identity.executable_sha256 +
+             "; database=" + runtime_identity.database_path +
+             "; socket=" + runtime_identity.socket_path +
+             "; socket_inode=" + runtime_identity.socket_inode);
     RequireStatus("cleanup", client->DropCollection(options.collection));
     Require(!HasCollection(client, options.collection), "cleanup",
             "collection still exists after DropCollection");
@@ -582,15 +609,20 @@ void RunVerifyCleanup(const std::shared_ptr<VectorDB::Database>& client,
 
 void Run(const Options& options) {
     if (options.phase == Phase::kCleanup) {
-        D2Cleanup::Validate({options.manifest,
-                             options.cleanup_token,
-                             options.cleanup_invocation_id,
-                             options.run_id,
-                             options.collection,
-                             options.app_id,
-                             options.db_file});
+        const auto runtime_identity = ValidateCleanupRuntimeIdentity(options);
         Pass("cleanup_authorization",
              "manifest, one-time token, database identity, and invocation match");
+        Pass("cleanup_runtime_identity",
+             "executable=" + runtime_identity.executable_path +
+                 "; executable_sha256=" + runtime_identity.executable_sha256 +
+                 "; service_unit=" + runtime_identity.service_unit +
+                 "; invocation_id=" + runtime_identity.invocation_id +
+                 "; service_main_pid=" +
+                 std::to_string(runtime_identity.service_main_pid) +
+                 "; engine_pid=" + std::to_string(runtime_identity.engine_pid) +
+                 "; database=" + runtime_identity.database_path +
+                 "; socket=" + runtime_identity.socket_path +
+                 "; socket_inode=" + runtime_identity.socket_inode);
     }
 
     const auto client = VectorDB::Database::Create();
