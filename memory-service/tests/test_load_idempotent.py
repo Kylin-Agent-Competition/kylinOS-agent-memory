@@ -43,6 +43,7 @@ def _module_guard():
 @pytest.fixture()
 def bridge():
     b = kb.EmbeddingBridge()
+    b.load()  # 先加载真实 .so（create_session 依赖 handle_）
     yield b
     try:
         b.destroy_session()
