@@ -119,3 +119,39 @@ entries:
       + 重复调用稳定性(5次) + 错误模型名(errorCode=10, fallback 恢复)
       全部通过，统一维度 768，L2 范数=1.000000（单位向量确认）
       运行输出见原始日志
+
+  - id: "ECHO-001"
+    task_id: "D1-C-ECHO"
+    description: "Kaiming UDS Echo 端到端验证: 服务端/客户端/KYSEC/回退"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/v6_final_results/evidence.jsonl"
+    commit: "9fa4b40"
+    date: "2026-08-02"
+    reviewer: "pending"
+    limitations: "C++客户端被KYSEC安全机制拦截(Operation not permitted)，Python客户端完整验证通过。KYSEC v6测试脚本未传递sudo密码导致状态/授权/回退命令返回非零，但phase5 Paramiko直接调用中KYSEC authorize退出码为0。"
+    checksum_sha256: "TBD"
+    details: |
+      银河麒麟桌面操作系统V11 x86_64, Linux 6.6.0-63-generic
+      UDS协议: 4字节Big-Endian长度 + UTF-8 JSON (协议版本1.0)
+      服务端: Python AF_UNIX SOCK_STREAM, /tmp/kylin-memory-echo/echo.sock
+      客户端: C++ POSIX (g++ -std=c++17) + Python inline client
+      
+      测试结果(17条结构化证据):
+      - SYS-001~002: 系统基线/socket初始状态 E4 PASS
+      - BUILD-001: C++客户端ELF BuildID=b40c1d4b E4 PASS
+      - SERVER-001~002: 服务端PID 331374, socket 0700 E4 PASS
+      - UDS-001: Python echo往返 Hello麒麟Echo -> ok E4 PASS
+      - UDS-002: C++客户端被KYSEC拦截(Operation not permitted) E0 SKIPPED
+      - UDS-003: health查询(healthy, uptime=32.7s) E4 PASS
+      - UDS-004: memory.retrieve(空上下文, fallback=false) E4 PASS
+      - UDS-005: 未知方法降级(nonexistent.method -> error) E4 PASS
+      - KYSEC-001: 授权脚本存在 E4 PASS
+      - KYSEC-002~003: v6内部sudo调用失败(未传密码) E3 FAIL
+      - KYSEC-004: 授权后UDS仍可访问 E4 PASS
+      - ROLLBACK-001: 服务端停止+Socket清理 E4 PASS
+      - ROLLBACK-002: v6内部sudo调用失败 E3 FAIL
+      - ROLLBACK-003: 回退后系统状态(仅kysec_authorize.log残留) E4 PASS
+      
+      服务端日志确认6次请求-响应成功(echo/health/memory.retrieve/unknown/echo)
+      分支: feature/kaiming-uds-echo

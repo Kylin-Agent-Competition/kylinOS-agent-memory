@@ -1,0 +1,19 @@
+[2026-08-02T14:12:27.609Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=331374)
+[2026-08-02T14:12:29.757Z] [INFO] Client connected
+[2026-08-02T14:12:29.757Z] [INFO] Request method=echo request_id=req_py_1785679949756
+[2026-08-02T14:12:29.757Z] [INFO] Response sent: status=ok
+[2026-08-02T14:13:00.326Z] [INFO] Client connected
+[2026-08-02T14:13:00.326Z] [INFO] Request method=health request_id=req_py_1785679980326
+[2026-08-02T14:13:00.327Z] [INFO] Response sent: status=ok
+[2026-08-02T14:13:00.328Z] [INFO] Client connected
+[2026-08-02T14:13:00.328Z] [INFO] Request method=memory.retrieve request_id=req_py_1785679980328
+[2026-08-02T14:13:00.328Z] [INFO] Response sent: status=ok
+[2026-08-02T14:13:00.329Z] [INFO] Client connected
+[2026-08-02T14:13:00.330Z] [INFO] Request method=nonexistent.method request_id=req_py_1785679980329
+[2026-08-02T14:13:00.330Z] [WARN] Unknown method: nonexistent.method
+[2026-08-02T14:13:00.331Z] [INFO] Response sent: status=error
+[2026-08-02T14:13:00.494Z] [INFO] Client connected
+[2026-08-02T14:13:00.494Z] [INFO] Request method=echo request_id=req_py_1785679980494
+[2026-08-02T14:13:00.495Z] [INFO] Response sent: status=ok
+[2026-08-02T14:13:00.553Z] [INFO] Received signal 15, shutting down...
+[2026-08-02T14:13:00.553Z] [INFO] Server stopped

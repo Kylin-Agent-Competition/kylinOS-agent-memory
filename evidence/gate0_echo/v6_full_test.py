@@ -170,12 +170,13 @@ def record_evidence(
 
 # ---- 测试用例 ----
 class TestRunner:
-    def __init__(self):
+    def __init__(self, output_dir=OUTPUT_DIR):
+        self.output_dir = output_dir
         self.results = {"pass": 0, "fail": 0, "skip": 0}
 
     def run(self):
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        log(f"证据输出目录: {OUTPUT_DIR}")
+        os.makedirs(self.output_dir, exist_ok=True)
+        log(f"证据输出目录: {self.output_dir}")
 
         log("\n========== Phase 0: 系统基线 ==========")
         sys_info = collect_system_info()
@@ -548,10 +549,8 @@ def main():
     parser.add_argument("--output-dir", default=OUTPUT_DIR, help="证据输出目录")
     args = parser.parse_args()
 
-    global OUTPUT_DIR
-    OUTPUT_DIR = args.output_dir
-
-    runner = TestRunner()
+    _od = args.output_dir
+    runner = TestRunner(output_dir=_od)
     success = runner.run()
     sys.exit(0 if success else 1)
 
