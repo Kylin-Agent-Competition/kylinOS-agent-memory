@@ -140,7 +140,8 @@ struct BridgeInitParams {
 #else
     std::string so_path = "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1";  // x86_64 宿主证据 embedding_abi_symbols.log:7
 #endif
-    std::string depends_path = "/usr/lib/kylin-ai/depends";
+    // NOTE: 依赖库路径（如 /usr/lib/kylin-ai/depends）由部署期 LD_LIBRARY_PATH 配置，
+    // 不作为 BridgeInitParams 字段（P1-2：避免"看似可配置但实际无效"的误导字段）。
     TimeoutConfig timeouts;
 };
 

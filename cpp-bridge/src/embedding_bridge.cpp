@@ -26,6 +26,18 @@ EmbeddingBridge::~EmbeddingBridge() {
 }
 
 BridgeStatus EmbeddingBridge::load() {
+    try {
+        return load_impl();
+    } catch (const std::bad_alloc&) {
+        return BridgeStatus::fail(BridgeError::UNKNOWN, "load: bad_alloc");
+    } catch (const std::exception& e) {
+        return BridgeStatus::fail(BridgeError::UNKNOWN, std::string("load: ") + e.what());
+    } catch (...) {
+        return BridgeStatus::fail(BridgeError::UNKNOWN, "load: unknown exception");
+    }
+}
+
+BridgeStatus EmbeddingBridge::load_impl() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (handle_) {
         return BridgeStatus::ok(std::monostate{});  // 幂等：已加载
@@ -86,6 +98,19 @@ BridgeStatus EmbeddingBridge::load() {
 }
 
 BridgeStatus EmbeddingBridge::create_session() {
+    try {
+        return create_session_impl();
+    } catch (const std::bad_alloc&) {
+        return BridgeStatus::fail(BridgeError::UNKNOWN, "create_session: bad_alloc");
+    } catch (const std::exception& e) {
+        return BridgeStatus::fail(BridgeError::UNKNOWN,
+                                  std::string("create_session: ") + e.what());
+    } catch (...) {
+        return BridgeStatus::fail(BridgeError::UNKNOWN, "create_session: unknown exception");
+    }
+}
+
+BridgeStatus EmbeddingBridge::create_session_impl() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!handle_) {
         return BridgeStatus::fail(BridgeError::ERR_DLOPEN_FAILED, "bridge not loaded");
@@ -141,6 +166,22 @@ void EmbeddingBridge::destroy_unlocked() noexcept {
 
 BridgeResult<EmbeddingVector> EmbeddingBridge::embed(const std::string& text,
                                                      uint32_t /*timeout_ms*/) {
+    try {
+        return embed_impl(text);
+    } catch (const std::bad_alloc&) {
+        return BridgeResult<EmbeddingVector>::fail(BridgeError::UNKNOWN,
+                                                   "embed: bad_alloc");
+    } catch (const std::exception& e) {
+        return BridgeResult<EmbeddingVector>::fail(BridgeError::UNKNOWN,
+                                                   std::string("embed: ") + e.what());
+    } catch (...) {
+        return BridgeResult<EmbeddingVector>::fail(BridgeError::UNKNOWN,
+                                                   "embed: unknown exception");
+    }
+}
+
+// 实际实现（无异常边界，由 embed() 包裹）
+BridgeResult<EmbeddingVector> EmbeddingBridge::embed_impl(const std::string& text) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!handle_) {
         return BridgeResult<EmbeddingVector>::fail(BridgeError::ERR_DLOPEN_FAILED,
@@ -152,8 +193,18 @@ BridgeResult<EmbeddingVector> EmbeddingBridge::embed(const std::string& text,
                                                    "session not created, call create_session() first");
     }
 
+    // RAII Guard：确保任何返回路径都释放 SDK 结果对象（P0-3）
+    struct ResultGuard {
+        EmbeddingResult** ptr;
+        void (*destroy)(EmbeddingResult**);
+        ~ResultGuard() {
+            if (*ptr && destroy) destroy(ptr);
+        }
+    };
+
     EmbeddingResult* result = nullptr;
     bool ok = syms_.embed(session_, text.c_str(), &result);
+    ResultGuard guard{&result, syms_.result_destroy};
     if (!ok) {
         return BridgeResult<EmbeddingVector>::fail(BridgeError::ERR_EMBED_CALL,
                                                    "text_embedding returned false");
@@ -171,7 +222,6 @@ BridgeResult<EmbeddingVector> EmbeddingBridge::embed(const std::string& text,
                                   ? syms_.result_error_message(result)
                                   : nullptr;
         std::string msg = (raw_msg != nullptr) ? raw_msg : "";
-        syms_.result_destroy(&result);
         return BridgeResult<EmbeddingVector>::fail(BridgeError::ERR_EMBED_ERROR,
                                                    "SDK errorCode=" + std::to_string(ec) + " " + msg);
     }
@@ -179,17 +229,39 @@ BridgeResult<EmbeddingVector> EmbeddingBridge::embed(const std::string& text,
     int dim = syms_.result_vector_length(result);
     float* data = syms_.result_vector_data(result);
 
+    // 畸形结果防御（P0-2）：返回成功前必须验证结果有效性
+    if (dim <= 0) {
+        return BridgeResult<EmbeddingVector>::fail(
+            BridgeError::ERR_EMBED_RESULT,
+            "invalid dimension: " + std::to_string(dim));
+    }
+    if (!data) {
+        return BridgeResult<EmbeddingVector>::fail(
+            BridgeError::ERR_EMBED_RESULT,
+            "vector data is NULL");
+    }
+
     EmbeddingVector vec;
     vec.dimension = dim;
     vec.error_code = 0;
-    if (data && dim > 0) {
-        vec.data.assign(data, data + dim);
-        double sum = 0.0;
-        for (float v : vec.data) sum += (double)v * (double)v;
-        vec.l2_norm = std::sqrt(sum);
+    vec.data.assign(data, data + dim);
+    if (vec.data.size() != static_cast<size_t>(dim)) {
+        return BridgeResult<EmbeddingVector>::fail(
+            BridgeError::ERR_EMBED_RESULT,
+            "vector copy size mismatch");
     }
 
-    syms_.result_destroy(&result);
+    double sum = 0.0;
+    for (float v : vec.data) {
+        if (std::isnan(v) || std::isinf(v)) {
+            return BridgeResult<EmbeddingVector>::fail(
+                BridgeError::ERR_EMBED_RESULT,
+                "vector contains NaN/Inf");
+        }
+        sum += (double)v * (double)v;
+    }
+    vec.l2_norm = std::sqrt(sum);
+
     return BridgeResult<EmbeddingVector>::ok(std::move(vec));
 }
 

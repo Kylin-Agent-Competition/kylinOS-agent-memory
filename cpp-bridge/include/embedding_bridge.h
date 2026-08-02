@@ -87,7 +87,7 @@ public:
 
     // ── Embedding 调用 ──
 
-    /** 单条文本向量化（同步）。 */
+    /** 单条文本向量化（同步）。不抛出 C++ 异常，异常在内部捕获转为错误。 */
     BridgeResult<EmbeddingVector> embed(const std::string& text, uint32_t timeout_ms = 0);
 
     // ── 状态查询 ──
@@ -104,6 +104,11 @@ private:
 
     // 私有辅助：调用方须持有锁。释放会话与 .so 句柄并清零符号表。
     void destroy_unlocked() noexcept;
+
+    // 无异常边界的实现体，由公共方法 try/catch 包裹（P0-3）
+    BridgeStatus load_impl();
+    BridgeStatus create_session_impl();
+    BridgeResult<EmbeddingVector> embed_impl(const std::string& text);
 };
 
 } // namespace kylin

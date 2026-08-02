@@ -22,8 +22,6 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include <cstdlib>
-#include <cstdio>
 #include <stdexcept>
 #include <string>
 
@@ -76,9 +74,9 @@ struct BridgeModelError : BridgeErrorException { using BridgeErrorException::Bri
         case BridgeError::ERR_MODEL_INVALID:
             throw BridgeModelError(msg);
         case BridgeError::SUCCESS:
-            // 调用方 bug：不应以 SUCCESS 调用 raise_for_error，终止而非抛业务异常
-            std::fprintf(stderr, "[Bridge] raise_for_error called with SUCCESS\n");
-            std::abort();
+            // 调用方 bug：不应以 SUCCESS 调用 raise_for_error。
+            // 抛内部一致性异常（由 pybind11 转为 Python 异常），不终止进程（P1-3）。
+            throw BridgeErrorException("internal error: raise_for_error called with SUCCESS");
         case BridgeError::NOT_IMPLEMENTED:
             throw BridgeErrorException("NOT_IMPLEMENTED: " + msg);
         case BridgeError::UNKNOWN:
@@ -121,8 +119,7 @@ PYBIND11_MODULE(kylin_embedding, m) {
 
     py::class_<BridgeInitParams>(m, "BridgeInitParams")
         .def(py::init<>())
-        .def_readwrite("so_path", &BridgeInitParams::so_path)
-        .def_readwrite("depends_path", &BridgeInitParams::depends_path);
+        .def_readwrite("so_path", &BridgeInitParams::so_path);
 
     // ── EmbeddingBridge ──
 

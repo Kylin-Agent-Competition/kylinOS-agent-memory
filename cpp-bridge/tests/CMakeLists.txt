@@ -13,3 +13,21 @@ add_executable(test_bridge_so_not_found
 )
 target_link_libraries(test_bridge_so_not_found PRIVATE embedding_bridge_core)
 add_test(NAME bridge_so_not_found COMMAND test_bridge_so_not_found)
+
+# 测试 3: 畸形 SDK 结果防御（P0-2）— 可控假 .so
+# 编译 fake_sdk_malformed.c 为共享库，test_bridge_malformed 通过 argv[1] 引用它
+add_library(fake_sdk_malformed SHARED
+  fake_sdk_malformed.c
+)
+set_target_properties(fake_sdk_malformed PROPERTIES
+  PREFIX ""
+  OUTPUT_NAME "fake_sdk_malformed"
+)
+add_executable(test_bridge_malformed
+  test_bridge_malformed.cpp
+)
+target_link_libraries(test_bridge_malformed PRIVATE embedding_bridge_core)
+# 测试运行时把假 .so 路径作为参数传入
+add_test(NAME bridge_malformed
+  COMMAND test_bridge_malformed $<TARGET_FILE:fake_sdk_malformed>
+)
