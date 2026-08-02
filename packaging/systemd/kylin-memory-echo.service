@@ -1,0 +1,29 @@
+[Unit]
+Description=Kylin Memory Echo Server — UDS 最小验证服务
+Documentation=https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/%u/kylin-memory-echo/bin/kylin-memory-echo-server
+ExecStopPost=/bin/rm -f /tmp/kylin-memory-echo/echo.sock
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:/home/%u/kylin-memory-echo/logs/server_stdout.log
+StandardError=append:/home/%u/kylin-memory-echo/logs/server_stderr.log
+RuntimeDirectory=kylin-memory-echo
+RuntimeDirectoryMode=0700
+
+# 安全加固
+NoNewPrivileges=yes
+PrivateTmp=no
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/tmp/kylin-memory-echo
+ReadWritePaths=/home/%u/kylin-memory-echo/logs
+ReadOnlyPaths=/home/%u/kylin-memory-echo/bin
+ReadOnlyPaths=/home/%u/kylin-memory-echo/share
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=default.target
