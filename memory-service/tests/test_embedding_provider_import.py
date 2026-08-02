@@ -62,3 +62,16 @@ def test_provider_error_code_enum(provider_module):
     # ProviderError 异常可实例化
     err = ProviderError(ProviderErrorCode.ERR_INVALID_TEXT, "test")
     assert err.code == ProviderErrorCode.ERR_INVALID_TEXT
+
+
+def test_embed_non_str_raises_provider_error(provider_module):
+    """非 str 输入应抛 ProviderError.ERR_INVALID_TEXT（P1-1，应用层校验）。"""
+    EmbeddingProvider, _, _, ProviderError = provider_module
+    from providers import ProviderErrorCode
+    provider = EmbeddingProvider.__new__(EmbeddingProvider)  # 绕过 __init__（无需 SDK）
+    try:
+        provider.embed(123)
+        pytest.fail("非 str 输入应抛 ProviderError")
+    except ProviderError as exc:
+        assert exc.code == ProviderErrorCode.ERR_INVALID_TEXT
+
