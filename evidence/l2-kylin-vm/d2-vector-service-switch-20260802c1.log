@@ -1,0 +1,33 @@
+D2_SERVICE_SWITCH phase=before
+2026-08-01T18:19:54+00:00
+default_db_sha256=54a1ecb52a7dfd7f05c0fea5cc3ffdc6f0a12fb607c9f7fc921c0ecc97a4f768
+D2_SERVICE_STATE label=default_before_stop unit=kylin-ai-vector-engine.service
+MainPID=50261
+LoadState=loaded
+ActiveState=active
+SubState=running
+FragmentPath=/usr/lib/systemd/user/kylin-ai-vector-engine.service
+InvocationID=6cbc7faf5cd244f59f5826e8b4ba03ff
+[Unit]
+Description=D2 isolated Vector Engine smoke service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/kylin-ai-vector-engine /home/yanmouren778/d2-b-vector-smoke-20260802c1/runtime/d2-vector-smoke.db unix:/tmp/kylin-ai-vector-engine-1000.sock ERROR
+Restart=no
+KillMode=control-group
+TimeoutStopSec=20s
+StandardOutput=journal
+StandardError=journal
+D2_SERVICE_SWITCH default_stopped=true socket_absent=true
+default_db_sha256_after_stop=54a1ecb52a7dfd7f05c0fea5cc3ffdc6f0a12fb607c9f7fc921c0ecc97a4f768
+D2_SERVICE_STATE label=test_started unit=d2-vector-engine.service
+MainPID=63871
+LoadState=loaded
+ActiveState=active
+SubState=running
+FragmentPath=/home/yanmouren778/.config/systemd/user/d2-vector-engine.service
+InvocationID=7793981615914e2995d252d0c70408d1
+  63871    1514 /usr/bin/kylin-ai-vector-engine /home/yanmouren778/d2-b-vector-smoke-20260802c1/runtime/d2-vector-smoke.db unix:/tmp/kylin-ai-vector-engine-1000.sock ERROR
+u_str LISTEN 0      4096                                                                          /tmp/kylin-ai-vector-engine-1000.sock 246474            * 0    users:(("kylin-ai-vector",pid=63871,fd=8))
+D2_SERVICE_SWITCH result=PASS

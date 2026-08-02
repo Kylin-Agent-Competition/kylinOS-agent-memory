@@ -1,0 +1,13 @@
+D2_VECTOR_SMOKE step=probe_start result=INFO detail="phase=verify, collection=d2_vector_smoke_20260802c1, app_id=d2-vector-smoke"
+D2_VECTOR_SMOKE step=client_create result=PASS detail="official Vector Engine client created"
+D2_VECTOR_SMOKE step=service_connect result=PASS detail="SDK data-plane connection established"
+D2_VECTOR_SMOKE step=database_mode result=PASS detail="using database preloaded by service: /home/yanmouren778/d2-b-vector-smoke-20260802c1/runtime/d2-vector-smoke.db"
+D2_VECTOR_SMOKE step=service_ready result=PASS detail="legacy 0k0.7 data plane is ready after successful Unix-socket connection"
+D2_VECTOR_SMOKE step=persistence_collection result=PASS detail="collection exists after service restart/reload"
+D2_VECTOR_SMOKE step=persistence_rows result=PASS detail="CRUD end state persisted with ids {101,102,201}"
+D2_VECTOR_SMOKE step=persistence_user_filter result=PASS detail="hard user_id filters returned only target-user rows"
+D2_VECTOR_SMOKE step=persistence_vector_search result=PASS detail="vector search returned exactly ids {101,102}, all owned by user-alpha; id 101 ranked first"
+D2_VECTOR_SMOKE step=verify_complete result=PASS detail="post-restart persistence and user isolation passed"
+D2_VECTOR_SMOKE step=disconnect result=PASS detail="client disconnected cleanly"
+D2_VECTOR_SMOKE step=probe_complete result=PASS detail="all checks for phase verify passed"
+D2_COMMAND expected=success exit_status=0 timeout=false

@@ -1,0 +1,21 @@
+D2_RECOVERY_BASELINE phase=before
+2026-08-01T17:09:21+00:00
+project_commit=278d2bc1041ec884b4285ad9f8195a9080e5cb53
+default_db=/home/yanmouren778/.local/share/kylin-ai-vector-engine/default.db
+default_db_sha256=54a1ecb52a7dfd7f05c0fea5cc3ffdc6f0a12fb607c9f7fc921c0ecc97a4f768
+default_db_identity=2052:2228244
+MainPID=35771
+LoadState=loaded
+ActiveState=active
+SubState=running
+FragmentPath=/usr/lib/systemd/user/kylin-ai-vector-engine.service
+InvocationID=3a8c325c90aa4c1ca8ad350ed9a66b8b
+default_processes_begin
+  35771    1514 /bin/bash /usr/bin/kylin-ai-vector-engine-default
+  35802   35771 /usr/bin/kylin-ai-vector-engine /home/yanmouren778/.local/share/kylin-ai-vector-engine/default.db unix:/tmp/kylin-ai-vector-engine-1000.sock ERROR
+default_processes_end
+test_service_state=inactive
+socket_path=/tmp/kylin-ai-vector-engine-1000.sock
+socket_before=present
+u_str LISTEN 0      4096                                                                          /tmp/kylin-ai-vector-engine-1000.sock 147900            * 0    users:(("kylin-ai-vector",pid=35802,fd=9))
+temporary_ssh_key_count=1

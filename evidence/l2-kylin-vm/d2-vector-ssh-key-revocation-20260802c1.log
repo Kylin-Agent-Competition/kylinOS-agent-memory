@@ -1,0 +1,35 @@
+D2_SSH_KEY phase=revoke
+2026-08-01T18:22:25+00:00
+authorized_keys=/home/yanmouren778/.ssh/authorized_keys
+temporary_ssh_key_count_before=1
+authorized_keys_lines_before=2
+authorized_keys_sha256_before=b80bbd9f79e9be7ee48a209eab7e0f5acb77b57a9e087c7e8745c37a498a860e
+authorized_keys_mode_before=600
+temporary_ssh_key_count_after=0
+authorized_keys_lines_after=1
+authorized_keys_sha256_after=19d27732656f279dcee5c15df58067e2dff8464eb8a63a5ec0c5900c4205490a
+authorized_keys_mode_after=600
+D2_FINAL_STATE
+project_commit=b4b268e7c309308c97b1723a4554ebb68733650f
+binary_sha256=2c9f7c25edca1415e606b936222f4400092f9dae47a3488d89e0ec29d5332d77
+kysec_state=/home/yanmouren778/d2-b-vector-smoke-20260802c1/bin/d2_vector_smoke_b4b268e: unknown
+default_db_sha256=54a1ecb52a7dfd7f05c0fea5cc3ffdc6f0a12fb607c9f7fc921c0ecc97a4f768
+MainPID=64498
+LoadState=loaded
+ActiveState=active
+SubState=running
+FragmentPath=/usr/lib/systemd/user/kylin-ai-vector-engine.service
+InvocationID=0d3ba870c03e4659b1b90c054f40d323
+MainPID=0
+LoadState=not-found
+ActiveState=inactive
+SubState=dead
+FragmentPath=
+InvocationID=
+test_unit_file_present=false
+socket_path=/tmp/kylin-ai-vector-engine-1000.sock
+u_str LISTEN 0      4096                                                                          /tmp/kylin-ai-vector-engine-1000.sock 248915            * 0    users:(("kylin-ai-vector",pid=64515,fd=9))
+formal_root_present=true
+failed_root_present=false
+helper_self_removed=true
+D2_SSH_KEY result=PASS before=1 after=0 other_keys_preserved=true

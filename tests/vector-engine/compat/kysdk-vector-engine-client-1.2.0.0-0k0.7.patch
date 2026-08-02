@@ -1,0 +1,142 @@
+diff --git a/include/kysdk-vector-engine-client/Database.h b/include/kysdk-vector-engine-client/Database.h
+index 6eb6371..8753cc3 100644
+--- a/include/kysdk-vector-engine-client/Database.h
++++ b/include/kysdk-vector-engine-client/Database.h
+@@ -64,4 +63,0 @@ public:
+-    virtual Status LoadDBFile(const std::string& db_file, bool encrypt = false, const std::string& key = "") = 0;
+-
+-    virtual Status CreateCollection(const CollectionSchema& schema) = 0;
+-
+@@ -108,9 +103,0 @@ public:
+-    /**
+-     * Create an index on a field. Currently only support index on vector field.
+-     *
+-     * @param [in] collection_name name of the collection
+-     * @param [in] index_desc the index descriptions and parameters
+-     * @return Status operation successfully or not
+-     */
+-    virtual Status CreateIndex(const std::string& collection_name, const IndexDesc& index_desc) = 0;
+-
+@@ -150,6 +136,0 @@ public:
+-    virtual Status HybridSearch(SearchResults& results, const std::string& collection_name,
+-                                const std::vector<AnnSearchRequest>& reqs, const BaseRanker& ranker, int limit,
+-                                const std::vector<std::string>& output_fields = {},
+-                                const std::vector<std::pair<std::string, std::string>>& params = {},
+-                                int timeout = 0) = 0;
+-
+@@ -193,13 +173,0 @@ public:
+-
+-    virtual Status DescribeCollection(const std::string& collection_name, CollectionDesc& collection_desc) = 0;
+-
+-    virtual Status ShowCollections(std::vector<std::string>& collection_names) = 0;
+-
+-    virtual Status DescribeIndex(const std::string& collection_name, const std::string& field_name,
+-                                 IndexDesc& index_desc) = 0;
+-
+-    virtual Status DropIndex(const std::string& collection_name, const std::string& index_name) = 0;
+-
+-    virtual Status GetCollectionStatistics(const std::string& collection_name, CollectionStat& collection_stat) = 0;
+-
+-    virtual Status GetLoadState(const std::string& collection_name, bool& is_loaded) = 0;
+diff --git a/include/kysdk-vector-engine-client/types/CollectionSchema.h b/include/kysdk-vector-engine-client/types/CollectionSchema.h
+index 2c67052..d2a8217 100644
+--- a/include/kysdk-vector-engine-client/types/CollectionSchema.h
++++ b/include/kysdk-vector-engine-client/types/CollectionSchema.h
+@@ -41 +41,2 @@ public:
+-    explicit CollectionSchema(std::string name, std::string desc = "", bool enable_dynamic_field = false);
++    explicit CollectionSchema(std::string name, std::string desc = "",
++                              bool enable_dynamic_field = false, int32_t shard_num = 1);
+@@ -66,0 +68,4 @@ public:
++    int32_t ShardsNum() const;
++
++    void SetShardsNum(int32_t shard_num);
++
+@@ -89,0 +95 @@ private:
++    int32_t shard_num_ = 1;
+diff --git a/include/kysdk-vector-engine-client/types/ConnectParam.h b/include/kysdk-vector-engine-client/types/ConnectParam.h
+index 5235ade..fb45e2f 100644
+--- a/include/kysdk-vector-engine-client/types/ConnectParam.h
++++ b/include/kysdk-vector-engine-client/types/ConnectParam.h
+@@ -32 +32 @@ public:
+-    explicit ConnectParam(std::string appId);
++    ConnectParam();
+@@ -35 +35 @@ public:
+-     * @brief for test
++     * @brief Constructor using an explicit server address.
+@@ -37 +37,16 @@ public:
+-    ConnectParam(std::string appId, const std::string& host, uint16_t port);
++    ConnectParam(std::string host, uint16_t port);
++
++    /**
++     * @brief Constructor using an explicit server address and credentials.
++     */
++    ConnectParam(std::string host, uint16_t port, std::string username, std::string password);
++
++    /**
++     * @brief Server host or Unix socket URI.
++     */
++    const std::string& Host() const;
++
++    /**
++     * @brief Server port. Zero is used by the Kylin Unix socket default.
++     */
++    uint16_t Port() const;
+@@ -54,2 +68,0 @@ public:
+-    std::string AppId() const;
+-
+@@ -57 +70,2 @@ private:
+-    std::string uri_;
++    std::string host_;
++    uint16_t port_ = 0;
+@@ -59 +73,8 @@ private:
+-    std::string app_id_;
++
++    bool tls_{false};
++    std::string server_name_;
++    std::string cert_;
++    std::string key_;
++    std::string ca_cert_;
++
++    std::string authorizations_;
+diff --git a/include/kysdk-vector-engine-client/types/FieldSchema.h b/include/kysdk-vector-engine-client/types/FieldSchema.h
+index 8af8475..b7d645f 100644
+--- a/include/kysdk-vector-engine-client/types/FieldSchema.h
++++ b/include/kysdk-vector-engine-client/types/FieldSchema.h
+@@ -180 +179,0 @@ private:
+-    DataType element_type_{DataType::UNKNOWN};  // only for array field
+@@ -182,0 +182 @@ private:
++    bool is_dynamic_ = false;
+diff --git a/include/kysdk-vector-engine-client/types/IndexDesc.h b/include/kysdk-vector-engine-client/types/IndexDesc.h
+index 772ec7f..733e4fa 100644
+--- a/include/kysdk-vector-engine-client/types/IndexDesc.h
++++ b/include/kysdk-vector-engine-client/types/IndexDesc.h
+@@ -49 +49,2 @@ public:
+-    IndexDesc(std::string field_name, std::string index_name, IndexType index_type = IndexType::FLAT,
++    IndexDesc(std::string field_name, std::string index_name, int64_t index_id = 0,
++              IndexType index_type = IndexType::FLAT,
+@@ -116 +117 @@ public:
+-    Status ExtraParamsFromJson(const std::string& json);
++    Status ExtraParamsFromJson(std::string json);
+@@ -146,0 +148 @@ private:
++    int64_t index_id_{0};
+@@ -150,8 +151,0 @@ private:
+-
+-    // the following members are only for DescribeIndex
+-    int64_t index_id_{0};
+-    IndexStateCode state_code_{IndexStateCode::NONE};
+-    std::string failed_reason_;
+-    int64_t indexed_rows_{0};
+-    int64_t total_rows_{0};
+-    int64_t pending_rows_{0};
+diff --git a/include/kysdk-vector-engine-client/types/QueryArguments.h b/include/kysdk-vector-engine-client/types/QueryArguments.h
+index e0a1ab0..5724b9f 100644
+--- a/include/kysdk-vector-engine-client/types/QueryArguments.h
++++ b/include/kysdk-vector-engine-client/types/QueryArguments.h
+@@ -112,0 +113 @@ private:
++    std::set<std::string> partition_names_;
+diff --git a/include/kysdk-vector-engine-client/types/SearchArguments.h b/include/kysdk-vector-engine-client/types/SearchArguments.h
+index 41d1f37..7a932b1 100644
+--- a/include/kysdk-vector-engine-client/types/SearchArguments.h
++++ b/include/kysdk-vector-engine-client/types/SearchArguments.h
+@@ -224,0 +225 @@ private:
++    std::set<std::string> partition_names_;
