@@ -1,0 +1,13 @@
+D2_KYSEC phase=revoke
+2026-08-01T18:21:08+00:00
+binary=/home/yanmouren778/d2-b-vector-smoke-20260802c1/bin/d2_vector_smoke_b4b268e
+expected_sha256=2c9f7c25edca1415e606b936222f4400092f9dae47a3488d89e0ec29d5332d77
+actual_sha256=2c9f7c25edca1415e606b936222f4400092f9dae47a3488d89e0ec29d5332d77
+before=/home/yanmouren778/d2-b-vector-smoke-20260802c1/bin/d2_vector_smoke_b4b268e: verified
+D2_KYSEC action=polkit_remove_trust
+after=/home/yanmouren778/d2-b-vector-smoke-20260802c1/bin/d2_vector_smoke_b4b268e: unknown
+getfattr：删去绝对路径名最前面的'/'
+# file: home/yanmouren778/d2-b-vector-smoke-20260802c1/bin/d2_vector_smoke_b4b268e
+security.exectl=0xffffffffffffffff0000000000000000
+
+D2_KYSEC result=PASS before=verified after=unknown

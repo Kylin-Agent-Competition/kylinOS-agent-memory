@@ -1,0 +1,9 @@
+D2_KYSEC phase=after_trust
+2026-08-01T18:19:53+00:00
+project_commit=b4b268e7c309308c97b1723a4554ebb68733650f
+binary=/home/yanmouren778/d2-b-vector-smoke-20260802c1/bin/d2_vector_smoke_b4b268e
+binary_sha256=2c9f7c25edca1415e606b936222f4400092f9dae47a3488d89e0ec29d5332d77
+/home/yanmouren778/d2-b-vector-smoke-20260802c1/bin/d2_vector_smoke_b4b268e: verified
+getfattr：删去绝对路径名最前面的'/'
+# file: home/yanmouren778/d2-b-vector-smoke-20260802c1/bin/d2_vector_smoke_b4b268e
+security.exectl=0xfb356e6a00000000e86d6b0f00000000

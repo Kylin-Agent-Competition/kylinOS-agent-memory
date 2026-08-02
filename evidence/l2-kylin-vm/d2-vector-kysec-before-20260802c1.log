@@ -1,0 +1,4 @@
+D2_KYSEC phase=before
+binary=/home/yanmouren778/d2-b-vector-smoke-20260802c1/bin/d2_vector_smoke_b4b268e
+binary_sha256=2c9f7c25edca1415e606b936222f4400092f9dae47a3488d89e0ec29d5332d77
+/home/yanmouren778/d2-b-vector-smoke-20260802c1/bin/d2_vector_smoke_b4b268e: unknown
