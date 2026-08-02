@@ -5,9 +5,15 @@ test_load_idempotent.py — 轨道 A Day4 load() 成功幂等性测试
   1. load() 成功
   2. 再次 load() 返回成功（幂等，不重复 dlopen）
   3. create_session() 后再次 create_session() 幂等
+  4. destroy_session() 清理
 
 pytest 风格（P0-4）：正式可被 pytest 收集。
 环境区分：麒麟 L1/L2（KYLIN_L2=1）缺 kylin_embedding 必须失败；WSL 允许 skip。
+
+注意：全部断言放在**单个测试函数**内、使用**单个 EmbeddingBridge 实例**。
+原因：SDK 在 dlopen→dlclose→再次 dlopen 的重载路径上会触发崩溃
+（麒麟 VM 实测 Fatal Python error: Aborted），因此不能每个断言单独
+创建 fixture；单实例顺序执行与 Day2 宿主实测路径一致。
 """
 
 import os
@@ -40,40 +46,29 @@ def _module_guard():
     _require_module()
 
 
-@pytest.fixture()
-def bridge():
-    b = kb.EmbeddingBridge()
-    b.load()  # 先加载真实 .so（create_session 依赖 handle_）
-    yield b
-    try:
-        b.destroy_session()
-    except Exception:  # noqa: BLE001 - 清理失败不影响测试结果
-        pass
+def test_load_and_session_idempotent():
+    """单实例顺序验证 load/create_session 幂等与 destroy 清理。
 
+    对应 Day2 宿主实测路径（同一进程一次 dlopen/dlclose），避免重载崩溃。
+    """
+    bridge = kb.EmbeddingBridge()
 
-def test_first_load_success(bridge):
+    # 1. 首次 load 成功
     bridge.load()
-    assert bridge.loaded is True
+    assert bridge.loaded is True, "首次 load() 后 loaded=True"
 
-
-def test_second_load_idempotent(bridge):
+    # 2. 二次 load 幂等（不重复 dlopen，不抛异常）
     bridge.load()
-    bridge.load()  # 不应抛异常
-    assert bridge.loaded is True
+    assert bridge.loaded is True, "二次 load() 后 loaded 仍为 True"
 
-
-def test_create_session_success(bridge):
+    # 3. create_session 成功
     bridge.create_session()
-    assert bridge.has_session is True
+    assert bridge.has_session is True, "create_session() 后 has_session=True"
 
-
-def test_second_create_session_idempotent(bridge):
+    # 4. 二次 create_session 幂等
     bridge.create_session()
-    bridge.create_session()  # 不应抛异常
-    assert bridge.has_session is True
+    assert bridge.has_session is True, "二次 create_session() 幂等"
 
-
-def test_destroy_session_clears(bridge):
-    bridge.create_session()
+    # 5. destroy 清理
     bridge.destroy_session()
-    assert bridge.has_session is False
+    assert bridge.has_session is False, "destroy_session() 后 has_session=False"
