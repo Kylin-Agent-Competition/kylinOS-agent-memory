@@ -92,14 +92,28 @@ log "Step 4: pytest 统一收集 (P0-4)"
 cd "$REPO"
 export PYTHONPATH="$REPO/cpp-bridge/build:$REPO/memory-service"
 export LD_LIBRARY_PATH="/usr/lib/kylin-ai/depends:${LD_LIBRARY_PATH:-}"
+# 注意：test_load_idempotent 必须单独进程运行。
+# 麒麟实测：SDK 在同一进程内与其他测试（异常映射反复创建/析构 EmbeddingBridge 对象）
+# 共存时触发崩溃（Fatal Python error: Aborted）；独立进程与 run_smoke 路径一致，稳定。
+pytest_ok=1
 if python -m pytest memory-service/tests/test_embedding_provider_import.py \
-    memory-service/tests/test_exception_mapping.py \
-    memory-service/tests/test_load_idempotent.py -v >/tmp/day4_pytest.log 2>&1; then
-  pass "pytest 全部通过"
+    memory-service/tests/test_exception_mapping.py -v >/tmp/day4_pytest_a.log 2>&1; then
+  :
 else
-  fail "pytest 有失败（见 /tmp/day4_pytest.log）"
+  pytest_ok=0
 fi
-grep -E "PASSED|FAILED|SKIPPED|passed|failed" /tmp/day4_pytest.log | sed 's/^/    /'
+grep -E "PASSED|FAILED|SKIPPED|passed|failed" /tmp/day4_pytest_a.log | sed 's/^/    /'
+if python -m pytest memory-service/tests/test_load_idempotent.py -v >/tmp/day4_pytest_b.log 2>&1; then
+  :
+else
+  pytest_ok=0
+fi
+grep -E "PASSED|FAILED|SKIPPED|passed|failed" /tmp/day4_pytest_b.log | sed 's/^/    /'
+if [ "$pytest_ok" -eq 1 ]; then
+  pass "pytest 全部通过（两组独立进程）"
+else
+  fail "pytest 有失败（见 /tmp/day4_pytest_a.log 和 /tmp/day4_pytest_b.log）"
+fi
 
 # ── 第 5 步：真实 SDK 冒烟（P1-1 回归） ──
 log "Step 5: 真实 SDK 冒烟"
