@@ -208,13 +208,14 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day4_bridge_smoke_run.log"
-    commit: "c7afbc14627569386fac3dc7df3c7bd998f7e15f"
+    source_commit: "d86abe14c85a3b2623d9131ab5937284c8d2992d"
+    commit: "pending"  # 证据提交的 Commit，收尾提交后补填
     date: "2026-08-01"
     reviewer: "pending"
-    limitations: "异步、并发、超时中断、多模态未覆盖；错误模型属 Day2 范围"
-    checksum_sha256: "50a3fbc43d35139a410012fb553477bd4c0ce7abcd922cdeb87f47ace88d6ac2"
+    limitations: "异步、并发、超时中断、多模态未覆盖；错误模型属 Day2 范围；SDK 同进程重载会崩溃（测试已拆独立进程规避）"
+    checksum_sha256: "a03495407aba55ff21c111795b92d897a5a17119269fdae0b3ec2c9de7f3f9ea"
     details: |
       C++ Bridge(dlopen/dlsym) + pybind11 模块 + Python EmbeddingProvider 最小真实调用
-      构建/CTest/异常映射/真实 SDK 冒烟(11项)/load+create_session 幂等(6项)
-      两轮审查 21 项处理（19 修复 + 2 备案），麒麟 VM 复测全部通过
+      干净 commit d86abe1 上麒麟 VM 全量复测：构建/CTest(3项含畸形防御 6 用例)
+      /pytest(28项)/真实 SDK 冒烟(11项)/Provider 错误映射(ERR_SDK_NOT_LOADED)
       运行输出见原始日志

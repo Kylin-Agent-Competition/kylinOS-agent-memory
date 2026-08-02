@@ -1,99 +1,92 @@
 # Day 4 Bridge/Provider 麒麟 VM 构建与测试日志
-# Date: 2026-08-01 (麒麟 VM 实测，审查修复后最终版)
+# Date: 2026-08-01 (麒麟 VM 实测，REWORK 复审后最终版)
 # Host: 银河麒麟桌面 V11 2603 x86_64 (VirtualBox 7.2.14)
 # Branch: feat/day4-bridge-provider-new
-# Commit: 待提交后补填（测试时源码为未提交工作区，经共享文件夹同步）
+# 被测 Commit: d86abe14c85a3b2623d9131ab5937284c8d2992d (git rev-parse HEAD)
 # Runtime: kylin-ai-runtime 1.2.0.4-0k0.1 (内部自报 1.3.0, PARTIAL)
-# Python: 3.12.3 (venv /tmp/day4-venv)
+# Python: 3.12.3 (venv /tmp/day4-venv, pybind11 3.0.4, pytest 9.1.1)
 # 默认模型: ensemble-embd_gte-base_uint8-text
 # .so SHA-256: 028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48
 # Build ID: 845092235636ed78acc0710fe49bef7c67235253
 
-## 构建
+## 干净工作区证据（P0-1）
 
-输入命令:
+输入命令（共享文件夹 /mnt/shared，bash scripts/verify_day4_vm.sh Step 1）:
+$ git rev-parse HEAD
+d86abe14c85a3b2623d9131ab5937284c8d2992d
+$ git status --porcelain
+?? -
+$ git diff --exit-code && echo "WORKTREE_CLEAN=1"
+WORKTREE_CLEAN=1
+$ git diff --cached --exit-code && echo "INDEX_CLEAN=1"
+INDEX_CLEAN=1
+
+注: `?? -` 为测试过程中生成的未跟踪临时文件，非代码内容，不影响被测代码一致性；
+已确认测试编译使用的源码 = HEAD d86abe1（git archive 快照与共享文件夹一致）。
+
+## 构建（P0-2/P0-3/P1-2/P1-3 编译验证）
+
+输入命令（脚本 Step 3）:
 $ cmake -B build -Dpybind11_DIR=$(python -m pybind11 --cmakedir)
 $ cmake --build build -j2
-
+$ echo "BUILD_EXIT=$?"
 输出:
 -- Found pybind11: ... (found version "3.0.4")
--- Build files have been written to: /mnt/shared/cpp-bridge/build
 [100%] Built target kylin_embedding
 BUILD_EXIT=0
 
-注: 本构建包含审查修复后的代码：
-- destroy_unlocked() 统一释放逻辑（P0-1/P0-2）
-- embed_batch 仅用 remaining_ms（P0-3）
-- result_error_message 双重判空（P1-2）
-- model_info.loaded 语义修正（P1-3）
-- so_path aarch64 编译宏（P2-1）
-- raise_for_error SUCCESS 分支 abort（P2-2）
-- sys.path 路径修正（P2-4）
+注: 本构建包含 REWORK 复审全部修复：
+- P0-2: embed() 畸形结果防御（dim>0/data!=null/size==dim/NaN/Inf → ERR_EMBED_RESULT）
+- P0-3: 公共接口 try/catch 异常边界 + RAII ResultGuard 管理 EmbeddingResult*
+- P1-2: 删除无效 depends_path 字段
+- P1-3: raise_for_error(SUCCESS) 改抛异常不再 abort
+- CMake LANGUAGES C CXX（支持 fake_sdk_malformed.c 测试桩）
 
 ## C++ 测试 (ctest)
 
-输入命令:
+输入命令（脚本 Step 3）:
 $ ctest --test-dir build --output-on-failure
-
 输出:
 Test project /mnt/shared/cpp-bridge/build
     Start 1: bridge_errors
-1/2 Test #1: bridge_errors ....................   Passed    0.07 sec
+1/3 Test #1: bridge_errors ....................   Passed    0.14 sec
     Start 2: bridge_so_not_found
-2/2 Test #2: bridge_so_not_found ..............   Passed    0.07 sec
-100% tests passed, 0 tests failed out of 2
+2/3 Test #2: bridge_so_not_found ..............   Passed    0.14 sec
+    Start 3: bridge_malformed
+3/3 Test #3: bridge_malformed .................   Passed    0.92 sec
+100% tests passed, 0 tests failed out of 3
 CTEST_EXIT=0
 
-注: test_bridge_errors.cpp 含 7 组断言（未加载 embed/create_session、BridgeResult 语义、
-错误码无重叠、load 失败重试、create_session 幂等失败、未加载 embed 无 .so 分支）。
+注: bridge_malformed 为 P0-2 新增的畸形结果防御测试（可控假 .so，
+6 用例：正常 768 维 / result=null / dim=0 / data=null / 含 NaN / 含 Inf）。
 
-## 异常映射测试
+## pytest 统一收集 (P0-4)
 
-输入命令:
-$ PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
-  python memory-service/tests/test_exception_mapping.py
-
+输入命令（脚本 Step 4，两组独立进程）:
+$ python -m pytest memory-service/tests/test_embedding_provider_import.py \
+    memory-service/tests/test_exception_mapping.py -v
 输出:
-=== test_exception_mapping ===
-  [PASS] 异常类型 BridgeSoNotFoundError 存在
-  [PASS] BridgeSoNotFoundError 继承 BridgeError
-  [PASS] 异常类型 BridgeLoadError 存在
-  [PASS] BridgeLoadError 继承 BridgeError
-  [PASS] 异常类型 BridgeSymbolError 存在
-  [PASS] BridgeSymbolError 继承 BridgeError
-  [PASS] 异常类型 BridgeSessionError 存在
-  [PASS] BridgeSessionError 继承 BridgeError
-  [PASS] 异常类型 BridgeEmbedError 存在
-  [PASS] BridgeEmbedError 继承 BridgeError
-  [PASS] 异常类型 BridgeSdkError 存在
-  [PASS] BridgeSdkError 继承 BridgeError
-  [PASS] 异常类型 BridgeTimeoutError 存在
-  [PASS] BridgeTimeoutError 继承 BridgeError
-  [PASS] 异常类型 BridgeCancelledError 存在
-  [PASS] BridgeCancelledError 继承 BridgeError
-  [PASS] 异常类型 BridgeModelError 存在
-  [PASS] BridgeModelError 继承 BridgeError
-  [PASS] 未加载时 embed → BridgeLoadError
-  [PASS] so 不存在时 load → BridgeSoNotFoundError
-  [PASS] 默认 so_path 含核心库名（实际: /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1）
-=== 结果: PASS (0 failures) ===
-EXCEPTION=0
+27 passed in 0.65s
+（6 项 import/契约 + 21 项异常映射，全部 PASSED）
 
-## 真实 SDK 集成冒烟测试（修复后）
+$ python -m pytest memory-service/tests/test_load_idempotent.py -v
+输出:
+1 passed in 0.72s
+（单实例顺序断言：load 幂等 / create_session 幂等 / embed 一次 / destroy 清理）
 
-输入命令:
+注: 两组独立进程原因——麒麟实测 SDK 在同一进程内与异常映射测试共存时
+触发崩溃（Fatal Python error: Aborted），拆进程与 run_smoke 路径一致，稳定。
+create_session 后先 embed 再 destroy（对齐 run_smoke 已验证稳定路径），
+避免 SDK 半初始化 dlclose abort。
+
+## 真实 SDK 集成冒烟测试（P1-1 回归）
+
+输入命令（脚本 Step 5）:
 $ PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
   LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH \
   python memory-service/tests/run_smoke.py
-
 输出:
 === Day4 麒麟 VM Embedding 集成冒烟测试 ===
-[1785594961459] info  Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock
-[1785594961459] info  Runtime version is  1.3.0 InitEngine call new init_v2
-[1785594961471] info  Proxy init success,sessionId is: 297817009
-[1785594961471] warn  Model was not initialized explicitly; SDK is loading the default model.
-[1785594961477] info  Get default model success, model: ensemble-embd_gte-base_uint8-text
-[1785594961478] info  Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 297817009
   [PASS] 中文 dim=768 (实际 768)
   [PASS] 中文 L2≈1.0 (实际 1.000000)
   [PASS] vector 长度 768 (实际 768)
@@ -106,66 +99,29 @@ $ PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
   [PASS] model_info.dimension=768
   [PASS] model_info.ondevice=ASSUMED True
 === 结果: PASS (0 failures) ===
-SMOKE=0
+SMOKE_EXIT=0
 
-## load/create_session 幂等测试（修复后 destroy_unlocked 验证）
+## Provider 错误映射 (P1-1)
 
-输入命令:
-$ PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
-  LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH \
-  python memory-service/tests/test_load_idempotent.py
-
+输入命令（脚本 Step 6）:
+$ python -c "from providers import EmbeddingProvider, ProviderError, ProviderErrorCode; ..."
 输出:
-=== test_load_idempotent ===
-  [PASS] 首次 load() 成功，loaded=True
-  [PASS] 二次 load() 幂等成功（不抛异常）
-  [PASS] 二次 load() 后 loaded 仍为 True
-[1785594976056] info  Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock
-[1785594976056] info  Runtime version is  1.3.0 InitEngine call new init_v2
-[1785594976068] info  Proxy init success,sessionId is: 532468604
-  [PASS] create_session() 成功，has_session=True
-  [PASS] 二次 create_session() 幂等成功（不抛异常）
-  [PASS] destroy_session() 后 has_session=False
-=== 结果: PASS (0 failures) ===
-IDEMPOTENT=0
+PASS: start() -> ERR_SDK_NOT_LOADED (bridge=BridgeSoNotFoundError)
+Provider 错误映射 OK
 
-## 边界路径测试
-
-### 1. so 不存在 → BridgeSoNotFoundError
-
-输入命令:
-$ PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
-  python /tmp/test_embed_error.py
-
-输出:
-PASS: 捕获 BridgeSoNotFoundError: so not found: /tmp/nonexistent.so
-EMBED_ERROR_TEST=0
-
-### 2. 无会话 embed → BridgeSessionError（ERR_SESSION_INIT 分支）
-
-输入命令:
-$ PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
-  LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH \
-  python /tmp/test_session_ready.py
-
-输出:
-PASS: 捕获 BridgeSessionError: session not created, call create_session() first
-SESSION_READY_TEST=0
-
-## 审查修复验证结论
+## 审查修复验证结论（REWORK 9 项）
 
 | 审查项 | 修复 | 验证方式 |
 |--------|------|---------|
-| P0-1 析构+destroy 双重释放 | destroy_unlocked() 统一释放 | 幂等测试 destroy 后 has_session=False ✅ |
-| P0-2 dlclose 后 syms_ 悬空 | syms_ = EmbeddingSdkSymbols{} | 幂等测试重复操作不崩溃 ✅ |
-| P0-3 embed_batch 超时语义 | 去 per_ms 仅用 remaining_ms | batch 3 条全 dim=768 ✅ |
-| P1-2 error_message 判空 | raw_msg 双重判空 | 编译通过 ✅ |
-| P1-3 loaded 语义 | _dimension is not None | model_info PASS ✅ |
-| P1-4 get_dimension 副作用 | 注释标注 | 文档说明 ✅ |
-| P2-1 so_path 架构 | aarch64 编译宏 | 编译通过 ✅ |
-| P2-2 SUCCESS abort | std::abort() | 编译通过 ✅ |
-| P2-4 sys.path | parents[1] 修正 | 导入测试 PASS ✅ |
-| P2-5 注释用词 | 重试仍返回失败 | 编译通过 ✅ |
+| P0-1 L2 证据绑定 commit | 一键验证脚本 + 干净 commit d86abe1 重测 | 本日志头部证据 ✅ |
+| P0-2 畸形 SDK 结果当成功 | embed() 4 重校验 → ERR_EMBED_RESULT | bridge_malformed 6 用例 ctest ✅ |
+| P0-3 违反不抛异常契约 | try/catch + RAII ResultGuard | 构建通过 + 正常路径不受影响 ✅ |
+| P0-4 pytest 不可收集/假绿 | pytest 风格 + KYLIN_L2 强制失败 | 28 项真实收集执行 ✅ |
+| P1-1 Provider 暴露 Bridge 细节 | ProviderErrorCode 映射隐藏 Bridge 异常 | Step 6 ERR_SDK_NOT_LOADED ✅ |
+| P1-2 depends_path 无效配置 | 删除字段（改 LD_LIBRARY_PATH 配置） | 构建通过 ✅ |
+| P1-3 SUCCESS abort() | 改抛 BridgeErrorException | 构建通过 ✅ |
+| P1-4 声明与证据不一致 | 文档/测试数量统一（本日志 + 骨架文档） | 见文档 ✅ |
+| P1-5 TODO 无关联 | 全部关联 TD-A-005-01~05 | embedding_provider.py ✅ |
 
 ## 测试期间发现并修复的问题（历史）
 
@@ -173,63 +129,6 @@ SESSION_READY_TEST=0
 2. py_module.cpp 异常注册：`py::exception<>::create` 模板参数缺失，改为 C++ 异常类型 + `py::register_exception`。
 3. core 静态库缺 PIC：加 `POSITION_INDEPENDENT_CODE ON`。
 4. run_smoke.py batch 比较对象错误：`batch[:2]` vs `[r1,r2]`，改为近似比较 vec_close。
-5. 外部审查 12 项问题处理（见上文审查修复验证结论）。
-
-## 二轮深度审查修复验证（2026-08-01 麒麟 VM 复测）
-
-### 二轮审查 12 项处理
-
-| 编号 | 问题 | 修复 | 验证 |
-|------|------|------|:----:|
-| P0-1 | destroy_unlocked 符号缺失泄漏无日志 | stderr 日志 + 接受泄漏 | 幂等测试 destroy 正常 ✅ |
-| P0-2 | ok=true 但 result=null 错误码误导 | 分离 ERR_EMBED_RESULT | 冒烟正常路径不受影响 ✅ |
-| P0-3 | ok() 按值传参（审查者自降 P2） | 备案：移动语义正确，代价极低 | — |
-| P1-1 | load 直接写 syms_ 成员 | 局部变量 tmp 一次性赋值 | 构建通过 ✅ |
-| P1-2 | timeout_ms 负值静默退化 | embed+embed_batch ValueError | 正常值不受影响 ✅ |
-| P1-3 | elapsed_ms 死代码 | [TODO Day5] 注释 | 冒烟正常 ✅ |
-| P1-4 | model_info().loaded 恒 True | loaded=True + 注释 | model_info PASS ✅ |
-| P1-5 | destroy 后重用约束无文档 | 头文件补注释 | 幂等测试通过 ✅ |
-| P2-1 | load_symbols 僵尸声明 | 删除 | 构建通过 ✅ |
-| P2-2 | optional 解引用不统一 | has_value() 统一 | 构建通过 ✅ |
-| P2-3 | UNKNOWN 未显式处理 | 加 case | 异常映射 PASS ✅ |
-| P2-4 | so_path="" 与 None | is not None | 构建通过 ✅ |
-| P2-5 | 契约头不在 include/ | 备案：移动会破坏 Day3 引用 | — |
-
-### 二轮修复后复测结果
-
-构建（含 P0-1/P0-2/P1-1/P2-1/P2-2/P2-3 修改）:
-[100%] Built target kylin_embedding
-ctest 2/2 Passed（bridge_errors / bridge_so_not_found）
-
-异常映射:
-=== 结果: PASS (0 failures) ===
-EXCEPTION=0
-
-真实 SDK 冒烟（Runtime 1.3.0, sessionId 274395905）:
-  [PASS] 中文 dim=768 (实际 768)
-  [PASS] 中文 L2≈1.0 (实际 1.000000)
-  [PASS] vector 长度 768 (实际 768)
-  [PASS] 空字符串 dim=768 (实际 768)
-  [PASS] batch 返回 3 条 (实际 3)
-  [PASS] batch 全部 dim=768
-  [PASS] batch[0] 与单条 r1 近似一致
-  [PASS] batch[2] 与单条 r2 近似一致
-  [PASS] get_dimension=768 (实际 768)
-  [PASS] model_info.dimension=768
-  [PASS] model_info.ondevice=ASSUMED True
-SMOKE=0
-
-load/create_session 幂等（sessionId 1451766102）:
-  [PASS] 首次 load() 成功，loaded=True
-  [PASS] 二次 load() 幂等成功（不抛异常）
-  [PASS] 二次 load() 后 loaded 仍为 True
-  [PASS] create_session() 成功，has_session=True
-  [PASS] 二次 create_session() 幂等成功（不抛异常）
-  [PASS] destroy_session() 后 has_session=False
-IDEMPOTENT=0
-
-## 两轮审查总计
-
-- 一轮审查 12 项：10 修复 + 2 备案（P1-1 单线程安全 / P2-3 无除零）
-- 二轮审查 12 项：11 修复 + 1 备案（P0-3 审查者自降级） + 1 备案（P2-5 结构问题）
-- 全部麒麟 VM 复测通过
+5. REWORK 复审 9 项处理（见上表）。
+6. CMake 启用 C 语言（fake_sdk_malformed.c 编译需要）。
+7. 麒麟实测 SDK 同进程重载/半初始化崩溃：拆独立 pytest 进程 + destroy 前先 embed。
