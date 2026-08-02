@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "d2_cleanup_manifest.h"
 #include "Database.h"
 
 namespace {
@@ -40,6 +41,7 @@ enum class Phase {
     kPrepare,
     kVerify,
     kCleanup,
+    kVerifyCleanup,
 };
 
 struct Options {
@@ -48,6 +50,9 @@ struct Options {
     std::string run_id;
     std::string collection;
     std::string db_file;
+    std::string manifest;
+    std::string cleanup_token;
+    std::string cleanup_invocation_id;
     bool service_managed_database = false;
 };
 
@@ -116,6 +121,9 @@ Phase ParsePhase(const std::string& value) {
     if (value == "cleanup") {
         return Phase::kCleanup;
     }
+    if (value == "verify-cleanup") {
+        return Phase::kVerifyCleanup;
+    }
     throw std::invalid_argument("unknown phase: " + value);
 }
 
@@ -127,6 +135,8 @@ std::string PhaseName(Phase phase) {
             return "verify";
         case Phase::kCleanup:
             return "cleanup";
+        case Phase::kVerifyCleanup:
+            return "verify-cleanup";
     }
     return "unknown";
 }
@@ -134,9 +144,11 @@ std::string PhaseName(Phase phase) {
 void PrintUsage(const char* program) {
     std::cout
         << "Usage: " << program
-        << " --phase <prepare|verify|cleanup> --run-id <lowercase-id>"
+        << " --phase <prepare|verify|cleanup|verify-cleanup> --run-id <lowercase-id>"
            " --db-file <absolute-path> [--app-id <id>] [--collection <name>]"
-           " --service-managed-database\n\n"
+           " --service-managed-database"
+           " [--manifest <absolute-path> --cleanup-token <64-hex>"
+           " --cleanup-invocation-id <32-hex>]\n\n"
         << "Persistence workflow:\n"
         << "  1. Run --phase prepare.\n"
         << "  2. Restart the service that preloads the same --db-file.\n"
@@ -168,6 +180,12 @@ Options ParseOptions(int argc, char** argv) {
             options.app_id = require_value(argument);
         } else if (argument == "--collection") {
             options.collection = require_value(argument);
+        } else if (argument == "--manifest") {
+            options.manifest = require_value(argument);
+        } else if (argument == "--cleanup-token") {
+            options.cleanup_token = require_value(argument);
+        } else if (argument == "--cleanup-invocation-id") {
+            options.cleanup_invocation_id = require_value(argument);
         } else if (argument == "--service-managed-database") {
             options.service_managed_database = true;
         } else if (argument == "--help" || argument == "-h") {
@@ -202,6 +220,24 @@ Options ParseOptions(int argc, char** argv) {
     if (!options.service_managed_database) {
         throw std::invalid_argument(
             "--service-managed-database is required by the legacy 0k0.7 runtime");
+    }
+    if (options.phase == Phase::kCleanup) {
+        if (options.manifest.empty() || options.manifest.front() != '/') {
+            throw std::invalid_argument(
+                "cleanup requires --manifest with an absolute path");
+        }
+        if (!D2Cleanup::IsHex(options.cleanup_token, 64)) {
+            throw std::invalid_argument(
+                "cleanup requires --cleanup-token with 64 hexadecimal characters");
+        }
+        if (!D2Cleanup::IsHex(options.cleanup_invocation_id, 32)) {
+            throw std::invalid_argument(
+                "cleanup requires --cleanup-invocation-id with 32 hexadecimal characters");
+        }
+    } else if (!options.manifest.empty() || !options.cleanup_token.empty() ||
+               !options.cleanup_invocation_id.empty()) {
+        throw std::invalid_argument(
+            "cleanup authorization arguments are only valid for --phase cleanup");
     }
 
     return options;
@@ -536,7 +572,27 @@ void RunCleanup(const std::shared_ptr<VectorDB::Database>& client,
     Pass("cleanup", "test collection removed");
 }
 
+void RunVerifyCleanup(const std::shared_ptr<VectorDB::Database>& client,
+                      const Options& options) {
+    Require(!HasCollection(client, options.collection), "verify_cleanup",
+            "collection exists after cleanup completion");
+    Pass("verify_cleanup",
+         "collection remains absent; no destructive operation was requested");
+}
+
 void Run(const Options& options) {
+    if (options.phase == Phase::kCleanup) {
+        D2Cleanup::Validate({options.manifest,
+                             options.cleanup_token,
+                             options.cleanup_invocation_id,
+                             options.run_id,
+                             options.collection,
+                             options.app_id,
+                             options.db_file});
+        Pass("cleanup_authorization",
+             "manifest, one-time token, database identity, and invocation match");
+    }
+
     const auto client = VectorDB::Database::Create();
     Require(client != nullptr, "client_create", "Database::Create returned null");
     Pass("client_create", "official Vector Engine client created");
@@ -555,6 +611,9 @@ void Run(const Options& options) {
                 break;
             case Phase::kCleanup:
                 RunCleanup(client, options);
+                break;
+            case Phase::kVerifyCleanup:
+                RunVerifyCleanup(client, options);
                 break;
         }
 

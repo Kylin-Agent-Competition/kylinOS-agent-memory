@@ -35,6 +35,7 @@ BINARY=""
 BUILD_DIR=""
 RUNTIME_LIBRARY=""
 CURRENT_INVOCATION_ID=""
+SERVICE_ENGINE_PID=""
 TEST_ROOT=""
 TEST_ROOT_CANONICAL=""
 MANIFEST_FILE=""
@@ -42,6 +43,7 @@ MANIFEST_TEMP=""
 MANIFEST_PREPARE_INVOCATION_ID=""
 MANIFEST_HASH=""
 MANIFEST_CREATED_AT_UTC=""
+MANIFEST_CLEANUP_TOKEN=""
 DATABASE_CANONICAL=""
 DATABASE_IDENTITY=""
 DATABASE_DEVICE=""
@@ -90,7 +92,7 @@ Build an untrusted fixed-path probe:
 After an operator verifies the hash and grants temporary KySec trust, run:
   scripts/run_d2_vector_smoke.sh \
     --action run \
-    --phase <prepare|verify|cleanup> \
+    --phase <prepare|verify|cleanup|verify-cleanup> \
     --run-id <6-32-lowercase-letters-or-digits> \
     --db-file <absolute-path> \
     --binary <absolute-trusted-probe-path> \
@@ -102,7 +104,10 @@ For run, the approved test root is fixed to:
   $HOME/d2-b-vector-smoke-<run-id>
 The database must be a canonical regular file below that root. The collection
 must exactly equal d2_vector_smoke_<run-id>. Prepare creates a hash-bound
-manifest in the test root; verify and cleanup must match that same manifest.
+  manifest in the test root; verify and cleanup must match that same manifest.
+Cleanup uses a one-time token and an atomic manifest state transition. The C++
+probe refuses cleanup before connecting unless the manifest is in the
+cleanup_in_progress state and all cleanup identity fields match.
 
 This runner never installs dependencies, changes KySec trust, starts/restarts
 services, copies databases, writes evidence, or performs Git operations on the
@@ -203,7 +208,7 @@ parse_arguments() {
     fi
 
     case "${PHASE}" in
-        prepare|verify|cleanup)
+        prepare|verify|cleanup|verify-cleanup)
             ;;
         "")
             fail "arguments" "--phase is required for run"
@@ -505,6 +510,7 @@ render_manifest() {
 
     {
         printf 'format_version=2\n'
+        printf 'run_state=reserved\n'
         printf 'run_id=%s\n' "${RUN_ID}"
         printf 'database_path=%s\n' "${DATABASE_CANONICAL}"
         printf 'database_identity=%s\n' "${DATABASE_IDENTITY}"
@@ -528,10 +534,19 @@ render_manifest() {
         printf 'created_by_prepare=%s\n' "${created_by_prepare}"
         printf 'created_at_utc=%s\n' "${MANIFEST_CREATED_AT_UTC}"
         printf 'prepared_at_utc=%s\n' "${prepared_at_utc}"
+        printf 'verified_at_utc=pending\n'
+        printf 'verify_invocation_id=pending\n'
         printf 'database_size_after_prepare=%s\n' \
             "${database_size_after_prepare}"
         printf 'database_sha256_after_prepare=%s\n' \
             "${database_sha256_after_prepare}"
+        printf 'cleanup_token=%s\n' "${MANIFEST_CLEANUP_TOKEN}"
+        printf 'cleanup_completed=false\n'
+        printf 'cleanup_started_at_utc=pending\n'
+        printf 'cleanup_at_utc=pending\n'
+        printf 'cleanup_invocation_id=pending\n'
+        printf 'cleanup_binary_sha256=pending\n'
+        printf 'collection_absent_verified=false\n'
     } >"${target}"
 }
 
@@ -539,6 +554,17 @@ update_manifest_hash() {
     MANIFEST_HASH="$(sha256sum "${MANIFEST_FILE}" | awk '{print $1}')"
     if [[ ! "${MANIFEST_HASH}" =~ ^[[:xdigit:]]{64}$ ]]; then
         fail "manifest_hash" "manifest returned an invalid SHA-256"
+    fi
+}
+
+generate_cleanup_token() {
+    require_command od
+    require_command tr
+    MANIFEST_CLEANUP_TOKEN="$(
+        od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]'
+    )"
+    if [[ ! "${MANIFEST_CLEANUP_TOKEN}" =~ ^[[:xdigit:]]{64}$ ]]; then
+        fail "manifest_token" "failed to generate a 256-bit cleanup token"
     fi
 }
 
@@ -555,6 +581,7 @@ write_manifest() {
     MANIFEST_TEMP="$(mktemp "${TEST_ROOT_CANONICAL}/.d2-vector-smoke.manifest.XXXXXX")"
     chmod 0600 "${MANIFEST_TEMP}"
     MANIFEST_CREATED_AT_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    generate_cleanup_token
     render_manifest "${MANIFEST_TEMP}" "false" "pending" "pending" "pending"
 
     if ! ln -- "${MANIFEST_TEMP}" "${MANIFEST_FILE}"; then
@@ -565,7 +592,62 @@ write_manifest() {
     MANIFEST_TEMP=""
     update_manifest_hash
     pass "manifest_write" \
-        "path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; created_by_prepare=false; run_id=${RUN_ID}; project_commit=${PROJECT_COMMIT}; binary_sha256=${BINARY_HASH}; prepare_invocation_id=${CURRENT_INVOCATION_ID}"
+        "path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; run_state=reserved; created_by_prepare=false; cleanup_completed=false; run_id=${RUN_ID}; project_commit=${PROJECT_COMMIT}; binary_sha256=${BINARY_HASH}; prepare_invocation_id=${CURRENT_INVOCATION_ID}"
+}
+
+atomic_update_manifest() {
+    if [[ "$#" -eq 0 || $(( $# % 2 )) -ne 0 ]]; then
+        fail "manifest_update" "field updates must be non-empty key/value pairs"
+    fi
+    require_command chmod
+    require_command mktemp
+    require_command mv
+    if [[ ! -f "${MANIFEST_FILE}" || -L "${MANIFEST_FILE}" ]]; then
+        fail "manifest_update" "manifest must be an existing regular non-symlink file"
+    fi
+
+    local key
+    local value
+    local line
+    declare -A replacements=()
+    declare -A seen=()
+    while [[ "$#" -gt 0 ]]; do
+        key="$1"
+        value="$2"
+        shift 2
+        if [[ -n "${replacements[${key}]+present}" ]]; then
+            fail "manifest_update" "duplicate replacement key: ${key}"
+        fi
+        if [[ "${value}" == *$'\n'* || "${value}" == *$'\r'* ]]; then
+            fail "manifest_update" "replacement value contains a line break: ${key}"
+        fi
+        replacements["${key}"]="${value}"
+    done
+
+    MANIFEST_TEMP="$(mktemp "${TEST_ROOT_CANONICAL}/.d2-vector-smoke.manifest.XXXXXX")"
+    chmod 0600 "${MANIFEST_TEMP}"
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+        if [[ "${line}" != *=* ]]; then
+            fail "manifest_update" "manifest contains a non key=value line"
+        fi
+        key="${line%%=*}"
+        if [[ -n "${replacements[${key}]+present}" ]]; then
+            printf '%s=%s\n' "${key}" "${replacements[${key}]}" >>"${MANIFEST_TEMP}"
+            seen["${key}"]=true
+        else
+            printf '%s\n' "${line}" >>"${MANIFEST_TEMP}"
+        fi
+    done <"${MANIFEST_FILE}"
+
+    for key in "${!replacements[@]}"; do
+        if [[ -z "${seen[${key}]+present}" ]]; then
+            fail "manifest_update" "manifest does not contain replacement key: ${key}"
+        fi
+    done
+
+    mv -fT -- "${MANIFEST_TEMP}" "${MANIFEST_FILE}"
+    MANIFEST_TEMP=""
+    update_manifest_hash
 }
 
 MANIFEST_VALUE=""
@@ -595,6 +677,9 @@ expect_manifest_value() {
 
 validate_manifest() {
     local expected_created_by_prepare="${1:-true}"
+    local expected_run_states="${2:-prepared|verified}"
+    local expected_cleanup_completed="${3:-false}"
+    local manifest_run_state
     require_command awk
     if [[ ! -f "${MANIFEST_FILE}" || ! -r "${MANIFEST_FILE}" ]]; then
         fail "manifest_read" "run manifest is missing or unreadable: ${MANIFEST_FILE}"
@@ -604,6 +689,12 @@ validate_manifest() {
     fi
 
     expect_manifest_value "format_version" "2"
+    read_manifest_value "run_state"
+    manifest_run_state="${MANIFEST_VALUE}"
+    if [[ ! "${manifest_run_state}" =~ ^(${expected_run_states})$ ]]; then
+        fail "manifest_mismatch" \
+            "run_state expected ${expected_run_states}; actual=${manifest_run_state}"
+    fi
     expect_manifest_value "run_id" "${RUN_ID}"
     expect_manifest_value "database_path" "${DATABASE_CANONICAL}"
     expect_manifest_value "database_identity" "${DATABASE_IDENTITY}"
@@ -664,18 +755,90 @@ validate_manifest() {
         expect_manifest_value "database_sha256_after_prepare" "pending"
     fi
 
+    read_manifest_value "verified_at_utc"
+    local verified_at_utc="${MANIFEST_VALUE}"
+    read_manifest_value "verify_invocation_id"
+    local verify_invocation_id="${MANIFEST_VALUE}"
+    if [[ "${verified_at_utc}" == "pending" &&
+          "${verify_invocation_id}" == "pending" ]]; then
+        if [[ "${manifest_run_state}" == "verified" ]]; then
+            fail "manifest_mismatch" \
+                "verified run_state requires verify timestamp and InvocationID"
+        fi
+    elif [[ ! "${verified_at_utc}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ||
+            ! "${verify_invocation_id}" =~ ^[[:xdigit:]]{32}$ ]]; then
+        fail "manifest_mismatch" \
+            "verify timestamp and InvocationID must both be pending or canonical"
+    fi
+
+    expect_manifest_value "cleanup_completed" "${expected_cleanup_completed}"
+    read_manifest_value "cleanup_token"
+    MANIFEST_CLEANUP_TOKEN="${MANIFEST_VALUE}"
+    if [[ "${expected_cleanup_completed}" == "true" ]]; then
+        if [[ "${MANIFEST_CLEANUP_TOKEN}" != "consumed" ]]; then
+            fail "manifest_mismatch" \
+                "cleaned manifest must contain cleanup_token=consumed"
+        fi
+    elif [[ ! "${MANIFEST_CLEANUP_TOKEN}" =~ ^[[:xdigit:]]{64}$ ]]; then
+        fail "manifest_mismatch" "cleanup_token is not 64 hexadecimal characters"
+    fi
+
+    read_manifest_value "cleanup_started_at_utc"
+    local cleanup_started_at_utc="${MANIFEST_VALUE}"
+    read_manifest_value "cleanup_at_utc"
+    local cleanup_at_utc="${MANIFEST_VALUE}"
+    read_manifest_value "cleanup_invocation_id"
+    local cleanup_invocation_id="${MANIFEST_VALUE}"
+    read_manifest_value "cleanup_binary_sha256"
+    local cleanup_binary_sha256="${MANIFEST_VALUE}"
+    read_manifest_value "collection_absent_verified"
+    local collection_absent_verified="${MANIFEST_VALUE}"
+
+    case "${manifest_run_state}" in
+        reserved|prepared|verified)
+            if [[ "${cleanup_started_at_utc}" != "pending" ||
+                  "${cleanup_at_utc}" != "pending" ||
+                  "${cleanup_invocation_id}" != "pending" ||
+                  "${cleanup_binary_sha256}" != "pending" ||
+                  "${collection_absent_verified}" != "false" ]]; then
+                fail "manifest_mismatch" \
+                    "unused cleanup authorization must remain pending and unconsumed"
+            fi
+            ;;
+        cleanup_in_progress)
+            if [[ ! "${cleanup_started_at_utc}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ||
+                  "${cleanup_at_utc}" != "pending" ||
+                  ! "${cleanup_invocation_id}" =~ ^[[:xdigit:]]{32}$ ||
+                  "${cleanup_binary_sha256}" != "${BINARY_HASH}" ||
+                  "${collection_absent_verified}" != "false" ]]; then
+                fail "manifest_mismatch" \
+                    "cleanup_in_progress fields are incomplete or inconsistent"
+            fi
+            ;;
+        cleaned)
+            if [[ ! "${cleanup_started_at_utc}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ||
+                  ! "${cleanup_at_utc}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ||
+                  ! "${cleanup_invocation_id}" =~ ^[[:xdigit:]]{32}$ ||
+                  "${cleanup_binary_sha256}" != "${BINARY_HASH}" ||
+                  "${collection_absent_verified}" != "true" ]]; then
+                fail "manifest_mismatch" \
+                    "cleaned manifest fields are incomplete or inconsistent"
+            fi
+            ;;
+        *)
+            fail "manifest_mismatch" "unsupported run_state: ${manifest_run_state}"
+            ;;
+    esac
+
     update_manifest_hash
     pass "manifest_validate" \
-        "phase=${PHASE}; path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; created_by_prepare=${expected_created_by_prepare}; all identity fields match; prepare_invocation_id=${MANIFEST_PREPARE_INVOCATION_ID}"
+        "phase=${PHASE}; path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; run_state=${manifest_run_state}; created_by_prepare=${expected_created_by_prepare}; cleanup_completed=${expected_cleanup_completed}; all identity fields match; prepare_invocation_id=${MANIFEST_PREPARE_INVOCATION_ID}"
 }
 
 finalize_manifest_after_prepare() {
-    require_command chmod
     require_command date
-    require_command mktemp
-    require_command mv
 
-    validate_manifest "false"
+    validate_manifest "false" "reserved" "false"
 
     local current_device
     local current_inode
@@ -695,21 +858,61 @@ finalize_manifest_after_prepare() {
     )"
     prepared_at_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-    read_manifest_value "created_at_utc"
-    MANIFEST_CREATED_AT_UTC="${MANIFEST_VALUE}"
-    MANIFEST_TEMP="$(mktemp "${TEST_ROOT_CANONICAL}/.d2-vector-smoke.manifest.XXXXXX")"
-    chmod 0600 "${MANIFEST_TEMP}"
-    render_manifest \
-        "${MANIFEST_TEMP}" \
-        "true" \
-        "${prepared_at_utc}" \
-        "${database_size_after_prepare}" \
-        "${database_sha256_after_prepare}"
-    mv -fT -- "${MANIFEST_TEMP}" "${MANIFEST_FILE}"
-    MANIFEST_TEMP=""
-    update_manifest_hash
+    atomic_update_manifest \
+        "run_state" "prepared" \
+        "created_by_prepare" "true" \
+        "prepared_at_utc" "${prepared_at_utc}" \
+        "database_size_after_prepare" "${database_size_after_prepare}" \
+        "database_sha256_after_prepare" "${database_sha256_after_prepare}"
+    validate_manifest "true" "prepared" "false"
     pass "manifest_finalize" \
-        "path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; created_by_prepare=true; prepared_at_utc=${prepared_at_utc}; database_size=${database_size_after_prepare}; database_sha256=${database_sha256_after_prepare}"
+        "path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; run_state=prepared; created_by_prepare=true; prepared_at_utc=${prepared_at_utc}; database_size=${database_size_after_prepare}; database_sha256=${database_sha256_after_prepare}"
+}
+
+finalize_manifest_after_verify() {
+    require_command date
+    validate_manifest "true" "prepared|verified" "false"
+    local verified_at_utc
+    verified_at_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    atomic_update_manifest \
+        "run_state" "verified" \
+        "verified_at_utc" "${verified_at_utc}" \
+        "verify_invocation_id" "${CURRENT_INVOCATION_ID}"
+    validate_manifest "true" "verified" "false"
+    pass "manifest_verify" \
+        "path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; run_state=verified; verified_at_utc=${verified_at_utc}; verify_invocation_id=${CURRENT_INVOCATION_ID}"
+}
+
+authorize_manifest_for_cleanup() {
+    require_command date
+    validate_manifest "true" "prepared|verified" "false"
+    local cleanup_started_at_utc
+    cleanup_started_at_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    atomic_update_manifest \
+        "run_state" "cleanup_in_progress" \
+        "cleanup_started_at_utc" "${cleanup_started_at_utc}" \
+        "cleanup_invocation_id" "${CURRENT_INVOCATION_ID}" \
+        "cleanup_binary_sha256" "${BINARY_HASH}"
+    validate_manifest "true" "cleanup_in_progress" "false"
+    pass "manifest_cleanup_authorize" \
+        "path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; run_state=cleanup_in_progress; cleanup token claimed atomically; invocation_id=${CURRENT_INVOCATION_ID}; binary_sha256=${BINARY_HASH}"
+}
+
+finalize_manifest_after_cleanup() {
+    require_command date
+    validate_manifest "true" "cleanup_in_progress" "false"
+    expect_manifest_value "cleanup_invocation_id" "${CURRENT_INVOCATION_ID}"
+    local cleanup_at_utc
+    cleanup_at_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    atomic_update_manifest \
+        "run_state" "cleaned" \
+        "cleanup_completed" "true" \
+        "cleanup_token" "consumed" \
+        "cleanup_at_utc" "${cleanup_at_utc}" \
+        "collection_absent_verified" "true"
+    validate_manifest "true" "cleaned" "true"
+    pass "manifest_cleanup_finalize" \
+        "path=${MANIFEST_FILE}; sha256=${MANIFEST_HASH}; run_state=cleaned; cleanup_completed=true; collection_absent_verified=true; cleanup_at_utc=${cleanup_at_utc}; cleanup token consumed"
 }
 
 check_service_database() {
@@ -754,6 +957,7 @@ check_service_database() {
             fi
         done
         if [[ "${engine_seen}" == true && "${database_seen}" == true ]]; then
+            SERVICE_ENGINE_PID="${process_pid}"
             pass "service_database" \
                 "engine_pid=${process_pid}; preloaded_db=${DB_FILE}"
             return
@@ -762,6 +966,51 @@ check_service_database() {
 
     fail "service_database" \
         "no engine process for ${SERVICE_UNIT} holds ${DB_FILE}"
+}
+
+check_service_socket_owner() {
+    require_command id
+    require_command readlink
+    if [[ ! "${SERVICE_ENGINE_PID}" =~ ^[1-9][0-9]*$ ]]; then
+        fail "service_socket" "engine PID was not established before socket validation"
+    fi
+    if [[ ! -r /proc/net/unix ]]; then
+        fail "service_socket" "/proc/net/unix is unreadable"
+    fi
+
+    local socket_path="/tmp/kylin-ai-vector-engine-$(id -u).sock"
+    if [[ ! -S "${socket_path}" ]]; then
+        fail "service_socket" "expected Vector Engine Unix Socket is missing: ${socket_path}"
+    fi
+
+    local -a socket_inodes=()
+    local socket_inode
+    local descriptor
+    local descriptor_target
+    mapfile -t socket_inodes < <(
+        awk -v path="${socket_path}" '$8 == path { print $7 }' /proc/net/unix
+    )
+    if [[ "${#socket_inodes[@]}" -ne 1 ||
+          ! "${socket_inodes[0]}" =~ ^[1-9][0-9]*$ ]]; then
+        fail "service_socket" \
+            "expected exactly one Unix Socket inode for ${socket_path}; count=${#socket_inodes[@]}"
+    fi
+    socket_inode="${socket_inodes[0]}"
+
+    for descriptor in "/proc/${SERVICE_ENGINE_PID}/fd/"*; do
+        if [[ ! -L "${descriptor}" ]]; then
+            continue
+        fi
+        descriptor_target="$(readlink -- "${descriptor}" 2>/dev/null || true)"
+        if [[ "${descriptor_target}" == "socket:[${socket_inode}]" ]]; then
+            pass "service_socket" \
+                "socket=${socket_path}; inode=${socket_inode}; owner_pid=${SERVICE_ENGINE_PID}; fd=${descriptor##*/}"
+            return
+        fi
+    done
+
+    fail "service_socket" \
+        "Unix Socket ${socket_path} is not held by engine PID ${SERVICE_ENGINE_PID}"
 }
 
 check_service() {
@@ -791,6 +1040,7 @@ check_service() {
     pass "service_status" \
         "unit=${SERVICE_UNIT}; active=${active_state}; sub=${sub_state}; invocation_id=${CURRENT_INVOCATION_ID}"
     check_service_database
+    check_service_socket_owner
 
     if [[ "${PHASE}" == "verify" ]]; then
         if [[ "${CURRENT_INVOCATION_ID,,}" == "${MANIFEST_PREPARE_INVOCATION_ID,,}" ]]; then
@@ -811,6 +1061,13 @@ run_probe() {
         --collection "${COLLECTION}"
         --service-managed-database
     )
+    if [[ "${PHASE}" == "cleanup" ]]; then
+        arguments+=(
+            --manifest "${MANIFEST_FILE}"
+            --cleanup-token "${MANIFEST_CLEANUP_TOKEN}"
+            --cleanup-invocation-id "${CURRENT_INVOCATION_ID}"
+        )
+    fi
 
     log "probe_execute" "INFO" \
         "phase=${PHASE}; collection=${COLLECTION}; db_file=${DB_FILE}; app_id=${APP_ID}"
@@ -845,20 +1102,36 @@ main() {
                 "prepare requires an unused manifest path: ${MANIFEST_FILE}"
         fi
         pass "manifest_precondition" "manifest path is unused: ${MANIFEST_FILE}"
+    elif [[ "${PHASE}" == "verify-cleanup" ]]; then
+        validate_manifest "true" "cleaned" "true"
     else
-        validate_manifest "true"
+        validate_manifest "true" "prepared|verified" "false"
     fi
     check_service
     if [[ "${PHASE}" == "prepare" ]]; then
         write_manifest
+    elif [[ "${PHASE}" == "cleanup" ]]; then
+        authorize_manifest_for_cleanup
     fi
     run_probe
-    if [[ "${PHASE}" == "prepare" ]]; then
-        finalize_manifest_after_prepare
-        log "restart_token" "INFO" "invocation_id=${CURRENT_INVOCATION_ID}"
-        log "manual_restart_required" "INFO" \
-            "restart ${SERVICE_UNIT}; verify will read the prepare InvocationID from ${MANIFEST_FILE}"
-    fi
+    case "${PHASE}" in
+        prepare)
+            finalize_manifest_after_prepare
+            log "restart_token" "INFO" "invocation_id=${CURRENT_INVOCATION_ID}"
+            log "manual_restart_required" "INFO" \
+                "restart ${SERVICE_UNIT}; verify will read the prepare InvocationID from ${MANIFEST_FILE}"
+            ;;
+        verify)
+            finalize_manifest_after_verify
+            ;;
+        cleanup)
+            finalize_manifest_after_cleanup
+            ;;
+        verify-cleanup)
+            pass "manifest_cleanup_verify" \
+                "read-only cleanup verification completed with consumed manifest ${MANIFEST_FILE}"
+            ;;
+    esac
     pass "runner_complete" \
         "run completed; no trust, service restart, or evidence upload was performed"
 }
