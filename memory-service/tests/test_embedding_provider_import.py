@@ -74,4 +74,3 @@ def test_embed_non_str_raises_provider_error(provider_module):
         pytest.fail("非 str 输入应抛 ProviderError")
     except ProviderError as exc:
         assert exc.code == ProviderErrorCode.ERR_INVALID_TEXT
-

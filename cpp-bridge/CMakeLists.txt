@@ -14,7 +14,8 @@
 # 产物：build/kylin_embedding*.so → 放入 python 导入路径
 
 cmake_minimum_required(VERSION 3.15)
-project(kylin_embedding_bridge LANGUAGES CXX)
+# LANGUAGES C CXX：C 用于 tests/fake_sdk_malformed.c（P0-2 假 .so 测试桩）
+project(kylin_embedding_bridge LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
