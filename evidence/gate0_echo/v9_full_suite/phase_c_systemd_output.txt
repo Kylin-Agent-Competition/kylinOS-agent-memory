@@ -1,0 +1,1 @@
+/home/REDACTED_VM_USER/kylin-memory-echo/share/test_systemd_lifecycle.sh: 行 47: log_test: 未找到命令

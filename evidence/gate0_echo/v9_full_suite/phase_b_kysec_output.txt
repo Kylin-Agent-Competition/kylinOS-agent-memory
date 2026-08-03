@@ -1,0 +1,65 @@
+[19:27:32] ==========================================
+[19:27:32]  KYSEC 三阶段验证 v2 — P1-1 Phase B
+[19:27:32]  日志: /home/REDACTED_VM_USER/kylin-memory-echo/logs/kysec_v2_20260803_192732.log
+[19:27:32]  备份: /tmp/kysec_v2_bkp_20260803_192732
+[19:27:32] ==========================================
+[19:27:32] 
+[19:27:32] ========== Stage 1: 基线备份 ==========
+[19:27:32]   SHA-256 部署前: 3c3e23271a39c8e40d9ecb0d416ea83448f74c398ba0c66c563158cceeaa0769
+[19:27:32]   ✅ Stage1: 基线 SHA-256=3c3e23271a39c8e40d9ecb0d416ea83448f74c398ba0c66c563158cceeaa0769
+[19:27:32]   ✅ Stage1: Socket 存在 (/tmp/kylin-memory-echo/echo.sock)
+[19:27:32]   ✅ Stage1: kylin-aiassistant 用户存在 (UID=1001)
+[19:27:32] 
+[19:27:32] ========== Stage 2: ACL 授权与验证 ==========
+[19:27:32]   ✅ Stage2: 授权前 kylin-aiassistant 无法访问 (rc=1, 最小权限 OK)
+[19:27:33]   ✅ Stage2: kysec_authorize.sh authorize 完成
+[19:27:33]   ❌ Stage2: 授权后 kylin-aiassistant 仍无法访问 (rc=1)
+[19:27:33]   ✅ Stage2: 授权后 SHA-256=c264fff80ae92189756d58fe8ffb56de8db52236df234a9c29a2e8682ee654c9
+[19:27:33]   ACL 详情:
+--- /tmp/kylin-memory-echo ACL ---
+# file: tmp/kylin-memory-echo
+# owner: REDACTED_VM_USER
+# group: REDACTED_VM_USER
+user::rwx
+user:kylin-aiassistant:rwx
+group::---
+mask::rwx
+other::---
+
+--- /tmp/kylin-memory-echo/echo.sock ACL ---
+# file: tmp/kylin-memory-echo/echo.sock
+# owner: REDACTED_VM_USER
+# group: REDACTED_VM_USER
+user::rw-
+user:kylin-aiassistant:rw-
+group::---
+mask::rw-
+other::---
+
+[19:27:33] 
+[19:27:33] ========== Stage 3: 回退与 SHA-256 对比 ==========
+[19:27:33]   ✅ Stage3: KYSEC rollback 完成
+[19:27:33]   ✅ Stage3: 回退后 SHA-256=6bb4eb7256143ae8ae5f9a0f51261790153d0477e93ecaa52efdaa0e78b52649
+[19:27:33]   部署前: 3c3e23271a39c8e40d9ecb0d416ea83448f74c398ba0c66c563158cceeaa0769
+[19:27:33]   回退后: 6bb4eb7256143ae8ae5f9a0f51261790153d0477e93ecaa52efdaa0e78b52649
+[19:27:33]   ❌ Stage3: SHA-256 不一致 ❌
+2,5c2,6
+< 总计 28
+< drwx------  2 REDACTED_VM_USER REDACTED_VM_USER  4096  8月 3日 19:27 .
+< drwxrwxrwt 29 root      root      12288  8月 3日 19:27 ..
+< srwx------  1 REDACTED_VM_USER REDACTED_VM_USER     0  8月 3日 19:27 echo.sock
+---
+> 总计 36
+> drwx------+  2 REDACTED_VM_USER REDACTED_VM_USER  4096  8月 3日 19:27 .
+> drwxrwxrwt  31 root      root      12288  8月 3日 19:27 ..
+> srw-------+  1 REDACTED_VM_USER REDACTED_VM_USER     0  8月 3日 19:27 echo.sock
+> -rw-r--r--   1 root      root       1215  8月 3日 19:27 kysec_authorize.log
+10,12c11,13
+< 访问时间：2026-08-03 19:27:32.791477882 +0800
+< 修改时间：2026-08-03 19:27:28.419466695 +0800
+< 变更时间：2026-08-03 19:27:28.419466695 +0800
+---
+> 访问时间：2026-08-03 19:27:33.383479389 +0800
+> 修改时间：2026-08-03 19:27:32.927478228 +0800
+> 变更时间：2026-08-03 19:27:33.351479308 +0800
+17a19

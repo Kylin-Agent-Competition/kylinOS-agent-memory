@@ -1,0 +1,461 @@
+[2026-08-03T11:22:00.112Z] [INFO] ============================================================
+[2026-08-03T11:22:00.114Z] [INFO]  V8 ??? Systemd ???????
+[2026-08-03T11:22:00.114Z] [INFO]  ??: 2026-08-03T11:22:00.114741+00:00
+[2026-08-03T11:22:00.115Z] [INFO]  ??: REDACTED_VM_USER@127.0.0.1:2222
+[2026-08-03T11:22:00.115Z] [INFO] ============================================================
+[2026-08-03T11:22:00.211Z] [PASS]   ? SSH ????
+[2026-08-03T11:22:00.212Z] [INFO]     CMD: id
+[2026-08-03T11:22:00.338Z] [INFO]   ????: uid=1000(REDACTED_VM_USER) gid=1000(REDACTED_VM_USER) ?=1000(REDACTED_VM_USER),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),100(users),114(lpadmin),989(sambashare)
+[2026-08-03T11:22:00.368Z] [INFO] 
+[2026-08-03T11:22:00.369Z] [PHASE] ============================================================
+[2026-08-03T11:22:00.370Z] [PHASE]   Phase 0: ????
+[2026-08-03T11:22:00.371Z] [PHASE] ============================================================
+[2026-08-03T11:22:00.372Z] [INFO]     CMD: uname -a
+[2026-08-03T11:22:00.392Z] [INFO]   ??: Linux REDACTED_VM_USER-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+[2026-08-03T11:22:00.393Z] [INFO]     CMD: cat /etc/os-release | head -4
+[2026-08-03T11:22:00.413Z] [INFO]   OS:
+NAME="Kylin"
+FULL_NAME="kylin"
+VERSION="??????????V11"
+VERSION_US="Kylin Linux Desktop V11"
+[2026-08-03T11:22:00.414Z] [INFO]     CMD: systemctl is-enabled kylin-memory-echo 2>&1 || echo 'NOT_ENABLED'
+[2026-08-03T11:22:00.446Z] [INFO]   systemctl is-enabled: disabled
+NOT_ENABLED
+[2026-08-03T11:22:00.447Z] [INFO]     CMD: systemctl is-active kylin-memory-echo 2>&1 || echo 'NOT_ACTIVE'
+[2026-08-03T11:22:00.481Z] [INFO]   systemctl is-active: inactive
+NOT_ACTIVE
+[2026-08-03T11:22:00.482Z] [INFO]     CMD: systemctl status kylin-memory-echo --no-pager 2>&1 | head -10
+[2026-08-03T11:22:00.724Z] [INFO]   systemctl status (first 10 lines):
+? kylin-memory-echo.service - Kylin Memory Echo Server ? UDS ??????
+     Loaded: loaded (/etc/systemd/system/kylin-memory-echo.service; disabled; preset: enabled)
+     Active: inactive (dead)
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+
+8? 03 17:39:44 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server ? UDS ??????.
+8? 03 17:52:28 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8? 03 17:52:29 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server ? UDS ??????.
+8? 03 17:52:32 REDACTED_VM_USER-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server ? UDS ??????...
+8? 03 17:52:32 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+[2026-08-03T11:22:00.724Z] [INFO]     CMD: sudo test -f /etc/systemd/system/kylin-memory-echo.service && echo 'EXISTS' || echo 'NO_UNIT_FILE'
+[2026-08-03T11:22:00.823Z] [INFO]   Unit file exists: EXISTS
+[2026-08-03T11:22:00.824Z] [INFO]     CMD: sudo sha256sum /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:22:00.918Z] [INFO]   Unit file SHA256: 610d355b3470b54861b874b3ab21f668d61c09af6b9b9fd4138e4baaa78a68c2  /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:22:00.919Z] [INFO]     CMD: sudo cat /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:22:01.014Z] [INFO]   Unit file content:
+[Unit]
+Description=Kylin Memory Echo Server ? UDS ??????
+Documentation=https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+After=network.target
+
+# ????????? REDACTED_VM_USER ???
+[Service]
+Type=simple
+User=REDACTED_VM_USER
+ExecStart=/usr/bin/python3 /home/REDACTED_VM_USER/kylin-memory-echo/bin/kylin-memory-echo-server
+ExecStopPost=/bin/rm -f /tmp/kylin-memory-echo/echo.sock
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:/home/REDACTED_VM_USER/kylin-memory-echo/logs/server_stdout.log
+StandardError=append:/home/REDACTED_VM_USER/kylin-memory-echo/logs/server_stderr.log
+
+# ????????????????????
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=default.target
+[2026-08-03T11:22:01.015Z] [INFO]     CMD: pgrep -a -f kylin-memory-echo-server 2>&1 || echo 'NO_PROCESS'
+[2026-08-03T11:22:01.057Z] [INFO]   ?????: 56503 bash -c pgrep -a -f kylin-memory-echo-server 2>&1 || echo 'NO_PROCESS'
+[2026-08-03T11:22:01.059Z] [INFO]     CMD: ls -la /tmp/kylin-memory-echo/ 2>&1 || echo 'NO_SOCKET_DIR'
+[2026-08-03T11:22:01.073Z] [INFO]   Socket ??: ?? 32
+drwx------+  2 REDACTED_VM_USER REDACTED_VM_USER  4096  8? 3? 17:52 .
+drwxrwxrwt  28 root      root      12288  8? 3? 19:01 ..
+-rw-r--r--   1 root      root       1215  8? 3? 17:44 kysec_authorize.log
+[2026-08-03T11:22:01.073Z] [INFO]     CMD: sudo kysec_status 2>&1 || echo 'KYSEC_NOT_AVAILABLE'
+[2026-08-03T11:22:01.173Z] [INFO]   KYSEC status (first 300):
+bash: ? 1: kysec_status: ?????
+KYSEC_NOT_AVAILABLE
+[2026-08-03T11:22:01.174Z] [INFO] 
+[2026-08-03T11:22:01.174Z] [PHASE] ============================================================
+[2026-08-03T11:22:01.175Z] [PHASE]   Phase 1: ????????
+[2026-08-03T11:22:01.175Z] [PHASE] ============================================================
+[2026-08-03T11:22:01.175Z] [INFO]   [1/8] systemctl stop...
+[2026-08-03T11:22:01.176Z] [INFO]     CMD: sudo systemctl stop kylin-memory-echo 2>/dev/null; true
+[2026-08-03T11:22:02.284Z] [INFO]   [2/8] systemctl disable...
+[2026-08-03T11:22:02.285Z] [INFO]     CMD: sudo systemctl disable kylin-memory-echo 2>/dev/null; true
+[2026-08-03T11:22:03.323Z] [INFO]   [3/8] systemctl reset-failed...
+[2026-08-03T11:22:03.324Z] [INFO]     CMD: sudo systemctl reset-failed kylin-memory-echo 2>/dev/null; true
+[2026-08-03T11:22:03.426Z] [INFO]   [4/8] ?? /etc/systemd/system/kylin-memory-echo.service...
+[2026-08-03T11:22:03.427Z] [INFO]     CMD: sudo rm -f /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:22:03.551Z] [INFO]     CMD: sudo test -f /etc/systemd/system/kylin-memory-echo.service && echo 'STILL_EXISTS' || echo 'REMOVED'
+[2026-08-03T11:22:03.647Z] [INFO]     Unit ????: REMOVED
+[2026-08-03T11:22:03.648Z] [PASS]   ? Unit ?????
+[2026-08-03T11:22:03.648Z] [INFO]   [5/8] ?? symlink...
+[2026-08-03T11:22:03.649Z] [INFO]     CMD: sudo rm -f /etc/systemd/system/default.target.wants/kylin-memory-echo.service 2>/dev/null; true
+[2026-08-03T11:22:03.742Z] [INFO]     CMD: sudo rm -f /etc/systemd/system/multi-user.target.wants/kylin-memory-echo.service 2>/dev/null; true
+[2026-08-03T11:22:03.862Z] [INFO]     CMD: sudo rm -f /etc/systemd/system/default.target.requires/kylin-memory-echo.service 2>/dev/null; true
+[2026-08-03T11:22:03.943Z] [INFO]     CMD: sudo find /etc/systemd/system/ -name 'kylin-memory-echo.service' 2>/dev/null || echo 'NONE'
+[2026-08-03T11:22:04.022Z] [INFO]     ?? .service: 
+[2026-08-03T11:22:04.023Z] [PASS]   ? Symlink ?????
+[2026-08-03T11:22:04.024Z] [INFO]   [6/8] systemctl daemon-reload...
+[2026-08-03T11:22:04.024Z] [INFO]     CMD: sudo systemctl daemon-reload 2>&1
+[2026-08-03T11:22:04.471Z] [INFO]     daemon-reload: ec=0, err=????
+[2026-08-03T11:22:04.471Z] [PASS]   ? daemon-reload ??
+[2026-08-03T11:22:04.472Z] [INFO]   [7/8] ??????...
+[2026-08-03T11:22:04.472Z] [INFO]     CMD: pkill -9 -f kylin-memory-echo-server 2>/dev/null; true
+[2026-08-03T11:22:05.512Z] [INFO]     CMD: pgrep -f kylin-memory-echo-server 2>&1 || echo 'NO_PROCESS'
+[2026-08-03T11:22:05.547Z] [FAIL]   ? ??????: 56922
+[2026-08-03T11:22:05.548Z] [INFO]   [8/8] ?? socket ??...
+[2026-08-03T11:22:05.548Z] [INFO]     CMD: rm -rf /tmp/kylin-memory-echo
+[2026-08-03T11:22:05.558Z] [INFO]     CMD: test -d /tmp/kylin-memory-echo && echo 'STILL_EXISTS' || echo 'REMOVED'
+[2026-08-03T11:22:05.566Z] [PASS]   ? Socket ?????
+[2026-08-03T11:22:05.567Z] [INFO] 
+[2026-08-03T11:22:05.567Z] [INFO]   --- ??????? ---
+[2026-08-03T11:22:05.567Z] [INFO]     CMD: sudo test -f /etc/systemd/system/kylin-memory-echo.service && echo 'FAIL' || echo 'OK'
+[2026-08-03T11:22:05.662Z] [INFO]     Unit ?????: OK
+[2026-08-03T11:22:05.662Z] [INFO]     CMD: systemctl status kylin-memory-echo --no-pager 2>&1 | head -3
+[2026-08-03T11:22:05.679Z] [INFO]     systemctl status: Unit kylin-memory-echo.service could not be found.
+[2026-08-03T11:22:05.679Z] [INFO] 
+[2026-08-03T11:22:05.680Z] [PHASE] ============================================================
+[2026-08-03T11:22:05.680Z] [PHASE]   Phase 2: ?????????
+[2026-08-03T11:22:05.681Z] [PHASE] ============================================================
+[2026-08-03T11:22:05.681Z] [INFO]     CMD: mkdir -p /home/REDACTED_VM_USER/kylin-memory-echo/bin /home/REDACTED_VM_USER/kylin-memory-echo/share /home/ZhouYif
+[2026-08-03T11:22:05.690Z] [PASS]   ? ???????
+[2026-08-03T11:22:05.690Z] [INFO]   ????? unit ??...
+[2026-08-03T11:22:06.046Z] [PASS]   ? Unit ?????? (SHA256: 32c1e6137bfdb7d3...)
+[2026-08-03T11:22:06.047Z] [INFO]   ????? SHA256: 32c1e6137bfdb7d3...
+[2026-08-03T11:22:06.048Z] [INFO]   ????? Unit ?? SHA256: d94408531717c4a2...
+[2026-08-03T11:22:06.048Z] [INFO] 
+[2026-08-03T11:22:06.048Z] [INFO]   --- ?????? ---
+[2026-08-03T11:22:06.049Z] [INFO]   ?? unit ??? /etc/systemd/system/kylin-memory-echo.service...
+[2026-08-03T11:22:06.062Z] [FAIL]   ? Unit ??????: ????????: bash: ? 1: /etc/systemd/system/kylin-memory-echo.service: ????
+
+[2026-08-03T11:22:06.063Z] [INFO]   ??: ?? sudo tee ??...
+[2026-08-03T11:22:06.064Z] [INFO]     CMD: sudo echo '[Unit]
+Description=Kylin Memory Echo Server ? UDS ??????
+Documentation=https://github.com/Kyli
+[2026-08-03T11:22:06.156Z] [INFO]     sudo tee: ec=0, [Unit]
+[2026-08-03T11:22:06.156Z] [INFO] 
+[2026-08-03T11:22:06.157Z] [INFO]   --- ????? ---
+[2026-08-03T11:22:06.157Z] [INFO]     CMD: sudo sha256sum /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:22:06.255Z] [INFO]   ??? Unit SHA256: ...
+[2026-08-03T11:22:06.256Z] [FAIL]   ? Unit ???????!
+[2026-08-03T11:22:06.256Z] [INFO]     ??: d94408531717c4a2c524761ec5acaef8cfa8524e50326c4cb4ca47dd901543d7
+[2026-08-03T11:22:06.257Z] [INFO]     ??: 
+[2026-08-03T11:22:06.257Z] [INFO]     CMD: sudo grep -E '^(User=|ExecStart=|NoNewPrivileges=|RestrictAddressFamilies=)' /etc/systemd/system/kylin-me
+[2026-08-03T11:22:06.267Z] [INFO]   ????:
+
+[2026-08-03T11:22:06.267Z] [INFO] 
+[2026-08-03T11:22:06.268Z] [INFO]   --- daemon-reload ---
+[2026-08-03T11:22:06.268Z] [INFO]     CMD: sudo systemctl daemon-reload 2>&1
+[2026-08-03T11:22:06.932Z] [PASS]   ? daemon-reload ??
+[2026-08-03T11:22:06.932Z] [INFO] 
+[2026-08-03T11:22:06.933Z] [INFO]   --- systemctl enable ---
+[2026-08-03T11:22:06.933Z] [INFO]     CMD: sudo systemctl enable kylin-memory-echo 2>&1
+[2026-08-03T11:22:07.045Z] [INFO]     enable ??: out=Failed to enable unit: Unit file kylin-memory-echo.service does not exist.
+ err=????
+[2026-08-03T11:22:07.047Z] [FAIL]   ? enable ??
+[2026-08-03T11:22:07.048Z] [INFO]     CMD: sudo test -L /etc/systemd/system/default.target.wants/kylin-memory-echo.service && echo 'LINKED' || echo 
+[2026-08-03T11:22:07.159Z] [INFO]     CMD: sudo find /etc/systemd/system/ -name 'kylin-memory-echo.service' 2>/dev/null
+[2026-08-03T11:22:07.270Z] [INFO]     ?? results: 
+[2026-08-03T11:22:07.271Z] [FAIL]   ? Symlink ??? ? enable ?????
+[2026-08-03T11:22:07.271Z] [INFO] 
+[2026-08-03T11:22:07.271Z] [PHASE] ============================================================
+[2026-08-03T11:22:07.272Z] [PHASE]   Phase 3: ??????????
+[2026-08-03T11:22:07.272Z] [PHASE] ============================================================
+[2026-08-03T11:22:07.273Z] [INFO]   --- Step 3.1: systemctl start ---
+[2026-08-03T11:22:07.273Z] [INFO]     CMD: sudo systemctl start kylin-memory-echo 2>&1
+[2026-08-03T11:22:07.377Z] [INFO]     start: ec=5, out=Failed to start kylin-memory-echo.service: Unit kylin-memory-echo.service not found.
+, err=????
+[2026-08-03T11:22:07.377Z] [FAIL]   ? systemctl start ???? ? ??????#1??????
+[2026-08-03T11:22:07.378Z] [INFO]     CMD: sudo journalctl -u kylin-memory-echo -n 30 --no-pager 2>&1
+[2026-08-03T11:22:07.536Z] [INFO]     journalctl (last 30):
+8? 03 17:33:07 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Failed with result 'exit-code'.
+8? 03 17:33:10 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 463.
+8? 03 17:33:10 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server ? UDS ??????.
+8? 03 17:33:10 REDACTED_VM_USER-pc (python3)[42604]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8? 03 17:33:10 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=exited, status=226/NAMESPACE
+8? 03 17:33:10 REDACTED_VM_USER-pc (rm)[42605]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8? 03 17:33:10 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Control process exited, code=exited, status=226/NAMESPACE
+8? 03 17:33:10 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Failed with result 'exit-code'.
+8? 03 17:33:12 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 464.
+8? 03 17:33:12 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server ? UDS ??????.
+8? 03 17:33:12 REDACTED_VM_USER-pc (python3)[42612]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8? 03 17:33:12 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=exited, status
+[2026-08-03T11:22:07.538Z] [INFO] 
+[2026-08-03T11:22:07.539Z] [PHASE] ============================================================
+[2026-08-03T11:22:07.540Z] [PHASE]   Phase 4: ?????????
+[2026-08-03T11:22:07.541Z] [PHASE] ============================================================
+[2026-08-03T11:22:07.541Z] [INFO] 
+[2026-08-03T11:22:07.542Z] [INFO]   --- ?? A: ?????????? ---
+[2026-08-03T11:22:07.543Z] [INFO]   ??: ????? service ???????? install_systemd.sh ??????...
+[2026-08-03T11:22:07.544Z] [INFO]     CMD: sudo cat /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:22:07.705Z] [INFO]   ?? Unit SHA256: N/A...
+[2026-08-03T11:22:07.705Z] [INFO]   ????? unit ??...
+[2026-08-03T11:22:07.721Z] [INFO]     CMD: sudo echo '[Unit]
+Description=Kylin Memory Echo Server ? UDS ??????
+Documentation=https://github.com/Kyli
+[2026-08-03T11:22:07.798Z] [INFO]     CMD: sudo sha256sum /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:22:07.867Z] [FAIL]   ? ??A: ????! ????????!
+[2026-08-03T11:22:07.868Z] [INFO]     ??: d94408531717c4a2...
+[2026-08-03T11:22:07.868Z] [INFO]     ??: ...
+[2026-08-03T11:22:07.885Z] [FATAL]   ? ????: ????????: bash: ? 1: /etc/systemd/system/kylin-memory-echo.service: ????
+
+[2026-08-03T11:22:07.889Z] [FATAL] Traceback (most recent call last):
+  File "e:\Kylin-memory-dev\UDS-Kylin-Echo\evidence\gate0_echo\v8_systemd_prod_test.py", line 648, in main
+    phase4_replace_and_reboot(kc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^
+  File "e:\Kylin-memory-dev\UDS-Kylin-Echo\evidence\gate0_echo\v8_systemd_prod_test.py", line 498, in phase4_replace_and_reboot
+    transfer.write_string_as_file(kc, prod_unit_content_global, UNIT_DST)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "e:\Kylin-memory-dev\UDS-Kylin-Echo\evidence\ssh_transfer_diagnosis\kylin_transfer.py", line 392, in write_string_as_file
+    raise TransferError(f"????????: {err[:200]}")
+evidence.ssh_transfer_diagnosis.kylin_transfer.TransferError: ????????: bash: ? 1: /etc/systemd/system/kylin-memory-echo.service: ????
+
+
+[2026-08-03T11:23:29.467Z] [INFO] ============================================================
+[2026-08-03T11:23:29.467Z] [INFO]  V8 ??? Systemd ???????
+[2026-08-03T11:23:29.468Z] [INFO]  ??: 2026-08-03T11:23:29.468109+00:00
+[2026-08-03T11:23:29.468Z] [INFO]  ??: REDACTED_VM_USER@127.0.0.1:2222
+[2026-08-03T11:23:29.468Z] [INFO] ============================================================
+[2026-08-03T11:23:29.534Z] [PASS]   ? SSH ????
+[2026-08-03T11:23:29.535Z] [INFO]     CMD: id
+[2026-08-03T11:23:29.675Z] [INFO]   ????: uid=1000(REDACTED_VM_USER) gid=1000(REDACTED_VM_USER) ?=1000(REDACTED_VM_USER),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),100(users),114(lpadmin),989(sambashare)
+[2026-08-03T11:23:29.676Z] [INFO] 
+[2026-08-03T11:23:29.677Z] [PHASE] ============================================================
+[2026-08-03T11:23:29.677Z] [PHASE]   Phase 0: ????
+[2026-08-03T11:23:29.678Z] [PHASE] ============================================================
+[2026-08-03T11:23:29.679Z] [INFO]     CMD: uname -a
+[2026-08-03T11:23:29.687Z] [INFO]   ??: Linux REDACTED_VM_USER-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+[2026-08-03T11:23:29.688Z] [INFO]     CMD: cat /etc/os-release | head -4
+[2026-08-03T11:23:29.703Z] [INFO]   OS:
+NAME="Kylin"
+FULL_NAME="kylin"
+VERSION="??????????V11"
+VERSION_US="Kylin Linux Desktop V11"
+[2026-08-03T11:23:29.704Z] [INFO]     CMD: systemctl is-enabled kylin-memory-echo 2>&1 || echo 'NOT_ENABLED'
+[2026-08-03T11:23:29.721Z] [INFO]   systemctl is-enabled: not-found
+NOT_ENABLED
+[2026-08-03T11:23:29.722Z] [INFO]     CMD: systemctl is-active kylin-memory-echo 2>&1 || echo 'NOT_ACTIVE'
+[2026-08-03T11:23:29.738Z] [INFO]   systemctl is-active: inactive
+NOT_ACTIVE
+[2026-08-03T11:23:29.739Z] [INFO]     CMD: systemctl status kylin-memory-echo --no-pager 2>&1 | head -10
+[2026-08-03T11:23:29.756Z] [INFO]   systemctl status (first 10 lines):
+Unit kylin-memory-echo.service could not be found.
+[2026-08-03T11:23:29.757Z] [INFO]     CMD: sudo test -f /etc/systemd/system/kylin-memory-echo.service && echo 'EXISTS' || echo 'NO_UNIT_FILE'
+[2026-08-03T11:23:29.857Z] [INFO]   Unit file exists: NO_UNIT_FILE
+[2026-08-03T11:23:29.858Z] [INFO]     CMD: pgrep -a -f kylin-memory-echo-server 2>&1 || echo 'NO_PROCESS'
+[2026-08-03T11:23:29.896Z] [INFO]   ?????: 57263 bash -c pgrep -a -f kylin-memory-echo-server 2>&1 || echo 'NO_PROCESS'
+[2026-08-03T11:23:29.897Z] [INFO]     CMD: ls -la /tmp/kylin-memory-echo/ 2>&1 || echo 'NO_SOCKET_DIR'
+[2026-08-03T11:23:29.908Z] [INFO]   Socket ??: ls: ???? '/tmp/kylin-memory-echo/': ?????????
+NO_SOCKET_DIR
+[2026-08-03T11:23:29.909Z] [INFO]     CMD: sudo kysec_status 2>&1 || echo 'KYSEC_NOT_AVAILABLE'
+[2026-08-03T11:23:30.021Z] [INFO]   KYSEC status (first 300):
+bash: ? 1: kysec_status: ?????
+KYSEC_NOT_AVAILABLE
+[2026-08-03T11:23:30.022Z] [INFO] 
+[2026-08-03T11:23:30.023Z] [PHASE] ============================================================
+[2026-08-03T11:23:30.024Z] [PHASE]   Phase 1: ????????
+[2026-08-03T11:23:30.024Z] [PHASE] ============================================================
+[2026-08-03T11:23:30.025Z] [INFO]   [1/8] systemctl stop...
+[2026-08-03T11:23:30.025Z] [INFO]     CMD: sudo systemctl stop kylin-memory-echo 2>/dev/null; true
+[2026-08-03T11:23:31.091Z] [INFO]   [2/8] systemctl disable...
+[2026-08-03T11:23:31.092Z] [INFO]     CMD: sudo systemctl disable kylin-memory-echo 2>/dev/null; true
+[2026-08-03T11:23:31.692Z] [INFO]   [3/8] systemctl reset-failed...
+[2026-08-03T11:23:31.693Z] [INFO]     CMD: sudo systemctl reset-failed kylin-memory-echo 2>/dev/null; true
+[2026-08-03T11:23:31.811Z] [INFO]   [4/8] ?? /etc/systemd/system/kylin-memory-echo.service...
+[2026-08-03T11:23:31.812Z] [INFO]     CMD: sudo rm -f /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:23:31.929Z] [INFO]     CMD: sudo test -f /etc/systemd/system/kylin-memory-echo.service && echo 'STILL_EXISTS' || echo 'REMOVED'
+[2026-08-03T11:23:32.052Z] [INFO]     Unit ????: REMOVED
+[2026-08-03T11:23:32.054Z] [PASS]   ? Unit ?????
+[2026-08-03T11:23:32.055Z] [INFO]   [5/8] ?? symlink...
+[2026-08-03T11:23:32.055Z] [INFO]     CMD: sudo rm -f /etc/systemd/system/default.target.wants/kylin-memory-echo.service 2>/dev/null; true
+[2026-08-03T11:23:32.162Z] [INFO]     CMD: sudo rm -f /etc/systemd/system/multi-user.target.wants/kylin-memory-echo.service 2>/dev/null; true
+[2026-08-03T11:23:32.282Z] [INFO]     CMD: sudo rm -f /etc/systemd/system/default.target.requires/kylin-memory-echo.service 2>/dev/null; true
+[2026-08-03T11:23:32.414Z] [INFO]     CMD: sudo find /etc/systemd/system/ -name 'kylin-memory-echo.service' 2>/dev/null || echo 'NONE'
+[2026-08-03T11:23:32.536Z] [INFO]     ?? .service: 
+[2026-08-03T11:23:32.537Z] [PASS]   ? Symlink ?????
+[2026-08-03T11:23:32.538Z] [INFO]   [6/8] systemctl daemon-reload...
+[2026-08-03T11:23:32.539Z] [INFO]     CMD: sudo systemctl daemon-reload 2>&1
+[2026-08-03T11:23:33.011Z] [INFO]     daemon-reload: ec=0, err=????
+[2026-08-03T11:23:33.012Z] [PASS]   ? daemon-reload ??
+[2026-08-03T11:23:33.013Z] [INFO]   [7/8] ??????...
+[2026-08-03T11:23:33.014Z] [INFO]     CMD: pkill -9 -f kylin-memory-echo-server 2>/dev/null; true
+[2026-08-03T11:23:34.055Z] [INFO]     CMD: pgrep -f kylin-memory-echo-server 2>&1 || echo 'NO_PROCESS'
+[2026-08-03T11:23:34.103Z] [FAIL]   ? ??????: 57499
+[2026-08-03T11:23:34.104Z] [INFO]   [8/8] ?? socket ??...
+[2026-08-03T11:23:34.105Z] [INFO]     CMD: rm -rf /tmp/kylin-memory-echo
+[2026-08-03T11:23:34.115Z] [INFO]     CMD: test -d /tmp/kylin-memory-echo && echo 'STILL_EXISTS' || echo 'REMOVED'
+[2026-08-03T11:23:34.125Z] [PASS]   ? Socket ?????
+[2026-08-03T11:23:34.126Z] [INFO] 
+[2026-08-03T11:23:34.126Z] [INFO]   --- ??????? ---
+[2026-08-03T11:23:34.127Z] [INFO]     CMD: sudo test -f /etc/systemd/system/kylin-memory-echo.service && echo 'FAIL' || echo 'OK'
+[2026-08-03T11:23:34.223Z] [INFO]     Unit ?????: OK
+[2026-08-03T11:23:34.224Z] [INFO]     CMD: systemctl status kylin-memory-echo --no-pager 2>&1 | head -3
+[2026-08-03T11:23:34.244Z] [INFO]     systemctl status: Unit kylin-memory-echo.service could not be found.
+[2026-08-03T11:23:34.245Z] [INFO] 
+[2026-08-03T11:23:34.246Z] [PHASE] ============================================================
+[2026-08-03T11:23:34.246Z] [PHASE]   Phase 2: ?????????
+[2026-08-03T11:23:34.247Z] [PHASE] ============================================================
+[2026-08-03T11:23:34.248Z] [INFO]     CMD: mkdir -p /home/REDACTED_VM_USER/kylin-memory-echo/bin /home/REDACTED_VM_USER/kylin-memory-echo/share /home/ZhouYif
+[2026-08-03T11:23:34.260Z] [PASS]   ? ???????
+[2026-08-03T11:23:34.261Z] [INFO]   ????? unit ??...
+[2026-08-03T11:23:34.602Z] [PASS]   ? Unit ?????? (SHA256: 32c1e6137bfdb7d3...)
+[2026-08-03T11:23:34.603Z] [INFO]   ????? SHA256: 32c1e6137bfdb7d3...
+[2026-08-03T11:23:34.604Z] [INFO]   ????? Unit ?? SHA256: d94408531717c4a2...
+[2026-08-03T11:23:34.605Z] [INFO] 
+[2026-08-03T11:23:34.606Z] [INFO]   --- ?????? ---
+[2026-08-03T11:23:34.606Z] [INFO]   ?? unit ??? /etc/systemd/system/kylin-memory-echo.service...
+[2026-08-03T11:23:34.607Z] [INFO]     CMD: sudo echo 'W1VuaXRdCkRlc2NyaXB0aW9uPUt5bGluIE1lbW9yeSBFY2hvIFNlcnZlciDigJQgVURTIOacgOWwj+mqjOivgeacjeWKoQ
+[2026-08-03T11:23:34.744Z] [INFO]     write+sha256: ec=0, sha=d94408531717c4a2c524761ec5acaef8cfa8524e50326c4cb4ca47dd901543d7  /etc/systemd/s
+[2026-08-03T11:23:34.746Z] [PASS]   ? Unit ?????? (sudo base64)
+[2026-08-03T11:23:34.748Z] [INFO] 
+[2026-08-03T11:23:34.748Z] [INFO]   --- ????? ---
+[2026-08-03T11:23:34.749Z] [INFO]     CMD: sudo sha256sum /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:23:34.892Z] [INFO]   ??? Unit SHA256: d94408531717c4a2...
+[2026-08-03T11:23:34.892Z] [PASS]   ? Unit ???????? (SHA256 ??)
+[2026-08-03T11:23:34.893Z] [INFO]     CMD: sudo grep -E '^(User=|ExecStart=|NoNewPrivileges=|RestrictAddressFamilies=)' /etc/systemd/system/kylin-me
+[2026-08-03T11:23:34.908Z] [INFO]   ????:
+
+[2026-08-03T11:23:34.909Z] [INFO] 
+[2026-08-03T11:23:34.910Z] [INFO]   --- daemon-reload ---
+[2026-08-03T11:23:34.910Z] [INFO]     CMD: sudo systemctl daemon-reload 2>&1
+[2026-08-03T11:23:35.567Z] [PASS]   ? daemon-reload ??
+[2026-08-03T11:23:35.568Z] [INFO] 
+[2026-08-03T11:23:35.569Z] [INFO]   --- systemctl enable ---
+[2026-08-03T11:23:35.570Z] [INFO]     CMD: sudo systemctl enable kylin-memory-echo 2>&1
+[2026-08-03T11:23:36.098Z] [PASS]   ? enable ??
+[2026-08-03T11:23:36.099Z] [INFO]     CMD: sudo test -L /etc/systemd/system/default.target.wants/kylin-memory-echo.service && echo 'LINKED' || echo 
+[2026-08-03T11:23:36.195Z] [PASS]   ? Symlink (default.target.wants) ???
+[2026-08-03T11:23:36.196Z] [INFO] 
+[2026-08-03T11:23:36.197Z] [PHASE] ============================================================
+[2026-08-03T11:23:36.198Z] [PHASE]   Phase 3: ??????????
+[2026-08-03T11:23:36.198Z] [PHASE] ============================================================
+[2026-08-03T11:23:36.199Z] [INFO]   --- Step 3.1: systemctl start ---
+[2026-08-03T11:23:36.200Z] [INFO]     CMD: sudo systemctl start kylin-memory-echo 2>&1
+[2026-08-03T11:23:36.344Z] [INFO]     start: ec=0, out=, err=????
+[2026-08-03T11:23:36.345Z] [PASS]   ? systemctl start ????
+[2026-08-03T11:23:39.346Z] [INFO] 
+[2026-08-03T11:23:39.347Z] [INFO]   --- Step 3.2: ???? ---
+[2026-08-03T11:23:39.348Z] [INFO]     CMD: sudo systemctl show -p MainPID kylin-memory-echo 2>/dev/null
+[2026-08-03T11:23:39.458Z] [INFO]     MainPID: 57865
+[2026-08-03T11:23:39.459Z] [INFO]     CMD: kill -0 57865 2>&1
+[2026-08-03T11:23:39.470Z] [PASS]   ? ???? (PID=57865)
+[2026-08-03T11:23:39.471Z] [INFO] 
+[2026-08-03T11:23:39.471Z] [INFO]   --- Step 3.3: Socket ?? ---
+[2026-08-03T11:23:41.472Z] [INFO]     CMD: test -S /tmp/kylin-memory-echo/echo.sock && stat -c '%a %U:%G' /tmp/kylin-memory-echo/echo.sock || e
+[2026-08-03T11:23:41.498Z] [PASS]   ? Socket ???: 700 REDACTED_VM_USER:REDACTED_VM_USER
+[2026-08-03T11:23:41.499Z] [INFO]     CMD: ls -la /tmp/kylin-memory-echo/ 2>&1
+[2026-08-03T11:23:41.520Z] [INFO]     Socket ??:
+?? 28
+drwx------  2 REDACTED_VM_USER REDACTED_VM_USER  4096  8? 3? 19:23 .
+drwxrwxrwt 28 root      root      12288  8? 3? 19:23 ..
+srwx------  1 REDACTED_VM_USER REDACTED_VM_USER     0  8? 3? 19:23 echo.sock
+[2026-08-03T11:23:41.521Z] [INFO] 
+[2026-08-03T11:23:41.522Z] [INFO]   --- Step 3.4: systemctl status ---
+[2026-08-03T11:23:41.523Z] [INFO]     CMD: sudo systemctl status kylin-memory-echo --no-pager --lines=5 2>&1
+[2026-08-03T11:23:41.714Z] [INFO]     status:
+? kylin-memory-echo.service - Kylin Memory Echo Server ? UDS ??????
+     Loaded: loaded (/etc/systemd/system/kylin-memory-echo.service; enabled; preset: enabled)
+     Active: active (running) since Mon 2026-08-03 19:23:36 CST; 5s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 57865 (python3)
+      Tasks: 1 (limit: 9405)
+     Memory: 5.8M (peak: 6.0M)
+        CPU: 36ms
+     CGroup: /system.slice/kylin-memory-echo.service
+             ??57865 /usr/bin
+[2026-08-03T11:23:41.715Z] [PASS]   ? status: active (running)
+[2026-08-03T11:23:41.717Z] [INFO] 
+[2026-08-03T11:23:41.719Z] [INFO]   --- Step 3.5: UDS ???? ---
+[2026-08-03T11:23:41.721Z] [INFO]     CMD: python3 -c 'import json, struct, socket
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+try:
+ 
+[2026-08-03T11:23:41.803Z] [INFO]     UDS test: ec=0, out=STATUS:ok
+ECHO:V8SystemdTest
+[2026-08-03T11:23:41.804Z] [PASS]   ? UDS echo ????
+[2026-08-03T11:23:41.805Z] [INFO] 
+[2026-08-03T11:23:41.806Z] [PHASE] ============================================================
+[2026-08-03T11:23:41.807Z] [PHASE]   Phase 4: ?????????
+[2026-08-03T11:23:41.808Z] [PHASE] ============================================================
+[2026-08-03T11:23:41.809Z] [INFO] 
+[2026-08-03T11:23:41.809Z] [INFO]   --- ?? A: ?????????? ---
+[2026-08-03T11:23:41.810Z] [INFO]   ??: ????? service ???????? install_systemd.sh ??????...
+[2026-08-03T11:23:41.811Z] [INFO]     CMD: sudo cat /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:23:41.953Z] [INFO]   ?? Unit SHA256: d94408531717c4a2...
+[2026-08-03T11:23:41.955Z] [INFO]   ????? unit ?? (sudo base64)...
+[2026-08-03T11:23:41.956Z] [INFO]     CMD: sudo echo 'W1VuaXRdCkRlc2NyaXB0aW9uPUt5bGluIE1lbW9yeSBFY2hvIFNlcnZlciDigJQgVURTIOacgOWwj+mqjOivgeacjeWKoQ
+[2026-08-03T11:23:42.083Z] [INFO]     write+sha: ec=0, 2b027f44e2531b0539a6c29e64b340cdec8e99a3d3f3e2c134eed5bcee123dec  /etc/systemd/system/kylin-memory-e
+[2026-08-03T11:23:42.084Z] [INFO]     CMD: sudo sha256sum /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:23:42.194Z] [PASS]   ? ??A: ???????? (SHA256 ??)
+[2026-08-03T11:23:42.196Z] [INFO]     CMD: sudo echo 'W1VuaXRdCkRlc2NyaXB0aW9uPUt5bGluIE1lbW9yeSBFY2hvIFNlcnZlciDigJQgVURTIOacgOWwj+mqjOivgeacjeWKoQ
+[2026-08-03T11:23:42.319Z] [INFO]   ????? unit ????
+[2026-08-03T11:23:42.320Z] [INFO] 
+[2026-08-03T11:23:42.321Z] [INFO]   --- ?? B: daemon-reload ?????? ---
+[2026-08-03T11:23:42.322Z] [INFO]     CMD: sudo systemctl daemon-reload 2>/dev/null
+[2026-08-03T11:23:42.942Z] [INFO]     CMD: sudo systemctl restart kylin-memory-echo 2>&1; true
+[2026-08-03T11:23:43.096Z] [INFO]     restart after daemon-reload: ec=0
+[2026-08-03T11:23:45.097Z] [INFO]     CMD: sudo systemctl status kylin-memory-echo --no-pager --lines=3 2>&1 || true
+[2026-08-03T11:23:45.239Z] [PASS]   ? ??B: daemon-reload + restart ????? (??????)
+[2026-08-03T11:23:45.240Z] [INFO]     CMD: sudo journalctl -u kylin-memory-echo -n 10 --no-pager 2>&1
+[2026-08-03T11:23:45.378Z] [INFO]     journalctl:
+8? 03 17:52:28 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8? 03 17:52:29 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server ? UDS ??????.
+8? 03 17:52:32 REDACTED_VM_USER-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server ? UDS ??????...
+8? 03 17:52:32 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8? 03 17:52:32 REDACTED_VM_USER-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin
+[2026-08-03T11:23:45.379Z] [INFO] 
+[2026-08-03T11:23:45.380Z] [PHASE] ============================================================
+[2026-08-03T11:23:45.381Z] [PHASE]   Phase 5: ??????
+[2026-08-03T11:23:45.382Z] [PHASE] ============================================================
+[2026-08-03T11:23:45.383Z] [INFO]   stop...
+[2026-08-03T11:23:45.383Z] [INFO]     CMD: sudo systemctl stop kylin-memory-echo 2>/dev/null; true
+[2026-08-03T11:23:46.544Z] [INFO]   disable...
+[2026-08-03T11:23:46.545Z] [INFO]     CMD: sudo systemctl disable kylin-memory-echo 2>/dev/null; true
+[2026-08-03T11:23:47.139Z] [INFO]   reset-failed...
+[2026-08-03T11:23:47.140Z] [INFO]     CMD: sudo systemctl reset-failed kylin-memory-echo 2>/dev/null; true
+[2026-08-03T11:23:47.266Z] [INFO]   ?? unit ??...
+[2026-08-03T11:23:47.267Z] [INFO]     CMD: sudo rm -f /etc/systemd/system/kylin-memory-echo.service
+[2026-08-03T11:23:47.404Z] [INFO]     CMD: sudo test -f /etc/systemd/system/kylin-memory-echo.service && echo 'FAIL' || echo 'OK'
+[2026-08-03T11:23:47.517Z] [PASS]   ? Unit ?????
+[2026-08-03T11:23:47.518Z] [INFO]     CMD: sudo rm -f /etc/systemd/system/default.target.wants/kylin-memory-echo.service 2>/dev/null; true
+[2026-08-03T11:23:47.631Z] [INFO]     CMD: sudo rm -f /etc/systemd/system/multi-user.target.wants/kylin-memory-echo.service 2>/dev/null; true
+[2026-08-03T11:23:47.752Z] [INFO]     CMD: sudo systemctl daemon-reload 2>&1
+[2026-08-03T11:23:48.294Z] [PASS]   ? daemon-reload ??
+[2026-08-03T11:23:48.296Z] [INFO]     CMD: pkill -9 -f kylin-memory-echo-server 2>/dev/null; true
+[2026-08-03T11:23:49.349Z] [INFO]     CMD: pgrep -f kylin-memory-echo-server 2>&1 || echo 'CLEAN'
+[2026-08-03T11:23:49.379Z] [FAIL]   ? ??????
+[2026-08-03T11:23:49.380Z] [INFO]     CMD: rm -rf /tmp/kylin-memory-echo
+[2026-08-03T11:23:49.388Z] [INFO]     CMD: test -d /tmp/kylin-memory-echo && echo 'FAIL' || echo 'OK'
+[2026-08-03T11:23:49.395Z] [PASS]   ? Socket ?????
+[2026-08-03T11:23:49.396Z] [INFO] 
+[2026-08-03T11:23:49.397Z] [INFO]   --- ?????? ---
+[2026-08-03T11:23:49.397Z] [INFO]     CMD: sudo systemctl status kylin-memory-echo --no-pager 2>&1 | head -3
+[2026-08-03T11:23:49.502Z] [INFO]     systemctl status: Unit kylin-memory-echo.service could not be found.
+[2026-08-03T11:23:49.503Z] [INFO] 
+[2026-08-03T11:23:49.503Z] [PHASE] ============================================================
+[2026-08-03T11:23:49.504Z] [PHASE]   ????
+[2026-08-03T11:23:49.505Z] [PHASE] ============================================================
+[2026-08-03T11:23:49.534Z] [PASS]   ? ?? server_stdout.log
+[2026-08-03T11:23:49.585Z] [PASS]   ? ?? server_stderr.log
+[2026-08-03T11:23:49.586Z] [INFO]     CMD: sudo journalctl -u kylin-memory-echo --no-pager 2>&1 | tail -50
+[2026-08-03T11:23:50.303Z] [PASS]   ? journalctl ?????
+[2026-08-03T11:23:50.304Z] [INFO]     CMD: sudo systemctl status kylin-memory-echo --no-pager --full 2>&1
+[2026-08-03T11:23:50.408Z] [PASS]   ? systemctl status ???
+[2026-08-03T11:23:50.408Z] [INFO]     CMD: sudo test -f /etc/systemd/system/kylin-memory-echo.service && cat /etc/systemd/system/kylin-memory-echo.s
+[2026-08-03T11:23:50.504Z] [PASS]   ? Unit ?????????
+[2026-08-03T11:23:50.505Z] [INFO] 
+[2026-08-03T11:23:50.506Z] [INFO] ============================================================
+[2026-08-03T11:23:50.507Z] [INFO]  V8 ????
+[2026-08-03T11:23:50.507Z] [INFO] ============================================================
+[2026-08-03T11:23:50.508Z] [INFO]   ??: 27
+[2026-08-03T11:23:50.509Z] [INFO]   ??: 2
+[2026-08-03T11:23:50.509Z] [INFO]   ??: 29
+[2026-08-03T11:23:50.510Z] [INFO]   ????: e:\Kylin-memory-dev\UDS-Kylin-Echo\evidence\gate0_echo\v8_prod_test
+[2026-08-03T11:23:50.511Z] [INFO] ============================================================
+[2026-08-03T11:23:50.511Z] [INFO]   ?? ? 2 ???
+[2026-08-03T11:23:50.512Z] [INFO]   ??????:
+[2026-08-03T11:23:50.514Z] [INFO]     #1 ????: ?? Phase 3 ?????????
+[2026-08-03T11:23:50.515Z] [INFO]     #2 ????: ?? Phase 4 ??A ? SHA256 ??
+[2026-08-03T11:23:50.516Z] [INFO]     #3 ????: ?? Phase 4 ??B daemon-reload ? restart ??

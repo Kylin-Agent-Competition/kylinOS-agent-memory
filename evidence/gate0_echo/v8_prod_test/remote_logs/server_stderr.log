@@ -1,0 +1,40 @@
+[2026-08-02T14:12:27.609Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=331374)
+[2026-08-02T14:12:29.757Z] [INFO] Client connected
+[2026-08-02T14:12:29.757Z] [INFO] Request method=echo request_id=req_py_1785679949756
+[2026-08-02T14:12:29.757Z] [INFO] Response sent: status=ok
+[2026-08-02T14:13:00.326Z] [INFO] Client connected
+[2026-08-02T14:13:00.326Z] [INFO] Request method=health request_id=req_py_1785679980326
+[2026-08-02T14:13:00.327Z] [INFO] Response sent: status=ok
+[2026-08-02T14:13:00.328Z] [INFO] Client connected
+[2026-08-02T14:13:00.328Z] [INFO] Request method=memory.retrieve request_id=req_py_1785679980328
+[2026-08-02T14:13:00.328Z] [INFO] Response sent: status=ok
+[2026-08-02T14:13:00.329Z] [INFO] Client connected
+[2026-08-02T14:13:00.330Z] [INFO] Request method=nonexistent.method request_id=req_py_1785679980329
+[2026-08-02T14:13:00.330Z] [WARN] Unknown method: nonexistent.method
+[2026-08-02T14:13:00.331Z] [INFO] Response sent: status=error
+[2026-08-02T14:13:00.494Z] [INFO] Client connected
+[2026-08-02T14:13:00.494Z] [INFO] Request method=echo request_id=req_py_1785679980494
+[2026-08-02T14:13:00.495Z] [INFO] Response sent: status=ok
+[2026-08-02T14:13:00.553Z] [INFO] Received signal 15, shutting down...
+[2026-08-02T14:13:00.553Z] [INFO] Server stopped
+[2026-08-03T09:39:44.784Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=26629)
+[2026-08-03T09:52:28.035Z] [INFO] Received signal 15, shutting down...
+[2026-08-03T09:52:28.037Z] [INFO] Server stopped
+[2026-08-03T09:52:29.211Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=39357)
+[2026-08-03T09:52:32.217Z] [INFO] Client connected
+[2026-08-03T09:52:32.218Z] [INFO] Request method=echo request_id=kaiming_req_001
+[2026-08-03T09:52:32.218Z] [INFO] Response sent: status=ok
+[2026-08-03T09:52:32.226Z] [INFO] Client connected
+[2026-08-03T09:52:32.226Z] [INFO] Request method=health request_id=kaiming_req_001
+[2026-08-03T09:52:32.226Z] [INFO] Response sent: status=ok
+[2026-08-03T09:52:32.245Z] [INFO] Received signal 15, shutting down...
+[2026-08-03T09:52:32.246Z] [INFO] Server stopped
+[2026-08-03T11:23:36.456Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=57865)
+[2026-08-03T11:23:41.840Z] [INFO] Client connected
+[2026-08-03T11:23:41.841Z] [INFO] Request method=echo request_id=v8probe
+[2026-08-03T11:23:41.845Z] [INFO] Response sent: status=ok
+[2026-08-03T11:23:43.108Z] [INFO] Received signal 15, shutting down...
+[2026-08-03T11:23:43.108Z] [INFO] Server stopped
+[2026-08-03T11:23:43.181Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=58083)
+[2026-08-03T11:23:45.555Z] [INFO] Received signal 15, shutting down...
+[2026-08-03T11:23:45.555Z] [INFO] Server stopped

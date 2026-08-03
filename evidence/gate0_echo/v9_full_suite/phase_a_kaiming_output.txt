@@ -1,0 +1,33 @@
+============================================
+ Kaiming Memory Client — v1.1 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: all
+ User: REDACTED_VM_USER
+============================================
+[2026-08-03T11:27:32Z] [INFO] TEST: echo 方法
+[2026-08-03T11:27:32Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"echo": "Hello from Kaiming AI Assistant", "received_at": "2026-08-03T11:27:32.560895+00:00"}, "server_ts": "2026-08-03T11:27:32.560909+00:00"}
+RESULT KAIMING-ECHO PASS
+[2026-08-03T11:27:32Z] [INFO] KAIMING-ECHO PASS: echo 往返, payload=Hello from Kaiming AI Assistant
+[2026-08-03T11:27:32Z] [INFO] TEST: health 方法
+[2026-08-03T11:27:32Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"status": "healthy", "uptime_seconds": 4.138851165771484, "socket_path": "/tmp/kylin-memory-echo/echo.sock", "pid": 59045}, "server_ts": "2026-08-03T11:27:32.561949+00:00"}
+RESULT KAIMING-HEALTH PASS
+[2026-08-03T11:27:32Z] [INFO] KAIMING-HEALTH PASS: health 查询返回 healthy
+[2026-08-03T11:27:32Z] [INFO] TEST: memory.retrieve 方法
+[2026-08-03T11:27:32Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"contexts": [], "total_found": 0, "elapsed_ms": 0.0, "fallback": false}, "server_ts": "2026-08-03T11:27:32.562804+00:00"}
+RESULT KAIMING-RETRIEVE PASS
+[2026-08-03T11:27:32Z] [INFO] KAIMING-RETRIEVE PASS: memory.retrieve 返回空上下文 (Echo 模拟)
+[2026-08-03T11:27:32Z] [INFO] TEST: memory.store 方法 (验证协议兼容性)
+[2026-08-03T11:27:32Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "", "trace_id": "", "status": "error", "data": {"error": "Protocol error: Expecting ',' delimiter: line 1 column 250 (char 249)"}, "server_ts": "2026-08-03T11:27:32.573337+00:00"}
+RESULT KAIMING-STORE PASS
+[2026-08-03T11:27:32Z] [INFO] KAIMING-STORE PASS: memory.store 协议层连通 (Echo未实现,预期error)
+[2026-08-03T11:27:32Z] [INFO] TEST: 未知方法降级
+[2026-08-03T11:27:32Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "error", "data": {"error": "Unknown method: kaiming.custom.analyze"}, "server_ts": "2026-08-03T11:27:32.574065+00:00"}
+RESULT KAIMING-UNKNOWN PASS
+[2026-08-03T11:27:32Z] [INFO] KAIMING-UNKNOWN PASS: 未知方法返回 status=error (降级正常)
+[2026-08-03T11:27:32Z] [INFO] TEST: 连续 5 次快速请求 (模拟高频调用)
+RESULT KAIMING-RAPID PASS
+[2026-08-03T11:27:32Z] [INFO] KAIMING-RAPID PASS: 5/5 次快速请求成功
+
+============================================
+ 通过: 6 / 失败: 0
+============================================

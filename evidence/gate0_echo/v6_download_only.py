@@ -55,7 +55,11 @@ def main():
                 local_path = os.path.join(local_dir, fname)
                 sftp.get(remote_path, local_path)
                 size = os.path.getsize(local_path)
-                print(f"  OK: {fname} ({size} bytes)")
+                if size == 0:
+                    print(f"  WARN: {fname} downloaded but is EMPTY (0 bytes) - possible transfer failure")
+                    _failures += 1
+                else:
+                    print(f"  OK: {fname} ({size} bytes)")
         except Exception as e:
             print(f"  SKIP {remote_dir}: {e}")
             _failures += 1

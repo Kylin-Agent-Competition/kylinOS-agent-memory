@@ -115,8 +115,13 @@ log('Step 6: Download remote logs...')
 sftp = c.open_sftp()
 for log_file in ['server_stdout.log', 'server_stderr.log']:
     try:
-        sftp.get(f'{REMOTE}/logs/{log_file}', os.path.join(EVIDENCE_DIR, log_file))
-        log(f'  Downloaded {log_file}')
+        local_log = os.path.join(EVIDENCE_DIR, log_file)
+        sftp.get(f'{REMOTE}/logs/{log_file}', local_log)
+        size = os.path.getsize(local_log)
+        if size == 0:
+            log(f'  WARN: {log_file} is EMPTY after download')
+        else:
+            log(f'  Downloaded {log_file} ({size} bytes)')
     except:
         log(f'  Skip {log_file}')
 
@@ -128,8 +133,10 @@ try:
     kysec_log = chan.recv(4096).decode('utf-8', errors='replace').strip()
     chan.close()
     if kysec_log:
-        sftp.get(kysec_log, os.path.join(EVIDENCE_DIR, 'test_kysec_full.log'))
-        log(f'  Downloaded KYSEC log')
+        local_log = os.path.join(EVIDENCE_DIR, 'test_kysec_full.log')
+        sftp.get(kysec_log, local_log)
+        size = os.path.getsize(local_log)
+        log(f'  Downloaded KYSEC log ({size} bytes)' + (' [WARN: EMPTY]' if size == 0 else ''))
 except:
     pass
 
@@ -141,8 +148,10 @@ try:
     sysd_log = chan.recv(4096).decode('utf-8', errors='replace').strip()
     chan.close()
     if sysd_log:
-        sftp.get(sysd_log, os.path.join(EVIDENCE_DIR, 'test_systemd_lifecycle.log'))
-        log(f'  Downloaded systemd log')
+        local_log = os.path.join(EVIDENCE_DIR, 'test_systemd_lifecycle.log')
+        sftp.get(sysd_log, local_log)
+        size = os.path.getsize(local_log)
+        log(f'  Downloaded systemd log ({size} bytes)' + (' [WARN: EMPTY]' if size == 0 else ''))
 except:
     pass
 

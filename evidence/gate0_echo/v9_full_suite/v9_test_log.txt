@@ -1,0 +1,94 @@
+[2026-08-03T11:27Z] [INFO] ============================================================
+[2026-08-03T11:27Z] [INFO]  V9 Full Suite Test — Kaiming + KYSEC + Systemd
+[2026-08-03T11:27Z] [INFO]  Target: REDACTED_VM_USER@127.0.0.1:2222
+[2026-08-03T11:27Z] [INFO] ============================================================
+[2026-08-03T11:27Z] [PASS]   PASS: SSH connected
+[2026-08-03T11:27Z] [INFO]     CMD: uname -r
+[2026-08-03T11:27Z] [INFO] Kernel: 6.6.0-63-generic
+[2026-08-03T11:27Z] [INFO] 
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [PHASE]   Phase 0: Upload & Compile
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [INFO]     CMD: mkdir -p /home/REDACTED_VM_USER/kylin-memory-echo/bin /home/REDACTED_VM_USER/kylin-memory-echo
+[2026-08-03T11:27Z] [PASS]   PASS: Remote dirs created
+[2026-08-03T11:27Z] [PASS]   PASS: Uploaded: memory_echo_server.py
+[2026-08-03T11:27Z] [PASS]   PASS: Uploaded: kaiming_memory_client.cpp
+[2026-08-03T11:27Z] [PASS]   PASS: Uploaded: CMakeLists.txt
+[2026-08-03T11:27Z] [PASS]   PASS: Uploaded: test_kysec_full.sh
+[2026-08-03T11:27Z] [PASS]   PASS: Uploaded: test_systemd_lifecycle.sh
+[2026-08-03T11:27Z] [PASS]   PASS: Uploaded: kysec_authorize.sh
+[2026-08-03T11:27Z] [PASS]   PASS: Uploaded: kylin-memory-echo.service
+[2026-08-03T11:27Z] [INFO]     CMD: chmod +x /home/REDACTED_VM_USER/kylin-memory-echo/bin/* /home/REDACTED_VM_USER/kylin-memory-ec
+[2026-08-03T11:27Z] [PASS]   PASS: Permissions set
+[2026-08-03T11:27Z] [INFO] Compiling kaiming_memory_client...
+[2026-08-03T11:27Z] [INFO]     CMD: cd /home/REDACTED_VM_USER/kylin-memory-echo && g++ -std=c++17 -O2 kaiming_memory_client
+[2026-08-03T11:27Z] [PASS]   PASS: kaiming_memory_client compiled successfully
+[2026-08-03T11:27Z] [INFO]     CMD: file /home/REDACTED_VM_USER/kylin-memory-echo/bin/kaiming_memory_client
+[2026-08-03T11:27Z] [INFO]   Client binary: /home/REDACTED_VM_USER/kylin-memory-echo/bin/kaiming_memory_client: ELF 64-bit LSB executable, x86-64, vers
+[2026-08-03T11:27Z] [INFO] 
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [PHASE]   Phase 1: Install Systemd Service
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [INFO] Target unit SHA256: d94408531717c4a2...
+[2026-08-03T11:27Z] [PASS]   PASS: Unit file written via sudo base64
+[2026-08-03T11:27Z] [PASS]   PASS: SHA256 verified
+[2026-08-03T11:27Z] [PASS]   PASS: daemon-reload OK
+[2026-08-03T11:27Z] [PASS]   PASS: systemctl enable OK
+[2026-08-03T11:27Z] [PASS]   PASS: Symlink verified
+[2026-08-03T11:27Z] [PASS]   PASS: systemctl start OK
+[2026-08-03T11:27Z] [PASS]   PASS: Service running (PID=59045)
+[2026-08-03T11:27Z] [INFO]     CMD: test -S /tmp/kylin-memory-echo/echo.sock && echo SOCKET_OK || echo NO_SOCKET
+[2026-08-03T11:27Z] [PASS]   PASS: Socket exists: /tmp/kylin-memory-echo/echo.sock
+[2026-08-03T11:27Z] [INFO] 
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [PHASE]   Phase A: Kaiming Memory Client UDS Tests
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [INFO]     CMD: test -x /home/REDACTED_VM_USER/kylin-memory-echo/bin/kaiming_memory_client && echo OK |
+[2026-08-03T11:27Z] [INFO]     CMD: /home/REDACTED_VM_USER/kylin-memory-echo/bin/kaiming_memory_client --method all 2>&1
+[2026-08-03T11:27Z] [INFO]   A-Raw: 12 PASS indicators, 0 FAIL indicators
+[2026-08-03T11:27Z] [PASS]   PASS: KAIMING-ECHO: PASS
+[2026-08-03T11:27Z] [PASS]   PASS: KAIMING-HEALTH: PASS
+[2026-08-03T11:27Z] [PASS]   PASS: KAIMING-RETRIEVE: PASS
+[2026-08-03T11:27Z] [PASS]   PASS: KAIMING-STORE: PASS
+[2026-08-03T11:27Z] [PASS]   PASS: KAIMING-UNKNOWN: PASS
+[2026-08-03T11:27Z] [PASS]   PASS: KAIMING-RAPID: PASS
+[2026-08-03T11:27Z] [INFO]   Phase A Summary: 6/6 PASS
+[2026-08-03T11:27Z] [INFO] 
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [PHASE]   Phase B: KYSEC ACL Authorization & Rollback
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [INFO]   B-Raw: 0/0 (PASS count/FAIL count in output)
+[2026-08-03T11:27Z] [PASS]   PASS: Stage1: Baseline SHA256 collected
+[2026-08-03T11:27Z] [PASS]   PASS: Stage2: ACL authorize attempted
+[2026-08-03T11:27Z] [PASS]   PASS: Stage3: Rollback attempted
+[2026-08-03T11:27Z] [INFO] 
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [PHASE]   Phase C: Systemd Full Lifecycle
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [INFO]   C-Raw: 0/0 (PASS/FAIL count)
+[2026-08-03T11:27Z] [FAIL]   FAIL: Phase C checkpoint missing: daemon-reload
+[2026-08-03T11:27Z] [FAIL]   FAIL: Phase C checkpoint missing: enable
+[2026-08-03T11:27Z] [FAIL]   FAIL: Phase C checkpoint missing: symlink
+[2026-08-03T11:27Z] [FAIL]   FAIL: Phase C checkpoint missing: start
+[2026-08-03T11:27Z] [FAIL]   FAIL: Phase C checkpoint missing: process alive
+[2026-08-03T11:27Z] [FAIL]   FAIL: Phase C checkpoint missing: socket
+[2026-08-03T11:27Z] [FAIL]   FAIL: Phase C checkpoint missing: UDS echo
+[2026-08-03T11:27Z] [FAIL]   FAIL: Phase C checkpoint missing: UDS health
+[2026-08-03T11:27Z] [FAIL]   FAIL: Phase C checkpoint missing: stop
+[2026-08-03T11:27Z] [FAIL]   FAIL: Phase C checkpoint missing: disable
+[2026-08-03T11:27Z] [INFO] 
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [PHASE]   Evidence Collection
+[2026-08-03T11:27Z] [PHASE] ============================================================
+[2026-08-03T11:27Z] [PASS]   PASS: Downloaded server_stdout.log
+[2026-08-03T11:27Z] [PASS]   PASS: Downloaded server_stderr.log
+[2026-08-03T11:27Z] [PASS]   PASS: journalctl saved
+[2026-08-03T11:27Z] [PASS]   PASS: systemctl status saved
+[2026-08-03T11:27Z] [PASS]   PASS: Unit file snapshot saved
+[2026-08-03T11:27Z] [INFO] 
+[2026-08-03T11:27Z] [PHASE V9] ============================================================
+[2026-08-03T11:27Z] [INFO]   V9 Full Suite Summary
+[2026-08-03T11:27Z] [PHASE V9] ============================================================
+[2026-08-03T11:27Z] [INFO]   Total: 43 checks (33 PASS / 10 FAIL)
+[2026-08-03T11:27Z] [INFO]   Evidence: e:\Kylin-memory-dev\UDS-Kylin-Echo\evidence\gate0_echo\v9_full_suite
+[2026-08-03T11:27Z] [INFO] ============================================================

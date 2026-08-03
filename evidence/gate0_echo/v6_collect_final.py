@@ -3,6 +3,7 @@
 
 凭据通过环境变量 KYLIN_VM_USER / KYLIN_VM_PASSWORD 传入，不硬编码。
 """
+import hashlib
 import os
 import sys
 import time
@@ -34,10 +35,38 @@ def run(c, cmd, timeout=30):
 
 
 def sftp_put(c, local, remote):
-    sftp = c.open_sftp()
-    sftp.put(local, remote, confirm=True)
-    sftp.close()
-    print(f"  UPLOADED: {os.path.basename(local)}")
+    """Ironclad upload with SHA256 verification + retry"""
+    import time
+    
+    l_sha = hashlib.sha256()
+    with open(local, "rb") as lf:
+        for chunk in iter(lambda: lf.read(65536), b""):
+            l_sha.update(chunk)
+    l_sha = l_sha.hexdigest()
+    
+    for attempt in range(3):
+        sftp = c.open_sftp()
+        try:
+            sftp.put(local, remote, confirm=True)
+        finally:
+            sftp.close()
+        
+        time.sleep(0.3)
+        _, out, _ = run(c, f"sha256sum '{remote}' 2>/dev/null || echo 'MISSING'", timeout=5)
+        if "MISSING" not in out:
+            r_sha = out.split()[0]
+            if l_sha == r_sha:
+                print(f"  UPLOADED+VERIFIED: {os.path.basename(local)} ({l_sha[:16]}...)")
+                return
+            else:
+                print(f"  [RETRY {attempt+1}/3] SHA mismatch: local={l_sha[:16]}... remote={r_sha[:16]}...")
+        else:
+            print(f"  [RETRY {attempt+1}/3] remote SHA unavailable for {os.path.basename(local)}")
+        
+        if attempt < 2:
+            time.sleep(1.0 * (attempt + 1))
+    
+    raise RuntimeError(f"UPLOAD FAILED after 3 retries: {os.path.basename(local)} SHA={l_sha[:16]}...")
 
 
 def main():

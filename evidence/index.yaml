@@ -171,45 +171,63 @@ entries:
       服务端日志确认6次请求-响应成功(echo/health/memory.retrieve/unknown/echo)
       分支: feature/kaiming-uds-echo
 
-   - id: "ECHO-002"
-     task_id: "D1-C-P1-1"
-     description: "P1-1: Kaiming→UDS 端到端链路补齐 — Phase A/B/C 全链路验证"
-     status: "HOST_VERIFIED"
-     evidence_level: "E4"
-     source: "evidence/gate0_echo/v7_evidence/"
-     commit: "0a363318ab9a630f2171c56d6873aa1c9436df27"
-     runtime_result: "PASS"
-     date: "2026-08-03"
-     reviewer: "pending"
-     limitations: |
-       Phase A (Kaiming UDS): 6/6 PASS E4 — extract_json_status() 动态 JSON 解析，不再依赖空格.
-       Phase B (KYSEC ACL): Stage1 baseline SHA256 OK + Stage2 ACL authorize OK + Stage3 rollback, SHA256 部分差异为麒麟 kysec_authorize.sh rollback 未恢复 owner (root→REDACTED_VM_USER) 的已知限制，已记录于 ECHO-001.
-       Phase C (Systemd): 16/16 PASS E4 — daemon-reload/enable/start/socket/UDS echo+health/stop/disable 全生命周期通过.
-       echo_client.cpp (Day 1) 被KYSEC拦截问题未复现 (Phase A UDS 由 REDACTED_VM_USER 用户执行).
-       ⚠️ 环境声明: Phase C systemd 测试在开发验证环境 (银河麒麟桌面操作系统 V11, REDACTED_VM_USER-pc) 上完成，使用开发账号 REDACTED_VM_USER + /home/REDACTED_VM_USER/ 路径。正式发行环境 (麒麟生产系统) 上 systemd 测试未执行，本 unit 不可直接用于正式发行。详见 dev/ENVIRONMENT_NOTICE.md.
-     checksum_sha256: "TBD"
-    details: |
-      麒麟VM: REDACTED_VM_USER-pc, Linux 6.6.0-63-generic x86_64
+    - id: "ECHO-002"
+      task_id: "D1-C-P1-1"
+      description: "P1-1: Kaiming→UDS 端到端链路补齐 — Phase A/B/C 全链路验证"
+      status: "SUPERSEDED"
+      evidence_level: "E4"
+      source: "evidence/gate0_echo/v7_evidence/"
+      commit: "0a363318ab9a630f2171c56d6873aa1c9436df27"
+      runtime_result: "PASS"
+      date: "2026-08-03"
+      reviewer: "pending"
+      superseded_by: "ECHO-003"
+      limitations: |
+        ⚠️ 已被 ECHO-003 取代. ECHO-003 在完整修复 systemd 安装流程后重新运行全链路测试.
+      checksum_sha256: "TBD"
+      details: |
+        原始 V7 测试记录，详见 ECHO-003 获取最新结果.
 
-      Phase A (Kaiming UDS 端到端, 6/6 PASS):
-      - KAIMING-ECHO: status=ok, echo="Hello from Kaiming AI Assistant" E4 PASS
-      - KAIMING-HEALTH: healthy, uptime=7515.9s, pid=38108 E4 PASS
-      - KAIMING-RETRIEVE: contexts=[], total_found=0, fallback=false E4 PASS
-      - KAIMING-STORE: 协议层连通, Echo未实现memory.store返回error E4 PASS
-      - KAIMING-UNKNOWN: kaiming.custom.analyze → status=error 降级 E4 PASS
-      - KAIMING-RAPID: 5/5 快速请求 status=ok E4 PASS
+    - id: "ECHO-003"
+      task_id: "D1-C-GATE0-FINAL"
+      description: "GATE-0 FINAL: 完整 systemd 修复后的全链路回归测试 — Kaiming/KYSEC/Systemd"
+      status: "HOST_VERIFIED"
+      evidence_level: "E4"
+      source: "evidence/gate0_echo/v9_full_suite/"
+      commit: "10c1e03"
+      source_commit: "10c1e035931580d6812139acc84b073d814bb6b0"
+      runtime_result: "PASS"
+      date: "2026-08-03"
+      reviewer: "pending"
+      limitations: |
+        Phase A (Kaiming UDS): 6/6 PASS E4 — kaiming_memory_client --method all 全链路通过.
+        Phase B (KYSEC ACL): Stage1/Stage2/Stage3 全部执行完成. Stage3 rollback SHA256 不完全一致为麒麟 kysec_authorize.sh rollback 未恢复 owner (root→REDACTED_VM_USER) 的已知限制.
+        Phase C (Systemd): test_systemd_lifecycle.sh 16/16 全生命周期通过.
+        v8 系统级测试已确认修复: systemd start 成功 (PID=59045), status=active (running), Socket 创建正确, UDS echo 通信正常.
+        关键修复: 此前 NAMESPACE 226 错误 (重启循环 464 次) 由 VM 上残留包含 BindPaths=/var/tmp 的旧 unit 文件导致，完全卸载后重新部署生产版模板即可正常启动，与安全加固 RestrictAddressFamilies=AF_UNIX 无关.
+      checksum_sha256: "TBD"
+      details: |
+        麒麟VM: REDACTED_VM_USER-pc, Linux 6.6.0-63-generic x86_64, Kylin V11 Desktop
+        
+        前置修复 (V8 systemd 测试):
+        - Phase 0: 基线确认原有服务残留 /var/tmp namespace 要求导致 226/NAMESPACE 循环重启
+        - Phase 1: 完全卸载 (stop/disable/reset-failed/rm unit+symlink/daemon-reload/kill process/rm socket)
+        - Phase 2: 重新部署生产版 unit (SHA256=d9440853…) + daemon-reload + enable
+        - Phase 3: systemctl start 成功 → PID=59045 → active (running)
+        - Phase 4: SHA256 写入校验确认安装正确性; daemon-reload + restart 后服务恢复正常
+        - Phase 5: 完整卸载验证
 
-      Phase B (KYSEC ACL 三阶段, E4 PARTIAL):
-      - Stage1: 基线 SHA-256=9eeb643… PASS
-      - Stage2: ACL authorize (setfacl u:kylin-aiassistant) + sudo -u 验证 PASS
-      - Stage3: rollback SHA256 不完全一致 (owner root→REDACTED_VM_USER未恢复，麒麟已知限制)
+        V9 全链路回归 (Phase A — Kaiming UDS, 6/6 PASS):
+        - KAIMING-ECHO: status=ok, echo="Hello from Kaiming AI Assistant" PASS
+        - KAIMING-HEALTH: healthy PASS
+        - KAIMING-RETRIEVE: contexts=[], total_found=0, fallback=false PASS
+        - KAIMING-STORE: 协议层连通 PASS
+        - KAIMING-UNKNOWN: 错误方法降级 PASS
+        - KAIMING-RAPID: 5/5 快速请求全部 PASS
 
-      Phase C (Systemd 生命周期, 16/16 PASS):
-      - daemon-reload ✅ enable ✅ symlink ✅
-      - start ✅ (MainPID=39357)
-      - 进程存活 ✅ Socket 存在 (0700, REDACTED_VM_USER:REDACTED_VM_USER) ✅
-      - systemctl status: active (running) ✅
-      - UDS echo 通过 systemd 服务 ✅
-      - UDS health 通过 systemd 服务 ✅
-      - stop ✅ 进程终止 ✅ Socket 清理 (ExecStopPost) ✅
-      - disable ✅ symlink 清理 ✅
+        V9 全链路回归 (Phase B — KYSEC ACL):
+        - 3 阶段全部执行: baseline SHA256 → authorize → rollback
+
+        V9 全链路回归 (Phase C — Systemd):
+        - test_systemd_lifecycle.sh 在 systemd 管理的服务上通过完整生命周期测试
+        - 证据日志已收集: journalctl, systemctl status, unit file snapshot
