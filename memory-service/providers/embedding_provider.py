@@ -91,8 +91,15 @@ class ModelInfo:
 
 class EmbeddingProvider:
     """
-    Embedding 向量化服务（骨架）。
-    每次调用通过 C++ Bridge 走 dlopen → dlsym → text_embedding 路径。
+    Embedding 向量化服务（进程级单例）。
+
+    生命周期模型（P0-1）：
+    - 通过进程级单例 Bridge 共享 SDK 会话：首次 start() 加载动态库并初始化模型，
+      后续调用复用已有 session（不销毁重建——SDK 不允许同进程 session 销毁后重建）。
+    - 全局路径锁定：so_path 参数仅在进程内第一个实例创建时生效；
+      后续创建不同路径的实例将被静默复用已加载的 Bridge。
+    - 生命周期边界：调用 close() 后，当前 Provider 实例应视为已废弃；
+      虽然由于单例机制底层 session 可能仍存活，但不建议继续调用 embed()。
     """
 
     # Bridge 异常 → Provider 错误码映射（P1-1：隐藏 Bridge 细节）
@@ -139,6 +146,7 @@ class EmbeddingProvider:
 
         self._bridge = EmbeddingProvider._shared_bridge
         self._dimension: Optional[int] = None
+        self._started = False  # 实例级幂等标记（P0-1/复审建议）
 
     # ── 生命周期 ──
 
@@ -152,6 +160,8 @@ class EmbeddingProvider:
         2. create_session 后必须至少完成一次成功 embed（模型加载就绪）
            才能安全使用；start() 将初始化 embed 作为正式初始化步骤。
         """
+        if self._started:
+            return  # 实例级幂等：本实例已启动，直接返回（引用计数不重复增加）
         try:
             self._bridge.load()  # 幂等：已加载则直接返回
             if not self._bridge.has_session:
@@ -161,6 +171,7 @@ class EmbeddingProvider:
                 if init.dimension > 0:
                     EmbeddingProvider._shared_dimension = init.dimension
             EmbeddingProvider._ref_count += 1
+            self._started = True
         except Exception as exc:  # noqa: BLE001 - 统一映射为 Provider 错误
             raise self._map_bridge_error(exc) from exc
 
@@ -262,8 +273,8 @@ class EmbeddingProvider:
         返回当前模型向量维度。
 
         NOTE: 首次调用若维度未知，会用空串触发一次 embed() 获取维度（有 IPC 副作用）。
-        [TD-A-005-03 get_dimension 副作用] 骨架阶段临时方案：Day2 已实测空串返回 768。
-        后续应改用 SDK 元信息接口无副作用获取。
+        [TD-A-005-03 get_dimension 副作用] Day4 阶段通过首条空串 embed 触发模型就绪验证
+        并提取维度（Day2 已实测空串返回 768）。
         """
         if EmbeddingProvider._shared_dimension is None:
             r = self.embed("")

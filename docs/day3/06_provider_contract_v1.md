@@ -37,8 +37,12 @@
 ```python
 class EmbeddingProvider:
     """
-    Embedding 向量化服务。
-    每次调用均通过 C++ Bridge 走 dlopen → dlsym → text_embedding 路径。
+    Embedding 向量化服务（进程级单例）。
+    通过进程级单例 Bridge 共享 SDK 会话：首次 start() 加载动态库并初始化模型，
+    后续调用复用已有 session（不销毁重建——SDK 不允许同进程 session 销毁后重建）。
+    生命周期约束（Day4 实现，见 evidence/l2-kylin-vm/day4_bridge_smoke_run.log）：
+    - so_path 仅在进程内第一个实例创建时生效（全局路径锁定）；
+    - close() 后当前实例应视为已废弃，不建议继续调用 embed()。
     """
 
     def embed(self, text: str, *, timeout_ms: int = 5000) -> EmbeddingResult:
