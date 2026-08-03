@@ -3,9 +3,9 @@
 > task_id: D2-C-OSAGENT-SPIKE
 > 责任轨道: C · 刘承恩
 > Reviewer: D(周子腾) 主审；E(谢嘉然) 补审
-> 状态: L2_VERIFIED（三项实验已在麒麟虚拟机执行完毕，证据已采集）
+> 状态: REVIEW_PENDING（三项实验已在麒麟VirtualBox虚拟机执行完毕, 证据已采集, 待 D Reviewer 复核真实性; 证据待上传到本目录）
 > 执行 Commit: 20adffc7449ad97f837108b02ce0dcc0d1d79f24
-> 执行环境: Kylin-Desktop V11 / Linux 6.6.0-63-generic / VMware Workstation
+> 执行环境: Kylin-Desktop V11 / Linux 6.6.0-63-generic / VirtualBox (由 systemd-detect-virt 自检测, 禁止硬编码)
 
 ## 本目录用途
 
@@ -15,14 +15,14 @@
 
 | 实验 | 状态 | 关键结论 |
 |---|---|---|
-| H2C-PostTurn | ✅ PASS | is_end=true 唯一 (计数=1), TurnFinalizedEvent Hook 点已确认 |
-| H2C-PreChat | ⚠️ PARTIAL_FAIL | H2C-PreChat-2 通过 (DB 无污染); H2C-PreChat-3 未通过 (Hook 点 A 未实现 memory_context 注入) |
-| H2C-Tool | ✅ PASS_WITH_FINDING | H2C-Tool-3/4 通过; **重大发现: 麒麟不用 tool_call, 用 intentionrecognition** |
+| H2C-PostTurn | PASS_CANDIDATE | is_end=true 唯一 (计数=1, sendmsg 到 assistant.sock); 待补数据库前后快照和15秒稳定性验证 |
+| H2C-PreChat | PARTIAL_FAIL_CANDIDATE | H2C-PreChat-2 通过 (DB 无污染); H2C-PreChat-3 memory_context 未观察到 (AGT-005=NOT_OBSERVED) |
+| H2C-Tool | ARCHITECTURE_FINDING_UNVERIFIED | 发现 stop_chat/intentionrecognition 线索; OpenAI风格关键词=0; 成功/失败/取消Tool结构化事件未捕获 |
 
 ## 三大架构发现
 
-1. **AF-1**: Hook 点 A (Pre-Chat Memory Context 注入) 当前版本未实现 — AGT-005 状态更新为 NOT_IMPLEMENTED
-2. **AF-2**: 麒麟 AI 助手不使用 OpenAI 风格 tool_call/function_call — Tool 动作由 kylin-ai-runtime 内部 intentionrecognition.cpp 直接执行
+1. **AF-1**: Hook 点 A (Pre-Chat Memory Context 注入) strace 未观察到 memory_context 字段 — AGT-005 状态为 NOT_OBSERVED (需源码 instrument 确认, 不得直接判定 NOT_IMPLEMENTED)
+2. **AF-2**: 麒麟 AI 助手不使用 OpenAI 风格 tool_call/function_call — Tool 动作由 kylin-ai-runtime 内部 intentionrecognition.cpp 直接执行 (AGT-004=PARTIAL, TD-007=OPEN)
 3. **AF-3**: 真实 IPC 通道为 /tmp/.kylin-ai-runtime-unix/1000/assistant.sock (DBus), 方法 chat/stop_chat, 信号 ChatResult
 
 ## 证据清单
@@ -60,11 +60,11 @@ evidence/l2-kylin-vm/d2c/
 
 证据上传到本目录后，需：
 
-1. 更新 `evidence/index.yaml` 中 D2-C 条目的 `status` → `L2_VERIFIED` 或 `L2_FAILED`
+1. 更新 `evidence/index.yaml` 中 D2-C 条目的 `status` → `REVIEW_PENDING` (证据完整上传并经 D Reviewer 复核后, 方可升级为 L2_VERIFIED)
 2. 回填 `commit` 字段（实际执行的 Commit SHA）
-3. 回填 `checksum` 字段（checksums.sha256 文件内容哈希）
+3. 回填 `checksum_sha256` 字段（checksums.sha256 文件内容哈希）
 4. 更新 os-agent-integration/D2_C_宿主实验执行手册.md 的完成定义
-5. 关闭/更新 TD-007（如 Tool Hook 路径已确认）
+5. 保持 TD-007 为 OPEN（Tool Hook 路径已确认为 intentionrecognition.cpp, 但需源码 instrument 补做成功/失败/取消 Tool 结构化事件）
 
 ## 脱敏要求
 

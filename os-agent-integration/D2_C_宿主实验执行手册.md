@@ -6,9 +6,9 @@
 > 日期：2026-07-30（D2，Gate 0：核心集成可行性验证）
 > Reviewer：D 主审（周子腾）；用户交互与安全由 E 补审（谢嘉然）
 > 依据：01 能力边界 v1.0 §7/§11（AGT-001~005）、02 总体架构 v1.0 §4/§16.15、03 环境配置手册 v1.0
-> 状态：L2_VERIFIED（三项实验已在麒麟虚拟机执行完毕，证据已采集，待 D Reviewer 复核）
+> 状态：REVIEW_PENDING（三项实验已在麒麟虚拟机执行完毕，证据已采集，待 D Reviewer 复核）
 > 执行 Commit: 20adffc7449ad97f837108b02ce0dcc0d1d79f24
-> 执行环境: Kylin-Desktop V11 / Linux 6.6.0-63-generic / VMware Workstation
+> 执行环境: Kylin-Desktop V11 / Linux 6.6.0-63-generic / VirtualBox
 
 ---
 
@@ -47,7 +47,7 @@
 | Runtime Socket | /tmp/.kylin-ai-runtime-unix/\<uid\>/assistant.sock | `ls -l /tmp/.kylin-ai-runtime-unix/*/assistant.sock` |
 | 聊天数据库 | ~/.config/kylin-aiassistant/kylin_aiassistant_database.db | `ls -l ~/.config/kylin-aiassistant/kylin_aiassistant_database.db` |
 | 当前 Commit | 同步到 D2 分支 HEAD | `cd ~/kylinOS-agent-memory && git rev-parse HEAD` |
-| 虚拟机快照 | 已回滚到 D2 基线快照 | VMware Workstation 或 VirtualBox 管理器 |
+| 虚拟机快照 | 已回滚到 D2 基线快照 | VirtualBox 管理器 |
 
 ### 1.2 脚本部署
 
@@ -99,8 +99,8 @@ sudo setstatus -p /home/<user>/d2c-probe/d2c_postturn_isend_counter.sh verified
 ```
 
 脚本将：
-- 启动 `strace` 或 `ltrace` 跟踪 kylin-aiassistant 进程的 `write`/`recvmsg` 系统调用
-- 过滤包含 `is_end`、`chatCallback`、`updateBubble` 关键词的日志行
+- 启动 `strace` 跟踪 kylin-aiassistant + kylin-ai-runtime 进程的 `write`/`writev`/`sendmsg`/`sendto`/`recvmsg`/`read`/`poll` 系统调用 (LD_PRELOAD 因 KYSEC/签名限制未采用)
+- 离线过滤包含 `is_end`、`ChatResult`、`assistant.sock` 关键词的日志行
 - 输出到 `~/d2c-probe/out/postturn_<timestamp>.log`
 
 **步骤 A2：** 打开 AI 助手，发起一次普通文本问答
@@ -180,9 +180,9 @@ sudo setstatus -p /home/<user>/d2c-probe/d2c_postturn_isend_counter.sh verified
 ~/d2c-probe/d2c_prechat_context_probe.sh capture-start
 ```
 
-脚本将使用 `ltrace` 或 `LD_PRELOAD` 拦截 `OsAssistant::chatAsync` 调用，记录入参 JSON 到 `~/d2c-probe/out/prechat_<timestamp>.model_request.jsonl`。
+脚本将使用 `strace` + 关键词过滤捕获系统调用文本 (非协议解码后的真实 chatAsync 入参 JSON), 按 marker/memory_context/prompt/context 等关键词过滤后保存到 `~/d2c-probe/out/prechat_<timestamp>.model_request.jsonl`。
 
-> **注意：** 此步骤可能需要构建一个最小 `LD_PRELOAD` 桩。若 KYSEC 或签名阻止注入，改用 `strace -e write` 捕获 socket 写入内容。具体方法在 D2 执行时记录到证据包。
+> **注意：** 实际使用 `strace -e write` + 关键词过滤捕获 socket 写入内容（LD_PRELOAD 因 KYSEC/签名限制未采用）。该文件是关键词过滤后的系统调用文本, 不是经过协议解码后确认的模型请求 JSON; 关键词未命中只能说明当前 strace 观察方式未发现这些明文字段, 不能直接证明 Hook 点 A 未实现。需源码 instrument、D-Bus 解码或真实 chatAsync 入参捕获确认。
 
 **步骤 B3：** 发起带标记的用户输入
 
@@ -192,7 +192,7 @@ sudo setstatus -p /home/<user>/d2c-probe/d2c_postturn_isend_counter.sh verified
 **步骤 B4：** 等待回答完成，停止捕获
 
 ```bash
-~/d2c-prechat/d2c_prechat_context_probe.sh capture-stop
+~/d2c-probe/d2c_prechat_context_probe.sh capture-stop
 ```
 
 **步骤 B5：** 三路证据采集
@@ -331,8 +331,8 @@ d2c_evidence_<timestamp>/
 
 - `task_id` — D2-C-OSAGENT-SPIKE
 - `commit` — 实际执行的 Commit SHA
-- `os` — 银河麒麟 V10 SP1 x86_64
-- `virtualization` — VirtualBox 7.x（版本号实测）
+- `os` — 银河麒麟 V11 x86_64
+- `virtualization` — 由 d2c_evidence_collector.sh 的 detect_virt() 自检测 (systemd-detect-virt / dmidecode / dmesg), 禁止硬编码
 - `command` — 执行的验证命令
 - `result` — 命令输出摘要或截图链接
 - `reviewer` — D（周子腾）；E 补审（谢嘉然）
@@ -349,39 +349,39 @@ d2c_evidence_<timestamp>/
 
 ## 6. D2-C 完成定义
 
-**状态：** L2_VERIFIED（三项实验已在麒麟虚拟机执行完毕）
+**状态：** REVIEW_PENDING（三项实验已在麒麟虚拟机执行完毕）
 
 **实验执行结果汇总（2026-08-01）：**
 
 | 实验 | 状态 | 关键结论 |
 |---|---|---|
-| A: H2C-PostTurn | ✅ PASS | is_end=true 唯一 (计数=1), TurnFinalizedEvent Hook 点已确认 (sendmsg on assistant.sock) |
-| B: H2C-PreChat | ⚠️ PARTIAL_FAIL | H2C-PreChat-2 通过 (DB 无污染); H2C-PreChat-3 未通过 (Hook 点 A 未实现 memory_context 注入) |
-| C: H2C-Tool | ✅ PASS_WITH_FINDING | H2C-Tool-3/4 通过; **重大发现: 麒麟不用 tool_call, 用 intentionrecognition** |
+| A: H2C-PostTurn | PASS_CANDIDATE | is_end=true 唯一 (计数=1, sendmsg 到 assistant.sock); 待补数据库前后快照和15秒稳定性验证 |
+| B: H2C-PreChat | PARTIAL_FAIL_CANDIDATE | H2C-PreChat-2 通过 (DB 无污染); H2C-PreChat-3 memory_context 未观察到 (AGT-005=NOT_OBSERVED) |
+| C: H2C-Tool | ARCHITECTURE_FINDING_UNVERIFIED | 发现 stop_chat/intentionrecognition 线索; OpenAI风格关键词=0; 成功/失败/取消Tool结构化事件未捕获 |
 
 **三大架构发现：**
 
-1. **AF-1**: Hook 点 A (Pre-Chat Memory Context 注入) 当前版本未实现 — AGT-005 状态更新为 NOT_IMPLEMENTED
-2. **AF-2**: 麒麟 AI 助手不使用 OpenAI 风格 tool_call/function_call — Tool 动作由 kylin-ai-runtime 内部 intentionrecognition.cpp 直接执行
+1. **AF-1**: Hook 点 A (Pre-Chat Memory Context 注入) strace 未观察到 memory_context 字段 — AGT-005 状态为 NOT_OBSERVED (需源码 instrument 确认, 不得直接判定 NOT_IMPLEMENTED)
+2. **AF-2**: 麒麟 AI 助手不使用 OpenAI 风格 tool_call/function_call — Tool 动作由 kylin-ai-runtime 内部 intentionrecognition.cpp 直接执行 (AGT-004=PARTIAL, TD-007=OPEN)
 3. **AF-3**: 真实 IPC 通道为 /tmp/.kylin-ai-runtime-unix/1000/assistant.sock (DBus), 方法 chat/stop_chat, 信号 ChatResult
 
 **升级为 COMPLETED 需要：**
 
 1. ✅ 人在麒麟虚拟机执行三项实验（A/B/C）。— 已完成 2026-08-01
 2. ⚠️ 收集完整证据包（日志、截图、数据库快照、JSON 报告）。— 证据已采集, 待上传到 evidence/l2-kylin-vm/d2c/
-3. ✅ 所有通过标准满足，或失败项已分类为 Bug/Blocker/Risk/TD。— H2C-PreChat-3 失败归因为 NOT_IMPLEMENTED, H2C-Tool-1/2 归因为架构不同 N/A
+3. ⚠️ 所有通过标准满足，或失败项已分类为 Bug/Blocker/Risk/TD。— H2C-PreChat-3 memory_context 未观察到归因为 NOT_OBSERVED (需源码 instrument), H2C-Tool-1/2 结构化事件未捕获归因为需源码 instrument
 4. ⚠️ 证据包上传到 `evidence/l2-kylin-vm/d2c/` 目录。— 待人在麒麟虚拟机执行 git add
-5. ✅ 更新 `evidence/index.yaml`。— 已更新 status=L2_VERIFIED, commit=20adffc
-6. ✅ 更新 01 文档能力矩阵 AGT-004（Tool）、AGT-005（Context）状态。— AGT-005 NOT_IMPLEMENTED, AGT-004 路径已确认
-7. ✅ 关闭或更新 TD-007（Tool Hook）。— 路径已确认为 intentionrecognition.cpp, 需源码 instrument
+5. ✅ 更新 `evidence/index.yaml`。— 已更新 status=REVIEW_PENDING, commit=20adffc
+6. ✅ 更新 01 文档能力矩阵 AGT-004（Tool）、AGT-005（Context）状态。— AGT-005 NOT_OBSERVED, AGT-004=PARTIAL
+7. ✅ 关闭或更新 TD-007（Tool Hook）。— 路径已确认为 intentionrecognition.cpp, TD-007 保持 OPEN, 需源码 instrument
 8. ⚠️ D Reviewer 复核证据真实性。— 待 D 复核
 
 ---
 
 ## 7. 关联文档
 
-- [D1 OS Agent 调用链与 Hook Spike 任务卡](file:///e:/tiaozhanbei/kylinOS-agent-memory/os-agent-integration/D1_OS_Agent_调用链与Hook_Spike_任务卡.md)
-- [01 能力边界文档](file:///e:/tiaozhanbei/01_麒麟OS_Agent_官方SDK与现有系统能力边界及验证矩阵_v1.0_20260726.docx)
-- [02 总体架构/SOP](file:///e:/tiaozhanbei/02_麒麟OS_Agent记忆系统_总体架构_团队分工与标准开发SOP_v1.0_20260726.docx)
-- [03 环境配置手册](file:///e:/tiaozhanbei/03_麒麟OS_Agent记忆系统_开发与Runtime环境快速配置手册_v1.0_20260726.docx)
-- [04 Agent/LLM 指南](file:///e:/tiaozhanbei/04_麒麟OS_Agent记忆系统_Agent_LLM与CodeAgent使用指南_v1.0_20260726.docx)
+- [D1 OS Agent 调用链与 Hook Spike 任务卡](./D1_OS_Agent_调用链与Hook_Spike_任务卡.md)
+- [01 能力边界文档](../../01_麒麟OS_Agent_官方SDK与现有系统能力边界及验证矩阵_v1.0_20260726.docx)
+- [02 总体架构/SOP](../../02_麒麟OS_Agent记忆系统_总体架构_团队分工与标准开发SOP_v1.0_20260726.docx)
+- [03 环境配置手册](../../03_麒麟OS_Agent记忆系统_开发与Runtime环境快速配置手册_v1.0_20260726.docx)
+- [04 Agent/LLM 指南](../../04_麒麟OS_Agent记忆系统_Agent_LLM与CodeAgent使用指南_v1.0_20260726.docx)
