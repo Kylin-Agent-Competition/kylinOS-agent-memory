@@ -5,6 +5,13 @@ test_load_idempotent.py — 轨道 A Day4 生命周期与幂等性测试
   生命周期模型：SDK 动态库进程内只加载一次，不执行 dlclose()；
   destroy_session() 只销毁会话，保留 .so 句柄，可再次 create_session()。
 
+SDK 生命周期契约（麒麟实测，P0-1）:
+  create_session 后必须至少完成一次成功 embed（模型加载就绪）
+  才能安全 destroy_session；否则 SDK 内部 event loop 线程未就绪，
+  进程会触发 `terminate called without an active exception`。
+  因此本文件所有 Bridge 层 destroy 前都先执行一次 embed("")，
+  与 Provider.start() 的初始化 embed 语义一致（非规避调用）。
+
 测试路径（P0-1 验收标准四类）:
   1. start → close
   2. with EmbeddingProvider(): pass
@@ -53,11 +60,13 @@ def _new_provider():
 
 
 def test_start_close():
-    """路径 1: start → close（load + create_session + destroy_session）"""
+    """路径 1: start → close（load + create_session + embed 初始化 + destroy_session）"""
     b = _new_provider()
     b.load()
     b.create_session()
     assert b.has_session is True
+    # SDK 生命周期契约：create_session 后必须至少一次 embed（模型就绪）才能安全 destroy
+    b.embed("")
     b.destroy_session()
     assert b.has_session is False
     # P0-1 生命周期模型：destroy 后 .so 仍加载（不卸载）
@@ -87,6 +96,7 @@ def test_destroy_idempotent():
     b = _new_provider()
     b.load()
     b.create_session()
+    b.embed("")  # SDK 契约：destroy 前模型就绪
     b.destroy_session()
     b.destroy_session()  # 第二次：session 已空，应安全返回
     assert b.has_session is False
@@ -99,6 +109,7 @@ def test_create_session_idempotent():
     b.create_session()
     b.create_session()  # 幂等
     assert b.has_session is True
+    b.embed("")  # SDK 契约：destroy 前模型就绪
     b.destroy_session()
 
 

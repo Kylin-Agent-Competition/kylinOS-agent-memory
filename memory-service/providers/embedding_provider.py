@@ -131,10 +131,23 @@ class EmbeddingProvider:
     # ── 生命周期 ──
 
     def start(self) -> None:
-        """加载 SDK 并创建会话。重复调用安全（幂等）。"""
+        """启动 Provider：加载 SDK、创建会话、完成模型初始化。重复调用安全（幂等）。
+
+        生命周期模型（P0-1）：
+        麒麟实测 SDK 要求 create_session 后必须至少完成一次成功 embed
+        （模型加载就绪）才能安全 destroy_session，否则会触发
+        `terminate called without an active exception`（SDK 内部 event loop
+        线程未就绪）。因此 start() 将初始化 embed 作为正式初始化步骤
+        （获取维度并验证模型可用），而非销毁前的规避调用。
+        """
         try:
             self._bridge.load()
             self._bridge.create_session()
+            # 初始化 embed：模型就绪验证 + 获取维度（SDK 生命周期契约）
+            if self._dimension is None:
+                init = self._bridge.embed("", 0)
+                if init.dimension > 0:
+                    self._dimension = init.dimension
         except Exception as exc:  # noqa: BLE001 - 统一映射为 Provider 错误
             raise self._map_bridge_error(exc) from exc
 
