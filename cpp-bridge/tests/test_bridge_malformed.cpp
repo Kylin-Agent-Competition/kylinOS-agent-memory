@@ -108,6 +108,14 @@ int main(int argc, char** argv) {
               "含 Inf 错误码 = ERR_EMBED_RESULT");
     }
 
+    // 7. text_embedding 返回 false → ERR_EMBED_CALL（P2 补充）
+    {
+        auto r = run_with_mode(so, "embedfalse");
+        CHECK(r.is_fail(), "embed 返回 false 时失败");
+        CHECK(r.error == BridgeError::ERR_EMBED_CALL,
+              "embed false 错误码 = ERR_EMBED_CALL");
+    }
+
     unsetenv("FAKE_MALFORMED");
     std::printf("=== 结果: %s (%d failures) ===\n",
                 failures == 0 ? "PASS" : "FAIL", failures);

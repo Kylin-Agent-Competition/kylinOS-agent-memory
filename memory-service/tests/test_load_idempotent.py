@@ -100,3 +100,59 @@ def test_create_session_idempotent():
     b.create_session()  # 幂等
     assert b.has_session is True
     b.destroy_session()
+
+
+# ── Provider 层生命周期边界（P1-4 验收标准） ──
+
+def _new_embedding_provider():
+    """创建 Provider 层实例（需 kylin_embedding 模块，麒麟 VM 可跑）。"""
+    from providers import EmbeddingProvider
+    return EmbeddingProvider()
+
+
+def test_provider_close_without_start():
+    """未 start 直接 close 应安全（destroy_session 幂等）"""
+    p = _new_embedding_provider()
+    p.close()  # 不应抛异常
+    p.close()  # 重复 close 安全
+
+
+def test_provider_context_manager():
+    """Context Manager 正常退出"""
+    with _new_embedding_provider() as p:
+        p.embed("hello")
+    # 退出后再次使用应安全
+    p.embed("world")
+
+
+def test_provider_context_manager_exception():
+    """Context Manager 内发生异常：__exit__ 仍应执行 close 且不掩盖原始异常"""
+    with pytest.raises(ValueError):
+        with _new_embedding_provider() as p:
+            p.embed("ok")  # 正常
+            raise ValueError("业务异常")
+    # __exit__ 已执行 close（不掩盖业务异常）
+
+
+def test_provider_start_embed_close_restart():
+    """Provider 层: start → embed → close → start → embed → close（P0-1 验收路径 3）"""
+    p = _new_embedding_provider()
+    p.start()
+    r1 = p.embed("test")
+    assert r1.dimension == 768
+    p.close()
+    p.start()
+    r2 = p.embed("test")
+    assert r2.dimension == 768
+    p.close()
+
+
+def test_multiple_providers_sequential():
+    """多个 Provider 顺序创建、启动、关闭（P0-1 验收路径 4）"""
+    for i in range(3):
+        p = _new_embedding_provider()
+        p.start()
+        r = p.embed(f"text-{i}")
+        assert r.dimension == 768
+        p.close()
+        del p

@@ -5,12 +5,13 @@
  *
  * 编译为共享库，提供与 libkysdk-coreai-embedding 相同的符号，
  * 但 embed() 返回可配置的畸形结果（由环境变量控制）：
- *   FAKE_MALFORMED=none   → 正常结果（768 维）
- *   FAKE_MALFORMED=null   → text_embedding 返回 true 但 result=NULL
- *   FAKE_MALFORMED=dim0   → result 有效但维度=0
- *   FAKE_MALFORMED=datnull→ 维度>0 但 data=NULL
- *   FAKE_MALFORMED=nan    → 数据含 NaN
- *   FAKE_MALFORMED=inf    → 数据含 Inf
+ *   FAKE_MALFORMED=none    → 正常结果（768 维）
+ *   FAKE_MALFORMED=null    → text_embedding 返回 true 但 result=NULL
+ *   FAKE_MALFORMED=dim0    → result 有效但维度=0
+ *   FAKE_MALFORMED=datnull → 维度>0 但 data=NULL
+ *   FAKE_MALFORMED=nan     → 数据含 NaN
+ *   FAKE_MALFORMED=inf     → 数据含 Inf
+ *   FAKE_MALFORMED=embedfalse → text_embedding 返回 false（ERR_EMBED_CALL，P2 补充）
  *
  * 仅用于测试，不进入正式构建。
  */
@@ -62,6 +63,10 @@ bool text_embedding(TextEmbeddingSession* s, const char* text, EmbeddingResult**
     (void)s;
     (void)text;
     const char* mode = getenv("FAKE_MALFORMED");
+    if (mode && strcmp(mode, "embedfalse") == 0) {
+        *out = NULL;
+        return false;  /* ERR_EMBED_CALL：调用失败，无结果 */
+    }
     if (mode && strcmp(mode, "null") == 0) {
         *out = NULL;
         return true;
