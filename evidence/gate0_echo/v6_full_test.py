@@ -406,12 +406,31 @@ class TestRunner:
                 {"response": resp}
             )
             self.results["pass" if ok else "fail"] += 1
-        except Exception as e:
+        except ConnectionError as e:
             record_evidence(
                 "V6-UDS-005", "UDS 未知方法降级",
-                "PASS", "E4", {"error": str(e), "note": "协议层也拒绝了，等效降级"}
+                "FAIL", "E0", {"error": str(e), "note": "连接失败，服务端不可达"}
             )
-            self.results["pass"] += 1
+            self.results["fail"] += 1
+        except socket.timeout:
+            record_evidence(
+                "V6-UDS-005", "UDS 未知方法降级",
+                "FAIL", "E0", {"error": "连接超时"}
+            )
+            self.results["fail"] += 1
+        except json.JSONDecodeError as e:
+            record_evidence(
+                "V6-UDS-005", "UDS 未知方法降级",
+                "FAIL", "E0", {"error": str(e), "note": "JSON 解析失败"}
+            )
+            self.results["fail"] += 1
+        except Exception as e:
+            # 服务端崩溃或其他未预期异常
+            record_evidence(
+                "V6-UDS-005", "UDS 未知方法降级",
+                "FAIL", "E0", {"error": str(e), "note": "未预期的异常"}
+            )
+            self.results["fail"] += 1
 
     def test_kysec_authorize(self):
         """KYSEC 最小授权验证"""

@@ -1,11 +1,29 @@
 #!/usr/bin/env python3
-"""V6 最终证据收集: 上传修复后的测试、运行、下载证据"""
-import os, sys, time
+"""V6 最终证据收集: 上传修复后的测试、运行、下载证据
+
+凭据通过环境变量 KYLIN_VM_USER / KYLIN_VM_PASSWORD 传入，不硬编码。
+"""
+import os
+import sys
+import time
+
 import paramiko
 
-HOST, PORT, USER, PASSWORD = "127.0.0.1", 2222, "REDACTED_VM_USER", "REDACTED_VM_PASSWORD"
-REMOTE_BASE = "/home/REDACTED_VM_USER/kylin-memory-echo"
+HOST = os.environ.get("KYLIN_VM_HOST", "127.0.0.1")
+PORT = int(os.environ.get("KYLIN_VM_PORT", "2222"))
+USER = os.environ.get("KYLIN_VM_USER", "")
+PASSWORD = os.environ.get("KYLIN_VM_PASSWORD", "")
+
+if not USER or not PASSWORD:
+    print("ERROR: 请设置环境变量 KYLIN_VM_USER 和 KYLIN_VM_PASSWORD", file=sys.stderr)
+    sys.exit(1)
+
+REMOTE_BASE = os.environ.get("KYLIN_VM_REMOTE_BASE", f"/home/{USER}/kylin-memory-echo")
 EVIDENCE_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "v6_final_results")
+
+# 全局失败计数
+_failures = 0
+
 
 def run(c, cmd, timeout=30):
     _, stdout, stderr = c.exec_command(cmd, timeout=timeout)
@@ -14,23 +32,29 @@ def run(c, cmd, timeout=30):
     err = stderr.read().decode("utf-8", errors="replace")
     return exit_code, out, err
 
+
 def sftp_put(c, local, remote):
     sftp = c.open_sftp()
     sftp.put(local, remote, confirm=True)
     sftp.close()
     print(f"  UPLOADED: {os.path.basename(local)}")
 
+
 def main():
+    global _failures
     c = paramiko.SSHClient()
     c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    c.connect(HOST, port=PORT, username=USER, password=PASSWORD, allow_agent=False, look_for_keys=False, timeout=20)
+    c.connect(HOST, port=PORT, username=USER, password=PASSWORD,
+              allow_agent=False, look_for_keys=False, timeout=20)
     print("Connected to VM")
 
     # 1. Upload fixed v6_full_test.py
     local_test = os.path.join(os.path.dirname(os.path.abspath(__file__)), "v6_full_test.py")
     remote_test = f"{REMOTE_BASE}/evidence/v6_full_test.py"
     sftp_put(c, local_test, remote_test)
-    run(c, f"chmod +x {remote_test}")
+    ec, _, _ = run(c, f"chmod +x {remote_test}")
+    if ec != 0:
+        _failures += 1
 
     # 2. Ensure server is running
     run(c, "pkill -f kylin-memory-echo-server 2>/dev/null; sleep 0.5; rm -f /tmp/kylin-memory-echo/echo.sock", timeout=5)
@@ -38,8 +62,13 @@ def main():
     time.sleep(2)
     ec, out, _ = run(c, "pgrep -f kylin-memory-echo-server", timeout=5)
     print(f"  Server PID: {out.strip()}")
+    if ec != 0:
+        _failures += 1
+
     ec, out, _ = run(c, "ls /tmp/kylin-memory-echo/echo.sock 2>&1")
     print(f"  Socket: {out.strip()}")
+    if ec != 0:
+        _failures += 1
 
     # 3. Run evidence collection (skip KYSEC since already done)
     print("\nRunning v6_full_test.py ...")
@@ -48,6 +77,8 @@ def main():
     print(f"  Output:\n{out[:1500]}")
     if err:
         print(f"  Stderr: {err[:500]}")
+    if ec != 0:
+        _failures += 1
 
     # 4. Download evidence
     os.makedirs(EVIDENCE_LOCAL, exist_ok=True)
@@ -59,6 +90,7 @@ def main():
             print(f"  DOWNLOADED: {fname}")
     except Exception as e:
         print(f"  Download error: {e}")
+        _failures += 1
     finally:
         sftp.close()
 
@@ -69,7 +101,7 @@ def main():
             sftp.get(f"{REMOTE_BASE}/logs/{log_name}", os.path.join(EVIDENCE_LOCAL, log_name))
             sftp.close()
             print(f"  DOWNLOADED: {log_name}")
-        except:
+        except Exception:
             pass
 
     # Cleanup
@@ -81,5 +113,8 @@ def main():
     for f in sorted(os.listdir(EVIDENCE_LOCAL)):
         print(f"  {f} ({os.path.getsize(os.path.join(EVIDENCE_LOCAL, f))} bytes)")
 
+    return 1 if _failures > 0 else 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

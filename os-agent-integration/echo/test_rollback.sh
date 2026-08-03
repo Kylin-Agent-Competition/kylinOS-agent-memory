@@ -179,13 +179,17 @@ test_phase3_uds_echo() {
         record_result "UDS memory.retrieve" "FAIL" "客户端返回非零"
     fi
 
-    # 3.4 未知方法
+    # 3.4 未知方法 - 连接失败/超时/JOSN解析失败必须判定FAIL
+    # 只有收到 status=="error" 的结构化响应才能PASS
     log_test "[3.4] 测试未知方法 (预期错误响应)..."
-    if "$CLIENT_BIN" --method "nonexistent.method" >> "$TEST_LOG" 2>&1; then
-        # 未知方法仍可能返回错误但客户端解析成功
-        record_result "UDS 未知方法降级" "PASS" "错误响应处理正常"
+    local unknown_output
+    unknown_output=$("$CLIENT_BIN" --method "nonexistent.method" 2>&1) || true
+    if echo "$unknown_output" | grep -q '"status"[[:space:]]*:[[:space:]]*"error"'; then
+        record_result "UDS 未知方法降级" "PASS" "收到status=error响应"
+    elif echo "$unknown_output" | grep -qi "connection refused\|no such file\|timeout\|operation not permitted"; then
+        record_result "UDS 未知方法降级" "FAIL" "连接失败: $unknown_output"
     else
-        record_result "UDS 未知方法降级" "PASS" "错误响应已返回 (非零退出正常)"
+        record_result "UDS 未知方法降级" "FAIL" "未收到预期error响应: $unknown_output"
     fi
 }
 

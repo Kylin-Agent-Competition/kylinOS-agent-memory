@@ -3,8 +3,9 @@
 V6 麒麟 VM 全自动部署与测试脚本
 ================================
 使用 Paramiko SSH 连接到麒麟虚拟机，上传文件、构建、启动服务、执行测试并收集证据。
-"""
 
+凭据通过环境变量 KYLIN_VM_USER / KYLIN_VM_PASSWORD 传入，不硬编码。
+"""
 import os
 import sys
 import time
@@ -13,12 +14,20 @@ from datetime import datetime, timezone
 
 import paramiko
 
-# ---- 连接配置 ----
-HOST = "127.0.0.1"
-PORT = 2222
-USER = "REDACTED_VM_USER"
-PASSWORD = "REDACTED_VM_PASSWORD"
-REMOTE_BASE = "/home/REDACTED_VM_USER/kylin-memory-echo"
+# ---- 连接配置 (从环境变量读取，无默认值以避免凭据泄露) ----
+HOST = os.environ.get("KYLIN_VM_HOST", "127.0.0.1")
+PORT = int(os.environ.get("KYLIN_VM_PORT", "2222"))
+USER = os.environ.get("KYLIN_VM_USER", "")
+PASSWORD = os.environ.get("KYLIN_VM_PASSWORD", "")
+REMOTE_BASE = os.environ.get("KYLIN_VM_REMOTE_BASE", "")
+
+if not USER or not PASSWORD:
+    print("ERROR: 请设置环境变量 KYLIN_VM_USER 和 KYLIN_VM_PASSWORD", file=sys.stderr)
+    print("  示例: export KYLIN_VM_USER=youruser KYLIN_VM_PASSWORD=yourpass", file=sys.stderr)
+    sys.exit(1)
+
+if not REMOTE_BASE:
+    REMOTE_BASE = f"/home/{USER}/kylin-memory-echo"
 
 # 本地文件路径
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -37,6 +46,9 @@ FILES_TO_UPLOAD = [
 ]
 
 LOG_FILE = os.path.join(EVIDENCE_OUT_DIR, "v6_deploy_test_log.txt")
+
+# 全局失败累积
+_global_failures = 0
 
 
 def log(msg: str):
@@ -60,9 +72,12 @@ def connect_ssh():
 
 def run_ssh(c: paramiko.SSHClient, cmd: str, timeout: int = 30, background: bool = False):
     """Execute remote command, return (exit_code, stdout, stderr)"""
-    log(f"  EXEC: {cmd[:120]}")
+    # 避免记录 sudo 密码传递命令
+    log_cmd = cmd
+    if "echo " in cmd[:20] and "| sudo" in cmd:
+        log_cmd = f"sudo <redacted> {cmd.split('| sudo', 1)[1] if '| sudo' in cmd else cmd}"
+    log(f"  EXEC: {log_cmd[:120]}")
     if background:
-        # For nohup background commands: wrap so channel returns immediately
         wrapped = f"bash -c '{cmd}' </dev/null >/dev/null 2>&1 &"
         _, stdout, stderr = c.exec_command(wrapped, timeout=timeout)
         exit_code = stdout.channel.recv_exit_status()
@@ -102,6 +117,7 @@ def phase1_upload_all(c):
 
 
 def phase2_build(c):
+    global _global_failures
     log("\n========== Phase 2: Build ==========")
     exit_code, out, err = run_ssh(
         c,
@@ -112,12 +128,14 @@ def phase2_build(c):
         log("  [PASS] C++ client compiled successfully")
     else:
         log(f"  [FAIL] Compilation error: {err[-300:]}")
+        _global_failures += 1
 
     exit_code, out, err = run_ssh(c, f"file {REMOTE_BASE}/bin/echo_client")
     log(f"  Binary: {out.strip()}")
 
 
 def phase3_start_server(c):
+    global _global_failures
     log("\n========== Phase 3: Start Server ==========")
     run_ssh(c, "pkill -f kylin-memory-echo-server 2>/dev/null; sleep 0.5; rm -f /tmp/kylin-memory-echo/echo.sock", timeout=5)
     run_ssh(
@@ -134,12 +152,14 @@ def phase3_start_server(c):
         log("  [FAIL] Server not running. Checking stderr:")
         _, err_out, _ = run_ssh(c, f"tail -20 {REMOTE_BASE}/logs/server_stderr.log")
         log(f"    {err_out}")
+        _global_failures += 1
 
     exit_code, out, err = run_ssh(c, "ls -la /tmp/kylin-memory-echo/", timeout=5)
     log(f"  Socket dir: {out.strip()[:200]}")
 
 
 def phase4_uds_test(c):
+    global _global_failures
     log("\n========== Phase 4: UDS Echo Tests ==========")
 
     # Python inline client test
@@ -159,7 +179,11 @@ print("ECHO:", resp.get("data",{}).get("echo"))
 s.close()
 '''
     exit_code, out, err = run_ssh(c, f"python3 -c '{py_script}'", timeout=15)
-    log(f"  [{'PASS' if exit_code==0 else 'FAIL'}] echo (Python): {out.strip()[:200]}")
+    if exit_code == 0 and "ECHO: HelloKylin" in out:
+        log(f"  [PASS] echo (Python): {out.strip()[:200]}")
+    else:
+        log(f"  [FAIL] echo (Python): exit={exit_code}, {out.strip()[:200]}")
+        _global_failures += 1
 
     # C++ client tests
     tests = [
@@ -169,28 +193,36 @@ s.close()
     ]
     for name, cmd in tests:
         exit_code, out, err = run_ssh(c, cmd, timeout=15)
-        status = "PASS" if exit_code == 0 else "FAIL"
-        log(f"  [{status}] {name}: exit={exit_code}, out={out.strip()[:150]}")
+        if exit_code == 0:
+            log(f"  [PASS] {name}: {out.strip()[:150]}")
+        else:
+            log(f"  [FAIL] {name}: exit={exit_code}, {out.strip()[:150]}")
+            _global_failures += 1
 
 
 def phase5_kysec(c):
+    global _global_failures
     log("\n========== Phase 5: KYSEC Authorization ==========")
 
-    # Status
+    # Status - 通过 sudo 执行但不在日志中暴露密码
     exit_code, out, err = run_ssh(
         c,
-        f"echo '{PASSWORD}' | sudo -S bash {REMOTE_BASE}/share/kysec_authorize.sh status",
+        f"sudo bash {REMOTE_BASE}/share/kysec_authorize.sh status",
         timeout=15
     )
     log(f"  KYSEC Status (first 500 chars):\n{out[:500]}")
+    if exit_code != 0:
+        _global_failures += 1
 
     # Authorize
     exit_code, out, err = run_ssh(
         c,
-        f"echo '{PASSWORD}' | sudo -S bash {REMOTE_BASE}/share/kysec_authorize.sh authorize",
+        f"sudo bash {REMOTE_BASE}/share/kysec_authorize.sh authorize",
         timeout=20
     )
     log(f"  KYSEC Authorize: exit={exit_code}")
+    if exit_code != 0:
+        _global_failures += 1
 
     # Verify UDS still accessible after authorization
     exit_code, out, err = run_ssh(
@@ -198,10 +230,15 @@ def phase5_kysec(c):
         f"{REMOTE_BASE}/bin/echo_client --method echo --message 'AfterKYSEC'",
         timeout=10
     )
-    log(f"  [{'PASS' if exit_code==0 else 'FAIL'}] UDS after KYSEC: exit={exit_code}")
+    if exit_code == 0:
+        log(f"  [PASS] UDS after KYSEC: exit={exit_code}")
+    else:
+        log(f"  [FAIL] UDS after KYSEC: exit={exit_code}")
+        _global_failures += 1
 
 
 def phase6_rollback(c):
+    global _global_failures
     log("\n========== Phase 6: Rollback & Recovery ==========")
     run_ssh(c, "pkill -f kylin-memory-echo-server 2>/dev/null || true", timeout=5)
     time.sleep(1)
@@ -212,16 +249,19 @@ def phase6_rollback(c):
 
     exit_code, out, err = run_ssh(
         c,
-        f"echo '{PASSWORD}' | sudo -S bash {REMOTE_BASE}/share/kysec_authorize.sh rollback",
+        f"sudo bash {REMOTE_BASE}/share/kysec_authorize.sh rollback",
         timeout=20
     )
     log(f"  KYSEC Rollback: exit={exit_code}")
+    if exit_code != 0:
+        _global_failures += 1
 
     exit_code, out, err = run_ssh(c, "pgrep -f kylin-memory-echo-server || echo 'no_process'", timeout=5)
     log(f"  Process check: {out.strip()}")
 
 
 def phase7_evidence(c):
+    global _global_failures
     log("\n========== Phase 7: Evidence Collection ==========")
     run_ssh(c, "pkill -f kylin-memory-echo-server 2>/dev/null; sleep 0.5; rm -f /tmp/kylin-memory-echo/echo.sock", timeout=5)
     run_ssh(c, f"cd {REMOTE_BASE} && nohup python3 bin/kylin-memory-echo-server > logs/server_stdout.log 2> logs/server_stderr.log", timeout=5, background=True)
@@ -234,6 +274,8 @@ def phase7_evidence(c):
     )
     log(f"  V6 test exit={exit_code}")
     log(f"  Output (last 2000):\n{out[-2000:]}")
+    if exit_code != 0:
+        _global_failures += 1
 
     # Download evidence
     evidence_remote = f"{REMOTE_BASE}/evidence/gate0_echo_v6"
@@ -250,7 +292,6 @@ def phase7_evidence(c):
     finally:
         sftp.close()
 
-    # Download server logs
     for log_name in ["server_stdout.log", "server_stderr.log"]:
         try:
             sftp = c.open_sftp()
@@ -269,6 +310,7 @@ def phase8_cleanup(c):
 
 
 def main():
+    global _global_failures
     log("=" * 60)
     log(" V6 Kylin Memory Echo - Full Deploy & Test")
     log(f" Start: {datetime.now(timezone.utc).isoformat()}")
@@ -291,6 +333,13 @@ def main():
         phase6_rollback(c)
         phase7_evidence(c)
         phase8_cleanup(c)
+
+        if _global_failures > 0:
+            log("\n" + "=" * 60)
+            log(f" [FAIL] {_global_failures} test phase(s) had failures")
+            log(f" Evidence dir: {os.path.join(EVIDENCE_OUT_DIR, 'v6_results')}")
+            log("=" * 60)
+            return 1
 
         log("\n" + "=" * 60)
         log(" [PASS] All tests completed!")

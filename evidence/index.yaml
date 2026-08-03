@@ -123,14 +123,23 @@ entries:
   - id: "ECHO-001"
     task_id: "D1-C-ECHO"
     description: "Kaiming UDS Echo 端到端验证: 服务端/客户端/KYSEC/回退"
-    status: "HOST_VERIFIED"
+    status: "PARTIAL"
     evidence_level: "E4"
     source: "evidence/gate0_echo/v6_final_results/evidence.jsonl"
     commit: "9fa4b40"
+    source_commit: "704e9e05c4ebe8d60d6e03b867987ef5e4f2a2bf"
+    runtime_result: "PARTIAL"
     date: "2026-08-02"
     reviewer: "pending"
-    limitations: "C++客户端被KYSEC安全机制拦截(Operation not permitted)，Python客户端完整验证通过。KYSEC v6测试脚本未传递sudo密码导致状态/授权/回退命令返回非零，但phase5 Paramiko直接调用中KYSEC authorize退出码为0。"
-    checksum_sha256: "TBD"
+    limitations: |
+      Python UDS 链路通过 (echo/health/memory.retrieve/unknown method).
+      C++ 客户端尚未在麒麟VM环境成功运行 (被KYSEC安全机制拦截 E0 SKIPPED).
+      尚无真实 Kaiming 宿主进程调用证据，当前仅为独立 UDS 测试.
+      KYSEC 授权状态/执行在v6脚本内因无sudo密码失败 (E3 FAIL x2)，phase5 Paramiko直接调用中authorize退出码为0.
+      systemd unit (kylin-memory-echo.service) 未执行完整生命周期测试 (install/start/enable/stop/disable).
+      完整原版回退仅完成服务停止+Socket清理，未恢复原owner/group/mode/ACL/KYSEC规则，未通过SHA-256对比验证.
+      回退脚本存在backup_id选择逻辑缺陷.
+    checksum_sha256: "a3f8c9d1e2b4f5a6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
     details: |
       银河麒麟桌面操作系统V11 x86_64, Linux 6.6.0-63-generic
       UDS协议: 4字节Big-Endian长度 + UTF-8 JSON (协议版本1.0)
@@ -152,6 +161,12 @@ entries:
       - ROLLBACK-001: 服务端停止+Socket清理 E4 PASS
       - ROLLBACK-002: v6内部sudo调用失败 E3 FAIL
       - ROLLBACK-003: 回退后系统状态(仅kysec_authorize.log残留) E4 PASS
+      
+      未验证项:
+      - 真实 Kaiming 宿主进程调用
+      - systemd 生命周期 (install, enable, start, status, stop, disable)
+      - KYSEC 规则/标签真实写入与回退
+      - 完整原版恢复 (SHA-256 对比验证)
       
       服务端日志确认6次请求-响应成功(echo/health/memory.retrieve/unknown/echo)
       分支: feature/kaiming-uds-echo

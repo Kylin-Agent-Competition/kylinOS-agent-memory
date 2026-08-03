@@ -1,16 +1,34 @@
 #!/usr/bin/env python3
-"""V6 Pure download: pull evidence files from Kylin VM"""
-import os, sys
+"""V6 Pure download: pull evidence files from Kylin VM
+
+凭据通过环境变量 KYLIN_VM_USER / KYLIN_VM_PASSWORD 传入，不硬编码。
+"""
+import os
+import sys
+
 import paramiko
 
-HOST, PORT, USER, PASSWORD = "127.0.0.1", 2222, "REDACTED_VM_USER", "REDACTED_VM_PASSWORD"
-REMOTE_BASE = "/home/REDACTED_VM_USER/kylin-memory-echo"
+HOST = os.environ.get("KYLIN_VM_HOST", "127.0.0.1")
+PORT = int(os.environ.get("KYLIN_VM_PORT", "2222"))
+USER = os.environ.get("KYLIN_VM_USER", "")
+PASSWORD = os.environ.get("KYLIN_VM_PASSWORD", "")
+
+if not USER or not PASSWORD:
+    print("ERROR: 请设置环境变量 KYLIN_VM_USER 和 KYLIN_VM_PASSWORD", file=sys.stderr)
+    sys.exit(1)
+
+REMOTE_BASE = os.environ.get("KYLIN_VM_REMOTE_BASE", f"/home/{USER}/kylin-memory-echo")
 EVIDENCE_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "v6_final_results")
 
+_failures = 0
+
+
 def main():
+    global _failures
     c = paramiko.SSHClient()
     c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    c.connect(HOST, port=PORT, username=USER, password=PASSWORD, allow_agent=False, look_for_keys=False, timeout=20)
+    c.connect(HOST, port=PORT, username=USER, password=PASSWORD,
+              allow_agent=False, look_for_keys=False, timeout=20)
     print("Connected")
 
     # Check what's on remote
@@ -40,6 +58,7 @@ def main():
                 print(f"  OK: {fname} ({size} bytes)")
         except Exception as e:
             print(f"  SKIP {remote_dir}: {e}")
+            _failures += 1
 
     sftp.close()
     c.close()
@@ -52,5 +71,8 @@ def main():
         print(f"  {f} ({sz} bytes)")
     print(f"Total: {total_bytes} bytes")
 
+    return 1 if _failures > 0 else 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
