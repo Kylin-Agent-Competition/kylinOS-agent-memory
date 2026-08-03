@@ -60,7 +60,14 @@ class ProviderError(Exception):
 
 @dataclass
 class EmbeddingResult:
-    """单条文本向量化结果（与 Day3 契约一致）。"""
+    """单条文本向量化结果（与 Day3 契约一致）。
+
+    error_code / error_message 用途说明（P2）：
+    本实现中失败统一抛 ProviderError（不通过返回值表达错误），
+    因此 error_code/error_message 在成功路径恒为 0/None，
+    保留字段仅为兼容 Day3 契约与潜在的错误降级场景（如 SDK 返回
+    非致命 errorCode 时上层可读取诊断信息）。
+    """
 
     vector: List[float]
     dimension: int
