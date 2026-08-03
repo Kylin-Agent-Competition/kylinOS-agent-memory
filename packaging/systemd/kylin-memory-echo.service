@@ -3,26 +3,19 @@ Description=Kylin Memory Echo Server — UDS 最小验证服务
 Documentation=https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
 After=network.target
 
+# 安装脚本会自动替换 __USERNAME__ 占位符
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/%u/kylin-memory-echo/bin/kylin-memory-echo-server
+User=__USERNAME__
+ExecStart=/usr/bin/python3 /home/__USERNAME__/kylin-memory-echo/bin/kylin-memory-echo-server
 ExecStopPost=/bin/rm -f /tmp/kylin-memory-echo/echo.sock
 Restart=on-failure
 RestartSec=2
-StandardOutput=append:/home/%u/kylin-memory-echo/logs/server_stdout.log
-StandardError=append:/home/%u/kylin-memory-echo/logs/server_stderr.log
-RuntimeDirectory=kylin-memory-echo
-RuntimeDirectoryMode=0700
+StandardOutput=append:/home/__USERNAME__/kylin-memory-echo/logs/server_stdout.log
+StandardError=append:/home/__USERNAME__/kylin-memory-echo/logs/server_stderr.log
 
-# 安全加固
+# 最小安全加固（开发验证环境，非生产环境）
 NoNewPrivileges=yes
-PrivateTmp=no
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/tmp/kylin-memory-echo
-ReadWritePaths=/home/%u/kylin-memory-echo/logs
-ReadOnlyPaths=/home/%u/kylin-memory-echo/bin
-ReadOnlyPaths=/home/%u/kylin-memory-echo/share
 RestrictAddressFamilies=AF_UNIX
 
 [Install]

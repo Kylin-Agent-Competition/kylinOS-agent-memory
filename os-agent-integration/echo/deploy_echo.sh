@@ -97,6 +97,20 @@ ssh $SSH_OPTS "$KYLIN_USER@$KYLIN_HOST" "
     echo '权限已设置'
 "
 
+# Step 6: 安装 systemd 服务（可选）
+echo ""
+echo "[--systemd] 若要安装 systemd 服务，请在麒麟 VM 上执行:"
+echo "  sudo bash $REMOTE_BASE/share/install_systemd.sh $KYLIN_USER"
+echo ""
+
+# 传输 systemd 安装脚本
+if [ -f "$SCRIPT_DIR/install_systemd.sh" ]; then
+    scp $SSH_OPTS "$SCRIPT_DIR/install_systemd.sh" \
+        "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/share/install_systemd.sh"
+    ssh $SSH_OPTS "$KYLIN_USER@$KYLIN_HOST" "chmod +x $REMOTE_BASE/share/install_systemd.sh"
+    echo "[--systemd] install_systemd.sh 已传输"
+fi
+
 echo ""
 echo "=========================================="
 echo " 部署完成!"
@@ -110,7 +124,7 @@ echo "     ssh $KYLIN_USER@$KYLIN_HOST"
 echo "     cd $REMOTE_BASE"
 echo "     g++ -std=c++17 -O2 echo_client.cpp -o bin/echo_client"
 echo ""
-echo "  2. 启动服务端:"
+echo "  2. 启动服务端 (手动):"
 echo "     python3 $REMOTE_BASE/bin/kylin-memory-echo-server &"
 echo ""
 echo "  3. 测试连通性:"
@@ -119,10 +133,13 @@ echo "     $REMOTE_BASE/bin/echo_client --method health"
 echo "     $REMOTE_BASE/bin/echo_client --method memory.retrieve"
 echo ""
 echo "  4. KYSEC 授权:"
-echo "     sudo bash $REMOTE_BASE/share/kysec_authorize.sh"
+echo "     sudo bash $REMOTE_BASE/share/kysec_authorize.sh authorize"
 echo ""
-echo "  5. 回退测试:"
+echo "  5. Systemd 安装 (推荐，根治服务管理):"
+echo "     sudo bash $REMOTE_BASE/share/install_systemd.sh $KYLIN_USER"
+echo ""
+echo "  6. 回退测试:"
 echo "     bash $REMOTE_BASE/share/test_rollback.sh"
 echo ""
-echo "  6. 收集证据:"
+echo "  7. 收集证据:"
 echo "     cd $REMOTE_BASE/evidence && python3 v6_full_test.py"
