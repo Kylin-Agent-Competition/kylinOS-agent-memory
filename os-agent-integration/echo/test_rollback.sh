@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Kylin Memory Echo — 回退与恢复测试脚本
+# Kylin Memory Echo — 测试资源清理脚本
 # =============================================================================
-# 测试完整生命周期: 部署 → 验证 → 回退 → 验证恢复
+# ⚠️ 不是完整原版恢复 — 仅清理测试写入的文件/目录/systemd unit
+# 测试完整生命周期: 部署 → 验证 → 资源清理 → 验证恢复
 #
 # 用法:
 #   bash test_rollback.sh
@@ -239,7 +240,7 @@ test_phase4_kysec() {
 
 test_phase5_rollback() {
     log_test ""
-    log_test "========== Phase 5: 原版恢复与回退 =========="
+    log_test "========== Phase 5: 测试资源清理 =========="
 
     # 5.1 停止服务端
     log_test "[5.1] 停止 Echo Server..."
@@ -310,7 +311,7 @@ main() {
     mkdir -p "$LOG_DIR"
 
     log_test "=========================================="
-    log_test " Kylin Memory Echo — 回退与恢复测试"
+    log_test " Kylin Memory Echo — 测试资源清理"
     log_test " 开始时间: $(date '+%Y-%m-%dT%H:%M:%S')"
     log_test " 日志文件: $TEST_LOG"
     log_test "=========================================="

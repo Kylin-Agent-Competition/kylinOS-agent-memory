@@ -25,7 +25,19 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# 端口号范围校验
+if ! [[ "$KYLIN_PORT" =~ ^[0-9]+$ ]] || [[ "$KYLIN_PORT" -lt 1 || "$KYLIN_PORT" -gt 65535 ]]; then
+    echo "❌ 无效端口号: $KYLIN_PORT (需为 1-65535)"
+    exit 1
+fi
+# 主机名/IP 非空校验
+if [[ -z "$KYLIN_HOST" ]]; then
+    echo "❌ 主机地址不能为空"
+    exit 1
+fi
+
 SSH_OPTS="-p $KYLIN_PORT -o ConnectTimeout=10 -o StrictHostKeyChecking=no"
+SCP_OPTS="-P $KYLIN_PORT -o ConnectTimeout=10 -o StrictHostKeyChecking=no"
 REMOTE_BASE="/home/$KYLIN_USER/kylin-memory-echo"
 
 echo "=========================================="
@@ -48,28 +60,28 @@ ssh $SSH_OPTS "$KYLIN_USER@$KYLIN_HOST" "
 # Step 2: 传输 Echo 服务端
 echo ""
 echo "[2/5] 传输 Echo 服务端..."
-scp $SSH_OPTS "$SCRIPT_DIR/memory_echo_server.py" \
+scp $SCP_OPTS "$SCRIPT_DIR/memory_echo_server.py" \
     "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/bin/kylin-memory-echo-server"
 
 # Step 3: 传输 Echo 客户端 (源码)
 echo ""
 echo "[3/5] 传输 Echo 客户端源码..."
-scp $SSH_OPTS "$SCRIPT_DIR/echo_client.cpp" \
+scp $SCP_OPTS "$SCRIPT_DIR/echo_client.cpp" \
     "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/"
 
 # Step 4: 传输 CMakeLists.txt 和脚本
 echo ""
 echo "[4/5] 传输构建文件和脚本..."
-scp $SSH_OPTS "$SCRIPT_DIR/CMakeLists.txt" \
+scp $SCP_OPTS "$SCRIPT_DIR/CMakeLists.txt" \
     "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/"
-scp $SSH_OPTS "$SCRIPT_DIR/kysec_authorize.sh" \
+scp $SCP_OPTS "$SCRIPT_DIR/kysec_authorize.sh" \
     "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/share/"
-scp $SSH_OPTS "$SCRIPT_DIR/test_rollback.sh" \
+scp $SCP_OPTS "$SCRIPT_DIR/test_rollback.sh" \
     "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/share/"
 
 # 传输 systemd service unit
 if [ -f "$PROJECT_DIR/packaging/systemd/kylin-memory-echo.service" ]; then
-    scp $SSH_OPTS "$PROJECT_DIR/packaging/systemd/kylin-memory-echo.service" \
+    scp $SCP_OPTS "$PROJECT_DIR/packaging/systemd/kylin-memory-echo.service" \
         "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/share/"
 fi
 
@@ -81,7 +93,7 @@ if [ -d "$EVIDENCE_DIR" ]; then
     ssh $SSH_OPTS "$KYLIN_USER@$KYLIN_HOST" "mkdir -p $REMOTE_BASE/evidence"
     for f in "$EVIDENCE_DIR"/*.py "$EVIDENCE_DIR"/*.sh; do
         if [ -f "$f" ]; then
-            scp $SSH_OPTS "$f" "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/evidence/"
+            scp $SCP_OPTS "$f" "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/evidence/"
         fi
     done
 fi
@@ -105,7 +117,7 @@ echo ""
 
 # 传输 systemd 安装脚本
 if [ -f "$SCRIPT_DIR/install_systemd.sh" ]; then
-    scp $SSH_OPTS "$SCRIPT_DIR/install_systemd.sh" \
+    scp $SCP_OPTS "$SCRIPT_DIR/install_systemd.sh" \
         "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/share/install_systemd.sh"
     ssh $SSH_OPTS "$KYLIN_USER@$KYLIN_HOST" "chmod +x $REMOTE_BASE/share/install_systemd.sh"
     echo "[--systemd] install_systemd.sh 已传输"
