@@ -39,6 +39,7 @@ class ProviderErrorCode(IntEnum):
     ERR_SESSION_FAILED = 0x0201  # create/init 会话失败（Bridge ERR_SESSION_*）
     ERR_EMBED_FAILED = 0x0301    # text_embedding 返回 false（Bridge ERR_EMBED_CALL）
     ERR_SDK_ERROR = 0x0303       # SDK 返回非零 errorCode（Bridge ERR_EMBED_ERROR）
+    ERR_MODEL_INVALID = 0x0304   # 模型无效（Bridge ERR_MODEL_INVALID）
     ERR_TIMEOUT = 0x0401         # 超过 timeout_ms（Bridge ERR_TIMEOUT）
     ERR_INVALID_TEXT = 0x0500    # text 非 str 类型（应用层校验，不进 Bridge）
     ERR_UNKNOWN = 0x0001         # 未分类错误
@@ -97,7 +98,7 @@ class EmbeddingProvider:
         "BridgeSdkError": ProviderErrorCode.ERR_SDK_ERROR,
         "BridgeTimeoutError": ProviderErrorCode.ERR_TIMEOUT,
         "BridgeCancelledError": ProviderErrorCode.ERR_TIMEOUT,
-        "BridgeModelError": ProviderErrorCode.ERR_SDK_ERROR,
+        "BridgeModelError": ProviderErrorCode.ERR_MODEL_INVALID,  # P1-3: 模型错误独立映射
     }
 
     @staticmethod
@@ -131,15 +132,14 @@ class EmbeddingProvider:
             raise self._map_bridge_error(exc) from exc
 
     def close(self) -> None:
-        """销毁会话并释放 SDK。重复调用安全。"""
+        """销毁会话。重复调用安全（幂等）。
+
+        注意（P0-1 生命周期模型）：close() 只销毁会话，不卸载 SDK 动态库；
+        close() 后可再次 start()（重新 create_session），不会触发 dlclose 重载崩溃。
+        """
         try:
             self._bridge.destroy_session()
-        except Exception as exc:  # noqa: BLE001
-            raise self._map_bridge_error(exc) from exc
-
-        except ProviderError:
-            raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - 统一映射为 Provider 错误
             raise self._map_bridge_error(exc) from exc
 
     def __enter__(self) -> "EmbeddingProvider":
@@ -157,14 +157,20 @@ class EmbeddingProvider:
 
         输入:
             text: 待向量化文本（空串/空白/超长行为见 Day2 证据）。
-            timeout_ms: 单次调用超时（毫秒），默认 5000。当前 Bridge 骨架未实现
-                        主动超时中断，该值透传保留（Day4 待实现）。
+            timeout_ms: 单次调用超时（毫秒），默认 5000。
+                        [TD-A-005-01 主动超时] Day4 未实现主动超时中断，
+                        该值当前无实际效果，仅透传保留，Day5 实现。
 
         返回:
             EmbeddingResult
 
         异常:
-            映射自 BridgeError 的 Python 异常（BridgeError 子类）。
+            ProviderError: 失败时抛出；ProviderError.code 为 Provider 级错误码
+                （ERR_SDK_NOT_LOADED / ERR_SESSION_FAILED / ERR_EMBED_FAILED /
+                ERR_SDK_ERROR / ERR_MODEL_INVALID / ERR_TIMEOUT / ERR_UNKNOWN）；
+                ProviderError.bridge_error 仅用于诊断（原始 Bridge 异常类型名）。
+            非字符串输入抛 ProviderError(ERR_INVALID_TEXT)。
+            timeout_ms 为负数抛 ValueError（参数校验在进入 Bridge 之前）。
         """
         if not isinstance(text, str):
             raise ProviderError(ProviderErrorCode.ERR_INVALID_TEXT,

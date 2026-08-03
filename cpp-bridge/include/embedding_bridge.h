@@ -79,9 +79,10 @@ public:
     BridgeStatus create_session();
 
     /**
-     * 销毁会话并释放 .so 句柄。
-     * 调用后 is_loaded() 和 has_session() 均返回 false。
-     * 若需重用对象，须重新调用 load() 后再调用 create_session()。
+     * 销毁会话。重复调用幂等。
+     * 注意：不卸载 .so（P0-1 生命周期模型：SDK 在进程生命周期内只加载一次），
+     * 调用后 has_session() 返回 false 但 is_loaded() 仍为 true，
+     * 可再次调用 create_session() 重建会话。
      */
     BridgeStatus destroy_session();
 
@@ -102,12 +103,13 @@ private:
     TextEmbeddingSession* session_ = nullptr;
     std::mutex mutex_;
 
-    // 私有辅助：调用方须持有锁。释放会话与 .so 句柄并清零符号表。
+    // 私有辅助：仅在析构函数中调用。释放会话与 .so 句柄并清零符号表。
     void destroy_unlocked() noexcept;
 
-    // 无异常边界的实现体，由公共方法 try/catch 包裹（P0-3）
+    // 无异常边界的实现体，由公共方法 try/catch 包裹（P0-3/P1-5）
     BridgeStatus load_impl();
     BridgeStatus create_session_impl();
+    BridgeStatus destroy_session_impl();
     BridgeResult<EmbeddingVector> embed_impl(const std::string& text);
 };
 

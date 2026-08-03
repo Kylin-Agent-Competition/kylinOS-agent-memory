@@ -20,7 +20,7 @@ EmbeddingBridge::EmbeddingBridge(const BridgeInitParams& params)
     : params_(params) {}
 
 EmbeddingBridge::~EmbeddingBridge() {
-    // 析构时确保释放（不抛异常）。
+    // 析构时释放会话与 .so 句柄（进程级单例场景：进程退出时卸载）。
     // 不加锁：析构时不应有并发访问；调用方应在析构前先 destroy_session()。
     destroy_unlocked();
 }
@@ -138,12 +138,42 @@ BridgeStatus EmbeddingBridge::create_session_impl() {
 }
 
 BridgeStatus EmbeddingBridge::destroy_session() {
+    try {
+        return destroy_session_impl();
+    } catch (const std::bad_alloc&) {
+        return BridgeStatus::fail(BridgeError::UNKNOWN, "destroy_session: bad_alloc");
+    } catch (const std::exception& e) {
+        return BridgeStatus::fail(BridgeError::UNKNOWN,
+                                  std::string("destroy_session: ") + e.what());
+    } catch (...) {
+        return BridgeStatus::fail(BridgeError::UNKNOWN, "destroy_session: unknown exception");
+    }
+}
+
+BridgeStatus EmbeddingBridge::destroy_session_impl() {
     std::lock_guard<std::mutex> lock(mutex_);
-    destroy_unlocked();
+    // 只销毁会话；保留 .so 句柄（P0-1 生命周期修复）。
+    // SDK 动态库在进程生命周期内只加载一次，不执行 dlclose()：
+    // 麒麟实测 dlclose 后再次 dlopen 会触发 Fatal Python error: Aborted。
+    if (session_) {
+        if (syms_.destroy_session) {
+            syms_.destroy_session(&session_);
+        } else {
+            // 符号缺失时无法正常销毁 SDK 会话对象，记录并接受泄漏
+            std::fprintf(stderr,
+                         "[Bridge] destroy_session: destroy_session symbol missing, "
+                         "session %p leaked\n", static_cast<void*>(session_));
+        }
+        session_ = nullptr;
+    }
+    // NOTE: 不执行 dlclose(handle_)，保留已解析符号，支持重新 create_session()。
+    // 真正卸载 .so 在析构函数 destroy_unlocked() 中进行（进程退出/单例销毁时）。
     return BridgeStatus::ok(std::monostate{});
 }
 
 // 私有辅助：调用方须持有锁。释放会话与 .so 句柄，并清零符号表。
+// 仅在析构函数中调用（进程级单例销毁/进程退出时）；
+// destroy_session() 不卸载 .so（P0-1 生命周期修复）。
 void EmbeddingBridge::destroy_unlocked() noexcept {
     if (session_) {
         if (syms_.destroy_session) {
