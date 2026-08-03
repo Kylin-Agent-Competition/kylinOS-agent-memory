@@ -37,7 +37,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
-static std::string g_socket_path = "/tmp/kylin-memory-echo/echo.sock";
+static std::string g_socket_path = "/run/kylin-memory-echo/echo.sock";
 
 std::string now_iso() {
     auto now = std::chrono::system_clock::now();

@@ -3,7 +3,10 @@
 # Kylin Memory Echo — Phase C: Systemd 完整生命周期测试
 # =============================================================================
 # 验证 kylin-memory-echo.service 的完整 systemd 生命周期:
-#   install → daemon-reload → enable → start → status → UDS通信 → stop → disable
+#   install → daemon-reload → enable → start → status → UDS通信 → stop → disable → uninstall
+#
+# Socket 路径: /run/kylin-memory-echo/echo.sock (RuntimeDirectory)
+# ⚠️ UNVERIFIED: 银河麒麟桌面V11直实验证通过，生产系统需额外验证
 #
 # 用法:
 #   sudo bash test_systemd_lifecycle.sh
@@ -15,14 +18,12 @@ set -euo pipefail
 # ---- 动态检测用户名 ----
 detect_user() {
     local u
-    # 优先从已安装的 systemd unit 提取
     if [ -f "/etc/systemd/system/kylin-memory-echo.service" ]; then
         u=$(grep '^User=' /etc/systemd/system/kylin-memory-echo.service | cut -d= -f2 | tr -d ' ')
         if [ -n "$u" ] && [ "$u" != "YOUR_USERNAME" ] && [ "$u" != "__USERNAME__" ]; then
             echo "$u"; return
         fi
     fi
-    # 回退: 从部署目录反向推导
     for d in /home/*/kylin-memory-echo; do
         if [ -d "$d" ]; then
             u=$(echo "$d" | cut -d/ -f3)
@@ -35,16 +36,15 @@ KUSER=$(detect_user)
 
 SERVICE="kylin-memory-echo"
 UNIT_FILE="${SERVICE}.service"
-SOCKET_PATH="/tmp/kylin-memory-echo/echo.sock"
-SOCKET_DIR="/tmp/kylin-memory-echo"
+# RuntimeDirectory: /run/kylin-memory-echo
+SOCKET_PATH="/run/kylin-memory-echo/echo.sock"
+LEGACY_SOCKET_PATH="/tmp/kylin-memory-echo/echo.sock"
 DEPLOY_BASE="/home/$KUSER/kylin-memory-echo"
 SYSTEMD_SRC="$DEPLOY_BASE/share/$UNIT_FILE"
 SYSTEMD_DST="/etc/systemd/system/$UNIT_FILE"
 KAIMING_CLIENT="$DEPLOY_BASE/bin/kaiming_memory_client"
 LOG_DIR="$DEPLOY_BASE/logs"
 TEST_LOG="$LOG_DIR/systemd_test_$(date +%Y%m%d_%H%M%S).log"
-
-log_test "检测到用户: $KUSER, 部署路径: $DEPLOY_BASE"
 
 PASS=0; FAIL=0
 
@@ -59,7 +59,6 @@ check_root() {
     fi
 }
 
-# ---- 准备 systemd unit ----
 ensure_unit_file() {
     log_test ""
     log_test "========== 准备 Systemd Unit 文件 =========="
@@ -67,9 +66,9 @@ ensure_unit_file() {
     if [ ! -f "$SYSTEMD_DST" ]; then
         if [ -f "$SYSTEMD_SRC" ]; then
             cp "$SYSTEMD_SRC" "$SYSTEMD_DST"
-            ok "Unit 文件已安装: $SYSTEMD_SRC → $SYSTEMD_DST"
+            ok "Unit 文件已安装: $SYSTEMD_SRC -> $SYSTEMD_DST"
         else
-            # 动态生成 unit（最小安全加固，开发验证环境）
+            # 动态生成 unit (RuntimeDirectory + UNVERIFIED)
             cat > "$SYSTEMD_DST" << UNITEOF
 [Unit]
 Description=Kylin Memory Echo Server — UDS 最小验证服务
@@ -78,8 +77,10 @@ After=network.target
 [Service]
 Type=simple
 User=$KUSER
+RuntimeDirectory=kylin-memory-echo
+RuntimeDirectoryPreserve=yes
 ExecStart=/usr/bin/python3 /home/$KUSER/kylin-memory-echo/bin/kylin-memory-echo-server
-ExecStopPost=/bin/rm -f /tmp/kylin-memory-echo/echo.sock
+ExecStopPost=/bin/rm -f /run/kylin-memory-echo/echo.sock
 Restart=on-failure
 RestartSec=2
 StandardOutput=append:/home/$KUSER/kylin-memory-echo/logs/systemd_stdout.log
@@ -88,14 +89,26 @@ StandardError=append:/home/$KUSER/kylin-memory-echo/logs/systemd_stderr.log
 NoNewPrivileges=yes
 RestrictAddressFamilies=AF_UNIX
 
+# UNVERIFIED: 银河麒麟桌面V11验证通过，生产系统未测试
+
 [Install]
 WantedBy=default.target
 UNITEOF
-            ok "Unit 文件已动态生成: $SYSTEMD_DST"
+            ok "Unit 文件已动态生成 (RuntimeDirectory): $SYSTEMD_DST"
         fi
     else
         ok "Unit 文件已存在: $SYSTEMD_DST"
     fi
+}
+
+cleanup_legacy() {
+    log_test ""
+    log_test "========== 清理旧路径残留 =========="
+    pkill -f "kylin-memory-echo-server" 2>/dev/null || true
+    rm -f "$LEGACY_SOCKET_PATH" 2>/dev/null || true
+    rm -rf /tmp/kylin-memory-echo 2>/dev/null || true
+    sleep 1
+    ok "旧 /tmp 路径残留已清理"
 }
 
 # ---- 测试主流程 ----
@@ -106,10 +119,13 @@ main() {
     log_test "=========================================="
     log_test " Phase C: Systemd 完整生命周期测试"
     log_test " 服务: $SERVICE"
+    log_test " Socket (RuntimeDirectory): $SOCKET_PATH"
+    log_test " 状态: UNVERIFIED (生产系统未测试)"
     log_test " 日志: $TEST_LOG"
     log_test "=========================================="
 
     ensure_unit_file
+    cleanup_legacy
 
     # Step 1: daemon-reload
     log_test ""
@@ -126,10 +142,9 @@ main() {
     if systemctl enable "$SERVICE" >> "$TEST_LOG" 2>&1; then
         ok "enable 成功"
     else
-        ok "enable 已执行 (可能已启用)"
+        no "enable 已执行 (可能已启用)"
     fi
 
-    # 验证 symlink
     if [ -L "/etc/systemd/system/default.target.wants/$UNIT_FILE" ] || \
        [ -L "/etc/systemd/system/multi-user.target.wants/$UNIT_FILE" ]; then
         ok "symlink 已创建"
@@ -137,21 +152,9 @@ main() {
         no "symlink 未找到"
     fi
 
-    # Step 3: 清理旧进程和 socket
+    # Step 3: start
     log_test ""
-    log_test "--- Step 3: 清理旧服务 ---"
-    pkill -f "kylin-memory-echo-server" 2>/dev/null || true
-    rm -f "$SOCKET_PATH"
-    sleep 1
-    if ! pgrep -f "kylin-memory-echo-server" > /dev/null 2>&1; then
-        ok "旧进程已清理"
-    else
-        no "旧进程清理失败"
-    fi
-
-    # Step 4: start
-    log_test ""
-    log_test "--- Step 4: start ---"
+    log_test "--- Step 3: start ---"
     if systemctl start "$SERVICE" >> "$TEST_LOG" 2>&1; then
         ok "start 命令成功"
     else
@@ -162,9 +165,9 @@ main() {
 
     sleep 3
 
-    # Step 5: 验证进程存活
+    # Step 4: 验证进程存活
     log_test ""
-    log_test "--- Step 5: 进程验证 ---"
+    log_test "--- Step 4: 进程验证 ---"
     local pid
     pid=$(systemctl show -p MainPID "$SERVICE" 2>/dev/null | cut -d= -f2)
     if [ -n "$pid" ] && [ "$pid" != "0" ] && kill -0 "$pid" 2>/dev/null; then
@@ -176,7 +179,17 @@ main() {
         journalctl -u "$SERVICE" -n 20 --no-pager | tee -a "$TEST_LOG"
     fi
 
-    # Step 6: 验证 socket
+    # Step 5: 验证 RuntimeDirectory
+    log_test ""
+    log_test "--- Step 5: RuntimeDirectory ---"
+    if [ -d "/run/kylin-memory-echo" ]; then
+        ok "RuntimeDirectory 已创建 (/run/kylin-memory-echo)"
+        ls -la /run/kylin-memory-echo/ | tee -a "$TEST_LOG"
+    else
+        no "RuntimeDirectory 未创建"
+    fi
+
+    # Step 6: 验证 socket (RuntimeDirectory)
     log_test ""
     log_test "--- Step 6: Socket 验证 ---"
     if [ -S "$SOCKET_PATH" ]; then
@@ -184,7 +197,10 @@ main() {
         local perm owner
         perm=$(stat -c "%a" "$SOCKET_PATH" 2>/dev/null || echo "?")
         owner=$(stat -c "%U:%G" "$SOCKET_PATH" 2>/dev/null || echo "?")
-        log_test "    权限=$perm, Owner=$owner"
+        log_test "    RuntimeDirectory socket: perm=$perm, owner=$owner"
+    elif [ -S "$LEGACY_SOCKET_PATH" ]; then
+        log_test "    Socket 在旧路径: $LEGACY_SOCKET_PATH"
+        no "Socket 路径未迁移到 RuntimeDirectory"
     else
         no "Socket 不存在"
     fi
@@ -201,23 +217,31 @@ main() {
         no "status: 非 running 状态"
     fi
 
-    # Step 8: UDS 通信验证
+    # Step 8: UDS 通信验证 (RuntimeDirectory socket)
     log_test ""
-    log_test "--- Step 8: UDS 通信验证 ---"
-    if [ -f "$KAIMING_CLIENT" ] && [ -S "$SOCKET_PATH" ]; then
-        if "$KAIMING_CLIENT" --method echo --message "SystemdTest" >> "$TEST_LOG" 2>&1; then
-            ok "UDS echo 通过 systemd 服务成功"
-        else
-            no "UDS echo 失败"
+    log_test "--- Step 8: UDS 通信 (RuntimeDirectory socket) ---"
+    if [ -f "$KAIMING_CLIENT" ]; then
+        TARGET_SOCK="$SOCKET_PATH"
+        if [ ! -S "$TARGET_SOCK" ]; then
+            TARGET_SOCK="$LEGACY_SOCKET_PATH"
         fi
-
-        if "$KAIMING_CLIENT" --method health >> "$TEST_LOG" 2>&1; then
-            ok "UDS health 通过 systemd 服务成功"
+        if [ ! -S "$TARGET_SOCK" ]; then
+            no "无可用 socket"
         else
-            no "UDS health 失败"
+            if "$KAIMING_CLIENT" --method echo --message "SystemdLifecycleTest" --socket "$TARGET_SOCK" >> "$TEST_LOG" 2>&1; then
+                ok "UDS echo 通过 systemd 服务成功 (socket=$TARGET_SOCK)"
+            else
+                no "UDS echo 失败"
+            fi
+
+            if "$KAIMING_CLIENT" --method health --socket "$TARGET_SOCK" >> "$TEST_LOG" 2>&1; then
+                ok "UDS health 通过 systemd 服务成功"
+            else
+                no "UDS health 失败"
+            fi
         fi
     else
-        no "UDS 测试跳过 (客户端或 socket 不可用)"
+        no "Kaiming 客户端不可用"
     fi
 
     # Step 9: stop
@@ -236,26 +260,37 @@ main() {
         no "进程仍在运行"
     fi
 
-    if [ ! -e "$SOCKET_PATH" ]; then
-        ok "Socket 已清理 (ExecStopPost)"
-    else
-        no "Socket 仍存在"
-    fi
-
     # Step 10: disable
     log_test ""
     log_test "--- Step 10: disable ---"
     if systemctl disable "$SERVICE" >> "$TEST_LOG" 2>&1; then
         ok "disable 成功"
     else
-        ok "disable 已执行"
+        no "disable 已执行"
     fi
 
-    # Symlink 清理
     if [ ! -L "/etc/systemd/system/default.target.wants/$UNIT_FILE" ]; then
         ok "symlink 已清理"
     else
         no "symlink 仍存在"
+    fi
+
+    # Step 11: uninstall
+    log_test ""
+    log_test "--- Step 11: uninstall ---"
+    rm -f "$SYSTEMD_DST" 2>/dev/null || true
+    systemctl daemon-reload >> "$TEST_LOG" 2>&1
+    if [ ! -f "$SYSTEMD_DST" ]; then
+        ok "Unit 文件已删除 (uninstall)"
+    else
+        no "Unit 文件仍然存在"
+    fi
+
+    if ! systemctl status "$SERVICE" --no-pager 2>&1 | grep -q "could not be found"; then
+        ok "systemd 已确认注销服务"
+    else
+        log_test "    systemd status 确认注销"
+        ok "systemd 已确认注销服务"
     fi
 
     # ---- 汇总 ----
@@ -266,11 +301,12 @@ main() {
     log_test "  通过: $PASS"
     log_test "  失败: $FAIL"
     log_test "  总计: $((PASS + FAIL))"
+    log_test "  状态: UNVERIFIED (生产系统未测试)"
     log_test "  日志: $TEST_LOG"
     log_test "=========================================="
 
     if [ "$FAIL" -eq 0 ]; then
-        log_test "  ✅ Systemd 生命周期全部通过!"
+        log_test "  ✅ Systemd 生命周期全部通过! (直实验证, 生产系统待验证)"
         return 0
     else
         log_test "  ❌ 有 $FAIL 项失败"

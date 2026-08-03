@@ -21,7 +21,10 @@ from datetime import datetime, timezone
 from typing import Optional
 
 # ---- 配置 ----
-SOCKET_DIR = "/tmp/kylin-memory-echo"
+# 优先使用 RuntimeDirectory（systemd 管理），fallback 到 /tmp
+SOCKET_DIR = os.environ.get("RUNTIME_DIRECTORY", "/run/kylin-memory-echo")
+if not os.path.isdir(SOCKET_DIR):
+    SOCKET_DIR = "/tmp/kylin-memory-echo"
 SOCKET_PATH = os.path.join(SOCKET_DIR, "echo.sock")
 BACKLOG = 5
 MAX_MESSAGE_BYTES = 65536  # 64KB 最大消息

@@ -1,0 +1,60 @@
+8月 03 17:33:05 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 461.
+8月 03 17:33:05 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 17:33:05 REDACTED_VM_USER-pc (python3)[42598]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8月 03 17:33:05 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=exited, status=226/NAMESPACE
+8月 03 17:33:05 REDACTED_VM_USER-pc (rm)[42599]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8月 03 17:33:05 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Control process exited, code=exited, status=226/NAMESPACE
+8月 03 17:33:05 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Failed with result 'exit-code'.
+8月 03 17:33:07 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 462.
+8月 03 17:33:07 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 17:33:07 REDACTED_VM_USER-pc (python3)[42601]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8月 03 17:33:07 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=exited, status=226/NAMESPACE
+8月 03 17:33:07 REDACTED_VM_USER-pc (rm)[42602]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8月 03 17:33:07 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Control process exited, code=exited, status=226/NAMESPACE
+8月 03 17:33:07 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Failed with result 'exit-code'.
+8月 03 17:33:10 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 463.
+8月 03 17:33:10 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 17:33:10 REDACTED_VM_USER-pc (python3)[42604]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8月 03 17:33:10 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=exited, status=226/NAMESPACE
+8月 03 17:33:10 REDACTED_VM_USER-pc (rm)[42605]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8月 03 17:33:10 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Control process exited, code=exited, status=226/NAMESPACE
+8月 03 17:33:10 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Failed with result 'exit-code'.
+8月 03 17:33:12 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 464.
+8月 03 17:33:12 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 17:33:12 REDACTED_VM_USER-pc (python3)[42612]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8月 03 17:33:12 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=exited, status=226/NAMESPACE
+8月 03 17:33:12 REDACTED_VM_USER-pc (rm)[42613]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8月 03 17:33:12 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Control process exited, code=exited, status=226/NAMESPACE
+8月 03 17:33:12 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Failed with result 'exit-code'.
+8月 03 17:33:14 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 465.
+8月 03 17:33:14 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 17:33:14 REDACTED_VM_USER-pc (python3)[42615]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8月 03 17:33:14 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=exited, status=226/NAMESPACE
+8月 03 17:33:14 REDACTED_VM_USER-pc (rm)[42616]: kylin-memory-echo.service: Failed to set up mount namespacing: /var/tmp/kylin-memory-echo: No such file or directory
+8月 03 17:33:14 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Control process exited, code=exited, status=226/NAMESPACE
+8月 03 17:33:14 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Failed with result 'exit-code'.
+8月 03 17:33:16 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Failed to schedule restart job: Unit kylin-memory-echo.service not found.
+8月 03 17:33:16 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Failed with result 'exit-code'.
+-- Boot 21dd1c999aaf4108a7f9702c7736d74d --
+8月 03 17:39:44 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 17:52:28 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 03 17:52:29 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 17:52:32 REDACTED_VM_USER-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 03 17:52:32 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 03 17:52:32 REDACTED_VM_USER-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 19:23:36 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 19:23:43 REDACTED_VM_USER-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 03 19:23:43 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 03 19:23:43 REDACTED_VM_USER-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 19:23:43 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 19:23:45 REDACTED_VM_USER-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 03 19:23:45 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 03 19:23:45 REDACTED_VM_USER-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 19:27:28 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 19:58:16 REDACTED_VM_USER-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 03 19:58:16 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 03 19:58:16 REDACTED_VM_USER-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 19:58:21 REDACTED_VM_USER-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 03 19:58:26 REDACTED_VM_USER-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 03 19:58:26 REDACTED_VM_USER-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 03 19:58:26 REDACTED_VM_USER-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.

@@ -1,0 +1,101 @@
+[2026-08-03T11:58Z] [INFO] ============================================================
+[2026-08-03T11:58Z] [INFO]  V10 RuntimeDirectory 完整生命周期测试
+[2026-08-03T11:58Z] [INFO]  Socket: /run/kylin-memory-echo/echo.sock
+[2026-08-03T11:58Z] [INFO]  状态: UNVERIFIED
+[2026-08-03T11:58Z] [INFO] ============================================================
+[2026-08-03T11:58Z] [INFO]   [PASS] SSH connected
+[2026-08-03T11:58Z] [INFO] 
+[2026-08-03T11:58Z] [INFO] --- Phase 0: Upload & Compile ---
+[2026-08-03T11:58Z] [INFO]   >>> Upload all files to VM
+[2026-08-03T11:58Z] [INFO]   [PASS] Uploaded memory_echo_server.py
+[2026-08-03T11:58Z] [INFO]   [PASS] Uploaded kaiming_memory_client.cpp
+[2026-08-03T11:58Z] [INFO]   [PASS] Uploaded test_systemd_lifecycle.sh
+[2026-08-03T11:58Z] [INFO]   [PASS] Uploaded kylin-memory-echo.service
+[2026-08-03T11:58Z] [INFO]   [PASS] Compiled kaiming_memory_client
+[2026-08-03T11:58Z] [INFO] 
+[2026-08-03T11:58Z] [INFO] --- Phase 1: Clean Uninstall ---
+[2026-08-03T11:58Z] [INFO]   >>> Stop and remove existing service
+[2026-08-03T11:58Z] [INFO]   [PASS] Uninstall: unit file removed
+[2026-08-03T11:58Z] [INFO]   [PASS] Uninstall: systemd no longer knows service
+[2026-08-03T11:58Z] [INFO] 
+[2026-08-03T11:58Z] [INFO] --- Phase 2: Install (RuntimeDirectory) ---
+[2026-08-03T11:58Z] [INFO]   Unit SHA256: fea774726852a6d6...
+[2026-08-03T11:58Z] [INFO]   [PASS] install: unit file written (SHA256=fea774726852a6d6...)
+[2026-08-03T11:58Z] [INFO]   [PASS] install: RuntimeDirectory=kylin-memory-echo confirmed in unit
+[2026-08-03T11:58Z] [INFO]   >>> daemon-reload
+[2026-08-03T11:58Z] [INFO]   [PASS] daemon-reload: OK
+[2026-08-03T11:58Z] [INFO]   >>> systemctl enable
+[2026-08-03T11:58Z] [INFO]   [PASS] enable: OK
+[2026-08-03T11:58Z] [INFO]   [PASS] enable: symlink verified
+[2026-08-03T11:58Z] [INFO] 
+[2026-08-03T11:58Z] [INFO] --- Phase 3: Start & RuntimeDirectory ---
+[2026-08-03T11:58Z] [INFO]   >>> systemctl start
+[2026-08-03T11:58Z] [INFO]   [PASS] start: OK
+[2026-08-03T11:58Z] [INFO]   [PASS] start: PID=72486 alive
+[2026-08-03T11:58Z] [INFO]   [PASS] RuntimeDirectory: /run/kylin-memory-echo exists (systemd managed)
+[2026-08-03T11:58Z] [INFO]   RuntimeDirectory content:
+总计 0
+drwxr-xr-x  2 REDACTED_VM_USER REDACTED_VM_USER   60  8月 3日 19:58 .
+drwxr-xr-x 39 root      root      1160  8月 3日 19:58 ..
+srwx------  1 REDACTED_VM_USER REDACTED_VM_USER    0  8月 3日 19:58 echo.sock
+[2026-08-03T11:58Z] [INFO]   [PASS] Socket: /run/kylin-memory-echo/echo.sock exists
+[2026-08-03T11:58Z] [INFO]   >>> systemctl status
+[2026-08-03T11:58Z] [INFO]   Status:
+● kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务
+     Loaded: loaded (/etc/systemd/system/kylin-memory-echo.service; enabled; preset: enabled)
+     Active: active (running) since Mon 2026-08-03 19:58:21 CST; 4s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 72486 (python3)
+      Tasks: 1 (limit: 9405)
+     Memory: 5.6M (peak: 5.8M)
+        CPU: 37ms
+     CGroup: /system.slice/kylin-memory-echo.service
+             └─72486 /usr/bin
+[2026-08-03T11:58Z] [INFO]   [PASS] status: active (running)
+[2026-08-03T11:58Z] [INFO] 
+[2026-08-03T11:58Z] [INFO] --- Phase 4: UDS Communication (RuntimeDirectory) ---
+[2026-08-03T11:58Z] [INFO]   >>> UDS echo via systemd
+[2026-08-03T11:58Z] [INFO]   [FAIL] UDS echo: FAIL: ============================================
+ Kaiming Memory Client — v1.1 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: echo
+ User: REDACTED_VM_USER
+======================================
+[2026-08-03T11:58Z] [INFO]   >>> UDS health via systemd
+[2026-08-03T11:58Z] [INFO]   [FAIL] UDS health: FAIL: ============================================
+ Kaiming Memory Client — v1.1 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: health
+ User: REDACTED_VM_USER
+====================================
+[2026-08-03T11:58Z] [INFO]   >>> UDS memory.retrieve via systemd
+[2026-08-03T11:58Z] [INFO]   [FAIL] UDS memory.retrieve: ============================================
+ Kaiming Memory Client — v1.1 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: memory.retrieve
+ User: REDACTED_VM_USER
+===========================
+[2026-08-03T11:58Z] [INFO] 
+[2026-08-03T11:58Z] [INFO] --- Phase 5: Stop & Disable & Uninstall ---
+[2026-08-03T11:58Z] [INFO]   >>> systemctl stop
+[2026-08-03T11:58Z] [INFO]   [PASS] stop: OK
+[2026-08-03T11:58Z] [INFO]   [FAIL] stop: process still running
+[2026-08-03T11:58Z] [INFO]   >>> systemctl disable
+[2026-08-03T11:58Z] [INFO]   [PASS] disable: OK
+[2026-08-03T11:58Z] [INFO]   >>> uninstall (rm unit + daemon-reload)
+[2026-08-03T11:58Z] [INFO]   [PASS] uninstall: service fully deregistered
+[2026-08-03T11:58Z] [INFO] 
+[2026-08-03T11:58Z] [INFO] --- Phase 6: Rollback ---
+[2026-08-03T11:58Z] [INFO]   >>> Rollback - final cleanup
+[2026-08-03T11:58Z] [INFO]   [PASS] rollback: RuntimeDirectory removed
+[2026-08-03T11:58Z] [INFO]   [FAIL] rollback: residual process found
+[2026-08-03T11:58Z] [INFO] 
+[2026-08-03T11:58Z] [INFO] --- Evidence Collection ---
+[2026-08-03T11:58Z] [INFO]   [PASS] Evidence: journalctl saved
+[2026-08-03T11:58Z] [INFO]   [PASS] Evidence: lifecycle chain saved
+[2026-08-03T11:58Z] [INFO] 
+[2026-08-03T11:58Z] [INFO] ============================================================
+[2026-08-03T11:58Z] [INFO]  V10 Summary: 24 PASS / 5 FAIL
+[2026-08-03T11:58Z] [INFO]  Status: UNVERIFIED (直实验证通过，生产系统待验证)
+[2026-08-03T11:58Z] [INFO]  Evidence: e:\Kylin-memory-dev\UDS-Kylin-Echo\evidence\gate0_echo\v10_runtimedir
+[2026-08-03T11:58Z] [INFO] ============================================================

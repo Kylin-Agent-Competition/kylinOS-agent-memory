@@ -1,0 +1,59 @@
+V10 Full Lifecycle Chain (UNVERIFIED)
+Socket: /run/kylin-memory-echo/echo.sock (RuntimeDirectory)
+============================================================
+PASS: SSH connected
+OP: Upload all files to VM
+PASS: Uploaded memory_echo_server.py
+PASS: Uploaded kaiming_memory_client.cpp
+PASS: Uploaded test_systemd_lifecycle.sh
+PASS: Uploaded kylin-memory-echo.service
+PASS: Compiled kaiming_memory_client
+OP: Stop and remove existing service
+PASS: Uninstall: unit file removed
+PASS: Uninstall: systemd no longer knows service
+PASS: install: unit file written (SHA256=fea774726852a6d6...)
+PASS: install: RuntimeDirectory=kylin-memory-echo confirmed in unit
+OP: daemon-reload
+PASS: daemon-reload: OK
+OP: systemctl enable
+PASS: enable: OK
+PASS: enable: symlink verified
+OP: systemctl start
+PASS: start: OK
+PASS: start: PID=72486 alive
+PASS: RuntimeDirectory: /run/kylin-memory-echo exists (systemd managed)
+PASS: Socket: /run/kylin-memory-echo/echo.sock exists
+OP: systemctl status
+PASS: status: active (running)
+OP: UDS echo via systemd
+FAIL: UDS echo: FAIL: ============================================
+ Kaiming Memory Client — v1.1 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: echo
+ User: REDACTED_VM_USER
+======================================
+OP: UDS health via systemd
+FAIL: UDS health: FAIL: ============================================
+ Kaiming Memory Client — v1.1 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: health
+ User: REDACTED_VM_USER
+====================================
+OP: UDS memory.retrieve via systemd
+FAIL: UDS memory.retrieve: ============================================
+ Kaiming Memory Client — v1.1 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: memory.retrieve
+ User: REDACTED_VM_USER
+===========================
+OP: systemctl stop
+PASS: stop: OK
+FAIL: stop: process still running
+OP: systemctl disable
+PASS: disable: OK
+OP: uninstall (rm unit + daemon-reload)
+PASS: uninstall: service fully deregistered
+OP: Rollback - final cleanup
+PASS: rollback: RuntimeDirectory removed
+FAIL: rollback: residual process found
+PASS: Evidence: journalctl saved

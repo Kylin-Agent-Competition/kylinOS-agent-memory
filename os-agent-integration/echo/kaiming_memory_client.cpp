@@ -25,7 +25,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
-static std::string g_socket_path = "/tmp/kylin-memory-echo/echo.sock";
+static std::string g_socket_path = "/run/kylin-memory-echo/echo.sock";
 static int g_pass = 0;
 static int g_fail = 0;
 
