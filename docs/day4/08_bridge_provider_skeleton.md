@@ -53,23 +53,23 @@
 ## 构建步骤（麒麟 VM）
 
 ```bash
+# 标准入口（P1-8：唯一标准复现命令，内部含构建/CTest/pytest/冒烟/生命周期）
+bash scripts/verify_day4_vm.sh
+```
+
+> 说明：手动执行 pytest 时必须拆成两个独立进程（脚本 Step 4 的做法）：
+> `test_embedding_provider_import.py` + `test_exception_mapping.py` 一组，
+> `test_load_idempotent.py` 单独一组。麒麟实测 SDK 在同一进程内与异常映射测试
+> 共存会触发 Abort，且 create_session 后未 embed 直接销毁也会崩溃
+> （P0-1 已修复：destroy_session 不再 dlclose，.so 进程内只加载一次）。
+
+手动构建（可选，供调试）:
+```bash
 cd cpp-bridge
 python -m pip install pybind11
 cmake -B build -Dpybind11_DIR=$(python -m pybind11 --cmakedir)
 cmake --build build
 ctest --test-dir build --output-on-failure   # C++ 测试
-
-# 导入 + 异常映射 + 幂等测试（pytest 统一收集）
-PYTHONPATH=build:../memory-service \
-LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH \
-python -m pytest ../memory-service/tests/test_embedding_provider_import.py \
-  ../memory-service/tests/test_exception_mapping.py \
-  ../memory-service/tests/test_load_idempotent.py -v
-
-# 真实 SDK 冒烟
-PYTHONPATH=build:../memory-service \
-LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH \
-python ../memory-service/tests/run_smoke.py
 ```
 
 ## 已知限制（关联 TD）
@@ -90,7 +90,8 @@ Provider 层将 Bridge 异常映射为 Day3 契约的 Provider 错误码，不�
 | BridgeSoNotFoundError / BridgeLoadError / BridgeSymbolError | ERR_SDK_NOT_LOADED |
 | BridgeSessionError | ERR_SESSION_FAILED |
 | BridgeEmbedError | ERR_EMBED_FAILED |
-| BridgeSdkError / BridgeModelError | ERR_SDK_ERROR |
+| BridgeSdkError | ERR_SDK_ERROR |
+| BridgeModelError | ERR_MODEL_INVALID（P1-3：模型错误独立映射，不归入普通 SDK 错误） |
 | BridgeTimeoutError / BridgeCancelledError | ERR_TIMEOUT |
 | （应用层校验） | ERR_INVALID_TEXT |
 

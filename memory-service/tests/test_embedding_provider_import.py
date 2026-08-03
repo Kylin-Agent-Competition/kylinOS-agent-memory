@@ -55,13 +55,23 @@ def test_model_info_fields(provider_module):
 def test_provider_error_code_enum(provider_module):
     _, _, _, ProviderError = provider_module
     from providers import ProviderErrorCode
-    # Day3 契约的 6 个 Provider 错误码必须存在
+    # Day3 契约的错误码必须存在（含 P1-3 补回的 ERR_MODEL_INVALID）
     for code in ["ERR_SDK_NOT_LOADED", "ERR_SESSION_FAILED", "ERR_EMBED_FAILED",
-                 "ERR_SDK_ERROR", "ERR_TIMEOUT", "ERR_INVALID_TEXT"]:
+                 "ERR_SDK_ERROR", "ERR_MODEL_INVALID", "ERR_TIMEOUT", "ERR_INVALID_TEXT"]:
         assert hasattr(ProviderErrorCode, code), f"ProviderErrorCode.{code} 应存在"
     # ProviderError 异常可实例化
     err = ProviderError(ProviderErrorCode.ERR_INVALID_TEXT, "test")
     assert err.code == ProviderErrorCode.ERR_INVALID_TEXT
+
+
+def test_bridge_model_error_maps_to_model_invalid(provider_module):
+    """BridgeModelError 应映射 ERR_MODEL_INVALID 而非 ERR_SDK_ERROR（P1-3）。"""
+    EmbeddingProvider, _, _, _ = provider_module
+    from providers import ProviderErrorCode
+    assert EmbeddingProvider._BRIDGE_ERROR_MAP["BridgeModelError"] == \
+        ProviderErrorCode.ERR_MODEL_INVALID
+    assert EmbeddingProvider._BRIDGE_ERROR_MAP["BridgeModelError"] != \
+        ProviderErrorCode.ERR_SDK_ERROR
 
 
 def test_embed_non_str_raises_provider_error(provider_module):
