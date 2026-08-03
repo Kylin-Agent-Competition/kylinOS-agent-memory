@@ -12,8 +12,8 @@ V8 生产版 Systemd 全生命周期测试 (Kylin VM)
 限制: 不能修改生产版的安全加固 (NoNewPrivileges=yes + RestrictAddressFamilies=AF_UNIX)
 
 用法:
-  set KYLIN_VM_USER=REDACTED_VM_USER
-  set KYLIN_VM_PASSWORD=REDACTED_VM_PASSWORD
+  set KYLIN_VM_USER=<username>
+  set KYLIN_VM_PASSWORD=<password>
   %PYTHON% evidence\\gate0_echo\\v8_systemd_prod_test.py
 """
 
@@ -37,8 +37,11 @@ from evidence.ssh_transfer_diagnosis.kylin_transfer import (
 # ---- 配置 ----
 VM_HOST = os.environ.get("KYLIN_VM_HOST", "127.0.0.1")
 VM_PORT = int(os.environ.get("KYLIN_VM_PORT", "2222"))
-VM_USER = os.environ.get("KYLIN_VM_USER", "REDACTED_VM_USER")
-VM_PASS = os.environ.get("KYLIN_VM_PASSWORD", "REDACTED_VM_PASSWORD")
+VM_USER = os.environ.get("KYLIN_VM_USER", "")
+VM_PASS = os.environ.get("KYLIN_VM_PASSWORD", "")
+if not VM_USER or not VM_PASS:
+    print("FATAL: KYLIN_VM_USER and KYLIN_VM_PASSWORD environment variables must be set.")
+    sys.exit(1)
 REMOTE_BASE = f"/home/{VM_USER}/kylin-memory-echo"
 
 SERVICE_NAME = "kylin-memory-echo"
@@ -91,8 +94,8 @@ def title(msg: str):
 
 
 def exec_sudo(kc: KylinConnection, cmd: str, timeout: int = 30) -> Tuple[int, str, str]:
-    """通过 sudo 执行命令（管道传密码），自动脱敏日志"""
-    wrapped = f"echo '{VM_PASS}' | sudo -S bash -c '{cmd}'"
+    """通过 sudo 执行命令，自动脱敏日志"""
+    wrapped = f"sudo bash -c '{cmd}'"
     log(f"    CMD: sudo {cmd[:100]}")
     exit_code, out, err = kc.client.exec_command(wrapped, timeout=timeout)
     ec = out.channel.recv_exit_status()

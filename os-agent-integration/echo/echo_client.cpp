@@ -1,15 +1,13 @@
 /**
- * Kylin Memory Echo Client — UDS 最小验证客户端
+ * Kylin Memory Echo Client �?UDS 最小验证客户端
  * ================================================
- * 连接 /tmp/kylin-memory-echo/echo.sock ，发送长度前缀 JSON 请求，
- * 接收响应并输出结果。
- *
- * 用途: Gate 0 验证 Kaiming 进程可通过 UDS 与自定义 Memory Service 通信
+ * 连接 /tmp/kylin-memory-echo/echo.sock ，发送长度前缀 JSON 请求�? * 接收响应并输出结果�? *
+ * 用�? Gate 0 验证 Kaiming 进程可通过 UDS 与自定义 Memory Service 通信
  * 协议: 4字节 Big-Endian 长度 + UTF-8 JSON 负载
  *
  * 编译 (麒麟 VM):
  *   g++ -std=c++17 echo_client.cpp -o echo_client
- *   或通过 CMake (需要 Qt5 QLocalSocket)
+ *   或通过 CMake (需�?Qt5 QLocalSocket)
  *
  * 用法:
  *   ./echo_client [--method echo|health|memory.retrieve] [--message "text"]
@@ -18,7 +16,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <cstring>
+#include <cerrno>`n#include <cstring>
 #include <chrono>
 #include <iomanip>
 #include <vector>
@@ -56,8 +54,7 @@ void log_error(const std::string& msg) {
 }
 
 /**
- * 通过 POSIX UDS 发送长度前缀 JSON 请求并接收响应
- */
+ * 通过 POSIX UDS 发送长度前缀 JSON 请求并接收响�? */
 int uds_send_recv(const std::string& request_json) {
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock < 0) {
@@ -77,7 +74,7 @@ int uds_send_recv(const std::string& request_json) {
     }
     log_info("Connected to " + g_socket_path);
 
-    // ---- 发送: 4字节 Big-Endian 长度 + JSON 负载 ----
+    // ---- 发�? 4字节 Big-Endian 长度 + JSON 负载 ----
     uint32_t body_len = htonl(static_cast<uint32_t>(request_json.size()));
     if (send(sock, &body_len, 4, 0) != 4) {
         log_error("send(header) failed");
@@ -142,8 +139,7 @@ int main(int argc, char* argv[]) {
     std::string message = "Hello from Kylin Echo Client";
     std::string socket_path = "/tmp/kylin-memory-echo/echo.sock";
 
-    // 简单参数解析
-    for (int i = 1; i < argc; i++) {
+    // 简单参数解�?    for (int i = 1; i < argc; i++) {
         std::string arg(argv[i]);
         if (arg == "--method" && i + 1 < argc) {
             method = argv[++i];

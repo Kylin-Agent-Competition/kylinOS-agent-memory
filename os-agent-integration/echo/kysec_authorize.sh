@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Kylin Memory Echo — KYSEC 最小授权脚本
+# UDS 文件权限与 ACL 最小授权脚本
 # =============================================================================
-# 对 /tmp/kylin-memory-echo/echo.sock 实施 KYSEC 最小授权策略:
+# ⚠️ 非真实 KYSEC 规则写入 — KYSEC 状态标记为 UNVERIFIED.
+# 对 socket 目录/文件实施 UDS 文件权限 + ACL 最小授权策略:
 #   - 仅允许 kylin-aiassistant 进程 (kylin-aiassistant 用户或进程标签) 访问
 #   - 记录授权前后规则状态
-#   - 非破坏性: 原有 KYSEC 规则被备份而非删除
+#   - 非破坏性: 原有权限/ACL 被备份而非删除
 #
 # 用法:
 #   sudo bash kysec_authorize.sh [authorize|status|rollback]
@@ -24,6 +25,7 @@ SOCKET_PATH="/tmp/kylin-memory-echo/echo.sock"
 SOCKET_DIR="/tmp/kylin-memory-echo"
 KYLIN_USER="${SUDO_USER:-$(whoami)}"
 BACKUP_DIR="/tmp/kylin-memory-echo-kysec-backup-$(date +%Y%m%d_%H%M%S)"
+BACKUP_ID_FILE="/tmp/kylin-memory-echo-kysec-backup-id.txt"
 LOG_FILE="/tmp/kylin-memory-echo/kysec_authorize.log"
 
 # ---- 工具函数 ----
@@ -100,11 +102,11 @@ apply_minimal_acl() {
         fi
     fi
 
-    log_msg "最小 ACL 策略已应用"
+    log_msg "最小 ACL 策略已应用 (非真实 KYSEC 规则写入)"
 }
 
 show_status() {
-    log_msg "====== KYSEC 状态报告 ======"
+    log_msg "====== ACL/文件权限 状态报告 ======"
 
     echo ""
     echo "--- Socket 目录 ---"
@@ -150,15 +152,33 @@ show_status() {
     echo "UID=$(id -u) USER=$(whoami)"
     echo "SUDO_USER=$SUDO_USER"
 
+    echo ""
+    echo "--- KYSEC 状态 ---"
+    echo "UNVERIFIED: 此脚本仅实施文件权限+ACL，不写入真实 KYSEC 规则"
+
     log_msg "====== 状态报告结束 ======"
 }
 
 rollback_from_backup() {
     log_msg "执行回退..."
 
-    # 找到最新的备份
-    local latest_backup
-    latest_backup=$(ls -dt /tmp/kylin-memory-echo-kysec-backup-* 2>/dev/null | head -1)
+    # 优先使用 BACKUP_ID_FILE 记录的最新备份
+    local recorded_backup=""
+    if [ -f "$BACKUP_ID_FILE" ] && [ -s "$BACKUP_ID_FILE" ]; then
+        recorded_backup="$(head -1 "$BACKUP_ID_FILE")"
+        if [ -n "$recorded_backup" ] && [ -d "$recorded_backup" ]; then
+            log_msg "使用 recorded backup: $recorded_backup"
+        else
+            log_msg "WARN: recorded backup 无效，兜底使用最新"
+            recorded_backup=""
+        fi
+    fi
+
+    # 兜底：取最早（不是最新）备份以恢复到授权前状态
+    local latest_backup="${recorded_backup:-}"
+    if [ -z "$latest_backup" ]; then
+        latest_backup=$(ls -dt /tmp/kylin-memory-echo-kysec-backup-* 2>/dev/null | tail -1)
+    fi
 
     if [ -z "$latest_backup" ]; then
         log_msg "ERROR: 未找到备份目录"
@@ -169,7 +189,6 @@ rollback_from_backup() {
 
     # 恢复 socket 目录 ACL
     if [ -f "$latest_backup/socket_dir_acl.txt" ]; then
-        # 清除现有 ACL 并从备份恢复 (简单的重新设置权限方式)
         chmod 0700 "$SOCKET_DIR" 2>/dev/null || true
         chown "$KYLIN_USER:$KYLIN_USER" "$SOCKET_DIR" 2>/dev/null || true
         log_msg "  Socket 目录权限已回退"
@@ -182,6 +201,9 @@ rollback_from_backup() {
         log_msg "  Socket 文件权限已回退"
     fi
 
+    # 清理 BACKUP_ID_FILE
+    rm -f "$BACKUP_ID_FILE"
+
     log_msg "回退完成"
 }
 
@@ -193,14 +215,18 @@ mkdir -p "$SOCKET_DIR"
 case "$ACTION" in
     authorize)
         check_root "$@"
-        log_msg "========== KYSEC 最小授权开始 =========="
+        log_msg "========== ACL 最小授权开始 (KYSEC UNVERIFIED) =========="
         backup_current_state
+        # 记录本次备份目录到 BACKUP_ID_FILE
+        echo "$BACKUP_DIR" > "$BACKUP_ID_FILE"
+        log_msg "备份ID已记录: $BACKUP_DIR"
         apply_minimal_acl
         show_status
-        log_msg "========== KYSEC 最小授权完成 =========="
+        log_msg "========== ACL 最小授权完成 =========="
         echo ""
         echo "备份位置: $BACKUP_DIR"
         echo "日志文件: $LOG_FILE"
+        echo "⚠️ KYSEC 状态: UNVERIFIED (非真实 KYSEC 规则写入)"
         ;;
 
     status)
@@ -209,18 +235,18 @@ case "$ACTION" in
 
     rollback)
         check_root "$@"
-        log_msg "========== KYSEC 回退开始 =========="
+        log_msg "========== ACL 回退开始 =========="
         backup_current_state  # 回退前也备份当前状态
         rollback_from_backup
-        log_msg "========== KYSEC 回退完成 =========="
+        log_msg "========== ACL 回退完成 =========="
         ;;
 
     *)
         echo "Usage: $0 [authorize|status|rollback]"
         echo ""
-        echo "  authorize  - 备份当前状态并应用最小 ACL 策略"
-        echo "  status     - 显示当前 KYSEC/Socket 状态"
-        echo "  rollback   - 从最近的备份恢复"
+        echo "  authorize  - 备份当前状态并应用最小 ACL 策略 (KYSEC UNVERIFIED)"
+        echo "  status     - 显示当前 ACL/Socket 状态"
+        echo "  rollback   - 从记录的备份恢复"
         exit 1
         ;;
 esac

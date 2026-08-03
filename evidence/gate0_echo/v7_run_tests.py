@@ -2,10 +2,13 @@
 """V7 测试执行器 - 在麒麟VM上运行全链路测试并下载证据"""
 import paramiko, os, sys, time, json
 
-HOST = '127.0.0.1'
-PORT = 2222
-USER = 'REDACTED_VM_USER'
-PASS = 'REDACTED_VM_PASSWORD'
+HOST = os.environ.get('KYLIN_VM_HOST', '127.0.0.1')
+PORT = int(os.environ.get('KYLIN_VM_PORT', '2222'))
+USER = os.environ.get('KYLIN_VM_USER', '')
+PASS = os.environ.get('KYLIN_VM_PASSWORD', '')
+if not USER or not PASS:
+    print("FATAL: KYLIN_VM_USER and KYLIN_VM_PASSWORD environment variables must be set.")
+    sys.exit(1)
 REMOTE = f'/home/{USER}/kylin-memory-echo'
 LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
 EVIDENCE_DIR = os.path.join(LOCAL_DIR, 'v7_evidence')
@@ -76,7 +79,7 @@ with open(os.path.join(EVIDENCE_DIR, 'phase_a_kaiming_output.txt'), 'w', encodin
 # ---- Step 4: Phase B - KYSEC tests ----
 log('Step 4: Phase B - KYSEC full test (sudo)...')
 chan = c.get_transport().open_session(timeout=90)
-chan.exec_command(f'cd {REMOTE} && echo {PASS} | sudo -S bash share/test_kysec_full.sh 2>&1')
+chan.exec_command(f'cd {REMOTE} && sudo bash share/test_kysec_full.sh 2>&1')
 chan.recv_exit_status()
 out = chan.recv(262144).decode('utf-8', errors='replace')
 chan.close()
@@ -95,7 +98,7 @@ with open(os.path.join(EVIDENCE_DIR, 'phase_b_kysec_output.txt'), 'w', encoding=
 log('Step 5: Phase C - Systemd lifecycle (sudo)...')
 # First restart server for systemd test
 chan = c.get_transport().open_session(timeout=90)
-chan.exec_command(f'cd {REMOTE} && echo {PASS} | sudo -S bash share/test_systemd_lifecycle.sh 2>&1')
+chan.exec_command(f'cd {REMOTE} && sudo bash share/test_systemd_lifecycle.sh 2>&1')
 chan.recv_exit_status()
 out = chan.recv(262144).decode('utf-8', errors='replace')
 chan.close()

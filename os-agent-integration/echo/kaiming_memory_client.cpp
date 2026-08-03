@@ -1,22 +1,18 @@
 /**
- * Kaiming Memory Client — 模拟 kylin-aiassistant 宿主进程的 UDS 客户端
- * ======================================================================
- * 模拟真实 Kaiming 宿主进程 (kylin-aiassistant) 发出的标准 Memory Service 请求。
- * 支持 method: echo / health / memory.retrieve / memory.store
+ * Kaiming Memory Client �?模拟 kylin-aiassistant 宿主进程�?UDS 客户�? * ======================================================================
+ * 模拟真实 Kaiming 宿主进程 (kylin-aiassistant) 发出的标�?Memory Service 请求�? * 支持 method: echo / health / memory.retrieve / memory.store
  *
- * 用途: Gate 0 P1-1 — 补齐 Kaiming→UDS 端到端链路证据
- * 协议: 4字节 Big-Endian 长度 + UTF-8 JSON 负载
+ * 用�? Gate 0 P1-1 �?补齐 Kaiming→UDS 端到端链路证�? * 协议: 4字节 Big-Endian 长度 + UTF-8 JSON 负载
  *
  * 编译 (麒麟 VM):
  *   g++ -std=c++17 -O2 kaiming_memory_client.cpp -o kaiming_memory_client
  *
- * 退出码: 0 — 全部通过, 1 — 有失败
- */
+ * 退出码: 0 �?全部通过, 1 �?有失�? */
 
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <cstring>
+#include <cerrno>`n#include <cstring>
 #include <chrono>
 #include <iomanip>
 #include <vector>
@@ -57,22 +53,21 @@ void log_result(const std::string& test_id, bool passed, const std::string& deta
     }
 }
 
-// 从 JSON 字符串中提取 "status" 字段的值 (不依赖空格)
-// 预期格式: ..."status": "ok"... 或 ..."status": "error"...
+// �?JSON 字符串中提取 "status" 字段的�?(不依赖空�?
+// 预期格式: ..."status": "ok"... �?..."status": "error"...
 static std::string extract_json_status(const std::string& json) {
     auto pos = json.find("\"status\"");
     if (pos == std::string::npos) return "";
     // 跳过 "status"
     pos += 8;
-    // 找冒号后的第一个引号
-    auto q1 = json.find('"', json.find(':', pos));
+    // 找冒号后的第一个引�?    auto q1 = json.find('"', json.find(':', pos));
     if (q1 == std::string::npos) return "";
     auto q2 = json.find('"', q1 + 1);
     if (q2 == std::string::npos) return "";
     return json.substr(q1 + 1, q2 - q1 - 1);
 }
 
-// 检查 JSON 中某个 key 是否存在 (不依赖空格)
+// 检�?JSON 中某�?key 是否存在 (不依赖空�?
 static bool json_has_key(const std::string& json, const std::string& key) {
     std::string pattern = "\"" + key + "\"";
     return json.find(pattern) != std::string::npos;
@@ -146,7 +141,7 @@ void test_echo() {
         std::string resp = uds_send_recv(build_request("echo", "Hello from Kaiming AI Assistant"));
         log_info("Response: " + resp);
         bool ok = (extract_json_status(resp) == "ok") && json_has_key(resp, "echo");
-        log_result("KAIMING-ECHO", ok, "echo 往返, payload=Hello from Kaiming AI Assistant");
+        log_result("KAIMING-ECHO", ok, "echo 往�? payload=Hello from Kaiming AI Assistant");
     } catch (const std::exception& e) {
         log_result("KAIMING-ECHO", false, std::string("异常: ") + e.what());
     }
@@ -179,15 +174,15 @@ void test_memory_retrieve() {
 }
 
 void test_memory_store() {
-    log_info("TEST: memory.store 方法 (验证协议兼容性)");
+    log_info("TEST: memory.store 方法 (验证协议兼容�?");
     try {
-        std::string resp = uds_send_recv(build_memory_store_request("kysec_policy_v1", "最小权限原则"));
+        std::string resp = uds_send_recv(build_memory_store_request("kysec_policy_v1", "最小权限原�?));
         log_info("Response: " + resp);
-        // Echo 未实现 memory.store, 预期 error
+        // Echo 未实�?memory.store, 预期 error
         bool ok = json_has_key(resp, "status");
-        log_result("KAIMING-STORE", ok, "memory.store 协议层连通 (Echo未实现,预期error)");
+        log_result("KAIMING-STORE", ok, "memory.store 协议层连�?(Echo未实�?预期error)");
     } catch (const std::exception& e) {
-        log_result("KAIMING-STORE", false, std::string("协议层异常: ") + e.what());
+        log_result("KAIMING-STORE", false, std::string("协议层异�? ") + e.what());
     }
 }
 
@@ -204,7 +199,7 @@ void test_unknown_method() {
 }
 
 void test_rapid_fire() {
-    log_info("TEST: 连续 5 次快速请求 (模拟高频调用)");
+    log_info("TEST: 连续 5 次快速请�?(模拟高频调用)");
     int ok_count = 0;
     for (int i = 1; i <= 5; i++) {
         try {
@@ -214,10 +209,10 @@ void test_rapid_fire() {
             log_error(std::string("Rapid #") + std::to_string(i) + ": " + e.what());
         }
     }
-    log_result("KAIMING-RAPID", ok_count == 5, std::to_string(ok_count) + "/5 次快速请求成功");
+    log_result("KAIMING-RAPID", ok_count == 5, std::to_string(ok_count) + "/5 次快速请求成�?);
 }
 
-// ---- 主入口 ----
+// ---- 主入�?----
 int main(int argc, char* argv[]) {
     std::string method = "all";
     std::string socket_path = "/tmp/kylin-memory-echo/echo.sock";
@@ -235,7 +230,7 @@ int main(int argc, char* argv[]) {
     g_socket_path = socket_path;
 
     std::cout << "============================================" << std::endl;
-    std::cout << " Kaiming Memory Client — v1.1 (robust JSON)" << std::endl;
+    std::cout << " Kaiming Memory Client �?v1.1 (robust JSON)" << std::endl;
     std::cout << " Socket: " << g_socket_path << std::endl;
     std::cout << " Method: " << method << std::endl;
     std::cout << " User: " << (getenv("USER") ? getenv("USER") : "?") << std::endl;
