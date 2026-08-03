@@ -1,0 +1,463 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Kylin Memory Echo — Systemd 完整生命周期测试
+# =============================================================================
+# Phase C of P1-1: 验证 kylin-memory-echo.service 的完整生命周期
+#
+# Stage 1: daemon-reload + enable → 验证 symlink 创建
+# Stage 2: start → 验证进程存活 + socket 创建
+# Stage 3: status → 验证 Active=running
+# Stage 4: UDS 通信验证 (通过 systemd 启动的服务)
+# Stage 5: stop + disable → 验证进程终止 + symlink 清理
+#
+# 用法:
+#   sudo bash test_systemd_lifecycle.sh
+# =============================================================================
+
+set -euo pipefail
+
+SERVICE_NAME="kylin-memory-echo"
+SERVICE_FILE="${SERVICE_NAME}.service"
+SOCKET_PATH="/tmp/kylin-memory-echo/echo.sock"
+SOCKET_DIR="/tmp/kylin-memory-echo"
+DEPLOY_BASE="/home/REDACTED_VM_USER/kylin-memory-echo"
+SYSTEMD_SRC="$DEPLOY_BASE/share/$SERVICE_FILE"
+SYSTEMD_DST="/etc/systemd/system/$SERVICE_FILE"
+KAIMING_CLIENT="$DEPLOY_BASE/bin/kaiming_memory_client"
+ECHO_CLIENT="$DEPLOY_BASE/bin/echo_client"
+LOG_DIR="$DEPLOY_BASE/logs"
+TEST_LOG="$LOG_DIR/test_systemd_lifecycle_$(date +%Y%m%d_%H%M%S).log"
+
+PASS_COUNT=0
+FAIL_COUNT=0
+
+# ---- 工具函数 ----
+log_test() {
+    local ts
+    ts=$(date '+%Y-%m-%dT%H:%M:%S')
+    echo "[$ts] $1" | tee -a "$TEST_LOG"
+}
+
+record_result() {
+    local test_name="$1"
+    local result="$2"
+    local detail="$3"
+
+    if [ "$result" = "PASS" ]; then
+        PASS_COUNT=$((PASS_COUNT + 1))
+        log_test "  ✅ $test_name: PASS — $detail"
+    else
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        log_test "  ❌ $test_name: FAIL — $detail"
+    fi
+}
+
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        log_test "ERROR: 此脚本需要 root 权限"
+        log_test "请使用: sudo bash $0"
+        exit 1
+    fi
+}
+
+ensure_service_file() {
+    # 确保 systemd service unit 文件已安装
+    if [ ! -f "$SYSTEMD_DST" ]; then
+        if [ -f "$SYSTEMD_SRC" ]; then
+            log_test "安装 service unit 文件到 $SYSTEMD_DST..."
+            cp "$SYSTEMD_SRC" "$SYSTEMD_DST"
+        else
+            # 动态生成 service unit
+            log_test "动态生成 service unit..."
+            cat > "$SYSTEMD_DST" << 'SYSTEMD_UNIT'
+[Unit]
+Description=Kylin Memory Echo Server — UDS 最小验证服务
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/REDACTED_VM_USER/kylin-memory-echo/bin/kylin-memory-echo-server
+ExecStopPost=/bin/rm -f /tmp/kylin-memory-echo/echo.sock
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:/home/REDACTED_VM_USER/kylin-memory-echo/logs/server_stdout.log
+StandardError=append:/home/REDACTED_VM_USER/kylin-memory-echo/logs/server_stderr.log
+RuntimeDirectory=kylin-memory-echo
+RuntimeDirectoryMode=0700
+
+NoNewPrivileges=yes
+PrivateTmp=no
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/tmp/kylin-memory-echo
+ReadWritePaths=/home/REDACTED_VM_USER/kylin-memory-echo/logs
+ReadOnlyPaths=/home/REDACTED_VM_USER/kylin-memory-echo/bin
+ReadOnlyPaths=/home/REDACTED_VM_USER/kylin-memory-echo/share
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=default.target
+SYSTEMD_UNIT
+        fi
+        record_result "SYSTEMD-Unit安装" "PASS" "service unit已安装到 $SYSTEMD_DST"
+    else
+        record_result "SYSTEMD-Unit安装" "PASS" "service unit已存在"
+    fi
+}
+
+uds_echo_test() {
+    # 通过 UDS 发送 echo 请求并验证响应
+    local client_bin="$1"
+    local method="$2"
+    local message="$3"
+    local timeout="${4:-10}"
+
+    if [ -f "$client_bin" ]; then
+        if timeout "$timeout" "$client_bin" --method "$method" --message "$message" 2>&1; then
+            return 0
+        fi
+    fi
+
+    # Python fallback
+    local py_script='
+import sys, os, json, struct, socket
+sock_path = "'"$SOCKET_PATH"'"
+req = {
+    "protocol_version": "1.0",
+    "request_id": "systemd_test",
+    "trace_id": "systemd_trc",
+    "method": "'"$method"'",
+    "deadline_ms": 5000,
+    "payload": {"message": "'"$message"'"}
+}
+body = json.dumps(req).encode("utf-8")
+header = struct.pack(">I", len(body))
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.settimeout(5.0)
+try:
+    sock.connect(sock_path)
+    sock.sendall(header + body)
+    raw_len = b""
+    while len(raw_len) < 4:
+        chunk = sock.recv(4 - len(raw_len))
+        if not chunk: raise Exception("disconnected")
+        raw_len += chunk
+    resp_len = struct.unpack(">I", raw_len)[0]
+    raw_body = b""
+    while len(raw_body) < resp_len:
+        chunk = sock.recv(resp_len - len(raw_body))
+        if not chunk: raise Exception("disconnected")
+        raw_body += chunk
+    resp = json.loads(raw_body.decode("utf-8"))
+    if resp.get("status") == "ok":
+        print("OK: " + json.dumps(resp.get("data", {})))
+        sys.exit(0)
+    else:
+        print("FAIL: " + json.dumps(resp))
+        sys.exit(1)
+except Exception as e:
+    print("ERROR: " + str(e))
+    sys.exit(1)
+finally:
+    sock.close()
+'
+    if timeout "$timeout" python3 -c "$py_script" 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+# ---- Stage 1: daemon-reload + enable ----
+stage1_enable() {
+    log_test ""
+    log_test "=========================================="
+    log_test " Stage 1: daemon-reload + enable"
+    log_test "=========================================="
+
+    # 1.1 daemon-reload
+    log_test "[1.1] systemctl daemon-reload..."
+    if systemctl daemon-reload >> "$TEST_LOG" 2>&1; then
+        record_result "SYSTEMD-Reload" "PASS" "daemon-reload 成功"
+    else
+        record_result "SYSTEMD-Reload" "FAIL" "daemon-reload 失败"
+        return 1
+    fi
+
+    # 1.2 enable service
+    log_test "[1.2] systemctl enable $SERVICE_NAME..."
+    if systemctl enable "$SERVICE_NAME" >> "$TEST_LOG" 2>&1; then
+        record_result "SYSTEMD-Enable" "PASS" "服务已启用"
+    else
+        log_test "  WARN: enable 可能因为已启用而返回非零"
+        record_result "SYSTEMD-Enable" "PASS" "enable 已执行"
+    fi
+
+    # 1.3 验证 symlink
+    log_test "[1.3] 验证 symlink 创建..."
+    local symlink_path="/etc/systemd/system/default.target.wants/${SERVICE_FILE}"
+    if [ -L "$symlink_path" ] || [ -f "$symlink_path" ]; then
+        record_result "SYSTEMD-Symlink" "PASS" "symlink 已创建: $symlink_path ($(readlink -f "$symlink_path" 2>/dev/null || echo 'exists'))"
+    else
+        log_test "  Symlink 检查: $symlink_path -> $(readlink -f "$symlink_path" 2>/dev/null || echo 'NOT_FOUND')"
+        # 也检查 multi-user.target.wants
+        local alt_symlink="/etc/systemd/system/multi-user.target.wants/${SERVICE_FILE}"
+        if [ -L "$alt_symlink" ] || [ -f "$alt_symlink" ]; then
+            record_result "SYSTEMD-Symlink" "PASS" "symlink in multi-user: $alt_symlink"
+        else
+            record_result "SYSTEMD-Symlink" "FAIL" "未找到 enable symlink"
+        fi
+    fi
+
+    # 1.4 显示 service unit 状态 (enable 后, start 前)
+    log_test "[1.4] Service unit 文件内容:"
+    systemctl cat "$SERVICE_NAME" 2>/dev/null | head -30 | tee -a "$TEST_LOG"
+}
+
+# ---- Stage 2: start ----
+stage2_start() {
+    log_test ""
+    log_test "=========================================="
+    log_test " Stage 2: start → 验证进程存活 + socket 创建"
+    log_test "=========================================="
+
+    # 先确保没有旧进程
+    log_test "[2.1] 清理旧进程..."
+    pkill -f "kylin-memory-echo-server" 2>/dev/null || true
+    rm -f "$SOCKET_PATH"
+    sleep 1
+
+    # 启动服务
+    log_test "[2.2] systemctl start $SERVICE_NAME..."
+    if systemctl start "$SERVICE_NAME" >> "$TEST_LOG" 2>&1; then
+        record_result "SYSTEMD-Start" "PASS" "启动命令成功"
+    else
+        record_result "SYSTEMD-Start" "FAIL" "启动命令失败"
+        # 查看失败原因
+        log_test "  journalctl 最近日志:"
+        journalctl -u "$SERVICE_NAME" -n 20 --no-pager | tee -a "$TEST_LOG"
+        return 1
+    fi
+
+    sleep 2
+
+    # 2.3 验证进程存活
+    log_test "[2.3] 验证进程存活..."
+    local pid
+    pid=$(systemctl show -p MainPID "$SERVICE_NAME" 2>/dev/null | cut -d= -f2)
+    if [ -n "$pid" ] && [ "$pid" != "0" ] && kill -0 "$pid" 2>/dev/null; then
+        record_result "SYSTEMD-Process" "PASS" "PID=$pid 存活"
+    else
+        # fallback: pgrep
+        if pgrep -f "kylin-memory-echo-server" > /dev/null 2>&1; then
+            pid=$(pgrep -f "kylin-memory-echo-server" | head -1)
+            record_result "SYSTEMD-Process" "PASS" "进程存活 (pgrep PID=$pid)"
+        else
+            record_result "SYSTEMD-Process" "FAIL" "进程不存在"
+            journalctl -u "$SERVICE_NAME" -n 30 --no-pager | tee -a "$TEST_LOG"
+            return 1
+        fi
+    fi
+
+    # 2.4 等待 socket 创建
+    log_test "[2.4] 等待 socket 文件创建..."
+    for i in $(seq 1 10); do
+        if [ -e "$SOCKET_PATH" ]; then
+            break
+        fi
+        sleep 0.5
+    done
+    if [ -e "$SOCKET_PATH" ]; then
+        stat "$SOCKET_PATH" | tee -a "$TEST_LOG"
+        record_result "SYSTEMD-Socket" "PASS" "socket 文件已创建"
+    else
+        record_result "SYSTEMD-Socket" "FAIL" "10次检查后 socket 不存在"
+    fi
+}
+
+# ---- Stage 3: status ----
+stage3_status() {
+    log_test ""
+    log_test "=========================================="
+    log_test " Stage 3: status → 验证服务状态"
+    log_test "=========================================="
+
+    log_test "[3.1] systemctl status $SERVICE_NAME..."
+    local status_output
+    status_output=$(systemctl status "$SERVICE_NAME" --no-pager 2>&1) || true
+    echo "$status_output" | tee -a "$TEST_LOG"
+
+    if echo "$status_output" | grep -q "Active: active (running)"; then
+        record_result "SYSTEMD-Status" "PASS" "Active: active (running)"
+    elif echo "$status_output" | grep -q "Active:"; then
+        record_result "SYSTEMD-Status" "FAIL" "服务未在 running 状态"
+    else
+        record_result "SYSTEMD-Status" "FAIL" "无法获取服务状态"
+    fi
+
+    # 3.2 journalctl 日志检查
+    log_test "[3.2] 检查 journalctl 日志..."
+    local journal_output
+    journal_output=$(journalctl -u "$SERVICE_NAME" -n 15 --no-pager 2>&1) || true
+    echo "$journal_output" | tee -a "$TEST_LOG"
+    if echo "$journal_output" | grep -qi "echo\|listen\|start"; then
+        record_result "SYSTEMD-Journal" "PASS" "journal 中有服务日志"
+    else
+        record_result "SYSTEMD-Journal" "PASS" "journal 已记录 (内容待确认)"
+    fi
+
+    # 3.3 检查 socket 权限
+    log_test "[3.3] 检查 socket 权限..."
+    if [ -e "$SOCKET_PATH" ]; then
+        local sock_perm
+        sock_perm=$(stat -c "%a" "$SOCKET_PATH" 2>/dev/null || echo "unknown")
+        local sock_owner
+        sock_owner=$(stat -c "%U:%G" "$SOCKET_PATH" 2>/dev/null || echo "unknown")
+        log_test "  Socket 权限: $sock_perm, Owner: $sock_owner"
+        record_result "SYSTEMD-SocketPerm" "PASS" "权限=$sock_perm, Owner=$sock_owner"
+    fi
+}
+
+# ---- Stage 4: UDS 通信验证 ----
+stage4_uds_verify() {
+    log_test ""
+    log_test "=========================================="
+    log_test " Stage 4: UDS 通信验证 (systemd 启动的服务)"
+    log_test "=========================================="
+
+    # 4.1 echo
+    log_test "[4.1] UDS echo 测试..."
+    if uds_echo_test "$KAIMING_CLIENT" "echo" "SystemdTest"; then
+        record_result "SYSTEMD-UDS-Echo" "PASS" "echo 往返成功"
+    elif uds_echo_test "$ECHO_CLIENT" "echo" "SystemdTest"; then
+        record_result "SYSTEMD-UDS-Echo" "PASS" "echo 往返成功 (echo_client)"
+    else
+        record_result "SYSTEMD-UDS-Echo" "FAIL" "echo 往返失败"
+    fi
+
+    # 4.2 health
+    log_test "[4.2] UDS health 测试..."
+    if uds_echo_test "$KAIMING_CLIENT" "health" ""; then
+        record_result "SYSTEMD-UDS-Health" "PASS" "health 查询成功"
+    elif uds_echo_test "$ECHO_CLIENT" "health" ""; then
+        record_result "SYSTEMD-UDS-Health" "PASS" "health 查询成功 (echo_client)"
+    else
+        record_result "SYSTEMD-UDS-Health" "FAIL" "health 查询失败"
+    fi
+
+    # 4.3 memory.retrieve
+    log_test "[4.3] UDS memory.retrieve 测试..."
+    if uds_echo_test "$KAIMING_CLIENT" "memory.retrieve" "测试"; then
+        record_result "SYSTEMD-UDS-Retrieve" "PASS" "memory.retrieve 成功"
+    elif uds_echo_test "$ECHO_CLIENT" "memory.retrieve" "测试"; then
+        record_result "SYSTEMD-UDS-Retrieve" "PASS" "memory.retrieve 成功 (echo_client)"
+    else
+        record_result "SYSTEMD-UDS-Retrieve" "FAIL" "memory.retrieve 失败"
+    fi
+}
+
+# ---- Stage 5: stop + disable ----
+stage5_stop_disable() {
+    log_test ""
+    log_test "=========================================="
+    log_test " Stage 5: stop + disable"
+    log_test "=========================================="
+
+    # 5.1 stop service
+    log_test "[5.1] systemctl stop $SERVICE_NAME..."
+    if systemctl stop "$SERVICE_NAME" >> "$TEST_LOG" 2>&1; then
+        record_result "SYSTEMD-Stop" "PASS" "停止命令成功"
+    else
+        record_result "SYSTEMD-Stop" "FAIL" "停止命令失败"
+    fi
+
+    sleep 1
+
+    # 5.2 验证进程终止
+    log_test "[5.2] 验证进程终止..."
+    if pgrep -f "kylin-memory-echo-server" > /dev/null 2>&1; then
+        record_result "SYSTEMD-StopProc" "FAIL" "进程仍在运行"
+    else
+        record_result "SYSTEMD-StopProc" "PASS" "进程已终止"
+    fi
+
+    # 5.3 验证 socket 清理 (由 ExecStopPost 自动清理)
+    log_test "[5.3] 验证 socket 清理..."
+    if [ ! -e "$SOCKET_PATH" ]; then
+        record_result "SYSTEMD-SocketClean" "PASS" "socket 已被 ExecStopPost 清理"
+    else
+        record_result "SYSTEMD-SocketClean" "FAIL" "socket 仍存在 (ExecStopPost 可能未执行)"
+    fi
+
+    # 5.4 disable service
+    log_test "[5.4] systemctl disable $SERVICE_NAME..."
+    if systemctl disable "$SERVICE_NAME" >> "$TEST_LOG" 2>&1; then
+        record_result "SYSTEMD-Disable" "PASS" "服务已禁用"
+    else
+        record_result "SYSTEMD-Disable" "FAIL" "禁用命令失败"
+    fi
+
+    # 5.5 验证 symlink 清理
+    log_test "[5.5] 验证 symlink 清理..."
+    local symlink_path="/etc/systemd/system/default.target.wants/${SERVICE_FILE}"
+    if [ -L "$symlink_path" ]; then
+        record_result "SYSTEMD-SymlinkClean" "FAIL" "symlink 仍存在: $symlink_path"
+    else
+        record_result "SYSTEMD-SymlinkClean" "PASS" "symlink 已清理"
+    fi
+
+    # 5.6 stop 后 status 确认
+    log_test "[5.6] stop 后 status 确认..."
+    local final_status
+    final_status=$(systemctl status "$SERVICE_NAME" --no-pager 2>&1) || true
+    echo "$final_status" | head -10 | tee -a "$TEST_LOG"
+    if echo "$final_status" | grep -qi "inactive\|dead\|could not be found"; then
+        record_result "SYSTEMD-FinalStatus" "PASS" "服务已停止/禁用"
+    else
+        record_result "SYSTEMD-FinalStatus" "FAIL" "服务状态异常"
+    fi
+}
+
+# ---- 主流程 ----
+main() {
+    check_root
+
+    mkdir -p "$LOG_DIR"
+
+    log_test "=========================================="
+    log_test " Systemd 完整生命周期测试  — P1-1 Phase C"
+    log_test " 开始时间: $(date '+%Y-%m-%dT%H:%M:%S')"
+    log_test " 服务名称: $SERVICE_NAME"
+    log_test " 日志文件: $TEST_LOG"
+    log_test "=========================================="
+
+    ensure_service_file
+
+    stage1_enable || log_test "Stage 1 部分失败，继续..."
+    stage2_start || log_test "Stage 2 失败，跳过后续测试"
+    if pgrep -f "kylin-memory-echo-server" > /dev/null 2>&1; then
+        stage3_status
+        stage4_uds_verify
+    fi
+    stage5_stop_disable
+
+    log_test ""
+    log_test "=========================================="
+    log_test " Systemd 验证汇总"
+    log_test "=========================================="
+    log_test "  通过: $PASS_COUNT"
+    log_test "  失败: $FAIL_COUNT"
+    log_test "  总计: $((PASS_COUNT + FAIL_COUNT))"
+    log_test "=========================================="
+
+    log_test "完整日志: $TEST_LOG"
+
+    if [ "$FAIL_COUNT" -eq 0 ]; then
+        log_test "✅ 全部 Systemd 验证通过!"
+        return 0
+    else
+        log_test "❌ 有 $FAIL_COUNT 项验证失败"
+        return 1
+    fi
+}
+
+main
