@@ -1,0 +1,30 @@
+# ===============================================================
+# ⚠️ 开发验证环境配置 — 不可用于正式发行环境
+# ===============================================================
+# 验证环境: 银河麒麟桌面操作系统 V11, REDACTED_VM_USER-pc
+# 验证结果: ECHO-002 Phase C 16/16 PASS (开发环境)
+# 正式发行环境: 未经测试，预计失败 (详见 dev/ENVIRONMENT_NOTICE.md)
+# ===============================================================
+
+[Unit]
+Description=Kylin Memory Echo Server — UDS 最小验证服务 [DEV]
+Documentation=https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+After=network.target
+
+# 安装脚本会自动替换 __USERNAME__ 占位符
+[Service]
+Type=simple
+User=__USERNAME__
+ExecStart=/usr/bin/python3 /home/__USERNAME__/kylin-memory-echo/bin/kylin-memory-echo-server
+ExecStopPost=/bin/rm -f /tmp/kylin-memory-echo/echo.sock
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:/home/__USERNAME__/kylin-memory-echo/logs/server_stdout.log
+StandardError=append:/home/__USERNAME__/kylin-memory-echo/logs/server_stderr.log
+
+# 最小安全加固（开发验证环境，非生产环境）
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=default.target
