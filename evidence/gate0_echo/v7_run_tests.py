@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-"""V7 测试执行器 - 在麒麟VM上运行全链路测试并下载证据"""
-import paramiko, os, sys, time, json
+"""V7 测试执行器 - 在麒麟VM上运行全链路测试并下载证据
+
+用法:
+  python3 v7_run_tests.py [--output-dir evidence/gate0_echo/v7_evidence]
+"""
+import argparse, paramiko, os, sys, time, json
 
 HOST = os.environ.get('KYLIN_VM_HOST', '127.0.0.1')
 PORT = int(os.environ.get('KYLIN_VM_PORT', '2222'))
@@ -11,7 +15,11 @@ if not USER or not PASS:
     sys.exit(1)
 REMOTE = f'/home/{USER}/kylin-memory-echo'
 LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
-EVIDENCE_DIR = os.path.join(LOCAL_DIR, 'v7_evidence')
+DEFAULT_EVIDENCE = os.path.join(LOCAL_DIR, 'v7_evidence')
+EVIDENCE_DIR = argparse.ArgumentParser(description='V7 测试执行器').parse_args().__dict__.get(
+    'output_dir',
+    sys.argv[sys.argv.index('--output-dir') + 1] if '--output-dir' in sys.argv else None
+) or DEFAULT_EVIDENCE
 
 os.makedirs(EVIDENCE_DIR, exist_ok=True)
 

@@ -17,6 +17,7 @@ V8 生产版 Systemd 全生命周期测试 (Kylin VM)
   %PYTHON% evidence\\gate0_echo\\v8_systemd_prod_test.py
 """
 
+import argparse
 import os
 import sys
 import time
@@ -33,6 +34,12 @@ sys.path.insert(0, PROJECT_ROOT)
 from evidence.ssh_transfer_diagnosis.kylin_transfer import (
     KylinConnection, transfer, TransferError, VerificationError
 )
+
+# ---- CLI args ----
+_DEFAULT_OUT = os.path.join(PROJECT_ROOT, "evidence", "gate0_echo", "v8_prod_test")
+_argp = argparse.ArgumentParser(description="V8 Systemd 生产测试")
+_argp.add_argument("--output-dir", default=_DEFAULT_OUT, help=f"证据输出目录 (默认: {_DEFAULT_OUT})")
+EVIDENCE_OUT = _argp.parse_args().output_dir
 
 # ---- 配置 ----
 VM_HOST = os.environ.get("KYLIN_VM_HOST", "127.0.0.1")
@@ -53,8 +60,6 @@ SOCKET_DIR = "/tmp/kylin-memory-echo"
 # 生产版 unit 模板 (与 packaging/systemd/kylin-memory-echo.service 一致)
 PROD_UNIT_TEMPLATE_PATH = os.path.join(PROJECT_ROOT, "packaging", "systemd", "kylin-memory-echo.service")
 
-# 输出目录
-EVIDENCE_OUT = os.path.join(PROJECT_ROOT, "evidence", "gate0_echo", "v8_prod_test")
 os.makedirs(EVIDENCE_OUT, exist_ok=True)
 
 # 全局日志

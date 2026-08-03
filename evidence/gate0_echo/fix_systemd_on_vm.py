@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
-"""直接修复麒麟 VM 上的 systemd unit 文件并重启服务"""
-import paramiko, time, os, sys
+"""直接修复麒麟 VM 上的 systemd unit 文件并重启服务
+
+用法:
+  python3 fix_systemd_on_vm.py [--output-dir evidence/gate0_echo/v8_prod_test]
+"""
+import argparse, paramiko, time, os, sys
+
+# ---- CLI args ----
+_DEFAULT_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "v8_prod_test")
+_argp = argparse.ArgumentParser(description="修复 VM 上的 systemd unit 文件")
+_argp.add_argument("--output-dir", default=_DEFAULT_OUT, help=f"日志输出目录 (默认: {_DEFAULT_OUT})")
+OUTPUT_DIR = _argp.parse_args().output_dir
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 HOST = os.environ.get('KYLIN_VM_HOST', '127.0.0.1')
 PORT = int(os.environ.get('KYLIN_VM_PORT', '2222'))

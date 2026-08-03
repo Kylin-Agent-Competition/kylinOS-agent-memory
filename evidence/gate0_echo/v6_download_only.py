@@ -2,7 +2,11 @@
 """V6 Pure download: pull evidence files from Kylin VM
 
 凭据通过环境变量 KYLIN_VM_USER / KYLIN_VM_PASSWORD 传入，不硬编码。
+
+用法:
+  python3 v6_download_only.py [--output-dir evidence/gate0_echo/v6_final_results]
 """
+import argparse
 import os
 import sys
 
@@ -18,7 +22,11 @@ if not USER or not PASSWORD:
     sys.exit(1)
 
 REMOTE_BASE = os.environ.get("KYLIN_VM_REMOTE_BASE", f"/home/{USER}/kylin-memory-echo")
-EVIDENCE_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "v6_final_results")
+
+DEFAULT_OUTPUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "v6_final_results")
+parser = argparse.ArgumentParser(description="V6 证据下载")
+parser.add_argument("--output-dir", default=DEFAULT_OUTPUT, help=f"证据输出目录 (默认: {DEFAULT_OUTPUT})")
+EVIDENCE_LOCAL = parser.parse_args().output_dir
 
 _failures = 0
 

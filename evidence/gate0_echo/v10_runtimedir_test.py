@@ -16,13 +16,19 @@ Socket: /run/kylin-memory-echo/echo.sock (RuntimeDirectory, systemd 管理)
   %PYTHON% evidence\\gate0_echo\\v10_runtimedir_test.py
 """
 
-import os, sys, time, hashlib, base64, traceback
+import argparse, os, sys, time, hashlib, base64, traceback
 from datetime import datetime, timezone
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
 from evidence.ssh_transfer_diagnosis.kylin_transfer import KylinConnection, transfer, TransferError
+
+# ---- CLI args ----
+_DEFAULT_OUT = os.path.join(PROJECT_ROOT, "evidence", "gate0_echo", "v10_runtimedir")
+_argp = argparse.ArgumentParser(description="V10 RuntimeDirectory 测试")
+_argp.add_argument("--output-dir", default=_DEFAULT_OUT, help=f"证据输出目录 (默认: {_DEFAULT_OUT})")
+EVIDENCE_OUT = _argp.parse_args().output_dir
 
 VM_HOST = os.environ.get("KYLIN_VM_HOST", "127.0.0.1")
 VM_PORT = int(os.environ.get("KYLIN_VM_PORT", "2222"))
@@ -40,7 +46,6 @@ UNIT_DST = f"/etc/systemd/system/{UNIT_FILE}"
 SOCKET_PATH = "/run/kylin-memory-echo/echo.sock"
 RUNTIME_DIR = "/run/kylin-memory-echo"
 
-EVIDENCE_OUT = os.path.join(PROJECT_ROOT, "evidence", "gate0_echo", "v10_runtimedir")
 os.makedirs(EVIDENCE_OUT, exist_ok=True)
 LOG_FILE = os.path.join(EVIDENCE_OUT, "v10_fulllifecycle.log")
 

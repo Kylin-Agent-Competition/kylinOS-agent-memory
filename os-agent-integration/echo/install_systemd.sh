@@ -19,7 +19,7 @@
 set -euo pipefail
 
 # ---- 用户检测 ----
-DETECTED_USER="${SUDO_USER:-$USER}"
+DETECTED_USER="${SUDO_USER:-${USER}}"
 TARGET_USER="${1:-$DETECTED_USER}"
 
 if [ "$TARGET_USER" = "root" ] || [ "$TARGET_USER" = "YOUR_USERNAME" ]; then
@@ -51,14 +51,14 @@ if [ ! -f "$UNIT_TEMPLATE" ]; then
 fi
 if [ ! -f "$UNIT_TEMPLATE" ]; then
     echo "ERROR: 找不到 unit 模板文件"
-    echo "  搜索: $(dirname "$UNIT_TEMPLATE") ; $DEPLOY_BASE/share"
+    echo "  搜索: $(dirname "${UNIT_TEMPLATE}") ; ${DEPLOY_BASE}/share"
     exit 1
 fi
-echo "[OK] 模板文件: $UNIT_TEMPLATE"
+echo "[OK] 模板文件: ${UNIT_TEMPLATE}"
 
 # ---- 检查部署目录 ----
 if [ ! -f "$DEPLOY_BASE/bin/kylin-memory-echo-server" ]; then
-    echo "ERROR: 服务端脚本不存在: $DEPLOY_BASE/bin/kylin-memory-echo-server"
+    echo "ERROR: 服务端脚本不存在: ${DEPLOY_BASE}/bin/kylin-memory-echo-server"
     echo "  请先运行 deploy_echo.sh 部署文件"
     exit 1
 fi
@@ -86,7 +86,7 @@ echo ""
 echo "--- 生成 Unit 文件 ---"
 sed "s/__USERNAME__/$TARGET_USER/g" "$UNIT_TEMPLATE" > "$UNIT_DST"
 chmod 644 "$UNIT_DST"
-echo "[OK] Unit 文件已生成: $UNIT_DST"
+echo "[OK] Unit 文件已生成: ${UNIT_DST}"
 
 # ---- SHA256 校验写入 (铁律) ----
 echo ""
@@ -98,9 +98,9 @@ echo "[OK] SHA256: ${INSTALLED_SHA:0:16}..."
 # ---- 显示生成后的内容用于抽查 ----
 echo ""
 echo "--- Unit 文件内容预览 (关键行) ---"
-echo "  User:           $(grep '^User=' "$UNIT_DST")"
-echo "  ExecStart:      $(grep '^ExecStart=' "$UNIT_DST")"
-echo "  RuntimeDirectory: $(grep '^RuntimeDirectory=' "$UNIT_DST")"
+echo "  User:           $(grep '^User=' "${UNIT_DST}")"
+echo "  ExecStart:      $(grep '^ExecStart=' "${UNIT_DST}")"
+echo "  RuntimeDirectory: $(grep '^RuntimeDirectory=' "${UNIT_DST}")"
 
 # ---- daemon-reload ----
 echo ""
@@ -160,7 +160,7 @@ fi
 # Status
 echo ""
 echo "--- systemctl status 摘要 ---"
-systemctl status "$UNIT_NAME" --no-pager --lines=5 2>&1 || true
+    systemctl status "${UNIT_NAME}" --no-pager --lines=5 2>&1 || true
 
 echo ""
 echo "=========================================="
@@ -168,14 +168,14 @@ echo " 安装完成!"
 echo "=========================================="
 echo ""
 echo "验证命令:"
-echo "  systemctl status $UNIT_NAME"
-echo "  /home/$TARGET_USER/kylin-memory-echo/bin/kaiming_memory_client --method health --socket $SOCKET_PATH"
+    echo "  systemctl status ${UNIT_NAME}"
+    echo "  /home/${TARGET_USER}/kylin-memory-echo/bin/kaiming_memory_client --method health --socket ${SOCKET_PATH}"
 echo ""
 echo "日志路径:"
-echo "  journalctl -u $UNIT_NAME -f"
-echo "  tail -f $DEPLOY_BASE/logs/server_stderr.log"
+echo "  journalctl -u ${UNIT_NAME} -f"
+echo "  tail -f ${DEPLOY_BASE}/logs/server_stderr.log"
 echo ""
 echo "卸载:"
-echo "  sudo systemctl stop $UNIT_NAME && sudo systemctl disable $UNIT_NAME"
+echo "  sudo systemctl stop ${UNIT_NAME} && sudo systemctl disable ${UNIT_NAME}"
 echo "  sudo rm -f /etc/systemd/system/${UNIT_NAME}.service && sudo systemctl daemon-reload"
 echo "=========================================="

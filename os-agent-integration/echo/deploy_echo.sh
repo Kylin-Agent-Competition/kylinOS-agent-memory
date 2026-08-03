@@ -12,6 +12,15 @@
 
 set -euo pipefail
 
+# ---- 依赖检查 ----
+for cmd in ssh scp; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo "❌ 缺少依赖: $cmd 未安装或不在 PATH 中"
+        echo "   请安装 OpenSSH 客户端: apt-get install openssh-client (麒麟) 或 Git for Windows (Windows)"
+        exit 1
+    fi
+done
+
 KYLIN_HOST="${1:-}"
 KYLIN_USER="${2:-kylin}"
 KYLIN_PORT="${3:-22}"

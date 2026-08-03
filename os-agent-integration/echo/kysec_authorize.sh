@@ -37,14 +37,14 @@ log_msg() {
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        echo "ERROR: 此脚本需要 root 权限 (对文件系统 ACL/KYSEC 的修改)"
-        echo "请使用: sudo bash $0 $*"
+    echo "ERROR: 此脚本需要 root 权限 (对文件系统 ACL/KYSEC 的修改)"
+    echo "请使用: sudo bash $0 $*"  # $* intentional word splitting for passthrough args
         exit 1
     fi
 }
 
 backup_current_state() {
-    log_msg "备份当前状态到: $BACKUP_DIR"
+    log_msg "备份当前状态到: ${BACKUP_DIR}"
     mkdir -p "$BACKUP_DIR"
 
     # 备份 socket 目录权限
@@ -62,7 +62,7 @@ backup_current_state() {
 
     # 备份 KYSEC 状态 (如果存在)
     if [ -d /sys/kernel/security/kylin ]; then
-        find /sys/kernel/security/kylin -type f -exec sh -c 'echo "=== {} ===" && cat "{}" 2>/dev/null || echo "(read failed)"' \; > "$BACKUP_DIR/kysec_status.txt" 2>&1 || true
+        find /sys/kernel/security/kylin -type f -exec sh -c 'echo "=== {} ===" && cat "{}" 2>/dev/null || echo "(read failed)"' \; > "${BACKUP_DIR}/kysec_status.txt" 2>&1 || true
     else
         echo "KYSEC 内核接口不可用 (非麒麟系统或未启用)" > "$BACKUP_DIR/kysec_status.txt"
     fi
@@ -76,14 +76,14 @@ apply_minimal_acl() {
     # 1. 确保 socket 目录存在，权限 0700
     mkdir -p "$SOCKET_DIR"
     chmod 0700 "$SOCKET_DIR"
-    chown "$KYLIN_USER:$KYLIN_USER" "$SOCKET_DIR" 2>/dev/null || true
-    log_msg "  Socket 目录权限: 0700, owner=$KYLIN_USER"
+    chown "${KYLIN_USER}:${KYLIN_USER}" "$SOCKET_DIR" 2>/dev/null || true
+    log_msg "  Socket 目录权限: 0700, owner=${KYLIN_USER}"
 
     # 2. 如果 socket 文件存在，同样限制
     if [ -e "$SOCKET_PATH" ]; then
         chmod 0600 "$SOCKET_PATH"
-        chown "$KYLIN_USER:$KYLIN_USER" "$SOCKET_PATH" 2>/dev/null || true
-        log_msg "  Socket 文件权限: 0600, owner=$KYLIN_USER"
+        chown "${KYLIN_USER}:${KYLIN_USER}" "$SOCKET_PATH" 2>/dev/null || true
+        log_msg "  Socket 文件权限: 0600, owner=${KYLIN_USER}"
     fi
 
     # 3. 尝试通过 ACL 精确授权给 kylin-aiassistant 用户 (如果存在)
@@ -165,9 +165,9 @@ rollback_from_backup() {
     # 优先使用 BACKUP_ID_FILE 记录的最新备份
     local recorded_backup=""
     if [ -f "$BACKUP_ID_FILE" ] && [ -s "$BACKUP_ID_FILE" ]; then
-        recorded_backup="$(head -1 "$BACKUP_ID_FILE")"
+        recorded_backup="$(head -1 "${BACKUP_ID_FILE}")"
         if [ -n "$recorded_backup" ] && [ -d "$recorded_backup" ]; then
-            log_msg "使用 recorded backup: $recorded_backup"
+            log_msg "使用 recorded backup: ${recorded_backup}"
         else
             log_msg "WARN: recorded backup 无效，兜底使用最新"
             recorded_backup=""
@@ -185,24 +185,24 @@ rollback_from_backup() {
         return 1
     fi
 
-    log_msg "从备份恢复: $latest_backup"
+    log_msg "从备份恢复: ${latest_backup}"
 
     # 恢复 socket 目录 ACL
     if [ -f "$latest_backup/socket_dir_acl.txt" ]; then
         chmod 0700 "$SOCKET_DIR" 2>/dev/null || true
-        chown "$KYLIN_USER:$KYLIN_USER" "$SOCKET_DIR" 2>/dev/null || true
+        chown "${KYLIN_USER}:${KYLIN_USER}" "$SOCKET_DIR" 2>/dev/null || true
         log_msg "  Socket 目录权限已回退"
     fi
 
     # 恢复 socket 文件权限
     if [ -f "$latest_backup/socket_file_acl.txt" ]; then
         chmod 0600 "$SOCKET_PATH" 2>/dev/null || true
-        chown "$KYLIN_USER:$KYLIN_USER" "$SOCKET_PATH" 2>/dev/null || true
+        chown "${KYLIN_USER}:${KYLIN_USER}" "$SOCKET_PATH" 2>/dev/null || true
         log_msg "  Socket 文件权限已回退"
     fi
 
     # 清理 BACKUP_ID_FILE
-    rm -f "$BACKUP_ID_FILE"
+    rm -f "${BACKUP_ID_FILE}"
 
     log_msg "回退完成"
 }
@@ -218,14 +218,14 @@ case "$ACTION" in
         log_msg "========== ACL 最小授权开始 (KYSEC UNVERIFIED) =========="
         backup_current_state
         # 记录本次备份目录到 BACKUP_ID_FILE
-        echo "$BACKUP_DIR" > "$BACKUP_ID_FILE"
-        log_msg "备份ID已记录: $BACKUP_DIR"
+        echo "${BACKUP_DIR}" > "${BACKUP_ID_FILE}"
+        log_msg "备份ID已记录: ${BACKUP_DIR}"
         apply_minimal_acl
         show_status
         log_msg "========== ACL 最小授权完成 =========="
         echo ""
-        echo "备份位置: $BACKUP_DIR"
-        echo "日志文件: $LOG_FILE"
+        echo "备份位置: ${BACKUP_DIR}"
+        echo "日志文件: ${LOG_FILE}"
         echo "⚠️ KYSEC 状态: UNVERIFIED (非真实 KYSEC 规则写入)"
         ;;
 

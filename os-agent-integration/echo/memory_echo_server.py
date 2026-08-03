@@ -7,6 +7,7 @@ Kylin Memory Echo Server — UDS 最小验证服务端
 
 用途: Gate 0 验证 Kaiming 进程可通过 UDS 与自定义 Memory Service 通信
 协议: 4字节 Big-Endian 长度 + UTF-8 JSON 负载
+架构: 单连接阻塞式 (Gate 0 Spike)，accept() 后处理一个客户端即退出 accept 循环
 """
 
 import json
@@ -29,6 +30,7 @@ SOCKET_PATH = os.path.join(SOCKET_DIR, "echo.sock")
 BACKLOG = 5
 MAX_MESSAGE_BYTES = 65536  # 64KB 最大消息
 PROTOCOL_VERSION = "1.0"
+CLIENT_TIMEOUT = 30.0  # 客户端读写超时（秒），防永久阻塞
 
 # ---- 日志 ----
 def log(level: str, msg: str):
@@ -116,6 +118,8 @@ METHOD_ROUTER = {
 def handle_client(sock: socket.socket, addr: str):
     """处理单个客户端连接"""
     try:
+        # 设置超时，防止恶意/故障客户端永久阻塞服务端
+        sock.settimeout(CLIENT_TIMEOUT)
         request = recv_message(sock)
         method = request.get("method", "")
         log("INFO", f"Request method={method} request_id={request.get('request_id', '?')}")
@@ -134,6 +138,8 @@ def handle_client(sock: socket.socket, addr: str):
 
         send_message(sock, response)
         log("INFO", f"Response sent: status={response['status']}")
+    except socket.timeout:
+        log("ERROR", f"Client read/write timeout ({CLIENT_TIMEOUT}s), closing connection")
     except Exception as e:
         log("ERROR", f"Client handler error: {e}\n{traceback.format_exc()}")
         try:
