@@ -209,10 +209,10 @@ entries:
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day4_bridge_smoke_run.log"
     source_commit: "d86abe14c85a3b2623d9131ab5937284c8d2992d"
-    commit: "805649c"  # 证据文件提交的 Commit（docs(evidence) 更新 Day4 证据）
+    commit: "PENDING_FULL_SHA"
     date: "2026-08-01"
     reviewer: "pending"
-    limitations: "异步、并发、超时中断、多模态未覆盖；错误模型属 Day2 范围；SDK 同进程重载会崩溃（测试已拆独立进程规避）"
+    limitations: "异步、并发、主动超时、多模态未覆盖；SDK 同进程 dlclose 后重载与半初始化 destroy 会崩溃（麒麟实测），生命周期模型待 P0-1 修复后以生产路径复测"
     checksum_sha256: "a03495407aba55ff21c111795b92d897a5a17119269fdae0b3ec2c9de7f3f9ea"
     details: |
       C++ Bridge(dlopen/dlsym) + pybind11 模块 + Python EmbeddingProvider 最小真实调用
