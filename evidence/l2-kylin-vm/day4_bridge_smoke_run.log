@@ -1,83 +1,103 @@
 # Day 4 Bridge/Provider 麒麟 VM 构建与测试日志
-# Date: 2026-08-01 (麒麟 VM 实测，REWORK 复审后最终版)
+# Date: 2026-08-03 (麒麟 VM 实测，REWORK 复审第三轮后最终版)
 # Host: 银河麒麟桌面 V11 2603 x86_64 (VirtualBox 7.2.14)
-# Branch: feat/day4-bridge-provider-new
-# 被测 Commit: d86abe14c85a3b2623d9131ab5937284c8d2992d (git rev-parse HEAD)
+# Branch: feat/day4-bridge-provider-new (基于最新 main 56de079 rebase)
+# 被测 Commit: 5d056b3507f601df835ace267633bc46c4cd6558 (git rev-parse HEAD)
 # Runtime: kylin-ai-runtime 1.2.0.4-0k0.1 (内部自报 1.3.0, PARTIAL)
 # Python: 3.12.3 (venv /tmp/day4-venv, pybind11 3.0.4, pytest 9.1.1)
 # 默认模型: ensemble-embd_gte-base_uint8-text
 # .so SHA-256: 028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48
 # Build ID: 845092235636ed78acc0710fe49bef7c67235253
 
-## 干净工作区证据（P0-1）
+## Review 结论汇总（REWORK 复审 12 项）
+
+| 审查项 | 结论 | 验证 |
+|--------|------|------|
+| P0-1 生命周期 Abort/挂起 | ✅ 进程级单例（共享 Bridge+session，close 不销毁，restart 复用） | Step 7 四类路径全 PASS |
+| P0-2 index.yaml 删 B 轨 | ✅ 基于最新 main 重建，VECTOR-CALL-001/002/003 保留 | index.yaml 校验 |
+| P1-1 脚本假绿 | ✅ 未跟踪检查 + KYLIN_L2=1 + 模块来源 + Skip 失败 | 脚本 7 步全过 |
+| P1-2 干净工作区矛盾 | ✅ --untracked-files=all 严格检查 | Step 1 无输出 |
+| P1-3 ERR_MODEL_INVALID | ✅ 补错误码 + BridgeModelError 独立映射 + 测试 | pytest 含断言 |
+| P1-4 close 不可达分支 | ✅ 单一 except + Provider 边界测试 | pytest 6 项含 |
+| P1-5 destroy 无异常边界 | ✅ destroy_session_impl + try/catch | 构建通过 |
+| P1-6 超时契约不一致 | ✅ 契约明确 Day4 不提供主动超时（TD-A-005-01） | 契约头 |
+| P1-7 TD 未登记 | ✅ TD-A-005-01~05 正式登记 | 技术债登记表 |
+| P1-8 文档命令不一致 | ✅ 标准入口 = verify_day4_vm.sh | 骨架文档 |
+| P1-9 embed docstring | ✅ 明确抛 ProviderError | provider.py |
+| P2 建议项 | ✅ embed false 用例 + 完整 SHA + error_code 说明 | ctest 7 用例 |
+
+## 交付物索引（源码在仓库，不重复摘录）
+
+| 交付物 | 位置 |
+|--------|------|
+| EmbeddingProvider（进程级单例版） | `memory-service/providers/embedding_provider.py` |
+| 生命周期测试（单例兼容版） | `memory-service/tests/test_load_idempotent.py` |
+| 一键验证脚本 | `scripts/verify_day4_vm.sh` |
+| C++ Bridge 核心 | `cpp-bridge/src/embedding_bridge.cpp`、`cpp-bridge/include/embedding_bridge.h` |
+| 错误契约 | `cpp-bridge/bridge_error_contract.h` |
+| 技术债登记 | `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`（TD-A-005-01~05） |
+| 证据索引 | `evidence/index.yaml`（EMBED-CALL-003） |
+| 工程骨架文档 | `docs/day4/08_bridge_provider_skeleton.md` |
+
+## 干净工作区证据（P0-1/P1-1/P1-2）
 
 输入命令（共享文件夹 /mnt/shared，bash scripts/verify_day4_vm.sh Step 1）:
 $ git rev-parse HEAD
-d86abe14c85a3b2623d9131ab5937284c8d2992d
-$ git status --porcelain
-?? -
-$ git diff --exit-code && echo "WORKTREE_CLEAN=1"
-WORKTREE_CLEAN=1
-$ git diff --cached --exit-code && echo "INDEX_CLEAN=1"
-INDEX_CLEAN=1
+5d056b3507f601df835ace267633bc46c4cd6558
+$ git status --porcelain --untracked-files=all
+（无输出 = 严格干净：无修改、无暂存、无未跟踪文件）
+[PASS] git status --porcelain --untracked-files=all 为空（严格干净）
+[PASS] WORKTREE_CLEAN=1
+[PASS] INDEX_CLEAN=1
 
-注: `?? -` 为测试过程中生成的未跟踪临时文件，非代码内容，不影响被测代码一致性；
-已确认测试编译使用的源码 = HEAD d86abe1（git archive 快照与共享文件夹一致）。
-
-## 构建（P0-2/P0-3/P1-2/P1-3 编译验证）
+## 构建（P0-2/P0-3/P1-2/P1-3/P1-5 编译验证）
 
 输入命令（脚本 Step 3）:
 $ cmake -B build -Dpybind11_DIR=$(python -m pybind11 --cmakedir)
 $ cmake --build build -j2
-$ echo "BUILD_EXIT=$?"
+$ ctest --test-dir build --output-on-failure
 输出:
 -- Found pybind11: ... (found version "3.0.4")
 [100%] Built target kylin_embedding
 BUILD_EXIT=0
 
-注: 本构建包含 REWORK 复审全部修复：
-- P0-2: embed() 畸形结果防御（dim>0/data!=null/size==dim/NaN/Inf → ERR_EMBED_RESULT）
-- P0-3: 公共接口 try/catch 异常边界 + RAII ResultGuard 管理 EmbeddingResult*
-- P1-2: 删除无效 depends_path 字段
-- P1-3: raise_for_error(SUCCESS) 改抛异常不再 abort
-- CMake LANGUAGES C CXX（支持 fake_sdk_malformed.c 测试桩）
-
 ## C++ 测试 (ctest)
 
-输入命令（脚本 Step 3）:
-$ ctest --test-dir build --output-on-failure
 输出:
-Test project /mnt/shared/cpp-bridge/build
-    Start 1: bridge_errors
-1/3 Test #1: bridge_errors ....................   Passed    0.14 sec
-    Start 2: bridge_so_not_found
-2/3 Test #2: bridge_so_not_found ..............   Passed    0.14 sec
-    Start 3: bridge_malformed
-3/3 Test #3: bridge_malformed .................   Passed    0.92 sec
+1/3 Test #1: bridge_errors ....................   Passed    0.07 sec
+2/3 Test #2: bridge_so_not_found ..............   Passed    0.08 sec
+3/3 Test #3: bridge_malformed .................   Passed    0.55 sec
 100% tests passed, 0 tests failed out of 3
 CTEST_EXIT=0
 
-注: bridge_malformed 为 P0-2 新增的畸形结果防御测试（可控假 .so，
-6 用例：正常 768 维 / result=null / dim=0 / data=null / 含 NaN / 含 Inf）。
+注: bridge_malformed 含 7 用例（正常 768 维 / result=null / dim=0 / data=null /
+含 NaN / 含 Inf / text_embedding 返回 false → ERR_EMBED_CALL，P2 补充）。
+模型无效场景（ERR_MODEL_INVALID）不在 C++ 假 .so 覆盖内——它属于 Provider 层
+错误码映射：BridgeModelError → ERR_MODEL_INVALID，已验证于 pytest
+（test_bridge_model_error_maps_to_model_invalid，见下方 pytest 章节）。
 
-## pytest 统一收集 (P0-4)
+## pytest 统一收集 (P0-4/P1-1)
 
 输入命令（脚本 Step 4，两组独立进程）:
 $ python -m pytest memory-service/tests/test_embedding_provider_import.py \
     memory-service/tests/test_exception_mapping.py -v
 输出:
-27 passed in 0.65s
-（6 项 import/契约 + 21 项异常映射，全部 PASSED）
+28 passed in 0.23s
+（7 项 import/契约含 ERR_MODEL_INVALID 断言 + 21 项异常映射，全部 PASSED，无 Skip）
 
 $ python -m pytest memory-service/tests/test_load_idempotent.py -v
 输出:
-1 passed in 0.72s
-（单实例顺序断言：load 幂等 / create_session 幂等 / embed 一次 / destroy 清理）
+6 passed in 0.32s
+（test_start_close / test_context_manager_pass / test_start_embed_close_restart /
+  test_multiple_providers_sequential / test_close_without_start /
+  test_context_manager_exception，全部 PASSED，无 Skip）
 
-注: 两组独立进程原因——麒麟实测 SDK 在同一进程内与异常映射测试共存时
-触发崩溃（Fatal Python error: Aborted），拆进程与 run_smoke 路径一致，稳定。
-create_session 后先 embed 再 destroy（对齐 run_smoke 已验证稳定路径），
-避免 SDK 半初始化 dlclose abort。
+模块来源校验（P1-1）:
+kylin_embedding.__file__=/var/mnt/shared/cpp-bridge/build/kylin_embedding.cpython-312-x86_64-linux-gnu.so
+[PASS] kylin_embedding 来自当前 build
+
+注: 两组独立进程原因——SDK 同一进程内与异常映射测试共存会崩溃/挂起（麒麟实测），
+拆进程与 run_smoke 路径一致。KYLIN_L2=1 已设置，缺 kylin_embedding 必须失败而非 skip。
 
 ## 真实 SDK 集成冒烟测试（P1-1 回归）
 
@@ -101,34 +121,50 @@ $ PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
 === 结果: PASS (0 failures) ===
 SMOKE_EXIT=0
 
-## Provider 错误映射 (P1-1)
+## Provider 错误映射 (P1-1/P1-3)
 
 输入命令（脚本 Step 6）:
 $ python -c "from providers import EmbeddingProvider, ProviderError, ProviderErrorCode; ..."
 输出:
 PASS: start() -> ERR_SDK_NOT_LOADED (bridge=BridgeSoNotFoundError)
 Provider 错误映射 OK
+（含 assert hasattr(ProviderErrorCode, "ERR_MODEL_INVALID") 断言）
 
-## 审查修复验证结论（REWORK 9 项）
+## 生命周期路径（P0-1 验收标准，进程级单例）
 
-| 审查项 | 修复 | 验证方式 |
-|--------|------|---------|
-| P0-1 L2 证据绑定 commit | 一键验证脚本 + 干净 commit d86abe1 重测 | 本日志头部证据 ✅ |
-| P0-2 畸形 SDK 结果当成功 | embed() 4 重校验 → ERR_EMBED_RESULT | bridge_malformed 6 用例 ctest ✅ |
-| P0-3 违反不抛异常契约 | try/catch + RAII ResultGuard | 构建通过 + 正常路径不受影响 ✅ |
-| P0-4 pytest 不可收集/假绿 | pytest 风格 + KYLIN_L2 强制失败 | 28 项真实收集执行 ✅ |
-| P1-1 Provider 暴露 Bridge 细节 | ProviderErrorCode 映射隐藏 Bridge 异常 | Step 6 ERR_SDK_NOT_LOADED ✅ |
-| P1-2 depends_path 无效配置 | 删除字段（改 LD_LIBRARY_PATH 配置） | 构建通过 ✅ |
-| P1-3 SUCCESS abort() | 改抛 BridgeErrorException | 构建通过 ✅ |
-| P1-4 声明与证据不一致 | 文档/测试数量统一（本日志 + 骨架文档） | 见文档 ✅ |
-| P1-5 TODO 无关联 | 全部关联 TD-A-005-01~05 | embedding_provider.py ✅ |
+输入命令（脚本 Step 7，麒麟 VM 真实执行）:
+$ python - <<'PYEOF'
+（创建 EmbeddingProvider → start/close/embed 四类路径）
+PYEOF
+
+输出:
+[1785767070030] info  Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock
+[1785767070030] info  Runtime version is  1.3.0 InitEngine call new init_v2
+[1785767070042] info  Proxy init success,sessionId is: 1631458592
+[1785767070042] warn  Model was not initialized explicitly; SDK is loading the default model.
+[1785767070049] info  Get default model success, model: ensemble-embd_gte-base_uint8-text
+[1785767070049] info  Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 1631458592
+  [PASS] start→close
+  [PASS] with EmbeddingProvider(): pass
+  [PASS] start→embed→close→start→embed→close
+  [PASS] 多个 Provider 顺序创建/启动/关闭
+  [PASS] 生命周期 4 类路径全部通过
+
+生命周期模型（P0-1，进程级单例）:
+1. SDK 动态库进程内只加载一次，不执行 dlclose（destroy_session 不卸载 .so）。
+2. session 进程内只创建一次，不销毁重建——麒麟实测 SDK 不允许同进程
+   destroy_session → create_session（会阻塞挂起）。
+3. close() 只释放引用，session 保持存活到进程退出，由共享 Bridge 析构统一释放。
+4. start() 复用已有 session；初始化 embed 作为正式初始化步骤（模型就绪验证）。
+
+（Review 结论汇总见文档开头"Review 结论汇总"表）
 
 ## 测试期间发现并修复的问题（历史）
 
-1. CMakeLists.txt include 路径错误：`${CMAKE_CURRENT_SOURCE_DIR}/..` 无法找到契约头，改为 `${CMAKE_CURRENT_SOURCE_DIR}`。
-2. py_module.cpp 异常注册：`py::exception<>::create` 模板参数缺失，改为 C++ 异常类型 + `py::register_exception`。
-3. core 静态库缺 PIC：加 `POSITION_INDEPENDENT_CODE ON`。
-4. run_smoke.py batch 比较对象错误：`batch[:2]` vs `[r1,r2]`，改为近似比较 vec_close。
-5. REWORK 复审 9 项处理（见上表）。
-6. CMake 启用 C 语言（fake_sdk_malformed.c 编译需要）。
-7. 麒麟实测 SDK 同进程重载/半初始化崩溃：拆独立 pytest 进程 + destroy 前先 embed。
+1. CMakeLists.txt include 路径错误：改为 ${CMAKE_CURRENT_SOURCE_DIR}。
+2. py_module.cpp 异常注册：py::register_exception 修正。
+3. core 静态库缺 PIC：加 POSITION_INDEPENDENT_CODE ON。
+4. run_smoke.py batch 比较对象错误：改为近似比较 vec_close。
+5. 麒麟实测 SDK 同进程重载崩溃：destroy 不 dlclose，拆独立 pytest 进程。
+6. 麒麟实测 SDK 同进程 session 销毁重建挂起：进程级单例，close 不销毁。
+7. CMake 启用 C 语言（fake_sdk_malformed.c 编译需要）。

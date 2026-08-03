@@ -208,14 +208,15 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day4_bridge_smoke_run.log"
-    source_commit: "d86abe14c85a3b2623d9131ab5937284c8d2992d"
-    commit: "56fa12f0a95b69a05ff70e6615dda671c2e13947"  # 证据提交（含 P0-2 index.yaml 重建 + P2 补充）
-    date: "2026-08-01"
+    source_commit: "5d056b3507f601df835ace267633bc46c4cd6558"
+    commit: "5d056b3507f601df835ace267633bc46c4cd6558"  # 被测代码 Commit（P0-1 进程级单例修复后）
+    date: "2026-08-03"
     reviewer: "pending"
-    limitations: "异步、并发、主动超时、多模态未覆盖；SDK 同进程 dlclose 后重载与半初始化 destroy 会崩溃（麒麟实测），生命周期模型待 P0-1 修复后以生产路径复测"
-    checksum_sha256: "a03495407aba55ff21c111795b92d897a5a17119269fdae0b3ec2c9de7f3f9ea"
+    limitations: "异步、并发、主动超时、多模态未覆盖；SDK 限制（麒麟实测）：同进程禁止 dlclose 后重载、禁止 session 销毁重建，已通过进程级单例+不销毁 session 规避；并发访问未覆盖"
+    checksum_sha256: "d08637fd1ee4d8e517e4c8aee888c363429edf270c67d49f785c5525a6c6e75b"
     details: |
       C++ Bridge(dlopen/dlsym) + pybind11 模块 + Python EmbeddingProvider 最小真实调用
-      干净 commit d86abe1 上麒麟 VM 全量复测：构建/CTest(3项含畸形防御 6 用例)
-      /pytest(28项)/真实 SDK 冒烟(11项)/Provider 错误映射(ERR_SDK_NOT_LOADED)
+      干净 commit 5d056b3 上麒麟 VM 全量复测：构建/CTest(3项含畸形防御 7 用例)
+      /pytest(28+6=34项无Skip)/真实 SDK 冒烟(11项)/Provider 错误映射(ERR_SDK_NOT_LOADED)
+      /生命周期 4 路径全 PASS（P0-1 进程级单例）
       运行输出见原始日志
