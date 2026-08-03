@@ -4,7 +4,17 @@
 
 ## 当前状态
 
-**仅建立目录和职责边界，尚无测试代码。**
+已建立目录和职责边界，并包含 D1/D2 Vector Engine 探针与安全回归。
+`tests/vector-engine/run_d2_vector_smoke_safety_test.sh` 覆盖数据库路径、
+Collection 命名、Manifest 身份、直接绕过 cleanup、重复 cleanup 和 stale
+Manifest 等门禁；同时覆盖 C++ 对真实二进制、InvocationID、engine DB 与
+Socket 所有者的校验，以及双进程并发 cleanup 只有一个进程可进入探针。
+并发负例中的首个进程会完整经过
+`validate → authorize → probe → finalize`，第二个进程在同一生命周期内必须于
+锁门禁处失败，且不得写入探针进入标记。
+Manifest 身份负例还会验证 cleanup 授权头文件哈希被记录，且源码身份不匹配
+时在进入探针前拒绝运行。
+真实数据面仍只在麒麟 VM 中执行。
 
 ## 测试层级说明
 
@@ -23,5 +33,6 @@ tests/
 ├── cpp-bridge/
 ├── memory-client/
 ├── integration/
+├── vector-engine/
 └── conftest.py
 ```

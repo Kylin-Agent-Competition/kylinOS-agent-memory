@@ -1,0 +1,8 @@
+D2_VECTOR_SMOKE step=probe_start result=INFO detail="phase=prepare, collection=d2_vector_smoke_20260802b1, app_id=d2-vector-smoke"
+D2_VECTOR_SMOKE step=client_create result=PASS detail="official Vector Engine client created"
+D2_VECTOR_SMOKE step=service_connect result=PASS detail="SDK data-plane connection established"
+D2_VECTOR_SMOKE step=database_mode result=PASS detail="using database preloaded by service: /home/yanmouren778/d2-b-vector-smoke-20260802b1/runtime/d2-vector-smoke.db"
+D2_VECTOR_SMOKE step=service_ready result=PASS detail="legacy 0k0.7 data plane is ready after successful Unix-socket connection"
+D2_VECTOR_SMOKE step=collision_guard_precondition result=FAIL detail="refusing to modify pre-existing collection: d2_vector_smoke_20260802b1"
+D2_VECTOR_SMOKE step=probe_complete result=FAIL detail="collision_guard_precondition: refusing to modify pre-existing collection: d2_vector_smoke_20260802b1"
+D2_COMMAND expected=failure exit_status=1 timeout=false
