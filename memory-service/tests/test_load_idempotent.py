@@ -1,24 +1,22 @@
 """
 test_load_idempotent.py — 轨道 A Day4 生命周期与幂等性测试
 
-验证（麒麟 VM 真实 .so，P0-1 生命周期模型）:
-  生命周期模型：SDK 动态库进程内只加载一次，不执行 dlclose()；
-  destroy_session() 只销毁会话，保留 .so 句柄，可再次 create_session()。
+验证（麒麟 VM 真实 .so，P0-1 进程级单例生命周期模型）:
 
-SDK 生命周期契约（麒麟实测，P0-1）:
-  create_session 后必须至少完成一次成功 embed（模型加载就绪）
-  才能安全 destroy_session；否则 SDK 内部 event loop 线程未就绪，
-  进程会触发 `terminate called without an active exception`。
-  因此本文件所有 Bridge 层 destroy 前都先执行一次 embed("")，
-  与 Provider.start() 的初始化 embed 语义一致（非规避调用）。
+生命周期模型（P0-1，进程级 Singleton）：
+  1. SDK 动态库在进程生命周期内只加载一次（不执行 dlclose）。
+  2. session 进程内只创建一次，不销毁重建——
+     麒麟实测 SDK 不允许同一进程 destroy_session → create_session
+     （会阻塞挂起），因此 close() 只释放引用，session 保持存活到进程退出。
+  3. 所有 EmbeddingProvider 共享同一个 Bridge 实例（进程级单例）。
 
 测试路径（P0-1 验收标准四类）:
   1. start → close
   2. with EmbeddingProvider(): pass
-  3. start → embed → close → start → embed → close
+  3. start → embed → close → start → embed → close（复用 session）
   4. 多个 Provider 顺序创建、启动、关闭
 
-以上路径均不得出现 Abort / 崩溃 / Double Free / Use After Free。
+以上路径均不得出现 Abort / 崩溃 / 挂起 / Double Free / Use After Free。
 
 pytest 风格（P0-4）：正式可被 pytest 收集。
 环境区分：麒麟 L1/L2（KYLIN_L2=1）缺 kylin_embedding 必须失败；WSL 允许 skip。
@@ -54,104 +52,38 @@ def _module_guard():
     _require_module()
 
 
+# ── Provider 层生命周期（进程级单例，P0-1 验收） ──
+
 def _new_provider():
-    """创建一个新的 Provider（直接操作 Bridge，避免依赖 Provider 封装）。"""
-    return kb.EmbeddingBridge()
-
-
-def test_start_close():
-    """路径 1: start → close（load + create_session + embed 初始化 + destroy_session）"""
-    b = _new_provider()
-    b.load()
-    b.create_session()
-    assert b.has_session is True
-    # SDK 生命周期契约：create_session 后必须至少一次 embed（模型就绪）才能安全 destroy
-    b.embed("")
-    b.destroy_session()
-    assert b.has_session is False
-    # P0-1 生命周期模型：destroy 后 .so 仍加载（不卸载）
-    assert b.loaded is True
-
-
-def test_start_embed_close_restart():
-    """路径 3: start → embed → close → start → embed → close"""
-    b = _new_provider()
-    b.load()
-    b.create_session()
-    v1 = b.embed("hello")
-    assert v1.dimension == 768
-    b.destroy_session()
-    assert b.has_session is False
-
-    # 重新 create_session（P0-1：不 dlclose，可重建会话）
-    b.create_session()
-    assert b.has_session is True
-    v2 = b.embed("world")
-    assert v2.dimension == 768
-    b.destroy_session()
-
-
-def test_destroy_idempotent():
-    """重复 destroy_session 安全（幂等）"""
-    b = _new_provider()
-    b.load()
-    b.create_session()
-    b.embed("")  # SDK 契约：destroy 前模型就绪
-    b.destroy_session()
-    b.destroy_session()  # 第二次：session 已空，应安全返回
-    assert b.has_session is False
-
-
-def test_create_session_idempotent():
-    """重复 create_session 安全（幂等）"""
-    b = _new_provider()
-    b.load()
-    b.create_session()
-    b.create_session()  # 幂等
-    assert b.has_session is True
-    b.embed("")  # SDK 契约：destroy 前模型就绪
-    b.destroy_session()
-
-
-# ── Provider 层生命周期边界（P1-4 验收标准） ──
-
-def _new_embedding_provider():
-    """创建 Provider 层实例（需 kylin_embedding 模块，麒麟 VM 可跑）。"""
+    """创建 Provider 实例（内部共享进程级单例 Bridge）。"""
     from providers import EmbeddingProvider
     return EmbeddingProvider()
 
 
-def test_provider_close_without_start():
-    """未 start 直接 close 应安全（destroy_session 幂等）"""
-    p = _new_embedding_provider()
-    p.close()  # 不应抛异常
-    p.close()  # 重复 close 安全
+def test_start_close():
+    """路径 1: start → close（session 保持存活，不销毁）"""
+    p = _new_provider()
+    p.start()
+    assert p._bridge.has_session is True
+    p.close()
+    # P0-1 单例模型：close 后 session 仍存活（进程退出时统一释放）
+    assert p._bridge.has_session is True
 
 
-def test_provider_context_manager():
-    """Context Manager 正常退出"""
-    with _new_embedding_provider() as p:
-        p.embed("hello")
-    # 退出后再次使用应安全
-    p.embed("world")
+def test_context_manager_pass():
+    """路径 2: with EmbeddingProvider(): pass"""
+    with _new_provider():
+        pass
 
 
-def test_provider_context_manager_exception():
-    """Context Manager 内发生异常：__exit__ 仍应执行 close 且不掩盖原始异常"""
-    with pytest.raises(ValueError):
-        with _new_embedding_provider() as p:
-            p.embed("ok")  # 正常
-            raise ValueError("业务异常")
-    # __exit__ 已执行 close（不掩盖业务异常）
-
-
-def test_provider_start_embed_close_restart():
-    """Provider 层: start → embed → close → start → embed → close（P0-1 验收路径 3）"""
-    p = _new_embedding_provider()
+def test_start_embed_close_restart():
+    """路径 3: start → embed → close → start → embed → close（复用 session）"""
+    p = _new_provider()
     p.start()
     r1 = p.embed("test")
     assert r1.dimension == 768
     p.close()
+    # 再次 start：复用已有 session（不重建，避免 SDK 挂起）
     p.start()
     r2 = p.embed("test")
     assert r2.dimension == 768
@@ -159,11 +91,26 @@ def test_provider_start_embed_close_restart():
 
 
 def test_multiple_providers_sequential():
-    """多个 Provider 顺序创建、启动、关闭（P0-1 验收路径 4）"""
+    """路径 4: 多个 Provider 顺序创建、启动、关闭（共享单例）"""
     for i in range(3):
-        p = _new_embedding_provider()
+        p = _new_provider()
         p.start()
         r = p.embed(f"text-{i}")
         assert r.dimension == 768
         p.close()
         del p
+
+
+def test_close_without_start():
+    """未 start 直接 close 应安全（引用计数不减小）"""
+    p = _new_provider()
+    p.close()
+    p.close()
+
+
+def test_context_manager_exception():
+    """Context Manager 内发生异常：__exit__ 仍执行 close 且不掩盖原始异常"""
+    with pytest.raises(ValueError):
+        with _new_provider() as p:
+            p.embed("ok")
+            raise ValueError("业务异常")

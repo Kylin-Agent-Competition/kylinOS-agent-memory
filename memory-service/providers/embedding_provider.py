@@ -117,50 +117,64 @@ class EmbeddingProvider:
         )
         return ProviderError(code, str(exc), bridge_error=cls_name)
 
+    # ── 进程级单例（P0-1 生命周期模型） ──
+    # 麒麟实测：SDK 不允许同一进程内 session 销毁后重建（destroy_session →
+    # create_session 会阻塞挂起）；也禁止同一进程多个 .so 句柄共存。
+    # 因此所有 EmbeddingProvider 共享同一个 Bridge（进程级单例），
+    # session 只创建一次、不销毁，进程退出时统一释放。
+    _shared_bridge = None
+    _shared_dimension: Optional[int] = None
+    _ref_count = 0
+
     def __init__(self, so_path: Optional[str] = None) -> None:
         if _bridge is None:
             raise RuntimeError(_IMPORT_ERROR)
 
-        params = _bridge.BridgeInitParams()
-        if so_path is not None:
-            params.so_path = so_path
+        if EmbeddingProvider._shared_bridge is None:
+            params = _bridge.BridgeInitParams()
+            if so_path is not None:
+                params.so_path = so_path
+            EmbeddingProvider._shared_bridge = _bridge.EmbeddingBridge(params)
+            EmbeddingProvider._shared_dimension = None
 
-        self._bridge = _bridge.EmbeddingBridge(params)
+        self._bridge = EmbeddingProvider._shared_bridge
         self._dimension: Optional[int] = None
 
     # ── 生命周期 ──
 
     def start(self) -> None:
-        """启动 Provider：加载 SDK、创建会话、完成模型初始化。重复调用安全（幂等）。
+        """启动 Provider：加载 SDK、创建会话（仅首次）、完成模型初始化。
+        重复调用安全（幂等）。
 
-        生命周期模型（P0-1）：
-        麒麟实测 SDK 要求 create_session 后必须至少完成一次成功 embed
-        （模型加载就绪）才能安全 destroy_session，否则会触发
-        `terminate called without an active exception`（SDK 内部 event loop
-        线程未就绪）。因此 start() 将初始化 embed 作为正式初始化步骤
-        （获取维度并验证模型可用），而非销毁前的规避调用。
+        生命周期模型（P0-1，进程级单例）：
+        1. 麒麟实测 SDK 不允许同一进程 session 销毁后重建（会阻塞挂起），
+           因此 session 进程内只创建一次，start() 复用已有 session。
+        2. create_session 后必须至少完成一次成功 embed（模型加载就绪）
+           才能安全使用；start() 将初始化 embed 作为正式初始化步骤。
         """
         try:
-            self._bridge.load()
-            self._bridge.create_session()
-            # 初始化 embed：模型就绪验证 + 获取维度（SDK 生命周期契约）
-            if self._dimension is None:
+            self._bridge.load()  # 幂等：已加载则直接返回
+            if not self._bridge.has_session:
+                self._bridge.create_session()
+                # 初始化 embed：模型就绪验证 + 获取维度（SDK 生命周期契约）
                 init = self._bridge.embed("", 0)
                 if init.dimension > 0:
-                    self._dimension = init.dimension
+                    EmbeddingProvider._shared_dimension = init.dimension
+            EmbeddingProvider._ref_count += 1
         except Exception as exc:  # noqa: BLE001 - 统一映射为 Provider 错误
             raise self._map_bridge_error(exc) from exc
 
     def close(self) -> None:
-        """销毁会话。重复调用安全（幂等）。
+        """释放本 Provider 对共享 session 的引用。重复调用安全（幂等）。
 
-        注意（P0-1 生命周期模型）：close() 只销毁会话，不卸载 SDK 动态库；
-        close() 后可再次 start()（重新 create_session），不会触发 dlclose 重载崩溃。
+        注意（P0-1 生命周期模型）：close() 不销毁 session——
+        麒麟实测 SDK 不允许同一进程 session 销毁后重建（会阻塞挂起），
+        因此 session 保持存活到进程退出，由共享 Bridge 析构时统一释放。
+        这也是 Review 要求的"进程级 Singleton"：SDK 动态库与 session
+        在进程生命周期内只加载/创建一次。
         """
-        try:
-            self._bridge.destroy_session()
-        except Exception as exc:  # noqa: BLE001 - 统一映射为 Provider 错误
-            raise self._map_bridge_error(exc) from exc
+        if EmbeddingProvider._ref_count > 0:
+            EmbeddingProvider._ref_count -= 1
 
     def __enter__(self) -> "EmbeddingProvider":
         self.start()
@@ -211,8 +225,8 @@ class EmbeddingProvider:
             dimension=vec.dimension,
             l2_norm=vec.l2_norm,
         )
-        if self._dimension is None and result.dimension > 0:
-            self._dimension = result.dimension
+        if EmbeddingProvider._shared_dimension is None and result.dimension > 0:
+            EmbeddingProvider._shared_dimension = result.dimension
         return result
 
     def embed_batch(self, texts: List[str], *, timeout_ms: int = 30000) -> List[EmbeddingResult]:
@@ -251,10 +265,10 @@ class EmbeddingProvider:
         [TD-A-005-03 get_dimension 副作用] 骨架阶段临时方案：Day2 已实测空串返回 768。
         后续应改用 SDK 元信息接口无副作用获取。
         """
-        if self._dimension is None:
+        if EmbeddingProvider._shared_dimension is None:
             r = self.embed("")
-            self._dimension = r.dimension
-        return self._dimension
+            EmbeddingProvider._shared_dimension = r.dimension
+        return EmbeddingProvider._shared_dimension
 
     def model_info(self) -> ModelInfo:
         """
