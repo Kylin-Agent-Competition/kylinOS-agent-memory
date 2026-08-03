@@ -62,7 +62,8 @@ def test_real_embed_returns_768_dim(service):
     """真实 SDK：embed 返回 768 维向量。"""
     resp = service.embed("hello world")
     assert resp["ok"] is True
-    assert resp["degraded"] is False, f"不应降级: {resp}"
+    # 成功路径无 degraded 字段（仅失败/降级路径返回 degraded）
+    assert "degraded" not in resp, f"成功路径不应降级: {resp}"
     assert resp["result"]["dimension"] == 768
     assert len(resp["result"]["vector"]) == 768
     assert abs(resp["result"]["l2_norm"] - 1.0) < 1e-3
