@@ -209,7 +209,7 @@ entries:
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day4_bridge_smoke_run.log"
     source_commit: "d86abe14c85a3b2623d9131ab5937284c8d2992d"
-    commit: "3ffe4baebabc104b7a5d8c6dcea4569298a73473"  # 证据提交（含 P0-2 index.yaml 重建）
+    commit: "56fa12f0a95b69a05ff70e6615dda671c2e13947"  # 证据提交（含 P0-2 index.yaml 重建 + P2 补充）
     date: "2026-08-01"
     reviewer: "pending"
     limitations: "异步、并发、主动超时、多模态未覆盖；SDK 同进程 dlclose 后重载与半初始化 destroy 会崩溃（麒麟实测），生命周期模型待 P0-1 修复后以生产路径复测"
