@@ -139,7 +139,7 @@ entries:
       systemd unit (kylin-memory-echo.service) 未执行完整生命周期测试 (install/start/enable/stop/disable).
       完整原版回退仅完成服务停止+Socket清理，未恢复原owner/group/mode/ACL/KYSEC规则，未通过SHA-256对比验证.
       回退脚本存在backup_id选择逻辑缺陷.
-    checksum_sha256: "a3f8c9d1e2b4f5a6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+    checksum_sha256: "268671980f14873c9cb3aac123c157b676f35d252da11547085b1c941824d9c0"
     details: |
       银河麒麟桌面操作系统V11 x86_64, Linux 6.6.0-63-generic
       UDS协议: 4字节Big-Endian长度 + UTF-8 JSON (协议版本1.0)
@@ -218,8 +218,9 @@ entries:
         RuntimeDirectory 路径 (/run/kylin-memory-echo) 与权限需在生产系统额外验证.
         UDS 3 FAIL 为测试脚本 --socket 参数传递问题，非 RuntimeDirectory 故障.
         stop/rollback 2 FAIL 为 pgrep 自匹配误报 (已知 v8/v9 同源).
-      checksum_sha256: "TBD"
+      checksum_sha256: "cd6038d06cee8a0c841f3a54a37eafdec181ddd4653e957cdd58f1f9dea77a74"
       details: |
+        KYSEC 状态: UNVERIFIED（仅文件权限+ACL层面，非真实KYSEC规则写入）
         完整生命周期链验证 (24/29 PASS, 5 FAIL 可解释):
         
         install: unit 写入 SHA256=fea77472… OK

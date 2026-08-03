@@ -70,7 +70,7 @@ class KylinConnection:
     DEFAULT_HOST = os.environ.get("KYLIN_VM_HOST", "127.0.0.1")
     DEFAULT_PORT = int(os.environ.get("KYLIN_VM_PORT", "2222"))
     DEFAULT_USER = os.environ.get("KYLIN_VM_USER", "REDACTED_VM_USER")
-    DEFAULT_PASSWORD = os.environ.get("KYLIN_VM_PASSWORD", "REDACTED_VM_PASSWORD")
+    DEFAULT_PASSWORD = os.environ.get("KYLIN_VM_PASSWORD", "")
 
     def __init__(self, host: str = None, port: int = None, username: str = None, password: str = None,
                  timeout: int = 20):

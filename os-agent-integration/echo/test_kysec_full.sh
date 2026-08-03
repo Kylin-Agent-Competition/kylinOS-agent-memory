@@ -15,7 +15,7 @@ set -euo pipefail
 
 SOCKET_DIR="/tmp/kylin-memory-echo"
 SOCKET_PATH="$SOCKET_DIR/echo.sock"
-DEPLOY_BASE="/home/REDACTED_VM_USER/kylin-memory-echo"
+DEPLOY_BASE="/home/${USER:-$(whoami)}/kylin-memory-echo"
 KAIMING_CLIENT="$DEPLOY_BASE/bin/kaiming_memory_client"
 KY_SEC_SCRIPT="$DEPLOY_BASE/share/kysec_authorize.sh"
 LOG_DIR="$DEPLOY_BASE/logs"

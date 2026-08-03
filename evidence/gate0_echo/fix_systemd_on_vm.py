@@ -10,19 +10,19 @@ if not USER or not PASS:
     print("FATAL: KYLIN_VM_USER and KYLIN_VM_PASSWORD environment variables must be set.")
     sys.exit(1)
 
-NEW_UNIT = """[Unit]
+NEW_UNIT = f"""[Unit]
 Description=Kylin Memory Echo Server - UDS min verification
 After=network.target
 
 [Service]
 Type=simple
-User=REDACTED_VM_USER
-ExecStart=/usr/bin/python3 /home/REDACTED_VM_USER/kylin-memory-echo/bin/kylin-memory-echo-server
+User={USER}
+ExecStart=/usr/bin/python3 /home/{USER}/kylin-memory-echo/bin/kylin-memory-echo-server
 ExecStopPost=/bin/rm -f /tmp/kylin-memory-echo/echo.sock
 Restart=on-failure
 RestartSec=2
-StandardOutput=append:/home/REDACTED_VM_USER/kylin-memory-echo/logs/server_stdout.log
-StandardError=append:/home/REDACTED_VM_USER/kylin-memory-echo/logs/server_stderr.log
+StandardOutput=append:/home/{USER}/kylin-memory-echo/logs/server_stdout.log
+StandardError=append:/home/{USER}/kylin-memory-echo/logs/server_stderr.log
 NoNewPrivileges=yes
 RestrictAddressFamilies=AF_UNIX
 
