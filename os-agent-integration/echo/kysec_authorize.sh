@@ -37,8 +37,8 @@ log_msg() {
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
-    echo "ERROR: 此脚本需要 root 权限 (对文件系统 ACL/KYSEC 的修改)"
-    echo "请使用: sudo bash $0 $*"  # $* intentional word splitting for passthrough args
+        echo "ERROR: 此脚本需要 root 权限 (对文件系统 ACL/KYSEC 的修改)"
+        echo "请使用: sudo bash \"$0\" $*"  # $* intentional word splitting for passthrough args
         exit 1
     fi
 }
