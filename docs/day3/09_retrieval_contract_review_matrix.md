@@ -81,8 +81,21 @@ Reviewer 结论只能填写：`ACCEPTED`、`REWORK`、`BLOCKED` 或
 | B-D3-X08 | Top-N/Top-K/类型配额 | 必须有界、版本化、进入评测记录 | B/E | 评测集前不得宣称最优 | `DEFERRED_CROSS_TRACK` |
 | B-D3-X09 | Token 估算与截断 | Candidate 只携带非负估算和版本 | B/C | Context 实现前冻结 | `DEFERRED_CROSS_TRACK` |
 | B-D3-X10 | Provider 同步/异步实现 | 绝对 deadline、取消、幂等语义不变 | A/B/D | D4 可选实现，不能改契约 | `DEFERRED_CROSS_TRACK` |
-| B-D3-X11 | UDS 身份与 deadline 线格式 | 每次逻辑请求使用稳定且不复用的 ID，进入 Provider 前已有非空 `user_id` 与同一绝对 `deadline_at` | C/D | PR #18 Echo 原型可保留；正式 IPC 不得沿用固定 ID、缺失用户或未消费的相对 deadline | `DEFERRED_CROSS_TRACK` |
-| B-D3-X12 | Embedding→检索错误与预算适配 | `cancelled`、`deadline_exceeded` 保持可区分；A 轨异常/相对 timeout 归一且不重置预算 | A/B/D | PR #17 可作为 A 轨骨架；适配测试通过前不得声明完整检索链契约符合 | `DEFERRED_CROSS_TRACK` |
+| B-D3-X11 | UDS 身份与 deadline 线格式 | 每次逻辑请求使用稳定且不复用的 ID，进入 Provider 前已有非空 `user_id` 与同一绝对 `deadline_at` | C/D | PR #18 `1b8111c1` 的 30 秒 Socket timeout 仅防阻塞；正式 IPC 不得沿用固定 ID、缺失用户或未消费的相对 deadline | `DEFERRED_CROSS_TRACK` |
+| B-D3-X12 | Embedding→检索错误、预算与生命周期适配 | `cancelled`、`deadline_exceeded` 保持可区分；A 轨异常/相对 timeout 归一且不重置预算；进程级单例约束不得泄漏为业务语义 | A/B/D | PR #17 `5510f94d` 可作为 A 轨骨架；适配测试通过前不得声明完整检索链契约符合 | `DEFERRED_CROSS_TRACK` |
+
+### 3.1 Git 集成预检
+
+以 D3-B 当前 HEAD 与 2026-08-04 刷新的远端分支执行三方预检：
+
+| 来源 | 结果 | 确定性处置 |
+|---|---|---|
+| PR #18 `feature/kaiming-uds-echo@1b8111c1` | 可机械合并 | 保持 D3-B 契约索引与 PR #18 UDS Spike 索引，两者语义仍按 `B-D3-X11` 分层 |
+| PR #17 `feat/day4-bridge-provider-new@5510f94d` | `TECHNICAL_DEBT_REGISTER.md` 内容冲突 | 保留 `TD-003/TD-004` 与 `TD-A-005-01~05` 全部记录；不得选择单侧覆盖 |
+| PR #19 `docs/C-d2-osagent-runtime@2797ae08` | `TECHNICAL_DEBT_REGISTER.md` 内容冲突 | 保留 `TD-003/TD-004` 与 `TD-007~009` 全部记录；不得选择单侧覆盖 |
+
+本表只冻结冲突处置规则；在对应 PR 合入批准基线前，不预先 merge、rebase 或
+改写其他作者分支。
 
 ## 4. D4 非 VM 契约测试计划
 
@@ -148,10 +161,10 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
 | ADR golden score 复算 | 4 个值及排序一致 | `PASS_LOCAL` |
 | 契约 JSON 样例解析 | 5/5 可解析 | `PASS_LOCAL` |
 | 文档引用存在 | 全部目标文件存在，索引相对链接可解析 | `PASS_LOCAL` |
-| GitHub 跨分支兼容核对 | 锚定 `main@56de079` 与 PR #17/#18/#19 HEAD；区分机械合并与语义准入 | `PASS_LOCAL`；新增 `B-D3-X11/X12` |
+| GitHub 跨分支兼容核对 | 锚定 `main@56de079`、PR #17 `5510f94d`、PR #18 `1b8111c1`、PR #19 `2797ae08`；区分机械合并与语义准入 | `PASS_LOCAL`；`B-D3-X11/X12` 已刷新 |
 | `git diff --check` | 无 whitespace error | `PASS_LOCAL` |
-| 仓库基线脚本 | 7/7，0 错误 | `PASS_LOCAL`；WSL 仅有既存 Windows OpenCV PATH 转换警告 |
-| 工作区范围 | 只含 D3-B 计划文件 | `PASS_LOCAL`；6 个文档/索引文件，未暂存 |
+| 仓库基线脚本 | 7/7，0 错误 | `PASS_LOCAL`；WSL 仅有既存编码、localhost NAT 与 Windows OpenCV PATH 转换警告 |
+| 工作区范围 | 只含 D3-B 最新远端审计刷新 | `PASS_LOCAL`；2 个 B 轨文档，未暂存 |
 
 ## 7. Reviewer 记录模板
 

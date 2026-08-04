@@ -761,20 +761,25 @@ D4 至少覆盖：
 | Embedding 到检索的错误/deadline 适配 | D4 A/B/D | 保留 `cancelled` 与 `deadline_exceeded` 的区别；A 轨异常和相对 timeout 必须在编排层归一，不能泄漏私有错误或重置预算 |
 | Provider 同步/异步实现 | D4 A/B/D | 绝对 deadline、取消与结果语义不变 |
 
-### 15.1 2026-08-03 GitHub 跨分支兼容核对
+### 15.1 2026-08-04 GitHub 跨分支兼容核对
 
 本轮以 `main@56de07977cb10c4fb87878e24ed5a7c97bf27ba2` 为基线，只读核对
-三个未合并分支。下表记录的是对指定提交的兼容判断，不替代相应 PR 的独立
-Review，也不把原型实现提升为正式契约：
+三个未合并分支。2026-08-04 的 `git fetch --prune origin` 确认 PR #17/#18
+发生强制更新，PR #19 继续追加提交，因此用最新 HEAD 替换旧审计锚点。下表
+记录的是对指定提交的兼容判断，不替代相应 PR 的独立 Review，也不把原型
+实现提升为正式契约：
 
 | 来源 | 已观察事实 | D3-B 兼容判断 |
 |---|---|---|
-| PR #18 `feature/kaiming-uds-echo@0a363318` | Echo 请求使用固定 `request_id`、相对 `deadline_ms`，`memory.retrieve` 未携带 `user_id`；服务端尚未执行 deadline/取消 | 仅可作为 Gate 0 UDS 连通性原型；不得作为正式 Memory Service 请求契约。由 C/D 在 IPC 冻结时补齐身份、绝对 deadline、取消和安全错误结构 |
-| PR #17 `feat/day4-bridge-provider-new@ed374775` | EmbeddingProvider 使用相对 `timeout_ms`，主动中断尚未实现，并把 `BridgeCancelledError` 归入 `ERR_TIMEOUT` | A/B 接口没有文件级覆盖冲突；D4 编排适配必须保留取消/超时差异，并在同一绝对 deadline 内把 A 轨异常归一为结构化错误；继续受 `TD-A-005-01` 约束 |
-| PR #19 `docs/C-d2-osagent-runtime@2b17e429` | `memory_context` 为 `NOT_OBSERVED`，真实 Runtime Socket/Hook 事实仍待进一步验证 | 与本契约的 C 轨宿主映射 `DEFERRED` 状态一致，不构成矛盾，也不得据此声称 Context 注入已实现 |
+| PR #18 `feature/kaiming-uds-echo@1b8111c1` | Echo 请求仍使用固定 `request_id`、相对 `deadline_ms`，`memory.retrieve` 未携带 `user_id`；服务端新增 30 秒 Socket 读写超时，但尚未消费请求 deadline 或取消 | 仅可作为 Gate 0 UDS 连通性原型；传输防永久阻塞不等于跨层绝对 deadline。由 C/D 在 IPC 冻结时补齐身份、绝对 deadline、取消和安全错误结构 |
+| PR #17 `feat/day4-bridge-provider-new@5510f94d` | EmbeddingProvider 使用相对 `timeout_ms`，主动中断尚未实现，并把 `BridgeCancelledError` 归入 `ERR_TIMEOUT`；最新实现增加进程级 Bridge/session 单例约束 | A/B Provider 的职责仍可分层；D4 编排适配必须保留取消/超时差异，在同一绝对 deadline 内归一 A 轨异常，并把生命周期约束纳入调度设计；继续受 `TD-A-005-01` 约束 |
+| PR #19 `docs/C-d2-osagent-runtime@2797ae08` | `memory_context` 为 `NOT_OBSERVED`，真实 Runtime Socket/Hook 事实仍待进一步验证 | 与本契约的 C 轨宿主映射 `DEFERRED` 状态一致，不构成矛盾，也不得据此声称 Context 注入已实现 |
 
-上述三个分支与本轮 D3-B 文件无路径交集；相对 `main` 的三方预检未产生
-冲突标记。该机械结论不表示跨轨语义已经闭合。
+相对当前 D3-B HEAD 的真实三方预检结果为：PR #18 可机械合并；PR #17 与
+PR #19 均在 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` 产生内容冲突。
+冲突来自各轨在同一表尾追加记录，不是编号碰撞。集成时必须保留 B 轨
+`TD-003/TD-004`、A 轨 `TD-A-005-01~05` 以及 C 轨 `TD-007~009` 的并集，
+不得通过选择一侧删除其他轨技术债。该机械处置规则不表示跨轨语义已经闭合。
 
 ## 16. 完成与审查门槛
 
