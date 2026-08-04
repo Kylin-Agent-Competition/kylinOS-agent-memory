@@ -1,11 +1,12 @@
 # 09 轨道 B — 检索契约审查与 D4 测试矩阵
 
 - 日期：2026-08-03
-- 状态：`READY_FOR_D_E_REVIEW`
+- 状态：`REWORK`
 - 契约：`vector-retrieval/v1`
 - 关联 ADR：`ADR-001 / rrf-v1`
-- 主审：D
-- 补审：E（用户隔离、遗忘、安全、评测）
+- 人工审批门槛：一名独立、非作者 Reviewer 的 `APPROVED`
+- 专业关注点：D 关注 Provider/SQLite/Outbox/IPC 可实现性；E 关注用户隔离、
+  遗忘、安全与评测；两者不是累计审批数量要求
 - Runtime：本轮未启动虚拟机；所有 L2 条目为 `DEFERRED_VM`
 
 ## 1. 使用规则
@@ -26,6 +27,9 @@
 Reviewer 结论只能填写：`ACCEPTED`、`REWORK`、`BLOCKED` 或
 `ACCEPTED_WITH_TD(<TD编号>)`。作者不得替 Reviewer 填写通过。
 
+一份 GitHub `APPROVED` 只满足人工 Review 组件；Gate 0 仍要求 P0 全部关闭、
+适用的静态/契约验证通过、证据与状态表述一致，且阻断项均有明确处置。
+
 ## 2. Gate 0 P0 审查矩阵
 
 所有 P0 条目必须得到明确结论后，契约和 ADR 才能从“提议/冻结候选”改为
@@ -34,22 +38,22 @@ Reviewer 结论只能填写：`ACCEPTED`、`REWORK`、`BLOCKED` 或
 | ID | 领域 | 冻结要求 | 正向样例 | 必须拒绝/降级的反例 | 证据/依据 | 作者状态 | Reviewer |
 |---|---|---|---|---|---|---|---|
 | B-D3-001 | 版本 | 请求明确 `vector-retrieval/v1`，未知主版本 fail closed | v1 请求进入 Provider | 未知 v2 被当作 v1 执行 | 08 §13 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
-| B-D3-002 | 边界 | Provider 不泄漏 SDK RPC/C++ 私有类型 | 返回结构化 `RetrievalError` | SDK 异常对象直接进入 IPC | 08 §5.2–5.3 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
+| B-D3-002 | 边界 | Provider 不泄漏 SDK RPC/C++ 私有类型 | 返回结构化 `RetrievalError` | SDK 异常对象直接进入 IPC | 08 §5.3–5.4 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-003 | 用户隔离 | `user_id` 非空、精确匹配、双重校验 | alpha 只返回 alpha | 同向量 beta 进入候选 | D2 E4；08 §7 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-004 | 真源 | SQLite 决定正文、归属、版本、状态和遗忘 | Vector 命中回源当前版本 | 使用 Vector 元数据正文直接注入 | 架构基线；08 §4 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-005 | 命名 | `object_type` 区分偏好/知识，`memory_type` 只表示记忆层级 | `object_type=knowledge,memory_type=long_term` | `memory_type=knowledge` | 业务 Schema；08 §9.1 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-006 | Provider | v1 固定 capabilities/upsert/search/delete/rebuild/get_index_state | 五项操作均有输入输出 | 以隐式副作用代替操作 | 08 §6 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
-| B-D3-007 | Deadline | 跨层使用同一绝对 `deadline_at` | 剩余预算逐层减少 | 每层重置 500 ms | 08 §5.4 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
-| B-D3-008 | 取消 | SDK 不可中断时返回 `outcome_unknown` 并协调 | 幂等键确认最终状态 | 超时后直接宣称未写入并盲重试 | 08 §5.4 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
-| B-D3-009 | 错误 | B 层字符串码语义稳定，D 只做协议映射 | `provider_unavailable` 映射 IPC | D 映射后改变可重试性/安全含义 | 08 §5.3 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
+| B-D3-007 | Deadline | 跨层使用同一绝对 `deadline_at` | 剩余预算逐层减少 | 每层重置 500 ms | 08 §5.5 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
+| B-D3-008 | 取消 | SDK 不可中断时返回 `outcome_unknown` 并协调 | 幂等键确认最终状态 | 超时后直接宣称未写入并盲重试 | 08 §5.5 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
+| B-D3-009 | 错误 | B 层字符串码语义稳定，D 只做协议映射 | `provider_unavailable` 映射 IPC | D 映射后改变可重试性/安全含义 | 08 §5.4 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-010 | Search | 非法 rank/ID/用户/版本/非有限 score 丢弃并计数 | 合法 hits 稳定排序 | 非法 hit 进入 RRF | 08 §6.4/§8 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-011 | 过滤 | Provider 先过滤，SQLite 回源终审 | 两层均确认用户/版本 | 只依赖 Vector 过滤 | D2 E4；08 §7.3 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-012 | Score | raw score 只作通道诊断 | 标记 `sdk_score_unverified` | 与 BM25 直接归一化/相加 | D2 限制；ADR-001 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
-| B-D3-013 | Upsert | 幂等键+payload 一致时重放 no-op/同结果 | 同一事件安全重放 | 同键不同 payload 被接受 | 08 §6.3 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
-| B-D3-014 | 水位 | 旧 `source_watermark` 不能覆盖新事实 | 1843 后拒绝 1842 | 旧事件回滚索引版本 | 08 §6.3 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
+| B-D3-013 | Upsert | 复合幂等域+规范 payload hash 一致时重放同结果 | 同用户/操作/Provider/代次安全重放 | 跨用户复用裸 key 误冲突，或同域异载荷被接受 | 08 §5.6/§6.3 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
+| B-D3-014 | 水位 | 仅同 scope/stream/partition/source-generation/kind 比较 | 同域 1843 后拒绝 1842 | 跨域比较或旧事件回滚索引版本 | 08 §5.6/§6.3 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-015 | Delete | 只接受已解析、非空 typed selector | 单条 resolved ID 删除 | 自然语言/通配/空列表直传 SDK | 08 §6.5 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-016 | Delete 隔离 | Service 先以 SQLite 校验归属；请求用户与 selector 用户不一致时明确拒绝 | alpha resolved IDs 进入 Provider | 越权 resolved ID 或用户不一致被“0 匹配”掩盖 | D2 E4；08 §6.5 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
-| B-D3-017 | Full reset | 必须有 D/E 授权和确认引用 | 已批准 resolved selector | 模型/自然语言直接全量删除 | 业务 Schema；08 §6.5 | `DEFERRED_CROSS_TRACK` | `PENDING_REVIEW` |
+| B-D3-017 | Full reset | 必须有独立授权、预览和显式确认引用 | 已授权且确认的 resolved selector | 模型/自然语言直接全量删除或豁免 | 业务 Schema；08 §6.5 | `DEFERRED_CROSS_TRACK` | `PENDING_REVIEW` |
 | B-D3-018 | Rebuild | 只从 SQLite 确定性快照/水位构建新代次 | 新代次校验后激活 | 从旧 Vector 正文反向恢复 | 08 §6.6 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-019 | 激活 | 未验证原子切换前 capability=false | maintenance/routing 模式显式 | 假定 Collection rename 原子 | `TD-004`；08 §6.6 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-020 | IndexState | `ready` 必须有 serving generation、Schema 和水位 | 三项完整且已验证 | Socket/进程存在即 ready | 08 §10 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
@@ -63,6 +67,12 @@ Reviewer 结论只能填写：`ACCEPTED`、`REWORK`、`BLOCKED` 或
 | B-D3-028 | 兼容 | 字段语义变化必须升级契约/算法版本 | 增加可选响应字段 | 同 v1 静默改变权重 | 08 §13；ADR-001 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-029 | IPC | 服务内部诊断与 `MemoryContext` 字段分层 | 只暴露安全摘要/必要解释 | raw score/用户/内部错误无审查暴露 | 08 §9.2 | `DEFERRED_CROSS_TRACK` | `PENDING_REVIEW` |
 | B-D3-030 | 证据 | 设计、E3、E4 与未测试状态分开 | 引用历史 E4 输入 | 文档静态检查冒充 D3 Runtime | 08 §2/§17 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
+| B-D3-031 | 命中去重顺序 | 精确版本去重后回源过滤，再按逻辑记忆聚合 | 旧 v1 rank 1 被移除、当前 v2 rank 2 保留 | 先按 memory_id 选 v1 导致 v2 被隐藏 | ADR-001；08 §8 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
+| B-D3-032 | IndexState 作用域 | 请求/状态显式携带同一 `IndexScope`，代次、水位、计数均绑定该 scope | 用户级与分片级状态独立 | 用户/分片状态被当作全局或跨 scope 合并 | 08 §5.2/§6.7/§10 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
+| B-D3-033 | 幂等域 | 复合域含 principal、操作、Provider、目标代次和 key | 跨用户/操作/代次复用裸 key 独立 | 裸 key 全局唯一导致误冲突 | 08 §5.6.2 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
+| B-D3-034 | 水位域 | 水位仅在完全相同 domain/kind 内按规定类型比较 | 同域整数单调推进 | 跨流、分区、scope、源代次或类型比较 | 08 §5.6.3 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
+| B-D3-035 | 运行状态双轴 | 历史 `evidence_level` 与当前 `availability` 独立 | host-verified 但当前 unavailable | 探活成功自动升级证据或故障抹除证据 | 08 §6.2/§10 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
+| B-D3-036 | 删除确认 | preview/selection/confirmation 绑定；仅单项已提交遗忘清理可版本化豁免 | 单项显式确认或合规清理豁免 | batch/full reset 豁免，或确认未绑定预览 | 08 §6.5 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
 
 ## 3. 跨轨待决矩阵
 
@@ -72,7 +82,7 @@ Reviewer 结论只能填写：`ACCEPTED`、`REWORK`、`BLOCKED` 或
 | ID | 待决事项 | B 已冻结边界 | 责任轨道 | 建议 Gate 结论 | 当前状态 |
 |---|---|---|---|---|---|
 | B-D3-X01 | `memory_status` 允许检索集合 | 发生在 RRF 前的硬过滤 | D/E | 未给集合时不得 `ACCEPTED` 全契约 | `DEFERRED_CROSS_TRACK` |
-| B-D3-X02 | `sensitivity` 分级与可见范围 | 发生在 RRF 前；模型不得降级终判 | E | 安全部分需 E 补审 | `DEFERRED_CROSS_TRACK` |
+| B-D3-X02 | `sensitivity` 分级与可见范围 | 发生在 RRF 前；模型不得降级终判 | E | 安全部分需 E 专业关注 | `DEFERRED_CROSS_TRACK` |
 | B-D3-X03 | 场景/作用域枚举与继承 | Provider 只消费 typed filter | D/E | 可接受 B 边界，枚举另案闭合 | `DEFERRED_CROSS_TRACK` |
 | B-D3-X04 | full reset 授权、确认、级联 | Provider 只消费 resolved+authorized selector | D/E | 未闭合前 full reset 保持禁用 | `DEFERRED_CROSS_TRACK` |
 | B-D3-X05 | IPC 数字错误码和 JSON 字段 | B 字符串错误语义不可改变 | C/D | 映射表必须单独评审 | `DEFERRED_CROSS_TRACK` |
@@ -86,7 +96,9 @@ Reviewer 结论只能填写：`ACCEPTED`、`REWORK`、`BLOCKED` 或
 
 ### 3.1 Git 集成预检
 
-以 D3-B 当前 HEAD 与 2026-08-04 刷新的远端分支执行三方预检：
+以下内容是 `2026-08-04` 的只读审计快照，只描述当时远端 SHA 的机械冲突结果，
+不是当前实现依赖、合并基线或持续有效结论。后续判断必须重新同步默认分支并
+生成新快照：
 
 | 来源 | 结果 | 确定性处置 |
 |---|---|---|
@@ -94,8 +106,8 @@ Reviewer 结论只能填写：`ACCEPTED`、`REWORK`、`BLOCKED` 或
 | PR #17 `feat/day4-bridge-provider-new@5510f94d` | `TECHNICAL_DEBT_REGISTER.md` 内容冲突 | 保留 `TD-003/TD-004` 与 `TD-A-005-01~05` 全部记录；不得选择单侧覆盖 |
 | PR #19 `docs/C-d2-osagent-runtime@2797ae08` | `TECHNICAL_DEBT_REGISTER.md` 内容冲突 | 保留 `TD-003/TD-004` 与 `TD-007~009` 全部记录；不得选择单侧覆盖 |
 
-本表只冻结冲突处置规则；在对应 PR 合入批准基线前，不预先 merge、rebase 或
-改写其他作者分支。
+本快照只记录冲突处置提示；不得以这些未合并 PR/SHA 作为实现基线，也不预先
+merge、rebase、Review 或改写其他作者分支。
 
 ## 4. D4 非 VM 契约测试计划
 
@@ -114,7 +126,7 @@ Reviewer 结论只能填写：`ACCEPTED`、`REWORK`、`BLOCKED` 或
 | B-D3-T008 | Upsert 部分失败 | rejected 列表准确 | 模糊整批成功禁止 | L1_FAKE | `PLANNED_D4` |
 | B-D3-T009 | Search 无命中 | 成功空 hits | 空结果误报 unavailable 禁止 | L1_FAKE | `PLANNED_D4` |
 | B-D3-T010 | Search 排名 | SDK 顺序转 1 起始 rank | rank<=0 丢弃并计数 | L1_FAKE | `PLANNED_D4` |
-| B-D3-T011 | Search 去重 | 同通道保留最佳 rank | 重复项多次贡献 RRF 禁止 | L1_FAKE | `PLANNED_D4` |
+| B-D3-T011 | Search 去重 | 同通道精确版本重复项保留最佳 rank | 不同版本被提前按 memory_id 合并或重复项多次贡献 RRF 禁止 | L1_FAKE | `PLANNED_D4` |
 | B-D3-T012 | Search 隔离 | 目标用户命中进入回源 | 跨用户同向量诱饵丢弃 | L1_FAKE | `PLANNED_D4` |
 | B-D3-T013 | SQLite 回源 | 当前版本生成 Candidate | 不存在/旧版本/已遗忘丢弃 | L1_FAKE | `PLANNED_D4` |
 | B-D3-T014 | raw score | 有限数按标签保留 | NaN/Inf 丢弃；不参与融合 | L0 | `PLANNED_D4` |
@@ -138,6 +150,14 @@ Reviewer 结论只能填写：`ACCEPTED`、`REWORK`、`BLOCKED` 或
 | B-D3-T032 | 错误映射 | A/Bridge 异常归一后每个 B 字符串码语义稳定，取消与超时可区分 | SDK 私有异常穿透或 `BridgeCancelledError→deadline_exceeded` 失败 | L0/L1_FAKE | `PLANNED_D4` |
 | B-D3-T033 | 日志安全 | 仅 ID/hash/rank/计数/耗时 | 正文、凭据、跨用户数据出现失败 | L0 | `PLANNED_D4` |
 | B-D3-T034 | 兼容性 | 可选响应字段兼容 | 同 v1 改字段语义失败 | L0 | `PLANNED_D4` |
+| B-D3-T035 | 旧/当前版本组合 | 旧 v1 rank 1 被过滤后当前 v2 rank 2 保留 | v1 先胜出导致整个 memory_id 丢失失败 | L1_FAKE | `PLANNED_D4` |
+| B-D3-T036 | 用户级 IndexState | user-alpha 的代次、水位、计数只覆盖 alpha | 混入 beta 或返回 global scope 失败 | L0/L1_FAKE | `PLANNED_D4` |
+| B-D3-T037 | 分片级 IndexState | shard-a 与 shard-b 状态独立 | 同名 generation 跨 scope 合并失败 | L0/L1_FAKE | `PLANNED_D4` |
+| B-D3-T038 | 幂等复合域 | 同域同 hash 重放；跨用户/操作/代次复用裸 key 独立 | 同域异 hash 未 conflict 或跨域误 conflict 失败 | L0/L1_FAKE | `PLANNED_D4` |
+| B-D3-T039 | 规范摘要 | map/集合重排与 NFC 等价输入得到同 Digest | 有序数组重排、null/缺失或不同 key-id 被判相等失败 | L0 | `PLANNED_D4` |
+| B-D3-T040 | 水位比较域 | 同域整数/定宽串确定性推进 | 跨 scope/stream/partition/source-generation/kind 比较或数字串猜测失败 | L0/L1_FAKE | `PLANNED_D4` |
+| B-D3-T041 | 证据/可用性双轴 | host_verified+unavailable 与 untested+available 均可表达 | 任一轴自动改写另一轴失败 | L0 | `PLANNED_D4` |
+| B-D3-T042 | 删除确认/豁免 | 单项显式确认与合规 committed-forget 豁免通过 | batch/full reset 豁免、过期/错 preview 确认拒绝 | L0/L1_FAKE | `PLANNED_D4` |
 
 ## 5. 目标麒麟 VM 验证队列（本轮跳过）
 
@@ -161,30 +181,36 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
 | ADR golden score 复算 | 4 个值及排序一致 | `PASS_LOCAL` |
 | 契约 JSON 样例解析 | 5/5 可解析 | `PASS_LOCAL` |
 | 文档引用存在 | 全部目标文件存在，索引相对链接可解析 | `PASS_LOCAL` |
-| GitHub 跨分支兼容核对 | 锚定 `main@56de079`、PR #17 `5510f94d`、PR #18 `1b8111c1`、PR #19 `2797ae08`；区分机械合并与语义准入 | `PASS_LOCAL`；`B-D3-X11/X12` 已刷新 |
+| GitHub Review 获取 | PR #20 当前 Review 与被审提交可追踪 | `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；head `8a7914bc`；已形成 B-D3-031～036 返工 Gate |
+| GitHub 跨分支兼容核对 | 历史 SHA 仅作为有日期的只读快照，不作为实现基线 | `AUDIT_SNAPSHOT_2026-08-04`；后续判断须重新同步默认分支 |
 | `git diff --check` | 无 whitespace error | `PASS_LOCAL` |
 | 仓库基线脚本 | 7/7，0 错误 | `PASS_LOCAL`；WSL 仅有既存编码、localhost NAT 与 Windows OpenCV PATH 转换警告 |
-| 工作区范围 | 只含 D3-B 最新远端审计刷新 | `PASS_LOCAL`；2 个 B 轨文档，未暂存 |
+| 工作区范围 | 只修改 B 轨契约、ADR、矩阵、索引和对应技术债行 | `PASS_LOCAL`；6 个文档，未暂存、未提交 |
 
-## 7. Reviewer 记录模板
+## 7. Reviewer 记录
 
-### D 主审
+### 当前 Review
+
+- Reviewer：`lovezy0730-create`
+- 审查提交：`8a7914bc`
+- 提交时间：`2026-08-04T14:29:27Z`
+- GitHub 结论：`CHANGES_REQUESTED`
+- 矩阵结论：`REWORK`
+- 返工范围：P0-01 至 P0-03、P1-01 至 P1-04 及三项冻结建议
+
+### 复审模板
 
 - 契约版本：`vector-retrieval/v1`
 - 审查提交：`<commit after user-approved commit>`
 - 结论：`PENDING_REVIEW`
 - P0 返工项：无 / `<ID 列表>`
-- IPC/SQLite/Outbox 待决项：`<B-D3-X ID 列表>`
+- D 关注项（如适用）：Provider / SQLite / Outbox / IPC / `<B-D3-X ID 列表>`
+- E 关注项（如适用）：用户隔离 / 敏感度 / 冲突 / 遗忘 / 评测 /
+  `<B-D3-X ID 列表>`
 - 允许进入 D4：是 / 否
 - 说明：
 
-### E 补审
-
-- 审查范围：用户隔离 / 敏感度 / 冲突 / 遗忘 / 评测
-- 结论：`PENDING_REVIEW`
-- P0 返工项：无 / `<ID 列表>`
-- 业务枚举待决项：`<B-D3-X ID 列表>`
-- 说明：
-
-在两份结论实际填写前，作者不得把 ADR 状态改为“已采纳”，不得把契约状态
-改为“已接受”，不得声明 Gate 0 PASS。
+在一名独立、非作者 Reviewer 实际给出 `APPROVED`，且 P0、验证和证据 Gate
+全部关闭前，作者不得把 ADR 状态改为“已采纳”，不得把契约状态改为“已接受”，
+不得声明 Gate 0 PASS。D/E 专业关注点可以由同一合格 Reviewer 一并核对，也可
+邀请额外意见，但不要求两份累计批准。

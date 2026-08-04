@@ -25,7 +25,7 @@
 
 | ADR | 状态 | 说明 |
 |---|---|---|
-| [ADR-001：默认使用 Memory Service 应用层 RRF](001-application-layer-rrf.md) | 提议，待 D 主审/E 补审 | `rrf-v1` 默认 `k=60`、等权、硬过滤先于融合；原生 Hybrid/RRF 仍非默认路径 |
+| [ADR-001：默认使用 Memory Service 应用层 RRF](001-application-layer-rrf.md) | 提议，PR #20 Review 返工中 | `rrf-v1` 默认 `k=60`、等权、硬过滤先于融合；一名独立非作者 Reviewer 的 `APPROVED` 满足人工审批门槛，D/E 为专业关注点 |
 
 **ADR-001 已形成 D3-B 冻结候选；独立审查前不得将状态改为“已采纳”。**
 

@@ -1,8 +1,8 @@
 # 08 轨道 B — Vector 检索与索引契约 v1
 
-> **文档状态：D3-B 冻结候选** — 作者侧契约已成形，待 D 主审；涉及用户
-> 隔离、敏感字段、遗忘和评测口径时需 E 补审。审查通过前不得标记为最终
-> `ACCEPTED`。
+> **文档状态：D3-B 冻结候选** — PR #20 Review 返工中。取得一名独立、
+> 非作者 Reviewer 的 `APPROVED` 且全部适用 Gate 关闭前，不得标记为最终
+> `ACCEPTED`；D/E 专业分工仅表示审查关注点，不构成累计审批数量要求。
 >
 > 本文冻结 Memory Service 内部的 B 轨技术语义，不冻结 D 轨 IPC 数字错误码、
 > SQLite 表结构、Vector Collection 物理布局或 D4 生产实现。
@@ -10,8 +10,8 @@
 - 契约标识：`vector-retrieval/v1`
 - 日期：2026-08-03
 - 责任轨道：B（Vector、FTS5、RRF 与检索评测）
-- 主审：D
-- 补审：E（用户隔离、遗忘、安全与评测）
+- 人工审批门槛：一名独立、非作者 Reviewer 的 `APPROVED`
+- 专业关注点：D 关注可实现性；E 关注用户隔离、遗忘、安全与评测
 - 关联决策：`docs/adr/001-application-layer-rrf.md`
 
 ## 1. 目标与边界
@@ -65,7 +65,7 @@ MemoryQuery / policy
   -> FTS5 Provider --------+
   -> Embedding -> VectorProvider.search
                             |
-  -> RetrievalHit 校验、通道内去重
+  -> RetrievalHit 校验、按精确 (memory_id, version_id) 通道内去重
   -> SQLite 回源：归属、当前版本、状态、正文/安全摘要
   -> 硬过滤：用户、场景/作用域、生命周期、敏感、冲突、遗忘
   -> 按 memory_id 聚合为 RetrievalCandidate
@@ -93,7 +93,7 @@ B 轨不得用本契约覆盖 D/E 的待决业务语义。
 | `contract_version` | string | 固定 `vector-retrieval/v1` | `FROZEN_CANDIDATE` |
 | `request_id` | string | 非空；一次逻辑请求内稳定 | `FROZEN_CANDIDATE` |
 | `trace_id` | string | 非空；跨 Provider/SQLite/IPC 关联 | `FROZEN_CANDIDATE` |
-| `user_id` | string | 非空；来自宿主/业务输入；禁止模型生成 | 业务规则待 E 终审，技术必填已冻结 |
+| `user_id` | string | 非空；来自宿主/业务输入；禁止模型生成 | 业务规则待 E 专业关注，技术必填已冻结 |
 | `occurred_at` / `*_at` | UTC datetime | RFC 3339，序列化为 `Z` 或明确 offset | `FROZEN_CANDIDATE` |
 | `deadline_at` | UTC datetime | 绝对 deadline，不允许每层重置相对预算 | `FROZEN_CANDIDATE` |
 | `idempotency_key` | string | 写操作必填；由接入层/系统生成，禁止模型生成 | `FROZEN_CANDIDATE` |
@@ -101,7 +101,29 @@ B 轨不得用本契约覆盖 D/E 的待决业务语义。
 ID 的 UUID 版本、数据库列型和 IPC 线格式由 D 冻结；B 只要求稳定、非空和
 在相应作用域内唯一。
 
-### 5.2 `ProviderResult<T>`
+### 5.2 `IndexScope`
+
+索引代次、水位和计数必须绑定显式作用域，不得依赖调用上下文猜测：
+
+```text
+IndexScope {
+  kind: "global" | "user" | "shard"
+  user_id: string | null
+  shard_id: string | null
+  scope_fingerprint: Digest
+}
+```
+
+- `global`：`user_id=null`、`shard_id=null`；只允许具有全局权限的调用方使用；
+- `user`：`user_id` 必填、`shard_id=null`；代次、水位和全部计数只描述该用户；
+- `shard`：`shard_id` 必填、`user_id=null`；代次、水位和全部计数只描述该
+  确定性分片；
+- `scope_fingerprint` 由规范化后的 `kind`、`user_id`、`shard_id` 计算，Provider
+  必须复算并拒绝不匹配值；作用域之间的代次、水位和计数禁止比较、继承或合并；
+- 从较窄作用域扩大为较宽作用域必须创建新请求并重新授权，不得在 Provider
+  内静默提升。
+
+### 5.3 `ProviderResult<T>`
 
 所有预期内 Provider 失败使用结构化返回，不向业务层泄漏 SDK RPC、C++
 异常或实现私有类型：
@@ -129,7 +151,7 @@ ProviderResult<T> {
 - Provider 不在内部静默无限重试；重试由 Service 按错误可重试性和同一
   deadline 决定。
 
-### 5.3 `RetrievalError`
+### 5.4 `RetrievalError`
 
 字符串错误码是 B 层稳定语义；D 可映射为 IPC 数字码，但不得改变含义。
 
@@ -151,7 +173,7 @@ ProviderResult<T> {
 `stage`、`provider`、`details`。`details` 不得含未脱敏正文、SDK 堆栈、数据库
 凭据或跨用户数据。
 
-### 5.4 Deadline 与取消
+### 5.5 Deadline 与取消
 
 1. 请求进入 Memory Service 时生成绝对 `deadline_at`；各层只消费剩余预算；
 2. Provider 开始新副作用前必须再次检查 deadline 和取消状态；
@@ -160,6 +182,69 @@ ProviderResult<T> {
 5. 若 SDK 调用无法主动中断，结果必须标为 `outcome_unknown`，随后通过
    `idempotency_key`、源水位和索引代次协调，禁止盲目重复副作用；
 6. 取消信号是协作式，不承诺强杀 SDK 线程或进程。
+
+### 5.6 规范摘要、幂等域与水位
+
+#### 5.6.1 `canonical-json/v1` 与 `Digest`
+
+`filter_fingerprint`、`index_text_hash`、`selection_hash` 和 `payload_hash` 使用
+同一规范输入规则：
+
+1. 字符串先规范为 Unicode NFC；时间统一为 RFC 3339 UTC `Z`；缺失字段与
+   显式 `null` 不等价；
+2. 对象按 RFC 8785 JSON Canonicalization Scheme 序列化；map 键按规范排序；
+3. Schema 标注为集合语义的数组先去重，再按元素规范 JSON 的 UTF-8 字节序
+   排序；顺序有业务含义的数组保持原顺序；
+4. 禁止浮点 `NaN`、正负无穷和负零；摘要输入必须先通过对应 Schema 校验；
+5. 摘要格式固定为 `hmac-sha256:<key_id>:<64 lowercase hex>`。使用部署密钥的
+   HMAC-SHA-256，避免低熵过滤器、ID 集或正文哈希被离线枚举；日志不得记录
+   规范输入、密钥或未经脱敏值。
+
+`Digest` 比较要求算法和 `key_id` 相同；密钥轮换期间由 Service 显式重算，
+Provider 不得把不同 `key_id` 的值推断为相等。
+
+#### 5.6.2 写操作幂等域
+
+幂等记录的唯一键不是裸 `idempotency_key`，而是以下复合域：
+
+```text
+(principal_scope, operation, provider, target_generation, idempotency_key)
+```
+
+- `principal_scope` 对 Upsert/Delete 为请求 `user_id`，对 Rebuild 为
+  `scope.scope_fingerprint`；
+- `operation` 为 `upsert`、`delete` 或 `rebuild`，`target_generation` 对前两者
+  为 `index_generation`、对 Rebuild 为 `target_generation`；
+- 所有写请求必须携带按 `canonical-json/v1` 计算的 `payload_hash`，且 Provider
+  必须从语义字段复算；`request_id`、`trace_id`、`deadline_at`、重试次数等易变
+  传输字段以及 `payload_hash` 自身不进入载荷，业务字段、作用域、选择器、
+  目标代次和源水位必须进入；
+- 同一复合域且 `payload_hash` 相同返回首次逻辑结果；同域不同 hash 返回
+  `conflict`；相同裸 key 在不同用户、操作、Provider 或代次中互不冲突。
+
+#### 5.6.3 `Watermark`
+
+```text
+Watermark {
+  domain: {
+    scope_fingerprint: Digest
+    stream: string
+    partition: string
+    source_generation: string
+  }
+  kind: "monotonic_int" | "fixed_width_lex"
+  value: integer | string
+}
+```
+
+- 仅当 `domain` 四个字段与 `kind` 完全相同才允许比较；跨用户/作用域、流、
+  分区或源代次比较必须返回 `invalid_argument`，不得据此判新旧；
+- `monotonic_int` 使用非负整数数值比较；`fixed_width_lex` 要求同一 domain 下
+  长度固定的 ASCII 字符串，按无符号字节序比较；不得把数字字符串按整数猜测；
+- 相等表示安全重放；较大值可推进；较小值确定性返回 `stale_index`，且不得
+  改写数据或已应用水位；
+- `applied_watermark`、`required_watermark` 和 `source_watermark` 均使用该
+  结构，禁止裸字符串/整数跨域比较。
 
 ## 6. `VectorProvider` 接口
 
@@ -192,10 +277,17 @@ interface VectorProvider {
 | `supports_rebuild` | boolean | 表示适配器具备受控重建流程，不等于原子 swap |
 | `supports_atomic_generation_switch` | boolean | 当前默认 `false/UNTESTED`，不得猜测为真 |
 | `max_top_n` | integer/null | 只有来源明确时填写；未知为 null |
-| `runtime_status` | enum | `host_verified`、`abi_verified`、`untested`、`unavailable` |
+| `evidence_level` | enum | 历史证据：`host_verified`、`abi_verified`、`untested`；不得用瞬时故障降级历史证据 |
+| `availability` | enum | 当前观测：`available`、`degraded`、`unavailable`、`unknown` |
+| `availability_checked_at` | UTC datetime | 当前可用性观测时间；不得当作历史验证时间 |
 
 `capabilities()` 是只读操作，不得隐式加载模型、创建 Collection、重建索引或
 修改服务状态。
+
+`evidence_level` 只说明该能力曾达到的证据等级；`availability` 只说明
+`availability_checked_at` 时的当前观测。曾有 `host_verified` 的 Provider 当前
+仍可为 `unavailable`，当前 `available` 也不得把 `untested` 自动提升为
+`host_verified`。
 
 ### 6.3 Upsert
 
@@ -204,9 +296,10 @@ interface VectorProvider {
 | 字段 | 类型 | 必填 | 约束 |
 |---|---|:---:|---|
 | 公共标识/deadline | 见 5.1 | 是 | 同一逻辑写入保持稳定 |
-| `idempotency_key` | string | 是 | 重放必须得到同一逻辑结果或 `conflict` |
+| `idempotency_key` | string | 是 | 按 5.6.2 复合域判定重放或冲突 |
+| `payload_hash` | `Digest` | 是 | Provider 按 `canonical-json/v1` 复算 |
 | `index_generation` | string | 是 | 只能写入明确的目标代次 |
-| `source_watermark` | string/integer | 是 | 对应 SQLite/Outbox 已提交事实，由 D 生成 |
+| `source_watermark` | `Watermark` | 是 | 对应 SQLite/Outbox 已提交事实，由 D 生成 |
 | `records` | `VectorRecord[]` | 是 | 非空、大小受 Provider 能力与 Service 限制 |
 
 `VectorRecord`：
@@ -221,15 +314,17 @@ interface VectorProvider {
 | `memory_type` | string/null | 承载 E/D 的短/中/长期业务枚举；B 不自行新增枚举值 |
 | `scene_id` | string/null | 已规范化的场景标识，不是自由表达式 |
 | `scope_terms` | map<string,string[]> | 只含契约允许键和值；数组去重并稳定排序 |
-| `index_text_hash` | SHA-256 string | 敏感过滤后索引文本的哈希；不要求 Vector 保存正文 |
+| `index_text_hash` | `Digest` | 敏感过滤后索引文本的 HMAC 摘要；不要求 Vector 保存正文 |
 
 Upsert 不变量：
 
 - SQLite/Outbox 事实必须先提交，Vector Upsert 不能成为业务真源；
 - Provider 只能索引请求用户记录，批内任一跨用户项必须拒绝；
-- 同一 `idempotency_key` + 同一 payload 重放不得重复产生逻辑记录；
-- 同一幂等键但 payload 哈希不同必须返回 `conflict`；
-- 旧 `source_watermark` 不得覆盖更高水位；
+- 同一幂等复合域 + 同一 `payload_hash` 重放不得重复产生逻辑记录；
+- 同一复合域但 `payload_hash` 不同必须返回 `conflict`；跨复合域复用裸 key
+  不得误报冲突；
+- 旧 `source_watermark` 不得覆盖同一水位 domain 的更高值，跨 domain 比较
+  必须拒绝；
 - 部分批次失败必须逐项返回状态，不能只返回模糊“成功”；
 - 正文是否进入 Vector 物理元数据由 D4 Schema 决定，但不得作为检索输出真源。
 
@@ -277,9 +372,10 @@ SDK/SQL 表达式。
 | 字段 | 类型 | 必填 | 约束 |
 |---|---|:---:|---|
 | 公共标识/deadline | 见 5.1 | 是 | 写操作要求完整审计 |
-| `idempotency_key` | string | 是 | 重放安全 |
+| `idempotency_key` | string | 是 | 按 5.6.2 复合域判定重放或冲突 |
+| `payload_hash` | `Digest` | 是 | Provider 按 `canonical-json/v1` 复算 |
 | `index_generation` | string | 是 | 禁止跨代次模糊删除 |
-| `source_watermark` | string/integer | 是 | 对应已提交 ForgetPlan/Outbox 事实 |
+| `source_watermark` | `Watermark` | 是 | 对应已提交 ForgetPlan/Outbox 事实 |
 | `selector` | `ResolvedDeleteSelector` | 是 | 已解析、非空、受控 |
 | `authorization_ref` | string/null | 条件 | 批量/full reset 按 E/D 规则要求 |
 
@@ -291,9 +387,18 @@ SDK/SQL 表达式。
   memory_ids: non-empty string[],
   version_ids: string[] | null,
   selection_mode: single_item | resolved_batch | full_reset,
-  selection_hash: SHA-256,
+  selection_hash: Digest,
   resolved_by: deterministic_rule_engine | system,
-  confirmation_ref: string | null
+  preview_ref: string,
+  preview_hash: Digest,
+  confirmation_mode: explicit | policy_exempt,
+  confirmation_ref: string | null,
+  exemption: {
+    code: committed_forget_cleanup,
+    policy_id: string,
+    policy_version: string,
+    decision_ref: string
+  } | null
 }
 ```
 
@@ -301,9 +406,23 @@ SDK/SQL 表达式。
 
 - `user_id` 必填并与请求用户相同；
 - `memory_ids` 必须来自 SQLite/遗忘规则引擎的确定性解析，禁止模型生成；
-- `single_item` 必须至少绑定 `user_id + memory_id`；
-- `resolved_batch` 必须携带 `selection_hash` 和解析来源；
-- `full_reset` 必须有 D/E 批准的 `authorization_ref` 与 `confirmation_ref`；
+- `selection_hash` 绑定规范化后的用户、ID、版本、模式和解析来源；
+  `preview_hash` 还必须绑定预计匹配数、不可逆影响摘要和源水位；两者均按
+  `canonical-json/v1` 计算，`preview_ref` 指向同一份未过期预览；
+- `single_item` 必须恰好包含一个 `memory_id` 和一个明确 `version_id`。默认使用
+  `confirmation_mode=explicit` 并携带绑定 `preview_hash` 的 `confirmation_ref`；
+- 只有“已提交遗忘事实的单项向量清理”可使用 `policy_exempt`：模式必须为
+  `single_item`，`exemption.code=committed_forget_cleanup`，`authorization_ref`
+  必须指向同用户、同 memory/version 的已提交 ForgetPlan/Outbox 事实，且
+  `policy_id`、`policy_version`、`decision_ref` 全部非空。该决定只能由版本化的
+  确定性规则引擎产生，模型、自然语言、调用方布尔值或 Provider 推断均无效；
+- `resolved_batch` 必须使用 `confirmation_mode=explicit`，携带非空
+  `confirmation_ref`，并绑定完整 `selection_hash` 与 `preview_hash`；不得豁免；
+- `full_reset` 必须使用 `confirmation_mode=explicit`，同时携带独立非空的
+  `authorization_ref` 与 `confirmation_ref`，二者均绑定用户、作用域、预览、
+  目标代次和过期时间；不得豁免；
+- `explicit` 时 `confirmation_ref` 非空且 `exemption=null`；`policy_exempt` 时
+  `confirmation_ref=null` 且 `exemption` 完整。其他组合一律 `invalid_argument`；
 - 空 ID 列表、通配符、原始自然语言、任意过滤表达式全部 `invalid_argument`；
 - Service 必须先用 SQLite 真源确认 resolved IDs 均属于请求用户；若已知包含
   跨用户目标，必须在调用 Provider 前返回 `user_scope_violation`；
@@ -318,9 +437,11 @@ SDK/SQL 表达式。
 `not_matched_ids`、`rejected[]`、`index_generation`、`applied_watermark` 和
 `outcome`。
 
-遗忘事务顺序由 D 冻结，B 要求以下语义保持：SQLite/ForgetPlan 是真源，
-Vector 删除是可重放索引副作用；Vector 失败不能撤销已授权的业务遗忘事实，
-但必须进入修复队列并使索引状态变为 `stale`/`degraded`。
+遗忘事务顺序及授权/确认策略由 D/E 跨轨冻结；B Provider 只消费 Service 已按
+上述结构解析、授权并校验的确定性选择器，不自行解释业务意图或签发豁免。
+SQLite/ForgetPlan 是真源，Vector 删除是可重放索引副作用；Vector 失败不能
+撤销已授权的业务遗忘事实，但必须进入修复队列并使索引状态变为
+`stale`/`degraded`。
 
 ### 6.6 Rebuild
 
@@ -329,13 +450,14 @@ Vector 删除是可重放索引副作用；Vector 失败不能撤销已授权的
 | 字段 | 类型 | 必填 | 约束 |
 |---|---|:---:|---|
 | 公共标识/deadline | 见 5.1 | 是 | 重建预算不得无限延伸 |
-| `idempotency_key` | string | 是 | 同一目标代次可安全重放 |
+| `idempotency_key` | string | 是 | 按 5.6.2 复合域判定重放或冲突 |
+| `payload_hash` | `Digest` | 是 | Provider 按 `canonical-json/v1` 复算 |
 | `source_snapshot_id` | string | 是 | D 提供的确定性 SQLite 快照/读取会话标识 |
-| `source_watermark` | string/integer | 是 | 快照对应水位 |
+| `source_watermark` | `Watermark` | 是 | 快照对应水位 |
 | `target_generation` | string | 是 | 不得覆盖当前 serving generation |
 | `schema_version` | string | 是 | 绑定 D4 Collection/字段 Schema |
 | `reason` | enum | 是 | `bootstrap`、`schema_change`、`repair`、`full_reset` |
-| `scope` | typed scope | 是 | 全局或明确用户/分片；禁止隐式扩大范围 |
+| `scope` | `IndexScope` | 是 | 全局或明确用户/分片；禁止隐式扩大范围 |
 
 重建阶段：
 
@@ -359,7 +481,7 @@ allocate_generation
 - 旧代次清理由单独、可审计、幂等的生命周期步骤执行；
 - 超时/取消后状态必须可从 `IndexState` 恢复，不得留下“未知但标 ready”的代次。
 
-`VectorRebuildResult` 至少包含 `target_generation`、`source_snapshot_id`、
+`VectorRebuildResult` 至少包含 `scope`、`target_generation`、`source_snapshot_id`、
 `source_watermark`、`read_count`、`indexed_count`、`rejected_count`、
 `rejection_reasons`、`verified`、`activated`、`activation_mode`、
 `previous_generation` 和 `outcome`。
@@ -367,6 +489,16 @@ allocate_generation
 ### 6.7 `get_index_state`
 
 这是严格只读操作：
+
+```text
+IndexStateRequest {
+  request_id: string
+  trace_id: string
+  scope: IndexScope
+  required_watermark: Watermark | null
+  deadline_at: UTC datetime
+}
+```
 
 - 不隐式创建 Collection；
 - 不加载模型；
@@ -437,14 +569,23 @@ Provider 过滤降低数据暴露与无效候选数量；SQLite 回源校验是�
 | `provider` | string | 是 | 实现稳定名 |
 | `index_generation` | string/null | 条件 | Vector 命中必填；FTS5 按实现填写 |
 | `retrieved_at` | UTC datetime | 是 | 本次命中时间 |
-| `filter_fingerprint` | SHA-256 string | 是 | 过滤结构的安全指纹，不含正文 |
+| `filter_fingerprint` | `Digest` | 是 | 过滤结构的 HMAC 安全指纹，不含正文 |
 | `diagnostics` | object | 是 | 非敏感、大小受限、结构化 |
 
 禁止字段：`content`、未经脱敏正文、SDK 私有对象、可执行过滤表达式。
 
-同一通道重复命中规则：按 `memory_id` 去重，只保留最小 rank；若 rank 相同，
-优先选择 `version_id` 与 SQLite 当前版本相同的项，否则按稳定字段顺序选择并
-记录重复计数。重复项不得多次贡献 RRF 分数。
+同一通道的处理顺序固定为：
+
+1. 仅对精确 `(memory_id, version_id)` 重复项去重，每个精确版本保留最小
+   rank；rank 相同则按稳定字段顺序选择，并记录重复计数；
+2. 回源 SQLite 校验用户归属、当前版本、状态、有效期、敏感度、冲突和遗忘
+   策略，移除过期版本和其他非法命中；
+3. 对剩余合法命中按 `memory_id` 聚合，每个通道保留最佳合法 rank；
+4. 聚合后的每个逻辑记忆在同一通道只贡献一次 RRF 分数。
+
+禁止在版本校验前按 `memory_id` 去重。例如同一记忆的旧 `v1` 为 rank 1、当前
+`v2` 为 rank 2 时，必须移除 `v1` 并保留 `v2`，不能因旧版本先胜出而隐藏当前
+合法版本。
 
 ## 9. `RetrievalCandidate`
 
@@ -514,21 +655,32 @@ B 层冻结服务内部对象，IPC 最终映射由 C/D 决定：
 | 字段 | 类型 | 约束 |
 |---|---|---|
 | `provider` | string | 实现稳定名 |
+| `scope` | `IndexScope` | 与请求作用域完全一致；不得返回更宽范围 |
 | `status` | `IndexStatus` | 上表枚举 |
 | `is_queryable` | boolean | 与状态和 serving generation 一致 |
 | `schema_version` | string | 当前 serving Schema |
 | `serving_generation` | string/null | 当前查询代次 |
 | `building_generation` | string/null | 当前构建代次 |
 | `source_snapshot_id` | string/null | serving generation 的真源快照 |
-| `applied_watermark` | string/integer/null | 已应用 SQLite/Outbox 水位 |
-| `required_watermark` | string/integer/null | 调用方要求水位 |
+| `applied_watermark` | `Watermark`/null | 已应用 SQLite/Outbox 水位 |
+| `required_watermark` | `Watermark`/null | 调用方要求水位；必须与 applied 同域同 kind |
 | `record_count` | integer/null | 非负；未知为 null，不伪造 0 |
 | `pending_count` | integer/null | 非负；未知为 null |
 | `stale_count` | integer/null | 非负；未知为 null |
 | `last_success_at` | UTC datetime/null | 最近成功同步/激活时间 |
 | `last_checked_at` | UTC datetime | 本次只读状态采集时间 |
 | `last_error` | safe `RetrievalError`/null | 不含敏感详情 |
-| `runtime_status` | enum | 证据/运行能力标记 |
+| `evidence_level` | enum | `host_verified`、`abi_verified`、`untested`；历史证据轴 |
+| `availability` | enum | `available`、`degraded`、`unavailable`、`unknown`；当前观测轴 |
+
+`serving_generation`、`building_generation`、`source_snapshot_id`、两类水位、
+`record_count`、`pending_count`、`stale_count`、状态和时间戳均以 `scope` 为
+统计边界。用户级状态不得汇入其他用户记录，分片级状态不得汇入其他分片；
+同名 generation 在不同 `scope_fingerprint` 下仍是不同代次。
+
+`evidence_level` 与 `availability` 必须独立更新：历史宿主验证不会因当前服务
+中断而消失，当前探活成功也不能提升历史证据等级。`availability` 的采集时点为
+`last_checked_at`；超过调用方的新鲜度预算后必须视为 `unknown`，不得沿用旧值。
 
 ### 10.3 状态约束与转换
 
@@ -596,7 +748,7 @@ B 层冻结服务内部对象，IPC 最终映射由 C/D 决定：
   "provider": "kylin_vector_0k0.7",
   "index_generation": "vector-gen-0007",
   "retrieved_at": "2026-08-03T01:59:59.120Z",
-  "filter_fingerprint": "8af799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a90",
+  "filter_fingerprint": "hmac-sha256:k1:8af799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a90",
   "diagnostics": {
     "provider_elapsed_ms": 18,
     "duplicate_count": 0
@@ -658,21 +810,46 @@ B 层冻结服务内部对象，IPC 最终映射由 C/D 决定：
 ```json
 {
   "provider": "kylin_vector_0k0.7",
+  "scope": {
+    "kind": "user",
+    "user_id": "user-001",
+    "shard_id": null,
+    "scope_fingerprint": "hmac-sha256:k1:8af799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a90"
+  },
   "status": "building",
   "is_queryable": true,
   "schema_version": "vector-schema/v1",
   "serving_generation": "vector-gen-0007",
   "building_generation": "vector-gen-0008",
   "source_snapshot_id": "sqlite-snapshot-20260803-001",
-  "applied_watermark": 1842,
-  "required_watermark": 1842,
+  "applied_watermark": {
+    "domain": {
+      "scope_fingerprint": "hmac-sha256:k1:8af799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a90",
+      "stream": "sqlite-outbox",
+      "partition": "user-001",
+      "source_generation": "sqlite-epoch-202608"
+    },
+    "kind": "monotonic_int",
+    "value": 1842
+  },
+  "required_watermark": {
+    "domain": {
+      "scope_fingerprint": "hmac-sha256:k1:8af799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a90",
+      "stream": "sqlite-outbox",
+      "partition": "user-001",
+      "source_generation": "sqlite-epoch-202608"
+    },
+    "kind": "monotonic_int",
+    "value": 1842
+  },
   "record_count": 1200,
   "pending_count": 0,
   "stale_count": 0,
   "last_success_at": "2026-08-03T01:40:00Z",
   "last_checked_at": "2026-08-03T01:59:59Z",
   "last_error": null,
-  "runtime_status": "host_verified"
+  "evidence_level": "host_verified",
+  "availability": "available"
 }
 ```
 
@@ -686,16 +863,30 @@ B 层冻结服务内部对象，IPC 最终映射由 C/D 决定：
   "user_id": "user-alpha",
   "deadline_at": "2026-08-03T02:01:00Z",
   "idempotency_key": "forget-plan-fgp-001-watermark-1843",
+  "payload_hash": "hmac-sha256:k1:7ab799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a91",
   "index_generation": "vector-gen-0007",
-  "source_watermark": 1843,
+  "source_watermark": {
+    "domain": {
+      "scope_fingerprint": "hmac-sha256:k1:6cf799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a92",
+      "stream": "sqlite-outbox",
+      "partition": "user-alpha",
+      "source_generation": "sqlite-epoch-202608"
+    },
+    "kind": "monotonic_int",
+    "value": 1843
+  },
   "selector": {
     "user_id": "user-alpha",
     "memory_ids": ["kn-000101"],
     "version_ids": ["ver-0003"],
     "selection_mode": "single_item",
-    "selection_hash": "c10bd1d548b7d1665534b0ef3c81a9e0f7b7fe003444e19238d604a791a2ee33",
+    "selection_hash": "hmac-sha256:k1:c10bd1d548b7d1665534b0ef3c81a9e0f7b7fe003444e19238d604a791a2ee33",
     "resolved_by": "deterministic_rule_engine",
-    "confirmation_ref": null
+    "preview_ref": "delete-preview-001",
+    "preview_hash": "hmac-sha256:k1:d20bd1d548b7d1665534b0ef3c81a9e0f7b7fe003444e19238d604a791a2ee34",
+    "confirmation_mode": "explicit",
+    "confirmation_ref": "delete-confirmation-001",
+    "exemption": null
   },
   "authorization_ref": null
 }
@@ -705,7 +896,7 @@ B 层冻结服务内部对象，IPC 最终映射由 C/D 决定：
 
 | 业务字段/问题 | B 轨结论 | 状态/待办 |
 |---|---|---|
-| `Knowledge.content_summary` | 可作为 FTS5/Embedding 输入，但须先敏感过滤；检索输出仍回源 SQLite | 符合，E 终审安全边界 |
+| `Knowledge.content_summary` | 可作为 FTS5/Embedding 输入，但须先敏感过滤；检索输出仍回源 SQLite | 符合，E 关注安全边界 |
 | `extracted_entities` | 可作为受控元数据过滤，不允许直接拼表达式 | 符合，D4 Schema 决定物理布局 |
 | `primary_category` | 开放业务分类，可过滤/解释，不得替代 `knowledge_type` | 符合 |
 | `knowledge_type` | 可作为类型化过滤字段；正式枚举由 E | 符合，枚举 `DEFERRED` |
@@ -733,7 +924,9 @@ D4 至少覆盖：
 
 - Provider 输入校验、维度/有限数、deadline 和取消；
 - Upsert 幂等、payload 冲突、旧水位、批内跨用户与部分失败；
-- Search 用户硬过滤、无命中、非法 rank、重复命中、陈旧版本和代次约束；
+- Search 用户硬过滤、无命中、非法 rank、精确版本去重、过滤后逻辑记忆聚合、
+  陈旧版本和代次约束；必须覆盖旧 `v1` rank 1、当前 `v2` rank 2 时仍保留
+  `v2`；
 - Delete 空/通配/自然语言拒绝、跨用户拒绝、重复删除和 full reset 门禁；
 - Rebuild 新代次、失败保留旧代次、校验失败不激活和非原子能力声明；
 - `IndexState` 不变量、只读状态查询和状态恢复；
@@ -763,11 +956,11 @@ D4 至少覆盖：
 
 ### 15.1 2026-08-04 GitHub 跨分支兼容核对
 
-本轮以 `main@56de07977cb10c4fb87878e24ed5a7c97bf27ba2` 为基线，只读核对
-三个未合并分支。2026-08-04 的 `git fetch --prune origin` 确认 PR #17/#18
-发生强制更新，PR #19 继续追加提交，因此用最新 HEAD 替换旧审计锚点。下表
-记录的是对指定提交的兼容判断，不替代相应 PR 的独立 Review，也不把原型
-实现提升为正式契约：
+以下是 `2026-08-04` 的只读审计快照：当时以
+`main@56de07977cb10c4fb87878e24ed5a7c97bf27ba2` 为基线核对三个未合并分支。
+它只描述指定 SHA 当时的机械冲突和兼容判断，不是当前实现依赖、合并基线或
+持续有效结论；后续判断必须重新同步默认分支并生成新快照。该记录不替代相应
+PR 的独立 Review，也不把原型实现提升为正式契约：
 
 | 来源 | 已观察事实 | D3-B 兼容判断 |
 |---|---|---|
@@ -775,22 +968,23 @@ D4 至少覆盖：
 | PR #17 `feat/day4-bridge-provider-new@5510f94d` | EmbeddingProvider 使用相对 `timeout_ms`，主动中断尚未实现，并把 `BridgeCancelledError` 归入 `ERR_TIMEOUT`；最新实现增加进程级 Bridge/session 单例约束 | A/B Provider 的职责仍可分层；D4 编排适配必须保留取消/超时差异，在同一绝对 deadline 内归一 A 轨异常，并把生命周期约束纳入调度设计；继续受 `TD-A-005-01` 约束 |
 | PR #19 `docs/C-d2-osagent-runtime@2797ae08` | `memory_context` 为 `NOT_OBSERVED`，真实 Runtime Socket/Hook 事实仍待进一步验证 | 与本契约的 C 轨宿主映射 `DEFERRED` 状态一致，不构成矛盾，也不得据此声称 Context 注入已实现 |
 
-相对当前 D3-B HEAD 的真实三方预检结果为：PR #18 可机械合并；PR #17 与
+相对该快照中的 D3-B HEAD，三方预检结果为：PR #18 可机械合并；PR #17 与
 PR #19 均在 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` 产生内容冲突。
 冲突来自各轨在同一表尾追加记录，不是编号碰撞。集成时必须保留 B 轨
 `TD-003/TD-004`、A 轨 `TD-A-005-01~05` 以及 C 轨 `TD-007~009` 的并集，
-不得通过选择一侧删除其他轨技术债。该机械处置规则不表示跨轨语义已经闭合。
+不得通过选择一侧删除其他轨技术债。该机械处置规则不表示跨轨语义已经闭合，
+也不得据此 merge、rebase、Review 或改写其他作者分支。
 
 ## 16. 完成与审查门槛
 
 本契约从“冻结候选”变为“已接受”需要：
 
-1. D 主审确认 Provider、索引状态、SQLite/Outbox 与 IPC 边界可实现；
-2. E 补审确认用户隔离、敏感度、冲突和遗忘语义没有被技术层放宽；
-3. ADR-001 状态同步更新为“已采纳”；
-4. 审查矩阵中所有 P0 条目为 `ACCEPTED` 或有明确阻断结论；
-5. `git diff --check`、仓库基线、JSON 样例解析和 RRF golden 复算通过；
-6. 文档明确记录本轮未启动虚拟机，未新增 Runtime 证据。
+1. 一名独立、非作者 Reviewer 给出 `APPROVED`；D 可实现性与 E 安全/评测是
+   专业关注点，不是两份累计审批要求；
+2. ADR-001 状态同步更新为“已采纳”；
+3. 审查矩阵中所有 P0 条目为 `ACCEPTED` 或有明确阻断结论；
+4. `git diff --check`、仓库基线、JSON 样例解析和 RRF golden 复算通过；
+5. 文档明确记录本轮未启动虚拟机，未新增 Runtime 证据。
 
 ## 17. 证据与引用
 
