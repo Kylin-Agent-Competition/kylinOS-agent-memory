@@ -185,7 +185,7 @@ def test_restart_after_close_recovers():
 
 def test_config_conflict_raises():
     """首实例锁定路径后，不同路径明确报 ERR_CONFIG_CONFLICT（P1-2）。"""
-    from providers import ProviderError, ProviderErrorCode
+    from providers import EmbeddingProvider, ProviderError, ProviderErrorCode
     _new_provider()  # 首实例（默认路径）锁定
     with pytest.raises(ProviderError) as ei:
         EmbeddingProvider(so_path="/tmp/different.so")
@@ -194,6 +194,7 @@ def test_config_conflict_raises():
 
 def test_same_path_ok():
     """相同路径可创建多个实例（共享单例）。"""
+    from providers import EmbeddingProvider
     p1 = _new_provider()
     p2 = EmbeddingProvider(so_path=None)  # None == 默认路径，不冲突
     p1.start()
