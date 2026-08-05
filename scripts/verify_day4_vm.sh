@@ -142,8 +142,15 @@ else
   pytest_ok=0
 fi
 grep -E "PASSED|FAILED|SKIPPED|passed|failed|skipped" /tmp/day4_pytest_b.log | sed 's/^/    /'
+# P2: 解释器退出析构路径（子进程 start→embed→close→退出，无 Abort/挂起/core dump）
+if python -m pytest memory-service/tests/test_interpreter_exit.py -v >/tmp/day4_pytest_c.log 2>&1; then
+  :
+else
+  pytest_ok=0
+fi
+grep -E "PASSED|FAILED|SKIPPED|passed|failed|skipped" /tmp/day4_pytest_c.log | sed 's/^/    /'
 # P1-1: 关键测试出现 skip 必须失败
-for logf in /tmp/day4_pytest_a.log /tmp/day4_pytest_b.log; do
+for logf in /tmp/day4_pytest_a.log /tmp/day4_pytest_b.log /tmp/day4_pytest_c.log; do
   if grep -qE "skipped|[0-9]+ skipped" "$logf"; then
     fail "关键测试被 Skip（$logf），L2 环境不允许跳过"
     pytest_ok=0
