@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-08-05T19:07:26",
+  "hostname": "ZhouYifan-pc",
+  "user": "kylin-agent",
+  "pr_head": "dbac3b69e9ed79b5a837a58a9291bb7e30667f39",
+  "rollback_anchors": {
+    "vm_snapshot": "MANUAL_ENTRY_REQUIRED",
+    "original_packages": {
+      "kylin-ai-runtime": "1.2.0.4-0k0.1",
+      "libkylin-coreai-embedding": "1.2.0.0-0k0.3",
+      "kylin-aiassistant": "NOT_INSTALLED_PER_DPKG"
+    },
+    "original_paths": {
+      "/home/kylin-agent/kylin-memory-echo": "NOT_FOUND_BEFORE_DAY2",
+      "/run/kylin-memory-echo": "NOT_FOUND_BEFORE_DAY2",
+      "/etc/systemd/system/kylin-memory-echo.service": "NOT_FOUND_BEFORE_DAY2",
+      "/tmp/kylin-memory-echo": "NOT_FOUND_BEFORE_DAY2"
+    },
+    "original_services": {
+      "kylin-memory-echo": "NOT_INSTALLED_BEFORE_DAY2"
+    },
+    "kysec_status": "UNAVAILABLE_ON_VM"
+  },
+  "declaration": "Day1-3 回退锚点: 记录 Day2 UDS Echo 修改前的原始状态。rollback 对照此基线验证恢复结果。若只能做资源清理，必须声明: TEST RESOURCE CLEANUP ONLY / ORIGINAL RESTORE UNVERIFIED"
+}
