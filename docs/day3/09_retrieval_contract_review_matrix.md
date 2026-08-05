@@ -6,7 +6,7 @@
 - 关联 ADR：`ADR-001 / rrf-v1`
 - 人工审批门槛：一名独立、非作者 Reviewer 的 `APPROVED`
 - 专业关注点：D 关注 Provider/SQLite/Outbox/IPC 可实现性；E 关注用户隔离、
-  遗忘、安全与评测；两者不是累计审批数量要求
+  遗忘、安全与评测；项目任务卡指定的关注项须在 Review 记录中明确覆盖
 - Runtime：本轮未启动虚拟机；所有 L2 条目为 `DEFERRED_VM`
 
 ## 1. 使用规则
@@ -27,8 +27,9 @@
 Reviewer 结论只能填写：`ACCEPTED`、`REWORK`、`BLOCKED` 或
 `ACCEPTED_WITH_TD(<TD编号>)`。作者不得替 Reviewer 填写通过。
 
-一份 GitHub `APPROVED` 只满足人工 Review 组件；Gate 0 仍要求 P0 全部关闭、
-适用的静态/契约验证通过、证据与状态表述一致，且阻断项均有明确处置。
+一份 GitHub `APPROVED` 只满足人工 Review 的数量组件，不自动等价为 Day3-B
+Gate PASS；Gate 0 仍要求 P0 全部关闭、适用的静态/契约验证通过、证据与状态
+表述一致、项目任务卡指定的 D/E 专业关注项已记录覆盖，且阻断项均有明确处置。
 
 ## 2. Gate 0 P0 审查矩阵
 
@@ -68,11 +69,13 @@ Reviewer 结论只能填写：`ACCEPTED`、`REWORK`、`BLOCKED` 或
 | B-D3-029 | IPC | 服务内部诊断与 `MemoryContext` 字段分层 | 只暴露安全摘要/必要解释 | raw score/用户/内部错误无审查暴露 | 08 §9.2 | `DEFERRED_CROSS_TRACK` | `PENDING_REVIEW` |
 | B-D3-030 | 证据 | 设计、E3、E4 与未测试状态分开 | 引用历史 E4 输入 | 文档静态检查冒充 D3 Runtime | 08 §2/§17 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-031 | 命中去重顺序 | 精确版本去重后回源过滤，再按逻辑记忆聚合 | 旧 v1 rank 1 被移除、当前 v2 rank 2 保留 | 先按 memory_id 选 v1 导致 v2 被隐藏 | ADR-001；08 §8 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
-| B-D3-032 | IndexState 作用域 | 请求/状态显式携带同一 `IndexScope`，代次、水位、计数均绑定该 scope | 用户级与分片级状态独立 | 用户/分片状态被当作全局或跨 scope 合并 | 08 §5.2/§6.7/§10 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
-| B-D3-033 | 幂等域 | 复合域含 principal、操作、Provider、目标代次和 key | 跨用户/操作/代次复用裸 key 独立 | 裸 key 全局唯一导致误冲突 | 08 §5.6.2 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
-| B-D3-034 | 水位域 | 水位仅在完全相同 domain/kind 内按规定类型比较 | 同域整数单调推进 | 跨流、分区、scope、源代次或类型比较 | 08 §5.6.3 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
+| B-D3-032 | IndexState 作用域 | 请求/状态携带稳定 `scope_id`；代次、水位、计数均绑定该 scope | 用户级与分片级状态独立 | 用户/分片状态被当作全局或跨 scope 合并 | 08 §5.2/§6.7/§10 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
+| B-D3-033 | 幂等域 | 复合域含 principal、操作、Provider、目标代次和稳定 scope 身份 | 跨用户/操作/代次复用裸 key 独立 | 裸 key 全局唯一或 HMAC 轮换导致误冲突 | 08 §5.6.2 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
+| B-D3-034 | 水位域 | 水位仅在完全相同 `scope_id` domain/kind 内按规定类型比较 | 同域整数单调推进 | 跨流、分区、scope、源代次或类型比较 | 08 §5.6.3 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
 | B-D3-035 | 运行状态双轴 | 历史 `evidence_level` 与当前 `availability` 独立 | host-verified 但当前 unavailable | 探活成功自动升级证据或故障抹除证据 | 08 §6.2/§10 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
 | B-D3-036 | 删除确认 | preview/selection/confirmation 绑定；仅单项已提交遗忘清理可版本化豁免 | 单项显式确认或合规清理豁免 | batch/full reset 豁免，或确认未绑定预览 | 08 §6.5 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
+| B-D3-037 | Scope 授权 | Service 在调用前认证并授权 scope，Provider 只消费绑定的内部上下文 | 授权 user/global/shard 请求进入 Provider | 缺 actor/authorization、越权或 scope_id 不匹配 | 08 §5.2/§6.6/§6.7 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
+| B-D3-038 | Scope 密钥轮换 | 稳定 `scope_id` 用于状态、水位和幂等；HMAC 仅用于披露 | k1→k2 后同一 scope 的水位和幂等记录连续 | HMAC 改变导致同一 scope 被当成新身份 | 08 §5.2/§5.6 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
 
 ## 3. 跨轨待决矩阵
 
@@ -158,6 +161,8 @@ merge、rebase、Review 或改写其他作者分支。
 | B-D3-T040 | 水位比较域 | 同域整数/定宽串确定性推进 | 跨 scope/stream/partition/source-generation/kind 比较或数字串猜测失败 | L0/L1_FAKE | `PLANNED_D4` |
 | B-D3-T041 | 证据/可用性双轴 | host_verified+unavailable 与 untested+available 均可表达 | 任一轴自动改写另一轴失败 | L0 | `PLANNED_D4` |
 | B-D3-T042 | 删除确认/豁免 | 单项显式确认与合规 committed-forget 豁免通过 | batch/full reset 豁免、过期/错 preview 确认拒绝 | L0/L1_FAKE | `PLANNED_D4` |
+| B-D3-T043 | Scope 授权边界 | Service 传入绑定 actor_ref/authorization_ref/scope_id 的内部上下文 | 缺失、越权或 scope_id 不匹配时 Provider 不执行 | L0/L1_FAKE | `PLANNED_D4` |
+| B-D3-T044 | Scope 密钥轮换 | k1→k2 后稳定 scope_id 的状态、水位与幂等记录仍连续 | HMAC 改变导致重试、比较或 generation 隔离断裂 | L0/L1_FAKE | `PLANNED_D4` |
 
 ## 5. 目标麒麟 VM 验证队列（本轮跳过）
 
@@ -181,11 +186,11 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
 | ADR golden score 复算 | 4 个值及排序一致 | `PASS_LOCAL` |
 | 契约 JSON 样例解析 | 5/5 可解析 | `PASS_LOCAL` |
 | 文档引用存在 | 全部目标文件存在，索引相对链接可解析 | `PASS_LOCAL` |
-| GitHub Review 获取 | PR #20 当前 Review 与被审提交可追踪 | `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；head `8a7914bc`；已形成 B-D3-031～036 返工 Gate |
+| GitHub Review 获取 | PR #20 当前 Review 与被审提交可追踪 | 第二轮 `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；head `639dbcd`；已形成 B-D3-031～038 返工 Gate |
 | GitHub 跨分支兼容核对 | 历史 SHA 仅作为有日期的只读快照，不作为实现基线 | `AUDIT_SNAPSHOT_2026-08-04`；后续判断须重新同步默认分支 |
 | `git diff --check` | 无 whitespace error | `PASS_LOCAL` |
 | 仓库基线脚本 | 7/7，0 错误 | `PASS_LOCAL`；WSL 仅有既存编码、localhost NAT 与 Windows OpenCV PATH 转换警告 |
-| 工作区范围 | 只修改 B 轨契约、ADR、矩阵、索引和对应技术债行 | `PASS_LOCAL`；6 个文档，未暂存、未提交 |
+| 工作区范围 | 只修改 B 轨契约、ADR、矩阵、索引和对应技术债行 | `639dbcd` 已推送；第二轮返工改动待验证、未暂存、未提交 |
 
 ## 7. Reviewer 记录
 
@@ -197,6 +202,16 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
 - GitHub 结论：`CHANGES_REQUESTED`
 - 矩阵结论：`REWORK`
 - 返工范围：P0-01 至 P0-03、P1-01 至 P1-04 及三项冻结建议
+
+### 第二轮 Review
+
+- Reviewer：`lovezy0730-create`
+- 审查提交：`639dbcd`
+- 提交时间：`2026-08-04T17:37:24Z`
+- GitHub 结论：`CHANGES_REQUESTED`
+- 矩阵结论：`REWORK`
+- 返工范围：P0-01～02、P1-01～02、P2 清理项；D1/D2 历史审查文案仅核对，
+  不在 B 轨 PR 中改写
 
 ### 复审模板
 
@@ -210,7 +225,7 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
 - 允许进入 D4：是 / 否
 - 说明：
 
-在一名独立、非作者 Reviewer 实际给出 `APPROVED`，且 P0、验证和证据 Gate
-全部关闭前，作者不得把 ADR 状态改为“已采纳”，不得把契约状态改为“已接受”，
-不得声明 Gate 0 PASS。D/E 专业关注点可以由同一合格 Reviewer 一并核对，也可
-邀请额外意见，但不要求两份累计批准。
+在一名独立、非作者 Reviewer 实际给出 `APPROVED`，且 P0、验证、证据和项目
+任务卡指定的 D/E 专业关注项全部记录覆盖前，作者不得把 ADR 状态改为“已采纳”，
+不得把契约状态改为“已接受”，不得声明 Gate 0 PASS。本矩阵不修改项目任务卡
+或共享治理文档，也不将单一 approval 自动表述为 Gate 通过。

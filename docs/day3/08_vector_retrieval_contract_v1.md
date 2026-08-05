@@ -2,7 +2,8 @@
 
 > **文档状态：D3-B 冻结候选** — PR #20 Review 返工中。取得一名独立、
 > 非作者 Reviewer 的 `APPROVED` 且全部适用 Gate 关闭前，不得标记为最终
-> `ACCEPTED`；D/E 专业分工仅表示审查关注点，不构成累计审批数量要求。
+> `ACCEPTED`。该 approval 只满足 GitHub PR 的人工审批数量门槛；项目任务卡
+> 指定的 D/E 专业关注项仍须在 Review 记录中明确覆盖，本契约不修改该治理分工。
 >
 > 本文冻结 Memory Service 内部的 B 轨技术语义，不冻结 D 轨 IPC 数字错误码、
 > SQLite 表结构、Vector Collection 物理布局或 D4 生产实现。
@@ -12,6 +13,8 @@
 - 责任轨道：B（Vector、FTS5、RRF 与检索评测）
 - 人工审批门槛：一名独立、非作者 Reviewer 的 `APPROVED`
 - 专业关注点：D 关注可实现性；E 关注用户隔离、遗忘、安全与评测
+- 治理边界：单一 `APPROVED` 不自动等价为 Day3-B Gate PASS；P0、适用验证、
+  证据和任务卡指定的专业关注项均须关闭或有明确阻断结论
 - 关联决策：`docs/adr/001-application-layer-rrf.md`
 
 ## 1. 目标与边界
@@ -107,6 +110,7 @@ ID 的 UUID 版本、数据库列型和 IPC 线格式由 D 冻结；B 只要求�
 
 ```text
 IndexScope {
+  scope_id: string
   kind: "global" | "user" | "shard"
   user_id: string | null
   shard_id: string | null
@@ -114,14 +118,33 @@ IndexScope {
 }
 ```
 
-- `global`：`user_id=null`、`shard_id=null`；只允许具有全局权限的调用方使用；
+- `scope_id` 是由 Service 持久化的稳定内部身份；用于 generation、状态、
+  watermark domain 和 Rebuild 幂等域。它不从 HMAC 派生，密钥轮换不得改变它；
+- `global`：`user_id=null`、`shard_id=null`；只允许经授权的内部调用使用；
 - `user`：`user_id` 必填、`shard_id=null`；代次、水位和全部计数只描述该用户；
 - `shard`：`shard_id` 必填、`user_id=null`；代次、水位和全部计数只描述该
   确定性分片；
-- `scope_fingerprint` 由规范化后的 `kind`、`user_id`、`shard_id` 计算，Provider
-  必须复算并拒绝不匹配值；作用域之间的代次、水位和计数禁止比较、继承或合并；
+- `scope_fingerprint` 是由规范化后的 `kind`、`user_id`、`shard_id` 计算的可
+  轮换 HMAC 披露值，只用于日志、诊断和最小披露；不得作为持久化主键、比较键
+  或授权依据。密钥轮换时 Service 重算该值，但保持 `scope_id` 不变；
+- 作用域之间的代次、水位和计数以 `scope_id` 隔离，禁止比较、继承或合并；
 - 从较窄作用域扩大为较宽作用域必须创建新请求并重新授权，不得在 Provider
   内静默提升。
+
+```text
+ScopeAuthorization {
+  actor_ref: string
+  authorization_ref: string
+  scope_id: string
+}
+```
+
+Service 在调用 Provider 前负责身份认证、用户关系/委托与 global/shard scope
+授权；D/E 冻结具体认证与 RBAC Schema。`actor_ref` 和 `authorization_ref` 必须
+进入审计链，且 `scope_id` 必须等于请求 `IndexScope.scope_id`。Provider 只接受
+来自 Service 的内部调用，校验授权上下文与 scope 的绑定，不得根据 scope 自行
+推断或提升权限；缺少、越权或绑定不一致时 Service 不得调用 Provider，并返回
+`user_scope_violation` 或 `invalid_argument`。
 
 ### 5.3 `ProviderResult<T>`
 
@@ -211,8 +234,8 @@ Provider 不得把不同 `key_id` 的值推断为相等。
 (principal_scope, operation, provider, target_generation, idempotency_key)
 ```
 
-- `principal_scope` 对 Upsert/Delete 为请求 `user_id`，对 Rebuild 为
-  `scope.scope_fingerprint`；
+- `principal_scope` 对 Upsert/Delete 为请求 `user_id`，对 Rebuild 为稳定的
+  `scope.scope_id`；
 - `operation` 为 `upsert`、`delete` 或 `rebuild`，`target_generation` 对前两者
   为 `index_generation`、对 Rebuild 为 `target_generation`；
 - 所有写请求必须携带按 `canonical-json/v1` 计算的 `payload_hash`，且 Provider
@@ -227,7 +250,7 @@ Provider 不得把不同 `key_id` 的值推断为相等。
 ```text
 Watermark {
   domain: {
-    scope_fingerprint: Digest
+    scope_id: string
     stream: string
     partition: string
     source_generation: string
@@ -356,7 +379,8 @@ Search 不变量：
 
 - Provider 层先执行 `user_id` 硬过滤；Service 回源时再次校验用户归属；
 - SDK 返回顺序转为 1 起始 rank；
-- 同一通道同一 `memory_id` 重复项只保留最佳 rank；
+- 同一通道只对精确 `(memory_id, version_id)` 重复项保留最佳 rank；必须先按
+  §8 完成 SQLite 当前版本与合法性过滤，才可按 `memory_id` 聚合最佳合法 rank；
 - 非正 rank、非有限 raw score、缺失 ID/用户/版本的命中被丢弃并计数；
 - Search 不返回正文，正文由 Service 回源 SQLite；
 - `top_n` 是上限，不保证一定返回足量结果；
@@ -458,6 +482,7 @@ SQLite/ForgetPlan 是真源，Vector 删除是可重放索引副作用；Vector 
 | `schema_version` | string | 是 | 绑定 D4 Collection/字段 Schema |
 | `reason` | enum | 是 | `bootstrap`、`schema_change`、`repair`、`full_reset` |
 | `scope` | `IndexScope` | 是 | 全局或明确用户/分片；禁止隐式扩大范围 |
+| `scope_authorization` | `ScopeAuthorization` | 是 | Service 已完成授权；必须绑定 `scope.scope_id` |
 
 重建阶段：
 
@@ -495,6 +520,7 @@ IndexStateRequest {
   request_id: string
   trace_id: string
   scope: IndexScope
+  scope_authorization: ScopeAuthorization
   required_watermark: Watermark | null
   deadline_at: UTC datetime
 }
@@ -676,7 +702,7 @@ B 层冻结服务内部对象，IPC 最终映射由 C/D 决定：
 `serving_generation`、`building_generation`、`source_snapshot_id`、两类水位、
 `record_count`、`pending_count`、`stale_count`、状态和时间戳均以 `scope` 为
 统计边界。用户级状态不得汇入其他用户记录，分片级状态不得汇入其他分片；
-同名 generation 在不同 `scope_fingerprint` 下仍是不同代次。
+同名 generation 在不同 `scope_id` 下仍是不同代次。
 
 `evidence_level` 与 `availability` 必须独立更新：历史宿主验证不会因当前服务
 中断而消失，当前探活成功也不能提升历史证据等级。`availability` 的采集时点为
@@ -811,10 +837,11 @@ B 层冻结服务内部对象，IPC 最终映射由 C/D 决定：
 {
   "provider": "kylin_vector_0k0.7",
   "scope": {
+    "scope_id": "scope-user-001",
     "kind": "user",
     "user_id": "user-001",
     "shard_id": null,
-    "scope_fingerprint": "hmac-sha256:k1:8af799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a90"
+    "scope_fingerprint": "hmac-sha256:k1:9bf799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a93"
   },
   "status": "building",
   "is_queryable": true,
@@ -824,7 +851,7 @@ B 层冻结服务内部对象，IPC 最终映射由 C/D 决定：
   "source_snapshot_id": "sqlite-snapshot-20260803-001",
   "applied_watermark": {
     "domain": {
-      "scope_fingerprint": "hmac-sha256:k1:8af799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a90",
+      "scope_id": "scope-user-001",
       "stream": "sqlite-outbox",
       "partition": "user-001",
       "source_generation": "sqlite-epoch-202608"
@@ -834,7 +861,7 @@ B 层冻结服务内部对象，IPC 最终映射由 C/D 决定：
   },
   "required_watermark": {
     "domain": {
-      "scope_fingerprint": "hmac-sha256:k1:8af799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a90",
+      "scope_id": "scope-user-001",
       "stream": "sqlite-outbox",
       "partition": "user-001",
       "source_generation": "sqlite-epoch-202608"
@@ -867,7 +894,7 @@ B 层冻结服务内部对象，IPC 最终映射由 C/D 决定：
   "index_generation": "vector-gen-0007",
   "source_watermark": {
     "domain": {
-      "scope_fingerprint": "hmac-sha256:k1:6cf799eed65e29c7473a302c979252bb3b53e6f29f47b038510039e2c4c39a92",
+      "scope_id": "scope-user-alpha",
       "stream": "sqlite-outbox",
       "partition": "user-alpha",
       "source_generation": "sqlite-epoch-202608"
@@ -979,12 +1006,14 @@ PR #19 均在 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` 产生内容冲�
 
 本契约从“冻结候选”变为“已接受”需要：
 
-1. 一名独立、非作者 Reviewer 给出 `APPROVED`；D 可实现性与 E 安全/评测是
-   专业关注点，不是两份累计审批要求；
-2. ADR-001 状态同步更新为“已采纳”；
-3. 审查矩阵中所有 P0 条目为 `ACCEPTED` 或有明确阻断结论；
-4. `git diff --check`、仓库基线、JSON 样例解析和 RRF golden 复算通过；
-5. 文档明确记录本轮未启动虚拟机，未新增 Runtime 证据。
+1. 一名独立、非作者 Reviewer 给出 `APPROVED`，以满足 GitHub PR 的人工审批
+   数量门槛；该 approval 不自动等价为 Day3-B Gate PASS；
+2. Review 记录明确覆盖项目任务卡指定的 D 可实现性与 E 用户隔离、遗忘、安全、
+   评测关注项；本契约不修改该角色分工；
+3. ADR-001 状态同步更新为“已采纳”；
+4. 审查矩阵中所有 P0 条目为 `ACCEPTED` 或有明确阻断结论；
+5. `git diff --check`、仓库基线、JSON 样例解析和 RRF golden 复算通过；
+6. 文档明确记录本轮未启动虚拟机，未新增 Runtime 证据。
 
 ## 17. 证据与引用
 
