@@ -1,8 +1,25 @@
 # 06 轨道 A — Provider v1 输入输出契约
 
-> **文档状态：骨架已建立** — 接口定义已冻结，Provider 实现尚未编码，未经过麒麟 VM 端到端验证。
+> **文档状态：接口已冻结（含 Gate 变更记录）** — 见下方"生命周期契约 Gate 变更记录"。
 >
 > 有宿主证据的结论均标注出处（证据文件:行号），无证据的接口标记为 UNTESTED。
+
+## 生命周期契约 Gate 变更记录（P1-5）
+
+Day4 实现引入了对 Day3 冻结契约的生命周期语义变更，按接口冻结 Gate 要求记录如下：
+
+| 项 | 内容 |
+|----|------|
+| **变更原因** | 麒麟实测 SDK 不允许同一进程 session 销毁后重建（destroy→create 会阻塞挂起）；SDK 动态库禁止 dlclose 后重载（Abort）。为满足 P0-1 生命周期安全，Provider 改为进程级单例。 |
+| **影响范围** | EmbeddingProvider 生命周期语义；Bridge destroy_session 终态；配置锁定。接口签名（embed/embed_batch/get_dimension/model_info）不变。 |
+| **close/restart 定义（模型 B）** | close() 释放实例引用并置 CLOSED；close 后可重新 start()（重新取得引用）。close 后未 restart 调用 embed() 抛 ERR_SESSION_DESTROYED。未启动 close 为 no-op。 |
+| **配置冲突规则** | 进程内首个实例的 so_path 被锁定；后续不同路径实例抛 ERR_CONFIG_CONFLICT。相同/None 路径可共享。 |
+| **初始化失败恢复规则** | 首次初始化失败（如 so 不存在）且无引用时重置单例，允许后续实例用正确路径重建。初始化 embed 失败保持 INITIALIZING，下次 start 重试。 |
+| **并发初始化策略** | 当前为骨架无类级锁（P2 技术债）；Memory Service 启动链路为单线程，暂不阻塞。 |
+| **进程退出清理责任** | 共享 Bridge 由 Python 解释器退出时析构（destroy_session + dlclose 一次）。 |
+| **生效 Commit** | 见 PR 证据（`evidence/l2-kylin-vm/day4_bridge_smoke_run.log` 被测 commit）。 |
+| **测试证据** | 生命周期 4 路径麒麟 VM 实测（P0-1）；引用计数/配置冲突/失败恢复 pytest（P1-1/P1-2/P1-4）。 |
+| **审批** | 待 Reviewer 确认（本记录随 PR #17 提交）。 |
 
 ## EmbeddingProvider
 
@@ -40,9 +57,11 @@ class EmbeddingProvider:
     Embedding 向量化服务（进程级单例）。
     通过进程级单例 Bridge 共享 SDK 会话：首次 start() 加载动态库并初始化模型，
     后续调用复用已有 session（不销毁重建——SDK 不允许同进程 session 销毁后重建）。
-    生命周期约束（Day4 实现，见 evidence/l2-kylin-vm/day4_bridge_smoke_run.log）：
-    - so_path 仅在进程内第一个实例创建时生效（全局路径锁定）；
-    - close() 后当前实例应视为已废弃，不建议继续调用 embed()。
+    生命周期语义（Day4 实现 + Gate 变更记录，见文档头部）：
+    - so_path 仅进程内首个实例生效（全局路径锁定），不同路径抛 ERR_CONFIG_CONFLICT；
+    - close() 释放引用并置 CLOSED；close 后可重新 start()（模型 B）；
+    - close() 后未 restart 调用 embed() 抛 ERR_SESSION_DESTROYED；
+    - 初始化失败可重试（INITIALIZING 状态），首次失败无引用时允许恢复。
     """
 
     def embed(self, text: str, *, timeout_ms: int = 5000) -> EmbeddingResult:
