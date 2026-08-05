@@ -1,0 +1,159 @@
+PATH: /home/kylin-agent/kylin-memory-echo
+  IS_DIR
+  总计 68
+  drwxrwxr-x  5 kylin-agent kylin-agent  4096  8月 5日 08:31 .
+  drwx------ 18 kylin-agent kylin-agent  4096  8月 5日 08:31 ..
+  drwxrwxr-x  2 kylin-agent kylin-agent  4096  8月 5日 08:32 bin
+  -rw-rw-r--  1 kylin-agent kylin-agent  5895  8月 5日 08:32 echo_client.cpp
+  -rw-rw-r--  1 kylin-agent kylin-agent 10472  8月 5日 08:32 kaiming_memory_client.cpp
+  drwxrwxr-x  2 kylin-agent kylin-agent  4096  8月 5日 08:31 logs
+  drwxrwxr-x  2 kylin-agent kylin-agent  4096  8月 5日 08:31 share
+
+PATH: /run/kylin-memory-echo
+  NOT_FOUND
+
+PATH: /etc/systemd/system/kylin-memory-echo.service
+  NOT_FOUND
+
+PATH: /tmp/kylin-memory-echo
+  IS_DIR
+  总计 28
+  drwx------  2 kylin-agent kylin-agent  4096  8月 5日 08:32 .
+  drwxrwxrwt 31 root        root        16384  8月 5日 19:03 ..
+
+PATH: /usr/bin/kylin-ai-runtime
+  b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225  /usr/bin/kylin-ai-runtime
+
+PATH: /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1
+  258c0d57f50b95bb05722d5e3f952a62fd9c998c845e4a9042b2d634a0d6a85c  /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1
+
+SERVICE: kylin-memory-echo
+  Unit kylin-memory-echo.service could not be found.
+  SERVICE_NOT_FOUND
+
+PROCESSES: kylin-agent
+  40381 /usr/lib/systemd/systemd --user
+  40382 (sd-pam)
+  40394 /usr/bin/kyai-data-management-service -s DataManagement
+  40395 /usr/bin/kylin-ai-document-qa-service -s KnowledgeBase
+  40406 /bin/bash /usr/bin/kylin-ai-vector-engine-default
+  40410 /usr/bin/pulseaudio --daemonize=no --log-target=journal
+  40418 /opt/kaiming-tools/bin/km-ses-dbusproxy
+  40469 /usr/bin/kylin-ai-vector-engine /home/kylin-agent/.local/share/kylin-ai-vector-engine/default.db unix:/tmp/kylin-ai-vector-engine-1001.sock ERROR
+  40484 /usr/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+  40542 /usr/bin/python3 /usr/share/kylin-software-center-plugin-preprocessing/startDbus.py
+  40545 /usr/libexec/gvfsd
+  40574 /usr/libexec/gvfsd-fuse /run/user/1001/gvfs -f
+  40665 kylin-wlcom-wrapper
+  40762 /usr/bin/ukui-audio-service
+  40820 kylin-wlcom -s ukui-session
+  40872 /usr/bin/kylin-status-manager
+  40933 ukui-session
+  40948 /usr/libexec/dconf-service
+  40950 /usr/bin/ukui-session-service-manager
+  40956 /usr/bin/ukuismserver
+  40965 /usr/libexec/xdg-desktop-portal
+  40972 /usr/libexec/xdg-document-portal
+  40975 /usr/share/kare/plugins/dbus-proxy/dbus-daemon-proxy --verbose 5 --namespace v10sp1 --session --family unix --socket /run/user/1001/kare-dbus-proxy
+  40977 /usr/bin/python3 /usr/share/kysdk/kysdk-base/conf2-session.py
+  40978 /usr/bin/ukui-screensaver-backend
+  40980 /usr/libexec/xdg-permission-store
+  40981 /usr/bin/ukui-settings-daemon
+  40982 /usr/bin/ukui-sni-watcher
+  41002 /usr/bin/xembed-sni-proxy
+  41003 /usr/bin/ukui-panel
+  41005 /usr/bin/peony-qt-desktop -w -d
+  41027 Xwayland :2 -rootless -core -terminate 10 -listenfd 24 -listenfd 25 -displayfd 66 -wm 63
+  41054 /usr/libexec/xdg-desktop-portal-ukui
+  41118 /usr/libexec/gvfsd-trash --spawner :1.4 /org/gtk/gvfs/exec_spaw/0
+  41150 /usr/bin/kylin-software-center-plugin-synchrodata
+  41258 /usr/bin/ukui-search-app-data-service
+  41340 /usr/libexec/gvfsd-computer --spawner :1.4 /org/gtk/gvfs/exec_spaw/1
+  41348 /usr/bin/ukui-search-service-dir-manager
+  41349 /usr/libexec/gvfs-udisks2-volume-monitor
+  41375 /usr/libexec/gvfs-afc-volume-monitor
+  41390 /usr/libexec/gvfs-mtp-volume-monitor
+  41398 /usr/libexec/gvfs-goa-volume-monitor
+  41405 /usr/libexec/gvfs-gphoto2-volume-monitor
+  41420 /opt/apps/com.cvte.exceedshare/files/bin/UWSTService
+  41701 /usr/libexec/gvfsd-metadata
+  41732 /usr/bin/kylin-process-manager
+  41758 /usr/bin/peony-intelligent-data-management-service
+  42526 /usr/bin/kylin-calendar -h
+  42529 /usr/bin/conf2-sync-session
+  42535 /usr/bin/fcitx5
+  42575 /usr/sbin/ksc-virus-dialog
+  42674 kylin-ai-runtime
+  42735 /usr/bin/kylin-device-daemon
+  42745 /usr/bin/kylin-nm
+  42754 /usr/bin/user-guide-daemon
+  42759 /usr/bin/kylin-virtual-keyboard
+  42765 /usr/bin/kylin-vpn
+  42784 /usr/bin/kySdkDbus-session
+  42785 /usr/bin/sdk-date
+  42797 /usr/bin/mm-watermark
+  42808 /usr/share/kare/plugins/kare-polkit/polkit-kare-authentication-agent-1
+  42811 /usr/lib/x86_64-linux-gnu/ukui-polkit/polkit-ukui-authentication-agent-1
+  42815 /usr/bin/python3 /usr/share/system-config-printer/applet.py
+  42841 /bin/bash /opt/apps/kaiming/bin/cn.kylin.kylin-aiassistant cn.kylin.kylin-aiassistant 0 /usr/bin/kylin-aiassistant --silence
+  42847 /bin/bash /opt/apps/kaiming/bin/cn.kylin.kylin-note cn.kylin.kylin-note 0 /opt/apps/cn.kylin.kylin-note/files/bin/kylin-note --silent
+  42874 /usr/bin/kylin-aiassistant --silence
+  42875 /opt/apps/cn.kylin.kylin-note/files/bin/kylin-note --silent
+  42896 /usr/bin/secRiskBox --session
+  42926 /bin/bash /opt/apps/kaiming/bin/top.openkylin.kylin-weather top.openkylin.kylin-weather 0 /opt/apps/top.openkylin.kylin-weather/files/bin/kylin-weather noshowmainwindow
+  42931 /usr/lib/kylin-os-manager/bin/kylin-os-manager-session-service
+  42958 /usr/bin/sound-theme-player
+  42985 /usr/bin/ukui-bluetooth
+  42988 /usr/bin/ukui-clipboard-tray
+  42991 /usr/bin/ukui-clipboard
+  42992 /opt/apps/top.openkylin.kylin-weather/files/bin/kylin-weather noshowmainwindow
+  43000 /usr/bin/ukui-framework-dbus
+  43001 /usr/bin/ukui-menu
+  43006 /usr/bin/ukui-notification-server
+  43011 /usr/bin/ukui-power-manager-tray
+  43012 /usr/bin/ukui-powermanagement
+  43022 /usr/bin/ukui-search-service
+  43026 /usr/bin/ukui-search
+  43031 /usr/bin/ukui-sidebar
+  43034 /usr/bin/ukui-upower
+  43099 /usr/bin/ukui-volume-control-applet-qt
+  43120 /bin/bash /usr/bin/ukui-window-switch
+  43127 /usr/bin/OfflineUpgradeNotification
+  43128 /usr/bin/user_cmd
+  43173 /usr/bin/kylin-activation-prompt
+  43213 /usr/bin/NotifySend --DesktopNotify
+  43230 /usr/bin/NotifySend --WaitSignalNotify
+  43236 /usr/bin/mate-terminal --working-directory=/home/kylin-agent/桌面
+  43328 /usr/bin/ukui-window-switch-wlcom
+  43356 /opt/kingsoft/wps-office/office6/wpsd --quickstart=wps,wpp,et --component=wps,wpp,et --mode=window
+  43756 /usr/libexec/gvfsd-recent --spawner :1.4 /org/gtk/gvfs/exec_spaw/2
+  44649 bash
+  45648 /usr/bin/ukui-session-service -p /usr/libexec/ukui-services/session/libukccSession.so -n Settings -r false -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session -s org.ukui.ukcc.session
+  68439 /usr/bin/ukui-screensaver-dialog --session-idle
+  494791 sshd: kylin-agent@notty
+  494805 bash -c ps -u kylin-agent -o pid,cmd --no-headers 2>/dev/null
+  494806 ps -u kylin-agent -o pid,cmd --no-headers
+
+ACL: /tmp/kylin-memory-echo & /run/kylin-memory-echo
+  # file: tmp/kylin-memory-echo
+  # owner: kylin-agent
+  # group: kylin-agent
+  user::rwx
+  group::---
+  other::---
+  
+  NO_ACL_PATH
+
+SOCKETS: kylin-memory-echo
+  NO_KYLIN_MEMORY_SOCKET
+
+VM_SNAPSHOT: 需手动记录 VirtualBox 快照名称与创建时间
+
+PACKAGE: kylin-ai-runtime
+  hi  kylin-ai-runtime                                     1.2.0.4-0k0.1                           amd64        Kylin AI SDK Runtime
+
+PACKAGE: libkylin-coreai-embedding
+  hi  libkylin-coreai-embedding:amd64                      1.2.0.0-0k0.3                           amd64        Kylin AI Core Embedding SDK
+
+PACKAGE: kylin-aiassistant
+  NOT_INSTALLED

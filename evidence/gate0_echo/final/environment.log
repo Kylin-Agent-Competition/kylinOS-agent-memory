@@ -1,0 +1,222 @@
+============================================================
+ 麒麟 OS Agent 记忆系统 — Day 1 环境基线冻结
+============================================================
+采集时间: 2026-08-05T19:07:17
+执行用户: kylin-agent
+执行主机: ZhouYifan-pc
+PR21 HEAD: dbac3b69e9ed79b5a837a58a9291bb7e30667f39
+============================================================
+
+[1/15] 麒麟系统版本 (uname -a)
+Linux ZhouYifan-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+(exit_code=0)
+
+[2/15] 操作系统发行版
+NAME="Kylin"
+FULL_NAME="kylin"
+VERSION="银河麒麟桌面操作系统V11"
+VERSION_US="Kylin Linux Desktop V11"
+ID=kylin
+PRETTY_NAME="Kylin V11"
+VERSION_ID="v11"
+HOME_URL="http://www.kylinos.cn/"
+VERSION_CODENAME=kylin
+KYLIN_RELEASE_ID="2603"
+ID_LIKE=openKylin
+(exit_code=0)
+
+[3/15] 麒麟 VM 快照编号
+需手动填写: VirtualBox 快照名称与创建时间
+(exit_code=0)
+
+[4/15] Python 版本
+Python 3.12.3
+(exit_code=0)
+
+[5/15] g++ 版本
+g++ (openKylin 12.3.0-1ok3k0.1) 12.3.0
+(exit_code=0)
+
+[6/15] CMake 版本
+cmake version 3.28.3
+(exit_code=0)
+
+[7/15] systemd 版本
+systemd 255 (255.2-ok1.9k1.39)
++PAM +AUDIT +SELINUX +APPARMOR +IMA +SMACK +SECCOMP +GCRYPT -GNUTLS +OPENSSL +ACL +BLKID +CURL +ELFUTILS +FIDO2 +IDN2 -IDN +IPTC +KMOD +LIBCRYPTSETUP +LIBFDISK +PCRE2 -PWQUALITY +P11KIT +QRENCODE +TPM2 +BZIP2 +LZ4 +XZ +ZLIB +ZSTD -BPF_FRAMEWORK -XKBCOMMON +UTMP +SYSVINIT default-hierarchy=unified
+(exit_code=0)
+
+[8/15] Kaiming/麒灵宿主版本
+未安装
+(exit_code=0)
+
+[9/15] kylin-ai-runtime 版本
+hi  kylin-ai-runtime                                     1.2.0.4-0k0.1                           amd64        Kylin AI SDK Runtime
+(exit_code=0)
+
+[10/15] Embedding SDK 版本
+hi  libkylin-coreai-embedding:amd64                      1.2.0.0-0k0.3                           amd64        Kylin AI Core Embedding SDK
+(exit_code=0)
+
+[11/15] KYSEC 当前状态
+KYSEC 不可用
+(exit_code=0)
+
+[12/15] 测试用户 (id)
+uid=1001(kylin-agent) gid=1001(kylin-agent) 组=1001(kylin-agent),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),100(users),114(lpadmin),989(sambashare)
+(exit_code=0)
+
+[13/15] 测试目录 (pwd)
+/home/kylin-agent
+(exit_code=0)
+
+[14/15] 原始 Socket、unit 和进程状态
+---SOCKS---
+u_str LISTEN 0      50                                                                  /var/tmp/ukui-panel-config-kylin-agentwayland-0 131348             * 0    users:(("ukui-panel",pid=41003,fd=23))
+u_str LISTEN 0      10                                                         /tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 24026              * 0
+u_str LISTEN 0      10                                                                     /tmp/.kylin-ai-runtime-unix/1000/config.sock 20338              * 0
+u_str LISTEN 0      50                                                                                 /tmp/qtsingleapp-aiassi-3d05-3e9 150894             * 0    users:(("kylin-aiassista",pid=42874,fd=22))
+u_str LISTEN 0      10                                                                  /tmp/.kylin-ai-runtime-unix/1000/genai-nlp.sock 26657              * 0
+u_str LISTEN 0      10                                                        /tmp/.kylin-ai-runtime-unix/1000/core-imageembedding.sock 24845              * 0
+u_str LISTEN 0      10                                                                  /tmp/.kylin-ai-runtime-unix/1000/assistant.sock 23120              * 0
+u_str LISTEN 0      10                                                                /tmp/.kylin-ai-runtime-unix/1000/core-vision.sock 24846              * 0
+u_str LISTEN 0      50                                                                           /var/tmp/ukui-idm-kylin-agentwayland-0 129927             * 0    users:(("peony-intellige",pid=41758,fd=18))
+u_str LISTEN 0      10                                                                /tmp/.kylin-ai-runtime-unix/1000/core-speech.sock 23121              * 0
+u_str LISTEN 0      10                                                               /tmp/.kylin-ai-runtime-unix/1000/genai-vision.sock 23122              * 0
+u_str LISTEN 0      10                                                                      /var/run/lightdm/kylin-agent/greeter-socket 122783             * 0
+u_str LISTEN 0      50                                                                             /var/tmp/qtsingleapp-kylinv-f0a2-3e9 133552             * 0    users:(("kylin-virtual-k",pid=42759,fd=21))
+u_dgr UNCONN 0      0                                                                                                                 * 131189             * 0    users:(("kylin-wlcom-wra",pid=40665,fd=7))
+u_str LISTEN 0      50                                                                             /var/tmp/qtsingleapp-kylinn-64f1-3e9 133079             * 0
+u_str LISTEN 0      10                                                                     /tmp/.kylin-ai-runtime-unix/1001/config.sock 138515             * 0    users:(("kylin-ai-runtim",pid=42674,fd=10))
+u_str LISTEN 0      10                                                                  /tmp/.kylin-ai-runtime-unix/1001/assistant.sock 138516             * 0    users:(("kylin-ai-runtim",pid=42674,fd=12))
+u_str LISTEN 0      10                                                                  /tmp/.kylin-ai-runtime-unix/1001/genai-nlp.sock 138517             * 0    users:(("kylin-ai-runtim",pid=42674,fd=15))
+u_str LISTEN 0      10                                                               /tmp/.kylin-ai-runtime-unix/1001/genai-vision.sock 138518             * 0    users:(("kylin-ai-runtim",pid=42674,fd=17))
+u_str LISTEN 0      10                                                                /tmp/.kylin-ai-runtime-unix/1001/core-speech.sock 138519             * 0    users:(("kylin-ai-runtim",pid=42674,fd=19))
+u_str LISTEN 0      10                                                                /tmp/.kylin-ai-runtime-unix/1001/core-vision.sock 138520             * 0    users:(("kylin-ai-runtim",pid=42674,fd=21))
+u_str LISTEN 0      10                                                         /tmp/.kylin-ai-runtime-unix/1001/core-textembedding.sock 138521             * 0    users:(("kylin-ai-runtim",pid=42674,fd=23))
+u_str LISTEN 0      50                                                                             /var/tmp/qtsingleapp-kylind-ba45-3e9 139961             * 0    users:(("kylin-device-da",pid=42735,fd=23))
+u_str LISTEN 0      10                                                        /tmp/.kylin-ai-runtime-unix/1001/core-imageembedding.sock 138522             * 0    users:(("kylin-ai-runtim",pid=42674,fd=25))
+u_str LISTEN 0      50                                                                             /var/tmp/qtsingleapp-kylind-85ec-3e8 20143              * 0
+u_str LISTEN 0      50                                                        /var/tmp/ukui-search-service-monitor-kylin-agentwayland-0 142375             * 0    users:(("ukui-search-ser",pid=43022,fd=25))
+u_str LISTEN 0      50                                                                                 /tmp/qtsingleapp-kylinw-18db-3e9 147926             * 0    users:(("kylin-weather",pid=42992,fd=24))
+u_str LISTEN 0      128                                                                                        /run/user/1001/wayland-0 125753             * 0    users:(("kylin-wlcom",pid=40820,fd=36),("kylin-wlcom",pid=40820,fd=34))
+u_str LISTEN 0      50                                                                             /var/tmp/qtsingleapp-kylinn-47e3-3e8 22992              * 0
+u_str LISTEN 0      50                                                                                 /tmp/qtsingleapp-KylinN-7497-3e9 149205             * 0    users:(("kylin-note",pid=42875,fd=22))
+u_str LISTEN 0      50                                                                             /var/tmp/qtsingleapp-kylinv-f0a2-3e8 21179              * 0
+u_str LISTEN 0      4096                                                                          /tmp/kylin-ai-vector-engine-1001.sock 129398             * 0    users:(("kylin-ai-vector",pid=40469,fd=9))
+u_str LISTEN 0      50                                                   /home/kylin-agent/.local/share/Kingsoft/daemon/wps-daemon-port 151177             * 0    users:(("wpsd",pid=43356,fd=6))
+u_str LISTEN 0      50                                                                                        /var/tmp/kylin-daq-daemon 1753               * 0
+u_str LISTEN 0      4096                                                                          /tmp/kylin-ai-vector-engine-1000.sock 14942              * 0
+u_str LISTEN 0      50                                                                                 /tmp/qtsingleapp-kylinw-18db-3e8 28322              * 0
+u_str LISTEN 0      50                                                                             /var/tmp/qtsingleapp-kylins-d447-3e8 15256              * 0
+u_str LISTEN 0      1                                                                                                 /tmp/.X11-unix/X2 128599             * 0    users:(("Xwayland",pid=41027,fd=25),("kylin-wlcom",pid=40820,fd=25))
+u_str LISTEN 0      50                                                                             /var/tmp/qtsingleapp-kylins-d447-3e9 126782             * 0    users:(("kylin-status-ma",pid=40872,fd=5))
+u_str LISTEN 0      10                                                           @/tmp/.kylin-ai-business-unix/1000/DataManagement.sock 712                * 0
+u_str LISTEN 0      10                                                           @/tmp/.kylin-ai-business-unix/1001/DataManagement.sock 127612             * 0    users:(("kyai-data-manag",pid=40394,fd=4))
+u_str LISTEN 0      1                                                                                                @/tmp/.X11-unix/X2 128598             * 0    users:(("Xwayland",pid=41027,fd=24),("kylin-wlcom",pid=40820,fd=24))
+u_str LISTEN 0      10                                                            @/tmp/.kylin-ai-business-unix/1001/Knowledgebase.sock 122795             * 0    users:(("kylin-ai-docume",pid=40395,fd=4))
+u_str LISTEN 0      10                                                            @/tmp/.kylin-ai-business-unix/1000/Knowledgebase.sock 11525              * 0
+---UNITS---
+dev-cdrom.device                                                                         loaded    active   plugged   VBOX_CD-ROM Kylin-Desktop-V11
+dev-disk-by\x2ddiskseq-10.device                                                         loaded    active   plugged   VBOX_CD-ROM Kylin-Desktop-V11
+dev-disk-by\x2did-ata\x2dVBOX_CD\x2dROM_VB0\x2d01f003f6.device                           loaded    active   plugged   VBOX_CD-ROM Kylin-Desktop-V11
+dev-disk-by\x2dlabel-Kylin\x2dDesktop\x2dV11.device                                      loaded    active   plugged   VBOX_CD-ROM Kylin-Desktop-V11
+dev-disk-by\x2dpath-pci\x2d0000:00:01.1\x2data\x2d1.0.device                             loaded    active   plugged   VBOX_CD-ROM Kylin-Desktop-V11
+dev-disk-by\x2dpath-pci\x2d0000:00:01.1\x2data\x2d1.device                               loaded    active   plugged   VBOX_CD-ROM Kylin-Desktop-V11
+dev-disk-by\x2duuid-69a2a95a00009fe3.device                                              loaded    active   plugged   VBOX_CD-ROM Kylin-Desktop-V11
+dev-sr0.device                                                                           loaded    active   plugged   VBOX_CD-ROM Kylin-Desktop-V11
+sys-devices-pci0000:00-0000:00:01.1-ata1-host0-target0:0:0-0:0:0:0-block-sr0.device      loaded    active   plugged   VBOX_CD-ROM Kylin-Desktop-V11
+run-media-ZhouYifan-Kylin\x2dDesktop\x2dV11.mount                                        loaded    active   mounted   /run/media/ZhouYifan/Kylin-Desktop-V11
+sysroot-ostree-deploy-kylin-var.mount                                                    loaded    active   mounted   sysroot-ostree-deploy-kylin-var.mount
+session-54.scope                                                                         loaded    active   running   Session 54 of User kylin-agent
+session-9.scope                                                                          loaded    active   running   Session 9 of User kylin-agent
+com.kylin-os-manager.service                                                             loaded    active   running   kylin os manager daemon
+com.kylin.kysdk.SyncConfig.service                                                       loaded    inactive dead      KYLIN CONF2 SYNC DBUS
+ksc-defender-init.service                                                                loaded    active   exited    Init kylin security center configure to system
+kyfs-fuse.service                                                                        loaded    active   running   kylin file system base fuse
+kylin-activation-check.service                                                           loaded    inactive dead      run kylin_activation_check at boot time
+kylin-core-dump-monitor.service                                                          loaded    active   running   kylin-core-dump-monitor
+kylin-daq.service                                                                        loaded    active   running   kylin-daq config
+kylin-endisk-daemon.service                                                              loaded    active   running   Kylin disk encrypt daemon dbus service
+kylin-fix-boot-grub.service                                                              loaded    inactive dead      Kylin fix boot grub
+kylin-journal-flush.service                                                              loaded    inactive dead      Flush Journal to Persistent Storage by delay
+kylin-nm-sysdbus.service                                                                 loaded    active   running   Kylin Network Manager System D-Bus Service
+kylin-printer-applet-dbus.service                                                        loaded    active   running   kylin-printer-applet Dbus Application
+kylin-process-manager-daemon.service                                                     loaded    active   running   kylin process manager daemon
+kylin-process-manager-thawer.service                                                     loaded    inactive dead      Thaw forzen processes before shutdown
+kylin-process-resource-manager-daemon.service                                            loaded    active   running   kylin process resource manager daemon
+kylin-source-update-timer.service                                                        loaded    active   running   更新源管理器启动时间的定时器生成工具
+● kylin-system-updater.service                                                             not-found inactive dead      kylin-system-updater.service
+kylin-unattended-upgrades.service                                                        loaded    active   running   Unattended Upgrades Shutdown
+kylin-update-rescue.service                                                              loaded    inactive dead      后台自动更新软件源
+kysdk-conf2.service                                                                      loaded    active   running   KYLIN CONF2 DBUS
+kysdk-dbus.service                                                                       loaded    active   running   KYLIN SDK SYSTIME DBUS
+kysdk-systime.service                                                                    loaded    active   running   KYLIN SDK SYSTIME DBUS
+kytensor.service                                                                         loaded    active   running   Kylin triton inference server
+nm-enhance-optimization.service                                                          loaded    active   running   kylin network enhancement optimization
+org.kylin.kaiming.service                                                                loaded    active   running   org-kylin-kaiming dbus daemon
+kylin-journal-flush.timer                                                                loaded    active   elapsed   Call Journal Flush By Timer
+kylin-source-update-timer.timer                                                          loaded    active   running   更新源管理器启动时间的定时器生成工具
+kylin-update-rescue.timer                                                                loaded    active   waiting   kylin-update-rescue
+---DIR---
+Socket目录不存在
+---SERVICE---
+Unit不存在
+(exit_code=0)
+
+[15/15] 仓库当前 checked-out commit
+NOT_IN_GIT_REPO
+(exit_code=0)
+
+============================================================
+ 环境信息采集完成 — 待 Review 确认后冻结为 Day 1 基线
+============================================================
+
+============================================================
+ 补充采集 — 闭合缺口 (2026-08-05T23:26 CST)
+ Reviewer: 谢嘉然 | 采集人: 周子腾
+============================================================
+
+[3/15-补充] 麒麟 VM 快照编号
+虚拟化平台: VirtualBox
+虚拟机名称: Kylin-desktop-11
+当前快照名称: all-dependencies-up-to-date
+快照创建时间: 2026-08-05 19:34:00
+快照描述: Day 1 前干净快照
+
+[8/15-补充] Kaiming/麒灵宿主版本
+kylin-aiassistant 3.0.67 已安装
+(dpkg -l 确认)
+
+[11/15-补充] KYSEC 当前状态
+首次采集时通过 /sys/kernel/security/kylin sysfs 检查返回"不可用"。
+补充验证: 银河麒麟桌面V11 不暴露该 sysfs，但 KYSEC 功能通过 CLI 工具 + 扩展属性实现。
+kysec_set / kysec_get CLI 工具已安装且可用。
+security.exectl 扩展属性读写验证通过:
+  kysec_set -n exectl -v verified → kysec_get -n exectl 返回 verified
+  setfattr -x security.exectl → 清除成功
+全链路 authorize → rollback 通过。
+结论: KYSEC 可用（非 sysfs 方式实现，不影响功能）。
+
+[14/15-补充] echo Socket、unit 和进程状态
+service unit: /etc/systemd/system/kylin-memory-echo.service 已部署
+unit User: kylin-agent
+socket 目录: /run/kylin-memory-echo/ 存在
+服务状态: active (running) — 自 2026-08-05 20:54:26 CST 起运行
+echo UDS 通信: 已验证通过
+
+[16/15] systemd lifecycle 测试 (新增)
+测试方式: _run_section6_final.py 通过 SSH 执行
+流程: daemon-reload → enable → start → stop → start → UDS 验证
+结果: 12/12 lifecycle 步骤 PASS
+(无破坏性: 保留 unit 文件，仅 stop/start 循环)
+
+[17/15] systemd rollback 测试 (新增)
+测试方式: kill 进程后观察 systemd 自动恢复
+结果: Restart=on-failure 自动恢复
+socket + UDS 通信均恢复
+Rollback 测试 PASS
+
+============================================================
+ 补充采集完成 — Day 1 环境基线冻结 (闭合版)
+============================================================

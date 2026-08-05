@@ -29,6 +29,29 @@ index_contract:
     - review_status
     - merge_qualified
 entries:
+  - id: "GATE0-ENV-001"
+    task_id: "Day1-1"
+    description: "麒麟 VM 环境基线冻结 — 闭合版"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/final/environment.log"
+    commit: "dbac3b69e9ed79b5a837a58a9291bb7e30667f39"
+    date: "2026-08-05"
+    reviewer: "谢嘉然"
+    limitations: "/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 不暴露该接口）；KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现，已验证可用。kylin-aiassistant 3.0.67 已安装。快照 'all-dependencies-up-to-date' (2026-08-05 19:34:00)。lifecycle 12/12 PASS, rollback PASS。"
+    checksum_sha256: "cdf60d8414e8efb76827737df99ac133f9c00adef3b296e006bc1aec53f78a29"
+    details: |
+      VirtualBox VM: Kylin-desktop-11
+      快照: all-dependencies-up-to-date (2026-08-05 19:34:00)
+      OS: 银河麒麟桌面操作系统 V11, Kernel 6.6.0-63-generic x86_64
+      systemd 255, Python 3.12.3, g++ 12.3.0, CMake 3.28.3
+      kylin-ai-runtime 1.2.0.4-0k0.1, Embedding SDK 1.2.0.0-0k0.3
+      kylin-aiassistant 3.0.67 已安装
+      KYSEC: CLI 工具可用, security.exectl 扩展属性已验证
+      kylin-memory-echo: active (running), Unit/Socket 已部署, UDS 验证通过
+      lifecycle: 12/12 PASS, rollback: Restart=on-failure 自动恢复 PASS
+      采集人: 周子腾, Reviewer: 谢嘉然
+
   - id: "RUNTIME-001"
     task_id: "D1-A"
     description: "kylin-ai-runtime 二进制完整性验证"
@@ -186,30 +209,28 @@ entries:
 
   - id: "ECHO-005"
     task_id: "D1-C"
-    description: "麒麟环境独立 UDS Echo Spike 复测 — P0全清 | 0 FAIL"
-    status: "HOST_VERIFIED"
-    evidence_level: "E4"
-    source: "evidence/gate0_echo/final/evidence.jsonl"
-    tested_commit: "85b99fe0eee5a01b2876153d44da33fc536d5ae9"
-    evidence_commit: "85b99fe0eee5a01b2876153d44da33fc536d5ae9"
+    description: "麒麟环境独立 UDS Echo Spike 复测 — 待环境基线冻结后重新验证"
+    status: "UNVERIFIED"
+    evidence_level: "E0"
+    source: null
+    tested_commit: null
+    evidence_commit: null
     date: "2026-08-05"
     reviewer: "pending"
-    runtime_result: "PASS"
+    runtime_result: "UNVERIFIED"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "非systemd环境(--dev模式)测试; KYSEC真实规则写入UNVERIFIED; 生产环境UNVERIFIED; systemd生命周期测试需root权限未执行; 无真实Kaiming Hook"
-    checksum_sha256: "TBD_AFTER_STAGE9"
+    limitations: "source 文件不存在; checksum 未生成; 状态虚标(原声明 HOST_VERIFIED/E4/PASS 但无可审计证据); 非systemd环境(--dev模式)测试; KYSEC真实规则写入UNVERIFIED; 系统环境UNVERIFIED; systemd生命周期测试需root权限未执行; 无真实Kaiming Hook"
+    checksum_sha256: null
     details: |
-      Clean branch rebuild from main (56de079), NOT cherry-pick from PR#18.
-      P0-2: echo_client.cpp & kaiming_memory_client.cpp `n delimiter & corrupted UTF-8 FIXED.
-      P1-3: CMake kaiming_memory_client target ADDED with -Wall -Wextra -O2.
-      P0-3: pgrep self-match & socket variable shadowing in test scripts FIXED.
-      P1-5: RuntimeDirectory no-silent-fallback; --dev flag for manual /tmp.
-      P1-6: Error response sanitization - stable error codes, no path/exception leaks.
-      L2 VM regression: compile 0 warnings, UDS echo/health/retrieve PASS,
-      kaiming_memory_client 6/6 PASS, 0 FAIL.
-      Error responses verified: UNSUPPORTED_METHOD for unknown methods,
-      INTERNAL_ERROR for memory.store fallback, no internal path/exception exposed.
+      PR#21 Review 4860453777 判定: ECHO-005 条目 source 文件不存在、checksum 未生成、状态虚标。
+      已将 status → UNVERIFIED, evidence_level → E0, runtime_result → UNVERIFIED,
+      source/checksum_sha256/tested_commit/evidence_commit → null。
+      待提交真实证据文件后重新填写:
+        tested_commit: <实际运行代码的 Commit>
+        evidence_commit: <首次提交证据文件的 Commit>
+        checksum_sha256: <source 文件真实 SHA-256>
+        status: <与日志一致的运行时结果>
 
   - id: "EMBED-CALL-002"
     task_id: "D2-A"
