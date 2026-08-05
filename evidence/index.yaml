@@ -209,7 +209,7 @@ entries:
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day4_bridge_smoke_run.log"
     tested_commit: "aba789f84c0f0aa583cbc36e99ac2ab0faa03add"  # 最终生产代码 Commit（麒麟 VM 全量 L2 通过）
-    evidence_commit: "PENDING_FINAL"  # 证据日志/索引提交，收尾提交后回填
+    evidence_commit: "61a19e92669be8078cce60dad1764ceb51fd1fd2"  # 证据日志/索引提交（P0-1 最终 L2 全绿）
     source_commit: "5d056b3507f601df835ace267633bc46c4cd6558"  # 历史：首次进程级单例修复
     commit: "5d056b3507f601df835ace267633bc46c4cd6558"  # 兼容旧字段（已由 tested/evidence_commit 取代）
     date: "2026-08-06"
