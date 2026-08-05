@@ -76,6 +76,8 @@ Gate PASS；Gate 0 仍要求 P0 全部关闭、适用的静态/契约验证通�
 | B-D3-036 | 删除确认 | preview/selection/confirmation 绑定；仅单项已提交遗忘清理可版本化豁免 | 单项显式确认或合规清理豁免 | batch/full reset 豁免，或确认未绑定预览 | 08 §6.5 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
 | B-D3-037 | Scope 授权 | Service 在调用前认证并授权 scope，Provider 只消费绑定的内部上下文 | 授权 user/global/shard 请求进入 Provider | 缺 actor/authorization、越权或 scope_id 不匹配 | 08 §5.2/§6.6/§6.7 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
 | B-D3-038 | Scope 密钥轮换 | 稳定 `scope_id` 用于状态、水位和幂等；HMAC 仅用于披露 | k1→k2 后同一 scope 的水位和幂等记录连续 | HMAC 改变导致同一 scope 被当成新身份 | 08 §5.2/§5.6 | `FROZEN_CANDIDATE` | `REWORK (2026-08-04)` |
+| B-D3-039 | Scope 授权操作/有效期 | 授权同时绑定 actor、scope、允许操作和过期时间 | `get_index_state` 与 `rebuild` 分别使用匹配且未过期授权 | 跨操作复用、过期或绑定不符仍调用 Provider | 08 §5.2/§5.4/§6.6/§6.7 | `FROZEN_CANDIDATE` | `REWORK (2026-08-05)` |
+| B-D3-040 | 摘要密钥轮换闭环 | 历史验证密钥覆盖幂等/确认保留期；索引文本受控重建 | k1→k2 后同一幂等重放和确认安全验证，新 generation 统一使用 k2 | 因 key-id 变更重复副作用、静默确认或混用索引摘要密钥 | 08 §5.4/§5.6.1 | `FROZEN_CANDIDATE` | `REWORK (2026-08-05)` |
 
 ## 3. 跨轨待决矩阵
 
@@ -163,6 +165,10 @@ merge、rebase、Review 或改写其他作者分支。
 | B-D3-T042 | 删除确认/豁免 | 单项显式确认与合规 committed-forget 豁免通过 | batch/full reset 豁免、过期/错 preview 确认拒绝 | L0/L1_FAKE | `PLANNED_D4` |
 | B-D3-T043 | Scope 授权边界 | Service 传入绑定 actor_ref/authorization_ref/scope_id 的内部上下文 | 缺失、越权或 scope_id 不匹配时 Provider 不执行 | L0/L1_FAKE | `PLANNED_D4` |
 | B-D3-T044 | Scope 密钥轮换 | k1→k2 后稳定 scope_id 的状态、水位与幂等记录仍连续 | HMAC 改变导致重试、比较或 generation 隔离断裂 | L0/L1_FAKE | `PLANNED_D4` |
+| B-D3-T045 | Scope 操作隔离 | 匹配操作的未过期授权可执行对应请求 | `get_index_state` 授权调用 Rebuild，或 Rebuild 授权调用状态查询时 Provider 不执行 | L0/L1_FAKE | `PLANNED_D4` |
+| B-D3-T046 | Scope 授权过期 | 当前时间严格早于 `expires_at` 的授权可执行 | `expires_at` 相等或已过期时返回 `authorization_expired` 且 Provider 不执行 | L0/L1_FAKE | `PLANNED_D4` |
+| B-D3-T047 | 幂等/确认摘要轮换 | 历史仅验证密钥下的同域同语义重放返回记录结果，未过期确认可验证 | key-id 改变导致重复副作用，密钥不可用或确认过期仍执行 Delete 失败 | L0/L1_FAKE | `PLANNED_D4` |
+| B-D3-T048 | 索引文本摘要轮换 | SQLite 真源重算后仅完整校验的新 key generation 激活 | serving generation 混用 key-id 或未重建即激活失败 | L1_FAKE | `PLANNED_D4` |
 
 ## 5. 目标麒麟 VM 验证队列（本轮跳过）
 
@@ -186,11 +192,11 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
 | ADR golden score 复算 | 4 个值及排序一致 | `PASS_LOCAL` |
 | 契约 JSON 样例解析 | 5/5 可解析 | `PASS_LOCAL` |
 | 文档引用存在 | 全部目标文件存在，索引相对链接可解析 | `PASS_LOCAL` |
-| GitHub Review 获取 | PR #20 当前 Review 与被审提交可追踪 | 第二轮 `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；head `639dbcd`；已形成 B-D3-031～038 返工 Gate |
+| GitHub Review 获取 | PR #20 当前 Review 与被审提交可追踪 | 第三轮 `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；head `9c808cd`；已形成 B-D3-039～040 返工 Gate |
 | GitHub 跨分支兼容核对 | 历史 SHA 仅作为有日期的只读快照，不作为实现基线 | `AUDIT_SNAPSHOT_2026-08-04`；后续判断须重新同步默认分支 |
 | `git diff --check` | 无 whitespace error | `PASS_LOCAL` |
-| 仓库基线脚本 | 7/7，0 错误 | `PASS_LOCAL`；WSL 仅有既存编码、localhost NAT 与 Windows OpenCV PATH 转换警告 |
-| 工作区范围 | 只修改 B 轨契约、ADR、矩阵、索引和对应技术债行 | `639dbcd` 已推送；第二轮返工改动待验证、未暂存、未提交 |
+| 仓库基线脚本 | 7/7，0 错误 | `BLOCKED_ENVIRONMENT`；2026-08-05 尝试未运行，宿主 WSL2 缺少 Hyper-V（`HCS_E_HYPERV_NOT_INSTALLED`），未启动 VM；历史 `PASS_LOCAL` 不作为本轮验证结果 |
+| 工作区范围 | 只修改 B 轨契约、ADR、矩阵、索引和对应技术债行 | `9c808cd` 已推送；第三轮返工改动待验证、未暂存、未提交 |
 
 ## 7. Reviewer 记录
 
@@ -212,6 +218,18 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
 - 矩阵结论：`REWORK`
 - 返工范围：P0-01～02、P1-01～02、P2 清理项；D1/D2 历史审查文案仅核对，
   不在 B 轨 PR 中改写
+
+### 第三轮 Review
+
+- Reviewer：`lovezy0730-create`
+- 审查提交：`9c808cd`
+- 提交时间：`2026-08-05T09:10:00Z`
+- GitHub 结论：`CHANGES_REQUESTED`
+- 矩阵结论：`REWORK`
+- 返工范围：R3-P0-01（PR 计数、head 与审查表述同步）、R3-P1-01（授权操作与
+  有效期绑定）、R3-P1-02（摘要密钥轮换闭环）。PR 正文和修复报告在本轮经用户
+  授权提交、推送后更新；不以“一名 approval”替代任务卡要求记录的 D/E 专业
+  关注覆盖。
 
 ### 复审模板
 

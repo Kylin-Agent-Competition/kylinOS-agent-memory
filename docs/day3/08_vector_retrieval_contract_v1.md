@@ -136,15 +136,27 @@ ScopeAuthorization {
   actor_ref: string
   authorization_ref: string
   scope_id: string
+  allowed_operations: non-empty subset(get_index_state, rebuild)
+  expires_at: UTC datetime
 }
 ```
 
 Service 在调用 Provider 前负责身份认证、用户关系/委托与 global/shard scope
 授权；D/E 冻结具体认证与 RBAC Schema。`actor_ref` 和 `authorization_ref` 必须
-进入审计链，且 `scope_id` 必须等于请求 `IndexScope.scope_id`。Provider 只接受
-来自 Service 的内部调用，校验授权上下文与 scope 的绑定，不得根据 scope 自行
-推断或提升权限；缺少、越权或绑定不一致时 Service 不得调用 Provider，并返回
-`user_scope_violation` 或 `invalid_argument`。
+进入审计链，且 `scope_id` 必须等于请求 `IndexScope.scope_id`。
+
+授权判定可由不可变授权记录或可解析的 `authorization_ref` 承载，但解析结果必须
+同时绑定 `actor_ref`、`scope_id`、`allowed_operations` 与 `expires_at`。Service 在
+每次调用 Provider 前按以下顺序校验：请求操作在 `allowed_operations` 中、请求
+scope 与绑定 scope 精确相等、当前时间严格早于 `expires_at`，以及 actor 对该
+scope 的关系/委托仍满足授权记录。`get_index_state` 只读授权不得用于 `rebuild`，
+反之亦然。任何字段缺失、绑定不一致、越权或已过期均不得调用 Provider；分别
+返回 `authorization_denied`、`authorization_expired` 或适用的
+`user_scope_violation`/`invalid_argument`。
+
+Provider 只接受来自 Service 的内部调用，并校验已经解析的授权上下文仍与 actor、
+scope、操作和有效期绑定；不得根据 scope 自行推断或提升权限，也不得把一次
+`get_index_state` 授权复用于 Rebuild。
 
 ### 5.3 `ProviderResult<T>`
 
@@ -183,6 +195,9 @@ ProviderResult<T> {
 | `invalid_argument` | 字段缺失、类型错误、rank/top_n 非法 | 否 | 否 |
 | `dimension_mismatch` | 向量维度与 Provider 能力不一致 | 状态变化后 | Search 可降级为 FTS5 |
 | `user_scope_violation` | 缺失用户、跨用户或越权作用域 | 否 | 否，必须拒绝 |
+| `authorization_denied` | actor、scope 或允许操作缺失、不匹配或不被授权 | 否 | 否，调用 Provider 前拒绝 |
+| `authorization_expired` | 授权在本次调用前已过期 | 获取新授权后 | 否，调用 Provider 前拒绝 |
+| `digest_key_unavailable` | 需要验证的历史摘要密钥已不可用 | 受控人工/服务端恢复后 | 否，禁止重放或确认副作用 |
 | `deadline_exceeded` | 绝对 deadline 已耗尽 | 新请求可重试 | 可返回已安全完成的部分结果 |
 | `cancelled` | 调用方取消 | 新请求可重试 | 可返回取消前已安全完成的只读结果 |
 | `provider_unavailable` | SDK/服务/连接不可用 | 是，退避且不越过 deadline | Search 可单路降级 |
@@ -223,8 +238,28 @@ ProviderResult<T> {
    HMAC-SHA-256，避免低熵过滤器、ID 集或正文哈希被离线枚举；日志不得记录
    规范输入、密钥或未经脱敏值。
 
-`Digest` 比较要求算法和 `key_id` 相同；密钥轮换期间由 Service 显式重算，
-Provider 不得把不同 `key_id` 的值推断为相等。
+`Digest` 比较要求算法和 `key_id` 相同；Provider 不得把不同 `key_id` 的值推断为
+相等。
+
+##### 摘要密钥轮换
+
+Service 维护活动摘要密钥与仅验证历史密钥。旧密钥从切换为仅验证起至少保留至
+`max(idempotency_record_retention, confirmation_ttl)` 结束；相应幂等记录和
+删除确认记录必须保存产生其摘要的 `key_id`，且确认 TTL 不得晚于该密钥的仅验证
+保留期。密钥轮换不改变摘要的规范输入规则，也不允许 Provider 自行选择密钥。
+
+- 幂等重放先按 §5.6.2 复合域定位已有记录；若记录使用历史 `key_id`，Service
+  用该记录的仅验证密钥重算请求语义字段并比较。相同则返回已记录结果，不同则
+  返回 `conflict`；不得因活动密钥已变更把同一请求当作新副作用。
+- 删除的 `selection_hash`、`preview_hash` 与确认引用按其记录的 `key_id` 验证。
+  密钥不可用或确认超过 TTL 时返回 `digest_key_unavailable` 或适用的过期错误，
+  不执行 Delete；不得静默接受、降级比较或改用活动密钥确认。
+- `index_text_hash` 轮换由受控重建完成：从 SQLite 真源重新计算新 key 的摘要，
+  将目标 generation 标为 `building`，完整校验后再激活。一个 serving generation
+  不得混用不同 `key_id` 的 `index_text_hash`；密钥轮换本身不得改变 `scope_id`、
+  水位域或既有幂等域。
+- 需要验证的历史密钥已按保留策略销毁时，Service 必须安全失败并记录可审计原因；
+  只有在原操作结果已确定后，才可由受控恢复流程建立新的幂等或确认事实。
 
 #### 5.6.2 写操作幂等域
 
