@@ -80,9 +80,12 @@ public:
 
     /**
      * 销毁会话。重复调用幂等。
-     * 注意：不卸载 .so（P0-1 生命周期模型：SDK 在进程生命周期内只加载一次），
-     * 调用后 has_session() 返回 false 但 is_loaded() 仍为 true，
-     * 可再次调用 create_session() 重建会话。
+     *
+     * 生命周期终态（P0-2）：调用后 Bridge 进入不可恢复终态（session_destroyed_），
+     * 再次调用 create_session() 或 embed() 返回稳定错误 ERR_SESSION_DESTROYED。
+     * 原因：麒麟实测 SDK 不允许同一进程 destroy_session → create_session
+     * （会阻塞挂起整个进程），因此销毁后不得重建。
+     * 注意：不卸载 .so；has_session() 返回 false 但 is_loaded() 仍为 true。
      */
     BridgeStatus destroy_session();
 
@@ -95,12 +98,15 @@ public:
 
     bool is_loaded() const { return handle_ != nullptr; }
     bool has_session() const { return session_ != nullptr; }
+    /** 是否已进入销毁终态（destroy_session 后不可再 create_session/embed）。 */
+    bool session_destroyed() const { return session_destroyed_; }
 
 private:
     BridgeInitParams params_;
     void* handle_ = nullptr;
     EmbeddingSdkSymbols syms_;
     TextEmbeddingSession* session_ = nullptr;
+    bool session_destroyed_ = false;  // P0-2: destroy 后终态标志
     std::mutex mutex_;
 
     // 私有辅助：仅在析构函数中调用。释放会话与 .so 句柄并清零符号表。

@@ -115,6 +115,11 @@ BridgeStatus EmbeddingBridge::create_session_impl() {
     if (!handle_) {
         return BridgeStatus::fail(BridgeError::ERR_DLOPEN_FAILED, "bridge not loaded");
     }
+    if (session_destroyed_) {
+        // P0-2: destroy 后不可恢复终态，禁止重建（宿主会挂起）
+        return BridgeStatus::fail(BridgeError::ERR_SESSION_DESTROYED,
+                                  "session destroyed, cannot recreate (SDK 不允许同进程重建)");
+    }
     if (session_) {
         return BridgeStatus::ok(std::monostate{});  // 幂等：已有会话
     }
@@ -166,7 +171,9 @@ BridgeStatus EmbeddingBridge::destroy_session_impl() {
         }
         session_ = nullptr;
     }
-    // NOTE: 不执行 dlclose(handle_)，保留已解析符号，支持重新 create_session()。
+    // P0-2: 置终态标志——销毁后不可重建（SDK 不允许同进程 destroy→create）
+    session_destroyed_ = true;
+    // NOTE: 不执行 dlclose(handle_)，保留已解析符号。
     // 真正卸载 .so 在析构函数 destroy_unlocked() 中进行（进程退出/单例销毁时）。
     return BridgeStatus::ok(std::monostate{});
 }
@@ -216,6 +223,11 @@ BridgeResult<EmbeddingVector> EmbeddingBridge::embed_impl(const std::string& tex
     if (!handle_) {
         return BridgeResult<EmbeddingVector>::fail(BridgeError::ERR_DLOPEN_FAILED,
                                                    "bridge not loaded");
+    }
+    if (session_destroyed_) {
+        // P0-2: 销毁后终态，embed 稳定报错（不挂起）
+        return BridgeResult<EmbeddingVector>::fail(BridgeError::ERR_SESSION_DESTROYED,
+                                                   "session destroyed, cannot embed");
     }
     if (!session_) {
         // 会话未建立：语义上接近 init 未完成，而非 create 动作失败

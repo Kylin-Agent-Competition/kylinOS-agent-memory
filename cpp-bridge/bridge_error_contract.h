@@ -55,6 +55,7 @@ enum class BridgeError : uint32_t {
     ERR_SESSION_CREATE  = 0x0201,   // create_session 返回 NULL
     ERR_SESSION_INIT    = 0x0202,   // init_session 返回非零
     ERR_SESSION_DESTROY = 0x0203,   // destroy_session 异常
+    ERR_SESSION_DESTROYED = 0x0204, // 会话已销毁（终态，禁止重建——SDK 不允许同进程 destroy→create，P0-2）
 
     // Embedding 调用 (0x03xx)
     ERR_EMBED_CALL      = 0x0301,   // text_embedding 返回 false

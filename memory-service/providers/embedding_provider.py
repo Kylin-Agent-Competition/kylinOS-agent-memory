@@ -42,6 +42,8 @@ class ProviderErrorCode(IntEnum):
     ERR_MODEL_INVALID = 0x0304   # 模型无效（Bridge ERR_MODEL_INVALID）
     ERR_TIMEOUT = 0x0401         # 超过 timeout_ms（Bridge ERR_TIMEOUT）
     ERR_INVALID_TEXT = 0x0500    # text 非 str 类型（应用层校验，不进 Bridge）
+    ERR_CONFIG_CONFLICT = 0x0601 # 单例配置冲突（so_path 与已锁定路径不一致）
+    ERR_SESSION_DESTROYED = 0x0202  # 会话已销毁（Bridge destroy 后终态，不可重建）
     ERR_UNKNOWN = 0x0001         # 未分类错误
 
 
@@ -89,17 +91,34 @@ class ModelInfo:
     loaded: bool = False
 
 
+class _ProviderLifecycle(IntEnum):
+    """Provider 实例生命周期状态机（P1-1/P1-3/P1-4）。
+
+    UNINITIALIZED → INITIALIZING → READY
+                            ↓ (初始化失败)
+                        保持 INITIALIZING（下次 start 重试）
+    READY → CLOSED（close 后，允许重新 start → INITIALIZING）
+    """
+
+    UNINITIALIZED = 0
+    INITIALIZING = 1
+    READY = 2
+    CLOSED = 3
+
+
 class EmbeddingProvider:
     """
     Embedding 向量化服务（进程级单例）。
 
-    生命周期模型（P0-1）：
+    生命周期模型（P0-1，进程级单例 + 实例状态机）：
     - 通过进程级单例 Bridge 共享 SDK 会话：首次 start() 加载动态库并初始化模型，
       后续调用复用已有 session（不销毁重建——SDK 不允许同进程 session 销毁后重建）。
     - 全局路径锁定：so_path 参数仅在进程内第一个实例创建时生效；
-      后续创建不同路径的实例将被静默复用已加载的 Bridge。
-    - 生命周期边界：调用 close() 后，当前 Provider 实例应视为已废弃；
-      虽然由于单例机制底层 session 可能仍存活，但不建议继续调用 embed()。
+      后续创建不同路径的实例将抛出 ERR_CONFIG_CONFLICT（不静默忽略）。
+    - 生命周期边界（模型 B）：close() 后实例可重新 start()（重新取得引用）；
+      close() 后未重新 start 时调用 embed() 抛 ERR_SESSION_DESTROYED。
+    - 初始化状态机：只有 load + create_session + 初始化 embed 全部成功后
+      才进入 READY；初始化失败保持 INITIALIZING，下次 start() 重新尝试。
     """
 
     # Bridge 异常 → Provider 错误码映射（P1-1：隐藏 Bridge 细节）
@@ -131,6 +150,7 @@ class EmbeddingProvider:
     # session 只创建一次、不销毁，进程退出时统一释放。
     _shared_bridge = None
     _shared_dimension: Optional[int] = None
+    _shared_so_path: Optional[str] = None  # 首实例锁定路径（P1-2 配置锁定）
     _ref_count = 0
 
     def __init__(self, so_path: Optional[str] = None) -> None:
@@ -142,50 +162,81 @@ class EmbeddingProvider:
             if so_path is not None:
                 params.so_path = so_path
             EmbeddingProvider._shared_bridge = _bridge.EmbeddingBridge(params)
+            EmbeddingProvider._shared_so_path = so_path
             EmbeddingProvider._shared_dimension = None
+        else:
+            # P1-2: 单例配置锁定——不同路径必须明确报冲突，不静默忽略
+            if so_path != EmbeddingProvider._shared_so_path:
+                raise ProviderError(
+                    ProviderErrorCode.ERR_CONFIG_CONFLICT,
+                    f"so_path 冲突: 已锁定 {EmbeddingProvider._shared_so_path!r}, "
+                    f"传入 {so_path!r}（进程级单例仅首实例路径生效）")
 
         self._bridge = EmbeddingProvider._shared_bridge
         self._dimension: Optional[int] = None
-        self._started = False  # 实例级幂等标记（P0-1/复审建议）
+        self._lifecycle = _ProviderLifecycle.UNINITIALIZED
 
     # ── 生命周期 ──
 
     def start(self) -> None:
         """启动 Provider：加载 SDK、创建会话（仅首次）、完成模型初始化。
-        重复调用安全（幂等）。
+        重复调用安全（幂等）；close 后允许重新 start（模型 B）。
 
-        生命周期模型（P0-1，进程级单例）：
+        生命周期模型（P0-1，进程级单例 + 状态机）：
         1. 麒麟实测 SDK 不允许同一进程 session 销毁后重建（会阻塞挂起），
            因此 session 进程内只创建一次，start() 复用已有 session。
         2. create_session 后必须至少完成一次成功 embed（模型加载就绪）
-           才能安全使用；start() 将初始化 embed 作为正式初始化步骤。
+           才能进入 READY；初始化 embed 失败保持 INITIALIZING，下次 start 重试。
         """
-        if self._started:
-            return  # 实例级幂等：本实例已启动，直接返回（引用计数不重复增加）
+        if self._lifecycle == _ProviderLifecycle.READY:
+            return  # 已就绪：幂等
+
+        self._lifecycle = _ProviderLifecycle.INITIALIZING
         try:
             self._bridge.load()  # 幂等：已加载则直接返回
             if not self._bridge.has_session:
                 self._bridge.create_session()
-                # 初始化 embed：模型就绪验证 + 获取维度（SDK 生命周期契约）
-                init = self._bridge.embed("", 0)
-                if init.dimension > 0:
-                    EmbeddingProvider._shared_dimension = init.dimension
+            # 初始化 embed：模型就绪验证 + 获取维度（每次 start 都重新验证，P1-3）
+            init = self._bridge.embed("", 0)
+            if init.dimension <= 0:
+                raise ProviderError(ProviderErrorCode.ERR_MODEL_INVALID,
+                                    f"初始化 embed 返回非法维度: {init.dimension}")
+            EmbeddingProvider._shared_dimension = init.dimension
             EmbeddingProvider._ref_count += 1
-            self._started = True
+            self._lifecycle = _ProviderLifecycle.READY
         except Exception as exc:  # noqa: BLE001 - 统一映射为 Provider 错误
+            # 初始化失败：保持 INITIALIZING（下次 start 重试），不置 READY（P1-3）
+            self._lifecycle = _ProviderLifecycle.INITIALIZING
+            # P1-2 失败恢复：首个实例初始化失败（如 so 不存在）且无任何引用时，
+            # 重置单例，允许后续实例用正确路径重新初始化（不污染共享 Bridge）
+            if EmbeddingProvider._ref_count == 0:
+                try:
+                    EmbeddingProvider._shared_bridge.destroy_session()
+                except Exception:  # noqa: BLE001 - 恢复路径尽力而为
+                    pass
+                EmbeddingProvider._shared_bridge = None
+                EmbeddingProvider._shared_so_path = None
+                EmbeddingProvider._shared_dimension = None
+                self._bridge = None
+            if isinstance(exc, ProviderError):
+                raise
             raise self._map_bridge_error(exc) from exc
 
     def close(self) -> None:
-        """释放本 Provider 对共享 session 的引用。重复调用安全（幂等）。
+        """释放本 Provider 对共享 session 的引用。
 
-        注意（P0-1 生命周期模型）：close() 不销毁 session——
-        麒麟实测 SDK 不允许同一进程 session 销毁后重建（会阻塞挂起），
-        因此 session 保持存活到进程退出，由共享 Bridge 析构时统一释放。
-        这也是 Review 要求的"进程级 Singleton"：SDK 动态库与 session
-        在进程生命周期内只加载/创建一次。
+        语义（模型 B，P1-1/P1-4）：
+        - 未启动实例 close() 为 no-op（不减少他人引用）。
+        - 已启动实例 close() 减引用并置 CLOSED，允许重新 start()。
+        - 重复 close() 为 no-op（_lifecycle 非 READY 时不再减）。
+        - 不销毁 session（SDK 不允许同进程 session 销毁重建），
+          session 保持存活到进程退出，由共享 Bridge 析构时统一释放。
         """
-        if EmbeddingProvider._ref_count > 0:
-            EmbeddingProvider._ref_count -= 1
+        if self._lifecycle == _ProviderLifecycle.READY:
+            if EmbeddingProvider._ref_count > 0:
+                EmbeddingProvider._ref_count -= 1
+            self._lifecycle = _ProviderLifecycle.CLOSED
+        # 非 READY（UNINITIALIZED/CLOSED/INITIALIZING）→ no-op（P1-1）
 
     def __enter__(self) -> "EmbeddingProvider":
         self.start()
@@ -212,7 +263,8 @@ class EmbeddingProvider:
         异常:
             ProviderError: 失败时抛出；ProviderError.code 为 Provider 级错误码
                 （ERR_SDK_NOT_LOADED / ERR_SESSION_FAILED / ERR_EMBED_FAILED /
-                ERR_SDK_ERROR / ERR_MODEL_INVALID / ERR_TIMEOUT / ERR_UNKNOWN）；
+                ERR_SDK_ERROR / ERR_MODEL_INVALID / ERR_TIMEOUT /
+                ERR_SESSION_DESTROYED / ERR_UNKNOWN）；
                 ProviderError.bridge_error 仅用于诊断（原始 Bridge 异常类型名）。
             非字符串输入抛 ProviderError(ERR_INVALID_TEXT)。
             timeout_ms 为负数抛 ValueError（参数校验在进入 Bridge 之前）。
@@ -222,6 +274,13 @@ class EmbeddingProvider:
                                 f"text 必须为 str, 实际 {type(text).__name__}")
         if timeout_ms < 0:
             raise ValueError(f"timeout_ms 不能为负数，实际 {timeout_ms}")
+        # 生命周期检查（P1-4 模型 B）：READY 前/CLOSED 后未 restart → 明确错误
+        if self._lifecycle == _ProviderLifecycle.CLOSED:
+            raise ProviderError(ProviderErrorCode.ERR_SESSION_DESTROYED,
+                                "实例已 close，请先重新 start()")
+        if self._lifecycle != _ProviderLifecycle.READY:
+            raise ProviderError(ProviderErrorCode.ERR_SESSION_FAILED,
+                                f"实例未就绪（状态 {self._lifecycle.name}），请先 start()")
 
         t0 = time.monotonic()
         try:
