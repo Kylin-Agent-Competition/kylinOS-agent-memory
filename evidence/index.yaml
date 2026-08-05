@@ -208,17 +208,19 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day4_bridge_smoke_run.log"
-    tested_commit: "2c0084a44d26f77aa7b5d1e91e055b067943260c"  # 最终生产代码 Commit（待 VM L2 复测确认）
-    evidence_commit: "PENDING_L2"  # 证据日志/索引提交，L2 复测后回填
+    tested_commit: "aba789f84c0f0aa583cbc36e99ac2ab0faa03add"  # 最终生产代码 Commit（麒麟 VM 全量 L2 通过）
+    evidence_commit: "PENDING_FINAL"  # 证据日志/索引提交，收尾提交后回填
     source_commit: "5d056b3507f601df835ace267633bc46c4cd6558"  # 历史：首次进程级单例修复
     commit: "5d056b3507f601df835ace267633bc46c4cd6558"  # 兼容旧字段（已由 tested/evidence_commit 取代）
     date: "2026-08-06"
     reviewer: "pending"
     limitations: "异步、并发、主动超时、多模态未覆盖；SDK 限制（麒麟实测）：同进程禁止 dlclose 后重载、禁止 session 销毁重建；Provider 进程级单例 + close 后需 restart（模型 B）；并发初始化无类级锁（技术债）"
-    checksum_sha256: "d08637fd1ee4d8e517e4c8aee888c363429edf270c67d49f785c5525a6c6e75b"  # 待 L2 后重算
+    checksum_sha256: "bcf64d8548079de8f0501efdf74b7b19c77780bd0957d4489de06489641b090e"
     details: |
       C++ Bridge(dlopen/dlsym) + pybind11 模块 + Python EmbeddingProvider 最小真实调用
       生命周期状态机（_lifecycle）+ Bridge destroy 终态 + 配置锁定 + 失败恢复
       （P0-2/P1-1~P1-5 修复，详见日志审查结论表）
-      最终 L2 复测：待麒麟 VM 执行 verify_day4_vm.sh 后回填结果
+      最终 L2 复测（2026-08-06，被测 commit aba789f）全绿：
+      ctest 3/3 + pytest 28+13+1=42 项无 Skip + smoke 11 + 生命周期 4 路径
+      运行输出见原始日志
       运行输出见原始日志

@@ -1,8 +1,8 @@
 # Day 4 Bridge/Provider 麒麟 VM 构建与测试日志
-# Date: 2026-08-03 (麒麟 VM 实测，REWORK 复审第三轮后最终版)
+# Date: 2026-08-06 (麒麟 VM 实测，REWORK 复审第四轮修复后最终版)
 # Host: 银河麒麟桌面 V11 2603 x86_64 (VirtualBox 7.2.14)
 # Branch: feat/day4-bridge-provider-new (基于最新 main 56de079 rebase)
-# 被测 Commit: 5d056b3507f601df835ace267633bc46c4cd6558 (git rev-parse HEAD)
+# 被测 Commit: aba789f84c0f0aa583cbc36e99ac2ab0faa03add (git rev-parse HEAD)
 # Runtime: kylin-ai-runtime 1.2.0.4-0k0.1 (内部自报 1.3.0, PARTIAL)
 # Python: 3.12.3 (venv /tmp/day4-venv, pybind11 3.0.4, pytest 9.1.1)
 # 默认模型: ensemble-embd_gte-base_uint8-text
@@ -25,6 +25,21 @@
 | P1-8 文档命令不一致 | ✅ 标准入口 = verify_day4_vm.sh | 骨架文档 |
 | P1-9 embed docstring | ✅ 明确抛 ProviderError | provider.py |
 | P2 建议项 | ✅ embed false 用例 + 完整 SHA + error_code 说明 | ctest 7 用例 |
+
+### 第四轮 REWORK 复审（2026-08-06）
+
+| 审查项 | 结论 | 验证 |
+|--------|------|------|
+| P0-1 最终 L2 证据 | ✅ 最终生产代码 aba789f 上全量回归 | verify_day4_vm.sh FAILURES=0 |
+| P0-2 Bridge destroy 终态 | ✅ ERR_SESSION_DESTROYED，destroy 后 create/embed 稳定报错 | C++ 终态检查 + 构建通过 |
+| P1-1 引用计数状态机 | ✅ 实例 _lifecycle + close 引用归属正确 | 13 项生命周期 pytest 含 |
+| P1-2 配置锁定+失败恢复 | ✅ _shared_so_path + ERR_CONFIG_CONFLICT + 失败恢复 | test_config_conflict_raises 等 |
+| P1-3 初始化失败重试 | ✅ INITIALIZING 状态，初始化 embed 成功才 READY | 状态机实现 |
+| P1-4 close/restart 模型 B | ✅ close 后未 restart embed 抛 ERR_SESSION_DESTROYED | test_embed_after_close_raises_destroyed |
+| P1-5 Day3 Gate 记录 | ✅ 契约文档 Gate 变更记录 | docs/day3 |
+| P2 解释器退出析构 | ✅ 无 Abort/挂起/core dump | test_interpreter_exit PASS |
+| P2 aarch64 | ✅ 删除范围外实现（验收环境 x86_64） | bridge_error_contract.h |
+| P2 tested/evidence_commit | ✅ index.yaml 字段区分 | evidence/index.yaml |
 
 ## 交付物索引（源码在仓库，不重复摘录）
 
@@ -82,15 +97,19 @@ CTEST_EXIT=0
 $ python -m pytest memory-service/tests/test_embedding_provider_import.py \
     memory-service/tests/test_exception_mapping.py -v
 输出:
-28 passed in 0.23s
+28 passed in 0.45s
 （7 项 import/契约含 ERR_MODEL_INVALID 断言 + 21 项异常映射，全部 PASSED，无 Skip）
 
 $ python -m pytest memory-service/tests/test_load_idempotent.py -v
 输出:
-6 passed in 0.32s
-（test_start_close / test_context_manager_pass / test_start_embed_close_restart /
-  test_multiple_providers_sequential / test_close_without_start /
-  test_context_manager_exception，全部 PASSED，无 Skip）
+13 passed in 1.24s
+（生命周期状态机 13 项：start/close/restart/引用计数/配置冲突/失败恢复/
+ close 后 embed 报错/解释器退出，全部 PASSED，无 Skip）
+
+$ python -m pytest memory-service/tests/test_interpreter_exit.py -v
+输出:
+1 passed in 0.73s
+（P2 解释器退出析构路径：子进程 start→embed→close→退出，无 Abort/挂起/core dump）
 
 模块来源校验（P1-1）:
 kylin_embedding.__file__=/var/mnt/shared/cpp-bridge/build/kylin_embedding.cpython-312-x86_64-linux-gnu.so
