@@ -1,6 +1,12 @@
+e62e91bfed66b50140ef2fb4ef41f500b26cd5d6
+  [PASS] git status --porcelain --untracked-files=all 为空（严格干净，排除证据日志）
+  [PASS] WORKTREE_CLEAN=1
+  [PASS] INDEX_CLEAN=1
+
+===== Runtime 输出（Step 2 起） =====
 # Day4 麒麟 VM 验证原始日志（脚本自动生成，未经手工拼接）
-# 被测 Commit: 31e173322fd84d6902d0dea9e1b311decf43bccc
-# Date: 2026-08-06 10:58:30
+# 被测 Commit: e62e91bfed66b50140ef2fb4ef41f500b26cd5d6
+# Date: 2026-08-07 00:37:09
 
 ===== Step 2: venv + pybind11 =====
   [PASS] pybind11 可用
@@ -9,44 +15,50 @@
   [PASS] cmake configure OK
   [PASS] cmake build OK
   [PASS] ctest 全部通过
-    1/4 Test #1: bridge_errors ....................   Passed    0.14 sec
-    2/4 Test #2: bridge_so_not_found ..............   Passed    0.15 sec
-    3/4 Test #3: bridge_malformed .................   Passed    1.05 sec
-    4/4 Test #4: bridge_destroyed .................   Passed    0.26 sec
-    100% tests passed, 0 tests failed out of 4
+    1/5 Test #1: bridge_errors ....................   Passed    0.15 sec
+    2/5 Test #2: bridge_so_not_found ..............   Passed    0.15 sec
+    3/5 Test #3: bridge_malformed .................   Passed    1.08 sec
+    4/5 Test #4: bridge_destroyed .................   Passed    0.26 sec
+    5/5 Test #5: bridge_failure_recovery ..........   Passed    0.38 sec
+    100% tests passed, 0 tests failed out of 5
 
 ===== Step 4: pytest 统一收集 (P0-4) =====
   kylin_embedding.__file__=/var/mnt/shared/cpp-bridge/build/kylin_embedding.cpython-312-x86_64-linux-gnu.so
   [PASS] kylin_embedding 来自当前 build
     memory-service/tests/test_embedding_provider_import.py::test_providers_package_importable PASSED [  3%]
-    memory-service/tests/test_embedding_provider_import.py::test_provider_contract_methods_exist PASSED [  7%]
-    memory-service/tests/test_embedding_provider_import.py::test_embedding_result_fields PASSED [ 10%]
-    memory-service/tests/test_embedding_provider_import.py::test_model_info_fields PASSED [ 14%]
-    memory-service/tests/test_embedding_provider_import.py::test_provider_error_code_enum PASSED [ 17%]
-    memory-service/tests/test_embedding_provider_import.py::test_bridge_model_error_maps_to_model_invalid PASSED [ 21%]
-    memory-service/tests/test_embedding_provider_import.py::test_embed_non_str_raises_provider_error PASSED [ 25%]
-    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSoNotFoundError] PASSED [ 28%]
-    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeLoadError] PASSED [ 32%]
-    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSymbolError] PASSED [ 35%]
-    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSessionError] PASSED [ 39%]
-    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeEmbedError] PASSED [ 42%]
-    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSdkError] PASSED [ 46%]
-    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeTimeoutError] PASSED [ 50%]
-    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeCancelledError] PASSED [ 53%]
-    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeModelError] PASSED [ 57%]
-    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSoNotFoundError] PASSED [ 60%]
-    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeLoadError] PASSED [ 64%]
-    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSymbolError] PASSED [ 67%]
-    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSessionError] PASSED [ 71%]
-    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeEmbedError] PASSED [ 75%]
-    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSdkError] PASSED [ 78%]
-    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeTimeoutError] PASSED [ 82%]
-    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeCancelledError] PASSED [ 85%]
-    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeModelError] PASSED [ 89%]
-    memory-service/tests/test_exception_mapping.py::test_embed_without_load_raises_load_error PASSED [ 92%]
-    memory-service/tests/test_exception_mapping.py::test_load_missing_so_raises_not_found PASSED [ 96%]
-    memory-service/tests/test_exception_mapping.py::test_default_so_path_contains_core_lib PASSED [100%]
-    ============================== 28 passed in 0.35s ==============================
+    memory-service/tests/test_embedding_provider_import.py::test_provider_contract_methods_exist PASSED [  6%]
+    memory-service/tests/test_embedding_provider_import.py::test_embedding_result_fields PASSED [  9%]
+    memory-service/tests/test_embedding_provider_import.py::test_model_info_fields PASSED [ 12%]
+    memory-service/tests/test_embedding_provider_import.py::test_provider_error_code_enum PASSED [ 15%]
+    memory-service/tests/test_embedding_provider_import.py::test_bridge_model_error_maps_to_model_invalid PASSED [ 18%]
+    memory-service/tests/test_embedding_provider_import.py::test_embed_non_str_raises_provider_error PASSED [ 21%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSoNotFoundError] PASSED [ 24%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeLoadError] PASSED [ 27%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSymbolError] PASSED [ 30%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSessionError] PASSED [ 33%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeEmbedError] PASSED [ 36%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSdkError] PASSED [ 39%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeTimeoutError] PASSED [ 42%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeCancelledError] PASSED [ 45%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeModelError] PASSED [ 48%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSoNotFoundError] PASSED [ 51%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeLoadError] PASSED [ 54%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSymbolError] PASSED [ 57%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSessionError] PASSED [ 60%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeEmbedError] PASSED [ 63%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSdkError] PASSED [ 66%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeTimeoutError] PASSED [ 69%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeCancelledError] PASSED [ 72%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeModelError] PASSED [ 75%]
+    memory-service/tests/test_exception_mapping.py::test_embed_without_load_raises_load_error PASSED [ 78%]
+    memory-service/tests/test_exception_mapping.py::test_load_missing_so_raises_not_found PASSED [ 81%]
+    memory-service/tests/test_exception_mapping.py::test_default_so_path_contains_core_lib PASSED [ 84%]
+    memory-service/tests/test_provider_failure_recovery.py::test_so_not_found_recovers_with_new_instance PASSED [ 87%]
+    memory-service/tests/test_provider_failure_recovery.py::test_init_embed_failure_retry_same_instance PASSED [ 90%]
+    memory-service/tests/test_provider_failure_recovery.py::test_init_embed_failure_new_instance_same_state PASSED [ 93%]
+    memory-service/tests/test_provider_failure_recovery.py::test_fatal_failure_no_retry PASSED [ 96%]
+    memory-service/tests/test_provider_failure_recovery.py::test_bridge_destroyed_maps_to_session_destroyed PASSED [100%]
+    ============================== 33 passed in 0.51s ==============================
     memory-service/tests/test_load_idempotent.py::test_start_close PASSED    [  7%]
     memory-service/tests/test_load_idempotent.py::test_context_manager_pass PASSED [ 15%]
     memory-service/tests/test_load_idempotent.py::test_start_embed_close_restart PASSED [ 23%]
@@ -60,9 +72,9 @@
     memory-service/tests/test_load_idempotent.py::test_restart_after_close_recovers PASSED [ 84%]
     memory-service/tests/test_load_idempotent.py::test_config_conflict_raises PASSED [ 92%]
     memory-service/tests/test_load_idempotent.py::test_same_path_ok PASSED   [100%]
-    ============================== 13 passed in 1.38s ==============================
+    ============================== 13 passed in 1.50s ==============================
     memory-service/tests/test_interpreter_exit.py::test_interpreter_exit_no_abort PASSED [100%]
-    ============================== 1 passed in 0.75s ===============================
+    ============================== 1 passed in 0.77s ===============================
   [PASS] pytest 全部通过（三组独立进程，无 Skip）
 
 ===== Step 5: 真实 SDK 冒烟 =====
@@ -85,15 +97,15 @@
   [PASS] Provider 错误映射 OK
 
 ===== Step 7: 生命周期路径 (P0-1) =====
-[1785985140413] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
-[1785985140413] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
-[1785985140475] [32minfo [0m Proxy init success,sessionId is: 433569664 
-[1785985140475] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
-[1785985140475] [32minfo [0m Try to get default model 
-[1785985140515] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
-[1785985140515] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
-[1785985140520] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 433569664 
-[1785985140521] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
+[1786034263168] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1786034263169] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
+[1786034263207] [32minfo [0m Proxy init success,sessionId is: 854218299 
+[1786034263208] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
+[1786034263208] [32minfo [0m Try to get default model 
+[1786034263230] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
+[1786034263230] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
+[1786034263232] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 854218299 
+[1786034263232] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
   [PASS] start→close
   [PASS] with EmbeddingProvider(): pass
   [PASS] start→embed→close→start→embed→close
