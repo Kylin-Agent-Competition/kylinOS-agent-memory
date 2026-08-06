@@ -148,7 +148,8 @@ fi
 
 pytest_ok=1
 if python -m pytest memory-service/tests/test_embedding_provider_import.py \
-    memory-service/tests/test_exception_mapping.py -v >/tmp/day4_pytest_a.log 2>&1; then
+    memory-service/tests/test_exception_mapping.py \
+    memory-service/tests/test_provider_failure_recovery.py -v >/tmp/day4_pytest_a.log 2>&1; then
   :
 else
   pytest_ok=0
