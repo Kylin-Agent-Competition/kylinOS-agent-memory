@@ -1,0 +1,76 @@
+# Day2 D2-4 统一 Socket 路径验证
+# Timestamp: 2026-08-06T09:51:03
+
+### D2-4.1 systemd unit RuntimeDirectory
+```
+UNIT_NOT_FOUND
+```
+RuntimeDirectory: ⚠️ 未找到
+
+### D2-4.2 /run/kylin-memory-echo/ 状态
+```
+ls: 无法打开目录 '/run/kylin-memory-echo/': 权限不够
+```
+
+### D2-4.3 /tmp/kylin-memory-echo/ 状态
+```
+总计 40
+drwxrwxr-x  2 kylin-agent kylin-agent  4096  8月 6日 09:50 .
+drwxrwxrwt 32 root        root        20480  8月 6日 09:51 ..
+-rw-r--r--  1 root        root         3882  8月 6日 09:50 kysec_authorize.log
+```
+
+### D2-4.4 kaiming_memory_client --help
+```
+Usage: /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build/kaiming_memory_client [--method all|echo|health|memory.retrieve|memory.store] [--socket PATH]
+```
+--socket 参数: ✅ 已支持
+
+### D2-4.4 echo_client --help
+```
+Usage: /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build/echo_client [--method echo|health|memory.retrieve] [--message "text"] [--socket /path/to/sock]
+```
+--socket 参数: ✅ 已支持
+
+### D2-4.5 kysec_authorize.sh --help
+```
+Usage: /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh [authorize|status|rollback]
+
+  authorize  - 备份当前状态, KYSEC exectl verified 授权 + ACL 纵深防御
+  status     - 显示当前 KYSEC/ACL/Socket 完整状态
+  rollback   - 撤销 KYSEC exectl 授权, 回退 ACL, 从备份恢复
+
+环境变量:
+  KYLIN_ECHO_DEPLOY_BASE  部署根目录 (如 /home/user/kylin-memory-echo)
+
+示例:
+  KYLIN_ECHO_DEPLOY_BASE=/home/kylin-agent/kylin-memory-echo sudo -E bash /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh authorize
+```
+--socket 参数: ❌ 未支持
+
+### D2-4.6 test_rollback.sh SOCKET_PATH
+```
+NOT_FOUND
+```
+
+## D2-4.7 交叉验证 (dev服务 + systemd路径客户端)
+
+### 交叉验证: dev服务 + systemd路径客户端
+```
+============================================
+ Kaiming Memory Client - v1.2 (robust JSON)
+ Socket: /run/kylin-memory-echo/echo.sock
+ Method: health
+ User: kylin-agent
+============================================
+[2026-08-06T01:51:07Z] [INFO] TEST: health method
+RESULT KAIMING-HEALTH FAIL
+[2026-08-06T01:51:07Z] [INFO] KAIMING-HEALTH FAIL: exception: connect() failed: Permission denied
+
+============================================
+ Passed: 0 / Failed: 1
+============================================
+
+```
+预期失败: ✅ 明确报错
+

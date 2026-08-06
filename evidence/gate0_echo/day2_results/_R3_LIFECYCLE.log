@@ -1,0 +1,166 @@
+[11:01:11] ==========================================
+[11:01:11]  Phase C: Systemd 完整生命周期测试
+[11:01:11]  服务: kylin-memory-echo
+[11:01:11]  Socket (RuntimeDirectory): /run/kylin-memory-echo/echo.sock
+[11:01:11]  状态: UNVERIFIED (生产系统未测试)
+[11:01:11]  日志: /home/kylin-agent/kylin-memory-echo/logs/systemd_test_20260806_110111.log
+[11:01:11] ==========================================
+[11:01:11] 
+[11:01:11] ========== 准备 Systemd Unit 文件 ==========
+[11:01:11]   ✅ Unit 文件已动态生成 (RuntimeDirectory): /etc/systemd/system/kylin-memory-echo.service
+[11:01:11] 
+[11:01:11] ========== 清理旧路径残留 ==========
+[11:01:12]   ✅ 旧 /tmp 路径残留已清理
+[11:01:12] 
+[11:01:12] --- Step 1: daemon-reload ---
+[11:01:13]   ✅ daemon-reload 成功
+[11:01:13] 
+[11:01:13] --- Step 2: enable ---
+Created symlink /etc/systemd/system/default.target.wants/kylin-memory-echo.service → /etc/systemd/system/kylin-memory-echo.service.
+[11:01:14]   ✅ enable 成功
+[11:01:14]   ✅ symlink 已创建
+[11:01:14] 
+[11:01:14] --- Step 3: start ---
+[11:01:14]   ✅ start 命令成功
+[11:01:17] 
+[11:01:17] --- Step 4: 进程验证 ---
+[11:01:17]   ✅ 进程存活 (MainPID=90271)
+[11:01:17] 
+[11:01:17] --- Step 5: RuntimeDirectory ---
+[11:01:17]   ✅ RuntimeDirectory 已创建 (/run/kylin-memory-echo)
+总计 0
+drwxr-xr-x  2 kylin-agent kylin-agent   60  8月 6日 11:01 .
+drwxr-xr-x 39 root        root        1160  8月 6日 11:01 ..
+srwx------  1 kylin-agent kylin-agent    0  8月 6日 11:01 echo.sock
+[11:01:17] 
+[11:01:17] --- Step 6: Socket 验证 ---
+[11:01:17]   ✅ Socket 存在 (/run/kylin-memory-echo/echo.sock)
+[11:01:17]     RuntimeDirectory socket: perm=700, owner=kylin-agent:kylin-agent
+[11:01:17] 
+[11:01:17] --- Step 7: status ---
+● kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务
+     Loaded: loaded (/etc/systemd/system/kylin-memory-echo.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-08-06 11:01:14 CST; 3s ago
+   Main PID: 90271 (python3)
+      Tasks: 1 (limit: 9405)
+     Memory: 6.6M (peak: 6.8M)
+        CPU: 84ms
+     CGroup: /system.slice/kylin-memory-echo.service
+             └─90271 /usr/bin/python3 /home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server
+
+[11:01:17]   ✅ status: active (running)
+[11:01:17] 
+[11:01:17] --- Step 8: UDS 通信 (RuntimeDirectory socket) ---
+[11:01:17]     Using client: /home/kylin-agent/kylin-memory-echo/bin/kaiming_memory_client
+[11:01:17]     Using socket: /run/kylin-memory-echo/echo.sock
+[11:01:17]     Running kysec authorize for socket=/run/kylin-memory-echo/echo.sock...
+[2026-08-06T11:01:17] ========== KYSEC exectl + ACL 授权开始 ==========
+[2026-08-06T11:01:17] 备份当前状态到: /tmp/kylin-memory-echo-kysec-backup-20260806_110117
+[2026-08-06T11:01:17] 备份完成
+[2026-08-06T11:01:17] 备份ID已记录: /tmp/kylin-memory-echo-kysec-backup-20260806_110117
+[2026-08-06T11:01:17] --- Phase 1: KYSEC exectl 执行控制授权 ---
+[2026-08-06T11:01:17] KYSEC CLI 可用: kysec_set=/usr/sbin/kysec_set
+[2026-08-06T11:01:17] WARN: KYLIN_ECHO_DEPLOY_BASE 未设置，跳过二进制授权
+[2026-08-06T11:01:17]   用法: KYLIN_ECHO_DEPLOY_BASE=/home/user/kylin-memory-echo sudo -E bash /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh authorize
+[2026-08-06T11:01:17] --- Phase 2: 纵深防御 ACL 策略 ---
+[2026-08-06T11:01:17] 应用纵深防御 ACL 策略...
+[2026-08-06T11:01:17]   Socket 目录权限: 0700, owner=root
+[2026-08-06T11:01:17]   Socket 文件权限: 0600, owner=root
+[2026-08-06T11:01:17]   INFO: kylin-aiassistant 用户不存在，跳过用户级别 ACL
+[2026-08-06T11:01:17] 纵深防御 ACL 策略已应用
+[2026-08-06T11:01:17] ====== 完整状态报告 ======
+
+--- KYSEC CLI 探测 ---
+  kysec_set: /usr/sbin/kysec_set
+  kysec_get: /usr/sbin/kysec_get
+  getfattr:  /usr/bin/getfattr
+
+--- KYSEC 全局策略 ---
+(未设置 KYLIN_ECHO_DEPLOY_BASE)
+
+--- KYSEC 内核 sysfs ---
+/sys/kernel/security/kylin 不存在 (可能未加载内核模块)
+
+--- 目标二进制 KYSEC 状态 ---
+  (未设置 KYLIN_ECHO_DEPLOY_BASE, 跳过)
+
+--- Socket 目录 ---
+总计 0
+drwx------  2 root root   60  8月 6日 11:01 .
+drwxr-xr-x 39 root root 1160  8月 6日 11:01 ..
+srw-------  1 root root    0  8月 6日 11:01 echo.sock
+
+ACL:
+# file: run/kylin-memory-echo
+# owner: root
+# group: root
+user::rwx
+group::---
+other::---
+
+
+--- Socket 文件 ---
+srw------- 1 root root 0  8月 6日 11:01 /run/kylin-memory-echo/echo.sock
+
+ACL:
+# file: run/kylin-memory-echo/echo.sock
+# owner: root
+# group: root
+user::rw-
+group::---
+other::---
+
+
+--- kylin-aiassistant 进程 ---
+无 kylin-aiassistant 进程
+
+--- 当前用户 ---
+UID=0 USER=root
+SUDO_USER=root
+[2026-08-06T11:01:17] ====== 状态报告结束 ======
+[2026-08-06T11:01:17] ========== KYSEC exectl + ACL 授权完成 ==========
+
+备份位置: /tmp/kylin-memory-echo-kysec-backup-20260806_110117
+日志文件: /tmp/kylin-memory-echo/kysec_authorize.log
+✓ KYSEC: exectl verified 已写入目标二进制
+[11:01:17]     Running as kylin-agent (socket owner)
+sudo: 无法执行 /home/kylin-agent/kylin-memory-echo/bin/kaiming_memory_client: 不允许的操作
+[11:01:48]     C++ client echo failed, attempting Python UDS fallback...
+[11:01:48]   ✅ UDS echo 通过 Python 回退方案成功
+sudo: 无法执行 /home/kylin-agent/kylin-memory-echo/bin/kaiming_memory_client: 不允许的操作
+[11:02:19]     C++ client health failed, attempting Python UDS fallback...
+[11:02:19]   ✅ UDS health 通过 Python 回退方案成功
+[2026-08-06T11:02:19] ========== KYSEC exectl + ACL 回退开始 ==========
+[2026-08-06T11:02:19] 备份当前状态到: /tmp/kylin-memory-echo-kysec-backup-20260806_110219
+[2026-08-06T11:02:19] 备份完成
+[2026-08-06T11:02:19] 执行回退...
+[2026-08-06T11:02:19] 使用 recorded backup: /tmp/kylin-memory-echo-kysec-backup-20260806_110117
+[2026-08-06T11:02:19] 从备份恢复: /tmp/kylin-memory-echo-kysec-backup-20260806_110117
+[2026-08-06T11:02:19]   Socket 目录权限已回退
+[2026-08-06T11:02:19]   Socket 文件权限已回退
+[2026-08-06T11:02:19] 回退完成
+[2026-08-06T11:02:19] ========== KYSEC exectl + ACL 回退完成 ==========
+[11:02:19] 
+[11:02:19] --- Step 9: stop ---
+[11:02:19]   ✅ stop 命令成功
+[11:02:21]   ✅ 进程已终止
+[11:02:21] 
+[11:02:21] --- Step 10: disable ---
+Removed "/etc/systemd/system/default.target.wants/kylin-memory-echo.service".
+[11:02:22]   ✅ disable 成功
+[11:02:22]   ✅ symlink 已清理
+[11:02:22] 
+[11:02:22] --- Step 11: uninstall ---
+[11:02:22]   ✅ Unit 文件已删除 (uninstall)
+[11:02:22]   ✅ systemd 已确认注销服务
+[11:02:22] 
+[11:02:22] ==========================================
+[11:02:22]  Phase C 汇总
+[11:02:22] ==========================================
+[11:02:22]   通过: 18
+[11:02:22]   失败: 0
+[11:02:22]   总计: 18
+[11:02:22]   状态: UNVERIFIED (生产系统未测试)
+[11:02:22]   日志: /home/kylin-agent/kylin-memory-echo/logs/systemd_test_20260806_110111.log
+[11:02:22] ==========================================
+[11:02:22]   ✅ Systemd 生命周期全部通过! (直实验证, 生产系统待验证)

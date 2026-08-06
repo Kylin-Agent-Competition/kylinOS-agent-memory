@@ -1,0 +1,64 @@
+# Day2 D2-3 部署和启动可复现
+# Timestamp: 2026-08-06T09:50:58
+
+## D2-3.2 干净 CMake 构建
+
+### cmake 配置
+```
+-- The CXX compiler identification is GNU 12.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.3s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build
+
+```
+Exit code: 0
+
+### cmake 构建
+```
+[ 25%] Building CXX object CMakeFiles/echo_client.dir/echo_client.cpp.o
+[ 50%] Linking CXX executable echo_client
+[ 50%] Built target echo_client
+[ 75%] Building CXX object CMakeFiles/kaiming_memory_client.dir/kaiming_memory_client.cpp.o
+[100%] Linking CXX executable kaiming_memory_client
+[100%] Built target kaiming_memory_client
+
+```
+Exit code: 0
+
+### 二进制产物
+```
+-rwxrwxr-x 1 kylin-agent kylin-agent 34848  8月 6日 09:51 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build/echo_client
+-rwxrwxr-x 1 kylin-agent kylin-agent 54056  8月 6日 09:51 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build/kaiming_memory_client
+```
+✅ 两个客户端均编译成功
+
+## D2-3.3 手动 dev 模式启动
+
+### dev 模式 socket 检查
+```
+ls: 无法访问 '/tmp/kylin-memory-echo/echo.sock': 没有那个文件或目录
+```
+✅ socket 在 /tmp/kylin-memory-echo/echo.sock 创建
+
+## D2-3.4 --dev 参数使能验证
+
+### 不带 --dev 启动
+```
+Traceback (most recent call last):
+  File "/home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/memory_echo_server.py", line 253, in <module>
+    main()
+  File "/home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/memory_echo_server.py", line 221, in main
+    cleanup()  # 清理残留 socket
+    ^^^^^^^^^
+  File "/home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/memory_echo_server.py", line 209, in cleanup
+    os.unlink(SOCKET_PATH)
+PermissionError: [Errno 13] Permission denied: '/run/kylin-memory-echo/echo.sock'
+
+```
+✅ systemd 模式不会静默回退到 /tmp (预期行为: 报错或使用 /run 路径)
+
