@@ -1,0 +1,132 @@
+# UDS Client Test Log
+# 2026-08-06T00:20:15
+
+## Socket Check (ec=0)
+srwx------ 1 kylin-agent kylin-agent 0  8月 6日 00:18 /run/kylin-memory-echo/echo.sock
+
+
+## D4 echo_client (ec=0)
+[2026-08-05T16:20:17Z] [INFO] Echo Client starting
+[2026-08-05T16:20:17Z] [INFO]   Socket: /run/kylin-memory-echo/echo.sock
+[2026-08-05T16:20:17Z] [INFO]   Method: echo
+[2026-08-05T16:20:17Z] [INFO]   Message: Day1_TEST
+[2026-08-05T16:20:17Z] [INFO] Request: {"protocol_version":"1.0","request_id":"req_test_001","trace_id":"trc_test_001","method":"echo","deadline_ms":5000,"payload":{"message":"Day1_TEST"}}
+[2026-08-05T16:20:17Z] [INFO] Connected to /run/kylin-memory-echo/echo.sock
+[2026-08-05T16:20:17Z] [INFO] Sent 149 bytes
+=== RESPONSE ===
+{"protocol_version": "1.0", "request_id": "req_test_001", "trace_id": "trc_test_001", "status": "ok", "data": {"echo": "Day1_TEST", "received_at": "2026-08-05T16:20:17.242560+00:00"}, "server_ts": "2026-08-05T16:20:17.242575+00:00"}
+================
+[2026-08-05T16:20:17Z] [INFO] Round-trip OK
+EXIT=0
+
+
+## D5 kaiming_memory_client health (ec=0)
+============================================
+ Kaiming Memory Client - v1.1 (robust JSON)
+ Socket: /run/kylin-memory-echo/echo.sock
+ Method: health
+ User: kylin-agent
+============================================
+[2026-08-05T16:20:17Z] [INFO] TEST: health method
+[2026-08-05T16:20:17Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"status": "healthy", "uptime_seconds": 118.70651602745056, "socket_path": "/run/kylin-memory-echo/echo.sock", "pid": 41657}, "server_ts": "2026-08-05T16:20:17.306424+00:00"}
+RESULT KAIMING-HEALTH PASS
+[2026-08-05T16:20:17Z] [INFO] KAIMING-HEALTH PASS: health query returned healthy
+
+============================================
+ Passed: 1 / Failed: 0
+============================================
+EXIT=0
+
+
+## D5 kaiming_memory_client all (ec=0)
+============================================
+ Kaiming Memory Client - v1.1 (robust JSON)
+ Socket: /run/kylin-memory-echo/echo.sock
+ Method: all
+ User: kylin-agent
+============================================
+[2026-08-05T16:20:17Z] [INFO] TEST: echo method
+[2026-08-05T16:20:17Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"echo": "Hello from Kaiming AI Assistant", "received_at": "2026-08-05T16:20:17.372164+00:00"}, "server_ts": "2026-08-05T16:20:17.372178+00:00"}
+RESULT KAIMING-ECHO PASS
+[2026-08-05T16:20:17Z] [INFO] KAIMING-ECHO PASS: echo roundtrip payload=Hello from Kaiming AI Assistant
+[2026-08-05T16:20:17Z] [INFO] TEST: health method
+[2026-08-05T16:20:17Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"status": "healthy", "uptime_seconds": 118.77511644363403, "socket_path": "/run/kylin-memory-echo/echo.sock", "pid": 41657}, "server_ts": "2026-08-05T16:20:17.375023+00:00"}
+RESULT KAIMING-HEALTH PASS
+[2026-08-05T16:20:17Z] [INFO] KAIMING-HEALTH PASS: health query returned healthy
+[2026-08-05T16:20:17Z] [INFO] TEST: memory.retrieve method
+[2026-08-05T16:20:17Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"contexts": [], "total_found": 0, "elapsed_ms": 0.0, "fallback": false}, "server_ts": "2026-08-05T16:20:17.376279+00:00"}
+RESULT KAIMING-RETRIEVE PASS
+[2026-08-05T16:20:17Z] [INFO] KAIMING-RETRIEVE PASS: memory.retrieve returned empty context (Echo simulation)
+[2026-08-05T16:20:17Z] [INFO] TEST: memory.store method (verify protocol compatibility)
+[2026-08-05T16:20:17Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "", "trace_id": "", "status": "error", "data": {"error_code": "INTERNAL_ERROR", "message": "Protocol error occurred while processing request"}, "server_ts": "2026-08-05T16:20:17.389843+00:00"}
+RESULT KAIMING-STORE PASS
+[2026-08-05T16:20:17Z] [INFO] KAIMING-STORE PASS: memory.store protocol layer connected (Echo not implemented, expected error)
+[2026-08-05T16:20:17Z] [INFO] TEST: unknown method degradation
+[2026-08-05T16:20:17Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "error", "data": {"error_code": "UNSUPPORTED_METHOD", "message": "Requested method is not supported by this service"}, "server_ts": "2026-08-05T16:20:17.391509+00:00"}
+RESULT KAIMING-UNKNOWN PASS
+[2026-08-05T16:20:17Z] [INFO] KAIMING-UNKNOWN PASS: unknown method returned status=error (degradation normal)
+[2026-08-05T16:20:17Z] [INFO] TEST: 5 consecutive rapid requests (simulating high-frequency calls)
+RESULT KAIMING-RAPID PASS
+[2026-08-05T16:20:17Z] [INFO] KAIMING-RAPID PASS: 5/5 rapid requests succeeded
+
+============================================
+ Passed: 6 / Failed: 0
+============================================
+EXIT=0
+
+
+## Python UDS direct test (ec=0)
+--- HEALTH ---
+{
+  "protocol_version": "1.0",
+  "request_id": "r1",
+  "trace_id": "",
+  "status": "ok",
+  "data": {
+    "status": "healthy",
+    "uptime_seconds": 118.87843418121338,
+    "socket_path": "/run/kylin-memory-echo/echo.sock",
+    "pid": 41657
+  },
+  "server_ts": "2026-08-05T16:20:17.478339+00:00"
+}
+--- ECHO ---
+{
+  "protocol_version": "1.0",
+  "request_id": "r2",
+  "trace_id": "",
+  "status": "ok",
+  "data": {
+    "echo": "Day1-UDS-Test-20260806",
+    "received_at": "2026-08-05T16:20:17.479294+00:00"
+  },
+  "server_ts": "2026-08-05T16:20:17.479303+00:00"
+}
+--- RETRIEVE ---
+{
+  "protocol_version": "1.0",
+  "request_id": "r3",
+  "trace_id": "",
+  "status": "ok",
+  "data": {
+    "contexts": [],
+    "total_found": 0,
+    "elapsed_ms": 0.0,
+    "fallback": false
+  },
+  "server_ts": "2026-08-05T16:20:17.480236+00:00"
+}
+--- STORE ---
+{
+  "protocol_version": "1.0",
+  "request_id": "r4",
+  "trace_id": "",
+  "status": "error",
+  "data": {
+    "error_code": "UNSUPPORTED_METHOD",
+    "message": "Requested method is not supported by this service"
+  },
+  "server_ts": "2026-08-05T16:20:17.481394+00:00"
+}
+--- DONE ---
+
