@@ -141,10 +141,61 @@ def handle_memory_retrieve(request: dict) -> dict:
     }
 
 
+def handle_evidence_record(request: dict) -> dict:
+    """evidence.record: 持久化写入 evidence.jsonl
+
+    接收标准 evidence 记录字段，追加写入 evidence/gate0_echo/final/evidence.jsonl。
+    仅保存 status="PASS" 的条目，FAIL/SKIP/BLOCKED 条目通过 .log 文件呈现。
+    """
+    payload = request.get("payload", {})
+    if not payload:
+        return {"recorded": False, "reason": "empty_payload", "server_ts": datetime.now(timezone.utc).isoformat()}
+
+    test_id = payload.get("test_id", "")
+    status = payload.get("status", "PASS")
+    # 仅保存 PASS 条目
+    if status != "PASS":
+        return {"recorded": False, "reason": "non_pass_skipped", "server_ts": datetime.now(timezone.utc).isoformat()}
+
+    evidence_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "evidence", "gate0_echo", "final")
+    try:
+        os.makedirs(evidence_dir, exist_ok=True)
+    except OSError as e:
+        log("ERROR", f"handle_evidence_record: 无法创建证据目录 {evidence_dir}: {e}")
+        return {"recorded": False, "reason": f"dir_create_failed: {e}", "server_ts": datetime.now(timezone.utc).isoformat()}
+
+    evidence_path = os.path.join(evidence_dir, "evidence.jsonl")
+    try:
+        record = {
+            "test_id": test_id,
+            "tested_commit": payload.get("tested_commit", ""),
+            "command": payload.get("command", ""),
+            "exit_code": payload.get("exit_code", 0),
+            "status": status,
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "environment": payload.get("environment", ""),
+            "source_log": payload.get("source_log", ""),
+            "sha256": payload.get("sha256", ""),
+        }
+        root_cause = payload.get("root_cause", "")
+        if root_cause:
+            record["root_cause"] = root_cause
+
+        with open(evidence_path, "a") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        log("INFO", f"Evidence recorded: {test_id}")
+        return {"recorded": True, "test_id": test_id, "server_ts": datetime.now(timezone.utc).isoformat()}
+    except Exception as e:
+        log("ERROR", f"handle_evidence_record: 写入失败: {e}")
+        return {"recorded": False, "reason": f"write_failed: {e}", "server_ts": datetime.now(timezone.utc).isoformat()}
+
+
 METHOD_ROUTER = {
     "echo": handle_echo,
     "health": handle_health,
     "memory.retrieve": handle_memory_retrieve,
+    "evidence.record": handle_evidence_record,
 }
 
 
