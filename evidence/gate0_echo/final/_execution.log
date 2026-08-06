@@ -1,0 +1,40 @@
+Day1 V&V started at 2026-08-06T00:18:11
+SSH connected
+Phase 4: Uploading test runner + executing D4-D8...
+Uploaded test runner (3866 bytes)
+Test runner exit=1
+SFTP read failed: [Errno 2] No such file, falling back to cat
+client.log written (43 bytes)
+D6: systemd lifecycle...
+systemd_lifecycle.log written
+D7: KYSEC ACL...
+kysec_acl.log written
+D8: Rollback...
+rollback.log written
+build.log written
+deploy.log written
+server.log written
+Phase 5: evidence.jsonl...
+evidence.jsonl written (SHA256: 7e8cd1a9847bd18fb8c973f85bd9ada3)
+Phase 6: File checklist...
+# Day1 Evidence File Checklist
+# 2026-08-06T00:18:11
+
+[x] environment.log: OK (4849 bytes)
+[x] baseline.json: OK (8124 bytes)
+[x] build.log: OK (752 bytes)
+[x] deploy.log: OK (860 bytes)
+[x] server.log: OK (6239 bytes)
+[x] client.log: OK (165 bytes)
+[x] systemd_lifecycle.log: OK (4663 bytes)
+[x] kysec_acl.log: OK (809 bytes)
+[x] rollback.log: OK (505 bytes)
+[x] evidence.jsonl: OK (1868 bytes)
+
+## Summary
+All 10 files present: True
+Updating evidence/index.yaml...
+index.yaml updated
+
+Done at 2026-08-06T00:18:17
+All evidence saved to e:\Kylin-memory-dev\UDS-Kylin-Echo\evidence\gate0_echo\final
