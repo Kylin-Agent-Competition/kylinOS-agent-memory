@@ -12,6 +12,10 @@
  *   FAKE_MALFORMED=nan     → 数据含 NaN
  *   FAKE_MALFORMED=inf     → 数据含 Inf
  *   FAKE_MALFORMED=embedfalse → text_embedding 返回 false（ERR_EMBED_CALL，P2 补充）
+ *   FAKE_MALFORMED=createnull → create_session 返回 NULL（ERR_SESSION_CREATE，P1-3 补充）
+ *
+ * 编译变体（P1-3）：定义 FAKE_MISSING_CREATE_SESSION 时不再导出
+ *   text_embedding_create_session（模拟必需符号缺失 → dlsym 失败路径）。
  *
  * 仅用于测试，不进入正式构建。
  */
@@ -37,10 +41,17 @@ struct _EmbeddingResult {
 
 static const int kDim = 768;
 
+#ifndef FAKE_MISSING_CREATE_SESSION
 TextEmbeddingSession* text_embedding_create_session(void) {
+    /* P1-3: FAKE_MALFORMED=createnull 时返回 NULL（模拟 create_session 失败） */
+    const char* mode = getenv("FAKE_MALFORMED");
+    if (mode && strcmp(mode, "createnull") == 0) {
+        return NULL;
+    }
     TextEmbeddingSession* s = (TextEmbeddingSession*)calloc(1, sizeof(TextEmbeddingSession));
     return s;
 }
+#endif /* FAKE_MISSING_CREATE_SESSION */
 
 void text_embedding_destroy_session(TextEmbeddingSession** s) {
     if (s && *s) {

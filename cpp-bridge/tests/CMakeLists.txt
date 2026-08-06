@@ -49,3 +49,21 @@ target_link_libraries(test_bridge_failure_recovery PRIVATE embedding_bridge_core
 add_test(NAME bridge_failure_recovery
   COMMAND test_bridge_failure_recovery $<TARGET_FILE:fake_sdk_malformed>
 )
+
+# 测试 6: dlsym 缺失失败路径（P1-High/P1-3）— 符号缺失变体假 .so
+# 同一源码以 FAKE_MISSING_CREATE_SESSION 宏编译：不导出 text_embedding_create_session
+add_library(fake_sdk_missing_dlsym SHARED
+  fake_sdk_malformed.c
+)
+set_target_properties(fake_sdk_missing_dlsym PROPERTIES
+  PREFIX ""
+  OUTPUT_NAME "fake_sdk_missing_dlsym"
+)
+target_compile_definitions(fake_sdk_missing_dlsym PRIVATE FAKE_MISSING_CREATE_SESSION)
+add_executable(test_bridge_dlsym_missing
+  test_bridge_dlsym_missing.cpp
+)
+target_link_libraries(test_bridge_dlsym_missing PRIVATE embedding_bridge_core)
+add_test(NAME bridge_dlsym_missing
+  COMMAND test_bridge_dlsym_missing $<TARGET_FILE:fake_sdk_missing_dlsym>
+)
