@@ -79,6 +79,23 @@ static bool json_has_key(const std::string& json, const std::string& key) {
     return json.find(pattern) != std::string::npos;
 }
 
+// Extract a string value for a given key from JSON (whitespace-independent)
+// e.g. extract_json_string_value(json, "error_code") returns "UNSUPPORTED_METHOD"
+static std::string extract_json_string_value(const std::string& json, const std::string& key) {
+    std::string pattern = "\"" + key + "\"";
+    auto pos = json.find(pattern);
+    if (pos == std::string::npos) return "";
+    pos += pattern.length();
+    // Skip whitespace and colon
+    auto colon = json.find(':', pos);
+    if (colon == std::string::npos) return "";
+    auto q1 = json.find('"', colon);
+    if (q1 == std::string::npos) return "";
+    auto q2 = json.find('"', q1 + 1);
+    if (q2 == std::string::npos) return "";
+    return json.substr(q1 + 1, q2 - q1 - 1);
+}
+
 // UDS send/receive
 std::string uds_send_recv(const std::string& request_json) {
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -185,14 +202,13 @@ void test_memory_store() {
     try {
         std::string resp = uds_send_recv(build_memory_store_request("kysec_policy_v1", "least privilege principle"));
         log_info("Response: " + resp);
-        // Echo does not implement memory.store, expected error
-        // Must verify: status=="error" AND error_code present AND message present
-        // (Server returns field name "message", not "error_message")
-        // PROTOCOL_ERROR / INTERNAL_ERROR / parse failures must be scored as FAIL
+        // Echo does not implement memory.store; expected:
+        //   status=="error" AND error_code=="UNSUPPORTED_METHOD" AND message present
+        // PROTOCOL_ERROR / INTERNAL_ERROR / parse failures / missing error_code value -> FAIL
         bool ok = (extract_json_status(resp) == "error")
-               && json_has_key(resp, "error_code")
+               && (extract_json_string_value(resp, "error_code") == "UNSUPPORTED_METHOD")
                && json_has_key(resp, "message");
-        log_result("KAIMING-STORE", ok, "memory.store correctly returned status=error with error_code (Echo not implemented)");
+        log_result("KAIMING-STORE", ok, "memory.store correctly returned status=error with error_code=UNSUPPORTED_METHOD (Echo not implemented)");
     } catch (const std::exception& e) {
         log_result("KAIMING-STORE", false, std::string("protocol layer exception: ") + e.what());
     }
@@ -242,7 +258,7 @@ int main(int argc, char* argv[]) {
     g_socket_path = socket_path;
 
     std::cout << "============================================" << std::endl;
-    std::cout << " Kaiming Memory Client - v1.2 (robust JSON)" << std::endl;
+    std::cout << " Kaiming Memory Client - v1.3 (value-aware)" << std::endl;
     std::cout << " Socket: " << g_socket_path << std::endl;
     std::cout << " Method: " << method << std::endl;
     std::cout << " User: " << (getenv("USER") ? getenv("USER") : "?") << std::endl;
