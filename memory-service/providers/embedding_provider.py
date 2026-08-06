@@ -127,6 +127,8 @@ class EmbeddingProvider:
         "BridgeLoadError": ProviderErrorCode.ERR_SDK_NOT_LOADED,
         "BridgeSymbolError": ProviderErrorCode.ERR_SDK_NOT_LOADED,
         "BridgeSessionError": ProviderErrorCode.ERR_SESSION_FAILED,
+        "BridgeSessionDestroyedError": ProviderErrorCode.ERR_SESSION_DESTROYED,  # P1-1: 销毁终态独立映射
+        "BridgeFatalError": ProviderErrorCode.ERR_SESSION_FAILED,  # P1-High: 不可恢复，映射后要求重启
         "BridgeEmbedError": ProviderErrorCode.ERR_EMBED_FAILED,
         "BridgeSdkError": ProviderErrorCode.ERR_SDK_ERROR,
         "BridgeTimeoutError": ProviderErrorCode.ERR_TIMEOUT,

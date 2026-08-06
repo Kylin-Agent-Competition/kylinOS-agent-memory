@@ -40,3 +40,12 @@ target_link_libraries(test_bridge_destroyed PRIVATE embedding_bridge_core)
 add_test(NAME bridge_destroyed
   COMMAND test_bridge_destroyed $<TARGET_FILE:fake_sdk_malformed>
 )
+
+# 测试 5: 失败恢复策略（P1-High/P1-3）— 假 .so
+add_executable(test_bridge_failure_recovery
+  test_bridge_failure_recovery.cpp
+)
+target_link_libraries(test_bridge_failure_recovery PRIVATE embedding_bridge_core)
+add_test(NAME bridge_failure_recovery
+  COMMAND test_bridge_failure_recovery $<TARGET_FILE:fake_sdk_malformed>
+)

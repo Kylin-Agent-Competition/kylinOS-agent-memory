@@ -100,6 +100,8 @@ public:
     bool has_session() const { return session_ != nullptr; }
     /** 是否已进入销毁终态（destroy_session 后不可再 create_session/embed）。 */
     bool session_destroyed() const { return session_destroyed_; }
+    /** 是否已进入不可恢复失败态（dlsym/init_session 失败后已 dlclose/destroy，禁止重试）。 */
+    bool fatal_failure() const { return fatal_failure_; }
 
 private:
     BridgeInitParams params_;
@@ -107,6 +109,7 @@ private:
     EmbeddingSdkSymbols syms_;
     TextEmbeddingSession* session_ = nullptr;
     bool session_destroyed_ = false;  // P0-2: destroy 后终态标志
+    bool fatal_failure_ = false;      // P1-High: 不可恢复失败标志（已发生 dlclose/destroy）
     std::mutex mutex_;
 
     // 私有辅助：仅在析构函数中调用。释放会话与 .so 句柄并清零符号表。

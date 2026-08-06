@@ -51,6 +51,11 @@ void text_embedding_destroy_session(TextEmbeddingSession** s) {
 
 int text_embedding_init_session(TextEmbeddingSession* s) {
     (void)s;
+    /* P1-High: FAKE_MALFORMED=initfail 时返回非零（模拟 init_session 失败） */
+    const char* mode = getenv("FAKE_MALFORMED");
+    if (mode && strcmp(mode, "initfail") == 0) {
+        return -1;
+    }
     return 0;
 }
 

@@ -39,6 +39,11 @@ BridgeStatus EmbeddingBridge::load() {
 
 BridgeStatus EmbeddingBridge::load_impl() {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (fatal_failure_) {
+        // P1-High: 不可恢复失败（已 dlclose），禁止重试 dlopen
+        return BridgeStatus::fail(BridgeError::ERR_FATAL_FAILURE,
+                                  "fatal failure, restart required");
+    }
     if (handle_) {
         return BridgeStatus::ok(std::monostate{});  // 幂等：已加载
     }
@@ -88,8 +93,11 @@ BridgeStatus EmbeddingBridge::load_impl() {
         !tmp.result_error_code || !tmp.result_error_message ||
         !tmp.result_destroy) {
         dlclose(h);
-        return BridgeStatus::fail(BridgeError::ERR_DLSYM_FAILED,
-                                  "required symbol missing from " + params_.so_path);
+        // P1-High: 已执行 dlclose，禁止重试（同进程 dlclose→dlopen 可能 Abort）
+        fatal_failure_ = true;
+        return BridgeStatus::fail(BridgeError::ERR_FATAL_FAILURE,
+                                  "required symbol missing from " + params_.so_path
+                                  + " (fatal: dlclose 已执行，不可重试)");
     }
 
     syms_ = tmp;  // 全部验证后一次性赋值
@@ -112,6 +120,11 @@ BridgeStatus EmbeddingBridge::create_session() {
 
 BridgeStatus EmbeddingBridge::create_session_impl() {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (fatal_failure_) {
+        // P1-High: 不可恢复失败（已 dlclose/destroy），禁止重试
+        return BridgeStatus::fail(BridgeError::ERR_FATAL_FAILURE,
+                                  "fatal failure, restart required");
+    }
     if (!handle_) {
         return BridgeStatus::fail(BridgeError::ERR_DLOPEN_FAILED, "bridge not loaded");
     }
@@ -133,8 +146,11 @@ BridgeStatus EmbeddingBridge::create_session_impl() {
     int rc = syms_.init_session(s);
     if (rc != 0) {
         syms_.destroy_session(&s);
-        return BridgeStatus::fail(BridgeError::ERR_SESSION_INIT,
-                                  "init_session rc=" + std::to_string(rc));
+        // P1-High: 已执行 destroy_session，禁止重试 create（同进程 destroy→create 可能挂起）
+        fatal_failure_ = true;
+        return BridgeStatus::fail(BridgeError::ERR_FATAL_FAILURE,
+                                  "init_session rc=" + std::to_string(rc)
+                                  + " (fatal: destroy 已执行，不可重试)");
     }
 
     syms_.enable_event_loop(s, true);
@@ -220,6 +236,11 @@ BridgeResult<EmbeddingVector> EmbeddingBridge::embed(const std::string& text,
 // 实际实现（无异常边界，由 embed() 包裹）
 BridgeResult<EmbeddingVector> EmbeddingBridge::embed_impl(const std::string& text) {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (fatal_failure_) {
+        // P1-High: 不可恢复失败，禁止重试
+        return BridgeResult<EmbeddingVector>::fail(BridgeError::ERR_FATAL_FAILURE,
+                                                   "fatal failure, restart required");
+    }
     if (!handle_) {
         return BridgeResult<EmbeddingVector>::fail(BridgeError::ERR_DLOPEN_FAILED,
                                                    "bridge not loaded");

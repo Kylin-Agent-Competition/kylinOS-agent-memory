@@ -41,6 +41,10 @@ struct BridgeSoNotFoundError : BridgeErrorException { using BridgeErrorException
 struct BridgeLoadError : BridgeErrorException { using BridgeErrorException::BridgeErrorException; };
 struct BridgeSymbolError : BridgeErrorException { using BridgeErrorException::BridgeErrorException; };
 struct BridgeSessionError : BridgeErrorException { using BridgeErrorException::BridgeErrorException; };
+// P1-1: 销毁终态专用异常（区分于通用 Session 错误，使 Provider 能映射 ERR_SESSION_DESTROYED）
+struct BridgeSessionDestroyedError : BridgeErrorException { using BridgeErrorException::BridgeErrorException; };
+// P1-High: 不可恢复失败异常（dlsym/init_session 失败后已 dlclose/destroy，禁止重试）
+struct BridgeFatalError : BridgeErrorException { using BridgeErrorException::BridgeErrorException; };
 struct BridgeEmbedError : BridgeErrorException { using BridgeErrorException::BridgeErrorException; };
 struct BridgeSdkError : BridgeErrorException { using BridgeErrorException::BridgeErrorException; };
 struct BridgeTimeoutError : BridgeErrorException { using BridgeErrorException::BridgeErrorException; };
@@ -60,8 +64,11 @@ struct BridgeModelError : BridgeErrorException { using BridgeErrorException::Bri
         case BridgeError::ERR_SESSION_CREATE:
         case BridgeError::ERR_SESSION_INIT:
         case BridgeError::ERR_SESSION_DESTROY:
-        case BridgeError::ERR_SESSION_DESTROYED:
             throw BridgeSessionError(msg);
+        case BridgeError::ERR_SESSION_DESTROYED:
+            throw BridgeSessionDestroyedError(msg);
+        case BridgeError::ERR_FATAL_FAILURE:
+            throw BridgeFatalError(msg);
         case BridgeError::ERR_EMBED_CALL:
         case BridgeError::ERR_EMBED_RESULT:
             throw BridgeEmbedError(msg);
@@ -98,6 +105,8 @@ PYBIND11_MODULE(kylin_embedding, m) {
     py::register_exception<BridgeLoadError>(m, "BridgeLoadError", bridge_err.ptr());
     py::register_exception<BridgeSymbolError>(m, "BridgeSymbolError", bridge_err.ptr());
     py::register_exception<BridgeSessionError>(m, "BridgeSessionError", bridge_err.ptr());
+    py::register_exception<BridgeSessionDestroyedError>(m, "BridgeSessionDestroyedError", bridge_err.ptr());
+    py::register_exception<BridgeFatalError>(m, "BridgeFatalError", bridge_err.ptr());
     py::register_exception<BridgeEmbedError>(m, "BridgeEmbedError", bridge_err.ptr());
     py::register_exception<BridgeSdkError>(m, "BridgeSdkError", bridge_err.ptr());
     py::register_exception<BridgeTimeoutError>(m, "BridgeTimeoutError", bridge_err.ptr());
