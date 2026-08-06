@@ -154,5 +154,8 @@ PYBIND11_MODULE(kylin_embedding, m) {
         }, py::arg("text"), py::arg("timeout_ms") = 0)
         .def_property_readonly("loaded", &EmbeddingBridge::is_loaded)
         .def_property_readonly("has_session", &EmbeddingBridge::has_session)
-        .def_property_readonly("session_destroyed", &EmbeddingBridge::session_destroyed);
+        .def_property_readonly("session_destroyed", &EmbeddingBridge::session_destroyed)
+        // P1-High: 暴露不可恢复失败态，使 Provider 能区分"load 前失败(可重置)"与
+        // "fatal 失败(已 dlclose/destroy，禁止重置单例再触发 dlopen/destroy→create)"
+        .def_property_readonly("fatal_failure", &EmbeddingBridge::fatal_failure);
 }

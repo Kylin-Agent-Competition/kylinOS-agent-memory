@@ -43,6 +43,10 @@ class _FakeBridge:
     def session_destroyed(self):
         return self._destroyed
 
+    @property
+    def fatal_failure(self):
+        return self._fatal
+
     def load(self):
         if 'nonexist' in self.so_path:
             raise RuntimeError('dlopen failed')  # load 前失败
@@ -140,13 +144,25 @@ def test_init_embed_failure_new_instance_same_state():
 
 
 def test_fatal_failure_no_retry():
-    """fatal 失败（dlsym/init_session 已 dlclose/destroy）→ 不可恢复，重试稳定失败。"""
+    """fatal 失败（dlsym/init_session 已 dlclose/destroy）→ 进程级不可恢复。
+
+    P1-High 方案 A 验收：fatal 后不得重置单例（重置会让新实例重新 dlopen，
+    形成 dlclose→dlopen 危险序列）；同实例与新实例重试都必须稳定失败。
+    """
     p = EmbeddingProvider(so_path='/tmp/fatal.so')
     with pytest.raises(ProviderError):
         p.start()
+    # fatal 后单例保留（不得重置，避免新实例重新 dlopen）
+    assert EmbeddingProvider._shared_bridge is not None, 'fatal 后不得重置单例'
+    assert p._bridge.fatal_failure is True, 'Bridge 应处于 fatal 终态'
     # 同实例重试：fatal 后不再重试（稳定失败，不触发危险生命周期）
     with pytest.raises(ProviderError):
         p.start()
+    # 新实例：共享同一 fatal Bridge，重试同样稳定失败（不创建新 Bridge 重新 dlopen）
+    p2 = EmbeddingProvider(so_path='/tmp/fatal.so')
+    assert p2._bridge is p._bridge, '新实例必须共享同一 fatal Bridge（不得新建）'
+    with pytest.raises(ProviderError):
+        p2.start()
 
 
 def test_bridge_destroyed_maps_to_session_destroyed():
