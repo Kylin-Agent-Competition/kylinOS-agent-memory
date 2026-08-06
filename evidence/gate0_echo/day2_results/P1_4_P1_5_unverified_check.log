@@ -1,0 +1,171 @@
+# P1-4 & P1-5 UNVERIFIED 标注状态
+# Timestamp: 2026-08-06T13:32:55
+
+## packaging (部署版): /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh
+存在: EXISTS
+
+### P1-4 头部 UNVERIFIED 标注
+UNVERIFIED 存在: ❌ 缺失
+```
+#!/usr/bin/env bash
+# =============================================================================
+# KYSEC 执行控制授权 + UDS 文件权限与 ACL 最小授权脚本
+# =============================================================================
+# 实施真实 KYSEC exectl 规则写入 — 基于 D2 vector smoke 已验证机制:
+#   - kysec_set -n exectl -v verified  <binary>    设置执行信任
+#   - kysec_set -n exectl -v unknown   <binary>    撤销执行信任
+#   - getfattr -n security.exectl      <binary>    读取扩展属性
+#   - kysec_get                       查看当前策略
+#
+# 同时实施 UDS 文件权限 + ACL 最小授权作为纵深防御:
+#   - 仅允许 kylin-aiassistant 进程访问 socket
+#   - 记录授权前后规则状态
+#   - 非破坏性: 原有权限/ACL/KYSEC 状态被备份而非删除
+#
+```
+
+### P1-5 status 输出 UNVERIFIED 标注
+UNVERIFIED 存在: ❌ 缺失
+```
+[2026-08-06T13:32:57] ====== 完整状态报告 ======
+
+--- KYSEC CLI 探测 ---
+  kysec_set: /usr/sbin/kysec_set
+  kysec_get: /usr/sbin/kysec_get
+  getfattr:  /usr/bin/getfattr
+
+--- KYSEC 全局策略 ---
+(未设置 KYLIN_ECHO_DEPLOY_BASE)
+
+--- KYSEC 内核 sysfs ---
+/sys/kernel/security/kylin 不存在 (可能未加载内核模块)
+
+--- 目标二进制 KYSEC 状态 ---
+  (未设置 KYLIN_ECHO_DEPLOY_BASE, 跳过)
+
+--- Socket 目录 ---
+总计 0
+drwx------  2 root root   40  8月 6日 13:32 .
+drwxr-xr-x 39 root root 1160  8月 6日 13:32 ..
+
+ACL:
+# file: run/kylin-memory-echo
+# owner: root
+# group: root
+user::rwx
+group::---
+other::---
+
+
+--- Socket 文件 ---
+Socket 文件不存在 (服务未启动)
+
+--- kylin-aiassistant 进程 ---
+无 kylin-aiassistant 进程
+
+--- 当前用户 ---
+UID=0 USER=root
+SUDO_USER=root
+[2026-08-06T13:32:57] ====== 状态报告结束 ======
+```
+
+### --help --socket 参数
+--socket 支持: ❌ 缺失
+```
+Usage: /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh [authorize|status|rollback]
+
+  authorize  - 备份当前状态, KYSEC exectl verified 授权 + ACL 纵深防御
+  status     - 显示当前 KYSEC/ACL/Socket 完整状态
+  rollback   - 撤销 KYSEC exectl 授权, 回退 ACL, 从备份恢复
+
+环境变量:
+  KYLIN_ECHO_DEPLOY_BASE  部署根目录 (如 /home/user/kylin-memory-echo)
+
+示例:
+  KYLIN_ECHO_DEPLOY_BASE=/home/kylin-agent/kylin-memory-echo sudo -E bash /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh authorize
+```
+
+## echo (开发版): /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kysec_authorize.sh
+存在: EXISTS
+
+### P1-4 头部 UNVERIFIED 标注
+UNVERIFIED 存在: ❌ 缺失
+```
+#!/usr/bin/env bash
+# =============================================================================
+# KYSEC 执行控制授权 + UDS 文件权限与 ACL 最小授权脚本
+# =============================================================================
+# 实施真实 KYSEC exectl 规则写入 — 基于 D2 vector smoke 已验证机制:
+#   - kysec_set -n exectl -v verified  <binary>    设置执行信任
+#   - kysec_set -n exectl -v unknown   <binary>    撤销执行信任
+#   - getfattr -n security.exectl      <binary>    读取扩展属性
+#   - kysec_get                       查看当前策略
+#
+# 同时实施 UDS 文件权限 + ACL 最小授权作为纵深防御:
+#   - 仅允许 kylin-aiassistant 进程访问 socket
+#   - 记录授权前后规则状态
+#   - 非破坏性: 原有权限/ACL/KYSEC 状态被备份而非删除
+#
+```
+
+### P1-5 status 输出 UNVERIFIED 标注
+UNVERIFIED 存在: ❌ 缺失
+```
+[2026-08-06T13:32:58] ====== 完整状态报告 ======
+
+--- KYSEC CLI 探测 ---
+  kysec_set: /usr/sbin/kysec_set
+  kysec_get: /usr/sbin/kysec_get
+  getfattr:  /usr/bin/getfattr
+
+--- KYSEC 全局策略 ---
+(未设置 KYLIN_ECHO_DEPLOY_BASE)
+
+--- KYSEC 内核 sysfs ---
+/sys/kernel/security/kylin 不存在 (可能未加载内核模块)
+
+--- 目标二进制 KYSEC 状态 ---
+  (未设置 KYLIN_ECHO_DEPLOY_BASE, 跳过)
+
+--- Socket 目录 ---
+总计 0
+drwx------  2 root root   40  8月 6日 13:32 .
+drwxr-xr-x 39 root root 1160  8月 6日 13:32 ..
+
+ACL:
+# file: run/kylin-memory-echo
+# owner: root
+# group: root
+user::rwx
+group::---
+other::---
+
+
+--- Socket 文件 ---
+Socket 文件不存在 (服务未启动)
+
+--- kylin-aiassistant 进程 ---
+无 kylin-aiassistant 进程
+
+--- 当前用户 ---
+UID=0 USER=root
+SUDO_USER=root
+[2026-08-06T13:32:58] ====== 状态报告结束 ======
+```
+
+### --help --socket 参数
+--socket 支持: ❌ 缺失
+```
+Usage: /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kysec_authorize.sh [authorize|status|rollback]
+
+  authorize  - 备份当前状态, KYSEC exectl verified 授权 + ACL 纵深防御
+  status     - 显示当前 KYSEC/ACL/Socket 完整状态
+  rollback   - 撤销 KYSEC exectl 授权, 回退 ACL, 从备份恢复
+
+环境变量:
+  KYLIN_ECHO_DEPLOY_BASE  部署根目录 (如 /home/user/kylin-memory-echo)
+
+示例:
+  KYLIN_ECHO_DEPLOY_BASE=/home/kylin-agent/kylin-memory-echo sudo -E bash /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kysec_authorize.sh authorize
+```
+
