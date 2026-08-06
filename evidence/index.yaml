@@ -222,4 +222,3 @@ entries:
       最终 L2 复测（2026-08-07，被测 commit e62e91b）全绿：
       ctest 5/5（含 failure_recovery）+ pytest 33+13+1=47 项无 Skip + smoke 11 + 生命周期 4 路径
       运行输出见原始日志
-      运行输出见原始日志
