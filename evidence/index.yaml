@@ -237,6 +237,7 @@ entries:
       采集人: 周子腾, 采集日期: 2026-08-06.
       麒麟环境: Kylin V11 (2603), Linux 6.6.0-63-generic, systemd 255, Python 3.12.3, g++ 12.3.0, CMake 3.28.3.
       KYSEC authorize→rollback 全链路验证通过 (real rule write + verified + revocation).
+
   - id: "D2-1-KAIMING-HOOK"
     task_id: "D2-1"
     description: "Kaiming → 自定义 UDS Echo 真实 Hook 调查 — 路线 B 如实记录失败"
@@ -275,3 +276,74 @@ entries:
       + 重复调用稳定性(5次) + 错误模型名(errorCode=10, fallback 恢复)
       全部通过，统一维度 768，L2 范数=1.000000（单位向量确认）
       运行输出见原始日志
+
+  - id: "D2-3-DEPLOY-STARTUP"
+    task_id: "D2-3"
+    description: "Day2 部署和启动可复现验证 — CMake 构建、dev 模式启动、--dev 参数使能"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/day2_results/D2_3_deploy_startup.log"
+    date: "2026-08-06"
+    reviewer: "谢嘉然"
+    limitations: "systemd unit 文件在回退后已移除，systemd 模式重启未验证；dev 模式启动和 socket 创建均 PASS；交叉验证 dev 服务 + systemd 路径客户端正确拒绝"
+    checksum_sha256: "15c617e7f1b5130c0192b941c87474e0b88fedaca87dfbe549d03aeb2cbf67c1"
+    details: |
+      D2-3.2 CMake 配置 + 构建: exit=0, 产物 echo_client + kaiming_memory_client 编译成功.
+      D2-3.3 dev 模式手动启动: socket /tmp/kylin-memory-echo/echo.sock 创建成功.
+      D2-3.4 --dev 参数使能验证: 不带 --dev 启动时预期拒绝 (systemd 模式不静默回退).
+      关联缺口: P2-1 (index.yaml 登记), P0-1 (R3 生命周期路径不一致).
+
+  - id: "D2-4-SOCKET-AUDIT"
+    task_id: "D2-4"
+    description: "Day2 统一 Socket 路径全链路一致性审计"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/day2_results/E9_socket_path_audit.log"
+    date: "2026-08-06"
+    reviewer: "谢嘉然"
+    limitations: "D2-4.1 systemd unit RuntimeDirectory 不可确认 (unit 已移除); D2-4.5 kysec_authorize.sh --socket 参数未支持 (关联 P0-3); D2-4.6 test_rollback.sh NOT_FOUND (关联 P1-3); C++ 客户端 (echo_client + kaiming_memory_client) --socket 参数均支持"
+    checksum_sha256: "89523018e601180bb3e023de8c4582f2ae3afa35b8f67ed9c6349ed594188f7c"
+    details: |
+      D2-4.1 RuntimeDirectory: UNIT_NOT_FOUND (审计时已 uninstall).
+      D2-4.2 /run/kylin-memory-echo/: 权限不够 (非 root 审计).
+      D2-4.3 /tmp/kylin-memory-echo/: 存在, kysec_authorize.log 残留.
+      D2-4.4 C++ 客户端: echo_client + kaiming_memory_client 均支持 --socket.
+      D2-4.5 kysec_authorize.sh --help: --socket 参数未支持 (关联 P0-3 修复方向).
+      D2-4.6 test_rollback.sh: NOT_FOUND (关联 P1-3 需上传).
+      D2-4.7 交叉验证: dev 服务 + systemd 路径客户端 -> 预期失败 PASS.
+
+  - id: "D2-6-KYSEC-SCOPE"
+    task_id: "D2-6"
+    description: "Day2 KYSEC 授权口径确认 — ACL 模拟替代方案范围界定"
+    status: "UNVERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/day2_results/D2_6_kysec_scope.log"
+    date: "2026-08-06"
+    reviewer: "谢嘉然"
+    limitations: "KYSEC 内核接口不可用 (/sys/kernel/security/kylin 路径不存在); kysec_authorize.sh 头部缺少 UNVERIFIED 标注 (关联 P1-4); status 输出缺少 UNVERIFIED 标注 (关联 P1-5); D2-6.3 记录不一致 (关联 P2-3)"
+    checksum_sha256: "3481700d999e7301f841f77aa829a449cab3f5c8eea6f52e53c1521953afda47"
+    details: |
+      当前 kysec_authorize.sh 仅实施文件权限 (chmod 0700/0600) + ACL (setfacl) 纵深防御.
+      不调用 kysec_set/kysec_get 命令写入真实 KYSEC 规则.
+      Gate 0 阶段不具备 KYSEC 管理员 token 和内核模块加载权限.
+      Gate 1 后续计划: 获取 KYSEC 开发者文档 -> 申请测试环境授权 -> 最小规则集验证.
+      关联缺口: P1-4 (头部 UNVERIFIED 标注), P1-5 (status UNVERIFIED 标注), P2-3 (记录一致性).
+
+  - id: "D2-7-ROLLBACK-BASELINE"
+    task_id: "D2-7"
+    description: "Day2 回退对照 Day1 基线验证 — 逐项对比文件/SHA/权限/ACL/进程"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/day2_results/E8_rollback_baseline_compare.log"
+    date: "2026-08-06"
+    reviewer: "谢嘉然"
+    limitations: "D2-7.2 SHA-256 对比仅回退前无回退后 (关联 P1-6); D2-7.7 owner/group/mode 恢复检查未执行 (关联 P1-7); D2-7.8 ACL 恢复检查未执行 (关联 P1-8); D2-7.9 包版本恢复检查未执行 (关联 P1-9); D2-7.5 进程清理不干净 (关联 P1-10); test_rollback.sh NOT_FOUND 无法执行标准 rollback"
+    checksum_sha256: "6680123bfe6b0d49d26baf7ac12689891299c82ac3ac1a85421e9e0c63eeb966"
+    details: |
+      D2-7.1 文件恢复: rollback 后文件清单与回退前一致.
+      D2-7.3 unit 恢复: systemctl cat 返回 NOT_FOUND (unit 已移除).
+      D2-7.4 service 恢复: systemctl status 返回 could not be found.
+      D2-7.5 进程清理: pgrep 返回 PID 残留 (不完全).
+      D2-7.6 Socket 清理: /run/ 和 /tmp/ socket 均不存在.
+      P1-6 SHA-256 回退前后一致; P1-7~P1-9 未执行对比.
+      关联缺口: P1-6, P1-7, P1-8, P1-9, P1-10.

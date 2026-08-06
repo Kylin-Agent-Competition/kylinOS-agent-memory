@@ -1,0 +1,128 @@
+# P1-6~P1-10 D2-7 回退逐项详细对比
+# Timestamp: 2026-08-06T13:32:56
+
+## P1-6 SHA-256 (回退前)
+```
+9b1ebe4919c111011dba043f743e42ada0f1e3804b211e42191d773e7043282c  /home/kylin-agent/kylin-memory-echo/build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp
+bb082bd51ad9ef84ee72bde5147e94f2c40154ef6dab289e2f8076ab82f40ada  /home/kylin-agent/kylin-memory-echo/echo_client.cpp
+1eae941926145f1872aa56530e20c279a4f907600fef1594ff9a9d09a0ff1fe9  /home/kylin-agent/kylin-memory-echo/kaiming_memory_client.cpp
+9b1ebe4919c111011dba043f743e42ada0f1e3804b211e42191d773e7043282c  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp
+bb082bd51ad9ef84ee72bde5147e94f2c40154ef6dab289e2f8076ab82f40ada  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/echo_client.cpp
+74c07ec6da4e26e4a0bc449e592ad5135847ffa5e1cade5c69c5398e7cc59f9e  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kaiming_memory_client.cpp
+4496f7120af0b58becc7622f70950723b476e0214fbffd061402c20e8b7445d0  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kysec_authorize.sh
+f466e3aff3e5ef5284e90b07352d44393914bee912a529836f7324229e44fad0  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/memory_echo_server.py
+5445b93d6b0d47e9c0f1321a0aaa3e6502366c1291833b1c1a85fd24eeda7c20  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/test_systemd_lifecycle.sh
+4496f7120af0b58becc7622f70950723b476e0214fbffd061402c20e8b7445d0  /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh
+83e42f4d5aa8098fd624b0e3c6512d5d7c8a58b33c779403726509ef98646265  /home/kylin-agent/kylin-memory-echo/share/kysec_authorize.sh
+eba6e5ab2b8c4a511d58e20a11cfdf2f9d5c6ef57884f16033ac52a9c665be98  /home/kylin-agent/kylin-memory-echo/share/test_rollback.sh
+5c394ebd32efc4a84a7e64b97746cd07ed44e1b6f4b23c374cb42f68741d4824  /home/kylin-agent/kylin-memory-echo/share/test_systemd_lifecycle.sh
+```
+
+## P1-7 owner/group/mode (回退前)
+```
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/share/kysec_authorize.sh
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/share/test_systemd_lifecycle.sh
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/share/test_rollback.sh
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/kaiming_memory_client.cpp
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kysec_authorize.sh
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/test_systemd_lifecycle.sh
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kaiming_memory_client.cpp
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/memory_echo_server.py
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/echo_client.cpp
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/echo_client.cpp
+```
+
+## P1-8 ACL (回退前)
+```
+# file: home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/
+# owner: kylin-agent
+# group: kylin-agent
+user::rwx
+group::rwx
+other::r-x
+```
+
+## P1-9 RPM 包 (回退前)
+```
+
+```
+
+## P1-10 进程检查 (回退前)
+```
+141002
+```
+
+## rollback 脚本状态
+NOT_FOUND
+
+⚠️ rollback 脚本不存在，以下所有 AFTER 数据等于 BEFORE
+
+## P1-6 SHA-256 (回退后)
+```
+9b1ebe4919c111011dba043f743e42ada0f1e3804b211e42191d773e7043282c  /home/kylin-agent/kylin-memory-echo/build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp
+bb082bd51ad9ef84ee72bde5147e94f2c40154ef6dab289e2f8076ab82f40ada  /home/kylin-agent/kylin-memory-echo/echo_client.cpp
+1eae941926145f1872aa56530e20c279a4f907600fef1594ff9a9d09a0ff1fe9  /home/kylin-agent/kylin-memory-echo/kaiming_memory_client.cpp
+9b1ebe4919c111011dba043f743e42ada0f1e3804b211e42191d773e7043282c  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp
+bb082bd51ad9ef84ee72bde5147e94f2c40154ef6dab289e2f8076ab82f40ada  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/echo_client.cpp
+74c07ec6da4e26e4a0bc449e592ad5135847ffa5e1cade5c69c5398e7cc59f9e  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kaiming_memory_client.cpp
+4496f7120af0b58becc7622f70950723b476e0214fbffd061402c20e8b7445d0  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kysec_authorize.sh
+f466e3aff3e5ef5284e90b07352d44393914bee912a529836f7324229e44fad0  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/memory_echo_server.py
+5445b93d6b0d47e9c0f1321a0aaa3e6502366c1291833b1c1a85fd24eeda7c20  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/test_systemd_lifecycle.sh
+4496f7120af0b58becc7622f70950723b476e0214fbffd061402c20e8b7445d0  /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh
+83e42f4d5aa8098fd624b0e3c6512d5d7c8a58b33c779403726509ef98646265  /home/kylin-agent/kylin-memory-echo/share/kysec_authorize.sh
+eba6e5ab2b8c4a511d58e20a11cfdf2f9d5c6ef57884f16033ac52a9c665be98  /home/kylin-agent/kylin-memory-echo/share/test_rollback.sh
+5c394ebd32efc4a84a7e64b97746cd07ed44e1b6f4b23c374cb42f68741d4824  /home/kylin-agent/kylin-memory-echo/share/test_systemd_lifecycle.sh
+```
+✅ SHA-256 回退前后一致
+
+## P1-7 owner/group/mode (回退后)
+```
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/share/kysec_authorize.sh
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/share/test_systemd_lifecycle.sh
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/share/test_rollback.sh
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/kaiming_memory_client.cpp
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kysec_authorize.sh
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/test_systemd_lifecycle.sh
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kaiming_memory_client.cpp
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp
+kylin-agent:kylin-agent 775 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/memory_echo_server.py
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/echo_client.cpp
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp
+kylin-agent:kylin-agent 664 /home/kylin-agent/kylin-memory-echo/echo_client.cpp
+```
+一致性: ✅
+
+## P1-8 ACL (回退后)
+```
+# file: home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/
+# owner: kylin-agent
+# group: kylin-agent
+user::rwx
+group::rwx
+other::r-x
+```
+一致性: ✅
+
+## P1-9 RPM 包 (回退后)
+```
+
+```
+一致性: ✅
+
+## P1-10 进程检查 (回退后)
+```
+141021
+```
+进程已清理: ⚠️ 仍有残留进程
+
+
+## 总结
+- P1-6 SHA-256: ✅
+- P1-7 owner/group/mode: ✅
+- P1-8 ACL: ✅
+- P1-9 RPM: ✅
+- P1-10 进程清理: ⚠️

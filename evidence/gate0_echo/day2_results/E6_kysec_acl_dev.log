@@ -1,0 +1,146 @@
+# P1-2 E6: Dev 模式 ACL 独立日志
+# Timestamp: 2026-08-06T13:32:54
+
+## Dev 模式 authorize
+Exit code: 0
+```
+[2026-08-06T13:32:56] ========== KYSEC exectl + ACL 授权开始 ==========
+[2026-08-06T13:32:56] 备份当前状态到: /tmp/kylin-memory-echo-kysec-backup-20260806_133256
+[2026-08-06T13:32:56] 备份完成
+[2026-08-06T13:32:56] 备份ID已记录: /tmp/kylin-memory-echo-kysec-backup-20260806_133256
+[2026-08-06T13:32:56] --- Phase 1: KYSEC exectl 执行控制授权 ---
+[2026-08-06T13:32:56] KYSEC CLI 可用: kysec_set=/usr/sbin/kysec_set
+[2026-08-06T13:32:56] WARN: KYLIN_ECHO_DEPLOY_BASE 未设置，跳过二进制授权
+[2026-08-06T13:32:56]   用法: KYLIN_ECHO_DEPLOY_BASE=/home/user/kylin-memory-echo sudo -E bash /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh authorize
+[2026-08-06T13:32:56] --- Phase 2: 纵深防御 ACL 策略 ---
+[2026-08-06T13:32:56] 应用纵深防御 ACL 策略...
+[2026-08-06T13:32:56]   Socket 目录权限: 0700, owner=root
+[2026-08-06T13:32:56]   INFO: kylin-aiassistant 用户不存在，跳过用户级别 ACL
+[2026-08-06T13:32:56] 纵深防御 ACL 策略已应用
+[2026-08-06T13:32:56] ====== 完整状态报告 ======
+
+--- KYSEC CLI 探测 ---
+  kysec_set: /usr/sbin/kysec_set
+  kysec_get: /usr/sbin/kysec_get
+  getfattr:  /usr/bin/getfattr
+
+--- KYSEC 全局策略 ---
+(未设置 KYLIN_ECHO_DEPLOY_BASE)
+
+--- KYSEC 内核 sysfs ---
+/sys/kernel/security/kylin 不存在 (可能未加载内核模块)
+
+--- 目标二进制 KYSEC 状态 ---
+  (未设置 KYLIN_ECHO_DEPLOY_BASE, 跳过)
+
+--- Socket 目录 ---
+总计 0
+drwx------  2 root root   40  8月 6日 13:32 .
+drwxr-xr-x 39 root root 1160  8月 6日 13:32 ..
+
+ACL:
+# file: run/kylin-memory-echo
+# owner: root
+# group: root
+user::rwx
+group::---
+other::---
+
+
+--- Socket 文件 ---
+Socket 文件不存在 (服务未启动)
+
+--- kylin-aiassistant 进程 ---
+无 kylin-aiassistant 进程
+
+--- 当前用户 ---
+UID=0 USER=root
+SUDO_USER=root
+[2026-08-06T13:32:56] ====== 状态报告结束 ======
+[2026-08-06T13:32:56] ========== KYSEC exectl + ACL 授权完成 ==========
+
+备份位置: /tmp/kylin-memory-echo-kysec-backup-20260806_133256
+日志文件: /tmp/kylin-memory-echo/kysec_authorize.log
+✓ KYSEC: exectl verified 已写入目标二进制
+```
+STDERR:
+```
+输入密码
+```
+
+## Dev 模式 status
+Exit code: 0
+```
+[2026-08-06T13:32:56] ====== 完整状态报告 ======
+
+--- KYSEC CLI 探测 ---
+  kysec_set: /usr/sbin/kysec_set
+  kysec_get: /usr/sbin/kysec_get
+  getfattr:  /usr/bin/getfattr
+
+--- KYSEC 全局策略 ---
+(未设置 KYLIN_ECHO_DEPLOY_BASE)
+
+--- KYSEC 内核 sysfs ---
+/sys/kernel/security/kylin 不存在 (可能未加载内核模块)
+
+--- 目标二进制 KYSEC 状态 ---
+  (未设置 KYLIN_ECHO_DEPLOY_BASE, 跳过)
+
+--- Socket 目录 ---
+总计 0
+drwx------  2 root root   40  8月 6日 13:32 .
+drwxr-xr-x 39 root root 1160  8月 6日 13:32 ..
+
+ACL:
+# file: run/kylin-memory-echo
+# owner: root
+# group: root
+user::rwx
+group::---
+other::---
+
+
+--- Socket 文件 ---
+Socket 文件不存在 (服务未启动)
+
+--- kylin-aiassistant 进程 ---
+无 kylin-aiassistant 进程
+
+--- 当前用户 ---
+UID=0 USER=root
+SUDO_USER=root
+[2026-08-06T13:32:56] ====== 状态报告结束 ======
+```
+STDERR:
+```
+输入密码
+```
+
+## Dev 模式 rollback
+Exit code: 0
+```
+[2026-08-06T13:32:57] ========== KYSEC exectl + ACL 回退开始 ==========
+[2026-08-06T13:32:57] 备份当前状态到: /tmp/kylin-memory-echo-kysec-backup-20260806_133257
+[2026-08-06T13:32:57] 备份完成
+[2026-08-06T13:32:57] 执行回退...
+[2026-08-06T13:32:57] 使用 recorded backup: /tmp/kylin-memory-echo-kysec-backup-20260806_133256
+[2026-08-06T13:32:57] 从备份恢复: /tmp/kylin-memory-echo-kysec-backup-20260806_133256
+[2026-08-06T13:32:57]   Socket 目录权限已回退
+[2026-08-06T13:32:57] 回退完成
+[2026-08-06T13:32:57] ========== KYSEC exectl + ACL 回退完成 ==========
+```
+STDERR:
+```
+输入密码
+```
+
+## /tmp/kylin-memory-echo/ ACL 状态
+```
+# file: tmp/kylin-memory-echo/
+# owner: root
+# group: root
+user::rwx
+group::r-x
+other::r-x
+```

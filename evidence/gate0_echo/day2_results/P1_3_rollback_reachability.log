@@ -1,0 +1,6 @@
+# P1-3 test_rollback.sh 可达性检查
+# Timestamp: 2026-08-06T13:32:55
+
+- `/home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/test_rollback.sh`: NOT_FOUND
+- `/home/kylin-agent/packaging/deploy-package/scripts/test_rollback.sh`: NOT_FOUND
+- `/home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/test_rollback.sh`: NOT_FOUND
