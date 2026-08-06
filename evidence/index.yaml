@@ -208,18 +208,18 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day4_verify_latest.log"
-    tested_commit: "31e173322fd84d6902d0dea9e1b311decf43bccc"  # 最终生产代码 Commit（麒麟 VM 最终 L2 全绿 FAILURES=0）
-    evidence_commit: "a650b6be17a4f13dceefe061c5a47e25a92e6c14"  # 证据日志提交（完整 SHA）
+    tested_commit: "e62e91bfed66b50140ef2fb4ef41f500b26cd5d6"  # 最终生产代码 Commit（麒麟 VM 第六轮 L2 全绿 FAILURES=0）
+    evidence_commit: "0b2a629"  # 证据日志提交（待回填完整 SHA）
     source_commit: "aba789f84c0f0aa583cbc36e99ac2ab0faa03add"  # 历史兼容字段（状态机修复基线）
     commit: "aba789f84c0f0aa583cbc36e99ac2ab0faa03add"  # 历史兼容字段（已由 tested/evidence_commit 取代）
-    date: "2026-08-06"
+    date: "2026-08-07"
     reviewer: "pending"
-    limitations: "异步、并发、主动超时、多模态未覆盖；SDK 限制（麒麟实测）：同进程禁止 dlclose 后重载、禁止 session 销毁重建；Provider 进程级单例 + close 后需 restart（模型 B）；并发初始化无类级锁（TD-A-005-06）"
-    checksum_sha256: "7349be00000cf3929864755114c4b5ae86c59cc1c968c21a8d0a896ad8e65ec3"
+    limitations: "异步、并发、主动超时、多模态未覆盖；SDK 限制（麒麟实测）：同进程禁止 dlclose 后重载、禁止 session 销毁重建；Provider 进程级单例 + close 后需 restart（模型 B）；并发初始化无类级锁（TD-A-005-06）；dlsym/init_session 失败进入不可恢复终态（P1-High 方案 A）"
+    checksum_sha256: "3176a8f4a62751de66470e8f97316fa37f4e0f35d233a64bb10d412e35870ad3"
     details: |
       C++ Bridge(dlopen/dlsym) + pybind11 模块 + Python EmbeddingProvider 最小真实调用
-      生命周期状态机（_lifecycle）+ Bridge destroy 终态 + 配置锁定 + 失败阶段区分恢复
-      最终 L2 复测（2026-08-06，被测 commit 31e1733）全绿：
-      ctest 4/4 + pytest 28+13+1=42 项无 Skip + smoke 11 + 生命周期 4 路径
+      生命周期状态机 + Bridge destroy 终态 + 配置锁定 + 失败阶段区分恢复（P1-High 方案 A）
+      最终 L2 复测（2026-08-07，被测 commit e62e91b）全绿：
+      ctest 5/5（含 failure_recovery）+ pytest 33+13+1=47 项无 Skip + smoke 11 + 生命周期 4 路径
       运行输出见原始日志
       运行输出见原始日志
