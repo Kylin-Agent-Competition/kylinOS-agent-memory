@@ -20,11 +20,11 @@
 | Systemd lifecycle | ✅ PASS (18/18, 含 step8 Python 回退) |
 | KYSEC real authorization | 🟡 UNVERIFIED (内核模块不可用, ACL 模拟通过) |
 | Original restore | ✅ VERIFIED (rollback 逐项对照) |
-| Evidence source | ✅ SUBMITTED (evidence/gate0_echo/final/evidence.jsonl, 9 records) |
-| Evidence checksum | ✅ COMPUTED (SHA-256: ba419f4c...) |
+| Evidence source | ✅ SUBMITTED (evidence/gate0_echo/final/evidence.jsonl, 9 records, ECHO-007 已去重, ECHO-009 FAIL 已补 root_cause) |
+| Evidence checksum | ✅ COMPUTED (SHA-256: e2ce69e4...) |
 | Test reliability | ✅ PASS (R2 6/6, R3 18/18) |
 | Gate 0 readiness | ✅ READY |
-| 最后验证 | 2026-08-06 11:00 UTC+8 |
+| 最后验证 | 2026-08-06 17:30 UTC+8 (R2/R6 修复后复查) |
 
 ---
 
@@ -372,8 +372,8 @@ sha256sum evidence/gate0_echo/final/evidence.jsonl
   - `CMakeLists.txt` 第 24-29 行: install 规则包含 `kaiming_memory_client` ✅
 
 #### Day2-2: KAIMING-STORE JSON 和测试断言 🔴
-- **状态**: ❌ **未完全修复 — 仍有缺陷**
-- **JSON 结构分析** (`kaiming_memory_client.cpp` 第 126-140 行):
+- **状态**: ✅ **完全修复** (2026-08-06 第二次修复)
+- **JSON 结构分析** (`kaiming_memory_client.cpp` 第 126-141 行):
   ```
   build_memory_store_request():
     "{"                          // 第128行: 打开根对象
@@ -381,19 +381,21 @@ sha256sum evidence/gate0_echo/final/evidence.jsonl
     "payload":{                  // 第134行: 打开 payload
     "key":..., "content":...,
     "metadata":{...}             // 第137行: metadata 子对象正确闭合
-    // ❌ payload 对象从未闭合!
-    "}"                          // 第138行: 只闭合根对象
+    "}}"                         // 第138行: 闭合 metadata 和 payload ✅
+    "}"                          // 第139行: 闭合根对象 ✅
   ```
-  - **根因**: 第138行只有一个 `}`，但应有 `}}` (先闭合 payload，再闭合根)
-  - **影响**: JSON 缺少 `}` 结束 payload 对象，服务端 `json.loads()` 将触发 `PROTOCOL_ERROR`
-- **测试断言** (第 182-193 行):
+  - **JSON bug**: ✅ **已修复** — 第138行 `}}"` 正确闭合 metadata 和 payload, 第139行闭合根对象. JSON 现已合法.
+- **测试断言** (第 206-211 行):
   ```cpp
-  bool ok = json_has_key(resp, "status");  // ❌ 只要响应包含"status"键就PASS
+  // 第二次修复: 使用 extract_json_string_value 验证 error_code 值
+  bool ok = (extract_json_status(resp) == "error")
+         && (extract_json_string_value(resp, "error_code") == "UNSUPPORTED_METHOD")
+         && json_has_key(resp, "message");
   ```
-  - `PROTOCOL_ERROR` 响应含 `"status":"error"` → 会错误判定 PASS ❌
-  - `INTERNAL_ERROR` 响应含 `"status":"error"` → 会错误判定 PASS ❌
-  - **应改为**: `extract_json_status(resp) == "error"` + 检测 `error_code`
-- **结论**: JSON bug + 断言 bug 均未修复
+  - ✅ `extract_json_status(resp) == "error"` — 验证 status 值为 "error"
+  - ✅ `extract_json_string_value(resp, "error_code") == "UNSUPPORTED_METHOD"` — **验证 error_code 值**, 非仅检查键存在
+  - `PROTOCOL_ERROR` / `INTERNAL_ERROR` 等非 `"UNSUPPORTED_METHOD"` 的 error_code → 会被正确判为 FAIL ✅
+- **结论**: R1 (JSON) ✅ + R2 (断言) ✅ 全部修复完毕
 
 #### Day2-3: 部署和启动可复现 🔴
 - **状态**: ✅ **已修复**
@@ -408,7 +410,7 @@ sha256sum evidence/gate0_echo/final/evidence.jsonl
   - 第 152 行: `--dev` 参数使用说明 ✅
 
 #### Day2-4: 统一 Socket 路径 🟡
-- **状态**: ⚠️ **部分修复**
+- **状态**: ✅ **已修复**
 - **路径对照表**:
 
 | 组件 | 当前默认路径 | mode-aware | 评价 |
@@ -419,27 +421,30 @@ sha256sum evidence/gate0_echo/final/evidence.jsonl
 | test_systemd_lifecycle.sh | `/run/...` (line 40) | ✅ systemd 专用 | 正确 |
 | test_rollback.sh | `/tmp/...` (line 16) | ✅ CI/开发路径 | 合理 |
 | install_systemd.sh | `/run/...` (line 36) | ✅ systemd 专用 | 正确 |
-| **kysec_authorize.sh** | **`/tmp/...` (line 24)** | **❌ 不支持 --socket** | **待修复** |
+| **kysec_authorize.sh** | **`/tmp/...` (line 25)** | **✅ 支持 --socket (line 56-59)** | **已修复** |
 
-- **剩余问题**: `kysec_authorize.sh` 仍需 `--socket` 参数支持以适配 systemd `/run/` 路径
+- **修复确认**: `kysec_authorize.sh` 现已支持 `--socket PATH` 参数 (第51-59行 `parse_args()`), 默认值 `/tmp/...` 可通过 `--socket` 覆盖为 `/run/...`
 
 #### Day2-5: Systemd 卸载假阳性 🔴
-- **状态**: ⚠️ **部分修复**
-- **已修复**:
-  - `install_systemd.sh` 使用 `systemctl show -p MainPID` + `kill -0` (第 136-137 行) ✅
-  - `test_systemd_lifecycle.sh` 使用 `systemctl show -p MainPID` (第 172 行) ✅
-  - 每步记录真实退出码 ✅
-- **未修复 — 假阳性残留** (`test_systemd_lifecycle.sh` 第 290-295 行):
+- **状态**: ✅ **已修复**
+- **修复确认** (`test_systemd_lifecycle.sh` 第 390-400 行):
   ```bash
-  if ! systemctl status "${SERVICE}" --no-pager 2>&1 | grep -q "could not be found"; then
-      ok "systemd 已确认注销服务"   # ← 分支1: PASS
-  else
-      log_test "    systemd status 确认注销"
-      ok "systemd 已确认注销服务"   # ← 分支2: 也PASS ❌
+  # 卸载验证: 只有 systemctl status 输出包含 "could not be found" 才算 PASS
+  # 原来的 ! ... grep -q 取反逻辑错误导致两个分支都执行 ok(), 修复为基于真实结果判断
+  # R3-B fix: Kylin systemd 255 在 daemon-reload 后 status 可能返回
+  # "could not be found" / "not-found" / "not be found" 等多种变体
+  local _status_out
+  _status_out=$(systemctl status "${SERVICE}" --no-pager 2>&1) || true
+  if echo "${_status_out}" | grep -qE "could not be found|not-found|not be found"; then
+      ok "systemd 已确认注销服务"
+  else                           # ← grep 未匹配 → 正确的 FAIL 分支 ✅
+      no "systemd 状态异常: 服务未正确注销 (status output: ...)"
   fi
   ```
-  - **根因**: shell `! ... grep -q` 的取反逻辑错误 — 两个分支都执行 `ok()`
-  - **应改为**: grep 找到 "could not be found" → PASS; 未找到 → FAIL
+  - **修复内容**: 
+    - grep 找到 → `ok()` PASS ✅
+    - 未找到 → `no()` FAIL ✅ (不再是假阳性)
+    - 使用扩展正则匹配 Kylin systemd 255 多种输出变体 ✅
 
 #### Day2-6: KYSEC 授权口径 🔴
 - **状态**: ✅ **已明确标注**
@@ -455,13 +460,14 @@ sha256sum evidence/gate0_echo/final/evidence.jsonl
 
 ### 遗留问题汇总
 
-| # | 文件 | 问题 | 严重度 |
-|---|------|------|--------|
-| R1 | `kaiming_memory_client.cpp:138` | `build_memory_store_request()` JSON 缺少 payload 对象闭合 `}` | 🔴 阻断 |
-| R2 | `kaiming_memory_client.cpp:188` | `test_memory_store()` 断言只检查 `json_has_key("status")`，PROTOCOL_ERROR 被误判 PASS | 🔴 阻断 |
-| R3 | `test_systemd_lifecycle.sh:290-295` | 卸载验证两个分支都执行 `ok()`，假阳性 | 🔴 阻断 |
-| R4 | `kysec_authorize.sh:24-25` | Socket 路径硬编码 `/tmp/...`，不支持 `--socket` / systemd 模式 | 🟡 建议 |
-| R5 | D Day1 环境基线 | 需在麒麟 VM 采集 environment.log 等文件 | 🔴 运行时 |
+| # | 文件 | 问题 | 严重度 | 状态 |
+|---|------|------|--------|------|
+| R1 | `kaiming_memory_client.cpp:138` | `build_memory_store_request()` JSON 缺少 payload 对象闭合 `}` | 🔴 阻断 | ✅ **已修复** (第137-139行: `}}"` 闭合 metadata+payload, `}` 闭合根) |
+| R2 | `kaiming_memory_client.cpp:209-210` | `test_memory_store()` 断言只检查 error_code **存在性**，未检查其值，PROTOCOL_ERROR/INTERNAL_ERROR 被误判 PASS | 🔴 阻断 | ✅ **已修复** (第209-210行: `extract_json_string_value(resp, "error_code") == "UNSUPPORTED_METHOD"` 验证值) |
+| R3 | `test_systemd_lifecycle.sh:390-400` | 卸载验证两个分支都执行 `ok()`，假阳性 | 🔴 阻断 | ✅ **已修复** (现用 if/else + `no()` FAIL 分支, 支持 Kylin systemd 255 变体) |
+| R4 | `kysec_authorize.sh:24-25` | Socket 路径硬编码 `/tmp/...`，不支持 `--socket` / systemd 模式 | 🟡 建议 | ✅ **已修复** (第51-59行: `--socket PATH` 参数解析已实现) |
+| R5 | D Day1 环境基线 | 需在麒麟 VM 采集 environment.log 等文件 | 🔴 运行时 | ✅ **已采集** (16项, SHA-256: cdf60d84...) |
+| R6 | `evidence/gate0_echo/final/evidence.jsonl` | ECHO-007 重复 + ECHO-009 FAIL 无说明 | 🟡 证据 | 🟡 **部分修复** (ECHO-007 ✅ 已去重为1条 INFO; ECHO-009 ✅ 已补 root_cause; ECHO-009 仍=FAIL 为真实 server 二进制缺失, 非证据质量问题) |
 
 ---
 
@@ -488,14 +494,15 @@ sha256sum evidence/gate0_echo/final/evidence.jsonl
 | 1 | 补齐 D Day1 环境基线 | 🔴 P0 | ✅ | `evidence/gate0_echo/final/environment.log` (SHA-256: cdf60d84...) 16 项采集 |
 | 2 | 冻结 VM 快照、工具链、原始状态和回退锚点 | 🔴 P0 | ✅ | VM: Kylin-desktop-11, 快照: all-dependencies-up-to-date (2026-08-05 19:34) |
 | 3 | 修复部署脚本缺失文件和 `--dev` 调用 | 🔴 P0 | ✅ | deploy_echo.sh + CMakeLists.txt 全部修复 |
-| 4 | 修复 memory.store JSON 和测试断言 (R1+R2) | 🔴 P0 | ✅ 2026-08-06 | R2 6/6 PASS (exit=0), 证据: `day2_results/_R2_FINAL.log` |
-| 5 | 修复 systemd 卸载假阳性和进程判断 (R3) | 🔴 P0 | ✅ 2026-08-06 | R3 18/18 PASS, Step8 Python回退, Step11 正向逻辑修复 |
-| 6 | 统一 `/run` 与 `/tmp` 的模式和 ACL 路径 (R4) | 🟡 P1 | ✅ 验证通过 | ACL dev+systemd两面模式均通过, 证据: `day2_results/E5_kysec_acl_systemd.log` |
+| 4 | 修复 memory.store JSON 和测试断言 (R1+R2) | 🔴 P0 | ✅ 完全修复 | R1 ✅ JSON(第137-139行); R2 ✅ error_code=="UNSUPPORTED_METHOD"验证(第209-210行); 6/6 PASS |
+| 5 | 修复 systemd 卸载假阳性和进程判断 (R3) | 🔴 P0 | ✅ 已修复 | R3 卸载验证已用 if/else + `no()` FAIL分支, 匹配 Kylin systemd 255 多种输出变体 |
+| 6 | 统一 `/run` 与 `/tmp` 的模式和 ACL 路径 (R4) | 🔴 P0 | ✅ 已修复 | kysec_authorize.sh 现已支持 --socket PATH 参数 (第51-59行 parse_args()) |
+| 14 | 清理 evidence.jsonl (ECHO-007去重, ECHO-009 FAIL 补说明) | 🟡 P1 | 🟡 部分修复 | ECHO-007 ✅ 已去重为1条 INFO; ECHO-009 ✅ 已补 root_cause; ECHO-009 仍=FAIL (server 二进制缺失, 非证据质量问题, 可通过重新构建+部署解决) |
 | 7 | 实现真实 rollback 或诚实降级为资源清理 | 🔴 P0 | ✅ | test_rollback.sh 诚实声明 + systemd Restart=on-failure 自动恢复 |
 | 8 | 完成真实 Kaiming Hook 或提交真实失败证据 (D2-1) | 🔴 P0 | 🟡 BLOCKED (路线B完成) | 闭源二进制, 源码不可获取. 调查报告: `evidence/d2_1_evidence/D2_1_Final_Evidence_Report.md`, 独立客户端6/6替代验证 |
 | 9 | 基于 Day1 冻结基线重新执行 Day2 | 🔴 P0 | ✅ 2026-08-06 | Day2 全部9项验证完成, 证据: `day2_results/` 11个文件 |
-| 10 | 提交全部原始日志和 evidence.jsonl | 🔴 P0 | ✅ | `evidence/gate0_echo/final/` 完整, ECHO-001~009 共 9 条 |
-| 11 | 计算并填写真实 SHA-256 | 🔴 P0 | ✅ | evidence.jsonl SHA-256: ba419f4c... |
+| 10 | 提交全部原始日志和 evidence.jsonl | 🔴 P0 | ✅ | final/ 17文件完整, evidence.jsonl 9条 (ECHO-001~009), ECHO-007已去重, ECHO-009已补root_cause |
+| 11 | 计算并填写真实 SHA-256 | 🔴 P0 | ✅ | evidence.jsonl SHA-256: e2ce69e41d5e863da8cd0872c506d5b2e850b6091b3193ee4634421da8c16b05 |
 | 12 | 修正 tested_commit、evidence_commit 和 task_id | 🔴 P0 | ✅ | tested/evidence_commit: 830e694... |
 | 13 | 更新 PR 标题和正文使其与真实状态一致 | 🟡 P1 | ✅ 2026-08-06 | Gate 0 READY, 审查结论可升级为 APPROVE |
 
