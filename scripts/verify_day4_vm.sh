@@ -157,9 +157,9 @@ for logf in /tmp/day4_pytest_a.log /tmp/day4_pytest_b.log /tmp/day4_pytest_c.log
   fi
 done
 if [ "$pytest_ok" -eq 1 ]; then
-  pass "pytest 全部通过（两组独立进程，无 Skip）"
+  pass "pytest 全部通过（三组独立进程，无 Skip）"
 else
-  fail "pytest 有失败或 Skip（见 /tmp/day4_pytest_a.log 和 /tmp/day4_pytest_b.log）"
+  fail "pytest 有失败或 Skip（见 /tmp/day4_pytest_a.log / b.log / c.log）"
 fi
 
 # ── 第 5 步：真实 SDK 冒烟（P1-1 回归） ──

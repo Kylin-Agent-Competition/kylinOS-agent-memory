@@ -152,21 +152,33 @@ class EmbeddingProvider:
     _shared_dimension: Optional[int] = None
     _shared_so_path: Optional[str] = None  # 首实例锁定路径（P1-2 配置锁定）
     _ref_count = 0
+    _DEFAULT_SO_PATH = "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1"  # x86_64 宿主证据
+
+    @staticmethod
+    def _normalize_so_path(so_path: Optional[str]) -> Optional[str]:
+        """so_path 归一化（P2）：None 与显式默认路径视为一致。"""
+        if so_path is None:
+            return None
+        if so_path == EmbeddingProvider._DEFAULT_SO_PATH:
+            return None  # 显式默认 == 未指定（None）
+        return so_path
 
     def __init__(self, so_path: Optional[str] = None) -> None:
         if _bridge is None:
             raise RuntimeError(_IMPORT_ERROR)
 
+        norm_so_path = self._normalize_so_path(so_path)
+
         if EmbeddingProvider._shared_bridge is None:
             params = _bridge.BridgeInitParams()
-            if so_path is not None:
-                params.so_path = so_path
+            if norm_so_path is not None:
+                params.so_path = norm_so_path
             EmbeddingProvider._shared_bridge = _bridge.EmbeddingBridge(params)
-            EmbeddingProvider._shared_so_path = so_path
+            EmbeddingProvider._shared_so_path = norm_so_path
             EmbeddingProvider._shared_dimension = None
         else:
             # P1-2: 单例配置锁定——不同路径必须明确报冲突，不静默忽略
-            if so_path != EmbeddingProvider._shared_so_path:
+            if norm_so_path != EmbeddingProvider._shared_so_path:
                 raise ProviderError(
                     ProviderErrorCode.ERR_CONFIG_CONFLICT,
                     f"so_path 冲突: 已锁定 {EmbeddingProvider._shared_so_path!r}, "
