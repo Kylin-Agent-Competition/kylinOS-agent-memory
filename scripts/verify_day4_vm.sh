@@ -28,12 +28,24 @@ set -u
 REPO=/mnt/shared
 VENV=/tmp/day4-venv
 FAILURES=0
+# P2/P0-EVIDENCE-1: 证据日志由脚本一次性生成（避免手工拼接歧义）
+EVIDENCE_LOG="$REPO/evidence/l2-kylin-vm/day4_verify_$(date +%Y%m%d_%H%M%S).log"
 
 log()  { printf '\n===== %s =====\n' "$*"; }
 pass() { printf '  [PASS] %s\n' "$*"; }
 fail() { printf '  [FAIL] %s\n' "$*"; FAILURES=$((FAILURES+1)); }
 
 cd "$REPO" || { echo "无法进入 $REPO（共享文件夹未挂载？）"; exit 2; }
+
+# 证据日志头部（含被测 Commit，Step 1 会刷新）
+{
+    echo "# Day4 麒麟 VM 验证原始日志（脚本自动生成，未经手工拼接）"
+    echo "# Date: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "# Script: scripts/verify_day4_vm.sh"
+} > "$EVIDENCE_LOG"
+
+# 全部输出同时写入证据日志（tee 到 stdout + 文件）
+exec > >(tee -a "$EVIDENCE_LOG") 2>&1
 
 # ── 第 1 步：干净工作区证据（P0-1/P1-1/P1-2） ──
 log "Step 1: git 状态证据 (P0-1)"
