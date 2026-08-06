@@ -9,7 +9,7 @@
 #   - 非破坏性: 原有权限/ACL 被备份而非删除
 #
 # 用法:
-#   sudo bash kysec_authorize.sh [authorize|status|rollback]
+#   sudo bash kysec_authorize.sh [authorize|status|rollback] [--socket PATH]
 #
 # 原理:
 #   麒麟 KYSEC 通过 /sys/kernel/security/kylin/ 下的控制文件实现。
@@ -21,12 +21,14 @@
 
 set -euo pipefail
 
+# 默认 socket 路径 (可通过 --socket 覆盖)
 SOCKET_PATH="/tmp/kylin-memory-echo/echo.sock"
 SOCKET_DIR="/tmp/kylin-memory-echo"
 KYLIN_USER="${SUDO_USER:-$(whoami)}"
 BACKUP_DIR="/tmp/kylin-memory-echo-kysec-backup-$(date +%Y%m%d_%H%M%S)"
 BACKUP_ID_FILE="/tmp/kylin-memory-echo-kysec-backup-id.txt"
 LOG_FILE="/tmp/kylin-memory-echo/kysec_authorize.log"
+ACTION=""
 
 # ---- 工具函数 ----
 log_msg() {
@@ -38,8 +40,51 @@ log_msg() {
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "ERROR: 此脚本需要 root 权限 (对文件系统 ACL/KYSEC 的修改)"
-        echo "请使用: sudo bash \"$0\" $*"  # $* intentional word splitting for passthrough args
+        echo "请使用: sudo bash $0 $*"
         exit 1
+    fi
+}
+
+parse_args() {
+    ACTION=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            authorize|status|rollback)
+                ACTION="$1"
+                shift
+                ;;
+            --socket)
+                if [ $# -lt 2 ]; then
+                    echo "ERROR: --socket requires a path argument"
+                    exit 1
+                fi
+                SOCKET_PATH="$2"
+                # Derive SOCKET_DIR from SOCKET_PATH
+                SOCKET_DIR="$(dirname "$SOCKET_PATH")"
+                shift 2
+                ;;
+            -h|--help)
+                echo "Usage: $0 [authorize|status|rollback] [--socket PATH]"
+                echo ""
+                echo "  authorize  - 备份当前状态并应用最小 ACL 策略 (KYSEC UNVERIFIED)"
+                echo "  status     - 显示当前 ACL/Socket 状态"
+                echo "  rollback   - 从记录的备份恢复"
+                echo ""
+                echo "Options:"
+                echo "  --socket PATH  - Socket 路径 (default: /tmp/kylin-memory-echo/echo.sock)"
+                echo "                   systemd 模式请使用: --socket /run/kylin-memory-echo/echo.sock"
+                exit 0
+                ;;
+            *)
+                echo "ERROR: Unknown argument: $1"
+                echo "Usage: $0 [authorize|status|rollback] [--socket PATH]"
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ -z "$ACTION" ]; then
+        ACTION="authorize"
     fi
 }
 
@@ -71,7 +116,7 @@ backup_current_state() {
 }
 
 apply_minimal_acl() {
-    log_msg "应用最小 ACL 策略..."
+    log_msg "应用最小 ACL 策略 (socket=${SOCKET_PATH})..."
 
     # 1. 确保 socket 目录存在，权限 0700
     mkdir -p "$SOCKET_DIR"
@@ -208,7 +253,7 @@ rollback_from_backup() {
 }
 
 # ---- 主入口 ----
-ACTION="${1:-authorize}"
+parse_args "$@"
 
 mkdir -p "$SOCKET_DIR"
 
@@ -216,6 +261,7 @@ case "$ACTION" in
     authorize)
         check_root "$@"
         log_msg "========== ACL 最小授权开始 (KYSEC UNVERIFIED) =========="
+        log_msg "Socket 路径: ${SOCKET_PATH}"
         backup_current_state
         # 记录本次备份目录到 BACKUP_ID_FILE
         echo "${BACKUP_DIR}" > "${BACKUP_ID_FILE}"
@@ -236,17 +282,21 @@ case "$ACTION" in
     rollback)
         check_root "$@"
         log_msg "========== ACL 回退开始 =========="
+        log_msg "Socket 路径: ${SOCKET_PATH}"
         backup_current_state  # 回退前也备份当前状态
         rollback_from_backup
         log_msg "========== ACL 回退完成 =========="
         ;;
 
     *)
-        echo "Usage: $0 [authorize|status|rollback]"
+        echo "Usage: $0 [authorize|status|rollback] [--socket PATH]"
         echo ""
         echo "  authorize  - 备份当前状态并应用最小 ACL 策略 (KYSEC UNVERIFIED)"
         echo "  status     - 显示当前 ACL/Socket 状态"
         echo "  rollback   - 从记录的备份恢复"
+        echo ""
+        echo "Options:"
+        echo "  --socket PATH  - Socket 路径 (default: /tmp/kylin-memory-echo/echo.sock)"
         exit 1
         ;;
 esac

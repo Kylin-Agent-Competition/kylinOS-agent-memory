@@ -1,0 +1,267 @@
+# Day2 阶段四 R4 KYSEC/ACL 模式适配验证
+# Timestamp: 2026-08-06T09:50:52
+
+## R4.1 Dev 模式 ACL (/tmp)
+
+### R4.1.1 authorize (dev)
+```
+[2026-08-06T09:50:53] ========== KYSEC exectl + ACL 授权开始 ==========
+[2026-08-06T09:50:53] 备份当前状态到: /tmp/kylin-memory-echo-kysec-backup-20260806_095053
+[2026-08-06T09:50:54] 备份完成
+[2026-08-06T09:50:54] 备份ID已记录: /tmp/kylin-memory-echo-kysec-backup-20260806_095053
+[2026-08-06T09:50:54] --- Phase 1: KYSEC exectl 执行控制授权 ---
+[2026-08-06T09:50:54] KYSEC CLI 可用: kysec_set=/usr/sbin/kysec_set
+[2026-08-06T09:50:54] WARN: KYLIN_ECHO_DEPLOY_BASE 未设置，跳过二进制授权
+[2026-08-06T09:50:54]   用法: KYLIN_ECHO_DEPLOY_BASE=/home/user/kylin-memory-echo sudo -E bash /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh authorize
+[2026-08-06T09:50:54] --- Phase 2: 纵深防御 ACL 策略 ---
+[2026-08-06T09:50:54] 应用纵深防御 ACL 策略...
+[2026-08-06T09:50:54]   Socket 目录权限: 0700, owner=root
+[2026-08-06T09:50:54]   INFO: kylin-aiassistant 用户不存在，跳过用户级别 ACL
+[2026-08-06T09:50:54] 纵深防御 ACL 策略已应用
+[2026-08-06T09:50:54] ====== 完整状态报告 ======
+
+--- KYSEC CLI 探测 ---
+  kysec_set: /usr/sbin/kysec_set
+  kysec_get: /usr/sbin/kysec_get
+  getfattr:  /usr/bin/getfattr
+
+--- KYSEC 全局策略 ---
+(未设置 KYLIN_ECHO_DEPLOY_BASE)
+
+--- KYSEC 内核 sysfs ---
+/sys/kernel/security/kylin 不存在 (可能未加载内核模块)
+
+--- 目标二进制 KYSEC 状态 ---
+  (未设置 KYLIN_ECHO_DEPLOY_BASE, 跳过)
+
+--- Socket 目录 ---
+总计 0
+drwx------  2 root root   40  8月 6日 09:50 .
+drwxr-xr-x 39 root root 1160  8月 6日 09:49 ..
+
+ACL:
+# file: run/kylin-memory-echo
+# owner: root
+# group: root
+user::rwx
+group::---
+other::---
+
+
+--- Socket 文件 ---
+Socket 文件不存在 (服务未启动)
+
+--- kylin-aiassistant 进程 ---
+无 kylin-aiassistant 进程
+
+--- 当前用户 ---
+UID=0 USER=root
+SUDO_USER=root
+[2026-08-06T09:50:54] ====== 状态报告结束 ======
+[2026-08-06T09:50:54] ========== KYSEC exectl + ACL 授权完成 ==========
+
+备份位置: /tmp/kylin-memory-echo-kysec-backup-20260806_095053
+日志文件: /tmp/kylin-memory-echo/kysec_authorize.log
+✓ KYSEC: exectl verified 已写入目标二进制
+输入密码
+```
+
+### R4.1.2 status (dev)
+```
+[2026-08-06T09:50:54] ====== 完整状态报告 ======
+
+--- KYSEC CLI 探测 ---
+  kysec_set: /usr/sbin/kysec_set
+  kysec_get: /usr/sbin/kysec_get
+  getfattr:  /usr/bin/getfattr
+
+--- KYSEC 全局策略 ---
+(未设置 KYLIN_ECHO_DEPLOY_BASE)
+
+--- KYSEC 内核 sysfs ---
+/sys/kernel/security/kylin 不存在 (可能未加载内核模块)
+
+--- 目标二进制 KYSEC 状态 ---
+  (未设置 KYLIN_ECHO_DEPLOY_BASE, 跳过)
+
+--- Socket 目录 ---
+总计 0
+drwx------  2 root root   40  8月 6日 09:50 .
+drwxr-xr-x 39 root root 1160  8月 6日 09:49 ..
+
+ACL:
+# file: run/kylin-memory-echo
+# owner: root
+# group: root
+user::rwx
+group::---
+other::---
+
+
+--- Socket 文件 ---
+Socket 文件不存在 (服务未启动)
+
+--- kylin-aiassistant 进程 ---
+无 kylin-aiassistant 进程
+
+--- 当前用户 ---
+UID=0 USER=root
+SUDO_USER=root
+[2026-08-06T09:50:54] ====== 状态报告结束 ======
+输入密码
+```
+
+### R4.1.3 rollback (dev)
+```
+[2026-08-06T09:50:54] ========== KYSEC exectl + ACL 回退开始 ==========
+[2026-08-06T09:50:54] 备份当前状态到: /tmp/kylin-memory-echo-kysec-backup-20260806_095054
+[2026-08-06T09:50:54] 备份完成
+[2026-08-06T09:50:54] 执行回退...
+[2026-08-06T09:50:54] 使用 recorded backup: /tmp/kylin-memory-echo-kysec-backup-20260806_095053
+[2026-08-06T09:50:54] 从备份恢复: /tmp/kylin-memory-echo-kysec-backup-20260806_095053
+[2026-08-06T09:50:54]   Socket 目录权限已回退
+[2026-08-06T09:50:54] 回退完成
+[2026-08-06T09:50:54] ========== KYSEC exectl + ACL 回退完成 ==========
+输入密码
+```
+
+## R4.2 Systemd 模式 ACL (--socket /run/...)
+
+### R4.2.1 authorize (systemd)
+```
+[2026-08-06T09:50:54] ========== KYSEC exectl + ACL 授权开始 ==========
+[2026-08-06T09:50:54] 备份当前状态到: /tmp/kylin-memory-echo-kysec-backup-20260806_095054
+[2026-08-06T09:50:54] 备份完成
+[2026-08-06T09:50:54] 备份ID已记录: /tmp/kylin-memory-echo-kysec-backup-20260806_095054
+[2026-08-06T09:50:54] --- Phase 1: KYSEC exectl 执行控制授权 ---
+[2026-08-06T09:50:54] KYSEC CLI 可用: kysec_set=/usr/sbin/kysec_set
+[2026-08-06T09:50:54] WARN: KYLIN_ECHO_DEPLOY_BASE 未设置，跳过二进制授权
+[2026-08-06T09:50:54]   用法: KYLIN_ECHO_DEPLOY_BASE=/home/user/kylin-memory-echo sudo -E bash /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh authorize
+[2026-08-06T09:50:54] --- Phase 2: 纵深防御 ACL 策略 ---
+[2026-08-06T09:50:54] 应用纵深防御 ACL 策略...
+[2026-08-06T09:50:54]   Socket 目录权限: 0700, owner=root
+[2026-08-06T09:50:54]   INFO: kylin-aiassistant 用户不存在，跳过用户级别 ACL
+[2026-08-06T09:50:54] 纵深防御 ACL 策略已应用
+[2026-08-06T09:50:54] ====== 完整状态报告 ======
+
+--- KYSEC CLI 探测 ---
+  kysec_set: /usr/sbin/kysec_set
+  kysec_get: /usr/sbin/kysec_get
+  getfattr:  /usr/bin/getfattr
+
+--- KYSEC 全局策略 ---
+(未设置 KYLIN_ECHO_DEPLOY_BASE)
+
+--- KYSEC 内核 sysfs ---
+/sys/kernel/security/kylin 不存在 (可能未加载内核模块)
+
+--- 目标二进制 KYSEC 状态 ---
+  (未设置 KYLIN_ECHO_DEPLOY_BASE, 跳过)
+
+--- Socket 目录 ---
+总计 0
+drwx------  2 root root   40  8月 6日 09:50 .
+drwxr-xr-x 39 root root 1160  8月 6日 09:49 ..
+
+ACL:
+# file: run/kylin-memory-echo
+# owner: root
+# group: root
+user::rwx
+group::---
+other::---
+
+
+--- Socket 文件 ---
+Socket 文件不存在 (服务未启动)
+
+--- kylin-aiassistant 进程 ---
+无 kylin-aiassistant 进程
+
+--- 当前用户 ---
+UID=0 USER=root
+SUDO_USER=root
+[2026-08-06T09:50:54] ====== 状态报告结束 ======
+[2026-08-06T09:50:54] ========== KYSEC exectl + ACL 授权完成 ==========
+
+备份位置: /tmp/kylin-memory-echo-kysec-backup-20260806_095054
+日志文件: /tmp/kylin-memory-echo/kysec_authorize.log
+✓ KYSEC: exectl verified 已写入目标二进制
+输入密码
+```
+
+### R4.2.2 status (systemd)
+```
+[2026-08-06T09:50:54] ====== 完整状态报告 ======
+
+--- KYSEC CLI 探测 ---
+  kysec_set: /usr/sbin/kysec_set
+  kysec_get: /usr/sbin/kysec_get
+  getfattr:  /usr/bin/getfattr
+
+--- KYSEC 全局策略 ---
+(未设置 KYLIN_ECHO_DEPLOY_BASE)
+
+--- KYSEC 内核 sysfs ---
+/sys/kernel/security/kylin 不存在 (可能未加载内核模块)
+
+--- 目标二进制 KYSEC 状态 ---
+  (未设置 KYLIN_ECHO_DEPLOY_BASE, 跳过)
+
+--- Socket 目录 ---
+总计 0
+drwx------  2 root root   40  8月 6日 09:50 .
+drwxr-xr-x 39 root root 1160  8月 6日 09:49 ..
+
+ACL:
+# file: run/kylin-memory-echo
+# owner: root
+# group: root
+user::rwx
+group::---
+other::---
+
+
+--- Socket 文件 ---
+Socket 文件不存在 (服务未启动)
+
+--- kylin-aiassistant 进程 ---
+无 kylin-aiassistant 进程
+
+--- 当前用户 ---
+UID=0 USER=root
+SUDO_USER=root
+[2026-08-06T09:50:54] ====== 状态报告结束 ======
+输入密码
+```
+
+### R4.2.3 rollback (systemd)
+```
+[2026-08-06T09:50:55] ========== KYSEC exectl + ACL 回退开始 ==========
+[2026-08-06T09:50:55] 备份当前状态到: /tmp/kylin-memory-echo-kysec-backup-20260806_095055
+[2026-08-06T09:50:55] 备份完成
+[2026-08-06T09:50:55] 执行回退...
+[2026-08-06T09:50:55] 使用 recorded backup: /tmp/kylin-memory-echo-kysec-backup-20260806_095054
+[2026-08-06T09:50:55] 从备份恢复: /tmp/kylin-memory-echo-kysec-backup-20260806_095054
+[2026-08-06T09:50:55]   Socket 目录权限已回退
+[2026-08-06T09:50:55] 回退完成
+[2026-08-06T09:50:55] ========== KYSEC exectl + ACL 回退完成 ==========
+输入密码
+```
+
+### R4.2.4 --help 输出
+```
+Usage: /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh [authorize|status|rollback]
+
+  authorize  - 备份当前状态, KYSEC exectl verified 授权 + ACL 纵深防御
+  status     - 显示当前 KYSEC/ACL/Socket 完整状态
+  rollback   - 撤销 KYSEC exectl 授权, 回退 ACL, 从备份恢复
+
+环境变量:
+  KYLIN_ECHO_DEPLOY_BASE  部署根目录 (如 /home/user/kylin-memory-echo)
+
+示例:
+  KYLIN_ECHO_DEPLOY_BASE=/home/kylin-agent/kylin-memory-echo sudo -E bash /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh authorize
+```
+--socket 参数: ❌ 未说明
+

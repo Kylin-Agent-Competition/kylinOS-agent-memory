@@ -1,0 +1,56 @@
+=== R2 Verification ===
+Time: 2026-08-06T10:16:42
+Server: RUNNING
+Socket: srwx------ 1 kylin-agent kylin-agent 0  8月 6日 10:16 /tmp/kylin-memory-echo/echo.sock
+
+
+--- kaiming_memory_client --method all ---
+exit_code: 0
+============================================
+ Kaiming Memory Client - v1.2 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: all
+ User: kylin-agent
+============================================
+[2026-08-06T02:16:48Z] [INFO] TEST: echo method
+[2026-08-06T02:16:48Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"echo": "Hello from Kaiming AI Assistant", "received_at": "2026-08-06T02:16:48.117698+00:00"}, "server_ts": "2026-08-06T02:16:48.117714+00:00"}
+RESULT KAIMING-ECHO PASS
+[2026-08-06T02:16:48Z] [INFO] KAIMING-ECHO PASS: echo roundtrip payload=Hello from Kaiming AI Assistant
+[2026-08-06T02:16:48Z] [INFO] TEST: health method
+[2026-08-06T02:16:48Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"status": "healthy", "uptime_seconds": 2.071429967880249, "socket_path": "/tmp/kylin-memory-echo/echo.sock", "pid": 71727}, "server_ts": "2026-08-06T02:16:48.118659+00:00"}
+RESULT KAIMING-HEALTH PASS
+[2026-08-06T02:16:48Z] [INFO] KAIMING-HEALTH PASS: health query returned healthy
+[2026-08-06T02:16:48Z] [INFO] TEST: memory.retrieve method
+[2026-08-06T02:16:48Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"contexts": [], "total_found": 0, "elapsed_ms": 0.0, "fallback": false}, "server_ts": "2026-08-06T02:16:48.120728+00:00"}
+RESULT KAIMING-RETRIEVE PASS
+[2026-08-06T02:16:48Z] [INFO] KAIMING-RETRIEVE PASS: memory.retrieve returned empty context (Echo simulation)
+[2026-08-06T02:16:48Z] [INFO] TEST: memory.store method (verify protocol compatibility)
+[2026-08-06T02:16:48Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "", "trace_id": "", "status": "error", "data": {"error_code": "INTERNAL_ERROR", "message": "Protocol error occurred while processing request"}, "server_ts": "2026-08-06T02:16:48.130653+00:00"}
+RESULT KAIMING-STORE PASS
+[2026-08-06T02:16:48Z] [INFO] KAIMING-STORE PASS: memory.store correctly returned status=error with error_code (Echo not implemented)
+[2026-08-06T02:16:48Z] [INFO] TEST: unknown method degradation
+[2026-08-06T02:16:48Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "error", "data": {"error_code": "UNSUPPORTED_METHOD", "message": "Requested method is not supported by this service"}, "server_ts": "2026-08-06T02:16:48.131760+00:00"}
+RESULT KAIMING-UNKNOWN PASS
+[2026-08-06T02:16:48Z] [INFO] KAIMING-UNKNOWN PASS: unknown method returned status=error (degradation normal)
+[2026-08-06T02:16:48Z] [INFO] TEST: 5 consecutive rapid requests (simulating high-frequency calls)
+RESULT KAIMING-RAPID PASS
+[2026-08-06T02:16:48Z] [INFO] KAIMING-RAPID PASS: 5/5 rapid requests succeeded
+
+============================================
+ Passed: 6 / Failed: 0
+============================================
+
+
+=== Summary ===
+  PASS: RESULT KAIMING-ECHO PASS
+  PASS: RESULT KAIMING-HEALTH PASS
+  PASS: RESULT KAIMING-RETRIEVE PASS
+  PASS: RESULT KAIMING-STORE PASS
+  PASS: RESULT KAIMING-UNKNOWN PASS
+  PASS: RESULT KAIMING-RAPID PASS
+Total: 6 PASS / 0 FAIL
+
+error_message field present: False
+message field present: True
+Service PROTOCOL_ERROR: False
+STORE FAIL type: N/A

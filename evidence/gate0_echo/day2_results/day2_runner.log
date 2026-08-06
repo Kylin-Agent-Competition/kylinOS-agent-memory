@@ -1,0 +1,134 @@
+[09:49:34] ============================================================
+[09:49:34]  Day2 麒麟 VM 运行时验证启动
+[09:49:34]  输出目录: e:\Kylin-memory-dev\UDS-Kylin-Echo\evidence\gate0_echo\day2_results
+[09:49:34] ============================================================
+[09:49:34] SSH 已连接: kylin-agent@127.0.0.1:2222
+[09:49:34] ============================================================
+[09:49:34] 阶段一 (S1): 代码同步与编译验证
+[09:49:34] ============================================================
+[09:49:34] 
+--- S1.1: 上传修复后代码 ---
+[09:49:34]   Upload OK: kaiming_memory_client.cpp -> /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kaiming_memory_client.cpp (SHA256 match)
+[09:49:34]   Upload OK: test_systemd_lifecycle.sh -> /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/test_systemd_lifecycle.sh (SHA256 match)
+[09:49:34]   Upload OK: kysec_authorize.sh -> /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh (SHA256 match)
+[09:49:34]   Upload OK: echo_client.cpp -> /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/echo_client.cpp (SHA256 match)
+[09:49:34]   Upload OK: CMakeLists.txt -> /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/CMakeLists.txt (SHA256 match)
+[09:49:34]   Upload OK: memory_echo_server.py -> /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/memory_echo_server.py (SHA256 match)
+[09:49:34] 
+--- S1.2: 干净 CMake 构建验证 ---
+[09:49:35] S1.2.1 cmake -S . -B build: ec=0
+[09:49:38] S1.2.2 cmake --build build: ec=0
+[09:49:38] S1.2.3 二进制产物: -rwxrwxr-x 1 kylin-agent kylin-agent 34848  8月 6日 09:49 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build/echo_client
+-rwxrwxr-x 1 kylin-agent kylin-agent 54056  8月 6日 09:49 /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build/kaiming_memory_client
+[09:49:38]   -> Written: E1_build.log (SHA256: a9a05336a1ddebfd...)
+[09:49:38] ============================================================
+[09:49:38] 阶段二 (R1+R2): KAIMING-STORE 修复验证
+[09:49:38] ============================================================
+[09:49:38] 
+--- 启动 Echo 服务 (dev 模式) ---
+[09:49:40]   Echo server PID: 62346
+62593
+[09:49:40]   Socket check: srwx------ 1 kylin-agent kylin-agent 0  8月 6日 09:49 /tmp/kylin-memory-echo/echo.sock
+[09:49:40] 
+--- R1: JSON 合法性验证 ---
+[09:49:40] R1.2 memory.store: ec=1
+[09:49:40] R1.3 服务端日志 PROTOCOL_ERROR: NO [OK]
+[09:49:40] 
+--- R2: 断言正确性验证 ---
+[09:49:40] R2.1 status字段: True, error_code: True, error_message: False
+[09:49:40] 
+--- R2.2: 非法 JSON 测试 ---
+[09:49:40] R2.2 非法JSON响应: {"protocol_version": "1.0", "request_id": "", "trace_id": "", "status": "error", "data": {"error_code": "INTERNAL_ERROR", "message": "Protocol error occurred while processing request"}, "server_ts": "2026-08-06T01:49:42.583109+00:00"}
+[09:49:40] 
+--- R2.3: 全量 6/6 测试 ---
+[09:49:41] R2.3 全量测试: ec=1
+[09:49:41]   -> Written: E2_client_kaiming_store.log (SHA256: bb09769f68b8262d...)
+[09:49:41] ============================================================
+[09:49:41] 阶段三 (R3): Systemd 卸载假阳性修复验证
+[09:49:41] ============================================================
+[09:49:41] 
+--- R3.1: 完整生命周期测试 ---
+[09:50:52] R3.1 完整生命周期: ec=1
+[09:50:52] 
+--- R3.2: Step 11 卸载验证 ---
+[09:50:52] R3.2 卸载确认: False
+[09:50:52]   -> Written: E4_systemd_lifecycle_rerun.log (SHA256: 639555b7299d381b...)
+[09:50:52] ============================================================
+[09:50:52] 阶段四 (R4): KYSEC/ACL 模式适配验证
+[09:50:52] ============================================================
+[09:50:52] 
+--- R4.1: Dev 模式 ACL (/tmp) ---
+[09:50:52] R4.1.1 authorize (dev): ec=0
+[09:50:52] R4.1.2 status (dev): ec=0
+[09:50:52] R4.1.3 rollback (dev): ec=0
+[09:50:52] 
+--- R4.2: Systemd 模式 ACL (--socket /run/...) ---
+[09:50:53] R4.2.1 authorize (systemd): ec=0
+[09:50:53] R4.2.2 status (systemd): ec=0
+[09:50:53] R4.2.3 rollback (systemd): ec=0
+[09:50:53] R4.2.4 --help 包含 --socket: False
+[09:50:53]   -> Written: E5_kysec_acl_systemd.log (SHA256: c3b213f524ef9954...)
+[09:50:53] ============================================================
+[09:50:53] 阶段五 D2-1: Kaiming → 自定义 UDS Echo 真实 Hook
+[09:50:53] ============================================================
+[09:50:53] 
+--- D2-1.1: 定位 Socket 调用点 ---
+[09:50:55] 
+--- D2-1.6: 独立模拟客户端 ---
+[09:50:58] D2-1.6 独立客户端全量测试: ec=1
+[09:50:58]   -> Written: E7_kaiming_hook_attempt.log (SHA256: 57e82609b41e1370...)
+[09:50:58] ============================================================
+[09:50:58] 阶段五 D2-3: 部署和启动可复现
+[09:50:58] ============================================================
+[09:50:58] 
+--- D2-3.2: 干净 CMake 构建 ---
+[09:51:00] 
+--- D2-3.3: 手动 dev 模式启动 ---
+[09:51:03] 
+--- D2-3.4: --dev 参数使能验证 ---
+[09:51:03]   -> Written: D2_3_deploy_startup.log (SHA256: 5cbbf0da5db1c15e...)
+[09:51:03] ============================================================
+[09:51:03] 阶段五 D2-4: 统一 Socket 路径验证
+[09:51:03] ============================================================
+[09:51:03] 
+--- D2-4.1: systemd unit RuntimeDirectory ---
+[09:51:03] 
+--- D2-4.2: 服务端 systemd 模式 ---
+[09:51:03] 
+--- D2-4.3: 服务端 dev 模式 ---
+[09:51:03] 
+--- D2-4.4: C++ 客户端 --socket ---
+[09:51:03] 
+--- D2-4.5: ACL 脚本 --socket ---
+[09:51:03] 
+--- D2-4.6: rollback 测试 ---
+[09:51:03] 
+--- D2-4.7: 交叉验证 ---
+[09:51:05]   -> Written: E9_socket_path_audit.log (SHA256: 22d9e85e56255959...)
+[09:51:05] ============================================================
+[09:51:05] 阶段五 D2-6: KYSEC 授权口径确认
+[09:51:05] ============================================================
+[09:51:05] 
+--- D2-6.1: 头部标注 ---
+[09:51:05] D2-6.1 UNVERIFIED标注: False
+[09:51:05] 
+--- D2-6.2: status 输出标注 ---
+[09:51:05] D2-6.2 status UNVERIFIED: False
+[09:51:05] 
+--- D2-6.3: KYSEC 内核接口 ---
+[09:51:05] D2-6.3 KYSEC 内核接口: 可用
+[09:51:05]   -> Written: D2_6_kysec_scope.log (SHA256: eac1f3b5b57868c2...)
+[09:51:05] ============================================================
+[09:51:05] 阶段五 D2-7: 回退对照 Day1 基线验证
+[09:51:05] ============================================================
+[09:51:05] 
+--- 采集当前状态基线 ---
+[09:51:05] 
+--- 执行 rollback ---
+[09:51:05] 
+--- D2-7.1: 文件恢复检查 ---
+[09:51:06]   -> Written: E8_rollback_baseline_compare.log (SHA256: 76a0ffce0f49aa8c...)
+[09:51:06] ============================================================
+[09:51:06] 阶段六: 证据收集与汇总
+[09:51:06] ============================================================
+[09:51:06]   -> Written: DAY2_SUMMARY.md (SHA256: 65a3fb4579498650...)

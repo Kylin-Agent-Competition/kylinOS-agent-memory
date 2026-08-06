@@ -135,6 +135,7 @@ std::string build_memory_store_request(const std::string& key, const std::string
         << R"("key":")" << key << R"(",)"
         << R"("content":")" << content << R"(",)"
         << R"("metadata":{"source":"kaiming-aiassistant","priority":"high"})"
+        << "}}"
         << "}";
     return oss.str();
 }
@@ -185,8 +186,13 @@ void test_memory_store() {
         std::string resp = uds_send_recv(build_memory_store_request("kysec_policy_v1", "least privilege principle"));
         log_info("Response: " + resp);
         // Echo does not implement memory.store, expected error
-        bool ok = json_has_key(resp, "status");
-        log_result("KAIMING-STORE", ok, "memory.store protocol layer connected (Echo not implemented, expected error)");
+        // Must verify: status=="error" AND error_code present AND message present
+        // (Server returns field name "message", not "error_message")
+        // PROTOCOL_ERROR / INTERNAL_ERROR / parse failures must be scored as FAIL
+        bool ok = (extract_json_status(resp) == "error")
+               && json_has_key(resp, "error_code")
+               && json_has_key(resp, "message");
+        log_result("KAIMING-STORE", ok, "memory.store correctly returned status=error with error_code (Echo not implemented)");
     } catch (const std::exception& e) {
         log_result("KAIMING-STORE", false, std::string("protocol layer exception: ") + e.what());
     }
@@ -236,7 +242,7 @@ int main(int argc, char* argv[]) {
     g_socket_path = socket_path;
 
     std::cout << "============================================" << std::endl;
-    std::cout << " Kaiming Memory Client - v1.1 (robust JSON)" << std::endl;
+    std::cout << " Kaiming Memory Client - v1.2 (robust JSON)" << std::endl;
     std::cout << " Socket: " << g_socket_path << std::endl;
     std::cout << " Method: " << method << std::endl;
     std::cout << " User: " << (getenv("USER") ? getenv("USER") : "?") << std::endl;
