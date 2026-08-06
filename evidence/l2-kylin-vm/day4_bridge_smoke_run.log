@@ -1,4 +1,6 @@
 # Day 4 Bridge/Provider 麒麟 VM 构建与测试日志
+# STATUS: HISTORICAL / SUPERSEDED（P2-4：已由 day4_verify_latest.log 取代）
+# 此文件为早期手工维护证据；当前权威 L2 证据见 evidence/l2-kylin-vm/day4_verify_latest.log
 # Date: 2026-08-06 (麒麟 VM 实测，REWORK 复审第四轮修复后最终版)
 # Host: 银河麒麟桌面 V11 2603 x86_64 (VirtualBox 7.2.14)
 # Branch: feat/day4-bridge-provider-new (基于最新 main 56de079 rebase)

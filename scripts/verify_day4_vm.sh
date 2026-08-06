@@ -42,12 +42,14 @@ cd "$REPO" || { echo "无法进入 $REPO（共享文件夹未挂载？）"; exit
 # ── 第 1 步：干净工作区证据（P0-1/P1-1/P1-2） ──
 # 注意：先于日志写入执行，确保看到严格干净的工作区
 log "Step 1: git 状态证据 (P0-1)"
-# vboxsf 共享文件夹 stat 缓存会导致 git 误报文件修改：
-# 先强制刷新 index stat（只更新 stat 信息，不改内容），再检查状态
+# vboxsf 共享文件夹 stat 缓存会导致 git 误报文件修改：先强制刷新 index stat
+# P0-EVIDENCE: Step 1 原始输出先写入 /tmp/day4_step1.log（tee 到 stdout + 文件）
+STEP1_LOG="/tmp/day4_step1.log"
+exec > >(tee "$STEP1_LOG") 2>&1
 git update-index --refresh >/dev/null 2>&1 || true
 git rev-parse HEAD
-# P1-2: 必须无任何输出（含未跟踪文件）；排除脚本自身生成的证据日志（预期产物）
-STATUS="$(git status --porcelain --untracked-files=all | grep -v 'day4_verify_.*\.log')"
+# P1-2: 必须无任何输出（含未跟踪文件）；仅排除本轮预期证据日志（不掩盖其他文件）
+STATUS="$(git status --porcelain --untracked-files=all | grep -vE 'day4_verify_latest\.log$|\.day4_verify_tmp\.log$')"
 if [ -n "$STATUS" ]; then
   echo "$STATUS"
   fail "工作区存在修改、暂存或未跟踪文件（含 ?? 未跟踪文件，非严格干净）"
@@ -64,14 +66,17 @@ if git diff --cached --exit-code >/dev/null 2>&1; then
 else
   fail "INDEX_CLEAN=0（暂存区有未提交修改）"
 fi
+# Step 1 输出结束：恢复 stdout（后续 tee 到 runtime 日志）
+exec > /dev/tty
 
-# 干净检查通过后，启动证据日志（tee 到临时文件，结束时合并到正式日志）
+# 干净检查通过后，启动 runtime 日志（tee 到 /tmp/day4_runtime.log）
+RUNTIME_LOG="/tmp/day4_runtime.log"
 {
     echo "# Day4 麒麟 VM 验证原始日志（脚本自动生成，未经手工拼接）"
     echo "# 被测 Commit: $(git rev-parse HEAD)"
     echo "# Date: $(date '+%Y-%m-%d %H:%M:%S')"
-} > "$EVIDENCE_TMP"
-exec > >(tee -a "$EVIDENCE_TMP") 2>&1
+} > "$RUNTIME_LOG"
+exec > >(tee -a "$RUNTIME_LOG") 2>&1
 
 # ── 第 2 步：venv + pybind11 ──
 log "Step 2: venv + pybind11"
@@ -267,11 +272,16 @@ else
   echo "存在 $FAILURES 项失败，请检查上方 [FAIL] 与对应日志"
 fi
 
-# 证据日志合并到正式路径（保留历史为 .prev）
+# 证据日志合并：Step1 原始输出 + runtime 输出 → 正式路径（保留历史为 .prev）
 if [ -f "$EVIDENCE_LOG" ]; then
   cp "$EVIDENCE_LOG" "$EVIDENCE_LOG.prev" 2>/dev/null || true
 fi
-cp "$EVIDENCE_TMP" "$EVIDENCE_LOG" 2>/dev/null || true
+{
+    cat "$STEP1_LOG" 2>/dev/null || true
+    echo ""
+    echo "===== Runtime 输出（Step 2 起） ====="
+    cat "$RUNTIME_LOG" 2>/dev/null || true
+} > "$EVIDENCE_LOG"
 echo "证据日志: $EVIDENCE_LOG"
 
 if [ "$FAILURES" -eq 0 ]; then

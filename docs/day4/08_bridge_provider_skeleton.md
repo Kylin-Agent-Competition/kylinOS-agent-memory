@@ -16,7 +16,7 @@
 | `cpp-bridge/src/embedding_bridge.cpp` | dlopen→dlsym→create/init→embed→destroy 最小真实调用 |
 | `cpp-bridge/src/py_module.cpp` | pybind11 绑定 + 9 类 Python 异常映射 |
 | `cpp-bridge/CMakeLists.txt` | pybind11 + core static lib 构建 |
-| `cpp-bridge/tests/CMakeLists.txt` | 3 个 C++ 测试注册 |
+| `cpp-bridge/tests/CMakeLists.txt` | 5 个 C++ 测试注册 |
 | `cpp-bridge/tests/test_bridge_errors.cpp` | 错误码映射测试（不依赖 SDK） |
 | `cpp-bridge/tests/test_bridge_so_not_found.cpp` | .so 不存在 → ERR_SO_NOT_FOUND（不依赖 SDK） |
 | `cpp-bridge/tests/fake_sdk_malformed.c` | 可控假 SDK .so（P0-2 畸形结果防御测试） |
@@ -45,9 +45,12 @@
 | L0-1 | `test_bridge_errors.cpp` 错误映射 | 任意（无需 SDK） |
 | L0-2 | `test_bridge_so_not_found.cpp` | 任意（无需 SDK） |
 | L0-3 | `test_bridge_malformed.cpp` 畸形结果防御（P0-2） | 任意（假 .so） |
-| L0-4 | `test_embedding_provider_import.py` 导入/契约（pytest） | WSL/任意 |
+| L0-4 | `test_bridge_destroyed.cpp` destroy 终态（P0-2/P1-1） | 任意（假 .so） |
+| L0-5 | `test_bridge_failure_recovery.cpp` 失败恢复策略（P1-High） | 任意（假 .so） |
+| L0-6 | `test_embedding_provider_import.py` 导入/契约（pytest） | WSL/任意 |
 | L1-1 | `test_exception_mapping.py` 异常映射（pytest） | 麒麟 VM（需编译模块） |
-| L1-2 | `test_load_idempotent.py` 幂等（pytest） | 麒麟 VM（需真实 .so） |
+| L1-2 | `test_load_idempotent.py` 生命周期状态机（pytest） | 麒麟 VM（需真实 .so） |
+| L1-3 | `test_interpreter_exit.py` 解释器退出析构（pytest） | 麒麟 VM |
 | L2 | `run_smoke.py` 真实 SDK 调用 | 麒麟 VM |
 
 ## 构建步骤（麒麟 VM）
