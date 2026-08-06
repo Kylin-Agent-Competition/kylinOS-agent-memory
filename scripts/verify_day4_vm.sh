@@ -29,7 +29,9 @@ REPO=/mnt/shared
 VENV=/tmp/day4-venv
 FAILURES=0
 # P2/P0-EVIDENCE-1: 证据日志由脚本一次性生成（避免手工拼接歧义）
+# 注意：先做 Step 1 干净工作区检查（此时日志尚未写入），检查通过后再启动 tee。
 EVIDENCE_LOG="$REPO/evidence/l2-kylin-vm/day4_verify_latest.log"
+EVIDENCE_TMP="$REPO/evidence/l2-kylin-vm/.day4_verify_tmp.log"
 
 log()  { printf '\n===== %s =====\n' "$*"; }
 pass() { printf '  [PASS] %s\n' "$*"; }
@@ -37,17 +39,8 @@ fail() { printf '  [FAIL] %s\n' "$*"; FAILURES=$((FAILURES+1)); }
 
 cd "$REPO" || { echo "无法进入 $REPO（共享文件夹未挂载？）"; exit 2; }
 
-# 证据日志头部（含被测 Commit，Step 1 会刷新）
-{
-    echo "# Day4 麒麟 VM 验证原始日志（脚本自动生成，未经手工拼接）"
-    echo "# Date: $(date '+%Y-%m-%d %H:%M:%S')"
-    echo "# Script: scripts/verify_day4_vm.sh"
-} > "$EVIDENCE_LOG"
-
-# 全部输出同时写入证据日志（tee 到 stdout + 文件）
-exec > >(tee -a "$EVIDENCE_LOG") 2>&1
-
 # ── 第 1 步：干净工作区证据（P0-1/P1-1/P1-2） ──
+# 注意：先于日志写入执行，确保看到严格干净的工作区
 log "Step 1: git 状态证据 (P0-1)"
 # vboxsf 共享文件夹 stat 缓存会导致 git 误报文件修改：
 # 先强制刷新 index stat（只更新 stat 信息，不改内容），再检查状态
@@ -71,6 +64,14 @@ if git diff --cached --exit-code >/dev/null 2>&1; then
 else
   fail "INDEX_CLEAN=0（暂存区有未提交修改）"
 fi
+
+# 干净检查通过后，启动证据日志（tee 到临时文件，结束时合并到正式日志）
+{
+    echo "# Day4 麒麟 VM 验证原始日志（脚本自动生成，未经手工拼接）"
+    echo "# 被测 Commit: $(git rev-parse HEAD)"
+    echo "# Date: $(date '+%Y-%m-%d %H:%M:%S')"
+} > "$EVIDENCE_TMP"
+exec > >(tee -a "$EVIDENCE_TMP") 2>&1
 
 # ── 第 2 步：venv + pybind11 ──
 log "Step 2: venv + pybind11"
@@ -262,8 +263,19 @@ PYEOF
 log "汇总"
 if [ "$FAILURES" -eq 0 ]; then
   echo "全部验证通过（FAILURES=0）"
-  exit 0
 else
   echo "存在 $FAILURES 项失败，请检查上方 [FAIL] 与对应日志"
+fi
+
+# 证据日志合并到正式路径（保留历史为 .prev）
+if [ -f "$EVIDENCE_LOG" ]; then
+  cp "$EVIDENCE_LOG" "$EVIDENCE_LOG.prev" 2>/dev/null || true
+fi
+cp "$EVIDENCE_TMP" "$EVIDENCE_LOG" 2>/dev/null || true
+echo "证据日志: $EVIDENCE_LOG"
+
+if [ "$FAILURES" -eq 0 ]; then
+  exit 0
+else
   exit 1
 fi
