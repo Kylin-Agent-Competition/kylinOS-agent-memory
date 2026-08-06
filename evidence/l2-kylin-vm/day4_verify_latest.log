@@ -1,13 +1,6 @@
 # Day4 麒麟 VM 验证原始日志（脚本自动生成，未经手工拼接）
-# Date: 2026-08-06 10:48:54
-# Script: scripts/verify_day4_vm.sh
-
-===== Step 1: git 状态证据 (P0-1) =====
-f8c08d04e68d0583539871ebc7bc9bcb88ef73e7
-?? evidence/l2-kylin-vm/day4_verify_latest.log
-  [FAIL] 工作区存在修改、暂存或未跟踪文件（含 ?? 未跟踪文件，非严格干净）
-  [PASS] WORKTREE_CLEAN=1
-  [PASS] INDEX_CLEAN=1
+# 被测 Commit: 31e173322fd84d6902d0dea9e1b311decf43bccc
+# Date: 2026-08-06 10:58:30
 
 ===== Step 2: venv + pybind11 =====
   [PASS] pybind11 可用
@@ -16,10 +9,10 @@ f8c08d04e68d0583539871ebc7bc9bcb88ef73e7
   [PASS] cmake configure OK
   [PASS] cmake build OK
   [PASS] ctest 全部通过
-    1/4 Test #1: bridge_errors ....................   Passed    0.13 sec
-    2/4 Test #2: bridge_so_not_found ..............   Passed    0.13 sec
-    3/4 Test #3: bridge_malformed .................   Passed    0.96 sec
-    4/4 Test #4: bridge_destroyed .................   Passed    0.25 sec
+    1/4 Test #1: bridge_errors ....................   Passed    0.14 sec
+    2/4 Test #2: bridge_so_not_found ..............   Passed    0.15 sec
+    3/4 Test #3: bridge_malformed .................   Passed    1.05 sec
+    4/4 Test #4: bridge_destroyed .................   Passed    0.26 sec
     100% tests passed, 0 tests failed out of 4
 
 ===== Step 4: pytest 统一收集 (P0-4) =====
@@ -53,7 +46,7 @@ f8c08d04e68d0583539871ebc7bc9bcb88ef73e7
     memory-service/tests/test_exception_mapping.py::test_embed_without_load_raises_load_error PASSED [ 92%]
     memory-service/tests/test_exception_mapping.py::test_load_missing_so_raises_not_found PASSED [ 96%]
     memory-service/tests/test_exception_mapping.py::test_default_so_path_contains_core_lib PASSED [100%]
-    ============================== 28 passed in 0.42s ==============================
+    ============================== 28 passed in 0.35s ==============================
     memory-service/tests/test_load_idempotent.py::test_start_close PASSED    [  7%]
     memory-service/tests/test_load_idempotent.py::test_context_manager_pass PASSED [ 15%]
     memory-service/tests/test_load_idempotent.py::test_start_embed_close_restart PASSED [ 23%]
@@ -67,9 +60,9 @@ f8c08d04e68d0583539871ebc7bc9bcb88ef73e7
     memory-service/tests/test_load_idempotent.py::test_restart_after_close_recovers PASSED [ 84%]
     memory-service/tests/test_load_idempotent.py::test_config_conflict_raises PASSED [ 92%]
     memory-service/tests/test_load_idempotent.py::test_same_path_ok PASSED   [100%]
-    ============================== 13 passed in 1.08s ==============================
+    ============================== 13 passed in 1.38s ==============================
     memory-service/tests/test_interpreter_exit.py::test_interpreter_exit_no_abort PASSED [100%]
-    ============================== 1 passed in 0.63s ===============================
+    ============================== 1 passed in 0.75s ===============================
   [PASS] pytest 全部通过（三组独立进程，无 Skip）
 
 ===== Step 5: 真实 SDK 冒烟 =====
@@ -92,15 +85,15 @@ f8c08d04e68d0583539871ebc7bc9bcb88ef73e7
   [PASS] Provider 错误映射 OK
 
 ===== Step 7: 生命周期路径 (P0-1) =====
-[1785984564531] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
-[1785984564531] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
-[1785984564554] [32minfo [0m Proxy init success,sessionId is: 352995118 
-[1785984564554] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
-[1785984564554] [32minfo [0m Try to get default model 
-[1785984564569] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
-[1785984564569] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
-[1785984564571] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 352995118 
-[1785984564572] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
+[1785985140413] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1785985140413] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
+[1785985140475] [32minfo [0m Proxy init success,sessionId is: 433569664 
+[1785985140475] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
+[1785985140475] [32minfo [0m Try to get default model 
+[1785985140515] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
+[1785985140515] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
+[1785985140520] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 433569664 
+[1785985140521] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
   [PASS] start→close
   [PASS] with EmbeddingProvider(): pass
   [PASS] start→embed→close→start→embed→close
@@ -108,4 +101,4 @@ f8c08d04e68d0583539871ebc7bc9bcb88ef73e7
   [PASS] 生命周期 4 类路径全部通过
 
 ===== 汇总 =====
-存在 1 项失败，请检查上方 [FAIL] 与对应日志
+全部验证通过（FAILURES=0）
