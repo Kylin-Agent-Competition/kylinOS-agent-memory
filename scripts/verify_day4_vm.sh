@@ -29,7 +29,7 @@ REPO=/mnt/shared
 VENV=/tmp/day4-venv
 FAILURES=0
 # P2/P0-EVIDENCE-1: 证据日志由脚本一次性生成（避免手工拼接歧义）
-EVIDENCE_LOG="$REPO/evidence/l2-kylin-vm/day4_verify_$(date +%Y%m%d_%H%M%S).log"
+EVIDENCE_LOG="$REPO/evidence/l2-kylin-vm/day4_verify_latest.log"
 
 log()  { printf '\n===== %s =====\n' "$*"; }
 pass() { printf '  [PASS] %s\n' "$*"; }
@@ -53,13 +53,13 @@ log "Step 1: git 状态证据 (P0-1)"
 # 先强制刷新 index stat（只更新 stat 信息，不改内容），再检查状态
 git update-index --refresh >/dev/null 2>&1 || true
 git rev-parse HEAD
-# P1-2: 必须无任何输出（含未跟踪文件）
-STATUS="$(git status --porcelain --untracked-files=all)"
+# P1-2: 必须无任何输出（含未跟踪文件）；排除脚本自身生成的证据日志（预期产物）
+STATUS="$(git status --porcelain --untracked-files=all | grep -v 'day4_verify_latest.log')"
 if [ -n "$STATUS" ]; then
   echo "$STATUS"
   fail "工作区存在修改、暂存或未跟踪文件（含 ?? 未跟踪文件，非严格干净）"
 else
-  pass "git status --porcelain --untracked-files=all 为空（严格干净）"
+  pass "git status --porcelain --untracked-files=all 为空（严格干净，排除证据日志）"
 fi
 if git diff --exit-code >/dev/null 2>&1; then
   pass "WORKTREE_CLEAN=1"

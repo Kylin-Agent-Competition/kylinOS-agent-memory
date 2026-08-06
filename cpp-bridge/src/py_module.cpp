@@ -144,5 +144,6 @@ PYBIND11_MODULE(kylin_embedding, m) {
             return *r.value;
         }, py::arg("text"), py::arg("timeout_ms") = 0)
         .def_property_readonly("loaded", &EmbeddingBridge::is_loaded)
-        .def_property_readonly("has_session", &EmbeddingBridge::has_session);
+        .def_property_readonly("has_session", &EmbeddingBridge::has_session)
+        .def_property_readonly("session_destroyed", &EmbeddingBridge::session_destroyed);
 }

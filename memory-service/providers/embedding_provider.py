@@ -227,7 +227,7 @@ class EmbeddingProvider:
             # 重置会重新触发危险生命周期。此时保留共享 Bridge，
             # 同实例下次 start() 直接复用 self._bridge 重试。
             if (EmbeddingProvider._ref_count == 0
-                    and not self._bridge.is_loaded()):
+                    and not self._bridge.loaded):
                 try:
                     EmbeddingProvider._shared_bridge.destroy_session()
                 except Exception:  # noqa: BLE001 - 恢复路径尽力而为
