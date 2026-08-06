@@ -18,3 +18,16 @@ KMA_RETRIEVE_DEADLINE_MS=150
 
 # 推送上下文最大 token 数
 KMA_MAX_CONTEXT_TOKENS=800
+
+# ======== SSH 远程 VM 连接凭据 (evidence/gate0_echo/*.py 使用) ========
+# 麒麟 VM SSH 主机地址
+KYLIN_VM_HOST=127.0.0.1
+
+# 麒麟 VM SSH 端口
+KYLIN_VM_PORT=2222
+
+# 麒麟 VM SSH 用户名
+KYLIN_VM_USER=kylin-agent
+
+# 麒麟 VM SSH 密码（必填，运行证据收集脚本前必须设置）
+KYLIN_VM_PASSWORD=
