@@ -60,6 +60,7 @@ struct BridgeModelError : BridgeErrorException { using BridgeErrorException::Bri
         case BridgeError::ERR_SESSION_CREATE:
         case BridgeError::ERR_SESSION_INIT:
         case BridgeError::ERR_SESSION_DESTROY:
+        case BridgeError::ERR_SESSION_DESTROYED:
             throw BridgeSessionError(msg);
         case BridgeError::ERR_EMBED_CALL:
         case BridgeError::ERR_EMBED_RESULT:

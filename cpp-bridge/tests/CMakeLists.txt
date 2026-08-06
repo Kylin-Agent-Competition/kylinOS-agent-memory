@@ -31,3 +31,12 @@ target_link_libraries(test_bridge_malformed PRIVATE embedding_bridge_core)
 add_test(NAME bridge_malformed
   COMMAND test_bridge_malformed $<TARGET_FILE:fake_sdk_malformed>
 )
+
+# 测试 4: Bridge destroy 终态（P1-1）— 假 .so
+add_executable(test_bridge_destroyed
+  test_bridge_destroyed.cpp
+)
+target_link_libraries(test_bridge_destroyed PRIVATE embedding_bridge_core)
+add_test(NAME bridge_destroyed
+  COMMAND test_bridge_destroyed $<TARGET_FILE:fake_sdk_malformed>
+)

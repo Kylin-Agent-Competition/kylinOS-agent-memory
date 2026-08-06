@@ -207,9 +207,15 @@ class EmbeddingProvider:
         except Exception as exc:  # noqa: BLE001 - 统一映射为 Provider 错误
             # 初始化失败：保持 INITIALIZING（下次 start 重试），不置 READY（P1-3）
             self._lifecycle = _ProviderLifecycle.INITIALIZING
-            # P1-2 失败恢复：首个实例初始化失败（如 so 不存在）且无任何引用时，
-            # 重置单例，允许后续实例用正确路径重新初始化（不污染共享 Bridge）
-            if EmbeddingProvider._ref_count == 0:
+            # P0-CODE-1: 按失败阶段区分恢复策略——
+            # 仅当"load 前失败"（.so 不存在等，Bridge 未加载任何句柄）且无引用时，
+            # 才允许重置 Singleton 占位，让后续实例用正确路径重新初始化。
+            # 若失败发生在 load 成功后（create_session/初始化 embed 失败），
+            # 不得重置单例：SDK 不允许同进程 dlclose→dlopen / destroy→create，
+            # 重置会重新触发危险生命周期。此时保留共享 Bridge，
+            # 同实例下次 start() 直接复用 self._bridge 重试。
+            if (EmbeddingProvider._ref_count == 0
+                    and not self._bridge.is_loaded()):
                 try:
                     EmbeddingProvider._shared_bridge.destroy_session()
                 except Exception:  # noqa: BLE001 - 恢复路径尽力而为
@@ -217,7 +223,6 @@ class EmbeddingProvider:
                 EmbeddingProvider._shared_bridge = None
                 EmbeddingProvider._shared_so_path = None
                 EmbeddingProvider._shared_dimension = None
-                self._bridge = None
             if isinstance(exc, ProviderError):
                 raise
             raise self._map_bridge_error(exc) from exc
