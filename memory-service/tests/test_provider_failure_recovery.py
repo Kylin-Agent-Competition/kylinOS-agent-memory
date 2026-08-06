@@ -79,6 +79,9 @@ _fake_mod.BridgeInitParams = type('BridgeInitParams', (), {
     '__init__': lambda self: setattr(self, 'so_path', ''),
 })
 _fake_mod.EmbeddingBridge = _FakeBridge
+# P1-1: 模拟 pybind 的专用异常（BridgeSessionDestroyedError）
+_fake_mod.BridgeSessionDestroyedError = type(
+    'BridgeSessionDestroyedError', (RuntimeError,), {})
 sys.modules['kylin_embedding'] = _fake_mod
 
 # 重新加载 providers（用 mock 模块）
@@ -144,3 +147,48 @@ def test_fatal_failure_no_retry():
     # 同实例重试：fatal 后不再重试（稳定失败，不触发危险生命周期）
     with pytest.raises(ProviderError):
         p.start()
+
+
+def test_bridge_destroyed_maps_to_session_destroyed():
+    """端到端（P1-1）：Bridge destroy 终态 → ProviderErrorCode.ERR_SESSION_DESTROYED。
+
+    模拟：load → create → embed → destroy → 再次 embed 返回 ERR_SESSION_DESTROYED。
+    验证 Provider 能区分销毁终态（而非 ERR_SESSION_FAILED）。
+    """
+    from providers import ProviderErrorCode
+
+    class DestroyBridge(_FakeBridge):
+        """模拟 pybind 的 BridgeSessionDestroyedError 行为。"""
+
+        def __init__(self, params):
+            super().__init__(params)
+            self._destroyed = False
+
+        @property
+        def session_destroyed(self):
+            return self._destroyed
+
+        def embed(self, text, timeout_ms=0):
+            if self._destroyed:
+                # 模拟 pybind 的 BridgeSessionDestroyedError（类名匹配 Provider 映射表）
+                raise _fake_mod.BridgeSessionDestroyedError('session destroyed')
+            return super().embed(text, timeout_ms)
+
+        def destroy_session(self):
+            self._destroyed = True
+            return super().destroy_session()
+
+    # 替换 mock 模块的 Bridge 为 DestroyBridge，验证映射
+    _fake_mod.EmbeddingBridge = DestroyBridge
+    try:
+        p = EmbeddingProvider(so_path='/tmp/normal.so')
+        p.start()
+        assert p.embed('x').dimension == 768
+        # 直接销毁底层 session（模拟 Bridge destroy 终态）
+        p._bridge.destroy_session()
+        with pytest.raises(ProviderError) as ei:
+            p.embed('x')
+        assert ei.value.code == ProviderErrorCode.ERR_SESSION_DESTROYED, \
+            f"销毁终态应映射 ERR_SESSION_DESTROYED, 实际 {ei.value.code}"
+    finally:
+        _fake_mod.EmbeddingBridge = _FakeBridge
