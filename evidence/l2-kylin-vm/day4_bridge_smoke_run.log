@@ -58,7 +58,7 @@
 
 输入命令（共享文件夹 /mnt/shared，bash scripts/verify_day4_vm.sh Step 1）:
 $ git rev-parse HEAD
-5d056b3507f601df835ace267633bc46c4cd6558
+aba789f84c0f0aa583cbc36e99ac2ab0faa03add
 $ git status --porcelain --untracked-files=all
 （无输出 = 严格干净：无修改、无暂存、无未跟踪文件）
 [PASS] git status --porcelain --untracked-files=all 为空（严格干净）

@@ -56,8 +56,9 @@ def test_provider_error_code_enum(provider_module):
     _, _, _, ProviderError = provider_module
     from providers import ProviderErrorCode
     # Day3 契约的错误码必须存在（含 P1-3 补回的 ERR_MODEL_INVALID）
-    for code in ["ERR_SDK_NOT_LOADED", "ERR_SESSION_FAILED", "ERR_EMBED_FAILED",
-                 "ERR_SDK_ERROR", "ERR_MODEL_INVALID", "ERR_TIMEOUT", "ERR_INVALID_TEXT"]:
+    for code in ["ERR_SDK_NOT_LOADED", "ERR_SESSION_FAILED", "ERR_SESSION_DESTROYED",
+                 "ERR_EMBED_FAILED", "ERR_SDK_ERROR", "ERR_MODEL_INVALID",
+                 "ERR_TIMEOUT", "ERR_INVALID_TEXT", "ERR_CONFIG_CONFLICT"]:
         assert hasattr(ProviderErrorCode, code), f"ProviderErrorCode.{code} 应存在"
     # ProviderError 异常可实例化
     err = ProviderError(ProviderErrorCode.ERR_INVALID_TEXT, "test")

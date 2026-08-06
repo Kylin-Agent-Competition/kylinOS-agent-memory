@@ -32,6 +32,7 @@
 | TD-A-005-03 | get_dimension() 首次调用用空串触发（有 IPC 副作用） | memory-service/providers/embedding_provider.py | Technical Debt | Low | Open | A 轨成员 | D 主审 | 2026-08-10 | 改用 SDK 元信息接口无副作用获取维度 | PR #17 |
 | TD-A-005-04 | model_info.name 硬编码默认模型名 | memory-service/providers/embedding_provider.py | Technical Debt | Low | Open | A 轨成员 | D 主审 | 2026-08-10 | 接入 get_model_list 获取真实模型名 | PR #17 |
 | TD-A-005-05 | model_info.loaded 临时语义（get_dimension 成功即代表可用） | memory-service/providers/embedding_provider.py | Technical Debt | Low | Open | A 轨成员 | D 主审 | 2026-08-10 | 精确化 loaded 状态（会话初始化 + 模型就绪） | PR #17 |
+| TD-A-005-06 | EmbeddingProvider 进程级 Singleton 并发初始化缺少类级锁 | memory-service/providers/embedding_provider.py | Technical Debt | Low | Open | A 轨成员 | D 主审 | 2026-08-10 | Memory Service 启动链路为单线程（并发入口不存在）；若后续引入并发初始化入口，需加类级锁并升级严重度 | PR #17 |
 
 ## 管理规则
 
