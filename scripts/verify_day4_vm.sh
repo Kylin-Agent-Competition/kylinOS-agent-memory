@@ -54,7 +54,7 @@ log "Step 1: git 状态证据 (P0-1)"
 git update-index --refresh >/dev/null 2>&1 || true
 git rev-parse HEAD
 # P1-2: 必须无任何输出（含未跟踪文件）；排除脚本自身生成的证据日志（预期产物）
-STATUS="$(git status --porcelain --untracked-files=all | grep -v 'day4_verify_latest.log')"
+STATUS="$(git status --porcelain --untracked-files=all | grep -v 'day4_verify_.*\\.log')"
 if [ -n "$STATUS" ]; then
   echo "$STATUS"
   fail "工作区存在修改、暂存或未跟踪文件（含 ?? 未跟踪文件，非严格干净）"
