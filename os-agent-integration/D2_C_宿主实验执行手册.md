@@ -11,8 +11,9 @@
 > 日期：2026-07-30（D2，Gate 0：核心集成可行性验证）
 > Reviewer：D 主审（周子腾）；用户交互与安全由 E 补审（谢嘉然）
 > 依据：01 能力边界 v1.0 §7/§11（AGT-001~005）、02 总体架构 v1.0 §4/§16.15、03 环境配置手册 v1.0
-> 状态：REVIEW_PENDING（三项实验已在麒麟虚拟机执行完毕，证据已采集，待 D Reviewer 复核）
-> 执行 Commit: 20adffc7449ad97f837108b02ce0dcc0d1d79f24
+> 状态：BLOCKED（2026-08-08 审计）。下文的候选状态和执行记录仅描述旧提交的部分观察，
+> 不构成 D2-C 完成、Gate 通过或合并准入证据。
+> 历史执行 Commit: 20adffc7449ad97f837108b02ce0dcc0d1d79f24
 > 执行环境: Kylin-Desktop V11 / Linux 6.6.0-63-generic / VirtualBox
 
 ---
@@ -354,7 +355,8 @@ d2c_evidence_<timestamp>/
 
 ## 6. D2-C 完成定义
 
-**状态：** REVIEW_PENDING（三项实验已在麒麟虚拟机执行完毕）
+**当前状态：** BLOCKED。以下是 2026-08-01 旧提交上的历史观察记录，不改变本手册开头
+的审计结论，也不能替代当前 Commit 的麒麟 VM 重跑。
 
 **实验执行结果汇总（2026-08-01）：**
 
@@ -384,11 +386,11 @@ d2c_evidence_<timestamp>/
 
 **升级为 COMPLETED 需要：**
 
-1. ✅ 人在麒麟虚拟机执行三项实验（A/B/C）。— 已完成 2026-08-01
-2. ⚠️ 收集完整证据包（日志、截图、数据库快照、JSON 报告）。— 证据已采集, 待上传到 evidence/l2-kylin-vm/d2c/
-3. ⚠️ 所有通过标准满足，或失败项已分类为 Bug/Blocker/Risk/TD。— H2C-PreChat-3 memory_context 未观察到归因为 NOT_OBSERVED (需源码 instrument), H2C-Tool-1/2 结构化事件未捕获归因为需源码 instrument
-4. ⚠️ 证据包上传到 `evidence/l2-kylin-vm/d2c/` 目录。— 待人在麒麟虚拟机执行 git add
-5. ✅ 更新 `evidence/index.yaml`。— 已更新 status=REVIEW_PENDING, commit=20adffc
+1. ⚠️ 人在麒麟虚拟机以当前被测 Commit 重跑三项实验（A/B/C）。— 历史运行仅基于 `20adffc`，不满足当前证据绑定要求
+2. ⚠️ 收集完整证据包（日志、截图、数据库快照、JSON 报告）。— 当前缺少 PostTurn 快照/稳定性/UI 一致性、PreChat UI 与已解码请求、Tool 三类结构化事件
+3. ⚠️ 所有通过标准满足，或失败项已分类为 Bug/Blocker/Risk/TD。— Gate 0 仍需 D 的正式决策；AGT-005/AGT-004 不得以关键词观察替代验证
+4. ⚠️ 将脱敏后的完整证据上传到 `evidence/l2-kylin-vm/d2c/`，将大体积原始材料迁至受控存储并记录链接与 SHA-256
+5. ⚠️ 更新 `evidence/index.yaml`。— 当前条目应保持 `BLOCKED`，仅在完整证据和复核后按准入流程升级
 6. ✅ 更新 01 文档能力矩阵 AGT-004（Tool）、AGT-005（Context）状态。— AGT-005 NOT_OBSERVED, AGT-004=PARTIAL
 7. ✅ 关闭或更新 TD-007（Tool Hook）。— 路径已确认为 intentionrecognition.cpp, TD-007 保持 OPEN, 需源码 instrument
 8. ⚠️ D Reviewer 复核证据真实性。— 待 D 复核

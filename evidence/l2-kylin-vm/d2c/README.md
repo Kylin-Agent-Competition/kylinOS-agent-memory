@@ -9,8 +9,9 @@
 > task_id: D2-C-OSAGENT-SPIKE
 > 责任轨道: C · 刘承恩
 > Reviewer: D(周子腾) 主审；E(谢嘉然) 补审
-> 状态: REVIEW_PENDING（三项实验已在麒麟VirtualBox虚拟机执行完毕, 证据已采集, 待 D Reviewer 复核真实性; 证据待上传到本目录）
-> 执行 Commit: 20adffc7449ad97f837108b02ce0dcc0d1d79f24
+> 状态: BLOCKED（2026-08-08 审计）。以下仅为旧提交的部分观察记录，不能证明三项
+> 实验完成，也不能作为 D2-C Gate 或合并准入证据。
+> 历史执行 Commit: 20adffc7449ad97f837108b02ce0dcc0d1d79f24
 > 执行环境: Kylin-Desktop V11 / Linux 6.6.0-63-generic / VirtualBox (由 systemd-detect-virt 自检测, 禁止硬编码)
 
 ## 本目录用途
@@ -70,11 +71,11 @@ evidence/l2-kylin-vm/d2c/
 | AGT-005 | Memory Context 注入 | UNTESTED/E0·E2 | 验证 UI/聊天库/模型请求三路隔离 |
 | AGT-004 | 真实 Tool Result | PARTIAL/E2·E4 | 捕获成功/失败/取消三类事件，关闭 TD-007 |
 
-## 上传后操作
+## 完整证据补采后操作
 
-证据上传到本目录后，需：
+人在麒麟 VM 使用当前被测 Commit 补采完整、脱敏的证据并经 D/E 复核后，方可：
 
-1. 更新 `evidence/index.yaml` 中 D2-C 条目的 `status` → `REVIEW_PENDING` (证据完整上传并经 D Reviewer 复核后, 方可升级为 L2_VERIFIED)
+1. 更新 `evidence/index.yaml` 中 D2-C 条目的 `status` → `REVIEW_PENDING`（完整证据上传并经 D Reviewer 复核后，方可升级为 `L2_VERIFIED`）
 2. 回填 `commit` 字段（实际执行的 Commit SHA）
 3. 回填 `checksum_sha256` 字段（checksums.sha256 文件内容哈希）
 4. 更新 os-agent-integration/D2_C_宿主实验执行手册.md 的完成定义
