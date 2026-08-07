@@ -21,12 +21,18 @@ KMA_MAX_CONTEXT_TOKENS=800
 
 # ======== UDS Echo 组件路径 (os-agent-integration/echo) ========
 # 注意: 以下路径区分 dev 模式与 systemd/prod 模式
+# 统一部署布局 (Gate 0): /home/<user>/kylin-memory-echo/
 #
-# ---- 构建产物安装路径 (CMake install, 默认 prefix=/usr/local) ----
-# echo_client 二进制:          /usr/local/bin/echo_client
-# kaiming_memory_client 二进制: /usr/local/bin/kaiming_memory_client
-# 服务端脚本 (rename):          /usr/local/bin/kylin-memory-echo-server
-# KYSEC/rollback 脚本:          /usr/local/share/kylin-memory-echo/
+# ---- 统一部署布局 (Gate 0) ----
+# /home/<user>/kylin-memory-echo/
+# ├── bin/
+# │   ├── kylin-memory-echo-server    (服务端脚本)
+# │   ├── echo_client                 (C++ 客户端)
+# │   └── kaiming_memory_client       (Kaiming 模拟客户端)
+# ├── share/
+# │   └── kylin-memory-echo.service   (仓库正式 Unit)
+# ├── logs/
+# └── build/
 #
 # ---- UDS Socket 路径 (按运行模式区分) ----
 # systemd 模式: /run/kylin-memory-echo/echo.sock
