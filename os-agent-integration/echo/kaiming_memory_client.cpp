@@ -152,7 +152,7 @@ std::string build_memory_store_request(const std::string& key, const std::string
         << R"("key":")" << key << R"(",)"
         << R"("content":")" << content << R"(",)"
         << R"("metadata":{"source":"kaiming-aiassistant","priority":"high"})"
-        << "}}"
+        << "}"
         << "}";
     return oss.str();
 }
