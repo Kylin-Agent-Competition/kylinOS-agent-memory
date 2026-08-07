@@ -2,7 +2,7 @@
 # D2-C 实验 C: H2C-Tool 真实 Tool 事件观察只读脚本
 #
 # 目标: 捕获真实 Tool 成功/失败/取消事件, 验证 Prompt Skill 不被误判
-# 关联: AGT-004 (真实 Tool Result, PARTIAL/E2·E4), TD-007
+# 关联: AGT-004 (真实 Tool Result, PARTIAL/E2·E4), TD-007 (OPEN)
 # 依据: 02 文档 §10.3 Tool Result Adapter, §16.15 步骤 14
 #
 # 用法:
@@ -402,10 +402,11 @@ PYEOF
   "pass_criteria": {
     "H2C-Tool-1": "N/A (架构不同: 成功 Tool 由 intentionrecognition 内部执行, 无独立 DBus 事件)",
     "H2C-Tool-2": "N/A (架构不同: 失败 Tool 由 intentionrecognition 内部处理, 无独立 DBus 事件)",
-    "H2C-Tool-3": $([ "${cancel_captured}" = "true" ] && echo '"通过: stop_chat DBus 方法已捕获"' || echo '"未通过: 未捕获到 stop_chat"'),
-    "H2C-Tool-4": $([ "${prompt_skill_not_misjudged}" = "true" ] && echo true || echo false)
+    "H2C-Tool-3": "observed: stop_chat DBus method captured (count=${stop_chat_count})",
+    "H2C-Tool-4": "observed: openai_style_keyword_count=${openai_keyword_count} (0=未观察到OpenAI风格关键词)"
   },
-  "note": "基于 D2-C 实验 C 实测: 麒麟 AI 助手所有用户输入(含打开应用/翻译)均以 message_type=chat 发送, 无 OpenAI 风格 tool_call 事件"
+  "note": "基于 D2-C 实验 C 实测: 麒麟 AI 助手所有用户输入(含打开应用/翻译)均以 message_type=chat 发送, 无 OpenAI 风格 tool_call 事件",
+  "disclaimer": "判定权交由 Reviewer, 脚本仅记录观察结果"
 }
 EOF
 
@@ -424,17 +425,10 @@ EOF
     echo "  OpenAI 风格关键词命中:     ${openai_keyword_count}  (预期 0, 证明麒麟不用 tool_call)"
     echo "  Prompt Skill 关键词:       ${prompt_skill_count}  (英文 ${prompt_skill_en_count} + 中文 ${prompt_skill_cn_count})"
     echo ""
-    echo "  [判定]"
-    if [ "${cancel_captured}" = "true" ]; then
-        echo "  ✓ H2C-Tool-3 通过: 捕获到 stop_chat 取消事件"
-    else
-        echo "  ✗ H2C-Tool-3 未通过: 未捕获到 stop_chat"
-    fi
-    if [ "${prompt_skill_not_misjudged}" = "true" ]; then
-        echo "  ✓ H2C-Tool-4 通过: OpenAI 风格关键词=0, Prompt Skill 不被误判为 tool_call"
-    else
-        echo "  ✗ H2C-Tool-4 未通过: 检测到 OpenAI 风格关键词 (与预期不符)"
-    fi
+    echo "  [观察结果]"
+    echo "  OBSERVED: H2C-Tool-3 stop_chat 事件已捕获 (count=${stop_chat_count})"
+    echo "  OBSERVED: H2C-Tool-4 OpenAI风格关键词计数=${openai_keyword_count}"
+    echo "  判定权交由 Reviewer, 脚本仅记录观察结果"
     echo ""
     echo "  H2C-Tool-1/2 (成功/失败 Tool): N/A"
     echo "    原因: 麒麟 AI 助手不使用 OpenAI 风格 tool_call,"

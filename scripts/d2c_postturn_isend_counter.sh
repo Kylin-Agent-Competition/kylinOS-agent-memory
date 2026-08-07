@@ -333,16 +333,15 @@ cmd_stop() {
         fi
     fi
 
-    # 宽松匹配下, is_end 会被 write(stdout) + write(log) + sendmsg 重复计数 (3x)
-    # 检测到 3 的倍数时自动除以 3, 还原真实业务事件数
-    if [ "${match_mode}" = "fallback" ] && [ "${is_end_true_count}" -gt 0 ] \
-       && [ $(( is_end_true_count % 3 )) -eq 0 ]; then
-        echo "INFO: 宽松匹配检测到 3x 重复写入 (stdout+log+dbus), 自动除以 3 还原真实事件数"
-        echo "      is_end=true:  ${is_end_true_count} -> $(( is_end_true_count / 3 ))"
-        echo "      is_end=false: ${is_end_false_count} -> $(( is_end_false_count / 3 ))"
-        is_end_true_count=$(( is_end_true_count / 3 ))
-        is_end_false_count=$(( is_end_false_count / 3 ))
+    # fallback 模式下计数可能包含 3x 重复 (stdout + log + dbus), 不再自动除以 3
+    # 保留原始计数不变, 仅在 stdout 打印提示供人工核对
+    if [ "${match_mode}" = "fallback" ]; then
+        echo "WARN: fallback模式计数可能包含3x重复(stdout+log+dbus)，请人工核对"
     fi
+
+    # 保存原始计数 (precise 模式下 raw == count; fallback 模式下 raw 保留未去重的值)
+    raw_is_end_false_count="${is_end_false_count}"
+    raw_is_end_true_count="${is_end_true_count}"
 
     cat > "${SUMMARY_FILE}" <<EOF
 {
@@ -355,7 +354,9 @@ cmd_stop() {
     "ChatResult_signal_count": ${chat_callback_count},
     "is_end_false_count": ${is_end_false_count},
     "is_end_true_count": ${is_end_true_count},
-    "updateBubble_count": ${update_bubble_count}
+    "updateBubble_count": ${update_bubble_count},
+    "raw_is_end_false_count": ${raw_is_end_false_count},
+    "raw_is_end_true_count": ${raw_is_end_true_count}
   },
   "expected": {
     "is_end_true_count": 1,
@@ -365,7 +366,8 @@ cmd_stop() {
     "H2C-PostTurn-1": $([ "${is_end_true_count}" -eq 1 ] && echo true || echo false),
     "H2C-PostTurn-2": $([ "${is_end_false_count}" -ge 1 ] && echo true || echo false)
   },
-  "note": "精确模式只统计 sendmsg 到 assistant.sock 的 DBus 业务回调; 宽松模式统计所有 is_end 匹配并自动除以 3 去重"
+  "match_mode": "${match_mode}",
+  "dedupe_basis": "precise模式仅统计sendmsg到assistant.sock的DBus回调; fallback模式保留原始计数不自动去重"
 }
 EOF
 
