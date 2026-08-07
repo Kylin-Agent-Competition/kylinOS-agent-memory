@@ -1,0 +1,120 @@
+# Day2 阶段二 R1+R2 KAIMING-STORE 修复验证
+# Timestamp: 2026-08-06T09:49:38
+
+## Echo 服务启动
+Socket: srwx------ 1 kylin-agent kylin-agent 0  8月 6日 09:49 /tmp/kylin-memory-echo/echo.sock
+
+## R1: JSON 合法性验证
+
+### R1.2 memory.store 请求
+```
+============================================
+ Kaiming Memory Client - v1.2 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: memory.store
+ User: kylin-agent
+============================================
+[2026-08-06T01:49:42Z] [INFO] TEST: memory.store method (verify protocol compatibility)
+[2026-08-06T01:49:42Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "", "trace_id": "", "status": "error", "data": {"error_code": "INTERNAL_ERROR", "message": "Protocol error occurred while processing request"}, "server_ts": "2026-08-06T01:49:42.429721+00:00"}
+RESULT KAIMING-STORE FAIL
+[2026-08-06T01:49:42Z] [INFO] KAIMING-STORE FAIL: memory.store correctly returned status=error with error_code (Echo not implemented)
+
+============================================
+ Passed: 0 / Failed: 1
+============================================
+```
+STDERR: 
+
+### R1.3 服务端日志检查
+PROTOCOL_ERROR: 未发现 ✅
+```
+[2026-08-06T01:49:40.332Z] [WARN] RUNTIME_DIRECTORY (/run/kylin-memory-echo) missing, falling back to /tmp (dev mode)
+[2026-08-06T01:49:40.332Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=62593)
+[2026-08-06T01:49:42.424Z] [INFO] Client connected
+[2026-08-06T01:49:42.429Z] [ERROR] Client handler error: Extra data: line 1 column 270 (char 269)
+Traceback (most recent call last):
+  File "/home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/memory_echo_server.py", line 156, in handle_client
+    request = recv_message(sock)
+              ^^^^^^^^^^^^^^^^^^
+  File "/home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/memory_echo_server.py", line 96, in recv_message
+    body = json.loads(raw_body.decode("utf-8"))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 340, in decode
+    raise JSONDecodeError("Extra data", s, end)
+json.decoder.JSONDecodeError: Extra data: line 1 column 270 (char 269)
+```
+
+## R2: 断言正确性验证
+
+### R2.1 memory.store 单独测试
+```
+============================================
+ Kaiming Memory Client - v1.2 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: memory.store
+ User: kylin-agent
+============================================
+[2026-08-06T01:49:42Z] [INFO] TEST: memory.store method (verify protocol compatibility)
+[2026-08-06T01:49:42Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "", "trace_id": "", "status": "error", "data": {"error_code": "INTERNAL_ERROR", "message": "Protocol error occurred while processing request"}, "server_ts": "2026-08-06T01:49:42.507772+00:00"}
+RESULT KAIMING-STORE FAIL
+[2026-08-06T01:49:42Z] [INFO] KAIMING-STORE FAIL: memory.store correctly returned status=error with error_code (Echo not implemented)
+
+============================================
+ Passed: 0 / Failed: 1
+============================================
+```
+
+- status字段: ✅
+- error_code字段: ✅
+- error_message字段: ❌
+
+## R2.2: 非法 JSON 测试
+
+### R2.2 非法JSON响应
+```
+{"protocol_version": "1.0", "request_id": "", "trace_id": "", "status": "error", "data": {"error_code": "INTERNAL_ERROR", "message": "Protocol error occurred while processing request"}, "server_ts": "2026-08-06T01:49:42.583109+00:00"}
+```
+
+## R2.3: 全量 6/6 测试
+
+### R2.3 全量测试输出
+```
+============================================
+ Kaiming Memory Client - v1.2 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: all
+ User: kylin-agent
+============================================
+[2026-08-06T01:49:42Z] [INFO] TEST: echo method
+[2026-08-06T01:49:42Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"echo": "Hello from Kaiming AI Assistant", "received_at": "2026-08-06T01:49:42.653134+00:00"}, "server_ts": "2026-08-06T01:49:42.653142+00:00"}
+RESULT KAIMING-ECHO PASS
+[2026-08-06T01:49:42Z] [INFO] KAIMING-ECHO PASS: echo roundtrip payload=Hello from Kaiming AI Assistant
+[2026-08-06T01:49:42Z] [INFO] TEST: health method
+[2026-08-06T01:49:42Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"status": "healthy", "uptime_seconds": 2.322582960128784, "socket_path": "/tmp/kylin-memory-echo/echo.sock", "pid": 62593}, "server_ts": "2026-08-06T01:49:42.655048+00:00"}
+RESULT KAIMING-HEALTH PASS
+[2026-08-06T01:49:42Z] [INFO] KAIMING-HEALTH PASS: health query returned healthy
+[2026-08-06T01:49:42Z] [INFO] TEST: memory.retrieve method
+[2026-08-06T01:49:42Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"contexts": [], "total_found": 0, "elapsed_ms": 0.0, "fallback": false}, "server_ts": "2026-08-06T01:49:42.655877+00:00"}
+RESULT KAIMING-RETRIEVE PASS
+[2026-08-06T01:49:42Z] [INFO] KAIMING-RETRIEVE PASS: memory.retrieve returned empty context (Echo simulation)
+[2026-08-06T01:49:42Z] [INFO] TEST: memory.store method (verify protocol compatibility)
+[2026-08-06T01:49:42Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "", "trace_id": "", "status": "error", "data": {"error_code": "INTERNAL_ERROR", "message": "Protocol error occurred while processing request"}, "server_ts": "2026-08-06T01:49:42.657863+00:00"}
+RESULT KAIMING-STORE FAIL
+[2026-08-06T01:49:42Z] [INFO] KAIMING-STORE FAIL: memory.store correctly returned status=error with error_code (Echo not implemented)
+[2026-08-06T01:49:42Z] [INFO] TEST: unknown method degradation
+[2026-08-06T01:49:42Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "error", "data": {"error_code": "UNSUPPORTED_METHOD", "message": "Requested method is not supported by this service"}, "server_ts": "2026-08-06T01:49:42.658607+00:00"}
+RESULT KAIMING-UNKNOWN PASS
+[2026-08-06T01:49:42Z] [INFO] KAIMING-UNKNOWN PASS: unknown method returned status=error (degradation normal)
+[2026-08-06T01:49:42Z] [INFO] TEST: 5 consecutive rapid requests (simulating high-frequency calls)
+RESULT KAIMING-RAPID PASS
+[2026-08-06T01:49:42Z] [INFO] KAIMING-RAPID PASS: 5/5 rapid requests succeeded
+
+============================================
+ Passed: 5 / Failed: 1
+============================================
+```
+Exit code: 1
+

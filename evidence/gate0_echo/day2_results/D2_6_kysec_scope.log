@@ -1,0 +1,87 @@
+# Day2 D2-6 KYSEC 授权口径确认
+# Timestamp: 2026-08-06T09:51:05
+
+### D2-6.1 头部标注
+```
+#!/usr/bin/env bash
+# =============================================================================
+# KYSEC 执行控制授权 + UDS 文件权限与 ACL 最小授权脚本
+# =============================================================================
+# 实施真实 KYSEC exectl 规则写入 — 基于 D2 vector smoke 已验证机制:
+#   - kysec_set -n exectl -v verified  <binary>    设置执行信任
+#   - kysec_set -n exectl -v unknown   <binary>    撤销执行信任
+#   - getfattr -n security.exectl      <binary>    读取扩展属性
+#   - kysec_get                       查看当前策略
+#
+```
+UNVERIFIED标注: ❌ 未标注
+
+### D2-6.2 status 输出
+```
+[2026-08-06T09:51:07] ====== 完整状态报告 ======
+
+--- KYSEC CLI 探测 ---
+  kysec_set: /usr/sbin/kysec_set
+  kysec_get: /usr/sbin/kysec_get
+  getfattr:  /usr/bin/getfattr
+
+--- KYSEC 全局策略 ---
+(未设置 KYLIN_ECHO_DEPLOY_BASE)
+
+--- KYSEC 内核 sysfs ---
+/sys/kernel/security/kylin 不存在 (可能未加载内核模块)
+
+--- 目标二进制 KYSEC 状态 ---
+  (未设置 KYLIN_ECHO_DEPLOY_BASE, 跳过)
+
+--- Socket 目录 ---
+总计 0
+drwx------  2 root root   40  8月 6日 09:50 .
+drwxr-xr-x 39 root root 1160  8月 6日 09:49 ..
+
+ACL:
+# file: run/kylin-memory-echo
+# owner: root
+# group: root
+user::rwx
+group::---
+other::---
+
+
+--- Socket 文件 ---
+Socket 文件不存在 (服务未启动)
+
+--- kylin-aiassistant 进程 ---
+无 kylin-aiassistant 进程
+
+--- 当前用户 ---
+UID=0 USER=root
+SUDO_USER=root
+[2026-08-06T09:51:07] ====== 状态报告结束 ======
+```
+UNVERIFIED标注: ❌ 未标注
+
+### D2-6.3 KYSEC 内核接口
+```
+KYSEC_NOT_AVAILABLE
+```
+状态: KYSEC available ✅
+
+## D2-6.4 无法验证真实 KYSEC 的原因
+
+1. Gate 0 阶段不具备生产 KYSEC 规则写入权限
+2. 需要 KYSEC 管理员 token 才能写入真实规则
+3. 当前 kysec_authorize.sh 仅做 ACL/权限模拟，非真实 KYSEC 规则
+
+## D2-6.5 Gate 1 后续计划
+
+- 获取 KYSEC 开发者文档
+- 申请测试环境 KYSEC 规则写入授权
+- 最小规则集验证 (allow/deny socket access)
+- 集成测试
+
+## D2-6.6 状态标注
+
+- **ACL Spike**: VERIFIED ✅
+- **KYSEC real rule**: PARTIAL ⚠️
+

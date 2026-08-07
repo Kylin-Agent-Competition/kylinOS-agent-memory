@@ -1,0 +1,15 @@
+# D3 Dev Mode (2026-08-06T08:53:48)
+
+### PID: 42040
+
+### Echo test (ec=0)
+[2026-08-06T00:54:03Z] [INFO] Echo Client starting
+[2026-08-06T00:54:03Z] [INFO]   Socket: /tmp/kylin-memory-echo/echo.sock
+[2026-08-06T00:54:03Z] [INFO]   Method: echo
+[2026-08-06T00:54:03Z] [INFO]   Message: DEV_MODE_D3
+[2026-08-06T00:54:03Z] [INFO] Request: {"protocol_version":"1.0","request_id":"req_test_001","trace_id":"trc_test_001","method":"echo","deadline_ms":5000,"payload":{"message":"DEV_MODE_D3"}}
+[2026-08-06T00:54:03Z] [ERROR] connect() failed: No such file or directory
+EXIT=1
+
+
+### D3 PASS: False

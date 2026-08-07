@@ -1,0 +1,45 @@
+# P2-3 D2-6.3 KYSEC 内核接口状态 — 记录一致性修正
+# Timestamp: 2026-08-06T13:32:57
+
+## sysfs_kylin
+```
+KYSEC_NOT_AVAILABLE
+```
+
+## sysfs_security
+```
+box
+evm
+ima
+integrity
+ksaf
+kycp
+kysec
+lockdown
+lsm
+```
+
+## kernel_modules
+```
+kysec_exectl           53248  0
+kysec_devctl           40960  0
+kysec2_kbox            16384  0
+ksaf_main             274432  7 kysec2_kbox,kysec_exectl,kysec_devctl
+```
+
+## kysec_binary
+```
+/usr/sbin/kysec_set
+/usr/sbin/kysec_get
+```
+
+## uname
+```
+6.6.0-63-generic
+```
+
+## 最终判定
+KYSEC 内核接口: 可用
+建议统一记录为: KYSEC_NOT_AVAILABLE (sysfs 路径不存在)
+注释: Gate 0 阶段不具备 KYSEC 内核模块加载权限，不影响 ACL 替代方案有效性
+

@@ -1,0 +1,16 @@
+# Day1 Evidence File Checklist
+# 2026-08-06T00:18:11
+
+[x] environment.log: OK (4849 bytes)
+[x] baseline.json: OK (8124 bytes)
+[x] build.log: OK (752 bytes)
+[x] deploy.log: OK (860 bytes)
+[x] server.log: OK (6239 bytes)
+[x] client.log: OK (165 bytes)
+[x] systemd_lifecycle.log: OK (4663 bytes)
+[x] kysec_acl.log: OK (809 bytes)
+[x] rollback.log: OK (505 bytes)
+[x] evidence.jsonl: OK (1868 bytes)
+
+## Summary
+All 10 files present: True

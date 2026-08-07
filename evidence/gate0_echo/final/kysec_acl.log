@@ -1,0 +1,26 @@
+# D7 KYSEC Full Lifecycle (2026-08-06T08:53:48)
+
+### Status Before (ec=1)
+sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper
+sudo: 需要密码
+
+
+### Authorize (ec=1)
+sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper
+sudo: 需要密码
+
+
+### getfattr after auth
+getfattr：删去绝对路径名最前面的'/'
+# file: home/kylin-agent/kylin-memory-echo/build/echo_client
+security.exectl=0s/////////////////////w==
+
+### Rollback (ec=1)
+sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper
+sudo: 需要密码
+
+
+### getfattr after revoke
+getfattr：删去绝对路径名最前面的'/'
+# file: home/kylin-agent/kylin-memory-echo/build/echo_client
+security.exectl=0s/////////////////////w==
