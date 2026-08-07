@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Complete R3 verification — upload + run + download + analyze"""
+import paramiko, time, os, re
+
+c = paramiko.SSHClient()
+c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+c.connect('127.0.0.1', port=2222, username='kylin-agent', password='Zyf790043', timeout=15)
+sftp = c.open_sftp()
+
+REPO = '/home/kylin-agent/kylin-memory-echo'
+ED = f'{REPO}/os-agent-integration/echo'
+LOCAL_BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+RESULT_DIR = os.path.join(os.path.dirname(__file__), 'day2_results')
+os.makedirs(RESULT_DIR, exist_ok=True)
+
+def exec_cmd(cmd, timeout=300, sudo=False):
+    if sudo:
+        cmd = f"echo 'Zyf790043' | sudo -S bash -c '{cmd}'"
+    _, so, se = c.exec_command(cmd, timeout=timeout)
+    ec = so.channel.recv_exit_status()
+    return ec, so.read().decode(errors='replace'), se.read().decode(errors='replace')
+
+# ==== Phase 1: Upload all files ====
+print("[1/4] Uploading files...")
+uploads = [
+    (f'{LOCAL_BASE}/os-agent-integration/echo/test_systemd_lifecycle.sh', f'{ED}/test_systemd_lifecycle.sh'),
+    (f'{LOCAL_BASE}/os-agent-integration/echo/kaiming_memory_client.cpp', f'{ED}/kaiming_memory_client.cpp'),
+    (f'{LOCAL_BASE}/os-agent-integration/echo/echo_client.cpp', f'{ED}/echo_client.cpp'),
+    (f'{LOCAL_BASE}/os-agent-integration/echo/CMakeLists.txt', f'{ED}/CMakeLists.txt'),
+    (f'{LOCAL_BASE}/os-agent-integration/echo/memory_echo_server.py', f'{ED}/memory_echo_server.py'),
+    (f'{LOCAL_BASE}/packaging/deploy-package/scripts/kysec_authorize.sh', f'{REPO}/kysec_authorize.sh'),
+]
+for src, dst in uploads:
+    if os.path.exists(src):
+        sftp.put(src, dst)
+        print(f'  OK: {os.path.basename(src)}')
+    else:
+        print(f'  MISSING: {src}')
+exec_cmd(f'mkdir -p {REPO}/packaging/deploy-package/scripts')
+sftp.put(f'{LOCAL_BASE}/packaging/deploy-package/scripts/kysec_authorize.sh',
+         f'{REPO}/packaging/deploy-package/scripts/kysec_authorize.sh')
+
+# ==== Phase 2: Build ====
+print("[2/4] Building C++ clients...")
+exec_cmd(f"rm -rf {ED}/build")
+ec, out, err = exec_cmd(f"cd {ED} && cmake -S . -B build 2>&1", timeout=120)
+ec2, out2, err2 = exec_cmd(f"cd {ED} && cmake --build build 2>&1", timeout=180)
+print(f"  CMake config={ec}, build={ec2}")
+exec_cmd(f"mkdir -p {REPO}/bin && cp -f {ED}/build/kaiming_memory_client {REPO}/bin/ && chmod +x {REPO}/bin/kaiming_memory_client")
+
+# ==== Phase 3: Cleanup + Run Test ====
+print("[3/4] Running systemd lifecycle test...")
+exec_cmd("pkill -9 -f memory_echo_server.py 2>/dev/null; systemctl stop kylin-memory-echo 2>/dev/null; rm -f /etc/systemd/system/kylin-memory-echo.service; systemctl daemon-reload 2>/dev/null", sudo=True)
+time.sleep(1)
+
+# Run with explicit sudo via the script's own require
+ec, out, err = exec_cmd(f"cd {ED} && sudo bash test_systemd_lifecycle.sh 2>&1", timeout=300, sudo=True)
+print(f"  Test exit code: {ec}")
+
+# ==== Phase 4: Analyze ====
+print("[4/4] Analyzing results...")
+results = []
+results.append('# R3 修复后最终验证 — Step8 + Step11')
+results.append(f'# Time: {time.strftime("%Y-%m-%dT%H:%M:%S")}')
+results.append(f'')
+results.append(f'Test exit code: {ec}')
+results.append('')
+
+# Parse pass/fail counts
+pm = re.search(r'\u901a\u8fc7:\s*(\d+)', out)  # 通过: N
+fm = re.search(r'\u5931\u8d25:\s*(\d+)', out)  # 失败: N
+if pm and fm:
+    results.append(f'**Pass/Fail: {pm.group(1)}/{fm.group(1)}**')
+    results.append('')
+
+# Step 8 analysis
+step8_section = ''
+if '--- Step 8:' in out:
+    idx = out.index('--- Step 8:')
+    step8_section = out[idx:idx+800]
+results.append('## Step 8 — UDS Communication')
+results.append('```')
+for line in step8_section.split('\n'):
+    results.append(line[:150])
+results.append('```')
+results.append('')
+
+# Check for key indicators
+echo_pass = False
+health_pass = False
+if 'echo' in step8_section:
+    echo_pass = 'PASS' in step8_section.split('echo')[1][:100] if len(step8_section.split('echo')) > 1 else False
+if 'health' in step8_section.lower():
+    if 'health' in step8_section:
+        # Simple check: look for ok() after "health"
+        health_ok = 'ok' in step8_section.lower()
+results.append(f'- Step8 UDS echo: {"PASS" if echo_pass else "CHECK output above"}')
+results.append(f'- Step8 UDS health: CHECK output above')
+
+# Step 11 analysis
+step11_pass = '\u5df2\u786e\u8ba4\u6ce8\u9500\u670d\u52a1' in out
+results.append(f'- Step11 systemd unregistered: {"PASS" if step11_pass else "FAIL"}')
+results.append('')
+
+# Full output tail
+lines = out.strip().split('\n')
+results.append(f'## Last 30 lines of output')
+results.append('```')
+for l in lines[-30:]:
+    results.append(l[:150])
+results.append('```')
+results.append('')
+results.append(f'## STDERR')
+results.append('```')
+results.append(err[:1000])
+results.append('```')
+
+# Also save full raw output
+raw_path = os.path.join(RESULT_DIR, '_R3_FULL_OUTPUT.log')
+with open(raw_path, 'w', encoding='utf-8') as f:
+    f.write(out)
+    f.write('\n\n=== STDERR ===\n')
+    f.write(err)
+
+rpt_path = os.path.join(RESULT_DIR, '_R3_ANALYSIS.log')
+with open(rpt_path, 'w', encoding='utf-8') as f:
+    f.write('\n'.join(results))
+
+print(f'\nRaw output: {raw_path}')
+print(f'Analysis: {rpt_path}')
+for r in results:
+    print(r[:150])
+
+sftp.close()
+c.close()

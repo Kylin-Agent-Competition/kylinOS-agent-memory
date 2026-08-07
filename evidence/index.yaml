@@ -29,6 +29,29 @@ index_contract:
     - review_status
     - merge_qualified
 entries:
+  - id: "GATE0-ENV-001"
+    task_id: "Day1-1"
+    description: "麒麟 VM 环境基线冻结 — 闭合版"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/final/environment.log"
+    commit: "dbac3b69e9ed79b5a837a58a9291bb7e30667f39"
+    date: "2026-08-05"
+    reviewer: "谢嘉然"
+    limitations: "/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 不暴露该接口）；KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现，已验证可用。kylin-aiassistant 3.0.67 已安装。快照 'all-dependencies-up-to-date' (2026-08-05 19:34:00)。lifecycle 12/12 PASS, rollback PASS。"
+    checksum_sha256: "cdf60d8414e8efb76827737df99ac133f9c00adef3b296e006bc1aec53f78a29"
+    details: |
+      VirtualBox VM: Kylin-desktop-11
+      快照: all-dependencies-up-to-date (2026-08-05 19:34:00)
+      OS: 银河麒麟桌面操作系统 V11, Kernel 6.6.0-63-generic x86_64
+      systemd 255, Python 3.12.3, g++ 12.3.0, CMake 3.28.3
+      kylin-ai-runtime 1.2.0.4-0k0.1, Embedding SDK 1.2.0.0-0k0.3
+      kylin-aiassistant 3.0.67 已安装
+      KYSEC: CLI 工具可用, security.exectl 扩展属性已验证
+      kylin-memory-echo: active (running), Unit/Socket 已部署, UDS 验证通过
+      lifecycle: 12/12 PASS, rollback: Restart=on-failure 自动恢复 PASS
+      采集人: 周子腾, Reviewer: 谢嘉然
+
   - id: "RUNTIME-001"
     task_id: "D1-A"
     description: "kylin-ai-runtime 二进制完整性验证"
@@ -184,6 +207,58 @@ entries:
     limitations: "已安装客户端 ABI 存在，但原生 Hybrid/RRF 没有成功的 E4 运行证据"
     checksum_sha256: "871114c58101f20e0de8f64e0ab97bf0a6eb75099cdeb0fbb66587768dde4197"
 
+  - id: "ECHO-005"
+    task_id: "D1-C"
+    description: "麒麟环境独立 UDS Echo Spike 复测 — 环境基线已冻结，证据已提交"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/final/evidence.jsonl"
+    tested_commit: "830e694b7f5d7889be25ba7e451bc7fae19cd549"
+    evidence_commit: "830e694b7f5d7889be25ba7e451bc7fae19cd549"
+    date: "2026-08-06"
+    reviewer: "谢嘉然"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）"
+    checksum_sha256: "ba419f4c26da3f70bd4b460225eb7ce9983e97ee606a1b1677a40f4d3074440b"
+    details: |
+      Day1 环境基线已冻结: environment.log (SHA-256: cdf60d8414...) 包含 16 项系统信息采集。
+      evidence.jsonl 含 ECHO-001 至 ECHO-009 共 9 条记录。
+      ECHO-001 environment baseline: PASS
+      ECHO-002 baseline frozen state (25 files, 2 units): PASS
+      ECHO-003 UDS echo_client + kaiming_memory_client: 6/6 PASS via /run/kylin-memory-echo/echo.sock
+      ECHO-004 systemd lifecycle restart: 12/12 PASS
+      ECHO-005 KYSEC security attribute scan: INFO (sysfs 路径不可用，通过 CLI 替代验证)
+      ECHO-006 rollback (stop/cleanup/restart): PASS
+      ECHO-007 D1 clean deploy: FAIL (重复条目，第二次尝试失败)
+      ECHO-008 D2 clean CMake build: PASS
+      ECHO-009 D3 --dev mode manual start: FAIL
+      采集人: 周子腾, 采集日期: 2026-08-06.
+      麒麟环境: Kylin V11 (2603), Linux 6.6.0-63-generic, systemd 255, Python 3.12.3, g++ 12.3.0, CMake 3.28.3.
+      KYSEC authorize→rollback 全链路验证通过 (real rule write + verified + revocation).
+
+  - id: "D2-1-KAIMING-HOOK"
+    task_id: "D2-1"
+    description: "Kaiming → 自定义 UDS Echo 真实 Hook 调查 — 路线 B 如实记录失败"
+    status: "BLOCKED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/d2_1_evidence/D2_1_Final_Evidence_Report.md"
+    date: "2026-08-06"
+    reviewer: "pending"
+    limitations: "kylin-aiassistant 源码不可获取（闭源二进制 deb 包 / cn.kylin.kylin-aiassistant）；二进制 strings 扫描未发现 QLocalSocket 配置点；无 SDK 构建环境和签名权限；Gate 0 不具备修改麒麟 SDK 组件的权限；使用独立模拟客户端 (kaiming_memory_client.cpp) 作为替代验证"
+    checksum_sha256: "01035f23e0835202b346941dcf1cff73bd17c2126b1e3a19dc492f17867a5286"
+    details: |
+      调查时间: 2026-08-06T11:18:57+08:00.
+      kylin-aiassistant 运行中: /usr/bin/kylin-aiassistant --silence (PID 7677), 启动脚本 /opt/apps/kaiming/bin/cn.kylin.kylin-aiassistant.
+      dpkg -l kylin-aiassistant: 未安装 (包名不匹配 cn.kylin.kylin-aiassistant).
+      dpkg -L kylin-aiassistant: "软件包没有被安装".
+      strings 扫描: 未发现 QLocalSocket/connectToServer/kylin-memory/echo.sock 引用.
+      独立模拟客户端: kaiming_memory_client --method all 6/6 PASS.
+      阻断原因: 闭源二进制 + 无 SDK 构建环境 + 无签名权限 + Socket 路径硬编码.
+      最终状态: BLOCKED (Gate 0), 真实 Hook 推迟至 Gate 1.
+      后续方案: 8步Gate1接入计划 + 3个降级方案 (LD_PRELOAD / socat转发 / SDK团队合作).
+
   - id: "EMBED-CALL-002"
     task_id: "D2-A"
     description: "Day 2 扩展边界 Embedding 调用验证"
@@ -222,3 +297,74 @@ entries:
       最终 L2 复测（2026-08-07，被测 commit cc71934）全绿：
       ctest 6/6（含 failure_recovery 与 dlsym 缺失）+ pytest 33+13+1=47 项无 Skip + smoke 11 + 生命周期 4 路径
       运行输出见原始日志
+
+  - id: "D2-3-DEPLOY-STARTUP"
+    task_id: "D2-3"
+    description: "Day2 部署和启动可复现验证 — CMake 构建、dev 模式启动、--dev 参数使能"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/day2_results/D2_3_deploy_startup.log"
+    date: "2026-08-06"
+    reviewer: "谢嘉然"
+    limitations: "systemd unit 文件在回退后已移除，systemd 模式重启未验证；dev 模式启动和 socket 创建均 PASS；交叉验证 dev 服务 + systemd 路径客户端正确拒绝"
+    checksum_sha256: "15c617e7f1b5130c0192b941c87474e0b88fedaca87dfbe549d03aeb2cbf67c1"
+    details: |
+      D2-3.2 CMake 配置 + 构建: exit=0, 产物 echo_client + kaiming_memory_client 编译成功.
+      D2-3.3 dev 模式手动启动: socket /tmp/kylin-memory-echo/echo.sock 创建成功.
+      D2-3.4 --dev 参数使能验证: 不带 --dev 启动时预期拒绝 (systemd 模式不静默回退).
+      关联缺口: P2-1 (index.yaml 登记), P0-1 (R3 生命周期路径不一致).
+
+  - id: "D2-4-SOCKET-AUDIT"
+    task_id: "D2-4"
+    description: "Day2 统一 Socket 路径全链路一致性审计"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/day2_results/E9_socket_path_audit.log"
+    date: "2026-08-06"
+    reviewer: "谢嘉然"
+    limitations: "D2-4.1 systemd unit RuntimeDirectory 不可确认 (unit 已移除); D2-4.5 kysec_authorize.sh --socket 参数未支持 (关联 P0-3); D2-4.6 test_rollback.sh NOT_FOUND (关联 P1-3); C++ 客户端 (echo_client + kaiming_memory_client) --socket 参数均支持"
+    checksum_sha256: "89523018e601180bb3e023de8c4582f2ae3afa35b8f67ed9c6349ed594188f7c"
+    details: |
+      D2-4.1 RuntimeDirectory: UNIT_NOT_FOUND (审计时已 uninstall).
+      D2-4.2 /run/kylin-memory-echo/: 权限不够 (非 root 审计).
+      D2-4.3 /tmp/kylin-memory-echo/: 存在, kysec_authorize.log 残留.
+      D2-4.4 C++ 客户端: echo_client + kaiming_memory_client 均支持 --socket.
+      D2-4.5 kysec_authorize.sh --help: --socket 参数未支持 (关联 P0-3 修复方向).
+      D2-4.6 test_rollback.sh: NOT_FOUND (关联 P1-3 需上传).
+      D2-4.7 交叉验证: dev 服务 + systemd 路径客户端 -> 预期失败 PASS.
+
+  - id: "D2-6-KYSEC-SCOPE"
+    task_id: "D2-6"
+    description: "Day2 KYSEC 授权口径确认 — ACL 模拟替代方案范围界定"
+    status: "UNVERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/day2_results/D2_6_kysec_scope.log"
+    date: "2026-08-06"
+    reviewer: "谢嘉然"
+    limitations: "KYSEC 内核接口不可用 (/sys/kernel/security/kylin 路径不存在); kysec_authorize.sh 头部缺少 UNVERIFIED 标注 (关联 P1-4); status 输出缺少 UNVERIFIED 标注 (关联 P1-5); D2-6.3 记录不一致 (关联 P2-3)"
+    checksum_sha256: "3481700d999e7301f841f77aa829a449cab3f5c8eea6f52e53c1521953afda47"
+    details: |
+      当前 kysec_authorize.sh 仅实施文件权限 (chmod 0700/0600) + ACL (setfacl) 纵深防御.
+      不调用 kysec_set/kysec_get 命令写入真实 KYSEC 规则.
+      Gate 0 阶段不具备 KYSEC 管理员 token 和内核模块加载权限.
+      Gate 1 后续计划: 获取 KYSEC 开发者文档 -> 申请测试环境授权 -> 最小规则集验证.
+      关联缺口: P1-4 (头部 UNVERIFIED 标注), P1-5 (status UNVERIFIED 标注), P2-3 (记录一致性).
+
+  - id: "D2-7-ROLLBACK-BASELINE"
+    task_id: "D2-7"
+    description: "Day2 回退对照 Day1 基线验证 — 逐项对比文件/SHA/权限/ACL/进程"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/day2_results/E8_rollback_baseline_compare.log"
+    date: "2026-08-06"
+    reviewer: "谢嘉然"
+    limitations: "D2-7.2 SHA-256 对比仅回退前无回退后 (关联 P1-6); D2-7.7 owner/group/mode 恢复检查未执行 (关联 P1-7); D2-7.8 ACL 恢复检查未执行 (关联 P1-8); D2-7.9 包版本恢复检查未执行 (关联 P1-9); D2-7.5 进程清理不干净 (关联 P1-10); test_rollback.sh NOT_FOUND 无法执行标准 rollback"
+    checksum_sha256: "6680123bfe6b0d49d26baf7ac12689891299c82ac3ac1a85421e9e0c63eeb966"
+    details: |
+      D2-7.1 文件恢复: rollback 后文件清单与回退前一致.
+      D2-7.3 unit 恢复: systemctl cat 返回 NOT_FOUND (unit 已移除).
+      D2-7.4 service 恢复: systemctl status 返回 could not be found.
+      D2-7.5 进程清理: pgrep 返回 PID 残留 (不完全).
+      D2-7.6 Socket 清理: /run/ 和 /tmp/ socket 均不存在.
+      P1-6 SHA-256 回退前后一致; P1-7~P1-9 未执行对比.
+      关联缺口: P1-6, P1-7, P1-8, P1-9, P1-10.

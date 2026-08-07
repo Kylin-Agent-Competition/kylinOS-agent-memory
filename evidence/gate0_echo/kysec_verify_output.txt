@@ -1,0 +1,32 @@
+KYSEC Verify started at 2026-08-05T21:46:33
+Connecting to 127.0.0.1:2222 as ZhouYifan...
+FATAL ERROR: Authentication failed.
+Traceback (most recent call last):
+  File "e:\Kylin-memory-dev\UDS-Kylin-Echo\evidence\gate0_echo\run_kysec_verify.py", line 30, in main
+    ssh.connect('127.0.0.1', port=2222, username='ZhouYifan', timeout=15,
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 allow_agent=False, look_for_keys=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jackb\AppData\Local\Programs\Python\Python313\Lib\site-packages\paramiko\client.py", line 477, in connect
+    self._auth(
+    ~~~~~~~~~~^
+        username,
+        ^^^^^^^^^
+    ...<5 lines>...
+        passphrase,
+        ^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\jackb\AppData\Local\Programs\Python\Python313\Lib\site-packages\paramiko\client.py", line 779, in _auth
+    raise saved_exception
+  File "C:\Users\jackb\AppData\Local\Programs\Python\Python313\Lib\site-packages\paramiko\client.py", line 755, in _auth
+    self._transport.auth_publickey(username, key)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\jackb\AppData\Local\Programs\Python\Python313\Lib\site-packages\paramiko\transport.py", line 1600, in auth_publickey
+    return self.auth_handler.wait_for_response(my_event)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\jackb\AppData\Local\Programs\Python\Python313\Lib\site-packages\paramiko\auth_handler.py", line 227, in wait_for_response
+    raise e
+paramiko.ssh_exception.AuthenticationException: Authentication failed.
+
+Finished at 2026-08-05T21:46:33

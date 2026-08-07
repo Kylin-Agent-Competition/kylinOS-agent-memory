@@ -1,0 +1,82 @@
+[09:49:43] ==========================================
+[09:49:43]  Phase C: Systemd 完整生命周期测试
+[09:49:43]  服务: kylin-memory-echo
+[09:49:43]  Socket (RuntimeDirectory): /run/kylin-memory-echo/echo.sock
+[09:49:43]  状态: UNVERIFIED (生产系统未测试)
+[09:49:43]  日志: /home/kylin-agent/kylin-memory-echo/logs/systemd_test_20260806_094943.log
+[09:49:43] ==========================================
+[09:49:43] 
+[09:49:43] ========== 准备 Systemd Unit 文件 ==========
+[09:49:43]   ✅ Unit 文件已动态生成 (RuntimeDirectory): /etc/systemd/system/kylin-memory-echo.service
+[09:49:43] 
+[09:49:43] ========== 清理旧路径残留 ==========
+[09:49:44]   ✅ 旧 /tmp 路径残留已清理
+[09:49:44] 
+[09:49:44] --- Step 1: daemon-reload ---
+[09:49:44]   ✅ daemon-reload 成功
+[09:49:44] 
+[09:49:44] --- Step 2: enable ---
+Created symlink /etc/systemd/system/default.target.wants/kylin-memory-echo.service → /etc/systemd/system/kylin-memory-echo.service.
+[09:49:45]   ✅ enable 成功
+[09:49:45]   ✅ symlink 已创建
+[09:49:45] 
+[09:49:45] --- Step 3: start ---
+[09:49:45]   ✅ start 命令成功
+[09:49:48] 
+[09:49:48] --- Step 4: 进程验证 ---
+[09:49:48]   ✅ 进程存活 (MainPID=63049)
+[09:49:48] 
+[09:49:48] --- Step 5: RuntimeDirectory ---
+[09:49:48]   ✅ RuntimeDirectory 已创建 (/run/kylin-memory-echo)
+总计 0
+drwxr-xr-x  2 kylin-agent kylin-agent   60  8月 6日 09:49 .
+drwxr-xr-x 39 root        root        1160  8月 6日 09:49 ..
+srwx------  1 kylin-agent kylin-agent    0  8月 6日 09:49 echo.sock
+[09:49:48] 
+[09:49:48] --- Step 6: Socket 验证 ---
+[09:49:48]   ✅ Socket 存在 (/run/kylin-memory-echo/echo.sock)
+[09:49:48]     RuntimeDirectory socket: perm=700, owner=kylin-agent:kylin-agent
+[09:49:48] 
+[09:49:48] --- Step 7: status ---
+● kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务
+     Loaded: loaded (/etc/systemd/system/kylin-memory-echo.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-08-06 09:49:45 CST; 3s ago
+   Main PID: 63049 (python3)
+      Tasks: 1 (limit: 9405)
+     Memory: 6.6M (peak: 6.8M)
+        CPU: 65ms
+     CGroup: /system.slice/kylin-memory-echo.service
+             └─63049 /usr/bin/python3 /home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server
+
+[09:49:49]   ✅ status: active (running)
+[09:49:49] 
+[09:49:49] --- Step 8: UDS 通信 (RuntimeDirectory socket) ---
+[09:49:49]     Using socket: /run/kylin-memory-echo/echo.sock
+test_systemd_lifecycle.sh: 行 232: /home/kylin-agent/kylin-memory-echo/bin/kaiming_memory_client: 不允许的操作
+[09:50:19]   ❌ UDS echo 失败
+test_systemd_lifecycle.sh: 行 238: /home/kylin-agent/kylin-memory-echo/bin/kaiming_memory_client: 不允许的操作
+[09:50:50]   ❌ UDS health 失败
+[09:50:50] 
+[09:50:50] --- Step 9: stop ---
+[09:50:50]   ✅ stop 命令成功
+[09:50:52]   ✅ 进程已终止
+[09:50:52] 
+[09:50:52] --- Step 10: disable ---
+Removed "/etc/systemd/system/default.target.wants/kylin-memory-echo.service".
+[09:50:53]   ✅ disable 成功
+[09:50:53]   ✅ symlink 已清理
+[09:50:53] 
+[09:50:53] --- Step 11: uninstall ---
+[09:50:53]   ✅ Unit 文件已删除 (uninstall)
+[09:50:53]   ❌ systemd 状态异常: 服务未正确注销
+[09:50:53] 
+[09:50:53] ==========================================
+[09:50:53]  Phase C 汇总
+[09:50:53] ==========================================
+[09:50:53]   通过: 15
+[09:50:53]   失败: 3
+[09:50:53]   总计: 18
+[09:50:53]   状态: UNVERIFIED (生产系统未测试)
+[09:50:53]   日志: /home/kylin-agent/kylin-memory-echo/logs/systemd_test_20260806_094943.log
+[09:50:53] ==========================================
+[09:50:53]   ❌ 有 3 项失败

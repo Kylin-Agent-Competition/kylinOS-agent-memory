@@ -1,0 +1,111 @@
+# Day2 D2-7 回退对照 Day1 基线验证
+# Timestamp: 2026-08-06T09:51:05
+
+## 当前状态基线采集
+
+### 文件清单 (回退前)
+```
+/home/kylin-agent/kylin-memory-echo/bin/echo_client
+/home/kylin-agent/kylin-memory-echo/bin/kaiming_memory_client
+/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server
+/home/kylin-agent/kylin-memory-echo/build/CMakeCache.txt
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/3.28.3/CMakeCXXCompiler.cmake
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_CXX.bin
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/3.28.3/CMakeSystem.cmake
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/3.28.3/CompilerIdCXX/a.out
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/cmake.check_cache
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/CMakeConfigureLog.yaml
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/CMakeDirectoryInformation.cmake
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/build.make
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/cmake_clean.cmake
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/compiler_depend.make
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/compiler_depend.ts
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/DependInfo.cmake
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/depend.make
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/echo_client.cpp.o
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/echo_client.cpp.o.d
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/flags.make
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/link.txt
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/progress.make
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/build.make
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/cmake_clean.cmake
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/compiler_depend.make
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/compiler_depend.ts
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/DependInfo.cmake
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/depend.make
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/flags.make
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/kaiming_memory_client.cpp.o
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/kaiming_memory_client.cpp.o.d
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/link.txt
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/progress.make
+/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/Makefile2
+/home/kylin-agent/kylin-memory-echo/build/CMakeFi
+```
+
+### SHA256 (回退前)
+```
+83e42f4d5aa8098fd624b0e3c6512d5d7c8a58b33c779403726509ef98646265  /home/kylin-agent/kylin-memory-echo/share/kysec_authorize.sh
+5c394ebd32efc4a84a7e64b97746cd07ed44e1b6f4b23c374cb42f68741d4824  /home/kylin-agent/kylin-memory-echo/share/test_systemd_lifecycle.sh
+eba6e5ab2b8c4a511d58e20a11cfdf2f9d5c6ef57884f16033ac52a9c665be98  /home/kylin-agent/kylin-memory-echo/share/test_rollback.sh
+1eae941926145f1872aa56530e20c279a4f907600fef1594ff9a9d09a0ff1fe9  /home/kylin-agent/kylin-memory-echo/kaiming_memory_client.cpp
+4496f7120af0b58becc7622f70950723b476e0214fbffd061402c20e8b7445d0  /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/kysec_authorize.sh
+4496f7120af0b58becc7622f70950723b476e0214fbffd061402c20e8b7445d0  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kysec_authorize.sh
+8052fc67d0a30141f091d162d74c02a5c0ff0a8c9dfd4120996efaba33efba8e  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/test_systemd_lifecycle.sh
+a1a50a7291519c8ea7cc628db0c0a918abd24c8f5ed5133e218d7564bbdde67a  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/kaiming_memory_client.cpp
+9b1ebe4919c111011dba043f743e42ada0f1e3804b211e42191d773e7043282c  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp
+f466e3aff3e5ef5284e90b07352d44393914bee912a529836f7324229e44fad0  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/memory_echo_server.py
+bb082bd51ad9ef84ee72bde5147e94f2c40154ef6dab289e2f8076ab82f40ada  /home/kylin-agent/kylin-memory-echo/os-agent-integration/echo/echo_client.cpp
+9b1ebe4919c111011dba043f743e42ada0f1e3804b211e42191d773e7043282c  /home/kylin-agent/kylin-memory-echo/build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp
+bb082bd51ad9ef84ee72bde5147e94f2c40154ef6dab289e2f8076ab82f40ada  /home/kylin-agent/kylin-memory-echo/echo_client.cpp
+```
+
+## rollback 执行
+
+### rollback 输出
+```
+bash: /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/scripts/test_rollback.sh: 没有那个文件或目录
+输入密码
+```
+Exit code: 127
+
+## D2-7 逐项回退对比
+
+### D2-7.1 文件是否恢复
+```
+回退后文件数: 100
+```
+匹配: ✅ 一致
+
+### D2-7.3 unit 是否恢复
+```
+No files found for kylin-memory-echo.service.
+NOT_FOUND
+```
+Unit 已移除: ✅
+
+### D2-7.4 service 是否恢复
+```
+Unit kylin-memory-echo.service could not be found.
+NOT_FOUND
+```
+Service 未找到: ✅
+
+### D2-7.5 进程是否清理
+```
+64432
+```
+进程已清理: ⚠️ 仍有进程
+
+### D2-7.6 Socket 是否清理
+```
+ls: 无法访问 '/run/kylin-memory-echo/echo.sock': 权限不够
+ls: 无法访问 '/tmp/kylin-memory-echo/echo.sock': 没有那个文件或目录
+NO_SOCKETS
+```
+Socket 已清理: ✅
+
+
+## 总结
+
+⚠️ **TEST RESOURCE CLEANUP ONLY / ORIGINAL RESTORE UNVERIFIED** - 部分项目未完全恢复到基线状态
