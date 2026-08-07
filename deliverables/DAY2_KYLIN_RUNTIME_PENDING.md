@@ -17,7 +17,7 @@
 | R2 | `kaiming_memory_client.cpp` 断言 `json_has_key("status")` 假阳性 | ✅ 已修复 | ✅ 6/6 PASS (exit=0) |
 | R3 | `test_systemd_lifecycle.sh` 卸载验证两个分支都执行 `ok()` | ✅ 已修复 | ✅ 18/18 PASS |
 | R4 | `kysec_authorize.sh` 不支持 `--socket` 参数 | ✅ 已修复 | ✅ ACL 两面模式通过 |
-| D2-1 | Kaiming → UDS Echo 真实 Hook | ✅ 路线B完成 | � BLOCKED (源码不可获取) |
+| D2-1 | Kaiming → UDS Echo 真实 Hook | ✅ 路线B完成 | 🟡 BLOCKED（源码已在 openkylin 开源可获取，待 VM 内编译验证；详见 `reviewDocuments/openkylin_blocker_survey.md`） |
 | D2-3 | 部署和启动可复现 | ✅ 已验证 | ✅ C++构建 + dev模式 |
 | D2-4 | 统一 Socket 路径 | ✅ 已验证 | ✅ 全链路7项一致 |
 | D2-6 | KYSEC 最小授权口径明确 | ✅ 已标注 | ✅ 内核接口确认不可用 |
@@ -111,7 +111,7 @@
 ### D2-1: Kaiming → 自定义 UDS Echo 真实 Hook ✅ (路线 B 已完成)
 
 > **策略**: 路线 B — 如实记录失败
-> **最终状态**: **BLOCKED** / Gate 0 评估: **PARTIAL**
+> **最终状态**: **BLOCKED**（源码已在 openkylin 开源可获取，待 VM 内编译验证）/ Gate 0 评估: **PARTIAL**
 > **调查报告**: `evidence/gate0_echo/d2_1_evidence/D2_1_Final_Evidence_Report.md`
 > **证据记录**: `evidence/gate0_echo/d2_1_evidence/D2_1_evidence_record.json`
 > **evidence/index.yaml**: `D2-1-KAIMING-HOOK` (L240-259)
@@ -120,16 +120,16 @@
 |---|------|:----:|------|
 | D2-1.1 | 定位 kylin-aiassistant 源码中的 Socket 调用点 | ✅ | `strings /usr/bin/kylin-aiassistant` 扫描: QLocalSocket/connectToServer/echo.sock 均未发现 — 路径可能在编译时硬编码 |
 | D2-1.2 | 记录尝试修改内容 | ✅ | 三次尝试记录: (1) 二进制 strings 扫描 (2) 配置文件搜索 (3) dpkg 包管理器查询 — 全部失败，详细记录见最终报告 §D2-1.2 |
-| D2-1.3 | 提交构建命令和构建日志 | ✅ | N/A — 无源码可用，无法构建。原因: kylin-aiassistant 为闭源二进制 deb 包 (cn.kylin.kylin-aiassistant) |
+| D2-1.3 | 提交构建命令和构建日志 | ✅ | N/A — D2-1 阶段误判为闭源二进制，无法构建。`reviewDocuments/openkylin_blocker_survey.md` 调查发现 kylin-aiassistant 已在 openkylin 完全开源（含完整 C++ 源码、`debian/` 打包目录），`qmake && make` 可本地编译验证 |
 | D2-1.4 | 记录实际失败命令和错误日志 | ✅ | 6 项操作完整记录 (dpkg/strings/find)，含退出码和错误信息，见最终报告 §D2-1.4 实际操作失败记录表 |
-| D2-1.5 | 说明阻断原因 | ✅ | 6 条阻断原因: (1) 源码不可获取 (2) 无 SDK 构建环境 (3) 无签名权限 (4) 包名不在标准 dpkg 索引 (5) Socket 路径硬编码 (6) Gate 0 权限限制 |
+| D2-1.5 | 说明阻断原因 | ✅ | D2-1 阶段列出 6 条阻断原因，`reviewDocuments/openkylin_blocker_survey.md` 调查后发现：源码已开源(1不成立)、构建环境 README 已提供(2不成立)、`dpkg-buildpackage -us -uc` 无需签名(3局部不成立)、Socket 路径源码层可审计(4前提失效)、Gate 0 可在 VM 内编译修改(5伪阻塞)、`kylin-ai-base` 接口待查(6前提失效)。详见 survey 表 |
 | D2-1.6 | 提交独立模拟客户端替代结果 | ✅ | `kaiming_memory_client --method all` → **6/6 PASS** (exit=0). 详见最终报告 §D2-1.5 |
-| D2-1.7 | 提交后续接入方案 | ✅ | 8 步 Gate 1 接入计划 + 风险评估 (ABI/签名/多消费者/版本锁定) + 3 个降级方案 (LD_PRELOAD/socat/SDK 合作)，见最终报告 §D2-1.6 |
+| D2-1.7 | 提交后续接入方案 | ✅ | D4 阶段在 VM 内 `git clone kylin-aiassistant` → `qmake && make` 编译 → 源码审计 Socket 路径 → 修改指向 Memory Service，见最终报告 §D2-1.6 |
 | D2-1.8 | 状态标记 | ✅ | `evidence/index.yaml` 已更新: `D2-1-KAIMING-HOOK` → **BLOCKED**; Gate 0 整体 → **PARTIAL** |
 
 > **⚠️ 已知不一致 (已修复)**: 原始自动化调查脚本输出 `D2_1_Kaiming_Hook_Investigation_Report.md` 记录独立客户端为 0/12 FAIL，原因是调查时 Echo 服务未启动导致 connect() 全部失败。该文件已标注 DEPRECATED，最终结论以 `D2_1_Final_Evidence_Report.md` 为准。
 
-> **Gate 1 前置条件**: 向麒麟 SDK 团队正式申请 `cn.kylin.kylin-aiassistant` 源码 + 搭建 Qt5/qmake 构建环境 + 获取二进制签名权限。
+> **最新进展 (2026-08-07)**: `reviewDocuments/openkylin_blocker_survey.md` 调查发现 kylin-aiassistant 已在 openkylin 完全开源，D2-1 阶段的"闭源二进制"假设不成立。D4 阶段可在 VM 内直接 clone 源码编译验证，无需等待 SDK 团队授权。
 
 ### D2-3: 部署和启动可复现 🔴
 

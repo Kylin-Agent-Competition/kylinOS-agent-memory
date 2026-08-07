@@ -46,10 +46,10 @@
 |------|-----|
 | 当前状态 | PARTIAL / BLOCKED（独立模拟客户端 PASS，真实 Kaiming Hook BLOCKED） |
 | 裁决 | **批准替代架构路线** |
-| 真实路径 | BLOCKED（闭源二进制，6条阻断原因，D2-1路线B调查报告完成） |
+| 真实路径 | BLOCKED（源码已在 openkylin 开源可获取，D2-1 原始6条阻断原因经 `reviewDocuments/openkylin_blocker_survey.md` 调查大部分不成立；但 VM 内编译验证和 Socket 路径修改尚未执行） |
 | 替代路径 | **路线 B**：独立 Qt 演示壳 + 执行日志 Adapter |
 | ADR 编号 | ADR-004（见下文 §2） |
-| 后续步骤 | Gate 1 获取 SDK 源码 → 修改 Socket 连接逻辑 → 编译验证 → 集成测试 |
+| 后续步骤 | D4 阶段在 VM 内 `git clone kylin-aiassistant` → `qmake && make` 编译验证 → 源码层审计 Socket 路径 → 修改指向 Memory Service → 集成测试 |
 | 状态标注 | 真实 Hook 标注为 BLOCKED，模拟验证路径标注为 PARTIAL/E4 |
 
 ### 1.5 UDS IPC — PASS_WITH_DEBT
@@ -73,18 +73,18 @@
 **状态**：已接受
 
 **上下文**：
-- 真实 Kaiming Hook 需要 kylin-aiassistant 源码（闭源二进制），6 条阻断原因经 D2-1 调查确认
+- 真实 Kaiming Hook 需要 kylin-aiassistant 源码；D2-1 原始调查报告以"闭源二进制，6 条阻断原因"标记为 BLOCKED，`reviewDocuments/openkylin_blocker_survey.md` 调查发现 kylin-aiassistant 及其上下游组件已在 openkylin 完全开源，原始阻断原因大部分不成立
 - 独立模拟客户端（kaiming_memory_client）已完成 6/6 PASS [ECHO-003]
 - Gate 0 阶段不具备生产级 Hook 部署条件
 
 **决策**：
 1. Gate 0 阶段接受独立 Qt 演示壳 + 执行日志 Adapter 作为 Tool Result 验证路径
-2. 真实 Kaiming Hook 推迟到 Gate 1（获取 SDK 源码后）
+2. 真实 Kaiming Hook 编译验证和 Socket 路径修改在 D4 阶段推进（源码已可获取，无需等待 Gate 1）
 3. 所有文档和证据中必须如实标注"真实 Hook BLOCKED，已批准替代架构"
 
 **后果**：
 - 正向：解除 D4 BLOCKED 状态，可继续冻结 IPC 协议
-- 负向：无法在 Gate 0 验证真实 Kaiming → UDS 的完整链路，存在集成风险（R-ARCH-05）
+- 负向：源码虽已开源可获取，但尚未在 VM 内完成编译和 Socket 路径修改验证，存在集成风险（R-ARCH-05）
 - 缓解：模拟客户端覆盖了 UDS 协议全链路，QML 演示壳可独立验证 Tool Result 契约
 
 ---
@@ -98,7 +98,7 @@
 | TD-IPC-002 | UDS 权限（systemd RuntimeDirectory） | 新增 | D4 | systemd unit 中 RuntimeDirectory 配置可确认并在麒麟 VM 验证 |
 | TD-IPC-003 | deadline_ms 行为复测不完整 | 新增 | D4 | deadline 超时后客户端正确截断，服务端不保持僵尸连接 |
 | TD-IPC-004 | 重连机制未实现 | 新增 | D4-D | 客户端支持 3 次指数退避重连，有 Evidence L2 日志 |
-| R-ARCH-05 | 真实 Kaiming Hook 未验证 | 维持 | Gate 1 | SDK 源码接入后编译通过，完整 ToolResultEvent 链路在麒麟 VM 跑通 |
+| R-ARCH-05 | 真实 Kaiming Hook 未验证 | 维持 | D4 | 源码已开源可获取（`reviewDocuments/openkylin_blocker_survey.md`），VM 内编译通过并修改 Socket 路径指向 Memory Service，完整 ToolResultEvent 链路在麒麟 VM 跑通 |
 
 ---
 
@@ -114,7 +114,7 @@
 | 2. Memory Context 注入与原文隔离 | 断言正确性 | PARTIAL | PASS (R1+R2 verified) |
 | 2. Memory Context 注入与原文隔离 | 原文隔离 | UNTESTED→**11/11 PASS** | **PASS** |
 | 3. 真实 Tool Result | 模拟客户端 | PASS | PASS |
-| 3. 真实 Tool Result | 真实 Hook | BLOCKED | **替代架构批准** |
+| 3. 真实 Tool Result | 真实 Hook | BLOCKED（源码已开源，待编译验证） | **替代架构批准**（维持 ADR-004） |
 | 4. Kaiming → UDS IPC | Socket 路径 | PASS | PASS |
 | 4. Kaiming → UDS IPC | UDS Echo | PASS | PASS |
 | 4. Kaiming → UDS IPC | 权限 | PARTIAL | **PASS_WITH_DEBT** |

@@ -45,7 +45,7 @@
 | 子项 | 状态 | 证据 |
 |------|------|------|
 | 独立模拟客户端 | PASS | 6/6 PASS exit=0 |
-| 真实 Kaiming Hook | **BLOCKED** | 闭源二进制，6 条阻断原因，路线 B 调查报告完成 |
+| 真实 Kaiming Hook | **BLOCKED** | D2-1 原始调查标记为"闭源二进制，6 条阻断原因"；`reviewDocuments/openkylin_blocker_survey.md` 调查发现 kylin-aiassistant 已在 openkylin 完全开源，源码可获取但尚未在 VM 内编译验证 |
 | 综合 | PARTIAL/BLOCKED | 通过标准要求"覆盖成功、失败和取消" [02 §3.3]，真实路径未通 |
 
 ### 2.4 Kaiming → UDS IPC — PARTIAL

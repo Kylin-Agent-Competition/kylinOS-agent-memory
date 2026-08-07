@@ -175,7 +175,7 @@ bool ok = (extract_json_status(resp) == "error")
   - `ACL_SPIKE=VERIFIED` ✅
   - `KYSEC_REAL_RULE=UNVERIFIED` (Gate 0 不具备 KYSEC 管理员 token 和内核模块加载权限) ✅
 - [x] `D2-1-KAIMING-HOOK` 状态: `BLOCKED` (第245行) ✅
-  - limitations 明确: 闭源二进制 + 无SDK构建环境 + 无签名权限 + Socket路径硬编码
+  - limitations 明确: D2-1 原始调查标记为闭源二进制；`reviewDocuments/openkylin_blocker_survey.md` 调查确认 kylin-aiassistant 已在 openkylin 完全开源，源码可获取但尚未在 VM 内编译验证
 - [x] 不再出现"模拟客户端=真实Kaiming Hook"或"ACL=真实KYSEC"等等价混淆
 - [ ] PR 标题和正文需在 P0-5 完成后同步更新
 

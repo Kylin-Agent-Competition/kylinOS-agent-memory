@@ -499,7 +499,7 @@ sha256sum evidence/gate0_echo/final/evidence.jsonl
 | 6 | 统一 `/run` 与 `/tmp` 的模式和 ACL 路径 (R4) | 🔴 P0 | ✅ 已修复 | kysec_authorize.sh 现已支持 --socket PATH 参数 (第51-59行 parse_args()) |
 | 14 | 清理 evidence.jsonl (ECHO-007去重, ECHO-009 FAIL 补说明) | 🟡 P1 | 🟡 部分修复 | ECHO-007 ✅ 已去重为1条 INFO; ECHO-009 ✅ 已补 root_cause; ECHO-009 仍=FAIL (server 二进制缺失, 非证据质量问题, 可通过重新构建+部署解决) |
 | 7 | 实现真实 rollback 或诚实降级为资源清理 | 🔴 P0 | ✅ | test_rollback.sh 诚实声明 + systemd Restart=on-failure 自动恢复 |
-| 8 | 完成真实 Kaiming Hook 或提交真实失败证据 (D2-1) | 🔴 P0 | 🟡 BLOCKED (路线B完成) | 闭源二进制, 源码不可获取. 调查报告: `evidence/d2_1_evidence/D2_1_Final_Evidence_Report.md`, 独立客户端6/6替代验证 |
+| 8 | 完成真实 Kaiming Hook 或提交真实失败证据 (D2-1) | 🔴 P0 | 🟡 BLOCKED (路线B完成，D2-1 原始调查误判为闭源二进制；`reviewDocuments/openkylin_blocker_survey.md` 调查确认 kylin-aiassistant 已在 openkylin 完全开源，源码可获取但尚未在 VM 内编译验证) | 独立客户端6/6替代验证已完成，VM 内编译验证待 D4 阶段执行 |
 | 9 | 基于 Day1 冻结基线重新执行 Day2 | 🔴 P0 | ✅ 2026-08-06 | Day2 全部9项验证完成, 证据: `day2_results/` 11个文件 |
 | 10 | 提交全部原始日志和 evidence.jsonl | 🔴 P0 | ✅ | final/ 17文件完整, evidence.jsonl 9条 (ECHO-001~009), ECHO-007已去重, ECHO-009已补root_cause |
 | 11 | 计算并填写真实 SHA-256 | 🔴 P0 | ✅ | evidence.jsonl SHA-256: e2ce69e41d5e863da8cd0872c506d5b2e850b6091b3193ee4634421da8c16b05 |
