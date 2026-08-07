@@ -1,0 +1,20 @@
+{
+  "experiment": "H2C-PostTurn",
+  "timestamp": "20260801_172138",
+  "log_file": "postturn_20260801_172138.log",
+  "raw_log_bytes": 419006,
+  "metrics": {
+    "chatCallback_count": 0,
+    "is_end_false_count": 0,
+    "is_end_true_count": 0,
+    "updateBubble_count": 0
+  },
+  "expected": {
+    "is_end_true_count": 1,
+    "is_end_false_count": ">=1"
+  },
+  "pass_criteria": {
+    "H2C-PostTurn-1": false,
+    "H2C-PostTurn-2": false
+  }
+}
