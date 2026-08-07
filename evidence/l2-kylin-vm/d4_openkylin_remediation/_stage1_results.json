@@ -1,0 +1,14 @@
+{
+  "stage": "1",
+  "started_at": "2026-08-07T23:51:22.717874+08:00",
+  "steps": {
+    "clone_kylin-ai-runtime": "OK",
+    "clone_kylin-ai-sdk": "OK",
+    "clone_kylin-ai-engine-plugins": "OK",
+    "clone_kylin-ai-model-manager": "OK"
+  },
+  "qmake_exit_code": 0,
+  "make_exit_code": 0,
+  "status": "COMPLETED",
+  "finished_at": "2026-08-07T23:52:22.614068+08:00"
+}
