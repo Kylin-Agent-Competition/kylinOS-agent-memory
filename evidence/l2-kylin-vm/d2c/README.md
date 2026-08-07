@@ -1,13 +1,29 @@
-﻿# D2-C L2 证据目录
+# D2-C L2 证据目录
 
 > task_id: D2-C-OSAGENT-SPIKE
 > 责任轨道: C · 刘承恩
 > Reviewer: D(周子腾) 主审；E(谢嘉然) 补审
-> 状态: READY_FOR_L2（脚本与手册就绪，等待人在麒麟虚拟机执行）
+> 状态: L2_VERIFIED（三项实验已在麒麟虚拟机执行完毕，证据已采集）
+> 执行 Commit: 20adffc7449ad97f837108b02ce0dcc0d1d79f24
+> 执行环境: Kylin-Desktop V11 / Linux 6.6.0-63-generic / VMware Workstation
 
 ## 本目录用途
 
 存放 **银河麒麟虚拟机 L2 层** 的真实宿主实验证据。所有证据必须来自当前 Commit 的麒麟虚拟机，不得用 WSL/Reasonix 沙箱替代。
+
+## 实验执行结果
+
+| 实验 | 状态 | 关键结论 |
+|---|---|---|
+| H2C-PostTurn | ✅ PASS | is_end=true 唯一 (计数=1), TurnFinalizedEvent Hook 点已确认 |
+| H2C-PreChat | ⚠️ PARTIAL_FAIL | H2C-PreChat-2 通过 (DB 无污染); H2C-PreChat-3 未通过 (Hook 点 A 未实现 memory_context 注入) |
+| H2C-Tool | ✅ PASS_WITH_FINDING | H2C-Tool-3/4 通过; **重大发现: 麒麟不用 tool_call, 用 intentionrecognition** |
+
+## 三大架构发现
+
+1. **AF-1**: Hook 点 A (Pre-Chat Memory Context 注入) 当前版本未实现 — AGT-005 状态更新为 NOT_IMPLEMENTED
+2. **AF-2**: 麒麟 AI 助手不使用 OpenAI 风格 tool_call/function_call — Tool 动作由 kylin-ai-runtime 内部 intentionrecognition.cpp 直接执行
+3. **AF-3**: 真实 IPC 通道为 /tmp/.kylin-ai-runtime-unix/1000/assistant.sock (DBus), 方法 chat/stop_chat, 信号 ChatResult
 
 ## 证据清单
 
