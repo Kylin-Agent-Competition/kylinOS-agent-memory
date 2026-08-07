@@ -2,7 +2,7 @@
 # D2-C 实验 B: H2C-PreChat Memory Context 注入三路隔离探针
 #
 # 目标: 验证 Memory Context 注入后, UI/聊天库/模型请求三路隔离
-# 关联: AGT-005 (Memory Context 注入, UNTESTED/E0·E2)
+# 关联: AGT-005 (Memory Context 注入, NOT_OBSERVED/E0·E2)
 # 依据: 02 文档 §4.1 Pre-Chat 检索注入, §7.3 原文污染红线
 #
 # 用法:
@@ -20,33 +20,6 @@ set -euo pipefail
 PROBE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${PROBE_DIR}/out"
 mkdir -p "${OUT_DIR}"
-
-# 状态文件统一放到 $HOME 下, 避免 sudo 与非 sudo 混用时权限冲突
-STATE_DIR="${HOME}/.d2c-probe-state"
-mkdir -p "${STATE_DIR}"
-
-TIMESTAMP_FILE="${STATE_DIR}/prechat_last_timestamp"
-META_FILE="${STATE_DIR}/prechat_capture.meta"
-CAPTURE_PID_FILE="${STATE_DIR}/prechat_capture.pid"
-MARKER="[D2C-MARKER-PRECHAT-001]"
-
-get_or_set_timestamp() {
-    if [ -n "${1:-}" ]; then
-        echo "${1}" > "${TIMESTAMP_FILE}"
-        echo "${1}"
-    elif [ -f "${TIMESTAMP_FILE}" ]; then
-        cat "${TIMESTAMP_FILE}"
-    else
-        date +%Y%m%d_%H%M%S
-    fi
-}
-
-TIMESTAMP="$(get_or_set_timestamp)"
-BASELINE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.baseline.json"
-CAPTURE_LOG_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.capture.log"
-MODEL_REQUEST_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.model_request.jsonl"
-DB_MESSAGE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.db_message.txt"
-UI_SCREENSHOT_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.ui_screenshot.png"
 
 # 确定实际登录用户的 HOME (避免 sudo 下 $HOME 变成 /root)
 # 优先级: SUDO_USER -> AI 进程 owner -> 当前 $HOME
@@ -75,14 +48,35 @@ get_user_home() {
 }
 USER_HOME="$(get_user_home)"
 
-DB_PATH="${USER_HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
-AI_PROC_NAME="kylin-aiassistant"
-
-# 同样保证状态文件/输出目录落在真实用户 HOME 下 (避免 sudo/非sudo 状态文件割裂)
+# 状态文件统一放到真实用户 HOME 下, 避免 sudo 与非 sudo 混用时权限冲突
 STATE_DIR="${USER_HOME}/.d2c-probe-state"
 mkdir -p "${STATE_DIR}"
-OUT_DIR="${PROBE_DIR}/out"
-mkdir -p "${OUT_DIR}"
+
+TIMESTAMP_FILE="${STATE_DIR}/prechat_last_timestamp"
+META_FILE="${STATE_DIR}/prechat_capture.meta"
+CAPTURE_PID_FILE="${STATE_DIR}/prechat_capture.pid"
+MARKER="[D2C-MARKER-PRECHAT-001]"
+
+get_or_set_timestamp() {
+    if [ -n "${1:-}" ]; then
+        echo "${1}" > "${TIMESTAMP_FILE}"
+        echo "${1}"
+    elif [ -f "${TIMESTAMP_FILE}" ]; then
+        cat "${TIMESTAMP_FILE}"
+    else
+        date +%Y%m%d_%H%M%S
+    fi
+}
+
+TIMESTAMP="$(get_or_set_timestamp)"
+BASELINE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.baseline.json"
+CAPTURE_LOG_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.capture.log"
+MODEL_REQUEST_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.model_request.jsonl"
+DB_MESSAGE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.db_message.txt"
+UI_SCREENSHOT_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.ui_screenshot.png"
+
+DB_PATH="${USER_HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
+AI_PROC_NAME="kylin-aiassistant"
 
 # AI Runtime 服务进程名 (模型请求 + memory_context 注入在此发生)
 AI_RUNTIME_NAME="kylin-ai-runtime"
@@ -187,6 +181,9 @@ cmd_baseline() {
     if [ -f "${DB_PATH}" ]; then
         rowid_max="$(sqlite3 "${DB_PATH}" "SELECT MAX(rowid) FROM RECORD;" 2>/dev/null || echo "N/A")"
     fi
+
+    # 持久化 baseline rowid 供 cmd_collect 限制查询范围 (仅查实验后新增记录)
+    echo "${rowid_max}" > "${STATE_DIR}/prechat_baseline_rowid"
 
     cat > "${BASELINE_FILE}" <<EOF
 {
@@ -397,9 +394,23 @@ cmd_collect() {
     if [ ! -f "${DB_PATH}" ]; then
         echo "  ✗ 数据库不存在: ${DB_PATH}"
     else
-        sqlite3 "${DB_PATH}" \
-            "SELECT rowid, sessionID, msgIndex, message, operateTime FROM RECORD WHERE message LIKE '%${MARKER}%';" \
-            > "${DB_MESSAGE_FILE}" 2>/dev/null || true
+        # 读取 baseline rowid, 仅查询实验后新增的记录 (避免历史污染干扰)
+        local baseline_rowid="N/A"
+        if [ -f "${STATE_DIR}/prechat_baseline_rowid" ]; then
+            baseline_rowid="$(cat "${STATE_DIR}/prechat_baseline_rowid" 2>/dev/null || echo "N/A")"
+        fi
+
+        if [ "${baseline_rowid}" = "N/A" ] || [ -z "${baseline_rowid}" ]; then
+            echo "  WARN: baseline_rowid 不可用 (N/A), 使用原查询 (无 rowid 限制)"
+            sqlite3 "${DB_PATH}" \
+                "SELECT rowid, sessionID, msgIndex, message, operateTime FROM RECORD WHERE message LIKE '%${MARKER}%';" \
+                > "${DB_MESSAGE_FILE}" 2>/dev/null || true
+        else
+            echo "  baseline_rowid = ${baseline_rowid} (仅查询此后新增的记录)"
+            sqlite3 "${DB_PATH}" \
+                "SELECT rowid, sessionID, msgIndex, message, operateTime FROM RECORD WHERE rowid > ${baseline_rowid} AND message LIKE '%${MARKER}%';" \
+                > "${DB_MESSAGE_FILE}" 2>/dev/null || true
+        fi
 
         local raw_dbm
         raw_dbm="$(wc -l < "${DB_MESSAGE_FILE}" 2>/dev/null || echo 0)"
@@ -409,14 +420,19 @@ cmd_collect() {
         echo "  输出文件: ${DB_MESSAGE_FILE}"
 
         # 检查是否包含 memory_context 字样 (污染检测)
+        # 前置条件: db_match_count >= 1, 否则无法判定无污染
         local raw_pol
         raw_pol="$(grep -cE 'memory_context|MemoryContext|记忆上下文' "${DB_MESSAGE_FILE}" 2>/dev/null || echo 0)"
         local pollution_check
         pollution_check="$(to_int "${raw_pol}")"
-        if [ "${pollution_check}" -eq 0 ]; then
-            echo "  ✓ H2C-PreChat-2 通过: 数据库 message 不含 Memory Context"
+        if [ "${db_match_count}" -eq 0 ]; then
+            echo "  ✗ H2C-PreChat-2 失败: 数据库中未找到 MARKER 记录 (db_match_count=0), 无法判定无污染"
         else
-            echo "  ✗ H2C-PreChat-2 失败: 数据库 message 疑似含 Memory Context (污染)"
+            if [ "${pollution_check}" -eq 0 ]; then
+                echo "  ✓ H2C-PreChat-2 通过: 数据库 message 不含 Memory Context"
+            else
+                echo "  ✗ H2C-PreChat-2 失败: 数据库 message 疑似含 Memory Context (污染)"
+            fi
         fi
     fi
 
