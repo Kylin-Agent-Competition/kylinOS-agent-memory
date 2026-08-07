@@ -1,0 +1,86 @@
+======================================================================
+ D4 Final Test - HEAD: 78d83823877e5efb1098f4dca4ba543b21fb3980
+ Time: 20260807T162842+08
+======================================================================
+Connected to VM
+
+[PHASE 1] Upload files...
+  Upload: os-agent-integration/echo/kaiming_memory_client.cpp sha256=49d00d409a34d8e2...
+    OK (attempt 1)
+  Upload: os-agent-integration/echo/memory_echo_server.py sha256=1274f0fd8434a9c6...
+    OK (attempt 1)
+
+[PHASE 2] Restart server...
+  CMD: pkill -f kylin-memory-echo-server 2>/dev/null; sleep 1; echo KILL_DONE
+  CMD: rm -f /tmp/kylin-memory-echo/echo.sock 2>/dev/null; echo SOCKET_CLEANED
+  OUT (14b): SOCKET_CLEANED
+  Starting new server...
+  CMD: tail -3 /home/kylin-agent/kylin-memory-echo/logs/server_d4.log 2>&1
+  OUT (104b): [2026-08-07T08:28:43.767Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=110309)
+
+[PHASE 3] Compile C++ client...
+  CMD: cd /home/kylin-agent/kylin-memory-echo && sed -i 's|/run/kylin-memory-echo/echo.sock|/tmp/kylin-memory-echo/echo.sock|g'
+  Compile OK
+
+[PHASE 4] Run Kaiming C++ client --method all...
+  CMD: cd /home/kylin-agent/kylin-memory-echo && ./kaiming_memory_client --method all --socket /tmp/kylin-memory-echo/echo.sock
+  OUT (3106b): ============================================
+ Kaiming Memory Client - v1.3 (value-aware)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: all
+ User: kylin-agent
+============================================
+[2026-08-07T08:28:48Z] [INFO] TEST: echo method
+[2026-08-07T08:28:48Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"echo": "Hello from Kaiming AI Assistant", "received_at": "2026-08-07T08:28:48.647336+0
+  Exit code: 0
+  Full output:
+============================================
+ Kaiming Memory Client - v1.3 (value-aware)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: all
+ User: kylin-agent
+============================================
+[2026-08-07T08:28:48Z] [INFO] TEST: echo method
+[2026-08-07T08:28:48Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"echo": "Hello from Kaiming AI Assistant", "received_at": "2026-08-07T08:28:48.647336+00:00"}, "server_ts": "2026-08-07T08:28:48.647353+00:00"}
+RESULT KAIMING-ECHO PASS
+[2026-08-07T08:28:48Z] [INFO] KAIMING-ECHO PASS: echo roundtrip payload=Hello from Kaiming AI Assistant
+[2026-08-07T08:28:48Z] [INFO] TEST: health method
+[2026-08-07T08:28:48Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"status": "healthy", "uptime_seconds": 4.881114959716797, "socket_path": "/tmp/kylin-memory-echo/echo.sock", "pid": 110309}, "server_ts": "2026-08-07T08:28:48.648082+00:00"}
+RESULT KAIMING-HEALTH PASS
+[2026-08-07T08:28:48Z] [INFO] KAIMING-HEALTH PASS: health query returned healthy
+[2026-08-07T08:28:48Z] [INFO] TEST: memory.retrieve method
+[2026-08-07T08:28:48Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"contexts": [], "total_found": 0, "elapsed_ms": 0.0, "fallback": false}, "server_ts": "2026-08-07T08:28:48.648782+00:00"}
+RESULT KAIMING-RETRIEVE PASS
+[2026-08-07T08:28:48Z] [INFO] KAIMING-RETRIEVE PASS: memory.retrieve returned empty context (Echo simulation)
+[2026-08-07T08:28:48Z] [INFO] TEST: memory.store method (verify protocol compatibility)
+[2026-08-07T08:28:48Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_store_001", "trace_id": "kaiming_trc_store", "status": "error", "data": {"error_code": "UNSUPPORTED_METHOD", "message": "Requested method is not supported by this service"}, "server_ts": "2026-08-07T08:28:48.649776+00:00"}
+RESULT KAIMING-STORE PASS
+[2026-08-07T08:28:48Z] [INFO] KAIMING-STORE PASS: memory.store correctly returned status=error with error_code=UNSUPPORTED_METHOD (Echo not implemented)
+[2026-08-07T08:28:48Z] [INFO] TEST: unknown method degradation
+[2026-08-07T08:28:48Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "error", "data": {"error_code": "UNSUPPORTED_METHOD", "message": "Requested method is not supported by this service"}, "server_ts": "2026-08-07T08:28:48.651095+00:00"}
+RESULT KAIMING-UNKNOWN PASS
+[2026-08-07T08:28:48Z] [INFO] KAIMING-UNKNOWN PASS: unknown method correctly returned status=error with error_code=UNSUPPORTED_METHOD (degradation normal)
+[2026-08-07T08:28:48Z] [INFO] TEST: 5 consecutive rapid requests (simulating high-frequency calls)
+RESULT KAIMING-RAPID PASS
+[2026-08-07T08:28:48Z] [INFO] KAIMING-RAPID PASS: 5/5 rapid requests succeeded
+
+============================================
+ Passed: 6 / Failed: 0
+============================================
+
+  Parsed results: {'KAIMING-ECHO': True, 'KAIMING-HEALTH': True, 'KAIMING-RETRIEVE': True, 'KAIMING-STORE': True, 'KAIMING-UNKNOWN': True, 'KAIMING-RAPID': True}
+
+[PHASE 5] Results:
+  [PASS] KAIMING-ECHO
+  [PASS] HEALTH
+  [PASS] RETRIEVE
+  [PASS] STORE
+  [PASS] UNKNOWN
+  [PASS] RAPID
+  Overall: 6/6 PASS (6 matched from C++) | HEAD: 78d83823877e5efb1098f4dca4ba543b21fb3980
+
+[PHASE 6] Generate evidence...
+
+======================================================================
+ RESULT: ALL 6/6 PASS
+======================================================================
