@@ -152,8 +152,7 @@ std::string build_memory_store_request(const std::string& key, const std::string
         << R"("key":")" << key << R"(",)"
         << R"("content":")" << content << R"(",)"
         << R"("metadata":{"source":"kaiming-aiassistant","priority":"high"})"
-        << "}}"
-        << "}";
+        << "}}";
     return oss.str();
 }
 
@@ -219,8 +218,10 @@ void test_unknown_method() {
     try {
         std::string resp = uds_send_recv(build_request("kaiming.custom.analyze", "test"));
         log_info("Response: " + resp);
-        bool ok = (extract_json_status(resp) == "error");
-        log_result("KAIMING-UNKNOWN", ok, "unknown method returned status=error (degradation normal)");
+        bool ok = (extract_json_status(resp) == "error")
+               && (extract_json_string_value(resp, "error_code") == "UNSUPPORTED_METHOD")
+               && json_has_key(resp, "message");
+        log_result("KAIMING-UNKNOWN", ok, "unknown method correctly returned status=error with error_code=UNSUPPORTED_METHOD (degradation normal)");
     } catch (const std::exception& e) {
         log_result("KAIMING-UNKNOWN", false, std::string("exception: ") + e.what());
     }

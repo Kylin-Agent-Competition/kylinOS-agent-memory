@@ -213,15 +213,15 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/gate0_echo/final/evidence.jsonl"
-    tested_commit: "830e694b7f5d7889be25ba7e451bc7fae19cd549"
-    evidence_commit: "830e694b7f5d7889be25ba7e451bc7fae19cd549"
+    tested_commit: "c9c8143571df036ddf5a34ec64ec6f44096b3fa4"
+    evidence_commit: "c9c8143571df036ddf5a34ec64ec6f44096b3fa4"
     date: "2026-08-06"
     reviewer: "谢嘉然"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）"
-    checksum_sha256: "ba419f4c26da3f70bd4b460225eb7ce9983e97ee606a1b1677a40f4d3074440b"
+     limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）；ACL_SPIKE=VERIFIED, KYSEC_REAL_RULE=UNVERIFIED"
+    checksum_sha256: "8e9e95ab9d5f645addc8e2f9c50f46715d8ed95e0aa493ac973d39a3da6e3637"
     details: |
       Day1 环境基线已冻结: environment.log (SHA-256: cdf60d8414...) 包含 16 项系统信息采集。
       evidence.jsonl 含 ECHO-001 至 ECHO-009 共 9 条记录。
@@ -236,7 +236,8 @@ entries:
       ECHO-009 D3 --dev mode manual start: FAIL
       采集人: 周子腾, 采集日期: 2026-08-06.
       麒麟环境: Kylin V11 (2603), Linux 6.6.0-63-generic, systemd 255, Python 3.12.3, g++ 12.3.0, CMake 3.28.3.
-      KYSEC authorize→rollback 全链路验证通过 (real rule write + verified + revocation).
+       ACL_SPIKE=VERIFIED (chmod + setfacl 纵深防御).
+       KYSEC_REAL_RULE=UNVERIFIED (Gate 0 不具备 KYSEC 管理员 token 和内核模块加载权限).
 
   - id: "D2-1-KAIMING-HOOK"
     task_id: "D2-1"
