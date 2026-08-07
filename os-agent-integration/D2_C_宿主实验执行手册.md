@@ -355,7 +355,19 @@ d2c_evidence_<timestamp>/
 
 | 实验 | 状态 | 关键结论 |
 |---|---|---|
-| A: H2C-PostTurn | PASS_CANDIDATE | is_end=true 唯一 (计数=1, sendmsg 到 assistant.sock); 待补数据库前后快照和15秒稳定性验证 |
+| A: H2C-PostTurn | PASS_CANDIDATE | is_end=true 唯一 (precise模式计数=1, sendmsg 到 assistant.sock); 待补数据库前后快照和15秒稳定性验证 |
+
+> **PostTurn is_end 3x 重复说明 (Reviewer D Issue #2):**
+>
+> 非 precise 模式 (fallback/宽松匹配) 下, strace `-f` 会同时跟踪多个线程/进程, 导致同一次 is_end 事件被捕获 3 份副本:
+> 1. `write(1</dev/null>)` — stdout (丢弃)
+> 2. `write(4<.../kylin-ai-runtime.log>)` — 本地日志文件 (副本)
+> 3. `sendmsg(N<...assistant.sock>)` — DBus 业务回调 (真正的事件)
+>
+> **去重策略:**
+> - **precise 模式** (首选): 仅统计 `sendmsg + assistant.sock + is_end` 的行, 天然去重, 得到真实事件数 (is_end_true=1)
+> - **fallback 模式**: 保留原始计数 (raw_count), **不再自动除以 3** (Reviewer E 阻断项六已修复); summary.json 同时输出 `raw_is_end_*_count` 和 `is_end_*_count` 供 Reviewer 核对
+> - 多轮实验中, 前期非 precise 模式观察到 is_end_true=3 属于已知的 3x 重复现象, 非业务错误
 | B: H2C-PreChat | PARTIAL_FAIL_CANDIDATE | H2C-PreChat-2 通过 (DB 无污染); H2C-PreChat-3 memory_context 未观察到 (AGT-005=NOT_OBSERVED) |
 | C: H2C-Tool | ARCHITECTURE_FINDING_UNVERIFIED | 发现 stop_chat/intentionrecognition 线索; OpenAI风格关键词=0; 成功/失败/取消Tool结构化事件未捕获 |
 
@@ -381,7 +393,9 @@ d2c_evidence_<timestamp>/
 ## 7. 关联文档
 
 - [D1 OS Agent 调用链与 Hook Spike 任务卡](./D1_OS_Agent_调用链与Hook_Spike_任务卡.md)
-- [01 能力边界文档](../../01_麒麟OS_Agent_官方SDK与现有系统能力边界及验证矩阵_v1.0_20260726.docx)
-- [02 总体架构/SOP](../../02_麒麟OS_Agent记忆系统_总体架构_团队分工与标准开发SOP_v1.0_20260726.docx)
-- [03 环境配置手册](../../03_麒麟OS_Agent记忆系统_开发与Runtime环境快速配置手册_v1.0_20260726.docx)
-- [04 Agent/LLM 指南](../../04_麒麟OS_Agent记忆系统_Agent_LLM与CodeAgent使用指南_v1.0_20260726.docx)
+- 01 能力边界文档 (外部参考, 不在仓库中): `01_麒麟OS_Agent_官方SDK与现有系统能力边界及验证矩阵_v1.0_20260726.docx`
+- 02 总体架构/SOP (外部参考, 不在仓库中): `02_麒麟OS_Agent记忆系统_总体架构_团队分工与标准开发SOP_v1.0_20260726.docx`
+- 03 环境配置手册 (外部参考, 不在仓库中): `03_麒麟OS_Agent记忆系统_开发与Runtime环境快速配置手册_v1.0_20260726.docx`
+- 04 Agent/LLM 指南 (外部参考, 不在仓库中): `04_麒麟OS_Agent记忆系统_Agent_LLM与CodeAgent使用指南_v1.0_20260726.docx`
+- 仓库内基线文档: [docs/baseline/01_sdk_model_abi_baseline.md](../baseline/01_sdk_model_abi_baseline.md), [docs/baseline/03_defensive_checklist.md](../baseline/03_defensive_checklist.md)
+- 仓库内技术债登记: [docs/technical-debt/TECHNICAL_DEBT_REGISTER.md](../technical-debt/TECHNICAL_DEBT_REGISTER.md)
