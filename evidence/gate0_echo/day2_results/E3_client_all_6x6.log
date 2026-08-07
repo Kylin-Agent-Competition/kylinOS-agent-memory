@@ -1,0 +1,57 @@
+# P1-1 E3: KAIMING-STORE 全量 6 项测试独立重跑
+# Timestamp: 2026-08-06T13:32:51
+
+## 服务端状态
+PID: 140693
+
+Socket: ls: 无法访问 '/tmp/kylin-memory-echo/echo.sock': 没有那个文件或目录
+
+## 全量 6 项测试输出
+Exit code: 1
+
+### STDOUT
+```
+============================================
+ Kaiming Memory Client - v1.2 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: all
+ User: kylin-agent
+============================================
+[2026-08-06T05:32:55Z] [INFO] TEST: echo method
+RESULT KAIMING-ECHO FAIL
+[2026-08-06T05:32:55Z] [INFO] KAIMING-ECHO FAIL: exception: connect() failed: No such file or directory
+[2026-08-06T05:32:55Z] [INFO] TEST: health method
+RESULT KAIMING-HEALTH FAIL
+[2026-08-06T05:32:55Z] [INFO] KAIMING-HEALTH FAIL: exception: connect() failed: No such file or directory
+[2026-08-06T05:32:55Z] [INFO] TEST: memory.retrieve method
+RESULT KAIMING-RETRIEVE FAIL
+[2026-08-06T05:32:55Z] [INFO] KAIMING-RETRIEVE FAIL: exception: connect() failed: No such file or directory
+[2026-08-06T05:32:55Z] [INFO] TEST: memory.store method (verify protocol compatibility)
+RESULT KAIMING-STORE FAIL
+[2026-08-06T05:32:55Z] [INFO] KAIMING-STORE FAIL: protocol layer exception: connect() failed: No such file or directory
+[2026-08-06T05:32:55Z] [INFO] TEST: unknown method degradation
+RESULT KAIMING-UNKNOWN FAIL
+[2026-08-06T05:32:55Z] [INFO] KAIMING-UNKNOWN FAIL: exception: connect() failed: No such file or directory
+[2026-08-06T05:32:55Z] [INFO] TEST: 5 consecutive rapid requests (simulating high-frequency calls)
+[2026-08-06T05:32:55Z] [ERROR] Rapid #1: connect() failed: No such file or directory
+[2026-08-06T05:32:55Z] [ERROR] Rapid #2: connect() failed: No such file or directory
+[2026-08-06T05:32:55Z] [ERROR] Rapid #3: connect() failed: No such file or directory
+[2026-08-06T05:32:55Z] [ERROR] Rapid #4: connect() failed: No such file or directory
+[2026-08-06T05:32:55Z] [ERROR] Rapid #5: connect() failed: No such file or directory
+RESULT KAIMING-RAPID FAIL
+[2026-08-06T05:32:55Z] [INFO] KAIMING-RAPID FAIL: 0/5 rapid requests succeeded
+
+============================================
+ Passed: 0 / Failed: 6
+============================================
+```
+
+## 统计
+- PASS 计数(粗略): 0
+- FAIL 计数(粗略): 12
+- Exit code: 1
+
+## 服务端日志 (tail)
+```
+[2026-08-06T05:32:53.779Z] [INFO] Echo server listening on /run/kylin-memory-echo/echo.sock (pid=140693)
+```

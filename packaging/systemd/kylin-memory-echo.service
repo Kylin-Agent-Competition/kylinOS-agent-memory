@@ -1,0 +1,28 @@
+[Unit]
+Description=Kylin Memory Echo Server — UDS 最小验证服务
+Documentation=https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+After=network.target
+
+# 安装脚本会自动替换 __USERNAME__ 占位符
+[Service]
+Type=simple
+User=__USERNAME__
+RuntimeDirectory=kylin-memory-echo
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/python3 /home/__USERNAME__/kylin-memory-echo/bin/kylin-memory-echo-server
+ExecStopPost=/bin/rm -f /run/kylin-memory-echo/echo.sock
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:/home/__USERNAME__/kylin-memory-echo/logs/server_stdout.log
+StandardError=append:/home/__USERNAME__/kylin-memory-echo/logs/server_stderr.log
+
+# 最小安全加固（开发验证环境，非生产环境）
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX
+
+# ⚠️ UNVERIFIED: 直实验证（银河麒麟桌面V11, REDACTED_VM_USER-pc）通过
+#    正式发行环境 (麒麟生产系统) systemd 测试未执行
+#    RuntimeDirectory 路径与权限需在生产系统额外验证
+
+[Install]
+WantedBy=default.target

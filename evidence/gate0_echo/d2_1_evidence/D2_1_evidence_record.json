@@ -1,0 +1,78 @@
+{
+  "test_id": "D2-1-KAIMING-HOOK",
+  "task_id": "D2-1",
+  "description": "Kaiming -> Custom UDS Echo Real Hook Investigation - Route B (documented failure)",
+  "status": "BLOCKED",
+  "evidence_level": "E4",
+  "source": "evidence/gate0_echo/d2_1_evidence/D2_1_Final_Evidence_Report.md",
+  "date": "2026-08-06",
+  "reviewer": "pending",
+  "limitations": "kylin-aiassistant source code unavailable (closed-source binary deb / cn.kylin.kylin-aiassistant); No QLocalSocket config found in binary strings scan; No SDK build environment or signing permissions in Gate 0; Socket path likely hardcoded at compile time; Standalone simulated client (kaiming_memory_client.cpp) used as alternative evidence",
+  "checksum_sha256": "01035f23e0835202b346941dcf1cff73bd17c2126b1e3a19dc492f17867a5286",
+  "details": {
+    "investigation_time": "2026-08-06T11:18:57+08:00",
+    "vm": "kylin-agent@127.0.0.1:2222 (Kylin V11 2603)",
+    "package": {
+      "installed": false,
+      "package_name_mismatch": "cn.kylin.kylin-aiassistant (app store format, not standard dpkg)",
+      "binary_path": "/usr/bin/kylin-aiassistant",
+      "process_running": true,
+      "pid": 7677,
+      "launch_script": "/opt/apps/kaiming/bin/cn.kylin.kylin-aiassistant"
+    },
+    "source_availability": {
+      "available": false,
+      "format": "closed-source binary deb package",
+      "no_cpp_h_c_files": true
+    },
+    "socket_reference_search": {
+      "qlocalsocket_found": false,
+      "connect_to_server_found": false,
+      "echo_sock_found": false,
+      "kylin_memory_found": false,
+      "method": "strings scan on /usr/bin/kylin-aiassistant"
+    },
+    "config_files": {
+      "found": false,
+      "editable": false,
+      "likely_hardcoded": true
+    },
+    "block_reasons": [
+      "kylin-aiassistant 闭源二进制分发，无 .cpp/.h 源文件",
+      "Gate 0 不具备麒麟 SDK 编译工具链 (qmake/Qt5)",
+      "麒麟系统要求二进制签名，修改后需 SDK 团队重新签名",
+      "包名不在标准 dpkg 索引 (cn.kylin.kylin-aiassistant 格式)",
+      "Socket 路径在编译时固定，strings 扫描未发现配置点",
+      "不具备修改系统级 SDK 组件的权限和批准"
+    ],
+    "failed_operations": [
+      {"operation": "dpkg -l kylin-aiassistant", "exit": 0, "error": "未安装 (包名不匹配)"},
+      {"operation": "dpkg -L kylin-aiassistant", "exit": 0, "error": "软件包没有被安装"},
+      {"operation": "strings /usr/bin/kylin-aiassistant | grep QLocalSocket", "exit": 0, "error": "无匹配"},
+      {"operation": "find /opt/apps/kaiming -name *.conf", "exit": 0, "error": "无结果"},
+      {"operation": "编译尝试", "exit": "N/A", "error": "无源码，无法编译"},
+      {"operation": "安装尝试", "exit": "N/A", "error": "无修改后二进制，无法安装"}
+    ],
+    "standalone_client_result": {
+      "binary": "kaiming_memory_client",
+      "version": "v1.2 (robust JSON)",
+      "command": "--method all --socket /tmp/kylin-memory-echo/echo.sock",
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "exit_code": 0,
+      "details": "KAIMING-ECHO PASS / KAIMING-HEALTH PASS / KAIMING-RETRIEVE PASS / KAIMING-STORE PASS / KAIMING-UNKNOWN PASS / KAIMING-RAPID PASS"
+    },
+    "gate1_plan": {
+      "steps": 8,
+      "timeline": "Gate 1 Week 1-3",
+      "fallback_plans": [
+        "LD_PRELOAD 拦截 connect() 系统调用动态替换路径",
+        "iptables/socat 本地端口转发代理到 Echo 服务",
+        "与麒麟 SDK 团队合作集成 Memory Service 为官方特性"
+      ]
+    },
+    "final_status": "BLOCKED (Gate 0). 核心通信已验证 (UDS 协议 + Echo 路由 + ACL/KYSEC + systemd 生命周期). 真实 Kaiming Hook 推迟至 Gate 1 SDK 源码访问后就绪.",
+    "gate0_overall": "PARTIAL"
+  }
+}

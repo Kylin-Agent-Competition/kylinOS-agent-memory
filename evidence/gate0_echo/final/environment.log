@@ -1,0 +1,195 @@
+# Day1 麒麟 VM 环境基线
+# 采集时间: 2026-08-06T00:11:53
+# 采集人: kylin-agent
+
+## E1_tested_commit
+命令: cd /home/kylin-agent/kylin-memory-echo && git rev-parse HEAD 2>&1 || echo NO_GIT_REPO
+退出码: 0
+输出:
+  bash: 行 1: git: 未找到命令
+  NO_GIT_REPO
+
+## E2_pr_head
+命令: cd /home/kylin-agent/kylin-memory-echo && git log -1 --format="%H %s" 2>&1 || echo NO_GIT_REPO
+退出码: 0
+输出:
+  bash: 行 1: git: 未找到命令
+  NO_GIT_REPO
+
+## E3_kylin_release
+命令: cat /etc/kylin-release 2>/dev/null || cat /etc/os-release 2>/dev/null || lsb_release -a 2>/dev/null || echo UNKNOWN
+退出码: 0
+输出:
+  NAME="Kylin"
+  FULL_NAME="kylin"
+  VERSION="银河麒麟桌面操作系统V11"
+  VERSION_US="Kylin Linux Desktop V11"
+  ID=kylin
+  PRETTY_NAME="Kylin V11"
+  VERSION_ID="v11"
+  HOME_URL="http://www.kylinos.cn/"
+  VERSION_CODENAME=kylin
+  KYLIN_RELEASE_ID="2603"
+  ID_LIKE=openKylin
+
+## E4_vm_snapshot
+命令: echo "MANUAL: 需要在 VirtualBox 中记录快照名称"
+退出码: 0
+输出:
+  MANUAL: 需要在 VirtualBox 中记录快照名称
+
+## E5_snapshot_info
+命令: echo "MANUAL: 快照名称 gate0_day1_baseline_20260806 创建时间 2026-08-06"
+退出码: 0
+输出:
+  MANUAL: 快照名称 gate0_day1_baseline_20260806 创建时间 2026-08-06
+
+## E6_python
+命令: python3 --version 2>&1
+退出码: 0
+输出:
+  Python 3.12.3
+
+## E7_gpp
+命令: g++ --version 2>&1 | head -3
+退出码: 0
+输出:
+  g++ (openKylin 12.3.0-1ok3k0.1) 12.3.0
+  Copyright (C) 2022 Free Software Foundation, Inc.
+  This is free software; see the source for copying conditions.  There is NO
+
+## E8_cmake
+命令: cmake --version 2>&1 | head -1
+退出码: 0
+输出:
+  cmake version 3.28.3
+
+## E9_systemd
+命令: systemd --version 2>&1 | head -1
+退出码: 0
+输出:
+  systemd 255 (255.2-ok1.9k1.39)
+
+## E10_kaiming
+命令: rpm -qa 2>/dev/null | grep -iE "kaiming|coreai" || dpkg -l 2>/dev/null | grep -iE "kaiming|coreai" || echo NO_PACKAGES_FOUND
+退出码: 0
+输出:
+  ii  kaiming                                              1.0.0-ok1k0.75                          amd64        Application deployment framework for desktop apps
+  ii  libkylin-coreai-embedding                            1.2.0.0-0k0.3                           amd64        Kylin AI Core Embedding SDK
+  ii  libkysdk-coreai-speech0                              1.1.0.1-0k0.4                           amd64        Kylin AI Core Speech SDK
+  ii  libkysdk-coreai-vision0                              1.1.0.1-0k0.4                           amd64        Kylin AI Core vision SDK
+
+## E11_kysec
+命令: cat /sys/kernel/security/kysec/status 2>/dev/null || echo KYSEC_PATH_NOT_FOUND
+退出码: 0
+输出:
+  KYSEC_PATH_NOT_FOUND
+  [STDERR]: 输入密码
+
+## E12_user
+命令: whoami && id
+退出码: 0
+输出:
+  kylin-agent
+  uid=1001(kylin-agent) gid=1001(kylin-agent) 组=1001(kylin-agent),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),100(users),114(lpadmin),989(sambashare)
+
+## E13_testdir
+命令: ls -la /home/kylin-agent/uds-echo-test 2>&1
+退出码: 0
+输出:
+  总计 16
+  drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月 6日 00:11 .
+  drwx------ 20 kylin-agent kylin-agent 4096  8月 6日 00:11 ..
+
+## E14_socket_residual
+命令: ls -la /run/kylin-memory-echo/ 2>&1; echo "---"; ls -la /tmp/kylin-memory-echo/ 2>&1
+退出码: 0
+输出:
+  总计 0
+  drwx------  2 kylin-agent kylin-agent   60  8月 5日 23:22 .
+  drwxr-xr-x 39 root        root        1140  8月 6日 00:11 ..
+  srw-------  1 kylin-agent kylin-agent    0  8月 5日 23:22 echo.sock
+  ---
+  总计 40
+  drwxr-xr-x  2 root root  4096  8月 5日 23:24 .
+  drwxrwxrwt 31 root root 20480  8月 6日 00:11 ..
+  -rw-r--r--  1 root root  3288  8月 5日 23:26 kysec_authorize.log
+
+## E15_unit_residual
+命令: systemctl list-units --type=service 2>&1 | grep -i echo || echo NO_ECHO_UNIT_FOUND
+退出码: 0
+输出:
+  kylin-memory-echo.service                     loaded active running Kylin Memory Echo Server — UDS 最小验证服务
+
+## E16_process_residual
+命令: ps aux 2>&1 | grep -i echo | grep -v grep || echo NO_ECHO_PROCESS_FOUND
+退出码: 0
+输出:
+  kylin-a+    1682  0.0  0.1  35812 14444 ?        Ss   8月05   0:00 /usr/bin/python3 /home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server
+
+## BONUS_kernel
+命令: uname -a
+退出码: 0
+输出:
+  Linux ZhouYifan-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+## BONUS_firewall
+命令: sudo iptables -L -n 2>&1 | head -10 || echo FIREWALL_CHECK_FAILED
+退出码: 0
+输出:
+  sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper
+  sudo: 需要密码
+
+## E4_vm_snapshot (supplemental 2026-08-06T08:45:01)
+命令: VirtualBox 磁盘镜像记录
+退出码: 0
+输出:
+  磁盘文件: kylin-desktop-v11.vhd
+  时间戳: 2026-08-06-0809
+  说明: VirtualBox 快照功能不可用，使用磁盘镜像文件作为基线锚点
+
+## E5_snapshot_info (supplemental 2026-08-06T08:45:01)
+命令: VirtualBox 磁盘镜像信息
+退出码: 0
+输出:
+  文件: kylin-desktop-v11.vhd
+  捕获时间: 2026-08-06T08:09
+
+## E1_tested_commit (supplemental 2026-08-06T08:45:01)
+命令: cd /home/kylin-agent/kylin-memory-echo && git rev-parse HEAD
+退出码: 127
+输出:
+  GIT_UNAVAILABLE
+
+## E2_pr_head (supplemental 2026-08-06T08:45:01)
+命令: cd /home/kylin-agent/kylin-memory-echo && git log -1 --format='%H %s'
+退出码: 127
+输出:
+  bash: 行 1: git: 未找到命令
+
+
+## E1_tested_commit (FIXED 2026-08-06T08:51:15)
+命令: /usr/bin/git rev-parse HEAD
+退出码: 127
+输出:
+  GIT_UNAVAILABLE
+
+## E2_pr_head (FIXED 2026-08-06T08:51:15)
+命令: /usr/bin/git log -1
+退出码: 127
+输出:
+  bash: 行 1: /usr/bin/git: 没有那个文件或目录
+
+
+## E1_tested_commit (FIXED 2026-08-06T08:53:48)
+命令: /usr/bin/git rev-parse HEAD
+退出码: 127
+输出:
+  bash: 行 1: /usr/bin/git: 没有那个文件或目录
+
+## E2_pr_head (FIXED 2026-08-06T08:53:48)
+命令: /usr/bin/git log -1
+退出码: 127
+输出:
+  bash: 行 1: /usr/bin/git: 没有那个文件或目录
+

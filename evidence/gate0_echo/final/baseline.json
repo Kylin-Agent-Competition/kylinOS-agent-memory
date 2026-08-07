@@ -1,0 +1,278 @@
+{
+  "captured_at": "2026-08-06T00:11:54",
+  "captured_by": "kylin-agent",
+  "vm_snapshot": "kylin-desktop-v11.vhd (2026-08-06-0809, no snapshot available)",
+  "system": {
+    "kylin_version": "NAME=\"Kylin\"\nFULL_NAME=\"kylin\"\nVERSION=\"银河麒麟桌面操作系统V11\"\nVERSION_US=\"Kylin Linux Desktop V11\"\nID=kylin\nPRETTY_NAME=\"Kylin V11\"\nVERSION_ID=\"v11\"\nHOME_URL=\"http://www.kylinos.cn/\"\nVERSION_CODENAME=kylin\nK",
+    "kernel_version": "Linux ZhouYifan-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
+    "python_version": "Python 3.12.3",
+    "gcc_version": "g++ (openKylin 12.3.0-1ok3k0.1) 12.3.0",
+    "cmake_version": "cmake version 3.28.3",
+    "systemd_version": "systemd 255 (255.2-ok1.9k1.39)"
+  },
+  "packages": [
+    {
+      "name": "kaiming",
+      "version": "1.0.0-ok1k0.75"
+    },
+    {
+      "name": "libkylin-coreai-embedding",
+      "version": "1.2.0.0-0k0.3"
+    },
+    {
+      "name": "libkysdk-coreai-speech0",
+      "version": "1.1.0.1-0k0.4"
+    },
+    {
+      "name": "libkysdk-coreai-vision0",
+      "version": "1.1.0.1-0k0.4"
+    }
+  ],
+  "files": [
+    {
+      "path": "/etc/systemd/system/default.target.wants/kylin-memory-echo.service",
+      "sha256": "9e3ebf6a89cf4f33b724beeafe0894aa057f2f632f852787a865cc61cf2da65b",
+      "owner": "root",
+      "group": "root",
+      "mode": "777",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/etc/systemd/system/graphical.target.wants/org.kylin.kaiming.service",
+      "sha256": "79bc0705cdbc56e5b5317818e522c8398b859a9054294b63c61a50eff4c12556",
+      "owner": "root",
+      "group": "root",
+      "mode": "777",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/etc/systemd/system/org.kylin.kaiming.service",
+      "sha256": "79bc0705cdbc56e5b5317818e522c8398b859a9054294b63c61a50eff4c12556",
+      "owner": "root",
+      "group": "root",
+      "mode": "777",
+      "acl": "getfacl: 从绝对路径名尾部去除\" / \"字符。\n# file: etc/systemd/system/org.kylin.kaiming.service\n# owner: root\n# group: root\nuser::rw-\ngroup::r--\nother::r--"
+    },
+    {
+      "path": "/etc/systemd/system/kylin-memory-echo.service",
+      "sha256": "9e3ebf6a89cf4f33b724beeafe0894aa057f2f632f852787a865cc61cf2da65b",
+      "owner": "root",
+      "group": "root",
+      "mode": "644",
+      "acl": "getfacl: 从绝对路径名尾部去除\" / \"字符。\n# file: etc/systemd/system/kylin-memory-echo.service\n# owner: root\n# group: root\nuser::rw-\ngroup::r--\nother::r--"
+    },
+    {
+      "path": "/home/kylin-agent/uds-echo-test",
+      "sha256": "NO_ACCESS",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "775",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/.log/kaiming.log",
+      "sha256": "eb35b523adb48cad0b5d24efae0fea092d6d590c4d696d0c81b869c1b1eeb496",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "664",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/.var/app/kaiming",
+      "sha256": "NO_ACCESS",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "755",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo",
+      "sha256": "NO_ACCESS",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "775",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/kaiming_memory_client.cpp",
+      "sha256": "1eae941926145f1872aa56530e20c279a4f907600fef1594ff9a9d09a0ff1fe9",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "664",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/build/kaiming_memory_client",
+      "sha256": "0f9f267fb47876c0e240e702c2bf39e60a5132635e876773c87be5cfa4adfcef",
+      "owner": "root",
+      "group": "root",
+      "mode": "755",
+      "acl": "getfacl: 从绝对路径名尾部去除\" / \"字符。\n# file: home/kylin-agent/kylin-memory-echo/build/kaiming_memory_client\n# owner: root\n# group: root\nuser::rwx\ngroup::r-x\nother::r-x"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/build/echo_client",
+      "sha256": "82cbb081add5ae52d815463b73884781c08c3e709168aabf81dfa7c922abaa84",
+      "owner": "root",
+      "group": "root",
+      "mode": "755",
+      "acl": "getfacl: 从绝对路径名尾部去除\" / \"字符。\n# file: home/kylin-agent/kylin-memory-echo/build/echo_client\n# owner: root\n# group: root\nuser::rwx\ngroup::r-x\nother::r-x"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir",
+      "sha256": "NO_ACCESS",
+      "owner": "root",
+      "group": "root",
+      "mode": "755",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/echo_client.cpp.o.d",
+      "sha256": "510f0d431ff67a001d8e9f9e72da89536aa3c8cbe7b34a141a22e8028f776ce4",
+      "owner": "root",
+      "group": "root",
+      "mode": "644",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/echo_client.dir/echo_client.cpp.o",
+      "sha256": "0b2bdb533af49abcf99b8b937e833954217b4d6d1acad5416857986f2cb5dac2",
+      "owner": "root",
+      "group": "root",
+      "mode": "644",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir",
+      "sha256": "NO_ACCESS",
+      "owner": "root",
+      "group": "root",
+      "mode": "755",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/kaiming_memory_client.cpp.o.d",
+      "sha256": "daec96e9de1aaddac26bb72b4121b355ba5b984de820414c61aecf16f9877ad0",
+      "owner": "root",
+      "group": "root",
+      "mode": "644",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/build/CMakeFiles/kaiming_memory_client.dir/kaiming_memory_client.cpp.o",
+      "sha256": "8ff1324351116c0acf5aa4e82dfd391fa33a46c1fbdd5a0c3deb9680e4f0298a",
+      "owner": "root",
+      "group": "root",
+      "mode": "644",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/echo_client.cpp",
+      "sha256": "bb082bd51ad9ef84ee72bde5147e94f2c40154ef6dab289e2f8076ab82f40ada",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "664",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server",
+      "sha256": "f466e3aff3e5ef5284e90b07352d44393914bee912a529836f7324229e44fad0",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "775",
+      "acl": "getfacl: 从绝对路径名尾部去除\" / \"字符。\n# file: home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server\n# owner: kylin-agent\n# group: kylin-agent\nuser::rwx\ngroup::rwx\nother::r-x"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/bin/kaiming_memory_client",
+      "sha256": "0f9f267fb47876c0e240e702c2bf39e60a5132635e876773c87be5cfa4adfcef",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "775",
+      "acl": "getfacl: 从绝对路径名尾部去除\" / \"字符。\n# file: home/kylin-agent/kylin-memory-echo/bin/kaiming_memory_client\n# owner: kylin-agent\n# group: kylin-agent\nuser::rwx\ngroup::rwx\nother::r-x"
+    },
+    {
+      "path": "/home/kylin-agent/kylin-memory-echo/bin/echo_client",
+      "sha256": "82cbb081add5ae52d815463b73884781c08c3e709168aabf81dfa7c922abaa84",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "775",
+      "acl": "getfacl: 从绝对路径名尾部去除\" / \"字符。\n# file: home/kylin-agent/kylin-memory-echo/bin/echo_client\n# owner: kylin-agent\n# group: kylin-agent\nuser::rwx\ngroup::rwx\nother::r-x"
+    },
+    {
+      "path": "/home/kylin-agent/deploy-package/src/kaiming_memory_client.cpp",
+      "sha256": "1eae941926145f1872aa56530e20c279a4f907600fef1594ff9a9d09a0ff1fe9",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "664",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/deploy-package/src/echo_client.cpp",
+      "sha256": "bb082bd51ad9ef84ee72bde5147e94f2c40154ef6dab289e2f8076ab82f40ada",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "664",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/deploy-package/systemd/kylin-memory-echo.service",
+      "sha256": "affa2c58b095397ac5175feb4233ffb3b1aa6217eae345a17811c995bccd5676",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "664",
+      "acl": "NOT_COLLECTED"
+    },
+    {
+      "path": "/home/kylin-agent/deploy-package/bin/kylin-memory-echo-server",
+      "sha256": "f466e3aff3e5ef5284e90b07352d44393914bee912a529836f7324229e44fad0",
+      "owner": "kylin-agent",
+      "group": "kylin-agent",
+      "mode": "664",
+      "acl": "NOT_COLLECTED"
+    }
+  ],
+  "units": [
+    {
+      "name": "kylin-memory-echo.service",
+      "status": "active"
+    },
+    {
+      "name": "org.kylin.kaiming.service",
+      "status": "active"
+    }
+  ],
+  "sockets": {
+    "/run/kylin-memory-echo/echo.sock": "exists",
+    "/tmp/kylin-memory-echo/echo.sock": "absent"
+  },
+  "kysec_status": "UNAVAILABLE (ec=1)",
+  "kaiming_host_version": "unknown",
+  "vm_disk": {
+    "file": "kylin-desktop-v11.vhd",
+    "timestamp": "2026-08-06-0809",
+    "note": "VirtualBox snapshot not available, disk image used as baseline anchor"
+  },
+  "kaiming_hook_files": [
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/bin/ld.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/libasan.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/libubsan.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/libquadmath.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/libitm.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/libcc1.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/liblto_plugin.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/liblsan.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/plugin/libcc1plugin.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/plugin/libcp1plugin.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/libgomp.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/libtsan.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/libatomic.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/libgcc_s.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/gcc/x86_64-linux-gnu/12/libstdc++.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/x86_64-linux-gnu/libVkLayer_INTEL_nullhw.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/x86_64-linux-gnu/libVkLayer_MESA_device_select.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/x86_64-linux-gnu/perl-base/auto/Hash/Util/Util.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/x86_64-linux-gnu/perl-base/auto/POSIX/POSIX.so",
+    "/sysroot/ostree/deploy/kylin/var/opt/kaiming/layers/stable/x86_64/base/top.openkylin.base/binary/1.1.13/files/usr/lib/x86_64-linux-gnu/perl-base/auto/Fcntl/Fcntl.so"
+  ],
+  "tested_commit": "bash: 行 1: /usr/bin/git: 没有那个文件或目录",
+  "updated_at": "2026-08-06T08:53:48"
+}

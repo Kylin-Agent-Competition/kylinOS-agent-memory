@@ -1,0 +1,73 @@
+# Day2 D2-1 Kaiming 真实 Hook 尝试
+# Timestamp: 2026-08-06T09:50:53
+
+## D2-1.1 定位 Socket 调用点
+
+### kylin-aiassistant 安装状态
+```
+NOT_FOUND
+```
+
+### 二进制/源码位置
+```
+/usr/share/kylin-software-center/data/icons/cn.kylin.kylin-aiassistant.png
+/usr/share/kylin-software-center/data/icons/kylin-aiassistant.png
+/usr/etc/xdg/autostart/kylin-aiassistant-autostart.desktop
+```
+
+### Socket 调用点搜索
+```
+/etc/ksaf/label/data/pkg_file_data.bin
+---DONE---
+```
+
+## D2-1.6 独立模拟客户端替代结果
+
+### kaiming_memory_client --method all 输出
+```
+============================================
+ Kaiming Memory Client - v1.2 (robust JSON)
+ Socket: /tmp/kylin-memory-echo/echo.sock
+ Method: all
+ User: kylin-agent
+============================================
+[2026-08-06T01:50:59Z] [INFO] TEST: echo method
+RESULT KAIMING-ECHO FAIL
+[2026-08-06T01:50:59Z] [INFO] KAIMING-ECHO FAIL: exception: connect() failed: No such file or directory
+[2026-08-06T01:50:59Z] [INFO] TEST: health method
+RESULT KAIMING-HEALTH FAIL
+[2026-08-06T01:50:59Z] [INFO] KAIMING-HEALTH FAIL: exception: connect() failed: No such file or directory
+[2026-08-06T01:50:59Z] [INFO] TEST: memory.retrieve method
+RESULT KAIMING-RETRIEVE FAIL
+[2026-08-06T01:50:59Z] [INFO] KAIMING-RETRIEVE FAIL: exception: connect() failed: No such file or directory
+[2026-08-06T01:50:59Z] [INFO] TEST: memory.store method (verify protocol compatibility)
+RESULT KAIMING-STORE FAIL
+[2026-08-06T01:50:59Z] [INFO] KAIMING-STORE FAIL: protocol layer exception: connect() failed: No such file or directory
+[2026-08-06T01:50:59Z] [INFO] TEST: unknown method degradation
+RESULT KAIMING-UNKNOWN FAIL
+[2026-08-06T01:50:59Z] [INFO] KAIMING-UNKNOWN FAIL: exception: connect() failed: No such file or directory
+[2026-08-06T01:50:59Z] [INFO] TEST: 5 consecutive rapid requests (simulating high-frequency calls)
+[2026-08-06T01:50:59Z] [ERROR] Rapid #1: connect() failed: No such file or directory
+[2026-08-06T01:50:59Z] [ERROR] Rapid #2: connect() failed: No such file or directory
+[2026-08-06T01:50:59Z] [ERROR] Rapid #3: connect() failed: No such file or directory
+[2026-08-06T01:50:59Z] [ERROR] Rapid #4: connect() failed: No such file or directory
+[2026-08-06T01:50:59Z] [ERROR] Rapid #5: connect() failed: No such file or directory
+RESULT KAIMING-RAPID FAIL
+[2026-08-06T01:50:59Z] [INFO] KAIMING-RAPID FAIL: 0/5 rapid requests succeeded
+
+============================================
+ Passed: 0 / Failed: 6
+============================================
+```
+Exit code: 1
+
+## D2-1.7 后续接入方案
+
+- **状态**: 路线 B — 如实记录失败/阻塞
+- **阻塞原因**: 
+  - kylin-aiassistant 源码未在 VM 中提供
+  - 需要麒麟 SDK 源码访问权限才能修改 Hook 点
+  - Gate 0 阶段不具备生产级 Hook 部署条件
+- **后续计划**: Gate 1 获取 SDK 源码 → 修改 Socket 连接逻辑 → 编译验证 → 集成测试
+- **所需资源**: kylin-aiassistant 源码、构建环境、测试环境
+

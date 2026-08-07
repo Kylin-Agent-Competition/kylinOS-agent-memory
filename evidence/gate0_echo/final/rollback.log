@@ -1,0 +1,41 @@
+# D8 Rollback (2026-08-06T08:53:48)
+
+### Uninstall (ec=0)
+输入密码============================================
+ Kylin Memory Echo — 卸载
+============================================
+  服务名:      kylin-memory-echo
+  部署路径:    /home/root/kylin-memory-echo
+============================================
+[0;32m[INFO][0m  Step 1/7: 停止服务...
+[1;33m[WARN][0m    服务未在运行
+[0;32m[INFO][0m  Step 2/7: 禁用自启...
+[1;33m[WARN][0m    自启未启用或已禁用
+[0;32m[INFO][0m  Step 3/7: 重置 systemd 失败状态...
+[0;32m[INFO][0m  Step 4/7: 终止残留进程...
+[0;32m[INFO][0m    无残留进程
+[0;32m[INFO][0m  Step 5/7: 删除 systemd unit 文件...
+[0;32m[INFO][0m    Unit 文件已删除, daemon-reload 完成
+[0;32m[INFO][0m  Step 6/7: 清理 socket 目录...
+[0;32m[INFO][0m    Socket 目录已清理或不存在
+[0;32m[INFO][0m  Step 6/7: 清理 /tmp 旧路径残留...
+[0;32m[INFO][0m    /tmp 残留已清理
+
+
+============================================
+ ✅ 卸载完成!
+============================================
+
+验证:
+  systemctl status kylin-memory-echo  # 应为 'could not be found'
+  ls /run/kylin-memory-echo 2>/dev/null      # 应为空或不存在
+
+
+
+### Service after: inactive
+not-found
+### Socket after: ls: 无法访问 '/run/kylin-memory-echo/echo.sock': 没有那个文件或目录
+CLEAN
+### Process after: NO_PROCESS
+
+### D8 PASS: True

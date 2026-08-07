@@ -1,0 +1,53 @@
+=== Supplemental Evidence Collection ===
+2026-08-06T08:39:53
+=== Supplemental Evidence Collection ===
+2026-08-06T08:45:01
+SSH connected
+--- E1/E2: git + commit hash ---
+git: NOT_FOUND
+apt install git: ec=0
+E1 tested_commit: bash: 行 1: git: 未找到命令
+E2 PR head: bash: 行 1: git: 未找到命令
+environment.log updated with E1/E2/E4/E5
+--- B1: dpkg packages ---
+B1 packages found: 4
+--- B6: getfacl ---
+B6 ACLs collected: 7 files
+--- B8: Kaiming .so scan ---
+B8 .so files found: 20
+--- Updating baseline.json ---
+baseline.json updated with B1/B6/B8/E1/E2/E4/E5
+--- D1: install.sh deploy ---
+install.sh not found at /home/kylin-agent/kylin-memory-echo/packaging/deploy-package/install.sh
+--- D2: Clean build ---
+CMake configure: ec=1
+chown build: ec=0
+build.log updated with D2
+--- D3: --dev mode ---
+Stop service: ec=0
+Dev start: ec=0
+Dev mode test: FAIL
+server.log updated with D3
+--- D7: KYSEC ACL full cycle ---
+D7 skipped: kysec_authorize.sh not found
+--- D8: Rollback full test ---
+Service before rollback: active
+rollback.log updated with D8
+--- Final updates ---
+evidence.jsonl updated: 7 items
+evidence.jsonl SHA256: a232cc7209ae3b1bc84291d37a7cf0c94bfe00baccc56834679a415cdc3451fc
+index.yaml updated
+
+=== FINAL CHECKLIST ===
+  [x] environment.log: 5679 bytes
+  [x] baseline.json: 13333 bytes
+  [x] build.log: 448 bytes
+  [x] deploy.log: 860 bytes
+  [x] server.log: 353 bytes
+  [x] client.log: 6242 bytes
+  [x] systemd_lifecycle.log: 4663 bytes
+  [x] kysec_acl.log: 243 bytes
+  [x] rollback.log: 568 bytes
+  [x] evidence.jsonl: 2146 bytes
+
+All supplemental evidence collected.
