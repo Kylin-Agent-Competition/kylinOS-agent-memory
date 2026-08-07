@@ -288,7 +288,7 @@ cmd_stop() {
     echo "INFO: 停止 strace 进程 ${cap_pid}"
     kill "${cap_pid}" 2>/dev/null || true
     pkill -P "${cap_pid}" 2>/dev/null || true
-    pkill -f "strace -p.*kylin" 2>/dev/null || true
+    # 只清理本次采集 PID 的子进程；不得以进程名宽匹配误杀并行采集任务。
     sleep 0.5
     rm -f "${PID_FILE}"
 
@@ -397,13 +397,13 @@ PYEOF
     "cancel_event_captured": ${cancel_captured},
     "intent_recognition_triggered": ${intent_triggered},
     "prompt_skill_not_misjudged": ${prompt_skill_not_misjudged},
-    "tool_event_captured": "N/A - 麒麟架构无独立 tool_call 事件, 用 intentionrecognition + stop_chat 替代验证"
+    "tool_event_captured": "NOT_VERIFIED - 未捕获真实 ToolExecutionEvent；架构线索不能替代成功、失败或取消事件"
   },
   "pass_criteria": {
-    "H2C-Tool-1": "N/A (架构不同: 成功 Tool 由 intentionrecognition 内部执行, 无独立 DBus 事件)",
-    "H2C-Tool-2": "N/A (架构不同: 失败 Tool 由 intentionrecognition 内部处理, 无独立 DBus 事件)",
-    "H2C-Tool-3": "observed: stop_chat DBus method captured (count=${stop_chat_count})",
-    "H2C-Tool-4": "observed: openai_style_keyword_count=${openai_keyword_count} (0=未观察到OpenAI风格关键词)"
+    "H2C-Tool-1": "NOT_VERIFIED (未捕获成功 ToolExecutionEvent)",
+    "H2C-Tool-2": "NOT_VERIFIED (未捕获失败 ToolExecutionEvent)",
+    "H2C-Tool-3": "NOT_VERIFIED (stop_chat 仅是取消线索，不能证明取消 ToolExecutionEvent)",
+    "H2C-Tool-4": "NOT_VERIFIED (关键词计数不能证明 Prompt Skill 未被分类为 Tool)"
   },
   "note": "基于 D2-C 实验 C 实测: 麒麟 AI 助手所有用户输入(含打开应用/翻译)均以 message_type=chat 发送, 无 OpenAI 风格 tool_call 事件",
   "disclaimer": "判定权交由 Reviewer, 脚本仅记录观察结果"

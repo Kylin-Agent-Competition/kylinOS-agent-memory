@@ -263,8 +263,7 @@ cmd_stop() {
     # 终止 strace 及其可能的子进程
     kill "${cap_pid}" 2>/dev/null || true
     pkill -P "${cap_pid}" 2>/dev/null || true
-    # 再给个 SIGTERM 给可能残留的 strace 进程 (strace -f 会 fork 监控子线程)
-    pkill -f "strace -p.*kylin" 2>/dev/null || true
+    # 只清理本次采集 PID 的子进程；不得以进程名宽匹配误杀并行采集任务。
     sleep 0.5
     rm -f "${PID_FILE}"
 

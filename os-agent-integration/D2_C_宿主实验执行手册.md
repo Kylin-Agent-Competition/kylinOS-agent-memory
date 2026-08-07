@@ -1,5 +1,10 @@
 # D2 · 轨道 C · OS Agent 宿主实验执行手册（H2C-PreChat / PostTurn / Tool）
 
+> **当前审计结论（2026-08-08）：D2-C 为 BLOCKED，不得以本手册中的历史候选状态
+> 宣称 Gate 通过。** PostTurn 尚缺数据库快照、15 秒稳定性和 UI/RECORD 一致性；
+> PreChat 尚缺 UI 截图及已解码模型请求证明；Tool 尚缺成功、失败、取消的真实
+> 结构化事件。必须由人在麒麟 VM 补采证据，并由 D/E 按职责复核。
+
 > 赛题：XA-202612 OS Agent 记忆优化及高效应用研究
 > 责任轨道：C · OS Agent 与 Qt/QML
 > 开发者：刘承恩

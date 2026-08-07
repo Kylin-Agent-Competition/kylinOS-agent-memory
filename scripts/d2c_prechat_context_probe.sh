@@ -315,7 +315,7 @@ cmd_capture_stop() {
     echo "INFO: 停止 strace 进程 ${cap_pid}"
     kill "${cap_pid}" 2>/dev/null || true
     pkill -P "${cap_pid}" 2>/dev/null || true
-    pkill -f "strace -p.*kylin" 2>/dev/null || true
+    # 只清理本次采集 PID 的子进程；不得以进程名宽匹配误杀并行采集任务。
     sleep 0.5
     rm -f "${CAPTURE_PID_FILE}"
 
@@ -454,7 +454,8 @@ cmd_collect() {
         local memory_in_request
         memory_in_request="$(to_int "${raw_mir}")"
         if [ "${memory_in_request}" -gt 0 ]; then
-            echo "  ✓ H2C-PreChat-3 通过: 模型请求含 Memory Context"
+            echo "  ! H2C-PreChat-3 未确认: 捕获文本含 Memory Context 候选字段，但未完成协议解码"
+            echo "    strace 关键词命中不能证明该文本是模型请求，也不能证明 Hook 点 A 注入成功"
         else
             echo "  ! H2C-PreChat-3 未确认: 模型请求未观察到 Memory Context"
             echo "    (可能 Hook 点 A 未注入 或 MemoryClient 未连接 或 关键词仍需扩展)"
