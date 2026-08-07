@@ -1,0 +1,53 @@
+Exit: 1
+
+STDOUT:
+============================================================
+ UT-2 IPC 重启复测
+ Socket: /home/kylin-agent/.echo_run/echo.sock
+ Time: 2026-08-07T09:48:05
+============================================================
+
+--- T1: 基础健康检查 ---
+[PASS] UT2-HEALTH-BASELINE: 健康检查通过 (pid=442927, uptime=2.2s)
+
+--- T2: 正常停止 → 连接失败检测 ---
+[FAIL] UT2-STOP: 服务未成功停止
+[PASS] UT2-STOP-DETECT: 客户端正确检测到服务不可用 (detail: SOCKET_NOT_FOUND), socket_exists=False
+
+--- T3: 重新启动 → 通信恢复 ---
+[PASS] UT2-RESTART-SERVER: 服务已重新启动
+[PASS] UT2-RESTART-RECOVER: 重启后通信恢复 (新 pid=442964, 旧 pid=442927)
+
+--- T4: Socket 残留清理 ---
+[PASS] UT2-SOCKET-CLEANUP: 停止后 socket 文件已被清理
+
+--- T5: Kill -9 异常终止恢复 ---
+[PASS] UT2-KILL9-PRE: Kill-9 前服务正常
+[FAIL] UT2-KILL9-STOP: Kill-9 后仍有残留进程
+[PASS] UT2-KILL9-RECOVER: Kill-9 后重启恢复 (pid=443023)
+
+--- T6: 快速连续重启 (5次) — 无 socket 残留冲突 ---
+  第 1/5 次重启成功
+  第 2/5 次重启成功
+  第 3/5 次重启成功
+  第 4/5 次重启成功
+  第 5/5 次重启成功
+[PASS] UT2-RAPID-RESTART: 5/5 快速重启全部成功, 无 socket 冲突
+
+--- T7: 客户端超时行为验证 ---
+[PASS] UT2-TIMEOUT: 服务不可用时客户端在 0.0s 内正确超时返回
+
+--- T8: 最终恢复验证 ---
+[PASS] UT2-FINAL-RECOVER: 所有测试后服务恢复正常 (pid=443170)
+
+--- Cleanup ---
+  已停止服务并清理 socket
+
+============================================================
+ UT-2 IPC 重启复测完成
+ Passed: 10 / Failed: 2 / Total: 12
+============================================================
+
+Results written to /tmp/ut2_ipc_restart_results.txt
+
+STDERR:
