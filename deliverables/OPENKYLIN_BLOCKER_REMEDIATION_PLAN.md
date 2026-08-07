@@ -456,20 +456,48 @@ scp -P $KYLIN_VM_PORT $KYLIN_VM_USER@$KYLIN_VM_HOST:~/evidence/d4_openkylin_reme
 
 **总计**: 1-2 个工作日（含编译等待、调试和异常处理余量）。
 
+**实际执行**: 2026-08-07 晚场（约 2h），推进至阶段 2 完成。
+
 ---
 
 ## 十、检查清单
 
-- [ ] **阶段 0**: D2-1 调查报告已更新 RESOLVED 状态
-- [ ] **阶段 0**: evidence/index.yaml D2-1-KAIMING-HOOK 状态更新
-- [ ] **阶段 0**: R-ARCH-05 技术债状态更新为 In Progress
-- [ ] **阶段 1**: kylin-aiassistant 源码 clone 成功并记录 commit
-- [ ] **阶段 1**: qmake && make 编译通过
-- [ ] **阶段 1**: 依赖库（kylin-ai-runtime/sdk/engine-plugins/model-manager）clone 成功
-- [ ] **阶段 2**: ChatOperator → QLocalSocket 调用链完整分析完成
-- [ ] **阶段 2**: Socket 路径可修改性评估完成（环境变量/配置文件/宏/硬编码）
-- [ ] **阶段 2**: 路径修改 patch 已应用并重新编译通过
-- [ ] **阶段 2**: kylin-ai-base 接口位置和调用方式已确认
+### 阶段 0 ✅ 完成 (08-07 22:57)
+- [x] **阶段 0**: D2-1 调查报告已更新 RESOLVED 状态 → commit `464d416`
+- [x] **阶段 0**: evidence/index.yaml D2-1-KAIMING-HOOK 状态更新 → `UNBLOCKED`
+- [x] **阶段 0**: R-ARCH-05 技术债状态更新为 In Progress
+
+### 阶段 1 ⚠️ 部分完成 (08-08 00:03)，主程序编译成功
+- [x] **阶段 1**: kylin-aiassistant 源码 clone 成功并记录 commit
+  - 采用宿主机 `git clone` → tar → SFTP 上传方案（VM 无 git/sudo）
+  - commit: `5a89601` (openkylin main branch)
+- [x] **阶段 1**: 依赖库（kylin-ai-runtime/sdk/engine-plugins/model-manager）clone 成功
+- [ ] **阶段 1**: qmake && make 编译通过 → **部分通过**
+  - ✅ qmake PASS (Qt 5.15.19, x86_64)
+  - ✅ **主程序 73MB ELF binary 编译成功** (BuildID=e62502...)
+  - ❌ peony-menu-plugin 因缺 `libpeony-dev` + `libgsettings-qt-dev` 失败
+  - 登记 `S1-BLOCK-001`，不影响阶段 2-5 核心路线
+  - evidence: `build_qmake.log`, `build_make.log`, `kylin-aiassistant.bin.sha256.log`
+
+### 阶段 2 ⚠️ 部分完成 (08-08 00:36)，审计完成 + LD_PRELOAD hook 已实现
+- [x] **阶段 2**: ChatOperator → QLocalSocket 调用链完整分析完成
+  - **结论**: kylin-aiassistant 不直接使用 QLocalSocket
+  - 通信委托给 `kyai::assistant::OsAssistant` → `libkyai-assistant.so.1.0.0` (闭源)
+  - evidence: `socket_deep_dive.json`, `socket_audit.log`
+- [x] **阶段 2**: Socket 路径可修改性评估完成
+  - P0-P2 方案不可行（路径在闭源 .so 中）
+  - 转 P0 替代方案: **LD_PRELOAD connect() hook**
+  - strings 确认路径: `unix:path=/tmp/.kylin-ai-runtime-unix/<PID>/assistant.sock`
+- [x] **阶段 2**: kylin-ai-base 接口位置和调用方式已确认
+  - 包: `libkyai-assistant0` v1.0.0.1-0k0.8
+  - API: `OsAssistant::chatAsync()` (15+ 导出符号)
+  - 通过 D-Bus (`g_dbus_connection_new_for_address_sync`) 建立 Socket 连接
+- [x] **阶段 2**: 路径修改方案已实现 → **LD_PRELOAD hook**
+  - `os-agent-integration/patches/libconnect_hook.c` (185 行 C)
+  - 环境变量: `CONNECT_HOOK_MATCH` / `CONNECT_HOOK_REDIRECT` / `CONNECT_HOOK_DEBUG`
+  - 待 VM 端编译 + 8 项集成测试 (commit `93ca25d`)
+
+### 阶段 3-5 ⬜ 待执行
 - [ ] **阶段 3**: 修改后的 kylin-aiassistant 成功连接到 Echo Service
 - [ ] **阶段 3**: 6 步 Echo 回显验证全部通过
 - [ ] **阶段 3**: 3 种异常路径测试全部通过
@@ -481,6 +509,23 @@ scp -P $KYLIN_VM_PORT $KYLIN_VM_USER@$KYLIN_VM_HOST:~/evidence/d4_openkylin_reme
 - [ ] **阶段 5**: TD-007 更新为 Resolved（或标注未通过项）
 - [ ] **阶段 5**: 修复完成报告已提交
 
+### 残余阻塞项
+| 编号 | 描述 | 状态 | 解除方案 |
+|------|------|------|---------|
+| S1-BLOCK-001 | peony-menu-plugin 编译失败 | BLOCKED | sudo install dev 包或跳过（不影响核心路线） |
+| STAGE2-TODO | VM 端 hook .so 编译 + 测试 | PLANNED | `_stage2_hook_deploy.py` 脚本已就绪，需 VM SSH 通道恢复 |
+
 ---
 
-> **下一步**: 阶段 0 可立即执行（纯文档更新，无需 VM）。阶段 1-5 在 D4 阶段按顺序执行，建议由轨道 C 开发者（刘承恩）与轨道 D 主审（周子腾）协作推进，阶段 3-4 的集成测试结果由 E（谢嘉然）做安全补审。
+## 十一、进度追踪（2026-08-07/08 晚场）
+
+| 时间 (SGT) | 事件 | Commit |
+|-------------|------|--------|
+| 22:57 | 阶段0 文档更新完成 | `464d416` |
+| 23:53 | 阶段1 源码获取 + 编译（部分通过） | `78bd260` |
+| 00:10 | 阶段2 审计 + S1-BLOCK-001 登记 | `1209afb` |
+| 00:35 | 阶段2 LD_PRELOAD hook 基础设施 | `93ca25d` |
+
+**Git 分支**: `feature/d4-gate0-review-freeze` (已推送)
+
+
