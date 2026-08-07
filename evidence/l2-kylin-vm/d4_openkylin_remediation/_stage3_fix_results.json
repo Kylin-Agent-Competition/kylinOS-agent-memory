@@ -1,0 +1,55 @@
+{
+  "tests": [
+    {
+      "name": "C1_direct",
+      "exit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "C2_hook_redirect",
+      "exit": 1,
+      "status": "FAIL"
+    },
+    {
+      "name": "C3_no_hook_bad",
+      "exit": 124,
+      "status": "PASS"
+    },
+    {
+      "name": "C4_passthrough",
+      "exit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "C5_custom_match",
+      "exit": 1,
+      "status": "FAIL"
+    },
+    {
+      "name": "C6_no_match_passthrough",
+      "exit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "M1_retrieve",
+      "exit": 1,
+      "status": "FAIL"
+    },
+    {
+      "name": "M2_store",
+      "exit": 1,
+      "status": "FAIL"
+    },
+    {
+      "name": "M3_forget",
+      "exit": 1,
+      "status": "FAIL"
+    },
+    {
+      "name": "M4_health",
+      "exit": 1,
+      "status": "FAIL"
+    }
+  ],
+  "finished_at": "2026-08-08T01:23:13.486775+08:00"
+}

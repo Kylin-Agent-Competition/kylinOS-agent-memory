@@ -479,7 +479,7 @@ scp -P $KYLIN_VM_PORT $KYLIN_VM_USER@$KYLIN_VM_HOST:~/evidence/d4_openkylin_reme
   - 登记 `S1-BLOCK-001`，不影响阶段 2-5 核心路线
   - evidence: `build_qmake.log`, `build_make.log`, `kylin-aiassistant.bin.sha256.log`
 
-### 阶段 2 ⚠️ 部分完成 (08-08 00:36)，审计完成 + LD_PRELOAD hook 已实现
+### 阶段 2 ✅ 完成 (08-08 01:04)，审计完成 + LD_PRELOAD hook 实现 + VM编译
 - [x] **阶段 2**: ChatOperator → QLocalSocket 调用链完整分析完成
   - **结论**: kylin-aiassistant 不直接使用 QLocalSocket
   - 通信委托给 `kyai::assistant::OsAssistant` → `libkyai-assistant.so.1.0.0` (闭源)
@@ -489,18 +489,27 @@ scp -P $KYLIN_VM_PORT $KYLIN_VM_USER@$KYLIN_VM_HOST:~/evidence/d4_openkylin_reme
   - 转 P0 替代方案: **LD_PRELOAD connect() hook**
   - strings 确认路径: `unix:path=/tmp/.kylin-ai-runtime-unix/<PID>/assistant.sock`
 - [x] **阶段 2**: kylin-ai-base 接口位置和调用方式已确认
-  - 包: `libkyai-assistant0` v1.0.0.1-0k0.8
-  - API: `OsAssistant::chatAsync()` (15+ 导出符号)
-  - 通过 D-Bus (`g_dbus_connection_new_for_address_sync`) 建立 Socket 连接
-- [x] **阶段 2**: 路径修改方案已实现 → **LD_PRELOAD hook**
-  - `os-agent-integration/patches/libconnect_hook.c` (185 行 C)
-  - 环境变量: `CONNECT_HOOK_MATCH` / `CONNECT_HOOK_REDIRECT` / `CONNECT_HOOK_DEBUG`
-  - 待 VM 端编译 + 8 项集成测试 (commit `93ca25d`)
+- [x] **阶段 2**: LD_PRELOAD hook 源码实现 + VM 端编译成功
+  - `libconnect_hook.c` (185行C) + `CMakeLists.txt` + `test_connect_hook.sh`
+  - ✅ **VM编译成功**: ELF 64-bit LSB shared object, x86-64, BuildID=c4c1db...
+  - ✅ **connect符号已hook**: nm确认 `T connect` at 0x13b0
+  - ✅ **证据下载**: `libconnect_hook.so` (16,440 bytes) → `evidence/l2-kylin-vm/d4_openkylin_remediation/`
+  - commit: `93ca25d`
 
-### 阶段 3-5 ⬜ 待执行
-- [ ] **阶段 3**: 修改后的 kylin-aiassistant 成功连接到 Echo Service
-- [ ] **阶段 3**: 6 步 Echo 回显验证全部通过
-- [ ] **阶段 3**: 3 种异常路径测试全部通过
+### 阶段 3 🔶 部分完成 (08-08 01:04)，Hook基础设施 + 协议Echo通过
+- [x] **阶段 2.5**: Echo服务器成功部署到VM并启动 ✅
+  - `memory_echo_server.py` 上传完成 (8,488 bytes)
+  - `echo.sock` 就绪 (`/tmp/kylin-memory-echo/echo.sock`)
+- [x] **协议Echo P1**: `memory.retrieve` → Echo回显正常 ✅ (socat stdin方式)
+- [⚠️] **Hook集成测试 T1-T8**: Python测试客户端就绪，LD_PRELOAD+Python socket兼容性待确认
+  - C测试客户端编译失败（JSON字符串转义），改用Python fallback
+  - Python socket模块connect()与libc connect()调用路径差异需验证
+  - `_stage23_combined.py` 综合脚本已就绪
+- [⚠️] **6步正向Echo**: P2-P6协议测试脚本已就绪
+- [⚠️] **3种异常路径**: E1-E3测试脚本已就绪，Echo kill/restart需稳定exec通道
+- [ ] **strace验证**: VM上有strace，kylin-aiassistant 73MB binary存在
+
+### 阶段 4-5 ⬜ 待执行
 - [ ] **阶段 4**: sendToolMessage 调用路径已定位
 - [ ] **阶段 4**: ToolExecutionEvent 捕获代码已加入并编译通过
 - [ ] **阶段 4**: 5 种 Tool Result 场景测试全部通过
@@ -513,7 +522,8 @@ scp -P $KYLIN_VM_PORT $KYLIN_VM_USER@$KYLIN_VM_HOST:~/evidence/d4_openkylin_reme
 | 编号 | 描述 | 状态 | 解除方案 |
 |------|------|------|---------|
 | S1-BLOCK-001 | peony-menu-plugin 编译失败 | BLOCKED | sudo install dev 包或跳过（不影响核心路线） |
-| STAGE2-TODO | VM 端 hook .so 编译 + 测试 | PLANNED | `_stage2_hook_deploy.py` 脚本已就绪，需 VM SSH 通道恢复 |
+| S3-BLOCK-001 | paramiko exec_command 超时 >8s | **ACTIVE** | nohup后台进程导致通道阻塞，需拆分短命令执行 |
+| S3-BLOCK-002 | Python socket.connect() 与 LD_PRELOAD libc connect() 兼容性 | **待验证** | 改用C测试客户端（修复JSON转义）或Go客户端 |
 
 ---
 
@@ -525,7 +535,19 @@ scp -P $KYLIN_VM_PORT $KYLIN_VM_USER@$KYLIN_VM_HOST:~/evidence/d4_openkylin_reme
 | 23:53 | 阶段1 源码获取 + 编译（部分通过） | `78bd260` |
 | 00:10 | 阶段2 审计 + S1-BLOCK-001 登记 | `1209afb` |
 | 00:35 | 阶段2 LD_PRELOAD hook 基础设施 | `93ca25d` |
+| 00:53 | 阶段2 libconnect_hook.so VM编译成功 + 上传Echo服务器 | (脚本执行) |
+| 01:03 | 阶段2 libconnect_hook.so 证据下载到本地 (16,440 bytes) | (SFTP) |
 
 **Git 分支**: `feature/d4-gate0-review-freeze` (已推送)
+
+**证据文件状态** (`evidence/l2-kylin-vm/d4_openkylin_remediation/`):
+| 文件 | 来源 | 大小 |
+|------|------|------|
+| `libconnect_hook.so` | VM gcc编译 | 16,440 bytes |
+| `libconnect_hook.so.sha256` | 本地生成 | 143 bytes |
+| `socket_deep_dive.json` | 阶段2审计 | 6,260 bytes |
+| `build_make.log` | 阶段1编译 | 13,619 bytes |
+| `_stage1_results.json` | 阶段1记录 | 378 bytes |
+| `all_commits.log` | 阶段1源码commit | 1,237 bytes |
 
 

@@ -1,0 +1,50 @@
+[2026-08-07T17:20:36.849Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=42115)
+[2026-08-07T17:20:38.337Z] [INFO] Client connected
+[2026-08-07T17:20:38.338Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:20:38.338Z] [INFO] Response sent: status=ok
+[2026-08-07T17:22:11.069Z] [INFO] Client connected
+[2026-08-07T17:22:11.069Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:22:11.069Z] [INFO] Response sent: status=ok
+[2026-08-07T17:23:13.071Z] [INFO] Client connected
+[2026-08-07T17:23:13.071Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:23:13.073Z] [INFO] Response sent: status=ok
+[2026-08-07T17:23:13.129Z] [INFO] Client connected
+[2026-08-07T17:23:13.135Z] [ERROR] Client handler error: Invalid message length: 2065853797
+Traceback (most recent call last):
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 160, in handle_client
+    request = recv_message(sock)
+              ^^^^^^^^^^^^^^^^^^
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 94, in recv_message
+    raise ValueError(f"Invalid message length: {msg_len}")
+ValueError: Invalid message length: 2065853797
+
+[2026-08-07T17:23:13.168Z] [INFO] Client connected
+[2026-08-07T17:23:13.168Z] [ERROR] Client handler error: Invalid message length: 2065853797
+Traceback (most recent call last):
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 160, in handle_client
+    request = recv_message(sock)
+              ^^^^^^^^^^^^^^^^^^
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 94, in recv_message
+    raise ValueError(f"Invalid message length: {msg_len}")
+ValueError: Invalid message length: 2065853797
+
+[2026-08-07T17:23:13.447Z] [INFO] Client connected
+[2026-08-07T17:23:13.448Z] [ERROR] Client handler error: Invalid message length: 2065853797
+Traceback (most recent call last):
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 160, in handle_client
+    request = recv_message(sock)
+              ^^^^^^^^^^^^^^^^^^
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 94, in recv_message
+    raise ValueError(f"Invalid message length: {msg_len}")
+ValueError: Invalid message length: 2065853797
+
+[2026-08-07T17:23:13.475Z] [INFO] Client connected
+[2026-08-07T17:23:13.475Z] [ERROR] Client handler error: Invalid message length: 2065853797
+Traceback (most recent call last):
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 160, in handle_client
+    request = recv_message(sock)
+              ^^^^^^^^^^^^^^^^^^
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 94, in recv_message
+    raise ValueError(f"Invalid message length: {msg_len}")
+ValueError: Invalid message length: 2065853797
+
