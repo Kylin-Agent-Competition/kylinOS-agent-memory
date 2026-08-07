@@ -13,6 +13,7 @@
 | UT-2 | OS 重启复测（IPC） | 未覆盖 | 需安排麒麟 VM 重启验证 | | | |
 | UT-3 | IPC-001 能力矩阵修正 | UNTESTED→HOST_VERIFIED | 直接引用 ECHO-003 证据修正 | | | |
 | UT-4 | AGT-005 能力矩阵修正 | UNTESTED→PARTIAL | 引用 R1+R2 部分通过证据 | | | |
+| S1-BLOCK-001 | peony-menu-plugin 编译失败（缺 dev包） | BLOCKED | 需 sudo install libpeony-dev + libgsettings-qt-dev；主程序编译成功，不影响阶段2-5 | 刘承恩/周子腾 | | |
 
 ---
 
