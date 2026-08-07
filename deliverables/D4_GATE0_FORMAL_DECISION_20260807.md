@@ -98,7 +98,7 @@
 | TD-IPC-002 | UDS 权限（systemd RuntimeDirectory） | 新增 | D4 | systemd unit 中 RuntimeDirectory 配置可确认并在麒麟 VM 验证 |
 | TD-IPC-003 | deadline_ms 行为复测不完整 | 新增 | D4 | deadline 超时后客户端正确截断，服务端不保持僵尸连接 |
 | TD-IPC-004 | 重连机制未实现 | 新增 | D4-D | 客户端支持 3 次指数退避重连，有 Evidence L2 日志 |
-| R-ARCH-05 | 真实 Kaiming Hook 未验证 | 维持 | D4 | 源码已开源可获取（`reviewDocuments/openkylin_blocker_survey.md`），VM 内编译通过并修改 Socket 路径指向 Memory Service，完整 ToolResultEvent 链路在麒麟 VM 跑通 |
+| R-ARCH-05 | 真实 Kaiming Hook 未验证 | In Progress | D4 | 源码已开源可获取（`reviewDocuments/openkylin_blocker_survey.md`），VM 内编译通过并修改 Socket 路径指向 Memory Service，完整 ToolResultEvent 链路在麒麟 VM 跑通；2026-08-07 阶段0文档更新已完成：D2-1调查报告已标注UNBLOCKED，evidence/index.yaml已更新，修复计划 `deliverables/OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md` 已发布 |
 
 ---
 

@@ -27,6 +27,7 @@
 | TD-002 | evidence/index.yaml Schema 1.0→1.1 迁移缺少独立变更记录 | evidence/index.yaml | Technical Debt | Medium | Open | gaoyizhe934 (B) | jackb | 2026-08-07 | evidence/README.md 中补充：① Schema 差异清单；② 已有条目迁移验证结果；③ 对下游消费者影响评估 | PR #12 |
 | TD-003 | 当前 Vector SDK 原始 score 的距离/相似度语义未独立验证 | Vector Provider / evaluation | Risk | Medium | Open | gaoyizhe934 (B) | D；评测影响由 E 关注 | 2026-08-09 | 在固定客户端/服务端/模型组合上，用 identical、orthogonal、opposite 与重复向量完成受控宿主实验；证据绑定被测提交和版本，明确方向、范围、稳定性及允许用途；验证前保持 `sdk_score_unverified` 且不得跨通道比较 | PR #20 |
 | TD-004 | Vector Engine 原子索引代次/Collection 切换能力未验证 | Vector Provider / index rebuild | Risk | High | Open | gaoyizhe934 (B) | D | 2026-08-06 | 取得目标麒麟宿主原子切换及故障恢复 E4 证据，或由 D/B 冻结并验证 maintenance-window/routing-switch 等价方案；失败重建不得替换旧 serving generation，恢复路径须可审计 | PR #20 |
+| R-ARCH-05 | 真实 Kaiming Hook 未验证 — openkylin 源码已开源可获取 | os-agent-integration / Kaiming Hook | Risk | High | In Progress | 刘承恩 (C) / 周子腾 (D) | 谢嘉然 (E) | 2026-08-07 | VM 内编译通过并修改 Socket 路径指向 Memory Service，完整 ToolResultEvent 链路在麒麟 VM 跑通；参考 `reviewDocuments/openkylin_blocker_survey.md` 调查结论和 `deliverables/OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md` 修复计划 | |
 
 ## 管理规则
 

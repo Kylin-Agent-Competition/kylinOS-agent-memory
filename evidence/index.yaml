@@ -260,13 +260,15 @@ entries:
 
   - id: "D2-1-KAIMING-HOOK"
     task_id: "D2-1"
-    description: "Kaiming → 自定义 UDS Echo 真实 Hook 调查 — 路线 B 如实记录失败"
-    status: "BLOCKED"
+    description: "Kaiming → 自定义 UDS Echo 真实 Hook 调查 — 路线 B 如实记录失败，D4 阶段解封"
+    status: "UNBLOCKED"
     evidence_level: "E4"
     source: "evidence/gate0_echo/d2_1_evidence/D2_1_Final_Evidence_Report.md"
-    date: "2026-08-06"
+    date: "2026-08-07"
     reviewer: "pending"
-    limitations: "kylin-aiassistant 源码不可获取（闭源二进制 deb 包 / cn.kylin.kylin-aiassistant）；二进制 strings 扫描未发现 QLocalSocket 配置点；无 SDK 构建环境和签名权限；Gate 0 不具备修改麒麟 SDK 组件的权限；使用独立模拟客户端 (kaiming_memory_client.cpp) 作为替代验证"
+    limitations: "2026-08-07 更新: openkylin_blocker_survey.md 调查确认 kylin-aiassistant 完全开源。原始 6 条阻塞原因中 4 条已不构成阻塞（RESOLVED/伪阻塞/前提失效），2 条局部不成立。真实编译验证在 D4 阶段执行。独立模拟客户端 (kaiming_memory_client.cpp) 6/6 PASS 作为 Gate 0 通信层验收证据保持有效。"
+    unblocked_by: "reviewDocuments/openkylin_blocker_survey.md"
+    remediation_plan: "deliverables/OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md"
     checksum_sha256: "01035f23e0835202b346941dcf1cff73bd17c2126b1e3a19dc492f17867a5286"
     details: |
       调查时间: 2026-08-06T11:18:57+08:00.
@@ -275,9 +277,10 @@ entries:
       dpkg -L kylin-aiassistant: "软件包没有被安装".
       strings 扫描: 未发现 QLocalSocket/connectToServer/kylin-memory/echo.sock 引用.
       独立模拟客户端: kaiming_memory_client --method all 6/6 PASS.
-      阻断原因: 闭源二进制 + 无 SDK 构建环境 + 无签名权限 + Socket 路径硬编码.
-      最终状态: BLOCKED (Gate 0), 真实 Hook 推迟至 Gate 1.
-      后续方案: 8步Gate1接入计划 + 3个降级方案 (LD_PRELOAD / socat转发 / SDK团队合作).
+      原始阻断原因: 闭源二进制 + 无 SDK 构建环境 + 无签名权限 + Socket 路径硬编码.
+      2026-08-07 状态更新: UNBLOCKED.
+      解除依据: reviewDocuments/openkylin_blocker_survey.md — kylin-aiassistant 在 openkylin 完全开源，源码可获取、可编译、可修改.
+      修复计划: deliverables/OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md (阶段 0-5).
 
   - id: "EMBED-CALL-002"
     task_id: "D2-A"

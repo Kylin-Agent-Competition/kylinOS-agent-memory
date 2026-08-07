@@ -2,6 +2,12 @@
 
 ## 策略: 路线 B — 如实记录失败
 
+> **2026-08-07 更新**: 本报告原始阻塞原因已被 `reviewDocuments/openkylin_blocker_survey.md` 调查重新评估。
+> 原始 6 条阻塞原因中 4 条已不构成阻塞（RESOLVED/伪阻塞/前提失效），2 条局部不成立。
+> kylin-aiassistant 在 openkylin 完全开源（含 C++ 源码、debian/ 打包目录），真实 Kaiming Hook 编译验证路径已打通。
+> **D2-1 总体状态**: `BLOCKED` → `UNBLOCKED (源码已可获取，D4 阶段执行编译验证)`。
+> 修复计划见 `deliverables/OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md`。
+
 **调查时间**: 2026-08-06T11:18:57+08:00  
 **调查 VM**: kylin-agent@127.0.0.1:2222 (VirtualBox 麒麟桌面 V11)  
 **OS**: 银河麒麟桌面操作系统 V11 (2603), Kernel 6.6.0-63-generic, x86_64  
