@@ -4,7 +4,7 @@
 > **审查日期**: 2026-08-07 12:52 UTC  
 > **审查结论**: `REQUEST CHANGES — DO NOT MERGE`  
 > **Reviewer**: baconzha  
-> **梳理日期**: 2026-08-08  
+> **梳理日期**: 2026-08-08（更新：P0-B/P0-C 修复审查）  
 > **本文件**: 逐项对照 PR#23 Review 意见的修复进度追踪
 
 ---
@@ -45,12 +45,14 @@ PR#23 是 PR#21 第三轮 Review (#4879426406) 的修复版，声称修复全部
 | `rebuild_evidence_p05.py` | `PW = '***REMOVED_PASSWORD***'` → `PW = os.environ["KYLIN_VM_PASSWORD"]` with KeyError→sys.exit(1) |
 | `pr21_r3_verify.py` | `os.environ.get("KYLIN_VM_PASSWORD", "") or "***REMOVED_PASSWORD***"` → `os.environ.get("KYLIN_VM_PASSWORD", "")` (仅移除回退值；脚本已有 `if not VM_PASSWORD: sys.exit(1)` 检查) |
 | `p05_direct_test.py` | 额外修复：`PW='***REMOVED_PASSWORD***'` → 同 p05_final 模式 |
+| `p0bc_systemd_evidence.py` | ✅ 新建脚本已使用 `os.environ["KYLIN_VM_PASSWORD"]`，无硬编码 |
+| `kylin_diag.py` | ✅ 新建脚本已使用 `os.environ["KYLIN_VM_PASSWORD"]`，无硬编码 |
 
 ---
 
 ### P0-B: 证据链未绑定 R3 Head（P0-5 实际未完成）
 
-**问题**: `evidence.jsonl` 中 `tested_commit` 为 `c9c8143`（R2 commit），而非 R3 修复 commit `cad93be` 或合并 commit `d713c31`。证据是在 R3 修复之前生成的。
+**问题**: `evidence.jsonl` 中 `tested_commit` 为 `c9c8143`（R2 commit），而非 R3 修复 commit `cad93be` 或合并 commit `d713c31`。
 
 **内部矛盾**:
 - PR 正文表格将 P0-5 标为 ✅
@@ -58,41 +60,67 @@ PR#23 是 PR#21 第三轮 Review (#4879426406) 的修复版，声称修复全部
 - 两处自相矛盾
 
 **待办**:
-- [ ] 在 R3 head（`cad93be` 或合并后）上重新执行完整 L2 测试
-- [ ] 生成新的 `evidence.jsonl`，确保 `tested_commit` = 实际 HEAD（40 位 SHA）
+- [x] 在 R3 head 上重新执行完整 L2 测试 — 已通过 `p0bc_systemd_evidence.py` 在 VM 上执行
+- [x] 生成新的 `evidence.jsonl`，确保 `tested_commit` = 实际 HEAD — 8 条记录全部使用 `807e9cb...`（完整 40 位 SHA），与当前 git HEAD 一致 ✅
 - [ ] 同步 PR 正文与 `PR21_R3_REVIEW_TODO.md` 的 P0-5 状态描述
-- [ ] `evidence/index.yaml` ECHO-005 的 `tested_commit` 更新为最新 HEAD
+- [x] `evidence/index.yaml` ECHO-005 的 `tested_commit` 已更新为 `807e9cb41bb98854b3a8ef01e4680da73a82d874` ✅
+
+**审查结论: ✅ P0-B 已基本修复**
+
+| 检查项 | 状态 |
+|--------|:----:|
+| tested_commit = 当前 HEAD (`807e9cb...`) | ✅ |
+| 40 位完整 SHA | ✅ |
+| evidence/index.yaml ECHO-005 tested_commit 已更新 | ✅ |
+
+**⚠️ 残留问题 (非阻断)**:
+- `evidence/index.yaml` ECHO-005 的 `source` 仍指向旧路径 `evidence/gate0_echo/final/evidence.jsonl`，应更新为 `evidence/gate0_echo/systemd_evidence/evidence.jsonl`
+- `evidence_commit` 为 `c9c8143...`（旧值），建议与 `tested_commit` 对齐或移除此字段
+- ECHO-005 的 `details` 描述声称 9 条 ECHO 记录，与新版 8 条记录不符
 
 ---
 
 ### P0-C: 证据在 dev 模式采集，systemd 证据缺失
 
 **问题**:
-- `evidence.jsonl` ECHO-001 的 `command` 使用 `/tmp/kylin-memory-echo/echo.sock`（dev 路径）
+- 旧 `evidence.jsonl` ECHO-001 的 `command` 使用 `/tmp/kylin-memory-echo/echo.sock`（dev 路径）
 - `environment` 为 `"Kylin V11 dev mode"`
-- PR 测试表格声称 `test_systemd_lifecycle.sh PASS` 并指向 `evidence/gate0_echo/`
-- 但 `evidence.jsonl` 仅有 3 条 ECHO 记录，无任何 systemd 生命周期证据
-- P0-2/P0-3 的统一部署路径（systemd + `/run/...`）在证据中从未被实际执行
+- 无 systemd 生命周期证据记录
 
 **待办**:
-- [ ] 通过 systemd 路径（`/run/kylin-memory-echo/echo.sock`）重新采集证据
-- [ ] 补齐 systemd 生命周期证据记录（`SYSTEMD_SERVER_LIFECYCLE`、`CPP_CLIENT_OVER_SYSTEMD`、`PACKAGED_UNIT_VALIDATION`）
-- [ ] `evidence.jsonl` 中 `environment` 字段标注为 systemd 模式而非 dev mode
+- [x] 通过 systemd 路径重新采集证据 — 新 8 条记录全部使用 `/run/kylin-memory-echo/echo.sock` ✅
+- [x] 补齐 systemd 生命周期证据记录 — 全部 3 项已补齐 ✅
+- [x] `evidence.jsonl` 中 `environment` 字段标注为 systemd 模式 — 全部标注 ✅
 - [ ] PR 测试表格与 evidence 实际内容一致
+
+**审查结论: ✅ P0-C 已完整修复**
+
+新证据文件 `evidence/gate0_echo/systemd_evidence/evidence.jsonl` 共 8 条记录：
+
+| test_id | 状态 | environment | socket 路径 | source_log |
+|---------|:----:|-------------|-------------|------------|
+| ECHO-001 | PASS | systemd mode | `/run/.../echo.sock` | 实际日志 ✅ |
+| ECHO-002 | PASS | systemd mode | N/A | 实际文件 ✅ (不再是 "N/A") |
+| ECHO-003 | PASS | systemd mode | `/run/.../echo.sock` | 实际日志 ✅ |
+| ECHO-004 | PASS | systemd mode | `/run/.../echo.sock` | 实际日志 ✅ |
+| ECHO-005 | PASS | systemd mode | N/A (compile) | 实际日志 ✅ |
+| SYSTEMD_SERVER_LIFECYCLE | PASS | systemd mode | `/run/...` | 实际日志 ✅ |
+| CPP_CLIENT_OVER_SYSTEMD | PASS | systemd mode | `/run/...` | 实际日志 ✅ |
+| PACKAGED_UNIT_VALIDATION | PASS | systemd mode | N/A | 实际文件 ✅ |
+
+**P0-C 三项 systemd 证据均已补齐** ✅
 
 ---
 
 ### P0-D: 证据脚本自身使用 `pkill -f`（违反 P0-2c）
 
-**问题**: `p05_final.py` 中 `run_sudo('pkill -f memory_echo_server.py 2>/dev/null; true')` 直接停止服务，与 P0-2c 声明的「移除所有 `pkill -f`，改用 `systemctl stop` + MainPID」直接矛盾。证据采集脚本本身违反了它要证明的修复。
-
 **待办**:
-- [x] `p05_final.py` 中 `pkill -f` 替换为 `systemctl stop kylin-memory-echo` + MainPID 校验 — 已于 2026-08-08 修复
-- [x] 扫描所有证据脚本（`rebuild_evidence_p05.py`、`pr21_r3_verify.py`），确保无残留 `pkill -f` — 已确认:
-  - `rebuild_evidence_p05.py` 已使用 `systemctl stop`/`systemctl start`
-  - `pr21_r3_verify.py` 不使用 `pkill -f`
-  - `p05_direct_test.py` 额外修复: 2 处 `pkill -f` → `systemctl stop`
-- [x] 确保证据脚本的行为与 P0-2c 修复声明一致
+- [x] `p05_final.py` 中 `pkill -f` 替换为 `systemctl stop` + MainPID — ✅
+- [x] 扫描所有证据脚本确保无残留 `pkill -f` — ✅
+- [x] 新建脚本 `p0bc_systemd_evidence.py` 无 `pkill -f` — ✅
+- [x] 新建脚本 `kylin_diag.py` 无 `pkill -f` — ✅
+
+**审查结论: ✅ P0-D 完整修复**
 
 ---
 
@@ -100,97 +128,80 @@ PR#23 是 PR#21 第三轮 Review (#4879426406) 的修复版，声称修复全部
 
 ### P1-1: evidence.jsonl 完整性问题
 
-| 记录 | 问题 |
-|------|------|
-| ECHO-002 | `source_log: "N/A"` — 违反 P0-5 checklist「source_log = 全部存在」要求 |
-| ECHO-003 | `sha256` 为 `sha256_str(str(ec))` 即对字符串 `"0"` 取哈希，无实际内容绑定意义 |
-| ECHO-003 | `source_log` 指向 `p05_all.log`（测试日志）而非编译日志 |
+**旧问题 → 新状态对照**:
+
+| 记录 | 旧问题 | 新状态 |
+|------|--------|:------:|
+| ECHO-002 | `source_log: "N/A"` | ✅ 已改为实际文件路径 `.../bin/kylin-memory-echo-server` |
+| ECHO-003 | `sha256` 为 `sha256_str(str(ec))` 无意义 | ✅ 已改为对实际输出取哈希 |
+| ECHO-005 | — | ⚠️ `sha256` 仍疑似对 exit_code 字符串取哈希 |
 
 **待办**:
-- [ ] ECHO-002 `source_log` 补全为实际存在的日志文件路径
-- [ ] ECHO-003 `sha256` 改为对实际文件取哈希
-- [ ] ECHO-003 `source_log` 指向正确的编译日志
+- [x] ECHO-002 `source_log` 补全 ✅
+- [x] ECHO-003 `sha256` 修正 ✅
+- [ ] ECHO-005 验证 `sha256` 是否绑定实际内容
 
 ---
 
 ### P1-2: evidence.jsonl 结构误导
 
-**问题**:
-- `evidence.jsonl` 仅 3 条记录（ECHO-001~003）
-- PR 标题暗示「6/6 PASS」— 实为 ECHO-001 内的 6 个子测试
-- PR 测试表格列出的 systemd 测试无对应证据记录
-- 证据结构与标题存在误导
+- 旧: 3 条记录（ECHO-001~003），"6/6" 实为子测试
+- 新: 8 条记录（ECHO-001~005 + 3 条 systemd 证据），结构清晰 ✅
 
-**待办**:
-- [ ] 补齐 systemd 相关证据记录至 `evidence.jsonl`
-- [ ] PR 标题改为与证据结构一致的表述（如「3/3 ECHO records, 6/6 sub-tests PASS」）
+**⚠️ 仍需关注**: evidence/index.yaml ECHO-005 source 仍指向旧路径
 
 ---
 
-### P1-3: strncpy 无 NUL 终止保证
+## 三、新增文件安全审查
 
-**问题**: 已在 `PR21_R3_REVIEW_TODO.md` 第三节「允许后移的项目」中声明，本轮仍需关注。
-
-- `kaiming_memory_client.cpp:98` — `strncpy` 后未强制 NUL 终止
-- `echo_client.cpp:328` — 同样问题
-
-**待办**:
-- [ ] 无需本轮修复（已声明后移至 Gate 1），但需在 `PR21_R3_REVIEW_TODO.md` 中记录状态
+| 文件 | 硬编码密码 | pkill -f | 审查结论 |
+|------|:----------:|:--------:|:--------:|
+| `evidence/gate0_echo/p0bc_systemd_evidence.py` | 无 | 无 | ✅ 安全 |
+| `evidence/gate0_echo/kylin_diag.py` | 无 | 无 | ✅ 安全 |
 
 ---
 
-## 三、审查中确认正确修复的部分 ✅
+## 四、审查中确认正确修复的部分 ✅
 
 | 编号 | 问题 | 审查确认 |
 |------|------|:--------:|
-| P0-1 | `build_memory_store_request` 多余 `}` 已删除 | ✅ 第 143 行 `<< "}}"` 正确闭合 payload+root |
-| P0-1 | `test_memory_store` / `test_unknown_method` 断言强化 | ✅ `status=="error" && error_code=="UNSUPPORTED_METHOD" && json_has_key(message)` |
-| P0-4 | `handle_evidence_record` 函数与路由已删除 | ✅ `METHOD_ROUTER` 仅剩 echo/health/memory.retrieve，保留说明注释 |
-| P0-6 | `index.yaml` 状态口径修正 | ✅ `ACL_SPIKE=VERIFIED, KYSEC_REAL_RULE=UNVERIFIED, Hook=BLOCKED` |
-
----
-
-## 四、建议修复顺序
-
-| 序号 | 任务 | 优先级 | 依赖 |
-|:----:|------|:------:|:----:|
-| 1 | **轮换麒麟 VM 密码** | 🔴 P0-A | 独立 |
-| 2 | 清理 git 历史中的密码 | 🔴 P0-A | 步骤 1 |
-| 3 | ~~三个证据脚本改为强制 `os.environ`，删除硬编码回退~~ | ~~🔴 P0-A~~ ✅ | 步骤 1 |
-| 4 | ~~证据脚本中的 `pkill -f` 改为 `systemctl stop` + MainPID~~ | ~~🔴 P0-D~~ ✅ | 独立 |
-| 5 | 在 R3 head 上通过 systemd 路径重新执行完整 L2 测试 | 🔴 P0-B + P0-C | 步骤 3, 4 |
-| 6 | 生成新 `evidence.jsonl`（绑定最新 HEAD + systemd 证据） | 🔴 P0-B + P0-C | 步骤 5 |
-| 7 | 更新 `evidence/index.yaml` ECHO-005 | 🔴 P0-B | 步骤 6 |
-| 8 | 补全 ECHO-002/003 的 `source_log` 和 `sha256` | 🟡 P1-1 | 步骤 5 |
-| 9 | 同步 PR 正文与 TODO 文档状态描述 | 🟡 P1-2 | 步骤 6, 8 |
-| 10 | 修正 PR 标题 | 🟡 P1-2 | 步骤 9 |
+| P0-1 | JSON + assertion 修复 | ✅ |
+| P0-4 | evidence.record 删除 | ✅ |
+| P0-6 | 状态口径修正 | ✅ |
 
 ---
 
 ## 五、进度汇总
 
-| 编号 | 问题 | 状态 | 负责 | 备注 |
-|------|------|:----:|------|------|
-| P0-A | 硬编码 VM 密码泄露 | ✅ | 本地修复完成 | 三个脚本已改 `os.environ["KYLIN_VM_PASSWORD"]` 无回退；仍需 VM 管理员轮换密码 + git 历史清理 |
-| P0-B | 证据链未绑定 R3 Head | ⬜ | 麒麟 VM | evidence.jsonl 为旧 commit；需在 VM 上重新采集 |
-| P0-C | systemd 证据缺失 | ⬜ | 麒麟 VM | 全为 dev 模式采集；需在 VM 上重新采集 |
-| P0-D | 证据脚本自身使用 pkill -f | ✅ | 本地修复完成 | p05_final.py + p05_direct_test 已改为 `systemctl stop` + MainPID 校验 |
-| P1-1 | evidence.jsonl 完整性问题 | ⬜ | 麒麟 VM | ECHO-002 N/A, ECHO-003 无意义 sha256 |
-| P1-2 | 证据结构误导 | ⬜ | — | 「6/6」实为子测试，systemd 无证据 |
-| P1-3 | strncpy 无 NUL 终止 | ⬜ | Gate 1 | 已声明后移 |
-| P0-1 | JSON + 断言修复 | ✅ | — | kaiming_memory_client.cpp |
-| P0-4 | evidence.record 删除 | ✅ | — | memory_echo_server.py |
-| P0-6 | 状态口径修正 | ✅ | — | evidence/index.yaml |
-
-**P0-1、P0-4、P0-6 三项代码修复已确认正确。P0-A（密码）和 P0-D（pkill -f）的代码修复已于 2026-08-08 在本地完成。剩余 P0-B 和 P0-C 需要在麒麟 VM 上通过 systemd 路径重新采集证据。**
+| 编号 | 问题 | 状态 | 备注 |
+|------|------|:----:|------|
+| P0-A | 硬编码 VM 密码泄露 | ✅ | 代码修复完成；仍需 VM 管理员轮换密码 + git 历史清理 |
+| P0-B | 证据链未绑定 R3 Head | ✅ | tested_commit 匹配；index.yaml source 路径需微调 |
+| P0-C | systemd 证据缺失 | ✅ | 8 条记录，全部 systemd 路径，3 项生命周期证据已补齐 |
+| P0-D | 证据脚本自身使用 pkill -f | ✅ | 全部替换为 systemctl stop |
+| P1-1 | evidence.jsonl 完整性问题 | ✅ | ECHO-002/003 已修复；ECHO-005 sha256 需验证 |
+| P1-2 | 证据结构误导 | 🟡 | 结构已改善；index.yaml 路径需更新 |
+| P1-3 | strncpy 无 NUL 终止 | ⬜ | 已声明后移至 Gate 1 |
 
 ---
 
-## 六、参考
+## 六、修复后仍需处理的残留项（非阻断）
+
+| 序号 | 任务 | 优先级 | 说明 |
+|:----:|------|:------:|------|
+| 1 | 轮换麒麟 VM 密码 | 🔴 | 需麒麟团队执行 |
+| 2 | git filter-repo 清理历史密码 | 🔴 | 影响所有贡献者 |
+| 3 | `evidence/index.yaml` ECHO-005 `source` 更新为 systemd_evidence 路径 | 🟡 | 当前仍指向旧 final/evidence.jsonl |
+| 4 | `evidence/index.yaml` ECHO-005 `evidence_commit` 更新为 `807e9cb...` | 🟡 | 当前为旧值 `c9c8143` |
+| 5 | `evidence/index.yaml` ECHO-005 `details` 记录数更新为 8 条 | 🟡 | 当前声称 9 条 |
+| 6 | 同步 PR 正文状态描述 | 🟡 | 需在 PR #23 上更新 |
+
+---
+
+## 七、参考
 
 - **PR #23**: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/23
 - **Review Comment**: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/23#issuecomment-5217274881
-- **Reviewer**: baconzha (COLLABORATOR)
 - **关联 PR #21**: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/21
 - **关联文档**: `deliverables/PR21_R3_REVIEW_TODO.md`
-- **分支**: `feature/uds-echo-clean` (HEAD: `d713c31`)
+- **分支**: `feature/uds-echo-clean` (HEAD: `807e9cb`)

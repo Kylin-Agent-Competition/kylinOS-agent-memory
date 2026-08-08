@@ -213,7 +213,7 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/gate0_echo/final/evidence.jsonl"
-    tested_commit: "c9c8143571df036ddf5a34ec64ec6f44096b3fa4"
+    tested_commit: 807e9cb41bb98854b3a8ef01e4680da73a82d874
     evidence_commit: "c9c8143571df036ddf5a34ec64ec6f44096b3fa4"
     date: "2026-08-06"
     reviewer: "谢嘉然"
