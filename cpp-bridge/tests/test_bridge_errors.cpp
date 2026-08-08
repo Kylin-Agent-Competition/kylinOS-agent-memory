@@ -66,6 +66,7 @@ int main() {
             BridgeError::ERR_DLOPEN_FAILED, BridgeError::ERR_DLSYM_FAILED,
             BridgeError::ERR_SESSION_CREATE, BridgeError::ERR_SESSION_INIT,
             BridgeError::ERR_SESSION_DESTROY, BridgeError::ERR_SESSION_DESTROYED,
+            BridgeError::ERR_FATAL_FAILURE,
             BridgeError::ERR_EMBED_CALL,
             BridgeError::ERR_EMBED_RESULT,  BridgeError::ERR_EMBED_ERROR,
             BridgeError::ERR_TIMEOUT,       BridgeError::ERR_CANCELLED,

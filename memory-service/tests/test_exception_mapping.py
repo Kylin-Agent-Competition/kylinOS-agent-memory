@@ -43,7 +43,8 @@ def _module_guard():
 
 @pytest.mark.parametrize("name", [
     "BridgeSoNotFoundError", "BridgeLoadError", "BridgeSymbolError",
-    "BridgeSessionError", "BridgeEmbedError", "BridgeSdkError",
+    "BridgeSessionError", "BridgeSessionDestroyedError", "BridgeFatalError",
+    "BridgeEmbedError", "BridgeSdkError",
     "BridgeTimeoutError", "BridgeCancelledError", "BridgeModelError",
 ])
 def test_exception_type_exists(name):
@@ -53,7 +54,8 @@ def test_exception_type_exists(name):
 
 @pytest.mark.parametrize("name", [
     "BridgeSoNotFoundError", "BridgeLoadError", "BridgeSymbolError",
-    "BridgeSessionError", "BridgeEmbedError", "BridgeSdkError",
+    "BridgeSessionError", "BridgeSessionDestroyedError", "BridgeFatalError",
+    "BridgeEmbedError", "BridgeSdkError",
     "BridgeTimeoutError", "BridgeCancelledError", "BridgeModelError",
 ])
 def test_exception_inherits_bridge_error(name):
