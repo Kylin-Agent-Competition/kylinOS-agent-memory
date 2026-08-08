@@ -50,24 +50,35 @@ git update-index --refresh >/dev/null 2>&1 || true
 git rev-parse HEAD
 # P1-2: 必须无任何输出（含未跟踪文件）；仅排除本轮预期证据日志（不掩盖其他文件）
 STATUS="$(git status --porcelain --untracked-files=all | grep -vE 'day4_verify_latest\.log$|\.day4_verify_tmp\.log$')"
+echo "--- git status --porcelain --untracked-files=all (exit=0) ---"
 if [ -n "$STATUS" ]; then
+  echo "stdout:"
   echo "$STATUS"
   fail "工作区存在修改、暂存或未跟踪文件（含 ?? 未跟踪文件，非严格干净）"
 else
+  echo "stdout: <EMPTY>"
   pass "git status --porcelain --untracked-files=all 为空（严格干净，排除证据日志）"
 fi
+echo "--- git diff --exit-code ---"
 if git diff --exit-code >/dev/null 2>&1; then
+  echo "exit=0, stdout: <EMPTY>"
   pass "WORKTREE_CLEAN=1"
 else
+  echo "exit=1, stdout: <EMPTY>"
   fail "WORKTREE_CLEAN=0（工作区有未提交修改）"
 fi
+echo "--- git diff --cached --exit-code ---"
 if git diff --cached --exit-code >/dev/null 2>&1; then
+  echo "exit=0, stdout: <EMPTY>"
   pass "INDEX_CLEAN=1"
 else
+  echo "exit=1, stdout: <EMPTY>"
   fail "INDEX_CLEAN=0（暂存区有未提交修改）"
 fi
-# Step 1 输出结束：恢复 stdout（后续 tee 到 runtime 日志）
-exec > /dev/tty
+# Step 1 输出结束：恢复 stdout（后续 tee 到 runtime 日志）；无 TTY 环境（CI/非交互）保持当前 stdout
+if [ -e /dev/tty ] && [ -w /dev/tty ]; then
+  exec > /dev/tty
+fi
 
 # 干净检查通过后，启动 runtime 日志（tee 到 /tmp/day4_runtime.log）
 RUNTIME_LOG="/tmp/day4_runtime.log"

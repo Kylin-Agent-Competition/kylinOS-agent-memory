@@ -1,6 +1,6 @@
 # 08 轨道 A — Day4 Bridge/Provider 工程骨架
 
-> **文档状态：作者自报（麒麟 VM 实测通过，待 Reviewer 验证）** — 工程骨架 + 最小真实 SDK 调用已验证；构建/C++/导入/异常映射/冒烟/幂等测试全部通过麒麟 VM 实测。证据见 `evidence/l2-kylin-vm/day4_bridge_smoke_run.log`。
+> **文档状态：作者自报（麒麟 VM 第七轮 L2 全绿 FAILURES=0，待 Reviewer 验证）** — 工程骨架 + 最小真实 SDK 调用已验证；构建/C++/导入/异常映射/失败恢复/冒烟/幂等测试全部通过麒麟 VM 实测。权威证据见 `evidence/l2-kylin-vm/day4_verify_latest.log`（EMBED-CALL-003，第七轮）；历史证据 `day4_bridge_smoke_run.log` 已标记 HISTORICAL / SUPERSEDED。
 
 ## 目标
 
@@ -14,7 +14,7 @@
 |------|------|
 | `cpp-bridge/include/embedding_bridge.h` | Bridge 类声明 + EmbeddingVector + SDK 符号表 |
 | `cpp-bridge/src/embedding_bridge.cpp` | dlopen→dlsym→create/init→embed→destroy 最小真实调用 |
-| `cpp-bridge/src/py_module.cpp` | pybind11 绑定 + 9 类 Python 异常映射 |
+| `cpp-bridge/src/py_module.cpp` | pybind11 绑定 + 11 类 Python 异常映射（含 BridgeSessionDestroyedError / BridgeFatalError） |
 | `cpp-bridge/CMakeLists.txt` | pybind11 + core static lib 构建 |
 | `cpp-bridge/tests/CMakeLists.txt` | 6 个 C++ 测试注册（含 dlsym 缺失变体假 .so） |
 | `cpp-bridge/tests/test_bridge_errors.cpp` | 错误码映射测试（不依赖 SDK） |
@@ -49,7 +49,8 @@
 | L0-5 | `test_bridge_failure_recovery.cpp` 失败恢复策略（P1-High） | 任意（假 .so） |
 | L0-6 | `test_bridge_dlsym_missing.cpp` dlsym 缺失终态（P1-High/P1-3） | 任意（符号缺失假 .so） |
 | L0-7 | `test_embedding_provider_import.py` 导入/契约（pytest） | WSL/任意 |
-| L1-1 | `test_exception_mapping.py` 异常映射（pytest） | 麒麟 VM（需编译模块） |
+| L0-8 | `test_provider_failure_recovery.py` Provider 失败恢复 + 错误分类（pytest，mock 假 Bridge，P1-1/P1-2/P1-3） | WSL/任意（不依赖真实 .so） |
+| L1-1 | `test_exception_mapping.py` 异常映射（pytest，含 BridgeSessionDestroyedError/BridgeFatalError 断言） | 麒麟 VM（需编译模块） |
 | L1-2 | `test_load_idempotent.py` 生命周期状态机（pytest） | 麒麟 VM（需真实 .so） |
 | L1-3 | `test_interpreter_exit.py` 解释器退出析构（pytest） | 麒麟 VM |
 | L2 | `run_smoke.py` 真实 SDK 调用 | 麒麟 VM |
@@ -61,11 +62,14 @@
 bash scripts/verify_day4_vm.sh
 ```
 
-> 说明：手动执行 pytest 时必须拆成两个独立进程（脚本 Step 4 的做法）：
-> `test_embedding_provider_import.py` + `test_exception_mapping.py` 一组，
-> `test_load_idempotent.py` 单独一组。麒麟实测 SDK 在同一进程内与异常映射测试
-> 共存会触发 Abort，且 create_session 后未 embed 直接销毁也会崩溃
-> （P0-1 已修复：destroy_session 不再 dlclose，.so 进程内只加载一次）。
+> 说明：手动执行 pytest 时必须拆成独立进程（脚本 Step 4 的做法）：
+> `test_embedding_provider_import.py` + `test_exception_mapping.py` + `test_provider_failure_recovery.py`
+> 一组（a 组，failure_recovery 用 mock 假 Bridge 不依赖真实 SDK，WSL 可跑），
+> `test_load_idempotent.py` 单独一组（b 组，真实 SDK），`test_interpreter_exit.py` 一组（c 组，子进程）。
+> 麒麟实测 SDK 在同一进程内与异常映射测试共存会触发 Abort，且 create_session 后未 embed 直接销毁
+> 也会崩溃（P0-1 已修复：destroy_session 不再 dlclose，.so 进程内只加载一次）。
+> P1-2：`test_provider_failure_recovery.py` 已改为 fixture 注入假模块并恢复 sys.modules，
+> 不污染其他测试文件（顺序无关，全量单进程 pytest 结果稳定）。
 
 手动构建（可选，供调试）:
 ```bash
@@ -93,6 +97,8 @@ Provider 层将 Bridge 异常映射为 Day3 契约的 Provider 错误码，不�
 |------------|----------------|
 | BridgeSoNotFoundError / BridgeLoadError / BridgeSymbolError | ERR_SDK_NOT_LOADED |
 | BridgeSessionError | ERR_SESSION_FAILED |
+| BridgeSessionDestroyedError | ERR_SESSION_DESTROYED（P1-1：Bridge destroy 终态独立映射） |
+| BridgeFatalError | ERR_FATAL_FAILURE（P1-1：fatal 终态后重试，需进程重启） |
 | BridgeEmbedError | ERR_EMBED_FAILED |
 | BridgeSdkError | ERR_SDK_ERROR |
 | BridgeModelError | ERR_MODEL_INVALID（P1-3：模型错误独立映射，不归入普通 SDK 错误） |
@@ -106,7 +112,9 @@ Provider 层将 Bridge 异常映射为 Day3 契约的 Provider 错误码，不�
 | ERR_SO_NOT_FOUND | BridgeSoNotFoundError |
 | ERR_DLOPEN_FAILED | BridgeLoadError |
 | ERR_DLSYM_FAILED | BridgeSymbolError |
-| ERR_SESSION_* | BridgeSessionError |
+| ERR_SESSION_CREATE / ERR_SESSION_INIT / ERR_SESSION_DESTROY | BridgeSessionError |
+| ERR_SESSION_DESTROYED | BridgeSessionDestroyedError（P1-1 专用异常） |
+| ERR_FATAL_FAILURE | BridgeFatalError（P1-High/P1-1 专用异常） |
 | ERR_EMBED_CALL/RESULT | BridgeEmbedError |
 | ERR_EMBED_ERROR | BridgeSdkError |
 | ERR_TIMEOUT | BridgeTimeoutError |

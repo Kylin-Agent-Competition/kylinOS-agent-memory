@@ -13,7 +13,7 @@
    - 宿主：银河麒麟 V11 x86_64（VirtualBox 虚拟机，Runtime 1.3.0）；开发：Windows + WSL2（Ubuntu）。
 
 2. **Agent 工具与运行模式**
-   - Agent：Reasonix（Windows 侧部署）。工作区经 UNC 路径 `\\wsl.localhost\Ubuntu\home\fff\projects\kylinOS-agent-memory` 访问 WSL 仓库。
+   - Agent：Reasonix（Windows 侧部署）。工作区经 WSL 层访问仓库（UNC `\\wsl.localhost\...` 映射）。
    - 运行模式：交互式 goal 模式 + AutoResearch；写文件/命令经 WSL 层执行。
    - 使用场景：按天（Day1~Day5）产出可合并 PR，麒麟 VM 实测证据归档。
 
@@ -61,7 +61,7 @@
    - Day4 PR #17 已推送 `b29fec5`，**等待 Reviewer 复审**（第六轮结论 REWORK 已修复，待确认）。
    - Day5 分支 `feat/day5-minimal-vertical-chain`（HEAD `438e91e`）基于 Day4 **旧版**（`5510f94`），尚未 rebase 到 Day4 最新；Day4 合并进 main 后需把 Day5 框架内容放入 main（用户明确"等合并吧"）。
    - 历史分支残留：`backup/day2-*`、`te`、`feat/day2-embedding-smoke-v2`（behind 5）等，勿混淆。
-   - 麒麟 VM 需**手动开机**；关机后 SSH（`ssh -p 2222 Lyf@127.0.0.1`）与共享文件夹均不可用。
+   - 麒麟 VM 需**手动开机**；关机后 SSH（`ssh -p <port> <user>@<vm-host>`）与共享文件夹均不可用。
 
 3. **待办清单**
    - [ ] 等待 Day4 PR #17 Reviewer 复审结果；若有 REWORK 按 `day-pr-review` skill 逐项修复。
@@ -73,13 +73,13 @@
 ## 四、核心技术关键信息
 
 1. **系统差异结论（Windows ↔ Ubuntu/WSL）**
-   - Windows Agent（Reasonix）经 `\\wsl.localhost\...` 访问 WSL 仓库；**文件写入需注意 UTF-16/CRLF 转换**（PowerShell 重定向会写 UTF-16 → 用 Python 脚本 `open(..., encoding='utf-8')` 写文件绕过）。
+   - Windows Agent（Reasonix）经 `\\wsl.localhost\...`（WSL 层）访问仓库；**文件写入需注意 UTF-16/CRLF 转换**（PowerShell 重定向会写 UTF-16 → 用 Python 脚本 `open(..., encoding='utf-8')` 写文件绕过）。
    - **PowerShell 不支持 `&&`/`||`/`head`/`grep`**；多行脚本/正则易被转义破坏 → 一律写 `tmp_*.py` 脚本文件执行，用完删除（保持工作区严格干净）。
    - **WSL 与 VM 之间无网络互通**（NAT 模式 localhost 代理不镜像）→ 用 **VirtualBox 共享文件夹**（vboxsf 挂载 `/mnt/shared`）同步代码，VM 内 `sudo mount -t vboxsf -o rw,uid=$(id -u),gid=$(id -g) kylinOS-agent-memory /mnt/shared`。
    - vboxsf **stat 缓存**会导致 git 误报文件修改 → 脚本 Step1 先 `git update-index --refresh`。
 
 2. **可用命令 / 路径规则**
-   - 仓库（WSL）：`/home/fff/projects/kylinOS-agent-memory`；UNC：`\\wsl.localhost\Ubuntu\home\fff\projects\kylinOS-agent-memory`；VM 挂载：`/mnt/shared`。
+   - 仓库（WSL 本地路径）：`/home/<user>/projects/kylinOS-agent-memory`（UNC `\\wsl.localhost\...` 映射）；VM 挂载：`/mnt/shared`。
    - 麒麟 SDK 路径：`/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1 → 1.0.0`；Runtime `/usr/bin/kylin-ai-runtime`；模型 `ensemble-embd_gte-base_uint8-text`，**维度 768，L2=1.000000**；默认模型目录 `/usr/share/kylin-ai/model-repository/`。
    - VM 运行环境：`source /tmp/day4-venv/bin/activate`（`python3 -m venv` + `pip install pybind11`）；编译 `g++ -std=c++17 -I. -ldl`；CMake `cmake -B build -Dpybind11_DIR=$(python -m pybind11 --cmakedir) && cmake --build build -j2 && ctest --test-dir build`。
    - 麒麟验证入口（唯一标准）：`cd /mnt/shared && git rev-parse HEAD && bash scripts/verify_day4_vm.sh`。
