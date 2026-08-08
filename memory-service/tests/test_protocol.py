@@ -12,10 +12,13 @@ import json
 import pytest
 
 from embedding.protocol import (
+    PROTOCOL_VERSION,
     IncompletePacket,
     ProtocolError,
+    build_envelope,
     decode_packet,
     encode,
+    parse_envelope,
 )
 
 
@@ -70,3 +73,57 @@ def test_oversize_rejected():
     bad = b"\xff\xff\xff\xff" + b"x"
     with pytest.raises(ProtocolError):
         decode_packet(bad)
+
+
+# ── 架构 4.4 envelope（协议版本/method/payload/可观测字段） ──
+
+
+def test_build_envelope_fields():
+    """build_envelope：protocol_version/method/payload + 可选 request_id/trace_id/deadline_ms。"""
+    env = build_envelope("memory.embed", {"text": "hi"},
+                         request_id="req-1", trace_id="trc-1", deadline_ms=150)
+    assert env["protocol_version"] == PROTOCOL_VERSION == "1.0"
+    assert env["method"] == "memory.embed"
+    assert env["payload"] == {"text": "hi"}
+    assert env["request_id"] == "req-1"
+    assert env["trace_id"] == "trc-1"
+    assert env["deadline_ms"] == 150
+
+
+def test_parse_envelope_valid():
+    """parse_envelope：合法 envelope 返回规范化字段。"""
+    env = build_envelope("memory.embed", {"text": "x"},
+                         request_id="r", trace_id="t")
+    method, payload, rid, tid, deadline = parse_envelope(
+        env, expected_methods={"memory.embed"})
+    assert method == "memory.embed"
+    assert payload == {"text": "x"}
+    assert rid == "r" and tid == "t"
+    assert deadline is None
+
+
+def test_parse_envelope_missing_version():
+    """缺 protocol_version → ProtocolError。"""
+    with pytest.raises(ProtocolError, match="protocol_version"):
+        parse_envelope({"method": "memory.embed", "payload": {}})
+
+
+def test_parse_envelope_bad_version():
+    """protocol_version 不兼容 → ProtocolError。"""
+    with pytest.raises(ProtocolError, match="protocol_version"):
+        parse_envelope({"protocol_version": "0.9", "method": "memory.embed",
+                         "payload": {}})
+
+
+def test_parse_envelope_unknown_method():
+    """method 不在白名单 → ProtocolError。"""
+    with pytest.raises(ProtocolError, match="unknown method"):
+        parse_envelope({"protocol_version": "1.0", "method": "memory.nope",
+                         "payload": {}}, expected_methods={"memory.embed"})
+
+
+def test_parse_envelope_bad_payload():
+    """payload 非 dict → ProtocolError。"""
+    with pytest.raises(ProtocolError, match="payload"):
+        parse_envelope({"protocol_version": "1.0", "method": "memory.embed",
+                         "payload": "not-dict"})

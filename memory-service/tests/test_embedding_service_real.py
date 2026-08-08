@@ -93,16 +93,29 @@ def test_real_embed_batch(service):
 
 
 def test_real_service_handle_request_ping(service):
-    """协议分发：ping。"""
-    resp = service.handle_request({"type": "ping"})
+    """协议分发（架构 4.4 envelope）：memory.ping。"""
+    resp = service.handle_request({"protocol_version": "1.0", "method": "memory.ping"})
     assert resp["result"] == "pong"
 
 
 def test_real_service_handle_request_embed(service):
-    """协议分发：embed。"""
-    resp = service.handle_request({"type": "embed", "text": "test"})
+    """协议分发（envelope）：memory.embed。"""
+    from embedding.protocol import build_envelope
+    env = build_envelope("memory.embed", {"text": "test"},
+                         request_id="req-real", trace_id="trc-real")
+    resp = service.handle_request(env)
     assert resp["ok"] is True
     assert resp["result"]["dimension"] == 768
+    assert resp["request_id"] == "req-real"
+    assert resp["trace_id"] == "trc-real"
+
+
+def test_real_service_health(service):
+    """memory.health：真实 Provider 下返回分项状态。"""
+    resp = service.handle_request({"protocol_version": "1.0", "method": "memory.health"})
+    assert resp["ok"] is True
+    assert resp["result"]["service"] == "ok"
+    assert resp["result"]["bridge_loaded"] is True
 
 
 def test_degraded_when_so_missing():

@@ -18,6 +18,7 @@ import time
 import pytest
 
 from embedding.embedding_service import EmbeddingService
+from embedding.protocol import build_envelope
 from providers import EmbeddingResult, ProviderError, ProviderErrorCode
 
 
@@ -145,13 +146,69 @@ def test_embed_returns_while_bridge_still_running():
     svc.close()
 
 
-# ── 协议分发 ──
+# ── 协议分发（架构 4.4 envelope） ──
 
 def test_handle_request_dispatch():
+    """envelope 分发：memory.ping / memory.embed / 未知 method / 缺 protocol_version。"""
     svc = EmbeddingService(provider=FakeProvider())
     svc.start()
-    assert svc.handle_request({"type": "ping"})["result"] == "pong"
-    assert svc.handle_request({"type": "embed", "text": "hi"})["ok"] is True
-    bad = svc.handle_request({"type": "unknown"})
-    assert bad["ok"] is False and bad["error"]["code"] == "ERR_INVALID_REQUEST"
+    # memory.ping
+    assert svc.handle_request(
+        {"protocol_version": "1.0", "method": "memory.ping"})["result"] == "pong"
+    # memory.embed（envelope + request_id/trace_id 回显）
+    env = build_envelope("memory.embed", {"text": "hi"},
+                         request_id="req-1", trace_id="trc-1")
+    resp = svc.handle_request(env)
+    assert resp["ok"] is True
+    assert resp["request_id"] == "req-1"
+    assert resp["trace_id"] == "trc-1"
+    assert resp["method"] == "memory.embed"
+    assert resp["protocol_version"] == "1.0"
+    # 未知 method → ERR_PROTOCOL
+    bad = svc.handle_request(
+        {"protocol_version": "1.0", "method": "memory.unknown", "payload": {}})
+    assert bad["ok"] is False and bad["error"]["code"] == "ERR_PROTOCOL"
+    # 缺 protocol_version → ERR_PROTOCOL（含 request_id 回显）
+    bad2 = svc.handle_request(
+        {"method": "memory.embed", "payload": {"text": "x"}, "request_id": "req-9"})
+    assert bad2["ok"] is False and bad2["error"]["code"] == "ERR_PROTOCOL"
+    assert bad2["request_id"] == "req-9"
+    svc.close()
+
+
+def test_handle_request_embed_batch_envelope():
+    """envelope 分发：memory.embed_batch。"""
+    svc = EmbeddingService(provider=FakeProvider())
+    svc.start()
+    resp = svc.handle_request(build_envelope(
+        "memory.embed_batch", {"texts": ["a", "b"]}))
+    assert resp["ok"] is True
+    assert len(resp["result"]) == 2
+    assert resp["result"][0]["dimension"] == 768
+    svc.close()
+
+
+def test_health_reports_status():
+    """memory.health：返回分项状态（服务/Provider/Bridge），不触发 SDK。"""
+    svc = EmbeddingService(provider=FakeProvider())
+    svc.start()
+    resp = svc.handle_request(
+        {"protocol_version": "1.0", "method": "memory.health"})
+    assert resp["ok"] is True
+    assert resp["result"]["service"] == "ok"
+    assert resp["result"]["provider"] == "ready"
+    assert resp["result"]["degraded"] is False
+    assert "bridge_loaded" in resp["result"]
+    assert "bridge_has_session" in resp["result"]
+    svc.close()
+
+
+def test_health_stopped_state():
+    """未 start 的 Service：health 返回 stopped 状态（不崩溃）。"""
+    svc = EmbeddingService(provider=FakeProvider())
+    resp = svc.handle_request(
+        {"protocol_version": "1.0", "method": "memory.health"})
+    assert resp["ok"] is True
+    assert resp["result"]["service"] == "stopped"
+    assert resp["result"]["provider"] == "stopped"
     svc.close()

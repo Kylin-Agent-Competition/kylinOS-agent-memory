@@ -26,9 +26,18 @@ from providers import (
     ProviderError,
     ProviderErrorCode,
 )
+from embedding.protocol import PROTOCOL_VERSION, ProtocolError, parse_envelope
 
 # Bridge 调用统一放线程池：SDK embed 可能耗时（IPC），不阻塞聊天线程（Day5-3）
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="embed-bridge")
+
+# 架构 4.4 方法名（总体架构文档 TABLE 15 风格：memory.*）
+_METHODS = {
+    "memory.embed",
+    "memory.embed_batch",
+    "memory.ping",
+    "memory.health",
+}
 
 
 class EmbeddingService:
@@ -57,28 +66,68 @@ class EmbeddingService:
         self._provider.close()
         self._started = False
 
-    # ── 对外接口（UDS 协议处理入口） ──
+    # ── 对外接口（UDS 协议处理入口，架构 4.4 envelope） ──
 
     def handle_request(self, req: Dict[str, Any]) -> Dict[str, Any]:
-        """协议分发入口：根据 request_type 分派。
+        """协议分发入口（架构 4.4 IPC 契约 envelope 格式）。
 
         Args:
-            req: 长度前缀 JSON 解码后的请求 dict。
-                 {"type": "embed", "text": "..."}
-                 {"type": "embed_batch", "texts": [...]}
+            req: 长度前缀 JSON 解码后的 envelope dict：
+                {"protocol_version": "1.0", "request_id": "...", "trace_id": "...",
+                 "method": "memory.embed", "deadline_ms": 5000,
+                 "payload": {"text": "..."}}
 
         Returns:
-            结构化响应 dict（JSON 可序列化）。
+            响应 envelope：protocol_version/method + request_id/trace_id（回显）
+            + ok/result|error（含降级标记）。
         """
-        req_type = req.get("type")
-        if req_type == "embed":
-            return self.embed(req.get("text", ""), timeout_ms=req.get("timeout_ms", 5000))
-        if req_type == "embed_batch":
-            return self.embed_batch(req.get("texts", []), timeout_ms=req.get("timeout_ms", 30000))
-        if req_type == "ping":
-            return {"ok": True, "result": "pong"}
-        return self._error("ERR_INVALID_REQUEST",
-                           f"unknown request type: {req_type!r}")
+        try:
+            method, payload, request_id, trace_id, _deadline = parse_envelope(
+                req, expected_methods=_METHODS)
+        except ProtocolError as exc:
+            return self._envelope_error(
+                "ERR_PROTOCOL", str(exc), req, method="unknown")
+
+        if method == "memory.embed":
+            body = self.embed(payload.get("text", ""),
+                              timeout_ms=payload.get("timeout_ms", 5000))
+        elif method == "memory.embed_batch":
+            body = self.embed_batch(payload.get("texts", []),
+                                    timeout_ms=payload.get("timeout_ms", 30000))
+        elif method == "memory.ping":
+            body = {"ok": True, "result": "pong"}
+        elif method == "memory.health":
+            body = self.health()
+        else:  # pragma: no cover - parse_envelope 已校验 method
+            body = self._error("ERR_INVALID_REQUEST", f"unknown method: {method!r}")
+
+        return self._envelope(body, method, request_id, trace_id)
+
+    # ── 健康检查（架构 TABLE 15: memory.health） ──
+
+    def health(self) -> Dict[str, Any]:
+        """返回服务分项健康状态（不触发 SDK 调用，只读状态）。
+
+        Returns:
+            {"ok": true, "result": {"service": "ok|stopped",
+                                     "provider": "ready|stopped",
+                                     "bridge_loaded": bool,
+                                     "bridge_has_session": bool,
+                                     "degraded": false}}
+        """
+        bridge = getattr(self._provider, "_bridge", None)
+        return {
+            "ok": True,
+            "result": {
+                "service": "ok" if self._started else "stopped",
+                "provider": "ready" if self._started else "stopped",
+                "bridge_loaded": bool(getattr(bridge, "loaded", False))
+                if bridge is not None else False,
+                "bridge_has_session": bool(getattr(bridge, "has_session", False))
+                if bridge is not None else False,
+                "degraded": False,
+            },
+        }
 
     # ── 核心操作 ──
 
@@ -137,6 +186,33 @@ class EmbeddingService:
         return {"ok": True, "result": results}
 
     # ── 辅助 ──
+
+    @staticmethod
+    def _envelope(body: Dict[str, Any], method: str,
+                  request_id: Optional[str], trace_id: Optional[str]) -> Dict[str, Any]:
+        """把业务响应包进架构 4.4 envelope（回显 request_id/trace_id）。"""
+        env = {"protocol_version": PROTOCOL_VERSION, "method": method, **body}
+        if request_id is not None:
+            env["request_id"] = request_id
+        if trace_id is not None:
+            env["trace_id"] = trace_id
+        return env
+
+    @staticmethod
+    def _envelope_error(code: str, message: str, req: Dict[str, Any],
+                        method: str) -> Dict[str, Any]:
+        """协议层错误响应（含可回显的 request_id/trace_id）。"""
+        env = {
+            "protocol_version": PROTOCOL_VERSION,
+            "method": method,
+            "ok": False,
+            "error": {"code": code, "message": message},
+        }
+        if req.get("request_id"):
+            env["request_id"] = req["request_id"]
+        if req.get("trace_id"):
+            env["trace_id"] = req["trace_id"]
+        return env
 
     @staticmethod
     def _error(code: str, message: str) -> Dict[str, Any]:
