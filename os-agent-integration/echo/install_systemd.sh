@@ -74,12 +74,17 @@ echo "--- 停止旧服务 ---"
 systemctl stop "$UNIT_NAME" 2>/dev/null || true
 systemctl disable "$UNIT_NAME" 2>/dev/null || true
 systemctl reset-failed "$UNIT_NAME" 2>/dev/null || true
-pkill -f "kylin-memory-echo-server" 2>/dev/null || true
+# 通过 MainPID 确认服务已停止，禁止使用 pkill -f 误杀其他用户/并行测试进程
+_OLD_MAIN_PID=$(systemctl show -p MainPID "$UNIT_NAME" 2>/dev/null | cut -d= -f2)
+if [ -n "$_OLD_MAIN_PID" ] && [ "$_OLD_MAIN_PID" != "0" ] && kill -0 "$_OLD_MAIN_PID" 2>/dev/null; then
+    echo "[WARN] 服务进程仍在运行 (MainPID=$_OLD_MAIN_PID), 等待退出..."
+    sleep 3
+fi
 # 清理旧 /tmp socket 存根 (迁移前残留)
 rm -f "$LEGACY_SOCKET_PATH" 2>/dev/null || true
 rm -rf /tmp/kylin-memory-echo 2>/dev/null || true
 sleep 1
-echo "[OK] 旧服务已清理并重置失败计数"
+echo "[OK] 旧服务已通过 systemctl stop 清理 (非 pkill)"
 
 # ---- 生成 unit 文件 ----
 echo ""

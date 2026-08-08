@@ -212,31 +212,31 @@ entries:
     description: "麒麟环境独立 UDS Echo Spike 复测 — 环境基线已冻结，证据已提交"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
-    source: "evidence/gate0_echo/final/evidence.jsonl"
-    tested_commit: "830e694b7f5d7889be25ba7e451bc7fae19cd549"
-    evidence_commit: "830e694b7f5d7889be25ba7e451bc7fae19cd549"
+    source: "evidence/gate0_echo/systemd_evidence/evidence.jsonl"
+    tested_commit: 807e9cb41bb98854b3a8ef01e4680da73a82d874
+    evidence_commit: "807e9cb41bb98854b3a8ef01e4680da73a82d874"
     date: "2026-08-06"
     reviewer: "谢嘉然"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）"
-    checksum_sha256: "ba419f4c26da3f70bd4b460225eb7ce9983e97ee606a1b1677a40f4d3074440b"
+     limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）；ACL_SPIKE=VERIFIED, KYSEC_REAL_RULE=UNVERIFIED"
+    checksum_sha256: "8e9e95ab9d5f645addc8e2f9c50f46715d8ed95e0aa493ac973d39a3da6e3637"
     details: |
       Day1 环境基线已冻结: environment.log (SHA-256: cdf60d8414...) 包含 16 项系统信息采集。
-      evidence.jsonl 含 ECHO-001 至 ECHO-009 共 9 条记录。
-      ECHO-001 environment baseline: PASS
-      ECHO-002 baseline frozen state (25 files, 2 units): PASS
-      ECHO-003 UDS echo_client + kaiming_memory_client: 6/6 PASS via /run/kylin-memory-echo/echo.sock
-      ECHO-004 systemd lifecycle restart: 12/12 PASS
-      ECHO-005 KYSEC security attribute scan: INFO (sysfs 路径不可用，通过 CLI 替代验证)
-      ECHO-006 rollback (stop/cleanup/restart): PASS
-      ECHO-007 D1 clean deploy: FAIL (重复条目，第二次尝试失败)
-      ECHO-008 D2 clean CMake build: PASS
-      ECHO-009 D3 --dev mode manual start: FAIL
+      evidence.jsonl 含 ECHO-001 至 ECHO-005 + 3 条 systemd 生命周期证据共 8 条记录。
+      ECHO-001 kaiming_memory_client --method all (6/6): PASS
+      ECHO-002 evidence.record removed (active code grep): PASS
+      ECHO-003 health check over systemd socket: PASS
+      ECHO-004 memory.store UNSUPPORTED_METHOD: PASS
+      ECHO-005 C++ compile: PASS
+      SYSTEMD_SERVER_LIFECYCLE: systemd 启动与运行验证 PASS
+      CPP_CLIENT_OVER_SYSTEMD: C++ 客户端通过 systemd socket 通信 PASS
+      PACKAGED_UNIT_VALIDATION: systemd unit 文件结构验证 PASS
       采集人: 周子腾, 采集日期: 2026-08-06.
       麒麟环境: Kylin V11 (2603), Linux 6.6.0-63-generic, systemd 255, Python 3.12.3, g++ 12.3.0, CMake 3.28.3.
-      KYSEC authorize→rollback 全链路验证通过 (real rule write + verified + revocation).
+       ACL_SPIKE=VERIFIED (chmod + setfacl 纵深防御).
+       KYSEC_REAL_RULE=UNVERIFIED (Gate 0 不具备 KYSEC 管理员 token 和内核模块加载权限).
 
   - id: "D2-1-KAIMING-HOOK"
     task_id: "D2-1"

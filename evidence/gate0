@@ -4,7 +4,7 @@ import paramiko, time, os, re
 
 c = paramiko.SSHClient()
 c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-c.connect('127.0.0.1', port=2222, username='kylin-agent', password='Zyf790043', timeout=15)
+c.connect('127.0.0.1', port=2222, username='kylin-agent', password='***REMOVED_PASSWORD***', timeout=15)
 sftp = c.open_sftp()
 
 REPO = '/home/kylin-agent/kylin-memory-echo'
@@ -15,7 +15,7 @@ os.makedirs(RESULT_DIR, exist_ok=True)
 
 def exec_cmd(cmd, timeout=300, sudo=False):
     if sudo:
-        cmd = f"echo 'Zyf790043' | sudo -S bash -c '{cmd}'"
+        cmd = f"echo '***REMOVED_PASSWORD***' | sudo -S bash -c '{cmd}'"
     _, so, se = c.exec_command(cmd, timeout=timeout)
     ec = so.channel.recv_exit_status()
     return ec, so.read().decode(errors='replace'), se.read().decode(errors='replace')
