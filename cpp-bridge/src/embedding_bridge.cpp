@@ -93,9 +93,11 @@ BridgeStatus EmbeddingBridge::load_impl() {
         !tmp.result_error_code || !tmp.result_error_message ||
         !tmp.result_destroy) {
         dlclose(h);
-        // P1-High: 已执行 dlclose，禁止重试（同进程 dlclose→dlopen 可能 Abort）
+        // P1-High: 已执行 dlclose，置 fatal（同进程 dlclose→dlopen 可能 Abort）。
+        // P1-1(R2): 首次失败保留原始原因 ERR_DLSYM_FAILED（Day3 契约：dlsym 失败
+        // → Provider ERR_SDK_NOT_LOADED）；fatal 后重试才返回 ERR_FATAL_FAILURE。
         fatal_failure_ = true;
-        return BridgeStatus::fail(BridgeError::ERR_FATAL_FAILURE,
+        return BridgeStatus::fail(BridgeError::ERR_DLSYM_FAILED,
                                   "required symbol missing from " + params_.so_path
                                   + " (fatal: dlclose 已执行，不可重试)");
     }
@@ -146,9 +148,11 @@ BridgeStatus EmbeddingBridge::create_session_impl() {
     int rc = syms_.init_session(s);
     if (rc != 0) {
         syms_.destroy_session(&s);
-        // P1-High: 已执行 destroy_session，禁止重试 create（同进程 destroy→create 可能挂起）
+        // P1-High: 已执行 destroy_session，置 fatal（同进程 destroy→create 可能挂起）。
+        // P1-1(R2): 首次失败保留原始原因 ERR_SESSION_INIT（Day3 契约：init_session
+        // 失败 → Provider ERR_SESSION_FAILED）；fatal 后重试才返回 ERR_FATAL_FAILURE。
         fatal_failure_ = true;
-        return BridgeStatus::fail(BridgeError::ERR_FATAL_FAILURE,
+        return BridgeStatus::fail(BridgeError::ERR_SESSION_INIT,
                                   "init_session rc=" + std::to_string(rc)
                                   + " (fatal: destroy 已执行，不可重试)");
     }

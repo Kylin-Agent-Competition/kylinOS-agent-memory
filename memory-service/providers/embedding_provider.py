@@ -44,6 +44,7 @@ class ProviderErrorCode(IntEnum):
     ERR_INVALID_TEXT = 0x0500    # text 非 str 类型（应用层校验，不进 Bridge）
     ERR_CONFIG_CONFLICT = 0x0601 # 单例配置冲突（so_path 与已锁定路径不一致）
     ERR_SESSION_DESTROYED = 0x0202  # 会话已销毁（Bridge destroy 后终态，不可重建）
+    ERR_FATAL_FAILURE = 0x0203       # 不可恢复终态（Bridge fatal：已 dlclose/destroy，需进程重启）
     ERR_UNKNOWN = 0x0001         # 未分类错误
 
 
@@ -128,7 +129,7 @@ class EmbeddingProvider:
         "BridgeSymbolError": ProviderErrorCode.ERR_SDK_NOT_LOADED,
         "BridgeSessionError": ProviderErrorCode.ERR_SESSION_FAILED,
         "BridgeSessionDestroyedError": ProviderErrorCode.ERR_SESSION_DESTROYED,  # P1-1: 销毁终态独立映射
-        "BridgeFatalError": ProviderErrorCode.ERR_SESSION_FAILED,  # P1-High: 不可恢复，映射后要求重启
+        "BridgeFatalError": ProviderErrorCode.ERR_FATAL_FAILURE,  # P1-High/P1-1: fatal 终态后重试——需进程重启（不再是 ERR_SESSION_FAILED）
         "BridgeEmbedError": ProviderErrorCode.ERR_EMBED_FAILED,
         "BridgeSdkError": ProviderErrorCode.ERR_SDK_ERROR,
         "BridgeTimeoutError": ProviderErrorCode.ERR_TIMEOUT,

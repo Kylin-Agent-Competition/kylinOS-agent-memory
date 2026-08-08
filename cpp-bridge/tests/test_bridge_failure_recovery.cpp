@@ -5,10 +5,11 @@
  *
  * 验证失败阶段的恢复策略（方案 A：不可恢复终态）：
  *   1. .so 不存在 → ERR_SO_NOT_FOUND，不置 fatal（可换路径重试）
- *   2. init_session 失败 → ERR_FATAL_FAILURE + fatal_failure_=true，重试 create 返回 ERR_FATAL_FAILURE
+ *   2. init_session 失败 → ERR_SESSION_INIT + fatal_failure_=true（P1-1 保留原始原因），
+ *      重试 create 返回 ERR_FATAL_FAILURE（fatal 终态稳定错误）
  *   3. create_session 返回 NULL → ERR_SESSION_CREATE，不置 fatal（未执行 destroy，可安全重试）
  *   4. destroy 终态 → ERR_SESSION_DESTROYED（P0-2 回归）
- * dlsym 缺失路径（必需符号缺失 → ERR_FATAL_FAILURE）由独立测试
+ * dlsym 缺失路径（必需符号缺失 → ERR_DLSYM_FAILED + fatal）由独立测试
  * test_bridge_dlsym_missing.cpp 覆盖（fake_sdk 符号缺失变体 .so）。
  *
  * 依赖：fake_sdk_malformed.c 编译的 .so 路径由 argv[1] 传入。
@@ -62,8 +63,8 @@ int main(int argc, char** argv) {
         auto rl = bridge.load();
         CHECK(rl.is_ok(), "load 成功（initfail 不影响 load）");
         auto rc = bridge.create_session();
-        CHECK(rc.is_fail() && rc.error == BridgeError::ERR_FATAL_FAILURE,
-              "init_session 失败 → ERR_FATAL_FAILURE");
+        CHECK(rc.is_fail() && rc.error == BridgeError::ERR_SESSION_INIT,
+              "init_session 失败 → ERR_SESSION_INIT（P1-1 保留原始原因）");
         CHECK(bridge.fatal_failure() == true,
               "init_session 失败置 fatal（禁止重试）");
         // 重试 create_session → 仍 ERR_FATAL_FAILURE

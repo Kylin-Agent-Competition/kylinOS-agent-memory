@@ -56,7 +56,9 @@ enum class BridgeError : uint32_t {
     ERR_SESSION_INIT    = 0x0202,   // init_session 返回非零
     ERR_SESSION_DESTROY = 0x0203,   // destroy_session 异常
     ERR_SESSION_DESTROYED = 0x0204, // 会话已销毁（终态，禁止重建——SDK 不允许同进程 destroy→create，P0-2）
-    ERR_FATAL_FAILURE = 0x0205,     // 不可恢复失败（已发生 dlclose/destroy，禁止重试避免危险生命周期，P1-High）
+    ERR_FATAL_FAILURE = 0x0205,     // 不可恢复终态后的稳定错误（已 dlclose/destroy，禁止重试；
+                                    // 需进程重启。P1-1：首次失败保留原始码 ERR_DLSYM_FAILED/ERR_SESSION_INIT，
+                                    // 本码仅用于 fatal 终态后的重试/调用）
 
     // Embedding 调用 (0x03xx)
     ERR_EMBED_CALL      = 0x0301,   // text_embedding 返回 false

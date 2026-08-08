@@ -3,9 +3,9 @@
  *
  * 轨道 A — dlsym 缺失失败路径测试（P1-High/P1-3，假 .so 符号缺失变体）
  *
- * 验证方案 A（不可恢复终态）在"dlopen 成功但必需符号缺失"阶段的行为：
- *   1. load() → 必需符号 dlsym 缺失 → ERR_FATAL_FAILURE + fatal_failure_=true
- *   2. 同一 Bridge 重试 load() → 仍 ERR_FATAL_FAILURE（不重新 dlopen）
+ * 验证方案 A（不可恢复终态）在"dlopen 成功但必需符号缺失"阶段的行为（P1-1 错误分类）：
+ *   1. load() → 必需符号 dlsym 缺失 → ERR_DLSYM_FAILED + fatal_failure_=true（保留原始原因）
+ *   2. 同一 Bridge 重试 load() → ERR_FATAL_FAILURE（fatal 终态稳定错误，不重新 dlopen）
  *   3. create_session() / embed() 在 fatal 态 → ERR_FATAL_FAILURE
  *
  * 依赖：fake_sdk_malformed.c 以 FAKE_MISSING_CREATE_SESSION 编译的 .so
@@ -43,10 +43,10 @@ int main(int argc, char** argv) {
     params.so_path = so;
     EmbeddingBridge bridge(params);
 
-    // 1. load：dlsym 缺失 → ERR_FATAL_FAILURE + fatal 终态
+    // 1. load：dlsym 缺失 → ERR_DLSYM_FAILED（保留原始原因）+ fatal 终态
     auto rl = bridge.load();
-    CHECK(rl.is_fail() && rl.error == BridgeError::ERR_FATAL_FAILURE,
-          "必需符号缺失 → ERR_FATAL_FAILURE（方案 A 不可恢复）");
+    CHECK(rl.is_fail() && rl.error == BridgeError::ERR_DLSYM_FAILED,
+          "必需符号缺失 → ERR_DLSYM_FAILED（P1-1 保留原始原因）");
     CHECK(bridge.fatal_failure() == true,
           "dlsym 缺失置 fatal（禁止重试 dlopen）");
     CHECK(bridge.is_loaded() == false,
