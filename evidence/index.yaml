@@ -347,3 +347,14 @@ entries:
       D2-7.6 Socket 清理: /run/ 和 /tmp/ socket 均不存在.
       P1-6 SHA-256 回退前后一致; P1-7~P1-9 未执行对比.
       关联缺口: P1-6, P1-7, P1-8, P1-9, P1-10.
+
+  - id: "D2-C-OSAGENT-SPIKE"
+    task_id: "D2-C-OSAGENT-SPIKE"
+    description: "D2-C OS Agent 宿主实验的部分观察证据；三项实验均尚缺 Gate 所需的完整证据。"
+    status: "BLOCKED"
+    evidence_level: "E2"
+    source: "evidence/l2-kylin-vm/d2c/d2c_evidence_20260801_195043/checksums.sha256"
+    date: "2026-08-01"
+    reviewer: "D 主审；E 补审"
+    limitations: "证据由旧脚本提交 20adffc 生成；缺少 PostTurn 数据库快照、15 秒稳定性、PreChat UI 截图与真实结构化 Tool 事件。"
+    checksum_sha256: "541135db12b7f88d498791192adad032f5f7470e4763fe7dfaa6b4b6446ce619"
