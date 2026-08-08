@@ -6,7 +6,12 @@ from datetime import datetime, timezone
 if sys.platform=='win32':
     sys.stdout=io.TextIOWrapper(sys.stdout.buffer,encoding='utf-8',errors='replace')
 
-PW='***REMOVED_PASSWORD***';USER='kylin-agent';REPO=f'/home/{USER}/kylin-memory-echo'
+try:
+    PW=os.environ["KYLIN_VM_PASSWORD"]
+except KeyError:
+    print("FATAL: KYLIN_VM_PASSWORD environment variable is required but not set.", file=sys.stderr)
+    sys.exit(1)
+USER='kylin-agent';REPO=f'/home/{USER}/kylin-memory-echo'
 PROJ=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEV_SOCK='/tmp/kylin-memory-echo/echo.sock'
 OUT=os.path.join(PROJ,'evidence','gate0_echo','final','evidence.jsonl')
@@ -67,7 +72,12 @@ run(f'chmod +x {REPO}/kaiming_memory_client')
 
 # 3. Force cleanup + start dev server
 print('\n[3] Cleanup + start dev server...')
-run_sudo('pkill -f memory_echo_server.py 2>/dev/null; true')
+run_sudo('systemctl stop kylin-memory-echo 2>/dev/null; true')
+time.sleep(0.5)
+# Verify stop via MainPID
+ec,o,_=run('systemctl show -p MainPID kylin-memory-echo 2>/dev/null || echo MainPID=0')
+mp=o.strip().split('=')[-1] if '=' in o else '0'
+print(f'  MainPID={mp}')
 time.sleep(1)
 run_sudo('rm -rf /tmp/kylin-memory-echo; mkdir -p /tmp/kylin-memory-echo; chown kylin-agent:kylin-agent /tmp/kylin-memory-echo')
 time.sleep(0.5)
@@ -122,8 +132,8 @@ if sock_ok:
         'timestamp':NOW,'environment':'Kylin V11',
         'source_log':f'{REPO}/logs/p05_all.log','sha256':sha256_str(str(ec))})
 
-    # Cleanup
-    run_sudo('pkill -f memory_echo_server.py 2>/dev/null; true')
+    # Cleanup via systemd
+    run_sudo('systemctl stop kylin-memory-echo 2>/dev/null; true')
 else:
     ec,o,_=run('cat /tmp/srv.log 2>/dev/null||echo NO_LOG')
     print(f'\nServer failed to start: {o[:500]}')

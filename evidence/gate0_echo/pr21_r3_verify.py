@@ -13,7 +13,7 @@ import paramiko
 VM_HOST = "127.0.0.1"
 VM_PORT = 2222
 VM_USER = "kylin-agent"
-VM_PASSWORD = os.environ.get("KYLIN_VM_PASSWORD", "") or "***REMOVED_PASSWORD***"
+VM_PASSWORD = os.environ.get("KYLIN_VM_PASSWORD", "")
 DEPLOY_BASE = "/home/kylin-agent/kylin-memory-echo"
 SOCKET_PATH = "/run/kylin-memory-echo/echo.sock"
 
