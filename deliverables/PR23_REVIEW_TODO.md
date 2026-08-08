@@ -134,12 +134,12 @@ PR#23 是 PR#21 第三轮 Review (#4879426406) 的修复版，声称修复全部
 |------|--------|:------:|
 | ECHO-002 | `source_log: "N/A"` | ✅ 已改为实际文件路径 `.../bin/kylin-memory-echo-server` |
 | ECHO-003 | `sha256` 为 `sha256_str(str(ec))` 无意义 | ✅ 已改为对实际输出取哈希 |
-| ECHO-005 | — | ⚠️ `sha256` 仍疑似对 exit_code 字符串取哈希 |
+| ECHO-005 | — | ✅ `sha256` = `sha256_str(compile_out)` 绑定编译输出内容，非 exit_code |
 
 **待办**:
 - [x] ECHO-002 `source_log` 补全 ✅
 - [x] ECHO-003 `sha256` 修正 ✅
-- [ ] ECHO-005 验证 `sha256` 是否绑定实际内容
+- [x] ECHO-005 验证 `sha256` 绑定实际编译输出 ✅
 
 ---
 
@@ -148,7 +148,7 @@ PR#23 是 PR#21 第三轮 Review (#4879426406) 的修复版，声称修复全部
 - 旧: 3 条记录（ECHO-001~003），"6/6" 实为子测试
 - 新: 8 条记录（ECHO-001~005 + 3 条 systemd 证据），结构清晰 ✅
 
-**⚠️ 仍需关注**: evidence/index.yaml ECHO-005 source 仍指向旧路径
+**✅ 已修复**: evidence/index.yaml ECHO-005 全部更新 — `source` → systemd_evidence/evidence.jsonl, `evidence_commit` → 807e9cb..., `details` → 8 条记录
 
 ---
 
@@ -179,8 +179,8 @@ PR#23 是 PR#21 第三轮 Review (#4879426406) 的修复版，声称修复全部
 | P0-B | 证据链未绑定 R3 Head | ✅ | tested_commit 匹配；index.yaml source 路径需微调 |
 | P0-C | systemd 证据缺失 | ✅ | 8 条记录，全部 systemd 路径，3 项生命周期证据已补齐 |
 | P0-D | 证据脚本自身使用 pkill -f | ✅ | 全部替换为 systemctl stop |
-| P1-1 | evidence.jsonl 完整性问题 | ✅ | ECHO-002/003 已修复；ECHO-005 sha256 需验证 |
-| P1-2 | 证据结构误导 | 🟡 | 结构已改善；index.yaml 路径需更新 |
+| P1-1 | evidence.jsonl 完整性问题 | ✅ | ECHO-002/003/005 已全部验证修复 — sha256 绑定实际编译输出 |
+| P1-2 | 证据结构误导 | ✅ | index.yaml source/evidence_commit/details 已更新为 systemd 路径 |
 | P1-3 | strncpy 无 NUL 终止 | ⬜ | 已声明后移至 Gate 1 |
 
 ---
@@ -191,9 +191,9 @@ PR#23 是 PR#21 第三轮 Review (#4879426406) 的修复版，声称修复全部
 |:----:|------|:------:|------|
 | 1 | 轮换麒麟 VM 密码 | 🔴 | 需麒麟团队执行 |
 | 2 | git filter-repo 清理历史密码 | 🔴 | 影响所有贡献者 |
-| 3 | `evidence/index.yaml` ECHO-005 `source` 更新为 systemd_evidence 路径 | 🟡 | 当前仍指向旧 final/evidence.jsonl |
-| 4 | `evidence/index.yaml` ECHO-005 `evidence_commit` 更新为 `807e9cb...` | 🟡 | 当前为旧值 `c9c8143` |
-| 5 | `evidence/index.yaml` ECHO-005 `details` 记录数更新为 8 条 | 🟡 | 当前声称 9 条 |
+| 3 | `evidence/index.yaml` ECHO-005 `source` 更新为 systemd_evidence 路径 | ✅ | 已更新为 evidence/gate0_echo/systemd_evidence/evidence.jsonl |
+| 4 | `evidence/index.yaml` ECHO-005 `evidence_commit` 更新为 `807e9cb...` | ✅ | 已更新为 807e9cb41bb98854b3a8ef01e4680da73a82d874 |
+| 5 | `evidence/index.yaml` ECHO-005 `details` 记录数更新为 8 条 | ✅ | 已更新与实际 evidence.jsonl 一致 |
 | 6 | 同步 PR 正文状态描述 | 🟡 | 需在 PR #23 上更新 |
 
 ---
