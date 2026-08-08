@@ -117,23 +117,27 @@ def _make_fake_module():
 
 @pytest.fixture
 def fake_kylin(monkeypatch):
-    """注入假 kylin_embedding 模块；teardown 恢复真实模块与 providers 缓存。
+    """注入假 kylin_embedding 模块；teardown 无条件恢复模块状态。
 
-    P1-2：消除模块 import 阶段的全局污染——
+    P1-2 / P1-1(R4)：消除模块 import 阶段的全局污染——
     - 仅在测试运行期注入（不在收集/模块导入期）；
-    - teardown 恢复 sys.modules["kylin_embedding"] 与 providers 模块缓存；
-    - 保证全量 pytest 顺序无关，后续测试（如 test_load_idempotent.py）
-      使用真实构建的 kylin_embedding，不会静默使用 FakeBridge。
+    - teardown 无条件清除测试期间产生的全部 providers*，再恢复 fixture
+      开始前保存的原模块（即使开始时 providers 尚未导入，也不会残留
+      FakeBridge 绑定，后续测试不会静默复用）；
+    - 恢复 sys.modules["kylin_embedding"]（monkeypatch 自动）；
+    - 保证任意收集顺序下后续测试（如 test_load_idempotent.py）使用真实
+      构建的 kylin_embedding，不会静默使用 FakeBridge。
     """
     global _fake_mod
+    # 1. fixture 开始前保存原 kylin_embedding 与 providers*（P1-1 R4）
     saved = {
         'kylin_embedding': sys.modules.get('kylin_embedding'),
     }
-    # 弹出 providers 包缓存，强制用当前（假）kylin_embedding 重新导入
     for name in list(sys.modules):
         if name == 'providers' or name.startswith('providers.'):
             saved[name] = sys.modules.pop(name)
 
+    # 2. 注入 fake kylin_embedding 并重新导入 providers（绑定 FakeBridge）
     fake_mod = _make_fake_module()
     _fake_mod = fake_mod
     monkeypatch.setitem(sys.modules, 'kylin_embedding', fake_mod)
@@ -142,12 +146,18 @@ def fake_kylin(monkeypatch):
     from providers import EmbeddingProvider, ProviderError  # noqa: E402
     yield EmbeddingProvider, ProviderError, fake_mod
 
-    # teardown：恢复 providers 模块缓存（monkeypatch 自动恢复 kylin_embedding）
+    # 3. teardown（P1-1 R4 完整隔离）：
+    #    a) 无条件清除测试期间当前存在的全部 providers*（含测试期新产生的）
+    for name in list(sys.modules):
+        if name == 'providers' or name.startswith('providers.'):
+            sys.modules.pop(name, None)
+    #    b) 恢复 fixture 开始前保存的原 providers* / kylin_embedding
     for name, mod in saved.items():
         if mod is not None:
             sys.modules[name] = mod
         else:
             sys.modules.pop(name, None)
+    #    c) kylin_embedding 由 monkeypatch 自动恢复为真实模块（或 None）
     _fake_mod = None
 
 
