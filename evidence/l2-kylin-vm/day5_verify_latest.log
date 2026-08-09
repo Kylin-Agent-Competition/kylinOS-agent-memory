@@ -1,0 +1,69 @@
+33180385e0db350a97915e40b978424381052f9c
+--- git status --porcelain --untracked-files=all (exit=0) ---
+stdout: ?? docs/project-management/session-handoff-20260809.md
+  [NOTE] 唯一未跟踪文件为交接文档（非被测代码，不影响 memory-service 证据门禁）
+--- git rev-parse HEAD (exit=0) ---
+stdout: 33180385e0db350a97915e40b978424381052f9c
+  [PASS] 被测 Commit = 3318038（Day5 分支 tip，cherry-pick 后最终代码）
+
+===== Runtime 输出（Step 2 起） =====
+# Day5 麒麟 VM 验证原始日志（真实 SDK，KYLIN_L2=1，未经手工拼接）
+# 被测 Commit: 33180385e0db350a97915e40b978424381052f9c
+# Date: 2026-08-09
+# 环境: 银河麒麟 V11 x86_64, Python 3.12.3, pytest 9.1.1,
+#       Runtime 1.3.0, kylin_embedding.cpython-312-x86_64-linux-gnu.so
+
+===== Step A: 真实 SDK pytest（test_embedding_service_real.py，8 项） =====
+命令:
+  cd /mnt/shared
+  PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
+  LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH \
+  KYLIN_L2=1 \
+  /tmp/day5-venv/bin/python -m pytest memory-service/tests/test_embedding_service_real.py -v
+
+输出（原始）:
+================================================= test session starts ==================================================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /tmp/day5-venv/bin/python
+cachedir: .pytest_cache
+rootdir: /var/mnt/shared
+collected 8 items
+
+memory-service/tests/test_embedding_service_real.py::test_real_embed_returns_768_dim PASSED                      [ 12%]
+memory-service/tests/test_embedding_service_real.py::test_real_embed_chinese PASSED                              [ 25%]
+memory-service/tests/test_embedding_service_real.py::test_real_embed_empty_string PASSED                         [ 37%]
+memory-service/tests/test_embedding_service_real.py::test_real_embed_batch PASSED                                [ 50%]
+memory-service/tests/test_embedding_service_real.py::test_real_service_handle_request_ping PASSED                [ 62%]
+memory-service/tests/test_embedding_service_real.py::test_real_service_handle_request_embed PASSED               [ 75%]
+memory-service/tests/test_embedding_service_real.py::test_real_service_health PASSED                             [ 87%]
+memory-service/tests/test_embedding_service_real.py::test_degraded_when_so_missing PASSED                        [100%]
+
+================================================== 8 passed in 1.44s ===================================================
+  [PASS] 8/8 无 Skip、无 FAIL
+
+===== Step B: 端到端 UDS（server + envelope + 真实 SDK） =====
+命令:
+  cd /mnt/shared/memory-service
+  PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
+  LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH \
+  /tmp/day5-venv/bin/python -m embedding.server --socket /tmp/kylin-embed.sock &
+  sleep 2
+  /tmp/day5-venv/bin/python -c "<socket client: memory.health + memory.embed>"
+
+输出（原始）:
+[1786266732711] info  Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock
+[1786266732711] info  Runtime version is  1.3.0 InitEngine call new init_v2
+[1786266732744] info  Proxy init success,sessionId is: 1257104058
+[1786266732746] warn  Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible.
+[1786266732746] info  Try to get default model
+[1786266732768] info  Get default model success, model: ensemble-embd_gte-base_uint8-text
+[1786266732768] info  Try to init default model: ensemble-embd_gte-base_uint8-text
+[1786266732769] info  Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 1257104058
+[1786266732769] info  Init default model success, model: ensemble-embd_gte-base_uint8-text
+[server] listening on /tmp/kylin-embed.sock
+health: {'protocol_version': '1.0', 'method': 'memory.health', 'ok': True, 'result': {'service': 'ok', 'provider': 'ready', 'bridge_loaded': True, 'bridge_has_session': True, 'degraded': False}, 'request_id': 'req-vm', 'trace_id': 'trc-vm'}
+embed ok: True dim: 768 rid回显: req-vm
+  [PASS] health: bridge_loaded=true, bridge_has_session=true
+  [PASS] embed: ok=true, dim=768, request_id/trace_id 回显正确
+
+===== 汇总 =====
+全部验证通过（FAILURES=0）：真实 SDK 8/8 无 Skip + 端到端 UDS（health/embed）全绿
