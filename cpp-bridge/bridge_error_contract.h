@@ -9,7 +9,9 @@
  * 规则：
  * 1. 所有 Bridge 函数返回 BridgeResult<T>，成功含值，失败含错误码+消息。
  * 2. 不抛出 C++ 异常（noexcept），异常在 Bridge 内部捕获并转为错误码。
- * 3. 超时由 Bridge 内部定时器控制，不依赖调用方传入 deadline。
+ * 3. 超时：Day4 未实现主动超时中断（TD-A-005-01 已登记）。timeout_ms 参数
+ *    当前无实际效果，仅透传保留；ERR_TIMEOUT 仅在 Day5 实现定时器后产生。
+ *    timeout_ms=0 语义未定义（Day4 不保证主动中断，也不保证超时返回）。
  * 4. 取消通过线程安全的状态标志位实现，不强制中断 SDK 内部调用。
  */
 
@@ -53,6 +55,10 @@ enum class BridgeError : uint32_t {
     ERR_SESSION_CREATE  = 0x0201,   // create_session 返回 NULL
     ERR_SESSION_INIT    = 0x0202,   // init_session 返回非零
     ERR_SESSION_DESTROY = 0x0203,   // destroy_session 异常
+    ERR_SESSION_DESTROYED = 0x0204, // 会话已销毁（终态，禁止重建——SDK 不允许同进程 destroy→create，P0-2）
+    ERR_FATAL_FAILURE = 0x0205,     // 不可恢复终态后的稳定错误（已 dlclose/destroy，禁止重试；
+                                    // 需进程重启。P1-1：首次失败保留原始码 ERR_DLSYM_FAILED/ERR_SESSION_INIT，
+                                    // 本码仅用于 fatal 终态后的重试/调用）
 
     // Embedding 调用 (0x03xx)
     ERR_EMBED_CALL      = 0x0301,   // text_embedding 返回 false
@@ -134,8 +140,12 @@ struct TimeoutConfig {
 // ── Bridge 初始化参数 ──
 
 struct BridgeInitParams {
-    std::string so_path = "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1";  // x86_64 平台路径（宿主证据 embedding_abi_symbols.log:7）。aarch64 平台需改为 /usr/lib/aarch64-linux-gnu/...（UNTESTED）
-    std::string depends_path = "/usr/lib/kylin-ai/depends";
+    // 默认 .so 路径（x86_64 宿主证据 embedding_abi_symbols.log:7）。
+    // 注：aarch64 不在本项目验收范围（验收环境为银河麒麟 V11 x86_64），
+    // 如需 aarch64 支持，应另行实现并补充实机证据（P2-3 收口）。
+    std::string so_path = "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1";
+    // NOTE: 依赖库路径（如 /usr/lib/kylin-ai/depends）由部署期 LD_LIBRARY_PATH 配置，
+    // 不作为 BridgeInitParams 字段（P1-2：避免"看似可配置但实际无效"的误导字段）。
     TimeoutConfig timeouts;
 };
 

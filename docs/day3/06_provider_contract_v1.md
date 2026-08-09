@@ -1,8 +1,28 @@
 # 06 轨道 A — Provider v1 输入输出契约
 
-> **文档状态：骨架已建立** — 接口定义已冻结，Provider 实现尚未编码，未经过麒麟 VM 端到端验证。
+> **文档状态：生命周期契约变更待 Gate 审批** — 见下方"生命周期契约 Gate 变更记录"。
+> 注意：生命周期语义变更（进程级单例/配置锁定/close-restart 模型 B 等）尚未经 Reviewer 批准，
+> 审批通过前不得视为接口已重新冻结。原有接口签名（embed/embed_batch/get_dimension/model_info）不受影响。
 >
 > 有宿主证据的结论均标注出处（证据文件:行号），无证据的接口标记为 UNTESTED。
+
+## 生命周期契约 Gate 变更记录（P1-5）
+
+Day4 实现引入了对 Day3 冻结契约的生命周期语义变更，按接口冻结 Gate 要求记录如下：
+
+| 项 | 内容 |
+|----|------|
+| **变更原因** | 麒麟实测 SDK 不允许同一进程 session 销毁后重建（destroy→create 会阻塞挂起）；SDK 动态库禁止 dlclose 后重载（Abort）。为满足 P0-1 生命周期安全，Provider 改为进程级单例。 |
+| **影响范围** | EmbeddingProvider 生命周期语义；Bridge destroy_session 终态；配置锁定。接口签名（embed/embed_batch/get_dimension/model_info）不变。 |
+| **close/restart 定义（模型 B）** | close() 释放实例引用并置 CLOSED；close 后可重新 start()（重新取得引用）。close 后未 restart 调用 embed() 抛 ERR_SESSION_DESTROYED。未启动 close 为 no-op。 |
+| **配置冲突规则** | 进程内首个实例的 so_path 被锁定；后续不同路径实例抛 ERR_CONFIG_CONFLICT。相同/None 路径可共享。 |
+| **初始化失败恢复规则** | 首次初始化失败（如 so 不存在）且无引用时重置单例，允许后续实例用正确路径重建。初始化 embed 失败保持 INITIALIZING，下次 start 重试。 |
+| **失败恢复与 fatal 终态（P1-1）** | dlsym 缺失 / init_session 失败：首次失败保留原始错误码（`ERR_DLSYM_FAILED`→Provider `ERR_SDK_NOT_LOADED`；`ERR_SESSION_INIT`→Provider `ERR_SESSION_FAILED`），同时置 Bridge fatal 终态（已 dlclose/destroy，禁止进程内重试避免危险生命周期）；fatal 后任何重试/调用返回 `ERR_FATAL_FAILURE`（Provider 0x0203），要求进程重启。.so 不存在、create_session 返回 NULL、初始化 embed 失败为可安全重试路径（不置 fatal）。 |
+| **并发初始化策略** | 当前为骨架无类级锁；Memory Service 启动链路为单线程，暂不阻塞（已登记 TD-A-005-06）。 |
+| **进程退出清理责任** | 共享 Bridge 由 Python 解释器退出时析构（destroy_session + dlclose 一次）。 |
+| **生效 Commit** | 见 PR 证据（`evidence/l2-kylin-vm/day4_verify_latest.log` 被测 commit，EMBED-CALL-003 tested_commit）。 |
+| **测试证据** | 生命周期 4 路径麒麟 VM 实测（P0-1）；引用计数/配置冲突/失败恢复 pytest（P1-1/P1-2/P1-4）。 |
+| **审批** | 待 Reviewer 确认（本记录随 PR #17 提交）。 |
 
 ## EmbeddingProvider
 
@@ -25,7 +45,7 @@
 | 超长文本(~2170 bytes) | dim=768, 不截断 | `day2_smoke_run.log` TC-1 |
 | 重复调用确定性 | 5 次结果一致 | `day2_smoke_run.log` TC-8 |
 | Bridge 契约头文件编译 | g++ -fsyntax-only 通过 | 麒麟 VM 实测，2026-07-30 |
-| 错误码枚举 | 15 个不重叠值 | 麒麟 VM 实测，2026-07-30 |
+| 错误码枚举 | 18 个不重叠值（含 ERR_SESSION_DESTROYED / ERR_FATAL_FAILURE） | 麒麟 VM 实测 + test_bridge_errors 唯一性断言 |
 | .so 不存在时 dlopen | 返回错误，不崩溃 | 麒麟 VM 实测，2026-07-30（DF-L1-001） |
 | dlsym 不存在符号 | 返回 NULL，不崩溃 | 麒麟 VM 实测，2026-07-30（DF-L1-002） |
 | init_model(错误模型名) | 返回 errorCode=10，SDK 自动 fallback | 麒麟 VM 实测，2026-07-30（DF-L1-006） |
@@ -37,8 +57,14 @@
 ```python
 class EmbeddingProvider:
     """
-    Embedding 向量化服务。
-    每次调用均通过 C++ Bridge 走 dlopen → dlsym → text_embedding 路径。
+    Embedding 向量化服务（进程级单例）。
+    通过进程级单例 Bridge 共享 SDK 会话：首次 start() 加载动态库并初始化模型，
+    后续调用复用已有 session（不销毁重建——SDK 不允许同进程 session 销毁后重建）。
+    生命周期语义（Day4 实现 + Gate 变更记录，见文档头部）：
+    - so_path 仅进程内首个实例生效（全局路径锁定），不同路径抛 ERR_CONFIG_CONFLICT；
+    - close() 释放引用并置 CLOSED；close 后可重新 start()（模型 B）；
+    - close() 后未 restart 调用 embed() 抛 ERR_SESSION_DESTROYED；
+    - 初始化失败可重试（INITIALIZING 状态），首次失败无引用时允许恢复。
     """
 
     def embed(self, text: str, *, timeout_ms: int = 5000) -> EmbeddingResult:
@@ -111,21 +137,27 @@ Provider 层错误码与 Bridge 层错误码的映射关系：
 |:------:|:----:|------|
 | `ERR_SDK_NOT_LOADED` | `ERR_SO_NOT_FOUND` / `ERR_DLOPEN_FAILED` / `ERR_DLSYM_FAILED` | Bridge 层错误向上聚合 |
 | `ERR_SESSION_FAILED` | `ERR_SESSION_CREATE` / `ERR_SESSION_INIT` | 任一失败均映射 |
+| `ERR_SESSION_DESTROYED` | `ERR_SESSION_DESTROYED`（Bridge destroy 终态） | 会话已销毁不可重建；Provider 层 close 后未 restart 也抛此码 |
+| `ERR_FATAL_FAILURE` | `ERR_FATAL_FAILURE`（fatal 终态后重试/调用） | 不可恢复终态（已 dlclose/destroy），需进程重启；首次失败保留原始码（`ERR_DLSYM_FAILED` / `ERR_SESSION_INIT`） |
 | `ERR_EMBED_FAILED` | `ERR_EMBED_CALL` | 直接映射 |
 | `ERR_SDK_ERROR` | `ERR_EMBED_ERROR` | 直接映射 |
 | `ERR_MODEL_INVALID` | `ERR_MODEL_INVALID` | `init_model` 返回 errorCode=10；SDK 自动 fallback 到默认模型，后续 `text_embedding()` 不受影响 |
 | `ERR_TIMEOUT` | `ERR_TIMEOUT` | 直接映射 |
 | `ERR_INVALID_TEXT` | 无对应 Bridge 码 | 应用层校验，不进入 Bridge |
+| `ERR_CONFIG_CONFLICT` | 无对应 Bridge 码 | Provider 单例配置锁定：so_path 与首实例不一致 |
 
 | Provider 错误码 | 触发条件 | 状态 |
 |:------:|---------|:----:|
 | `ERR_SDK_NOT_LOADED` | `dlopen` / `dlsym` 失败 | UNTESTED |
 | `ERR_SESSION_FAILED` | `create_session` / `init_session` 异常 | UNTESTED |
+| `ERR_SESSION_DESTROYED` | Bridge destroy 终态后 create/embed；Provider close 后未 restart embed | SOURCE_VERIFIED（麒麟 VM destroy 终态 CTest） |
+| `ERR_FATAL_FAILURE` | dlsym 缺失 / init_session 失败首次失败即进入 fatal 终态；fatal 后重试/调用 | SOURCE_VERIFIED（WSL 假 SDK + Provider pytest；麒麟 VM 第七轮 L2 全绿） |
 | `ERR_EMBED_FAILED` | `text_embedding` 返回 false | UNTESTED |
 | `ERR_SDK_ERROR` | `embedding_result_get_error_code != 0` | UNTESTED |
 | `ERR_MODEL_INVALID` | `init_model` 返回 errorCode=10；后续 embed 自动使用默认模型 | HOST_VERIFIED / E4 |
 | `ERR_TIMEOUT` | 超过 `timeout_ms` | UNTESTED |
 | `ERR_INVALID_TEXT` | `text` 为 None 或非字符串类型 | SOURCE_VERIFIED |
+| `ERR_CONFIG_CONFLICT` | 单例 so_path 与首实例不一致 | SOURCE_VERIFIED（麒麟 VM test_config_conflict_raises） |
 
 ## ExtractionProvider
 

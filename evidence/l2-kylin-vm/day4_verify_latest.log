@@ -1,0 +1,152 @@
+939bc2d383a3e7bafdd9d5740564afba4328ad03
+--- git status --porcelain --untracked-files=all (exit=0) ---
+stdout: <EMPTY>
+  [PASS] git status --porcelain --untracked-files=all 为空（严格干净，排除证据日志）
+--- git diff --exit-code ---
+exit=0, stdout: <EMPTY>
+  [PASS] WORKTREE_CLEAN=1
+--- git diff --cached --exit-code ---
+exit=0, stdout: <EMPTY>
+  [PASS] INDEX_CLEAN=1
+
+===== Runtime 输出（Step 2 起） =====
+# Day4 麒麟 VM 验证原始日志（脚本自动生成，未经手工拼接）
+# 被测 Commit: 939bc2d383a3e7bafdd9d5740564afba4328ad03
+# Date: 2026-08-08 21:03:16
+
+===== Step 2: venv + pybind11 =====
+  (重建 venv: /tmp/day4-venv)
+Collecting pybind11
+  Downloading pybind11-3.1.0-py3-none-any.whl.metadata (10 kB)
+Downloading pybind11-3.1.0-py3-none-any.whl (319 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 319.4/319.4 kB 48.1 kB/s eta 0:00:00
+Installing collected packages: pybind11
+Successfully installed pybind11-3.1.0
+Collecting pytest
+  Using cached pytest-9.1.1-py3-none-any.whl.metadata (7.6 kB)
+Collecting iniconfig>=1.0.1 (from pytest)
+  Using cached iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting packaging>=22 (from pytest)
+  Using cached packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+Collecting pluggy<2,>=1.5 (from pytest)
+  Using cached pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+Collecting pygments>=2.7.2 (from pytest)
+  Using cached pygments-2.20.0-py3-none-any.whl.metadata (2.5 kB)
+Using cached pytest-9.1.1-py3-none-any.whl (386 kB)
+Using cached iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
+Using cached packaging-26.3-py3-none-any.whl (129 kB)
+Using cached pluggy-1.6.0-py3-none-any.whl (20 kB)
+Using cached pygments-2.20.0-py3-none-any.whl (1.2 MB)
+Installing collected packages: pygments, pluggy, packaging, iniconfig, pytest
+Successfully installed iniconfig-2.3.0 packaging-26.3 pluggy-1.6.0 pygments-2.20.0 pytest-9.1.1
+  [PASS] pybind11 可用
+
+===== Step 3: CMake 构建 + CTest =====
+  [PASS] cmake configure OK
+  [PASS] cmake build OK
+  [PASS] ctest 全部通过
+    1/6 Test #1: bridge_errors ....................   Passed    0.07 sec
+    2/6 Test #2: bridge_so_not_found ..............   Passed    0.07 sec
+    3/6 Test #3: bridge_malformed .................   Passed    0.54 sec
+    4/6 Test #4: bridge_destroyed .................   Passed    0.14 sec
+    5/6 Test #5: bridge_failure_recovery ..........   Passed    0.25 sec
+    6/6 Test #6: bridge_dlsym_missing .............   Passed    0.14 sec
+    100% tests passed, 0 tests failed out of 6
+
+===== Step 4: pytest 统一收集 (P0-4) =====
+  kylin_embedding.__file__=/var/mnt/shared/cpp-bridge/build/kylin_embedding.cpython-312-x86_64-linux-gnu.so
+  [PASS] kylin_embedding 来自当前 build
+    memory-service/tests/test_embedding_provider_import.py::test_providers_package_importable PASSED [  2%]
+    memory-service/tests/test_embedding_provider_import.py::test_provider_contract_methods_exist PASSED [  5%]
+    memory-service/tests/test_embedding_provider_import.py::test_embedding_result_fields PASSED [  7%]
+    memory-service/tests/test_embedding_provider_import.py::test_model_info_fields PASSED [ 10%]
+    memory-service/tests/test_embedding_provider_import.py::test_provider_error_code_enum PASSED [ 13%]
+    memory-service/tests/test_embedding_provider_import.py::test_bridge_model_error_maps_to_model_invalid PASSED [ 15%]
+    memory-service/tests/test_embedding_provider_import.py::test_embed_non_str_raises_provider_error PASSED [ 18%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSoNotFoundError] PASSED [ 21%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeLoadError] PASSED [ 23%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSymbolError] PASSED [ 26%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSessionError] PASSED [ 28%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSessionDestroyedError] PASSED [ 31%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeFatalError] PASSED [ 34%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeEmbedError] PASSED [ 36%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeSdkError] PASSED [ 39%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeTimeoutError] PASSED [ 42%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeCancelledError] PASSED [ 44%]
+    memory-service/tests/test_exception_mapping.py::test_exception_type_exists[BridgeModelError] PASSED [ 47%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSoNotFoundError] PASSED [ 50%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeLoadError] PASSED [ 52%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSymbolError] PASSED [ 55%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSessionError] PASSED [ 57%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSessionDestroyedError] PASSED [ 60%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeFatalError] PASSED [ 63%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeEmbedError] PASSED [ 65%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeSdkError] PASSED [ 68%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeTimeoutError] PASSED [ 71%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeCancelledError] PASSED [ 73%]
+    memory-service/tests/test_exception_mapping.py::test_exception_inherits_bridge_error[BridgeModelError] PASSED [ 76%]
+    memory-service/tests/test_exception_mapping.py::test_embed_without_load_raises_load_error PASSED [ 78%]
+    memory-service/tests/test_exception_mapping.py::test_load_missing_so_raises_not_found PASSED [ 81%]
+    memory-service/tests/test_exception_mapping.py::test_default_so_path_contains_core_lib PASSED [ 84%]
+    memory-service/tests/test_provider_failure_recovery.py::test_so_not_found_recovers_with_new_instance PASSED [ 86%]
+    memory-service/tests/test_provider_failure_recovery.py::test_init_embed_failure_retry_same_instance PASSED [ 89%]
+    memory-service/tests/test_provider_failure_recovery.py::test_init_embed_failure_new_instance_same_state PASSED [ 92%]
+    memory-service/tests/test_provider_failure_recovery.py::test_dlsym_failure_fatal_no_retry PASSED [ 94%]
+    memory-service/tests/test_provider_failure_recovery.py::test_initfail_maps_to_session_failed_then_fatal PASSED [ 97%]
+    memory-service/tests/test_provider_failure_recovery.py::test_bridge_destroyed_maps_to_session_destroyed PASSED [100%]
+    ============================== 38 passed in 0.43s ==============================
+    memory-service/tests/test_load_idempotent.py::test_start_close PASSED    [  7%]
+    memory-service/tests/test_load_idempotent.py::test_context_manager_pass PASSED [ 15%]
+    memory-service/tests/test_load_idempotent.py::test_start_embed_close_restart PASSED [ 23%]
+    memory-service/tests/test_load_idempotent.py::test_multiple_providers_sequential PASSED [ 30%]
+    memory-service/tests/test_load_idempotent.py::test_close_without_start PASSED [ 38%]
+    memory-service/tests/test_load_idempotent.py::test_context_manager_exception PASSED [ 46%]
+    memory-service/tests/test_load_idempotent.py::test_close_without_start_is_noop_for_refcount PASSED [ 53%]
+    memory-service/tests/test_load_idempotent.py::test_repeated_close_noop PASSED [ 61%]
+    memory-service/tests/test_load_idempotent.py::test_ref_count_matches_started_instances PASSED [ 69%]
+    memory-service/tests/test_load_idempotent.py::test_embed_after_close_raises_destroyed PASSED [ 76%]
+    memory-service/tests/test_load_idempotent.py::test_restart_after_close_recovers PASSED [ 84%]
+    memory-service/tests/test_load_idempotent.py::test_config_conflict_raises PASSED [ 92%]
+    memory-service/tests/test_load_idempotent.py::test_same_path_ok PASSED   [100%]
+    ============================== 13 passed in 0.61s ==============================
+    memory-service/tests/test_interpreter_exit.py::test_interpreter_exit_no_abort PASSED [100%]
+    ============================== 1 passed in 0.38s ===============================
+  [PASS] pytest 全部通过（三组独立进程，无 Skip）
+
+===== Step 5: 真实 SDK 冒烟 =====
+  [PASS] smoke 全部通过
+      [PASS] 中文 dim=768 (实际 768)
+      [PASS] 中文 L2≈1.0 (实际 1.000000)
+      [PASS] vector 长度 768 (实际 768)
+      [PASS] 空字符串 dim=768 (实际 768)
+      [PASS] batch 返回 3 条 (实际 3)
+      [PASS] batch 全部 dim=768
+      [PASS] batch[0] 与单条 r1 近似一致
+      [PASS] batch[2] 与单条 r2 近似一致
+      [PASS] get_dimension=768 (实际 768)
+      [PASS] model_info.dimension=768
+      [PASS] model_info.ondevice=ASSUMED True
+    === 结果: PASS (0 failures) ===
+
+===== Step 6: Provider 错误映射 (P1-1) =====
+  [PASS] start() -> ERR_SDK_NOT_LOADED (bridge=BridgeSoNotFoundError)
+  [PASS] Provider 错误映射 OK
+
+===== Step 7: 生命周期路径 (P0-1) =====
+[1786194244384] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1786194244385] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
+[1786194244400] [32minfo [0m Proxy init success,sessionId is: 1399662219 
+[1786194244401] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
+[1786194244401] [32minfo [0m Try to get default model 
+[1786194244410] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
+[1786194244410] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
+[1786194244411] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 1399662219 
+[1786194244411] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
+  [PASS] start→close
+  [PASS] with EmbeddingProvider(): pass
+  [PASS] start→embed→close→start→embed→close
+  [PASS] 多个 Provider 顺序创建/启动/关闭
+  [PASS] 生命周期 4 类路径全部通过
+
+===== 汇总 =====
+全部验证通过（FAILURES=0）
