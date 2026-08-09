@@ -35,7 +35,15 @@ Python 记忆服务核心，以 Unix Domain Socket + 长度前缀 JSON 协议对
 
 ## 当前状态
 
-**仅建立目录和职责边界，尚无生产实现。**
+**D5（首个真实垂直链路）已实现 Embedding 最小链路**（`embedding/` 子包，见下方"实现"）：
+
+- `embedding/protocol.py`：UDS 长度前缀 JSON + 架构 4.4 envelope（`build_envelope`/`parse_envelope`，protocol_version=1.0 校验、method 白名单）
+- `embedding/embedding_service.py`：EmbeddingService（`memory.embed`/`embed_batch`/`ping`/`health`），Bridge 调用在线程池（不阻塞聊天线程），Provider 不可用时返回明确空向量 + `degraded`（真实降级，非固定样例）
+- `embedding/server.py`：UDS 服务器（`python -m embedding.server --socket ...`）
+
+麒麟 VM 验证（2026-08-08）：真实 SDK 8/8 无 Skip（768 维/中文/空串/batch/envelope 分发/health/降级）+ 本地 23/23 + 端到端 UDS（health bridge_loaded=true、embed dim=768）。
+
+其余记忆读写、检索、偏好/知识治理等仍在后续迭代（D6+）。
 
 ## 明确不负责的内容
 
