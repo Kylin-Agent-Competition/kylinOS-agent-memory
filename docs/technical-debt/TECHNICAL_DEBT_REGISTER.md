@@ -35,6 +35,7 @@
 | TD-A-005-06 | EmbeddingProvider 进程级 Singleton 并发初始化缺少类级锁 | memory-service/providers/embedding_provider.py | Technical Debt | Low | Open | A 轨成员 | D 主审 | 2026-08-10 | Memory Service 启动链路为单线程（并发入口不存在）；若后续引入并发初始化入口，需加类级锁并升级严重度 | PR #17 |
 | TD-A-005-07 | Day4 Bridge/Provider 非权威文档与元数据收口（轮次标注、错误模型注释同步） | docs/day3/06_provider_contract_v1.md, docs/day4/08_bridge_provider_skeleton.md, evidence/index.yaml, cpp-bridge/src/py_module.cpp, memory-service/providers/embedding_provider.py, cpp-bridge/tests/test_bridge_failure_recovery.cpp | Technical Debt | Low | Open | A 轨成员 | D 主审 | 2026-08-12 | 源码注释 / Day3 说明 / Day4 说明 / evidence 元数据与当前正式错误模型（ERR_FATAL_FAILURE 语义、BridgeSessionDestroyedError/BridgeFatalError）及最新 Runtime 轮次（第八轮）一致 | PR #17 |
 | TD-A-005-08 | Day4 验证脚本证据文件生命周期优化（.prev 备份不自动清理） | scripts/verify_day4_vm.sh, evidence/l2-kylin-vm | Technical Debt | Low | Open | A 轨成员 | D 主审 | 2026-08-12 | 验证脚本可连续执行，无需人工删除上一次运行生成的 .prev 临时备份，同时保持 Step 1 严格工作区门禁（历史备份入 /tmp 或执行前自动清理，或建立统一 evidence archive 机制） | PR #17 |
+| TD-A-005-09 | EmbeddingService 启动期 SDK 缺失无降级（server 构造直接抛 RuntimeError） | memory-service/embedding/embedding_service.py, memory-service/embedding/server.py, memory-service/providers/embedding_provider.py | Technical Debt | Medium | Open | A 轨成员 | D 主审；安全/降级影响 E 补审 | 2026-08-14 | ① EmbeddingProvider.__init__ 在 kylin_embedding 缺失时不再直接 raise，改为可注入/可延迟构造（或 EmbeddingUDSServer 增加 provider 注入点）；② 无 SDK 时 UDS server 可启动并返回结构化降级响应（memory.embed → ok+degraded 空向量；memory.health → bridge_loaded=false）；③ 麒麟 VM 补充"so 缺失"端到端证据 | PR #17 / Day5 PR |
 
 ### TD-A-005-07 / TD-A-005-08 延期说明（第四轮 Review，2026-08-08）
 
@@ -44,6 +45,9 @@
 - **TD-A-005-08 产生原因**：verify_day4_vm.sh 每次运行把上一版证据日志备份为 `day4_verify_latest.log.prev`，而 Step 1 严格工作区排除规则未覆盖 `.prev`，重复运行前可能需要人工清理。
   **当前影响**：仅影响连续运行的便利性；第八轮 L2 证据（HEAD 匹配 / status 空 / worktree clean / index clean / CTest 6/6 / pytest 52 / Smoke 11 / 生命周期 4 路径 / FAILURES=0）已生成且真实有效。
   **允许延期理由**：属测试基础设施维护，不影响已生成证据真实性。
+- **TD-A-005-09 产生原因**：Day5 垂直链路审查（2026-08-09）实测复现——无 SDK 环境（WSL 模拟）下 `EmbeddingUDSServer()` 构造即抛 `RuntimeError`：`EmbeddingProvider.__init__` 在 `kylin_embedding` 模块缺失时直接 `raise RuntimeError(_IMPORT_ERROR)`，且 `server.py` 硬编码 `EmbeddingService()`（无 provider 注入点）。因此降级语义（`memory.embed` → 空向量+degraded）只覆盖"Provider 已构造成功、运行期调用失败"场景，不覆盖"启动期 SDK 缺失"场景——后者 UDS server 直接崩溃，客户端只能走连接失败降级（架构 13.1"聊天继续"仍成立，但服务端无结构化降级响应）。`test_embedding_service_real.py::test_degraded_when_so_missing` 自述用 FailProvider 注入、未模拟真实 so 缺失。
+  **当前影响**：仅影响 SDK 缺失/损坏时的服务端降级能力；Day5 麒麟 VM 正常路径验证全绿（真实 SDK 8/8 无 Skip + 端到端 UDS bridge_loaded=true / embed dim=768），无假实现、无固定样例。
+  **允许延期理由**：属健壮性增强而非核心链路缺陷；麒麟宿主正常安装路径 SDK 存在，未阻断 Day5 垂直链路验证与合并；修复涉及 Provider 构造/注入点重构，计划在 Day6+ 统一处理。
 
 ## 管理规则
 
