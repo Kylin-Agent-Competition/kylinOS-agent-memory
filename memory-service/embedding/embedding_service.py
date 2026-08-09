@@ -151,7 +151,9 @@ class EmbeddingService:
                 result = fut.result(timeout=timeout_ms / 1000.0 + 1.0)
             except FutureTimeout:
                 # 超时：返回结构化错误；尽力取消任务（线程池中的任务可能无法中断，
-                # 但调用方线程立即获得控制权，不阻塞聊天线程）
+                # 但调用方线程立即获得控制权，不阻塞聊天线程）。
+                # [TD-A-005-01] 主动超时中断未实现：fut.cancel() 对已运行任务无效，
+                # 精确中断需 Bridge 内部定时器（Day6+ 跟踪）。
                 fut.cancel()
                 return self._error(ProviderErrorCode.ERR_TIMEOUT.name,
                                    "embed timed out (Bridge 未返回)")

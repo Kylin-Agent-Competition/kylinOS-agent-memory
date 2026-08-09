@@ -28,6 +28,12 @@ Python 记忆服务核心，以 Unix Domain Socket + 长度前缀 JSON 协议对
 - 方法（D5 最小垂直链路）：`memory.embed` / `memory.embed_batch` / `memory.ping` / `memory.health`；完整方法集见总体架构文档 4.4（TABLE 15）。
 - 实现见 `embedding/protocol.py`（build_envelope/parse_envelope）。
 
+> **架构文档引用说明**：本文件引用的「总体架构文档 v1」（4.4 IPC 契约、TABLE 12/48/54/55/15/17）
+> 为团队共享的外部文档（docx，版本 v1.0，2026-07-26 编制），仓库 `docs/architecture/` 尚未
+> 收录全文；仓库内可交叉验证的基线条目见 `docs/architecture/MEMORY_BUSINESS_SCHEMA_V0.1.md`、
+> `docs/day3/06_provider_contract_v1.md`。引用编号以该外部文档 v1.0 为准，若与仓库条目冲突以
+> 仓库冻结契约优先。待总体架构文档同步入库后移除本说明。
+
 ## 责任轨道
 
 - **主要**：D、E
