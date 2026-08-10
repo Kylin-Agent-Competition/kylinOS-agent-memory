@@ -110,6 +110,21 @@ def download_verified(remote_path, local_path):
     sftp.close()
     return False, ""
 
+def get_git_head(project_root):
+    head_file = os.path.join(project_root, '.git', 'HEAD')
+    if os.path.isfile(head_file):
+        with open(head_file, 'r') as f:
+            ref = f.read().strip()
+        if ref.startswith('ref: '):
+            ref_path = os.path.join(project_root, '.git', ref[5:])
+            if os.path.isfile(ref_path):
+                with open(ref_path, 'r') as f:
+                    return f.read().strip()
+        return ref
+    result = subprocess.run(["git", "rev-parse", "HEAD"],
+        capture_output=True, text=True, cwd=project_root)
+    return result.stdout.strip()
+
 def main():
     print("=" * 70)
     print(" P0-B / P0-C: SYSTEMD 路径证据重建")
@@ -117,10 +132,7 @@ def main():
     print("=" * 70)
 
     # ---- GET LOCAL HEAD ----
-    git_head = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        capture_output=True, text=True, cwd=PROJECT_ROOT
-    ).stdout.strip()
+    git_head = get_git_head(PROJECT_ROOT)
     print(f"\nLocal HEAD: {git_head}")
 
     # ---- CONNECT ----

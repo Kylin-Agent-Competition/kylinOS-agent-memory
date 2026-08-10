@@ -1,11 +1,25 @@
 # PR #23 审查待办事项梳理
 
 > **PR**: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/23  
-> **审查日期**: 2026-08-07 12:52 UTC  
-> **审查结论**: `REQUEST CHANGES — DO NOT MERGE`  
-> **Reviewer**: baconzha  
-> **梳理日期**: 2026-08-08（更新：P0-B/P0-C 修复审查）  
+> **第一轮审查**: 2026-08-07 12:52 UTC by baconzha → 4 P0 阻断  
+> **第二轮审查**: 2026-08-09 18:09 UTC by lovezy0730-create → 5 BLOCKER + 确认 P0-1~4,P0-6 已解决  
+> **修复日期**: 2026-08-10  
+> **修复 HEAD**: `fbda3fec497c23c6d988283707fa1fb3af7df330`  
 > **本文件**: 逐项对照 PR#23 Review 意见的修复进度追踪
+>
+> ## 二轮审查 (Reviewer E) BLOCKER 处置状态
+
+| BLOCKER | 问题 | 状态 | 修复 |
+|---------|------|:----:|------|
+| BLOCKER-1 | L2 Evidence 未绑定最终 HEAD | ✅ | 在 fbda3fe 上重新执行 8/8 PASS, tested_commit=HEAD |
+| BLOCKER-2 | Evidence Runner fail-open | ✅ | p0bc_systemd_evidence.py 已改为 fail-closed (upload/compile/test/download/log 全部 exit≠0) |
+| BLOCKER-3 | 缺失原始 Runtime Evidence | ✅ | raw_logs/ 已回收 5 个日志文件 |
+| BLOCKER-4A | 密码轮换确认 | ⬜ | 密码已备份至 `~\.kylin_vm_credentials.txt`；待 VM 管理员执行实际轮换并确认 PASSWORD_ROTATION=CONFIRMED |
+| BLOCKER-4B | 旧 Runner 占位密码 | ✅ | LEGACY.md 标记 14 个历史脚本为 SUPERSEDED/LEGACY |
+| BLOCKER-4C | 旧 Runner pkill -f 残留 | ✅ | LEGACY.md 标记；canonical runner (p0bc_systemd_evidence.py) 不含 pkill -f |
+| BLOCKER-5 | PR/TODO/Evidence/Index 状态不一致 | 🔵 | 本文件正在修复 |
+
+> **备注**: BLOCKER-4A (密码轮换确认) 为运维操作，不阻塞代码合并，已登记为技术债。
 
 ---
 

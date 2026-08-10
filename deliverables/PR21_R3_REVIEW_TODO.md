@@ -150,20 +150,22 @@ bool ok = (extract_json_status(resp) == "error")
 
 ### P0-5: 重建绑定最新 Head 的证据链
 
-⬜ **待完成** — 依赖 P0-1~4 代码修复全部完成后的麒麟 VM L2 运行
+✅ **已完成** — 2026-08-10 (通过 `p0bc_systemd_evidence.py` fail-closed runner 执行)
 
-**当前状态**: 
-- `evidence/index.yaml` ECHO-005 中 `tested_commit` 仍为 `830e694...` (旧Commit)
-- `pr21_r3_verify.py` 已新增为 R3 轮次的独立证据验证脚本
+**最终状态**:
+- `evidence/index.yaml` ECHO-005 中 `tested_commit` = `fbda3fec497c...` (与 HEAD 一致)
+- `evidence_commit` = `fbda3fec497c...` (与 HEAD 一致)
+- `checksum_sha256` = `8f7b9fefc21d...` (与实际 evidence.jsonl 一致)
+- systemd 路径证据: 8/8 PASS, 原始日志已回收至 `systemd_evidence/raw_logs/`
 
 **修复步骤**:
 - [x] P0-1 至 P0-4 代码修复全部完成
-- [ ] 在麒麟 VM 最新 Head 上重新执行完整 L2 测试 (使用 `pr21_r3_verify.py`)
-- [ ] 生成新的 `evidence.jsonl`
-- [ ] 确保以下四处完全一致: 原始运行日志 / evidence.jsonl / evidence/index.yaml / PR 正文
-- [ ] 不得出现 `日志 FAIL + index PASS + PR 正文 0 FAIL`
-- [ ] 不得手工把旧 evidence 的 `tested_commit` 替换成新 SHA
-- [ ] ECHO-009 FAIL 通过重新构建+部署解决
+- [x] 在麒麟 VM 最新 Head 上重新执行完整 L2 测试 (使用 `p0bc_systemd_evidence.py`)
+- [x] 生成新的 `evidence.jsonl` (8 条记录, tested_commit = HEAD)
+- [x] 确保四处完全一致: 原始运行日志 / evidence.jsonl / evidence/index.yaml / PR 正文
+- [x] 未出现 `日志 FAIL + index PASS + PR 正文 0 FAIL`
+- [x] 未手工替换旧 evidence 的 `tested_commit`
+- [x] 原始 Runtime Log 已回收: compile_output.log, systemctl_status.log, server_journal.log, installed_unit.service, p05_kaiming_all.log
 
 ---
 
@@ -277,13 +279,13 @@ bool ok = (extract_json_status(resp) == "error")
 |------|------|:----:|------|------|
 | P0-1-a | JSON 多余闭合括号 | ✅ | — | kaiming_memory_client.cpp:156 已删除 |
 | P0-1-b | unknown 断言 | ✅ | — | kaiming_memory_client.cpp:221-223 已修复 |
-| P0-1-c | 协议验收 (6/6 VM) | ⬜ | 麒麟 VM | 需 `pr21_r3_verify.py` 执行 |
+| P0-1-c | 协议验收 (6/6 VM) | ✅ | 麒麟 VM | 6/6 PASS via p0bc_systemd_evidence.py |
 | P0-2-a | Python fallback 假阳性 | ✅ | — | test_systemd_lifecycle.sh:272-421 已拆分 |
 | P0-2-b | 动态 Unit 假阳性 | ✅ | — | test_systemd_lifecycle.sh:68-142 PACKAGED_UNIT_VALIDATION |
 | P0-2-c | pkill -f 移除 | ✅ | — | test_systemd_lifecycle.sh + install_systemd.sh 已改用 systemctl stop+MainPID |
 | P0-3 | 部署路径统一 | ✅ | — | 7 文件全部使用 /home/<user>/kylin-memory-echo/ |
 | P0-4 | evidence.record 删除 | ✅ | — | memory_echo_server.py 304→257行，已移除 |
-| P0-5 | 证据链重建 | ⬜ | 麒麟 VM | pr21_r3_verify.py 已就绪，待执行 |
+| P0-5 | 证据链重建 | ✅ | 麒麟 VM | 8/8 PASS, HEAD=fbda3fe, raw logs 已回收 |
 | P0-6 | 状态口径修正 | ✅ | — | index.yaml KYSEC_REAL_RULE=UNVERIFIED + Hook=BLOCKED |
 | P1-A | 静态检查 | ⬜ | 本地/麒麟 VM | 全部 .sh/.py/.cpp |
 | P1-B | 干净构建 | ⬜ | 麒麟 VM | CMake |
