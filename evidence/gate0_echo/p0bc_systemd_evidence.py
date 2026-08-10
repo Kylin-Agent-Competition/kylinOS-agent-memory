@@ -37,6 +37,7 @@ SOCK = '/run/kylin-memory-echo/echo.sock'  # P0-C: systemd 路径，非 dev 路�
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EVIDENCE_DIR = os.path.join(PROJECT_ROOT, 'evidence', 'gate0_echo', 'systemd_evidence')
+RAW_LOGS_DIR = os.path.join(EVIDENCE_DIR, 'raw_logs')
 OUT_JSONL = os.path.join(EVIDENCE_DIR, 'evidence.jsonl')
 OUT_JSONL_REMOTE = f'{REPO}/evidence.jsonl'
 
@@ -161,6 +162,9 @@ def main():
         upload_oks.append(ok)
     all_uploaded = all(upload_oks)
     print(f"  Uploads: {'ALL OK' if all_uploaded else 'SOME FAILED'}")
+    if not all_uploaded:
+        print("FATAL: Upload verification failed. Aborting to prevent testing stale files on VM.")
+        sys.exit(1)
 
     # Set permissions
     run(f"chmod +x {REPO}/bin/kylin-memory-echo-server")
@@ -179,6 +183,11 @@ def main():
     if err:
         print(f"  stderr: {err[:300]}")
     run(f"chmod +x {REPO}/kaiming_memory_client")
+
+    # Save compile raw output for evidence
+    run(f"mkdir -p {REPO}/logs")
+    compile_b64 = base64.b64encode(compile_out.encode('utf-8', errors='replace')).decode('ascii')
+    run(f"echo '{compile_b64}' | base64 -d > {REPO}/logs/compile_output.log")
 
     # ---- INSTALL SYSTEMD ----
     print("\n[5/9] Installing systemd service...")
@@ -368,6 +377,15 @@ def main():
         ec, unit_sha_out, _ = run("sha256sum /etc/systemd/system/kylin-memory-echo.service")
         unit_file_sha = unit_sha_out.split()[0] if unit_sha_out else "N/A"
 
+        # Save systemctl status raw log
+        svc_b64 = base64.b64encode(svc_status_out.encode('utf-8', errors='replace')).decode('ascii')
+        run(f"echo '{svc_b64}' | base64 -d > {REPO}/logs/systemctl_status.log")
+
+        # Save journal log for server stdout/stderr
+        ec, journal_out, _ = run("journalctl -u kylin-memory-echo --no-pager -l 2>&1")
+        journal_b64 = base64.b64encode(journal_out.encode('utf-8', errors='replace')).decode('ascii')
+        run(f"echo '{journal_b64}' | base64 -d > {REPO}/logs/server_journal.log")
+
         evidence_records.append({
             "test_id": "SYSTEMD_SERVER_LIFECYCLE",
             "tested_commit": git_head,
@@ -423,7 +441,7 @@ def main():
             "status": "PASS" if unit_validation_ok else "FAIL",
             "timestamp": NOW_ISO,
             "environment": f"{kylin_ver}, systemd mode",
-            "source_log": f"/etc/systemd/system/kylin-memory-echo.service",
+            "source_log": f"{REPO}/logs/installed_unit.service",
             "sha256": unit_file_sha,
             "details": {
                 "runtime_directory": has_runtime_dir,
@@ -432,6 +450,10 @@ def main():
                 "no_new_privileges": has_no_new_priv,
             }
         })
+
+        # Save installed unit file as raw evidence
+        unit_b64 = base64.b64encode(unit_content.encode('utf-8', errors='replace')).decode('ascii')
+        run(f"echo '{unit_b64}' | base64 -d > {REPO}/logs/installed_unit.service")
     else:
         print("\n  *** Socket not available — recording failure evidence ***")
         evidence_records.append({
@@ -472,68 +494,115 @@ def main():
     ec, out, _ = run(f"wc -l {OUT_JSONL_REMOTE} && sha256sum {OUT_JSONL_REMOTE}")
     print(f"  Remote: {out.strip()}")
 
-    # ---- DOWNLOAD EVIDENCE ----
-    os.makedirs(EVIDENCE_DIR, exist_ok=True)
-    print(f"\n  Downloading to {OUT_JSONL}...")
-    ok, sha = download_verified(OUT_JSONL_REMOTE, OUT_JSONL)
-    if ok:
-        print(f"  Downloaded: {OUT_JSONL} (sha={sha[:20]}...)")
-        # Print summary
-        with open(OUT_JSONL, 'r', encoding='utf-8') as f:
-            for line in f:
-                rec = json.loads(line.strip())
-                emoji = "PASS" if rec["status"] == "PASS" else "FAIL"
-                print(f"    [{emoji}] {rec['test_id']}: {rec['status']} (commit={rec['tested_commit'][:12]}...)")
-    else:
-        print("  FAILED to download evidence — will attempt direct copy")
-        # Fallback: read from remote and write locally
-        ec, out, _ = run(f"cat {OUT_JSONL_REMOTE}")
-        with open(OUT_JSONL, 'w', encoding='utf-8') as f:
-            f.write(out)
-        print(f"  Fallback written: {len(out)} bytes")
-
-    # ---- UPDATE evidence/index.yaml ----
-    print("\n[9/9] Updating evidence/index.yaml...")
-    index_path = os.path.join(PROJECT_ROOT, 'evidence', 'index.yaml')
-    if os.path.exists(index_path):
-        with open(index_path, 'r', encoding='utf-8') as f:
-            index_content = f.read()
-        # Update tested_commit for ECHO-005 entry using str.replace to avoid regex backref issues
-        import re
-        # Find ECHO-005 block and replace tested_commit
-        echo005_start = index_content.find('ECHO-005')
-        if echo005_start >= 0:
-            # Find tested_commit line within ECHO-005 block
-            tc_start = index_content.find('tested_commit:', echo005_start)
-            if tc_start >= 0:
-                line_end = index_content.find('\n', tc_start)
-                if line_end < 0:
-                    line_end = len(index_content)
-                old_line = index_content[tc_start:line_end]
-                new_line = f"tested_commit: {git_head}"
-                new_content = index_content.replace(old_line, new_line)
-                if new_content != index_content:
-                    with open(index_path, 'w', encoding='utf-8') as f:
-                        f.write(new_content)
-                    print(f"  Updated ECHO-005 tested_commit in index.yaml -> {git_head[:12]}...")
-                else:
-                    print("  ECHO-005: no change needed")
-            else:
-                print("  ECHO-005: tested_commit not found")
-        else:
-            print("  ECHO-005: entry not found in index.yaml")
-    else:
-        print("  index.yaml not found, skip")
-
-    # ---- SUMMARY ----
+    # ---- COMPUTE RESULTS (before any local writes) ----
     total_p = sum(1 for r in evidence_records if r["status"] == "PASS")
     total_f = sum(1 for r in evidence_records if r["status"] == "FAIL")
+    all_tests_pass = (total_f == 0 and total_p == len(evidence_records))
+
+    # ---- DOWNLOAD EVIDENCE ----
+    os.makedirs(EVIDENCE_DIR, exist_ok=True)
+    print(f"\n  Downloading evidence.jsonl...")
+    ev_ok, ev_sha = download_verified(OUT_JSONL_REMOTE, OUT_JSONL)
+    if not ev_ok:
+        print("FATAL: evidence.jsonl download verification failed.")
+        sys.exit(1)
+    print(f"  evidence.jsonl: OK sha={ev_sha[:20]}...")
+
+    # ---- DOWNLOAD RAW LOGS ----
+    print(f"\n  Downloading raw runtime logs to {RAW_LOGS_DIR}...")
+    os.makedirs(RAW_LOGS_DIR, exist_ok=True)
+    raw_log_files = [
+        f"{REPO}/logs/p05_kaiming_all.log",
+        f"{REPO}/logs/compile_output.log",
+        f"{REPO}/logs/systemctl_status.log",
+        f"{REPO}/logs/server_journal.log",
+        f"{REPO}/logs/installed_unit.service",
+    ]
+    raw_download_failed = False
+    for remote_log in raw_log_files:
+        local_name = os.path.basename(remote_log)
+        local_path = os.path.join(RAW_LOGS_DIR, local_name)
+        ok, _ = download_verified(remote_log, local_path)
+        if ok:
+            print(f"  OK: {local_name}")
+        else:
+            print(f"  FAILED: {local_name}")
+            raw_download_failed = True
+
+    if raw_download_failed:
+        print("FATAL: Raw log recovery incomplete.")
+        sys.exit(1)
+
+    # ---- UPDATE evidence/index.yaml (ONLY on ALL PASS) ----
+    index_path = os.path.join(PROJECT_ROOT, 'evidence', 'index.yaml')
+    if all_tests_pass:
+        print("\n[9/9] All tests PASS — updating evidence/index.yaml...")
+        if os.path.exists(index_path):
+            with open(index_path, 'r', encoding='utf-8') as f:
+                index_content = f.read()
+            echo005_start = index_content.find('ECHO-005')
+            if echo005_start >= 0:
+                tc_start = index_content.find('tested_commit:', echo005_start)
+                if tc_start >= 0:
+                    line_end = index_content.find('\n', tc_start)
+                    if line_end < 0:
+                        line_end = len(index_content)
+                    old_line = index_content[tc_start:line_end]
+                    new_line = f"tested_commit: {git_head}"
+                    new_content = index_content.replace(old_line, new_line)
+                    if new_content != index_content:
+                        with open(index_path, 'w', encoding='utf-8') as f_out:
+                            f_out.write(new_content)
+                        print(f"  Updated ECHO-005 tested_commit -> {git_head[:12]}...")
+                    else:
+                        print("  ECHO-005: no change needed")
+                else:
+                    print("  WARN: ECHO-005 tested_commit line not found")
+            else:
+                print("  WARN: ECHO-005 entry not found in index.yaml")
+
+            # Update evidence_commit and checksum
+            with open(index_path, 'r', encoding='utf-8') as f:
+                index_content = f.read()
+            echo005_start = index_content.find('ECHO-005')
+            if echo005_start >= 0:
+                new_content = index_content
+
+                ec_start = new_content.find('evidence_commit:', echo005_start)
+                if ec_start >= 0:
+                    ec_line_end = new_content.find('\n', ec_start)
+                    if ec_line_end < 0:
+                        ec_line_end = len(new_content)
+                    old_ec_line = new_content[ec_start:ec_line_end]
+                    new_ec_line = f"evidence_commit: {git_head}"
+                    new_content = new_content.replace(old_ec_line, new_ec_line, 1)
+
+                cs_start = new_content.find('checksum_sha256:', echo005_start)
+                if cs_start >= 0:
+                    cs_line_end = new_content.find('\n', cs_start)
+                    if cs_line_end < 0:
+                        cs_line_end = len(new_content)
+                    old_cs_line = new_content[cs_start:cs_line_end]
+                    new_cs_line = f"checksum_sha256: {ev_sha}"
+                    new_content = new_content.replace(old_cs_line, new_cs_line, 1)
+
+                if new_content != index_content:
+                    with open(index_path, 'w', encoding='utf-8') as f_out:
+                        f_out.write(new_content)
+                    print("  Updated evidence_commit and checksum_sha256 in index.yaml")
+        else:
+            print("  WARN: index.yaml not found, skip")
+    else:
+        print(f"\n[9/9] Tests FAIL ({total_p}P/{total_f}F) — SKIPPING index.yaml update (fail-closed).")
+
+    # ---- SUMMARY ----
     print("\n" + "=" * 70)
     print(" P0-B / P0-C: SYSTEMD EVIDENCE REBUILD COMPLETE")
     print("=" * 70)
     print(f"  Commit:    {git_head}")
     print(f"  Records:   {len(evidence_records)} ({total_p} PASS / {total_f} FAIL)")
     print(f"  Evidence:  {OUT_JSONL}")
+    print(f"  Raw Logs:  {RAW_LOGS_DIR}")
     print(f"  Socket:    {SOCK}")
     print(f"  Mode:      systemd (NOT dev mode)")
     print("=" * 70)
@@ -548,6 +617,16 @@ def main():
     print(f"\n  P0-C Verification: {len(systemd_records)} systemd-specific records generated")
     for r in systemd_records:
         print(f"    - {r['test_id']}: {r['status']}")
+
+    # ---- FAIL-CLOSED EXIT ----
+    if not all_tests_pass:
+        print(f"\nFATAL: {total_f} tests FAILED. Runner exiting with non-zero for fail-closed compliance.")
+        sys.exit(1)
+    if not compile_ok:
+        print("\nFATAL: Compile FAILED. Runner exiting with non-zero for fail-closed compliance.")
+        sys.exit(1)
+
+    print("\nAll gates PASS — Runner exiting 0.")
 
 if __name__ == "__main__":
     try:
