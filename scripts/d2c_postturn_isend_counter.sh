@@ -365,7 +365,6 @@ cmd_stop() {
     "H2C-PostTurn-1": $([ "${is_end_true_count}" -eq 1 ] && echo true || echo false),
     "H2C-PostTurn-2": $([ "${is_end_false_count}" -ge 1 ] && echo true || echo false)
   },
-  "match_mode": "${match_mode}",
   "dedupe_basis": "precise模式仅统计sendmsg到assistant.sock的DBus回调; fallback模式保留原始计数不自动去重"
 }
 EOF
