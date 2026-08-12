@@ -387,8 +387,12 @@ EOF
     echo "  Prompt Skill 关键词:       ${prompt_skill_count}  (英文 ${prompt_skill_en_count} + 中文 ${prompt_skill_cn_count})"
     echo ""
     echo "  [观察结果]"
-    echo "  OBSERVED: H2C-Tool-3 stop_chat 事件已捕获 (count=${stop_chat_count})"
-    echo "  OBSERVED: H2C-Tool-4 OpenAI风格关键词计数=${openai_keyword_count}"
+    if [ "${stop_chat_count}" -gt 0 ]; then
+        echo "  OBSERVED: stop_chat 线索已捕获 (count=${stop_chat_count}; 不能替代结构化取消 Tool 事件)"
+    else
+        echo "  NOT_OBSERVED: stop_chat 线索未捕获 (count=0)"
+    fi
+    echo "  DIAGNOSTIC: OpenAI 风格关键词计数=${openai_keyword_count} (不能证明 H2C-Tool-4)"
     echo "  判定权交由 Reviewer, 脚本仅记录观察结果"
     echo ""
     echo "  H2C-Tool-1/2/3/4: NOT_VERIFIED"
