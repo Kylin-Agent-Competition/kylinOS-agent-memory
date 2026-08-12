@@ -69,9 +69,6 @@ SUMMARY_FILE="${OUT_DIR}/tool_${TIMESTAMP}.summary.json"
 
 AI_PROC_NAME="kylin-aiassistant"
 
-# AI Runtime 服务进程名 (Tool 执行结果通过 Runtime 回调上报)
-AI_RUNTIME_NAME="kylin-ai-runtime"
-
 # Tool 事件关键词 (基于 D2-C 实验 C 实测发现的麒麟 AI 助手真实结构)
 # 麒麟 AI 助手不使用 OpenAI 风格的 tool_call/function_call, 而是用:
 #   - DBus 方法 "chat"        : 用户消息发送通道 (assistant.sock)
@@ -147,15 +144,6 @@ find_ai_pid() {
     fi
 }
 
-find_runtime_pid() {
-    # 定位 kylin-ai-runtime 进程 (Tool 执行结果回调经 Runtime 上报)
-    local pid
-    pid="$(pgrep -f "${AI_RUNTIME_NAME}" 2>/dev/null | head -n 1 || true)"
-    if [ -n "${pid}" ]; then
-        echo "${pid}"
-    fi
-}
-
 reload_paths() {
     local ts_from_meta=""
     if [ -f "${META_FILE}" ]; then
@@ -179,15 +167,6 @@ cmd_start() {
     fi
     echo "INFO: AI 助手 PID = ${pid}"
 
-    # 同时定位 kylin-ai-runtime (Tool 执行结果回调经 Runtime 上报)
-    local runtime_pid
-    runtime_pid="$(find_runtime_pid)"
-    if [ -n "${runtime_pid}" ]; then
-        echo "INFO: AI Runtime PID = ${runtime_pid} (将同时跟踪以捕获 Tool 回调)"
-    else
-        echo "WARN: 未找到 ${AI_RUNTIME_NAME} 进程, 仅跟踪 AI 主进程 (可能漏掉 Tool 回调证据)"
-    fi
-
     if [ -f "${PID_FILE}" ]; then
         echo "ERROR: 已有捕获任务运行中" >&2
         exit 1
@@ -203,16 +182,12 @@ cmd_start() {
     echo "INFO: 捕获范围: write,writev,sendmsg,sendto,recvmsg,read,poll (扩至常见 IPC)"
 
     # strace 独立 nohup 直接写原始日志文件
-    # - 同时 attach 到 AI 主进程 + Runtime 服务进程 (strace 支持多个 -p)
+    # - 仅 attach 到真实 AI 助手主进程；Runtime 不是 Tool 事件的已验证来源。
     # - -f 跟踪子进程/线程
     # - -s 32768 (含 tool_call 大 JSON)
     # - -yy 打印 socket 路径
     local strace_args=(-p "${pid}" -f -s 32768 -yy \
         -e trace=write,writev,sendmsg,sendto,recvmsg,read,poll)
-    if [ -n "${runtime_pid}" ] && [ "${runtime_pid}" != "${pid}" ]; then
-        strace_args=(-p "${pid}" -p "${runtime_pid}" -f -s 32768 -yy \
-            -e trace=write,writev,sendmsg,sendto,recvmsg,read,poll)
-    fi
 
     nohup strace "${strace_args[@]}" \
         > "${RAW_LOG_FILE}" 2>&1 </dev/null &
@@ -233,21 +208,10 @@ cmd_start() {
     else
         echo "INFO: 已确认 strace attach 到 AI PID=${pid}"
     fi
-    if [ -n "${runtime_pid}" ] && [ "${runtime_pid}" != "${pid}" ]; then
-        local attached_rt=""
-        attached_rt="$(ps -o args= -p "${cap_pid}" 2>/dev/null | grep -o -- "-p *${runtime_pid}" || true)"
-        if [ -n "${attached_rt}" ]; then
-            echo "INFO: 已确认 strace attach 到 Runtime PID=${runtime_pid}"
-        else
-            echo "WARN: 无法确认 strace attach 到 Runtime PID=${runtime_pid} (可能已成功, ps 输出截断)"
-        fi
-    fi
-
     echo "${cap_pid}" > "${PID_FILE}"
     cat > "${META_FILE}" <<EOF
 strace_pid=${cap_pid}
 ai_pid=${pid}
-runtime_pid=${runtime_pid:-}
 raw_log=${RAW_LOG_FILE}
 filtered_log=${LOG_FILE}
 timestamp=${TIMESTAMP}
@@ -355,11 +319,8 @@ PYEOF
     fi
     local prompt_skill_count=$(( prompt_skill_en_count + prompt_skill_cn_count ))
 
-    # 判定逻辑 (基于实测架构):
-    # - H2C-Tool-1/2/3 (成功/失败/取消 Tool 事件): 麒麟没有独立 tool_call 事件,
-    #   用 stop_chat>0 验证取消场景, 用 intentionrecognition>0 验证意图识别触发
-    # - H2C-Tool-4 (Prompt Skill 不被误判): OpenAI 风格关键词=0 即通过
-    #   (因为没有任何消息被分类为 tool_call, Prompt Skill 自然不会被误判)
+    # 诊断线索不替代验收事件：所有 Tool Gate 条目保持 NOT_VERIFIED，
+    # 直到定位到可审计的结构化事件来源。
     local cancel_captured=false
     if [ "${stop_chat_count}" -gt 0 ]; then
         cancel_captured=true
@@ -430,10 +391,8 @@ EOF
     echo "  OBSERVED: H2C-Tool-4 OpenAI风格关键词计数=${openai_keyword_count}"
     echo "  判定权交由 Reviewer, 脚本仅记录观察结果"
     echo ""
-    echo "  H2C-Tool-1/2 (成功/失败 Tool): N/A"
-    echo "    原因: 麒麟 AI 助手不使用 OpenAI 风格 tool_call,"
-    echo "    Tool 动作由 kylin-ai-runtime 内部 intentionrecognition.cpp 直接执行,"
-    echo "    无独立 DBus 事件可在 ai_pid + runtime_pid strace 中观察"
+    echo "  H2C-Tool-1/2/3/4: NOT_VERIFIED"
+    echo "    原因: 当前诊断仅跟踪真实 AI 助手主进程，尚未定位可审计的结构化 Tool 事件来源。"
     echo ""
     echo "  报告: ${SUMMARY_FILE}"
     echo "  日志: ${LOG_FILE}"

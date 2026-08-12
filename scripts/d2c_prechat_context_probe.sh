@@ -79,9 +79,6 @@ UI_SCREENSHOT_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.ui_screenshot.png"
 DB_PATH="${USER_HOME}/.config/kylin-aiassistant/kylin_aiassistant_database.db"
 AI_PROC_NAME="kylin-aiassistant"
 
-# AI Runtime 服务进程名 (模型请求 + memory_context 注入在此发生)
-AI_RUNTIME_NAME="kylin-ai-runtime"
-
 # 安全地将字符串转为非负整数: 去掉非数字和多余换行, 空值默认 0
 to_int() {
     local raw="$1"
@@ -137,15 +134,6 @@ find_ai_pid() {
         echo "${best_pid}"
     else
         echo "${pids}" | head -n 1
-    fi
-}
-
-find_runtime_pid() {
-    # 定位 kylin-ai-runtime 进程 (模型推理服务, memory_context 注入点)
-    local pid
-    pid="$(pgrep -f "${AI_RUNTIME_NAME}" 2>/dev/null | head -n 1 || true)"
-    if [ -n "${pid}" ]; then
-        echo "${pid}"
     fi
 }
 
@@ -223,15 +211,6 @@ cmd_capture_start() {
     fi
     echo "INFO: AI 助手 PID = ${pid}"
 
-    # 同时定位 kylin-ai-runtime (memory_context 注入到模型请求发生在 Runtime 服务侧)
-    local runtime_pid
-    runtime_pid="$(find_runtime_pid)"
-    if [ -n "${runtime_pid}" ]; then
-        echo "INFO: AI Runtime PID = ${runtime_pid} (将同时跟踪以捕获 memory_context 注入)"
-    else
-        echo "WARN: 未找到 ${AI_RUNTIME_NAME} 进程, 仅跟踪 AI 主进程 (可能漏掉 memory_context 注入证据)"
-    fi
-
     if [ -f "${CAPTURE_PID_FILE}" ]; then
         echo "ERROR: 已有捕获任务运行中" >&2
         exit 1
@@ -242,16 +221,12 @@ cmd_capture_start() {
     echo "INFO: 捕获范围: write,writev,sendmsg,sendto,recvmsg,read,poll (扩至常见 IPC)"
 
     # strace 独立 nohup 直接写原始日志文件
-    # - 同时 attach 到 AI 主进程 + Runtime 服务进程 (strace 支持多个 -p)
+    # - 仅 attach 到真实 AI 助手主进程；Runtime 不是此智能体请求的已验证承载通道。
     # - -f 跟踪子进程/线程
     # - -s 32768 (覆盖 memory_context 大 JSON)
     # - -yy (打印 socket 路径/文件描述符类型)
     local strace_args=(-p "${pid}" -f -s 32768 -yy \
         -e trace=write,writev,sendmsg,sendto,recvmsg,read,poll)
-    if [ -n "${runtime_pid}" ] && [ "${runtime_pid}" != "${pid}" ]; then
-        strace_args=(-p "${pid}" -p "${runtime_pid}" -f -s 32768 -yy \
-            -e trace=write,writev,sendmsg,sendto,recvmsg,read,poll)
-    fi
 
     nohup strace "${strace_args[@]}" \
         > "${CAPTURE_LOG_FILE}" 2>&1 </dev/null &
@@ -273,21 +248,10 @@ cmd_capture_start() {
     else
         echo "INFO: 已确认 strace attach 到 AI PID=${pid}"
     fi
-    if [ -n "${runtime_pid}" ] && [ "${runtime_pid}" != "${pid}" ]; then
-        local attached_rt=""
-        attached_rt="$(ps -o args= -p "${cap_pid}" 2>/dev/null | grep -o -- "-p *${runtime_pid}" || true)"
-        if [ -n "${attached_rt}" ]; then
-            echo "INFO: 已确认 strace attach 到 Runtime PID=${runtime_pid}"
-        else
-            echo "WARN: 无法确认 strace attach 到 Runtime PID=${runtime_pid} (可能已成功, ps 输出截断)"
-        fi
-    fi
-
     echo "${cap_pid}" > "${CAPTURE_PID_FILE}"
     cat > "${META_FILE}" <<EOF
 strace_pid=${cap_pid}
 ai_pid=${pid}
-runtime_pid=${runtime_pid:-}
 capture_log=${CAPTURE_LOG_FILE}
 model_request_file=${MODEL_REQUEST_FILE}
 timestamp=${TIMESTAMP}
@@ -395,7 +359,9 @@ for number, raw in enumerate(source_path.read_text(encoding="utf-8").splitlines(
         raise SystemExit(f"ERROR: line {number} lacks required audit fields")
     if set(item) - allowed:
         raise SystemExit(f"ERROR: line {number} has undeclared fields; refusing possible raw or sensitive data")
-    if item["source"] != "kylin-bot-gateway" or item["user_marker"] != marker:
+    if item["source"] != "kylin-bot-gateway":
+        raise SystemExit(f"ERROR: line {number} is not a formal kylin-bot gateway audit record")
+    if item["user_marker"] != marker:
         continue
     digest = item["context_sha256"]
     if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest.lower()):
