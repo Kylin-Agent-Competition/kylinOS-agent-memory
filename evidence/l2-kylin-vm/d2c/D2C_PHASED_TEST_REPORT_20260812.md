@@ -51,6 +51,14 @@ kylin-aiassistant -> ~/.kylinbot/gateway.sock -> /usr/bin/kylin-bot daemon
 - Tool 限制：原始采集日志同样仅含 attach/detach 两行，未捕获结构化成功、失败或取消 Tool 事件；因此 H2C-Tool-1/2/3/4 继续为 `NOT_VERIFIED`。
 - 文案回归：Tool 零计数输出已调整为 `NOT_OBSERVED` / `DIAGNOSTIC`，避免将诊断计数误表述为验收通过；隔离零计数回归已通过并清理临时产物。
 
+### 2026-08-13 Tool 运行覆盖补充
+
+- 失败入口：前台请求打开明确不存在的应用，界面显示“工具调用 (1)”并返回 `Application not found`。
+- 取消入口：前台七天天气请求在持续生成时由用户点击停止，界面显示“已停止回答”。
+- Prompt Skill 对照：前台摘要请求正常返回摘要文本。
+- 三个场景均未见输入乱码；本轮观察脚本已停止，采集 PID 状态文件已删除，摘要 JSON 可解析。
+- 上述结果仅证明真实前台入口与脚本清理可运行；本轮原始观察日志仍仅含 `strace` attach/detach，不能构成结构化 Tool 事件证据或改变 `NOT_VERIFIED` 结论。
+
 ## 当前阻塞与下一步
 
 1. `kylin-bot` 需提供正式、受支持的脱敏审计输出；现有安装中未发现本地审计文件或本地 API 文档服务。
