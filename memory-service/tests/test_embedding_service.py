@@ -25,10 +25,11 @@ from providers import EmbeddingResult, ProviderError, ProviderErrorCode
 # ── fake Provider（不依赖 SDK） ──
 
 class FakeProvider:
-    def __init__(self, *, ok=True, delay=0.0, fail_with=None):
+    def __init__(self, *, ok=True, delay=0.0, fail_with=None, fail_on_text=None):
         self._ok = ok
         self._delay = delay
         self._fail_with = fail_with
+        self._fail_on_text = fail_on_text  # 仅对该文本触发失败（embed_batch 部分失败场景）
         self._started = False
         self._closed = False
         self.embed_thread = None
@@ -44,6 +45,9 @@ class FakeProvider:
         self.embed_thread = threading.current_thread().name
         if self._delay:
             time.sleep(self._delay)
+        if self._fail_on_text is not None and text == self._fail_on_text:
+            raise ProviderError(ProviderErrorCode.ERR_EMBED_FAILED,
+                                "embed failed for specific text")
         if self._fail_with is not None:
             raise self._fail_with
         if not self._ok:
@@ -188,6 +192,33 @@ def test_handle_request_embed_batch_envelope():
     svc.close()
 
 
+def test_embed_batch_partial_failure():
+    """embed_batch 任一条失败 → 整体失败（结构化错误，含失败码）。
+
+    审查报告 #5：补充部分失败路径的独立测试。
+    """
+    svc = EmbeddingService(provider=FakeProvider(fail_on_text="bad"))
+    svc.start()
+    resp = svc.embed_batch(["ok1", "bad", "ok3"])
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == "ERR_EMBED_FAILED"
+    svc.close()
+
+
+def test_embed_batch_partial_failure_via_handle_request():
+    """envelope 分发路径的 embed_batch 部分失败（结构化错误 + request_id 回显）。"""
+    svc = EmbeddingService(provider=FakeProvider(fail_on_text="bad"))
+    svc.start()
+    resp = svc.handle_request(build_envelope(
+        "memory.embed_batch", {"texts": ["a", "bad"]},
+        request_id="req-batch-fail", trace_id="trc-batch-fail"))
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == "ERR_EMBED_FAILED"
+    assert resp["request_id"] == "req-batch-fail"
+    assert resp["trace_id"] == "trc-batch-fail"
+    svc.close()
+
+
 def test_health_reports_status():
     """memory.health：返回分项状态（服务/Provider/Bridge），不触发 SDK。"""
     svc = EmbeddingService(provider=FakeProvider())
@@ -212,3 +243,24 @@ def test_health_stopped_state():
     assert resp["result"]["service"] == "stopped"
     assert resp["result"]["provider"] == "stopped"
     svc.close()
+
+
+def test_executor_shutdown_idempotent_and_rebuild():
+    """审查报告 #3：shutdown_executor 幂等；shutdown 后 submit 惰性重建。
+
+    - 第一次 shutdown：不抛错
+    - 第二次 shutdown：幂等（no-op）
+    - shutdown 后 embed 仍工作（_submit_bridge 自动重建线程池）
+    """
+    from embedding.embedding_service import shutdown_executor
+
+    shutdown_executor()
+    shutdown_executor()  # 幂等
+
+    svc = EmbeddingService(provider=FakeProvider())
+    svc.start()
+    resp = svc.embed("after-shutdown")
+    assert resp["ok"] is True
+    assert resp["result"]["dimension"] == 768
+    svc.close()
+    shutdown_executor()  # 恢复：避免影响后续测试（惰性重建为干净状态）

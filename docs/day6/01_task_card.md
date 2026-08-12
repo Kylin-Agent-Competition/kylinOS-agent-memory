@@ -73,3 +73,14 @@
 - 清洗/抽取管线可复用：同一输入多次清洗结果一致（确定性）；非法输出不进入候选（有测试断言）
 - 全量 pytest 本地通过、顺序无关
 - 无固定样例假实现（降级 = 真实规则结果或空列表）
+
+## 审查报告（PR #25）落实记录（Day6 提交时同步）
+
+| 报告项 | 处置 | 位置 |
+|--------|------|------|
+| #1 启动期降级缺口 | 部分落实：server 增加 provider 注入点（EmbeddingUDSServer(socket_path, provider=...)）；完整延迟构造修复（Provider 状态机改动）留待独立技术债 PR | server.py |
+| #2 架构文档引用 | 已随 PR #25 修复（README 来源说明） | README.md |
+| #3 executor 无 shutdown | 已落实：模块级 shutdown_executor()（幂等）+ _submit_bridge 惰性重建 + server.stop() 调用；测试覆盖 | embedding_service.py / server.py |
+| #4 TD-A-005-01 状态 | 已更新为「Open（部分缓解）」（fut.result 调用方保护有效，Bridge 无真正中断） | TECHNICAL_DEBT_REGISTER.md |
+| #5 embed_batch 部分失败 | 已落实：FakeProvider 支持 fail_on_text + 2 个新测试（直接调用 + envelope 分发路径） | test_embedding_service.py |
+| #6 _degrade 类型注解 | 已落实：code: Any（接受 ProviderErrorCode 枚举或 str） | embedding_service.py |

@@ -30,6 +30,29 @@ from embedding.protocol import PROTOCOL_VERSION, ProtocolError, parse_envelope
 
 # Bridge 调用统一放线程池：SDK embed 可能耗时（IPC），不阻塞聊天线程（Day5-3）
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="embed-bridge")
+_executor_shutdown = False  # shutdown 标记：submit 前若已关闭则惰性重建
+
+
+def shutdown_executor() -> None:
+    """关闭 Bridge 线程池（进程/服务停止时释放资源，审查报告 #3）。
+
+    幂等；关闭后再 submit 会惰性重建（见 _submit_bridge），保持进程级单例语义。
+    """
+    global _executor, _executor_shutdown
+    if _executor_shutdown:
+        return
+    _executor.shutdown(wait=False)
+    _executor_shutdown = True
+
+
+def _submit_bridge(fn, *args, **kwargs):
+    """提交 Bridge 调用到线程池；若已 shutdown 则重建后提交（幂等重启语义）。"""
+    global _executor, _executor_shutdown
+    if _executor_shutdown:
+        _executor = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="embed-bridge")
+        _executor_shutdown = False
+    return _executor.submit(fn, *args, **kwargs)
 
 # 架构 4.4 方法名（总体架构文档 TABLE 15 风格：memory.*）
 _METHODS = {
@@ -146,7 +169,7 @@ class EmbeddingService:
 
         try:
             # Day5-3: Bridge 调用放线程池，不阻塞聊天线程
-            fut = _executor.submit(self._provider.embed, text, timeout_ms=timeout_ms)
+            fut = _submit_bridge(self._provider.embed, text, timeout_ms=timeout_ms)
             try:
                 result = fut.result(timeout=timeout_ms / 1000.0 + 1.0)
             except FutureTimeout:
@@ -182,8 +205,14 @@ class EmbeddingService:
         results: List[Dict[str, Any]] = []
         for t in texts:
             r = self.embed(t, timeout_ms=timeout_ms)
-            if not r.get("ok"):
-                return r  # 任一条失败 → 整体失败（结构化错误）
+            if not r.get("ok") or r.get("degraded"):
+                # 任一条失败/降级 → 整体失败（结构化错误）。
+                # batch 语义：要么全部真实向量，要么整体失败——单条空向量
+                # 对批量索引无意义，降级只在单条 embed 场景保留（聊天优先）。
+                return self._error(
+                    r.get("degraded_reason", {}).get("code", "ERR_EMBED_FAILED"),
+                    r.get("degraded_reason", {}).get(
+                        "message", "embed_batch degraded/failed"))
             results.append(r["result"])
         return {"ok": True, "result": results}
 
@@ -222,7 +251,7 @@ class EmbeddingService:
         return {"ok": False, "error": {"code": code, "message": message}}
 
     @staticmethod
-    def _degrade(code, message: str) -> Dict[str, Any]:
+    def _degrade(code: Any, message: str) -> Dict[str, Any]:
         """真实降级：明确空向量 + degraded 标记。
 
         语义：Embedding 不可用时返回空向量（dimension=0），

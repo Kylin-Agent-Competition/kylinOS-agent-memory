@@ -21,7 +21,7 @@ import socket
 import threading
 from typing import Optional
 
-from embedding.embedding_service import EmbeddingService
+from embedding.embedding_service import EmbeddingService, shutdown_executor
 from embedding.protocol import (
     IncompletePacket,
     ProtocolError,
@@ -33,9 +33,11 @@ from embedding.protocol import (
 class EmbeddingUDSServer:
     """UDS + 长度前缀 JSON 最小链路服务器。"""
 
-    def __init__(self, socket_path: str) -> None:
+    def __init__(self, socket_path: str, provider: Optional[object] = None) -> None:
         self._socket_path = socket_path
-        self._service = EmbeddingService()
+        # provider 注入点（TD-A-005-09 修复路径）：测试/降级场景可注入替代 Provider；
+        # 为 None 时使用默认 EmbeddingProvider（进程级单例）
+        self._service = EmbeddingService(provider=provider)
         self._server_sock: Optional[socket.socket] = None
         self._running = False
 
@@ -68,6 +70,8 @@ class EmbeddingUDSServer:
             except OSError:
                 pass
         self._service.close()
+        # 审查报告 #3：服务停止时释放 Bridge 线程池资源（幂等；再次 start 会惰性重建）
+        shutdown_executor()
         if os.path.exists(self._socket_path):
             os.unlink(self._socket_path)
 
