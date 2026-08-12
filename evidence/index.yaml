@@ -463,6 +463,8 @@ entries:
     task_id: "D2-C-OSAGENT-SPIKE"
     description: "D2-C OS Agent 宿主实验的部分观察证据；三项实验均尚缺 Gate 所需的完整证据。"
     status: "BLOCKED"
+    review_status: "BLOCKED"
+    merge_qualified: false
     evidence_level: "E2"
     source: "evidence/l2-kylin-vm/d2c/d2c_evidence_20260801_195043/checksums.sha256"
     date: "2026-08-01"
