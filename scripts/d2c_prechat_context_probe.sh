@@ -72,6 +72,7 @@ TIMESTAMP="$(get_or_set_timestamp)"
 BASELINE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.baseline.json"
 CAPTURE_LOG_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.capture.log"
 MODEL_REQUEST_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.model_request.jsonl"
+AUDIT_SOURCE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.gateway_audit.jsonl"
 DB_MESSAGE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.db_message.txt"
 UI_SCREENSHOT_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.ui_screenshot.png"
 
@@ -160,6 +161,7 @@ reload_paths() {
     BASELINE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.baseline.json"
     CAPTURE_LOG_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.capture.log"
     MODEL_REQUEST_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.model_request.jsonl"
+    AUDIT_SOURCE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.gateway_audit.jsonl"
     DB_MESSAGE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.db_message.txt"
     UI_SCREENSHOT_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.ui_screenshot.png"
 }
@@ -368,6 +370,50 @@ cmd_capture_stop() {
     echo "=============================================="
 }
 
+cmd_import_audit() {
+    local source_file="${2:-}"
+    reload_paths
+    if [ -z "${source_file}" ] || [ ! -f "${source_file}" ]; then
+        echo "ERROR: formal redacted gateway audit JSONL file is required" >&2
+        exit 1
+    fi
+    python3 - "${source_file}" "${AUDIT_SOURCE_FILE}" "${MODEL_REQUEST_FILE}" "${MARKER}" <<'PY'
+import json
+import pathlib
+import sys
+
+source_path, audit_out, request_out = map(pathlib.Path, sys.argv[1:4])
+marker = sys.argv[4]
+required = {"timestamp", "source", "request_id", "user_marker", "memory_context_present", "context_sha256", "field_names"}
+allowed = required | {"schema_version", "model", "redaction"}
+records = []
+for number, raw in enumerate(source_path.read_text(encoding="utf-8").splitlines(), 1):
+    if not raw.strip():
+        continue
+    item = json.loads(raw)
+    if not isinstance(item, dict) or not required <= item.keys():
+        raise SystemExit(f"ERROR: line {number} lacks required audit fields")
+    if set(item) - allowed:
+        raise SystemExit(f"ERROR: line {number} has undeclared fields; refusing possible raw or sensitive data")
+    if item["source"] != "kylin-bot-gateway" or item["user_marker"] != marker:
+        continue
+    digest = item["context_sha256"]
+    if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest.lower()):
+        raise SystemExit(f"ERROR: line {number} has invalid context_sha256")
+    if not isinstance(item["memory_context_present"], bool) or not isinstance(item["field_names"], list):
+        raise SystemExit(f"ERROR: line {number} has invalid audit field types")
+    records.append(item)
+if not records:
+    raise SystemExit("ERROR: no matching formal gateway audit record for marker")
+payload = "\n".join(json.dumps(item, ensure_ascii=False, sort_keys=True) for item in records) + "\n"
+pathlib.Path(audit_out).write_text(payload, encoding="utf-8")
+pathlib.Path(request_out).write_text(payload, encoding="utf-8")
+print(f"INFO: imported {len(records)} formal redacted gateway audit record(s)")
+PY
+    echo "INFO: formal audit source: ${AUDIT_SOURCE_FILE}"
+    echo "INFO: model request evidence: ${MODEL_REQUEST_FILE}"
+}
+
 cmd_collect() {
     reload_paths
     echo "=============================================="
@@ -449,13 +495,12 @@ cmd_collect() {
         model_match_count="$(to_int "${raw_mm}")"
         echo "  含标记的请求行数: ${model_match_count}"
 
-        raw_mir="$(grep -cE 'memory[_-]?[Cc]ontext|MemoryContext|记忆上下文|system_prompt|prompt.*context|context' \
+        raw_mir="$(grep -c '"memory_context_present"[[:space:]]*:[[:space:]]*true' \
             "${MODEL_REQUEST_FILE}" 2>/dev/null || echo 0)"
         local memory_in_request
         memory_in_request="$(to_int "${raw_mir}")"
-        if [ "${memory_in_request}" -gt 0 ]; then
-            echo "  ! H2C-PreChat-3 未确认: 捕获文本含 Memory Context 候选字段，但未完成协议解码"
-            echo "    strace 关键词命中不能证明该文本是模型请求，也不能证明 Hook 点 A 注入成功"
+        if [ "${memory_in_request}" -gt 0 ] && [ -f "${AUDIT_SOURCE_FILE}" ]; then
+            echo "  PASS H2C-PreChat-3: formal redacted gateway audit confirms Memory Context"
         else
             echo "  ! H2C-PreChat-3 未确认: 模型请求未观察到 Memory Context"
             echo "    (可能 Hook 点 A 未注入 或 MemoryClient 未连接 或 关键词仍需扩展)"
@@ -489,11 +534,14 @@ case "${1:-}" in
     capture-stop)
         cmd_capture_stop
         ;;
+    import-audit)
+        cmd_import_audit "$@"
+        ;;
     collect)
         cmd_collect
         ;;
     *)
-        echo "用法: $0 {baseline|capture-start|capture-stop|collect}"
+        echo "Usage: $0 {baseline|capture-start|capture-stop|import-audit FILE.jsonl|collect}"
         echo ""
         echo "  baseline       - 记录实验前基线"
         echo "  capture-start  - 启动模型请求捕获"
