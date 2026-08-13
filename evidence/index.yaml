@@ -220,7 +220,7 @@ entries:
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-     limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）；ACL_SPIKE=VERIFIED, KYSEC_REAL_RULE=UNVERIFIED"
+    limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）；ACL_SPIKE=VERIFIED, KYSEC_REAL_RULE=UNVERIFIED"
     checksum_sha256: 8f7b9fefc21d58cd8d7d48eae5b1a1002839e77ddf3cab7c29f71bb9a09c655d
     details: |
       Day1 环境基线已冻结: environment.log (SHA-256: cdf60d8414...) 包含 16 项系统信息采集。
@@ -335,15 +335,18 @@ entries:
     checksum_sha256: "c5f6c74be8b6567ac8ed5abc222d06c859aa1c020033c68583b280d2196a0018"
     details: |
       Day6 多源接入/质量/安全管线（架构 v1 §6.2 六步 + Day3 ExtractionProvider 契约）麒麟 VM 验证
-      （2026-08-13，被测 62c4d8c，Reviewer BLOCKED 全部修复后 R6 重跑）：
-      全量 pytest 209 passed / 0 skipped / 0 failed（Python 3.12.3, pydantic 2.13.4）：
-      - Day6 新增 60 项（cleaner 15 / quality 8 / fingerprint 9 / sensitive 9 / extraction 14 / integration 5）
+      （2026-08-13，被测 1d98fdd，Reviewer 第三轮 B1/B2/H1/H3 修复后 L2 重跑）：
+      全量 pytest 209 passed / 0 skipped / 0 failed（7.95s，Python 3.12.3, pydantic 2.13.4）：
       - 真实 SDK 8 项（768 维/中文/空串/batch/envelope/health/降级）
-      - Day4 生命周期/错误映射 47 项 + Day5 协议/Service 23 项 + 基础 5 项
-      本地对照：96 passed + 47 skipped（WSL 无 SDK skip）→ VM 143 全过，数字完全吻合
+      - Day4 生命周期/错误映射 47 项 + Day5 协议/Service/executor 23 项
+      - Day6 全量 131 项（含第三轮新增 B1 6 / B2 3 / H1 3 / H3 3 = 15 项负向测试）
+      本地对照：162 passed + 47 skipped（WSL 无 SDK skip）→ VM 209 全过，数字完全吻合
       覆盖：Pydantic 校验拒绝（缺失/类型错/未知字段）、时间 UTC 标准化、六维质量评分 +
-      提取门控（可靠性下限）、内容指纹/幂等键/判重、敏感识别（API Key/JWT/密码/手机号/身份证/敏感路径）、
-      ExtractionProvider 规则优先 + LLM 注入 + Pydantic 非法输出降级（validation_failed 进审计不进真源）
+      提取门控（可靠性下限 + 安全 Gate fail-close）、内容指纹/幂等键/判重、敏感识别
+      （API Key/JWT/密码/手机号/身份证/敏感路径）、success Tool evidence 门控（B1）、
+      memory_status=candidate 可信级标记（B2）、payload_security_checked fail-close（H1）、
+      ProcessingStatus D3 五值契约（H3）、ExtractionProvider 规则优先 + LLM 注入 +
+      Pydantic 非法输出降级（audit 隔离不进真源）
       运行输出见原始日志
 
   - id: "D2-3-DEPLOY-STARTUP"

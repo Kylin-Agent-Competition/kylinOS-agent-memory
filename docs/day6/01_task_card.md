@@ -25,7 +25,10 @@
 
 ## 禁止修改范围
 
-- 不修改 Day4/Day5 已合并的 Bridge/Provider/Embedding 核心
+- 不修改 Day4 已合并的 Bridge/Provider 核心（cpp-bridge/、memory-service/providers/）
+- 修改 Day5 已合并的 Embedding 层为 PR #25 审查意见落实（增量）：embedding_service.py（executor
+  shutdown / embed_batch 部分失败语义 / _degrade 类型注解）、server.py（provider 注入点 /
+  stop() join 连接线程 / 超时 recv 退出 / 拒绝已停止连接新请求）——均为增量修改，不改变协议语义
 - 不实现 SQLite/Outbox 持久化（D 轨 D6）、日志脱敏/跨用户 Repository 约束（D 轨）、业务 Schema 冻结（E 轨）
 - 不接入真实 LLM（无模型凭证；接口预留，规则路径独立工作）
 - 不改架构 4.4 冻结 IPC 方法语义
@@ -46,12 +49,15 @@
 ## 错误语义
 
 - Pydantic 校验失败：抛 `EventValidationError(code, message)`，结构化错误，不静默吞掉
-- LLM 输出非法（非 dict / 缺字段 / 类型错）：降级——该候选标记 `validation_failed=True` 进审计，不进入业务真源；整体返回规则路径结果（真实结果或空列表，非固定样例）
+- LLM 输出非法（非 dict / 缺字段 / 类型错）：ValidationError → 进 audit → return None，不进入正常 candidates（R4：非法候选彻底隔离，不依赖下游过滤）；整体返回规则路径结果（真实结果或空列表，非固定样例）
 - 超时：按 Day3 契约返回空候选列表（降级）
 
 ## 安全边界
 
-- 敏感信息识别只做标记（is_sensitive_matched/sensitivity），不落明文日志
+- 敏感识别标记（is_sensitive_matched/sensitivity）+ 安全 Gate fail-close：high/critical 敏感事件
+  → should_ignore=true + source_business_status=ignored + eligible_for_extraction=false（R2，优先于
+  质量 Gate）；tool_result 事件未完成 Raw Payload 安全前置检查（payload_security_checked=false）
+  → fail-close（H1，不 silent fail-open）；不落明文日志
 - 指纹基于归一化正文，不包含原始载荷全文
 
 ## WSL 可测项
