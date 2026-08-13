@@ -351,30 +351,27 @@ entries:
 
   - id: "D7-A-PREF-EXTRACTION"
     task_id: "D7-A"
-    description: "Day 7 偏好抽取深化——规则/Provider 协同 + 缓存/超时/非法字段降级 + 字段级评测统一结果格式（本地 L1 全量 pytest）"
-    status: "VERIFIED"
-    evidence_level: "E2"
-    source: "evidence/l1/day7_pref_extraction_local.log"
+    description: "Day 7 偏好抽取深化——规则/Provider 协同 + 缓存/超时/非法字段降级 + 字段级评测统一结果格式（麒麟 VM L2 全量 pytest）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/day7_verify_latest.log"
+    tested_commit: "45827f4a283a6305de678c161ee89eb462e288c4"  # feat/day7-preference-extraction tip
+    evidence_commit: "45827f4a283a6305de678c161ee89eb462e288c4"
+    commit: "45827f4a283a6305de678c161ee89eb462e288c4"  # 历史兼容字段（= tested_commit）
     date: "2026-08-14"
     reviewer: "pending"
-    limitations: "本地 L1（WSL，215 passed + 47 skipped；skipped 为 VM/SDK 专属）；麒麟 VM L2 回归待 VM 开机后补充（预期全过无 skip）；未接入真实 LLM（无凭证，接口预留）；规则置信度/关键词为基线值待 E 轨数据集评测调优；全量 -v 一次偶发 test_server_lifecycle 复跑即绿（关联 TD-A-D6-EXEC-RACE 已知非阻断竞态窗口）"
-    checksum_sha256: "7d875baf3d1f9473c5229dba9deb42de0dda5178516a120bc4eabe0300dadd95"
+    limitations: "未接入真实 LLM（无凭证，接口预留）；规则置信度/关键词为基线值待 E 轨数据集评测调优；本地对照 215 passed + 47 skipped（WSL 无 SDK skip）→ VM 262 全过数字吻合（262 = 209 Day6 VM + 53 D7 新增）；全量 -v 本地一次偶发 test_server_lifecycle 复跑即绿（关联 TD-A-D6-EXEC-RACE 已知非阻断竞态窗口，VM 262 无此现象）"
+    checksum_sha256: "71e6155cd8e09ecb7831c16c9b13d3ce14f417369a050c7ce159817adca5e029"
     details: |
       Day7 偏好提取深化（架构 v1 TABLE 19/20 + E 轨 Schema §2.5/§2.9/§3.2，
-      docs/day7/01_task_card.md）：
-      - 规则路径深化：偏好六类识别（presentation/tool_selection/workflow/safety/
-        environment/scene_specific）/ 临时-长期（is_temporary/should_persist，
-        TABLE 20 原句覆盖）/ scope 五值推导（E 轨 §2.9）/ 类别键 / explicitness（§2.5）
-      - 规则+LLM 协同：合并去重（同 key 规则优先，dedup/conflict 进 audit）
-      - LRU 抽取缓存：键=kind+source_event_id+内容指纹；深拷贝；空结果缓存；TTL/容量可配
-      - LLM 显式超时包装（llm_timeout_ms，超时→空候选+audit，Day3 契约降级不阻塞）
-      - 可选字段非法值降级（confidence/scope/category/explicitness/布尔→默认值+audit；
-        必需字段缺失仍 R4 候选级拒绝，R3/R5/B1/B2 红线保持）
-      - 评测输出：PreferenceExtractionOutput / to_evaluation_record /
-        export_preference_records（JSONL，E 轨偏好评测口径）
-      新增测试 53 项（test_preference_rules.py 24 + test_extraction_provider_d7.py 29，
-      含独立审查修复 3 项：unhashable 字段值降级 / 超时后 llm-busy-skip / LLM 间去重标签）
-      全量 215 passed + 47 skipped；3 次乱序文件顺序运行均通过（顺序无关）
+      docs/day7/01_task_card.md）麒麟 VM 验证（2026-08-14，被测 45827f4）：
+      全量 pytest 262 passed / 0 skipped / 0 failed（8.80s）：
+      - Day4/5/6 回归 209 项（含真实 SDK Embedding 768 维/中文/空串/batch/health/降级）
+      - D7 新增 53 项：偏好六类识别 / 临时-长期（TABLE 20 原句）/ scope 五值推导 /
+        类别键 / explicitness / LRU 缓存（深拷贝/空结果/TTL/串键隔离）/ LLM 超时降级 /
+        llm-busy-skip / 可选字段降级（含 unhashable 值）/ 规则+LLM 合并去重（含
+        dedup-llm/conflict-llm 标签）/ 评测输出（JSONL 导出）
+      本地对照：215 passed + 47 skipped（WSL 无 SDK skip）→ VM 262 全过，数字完全吻合
       运行输出见原始日志
 
   - id: "D2-3-DEPLOY-STARTUP"
