@@ -65,16 +65,48 @@ check_root() {
 ensure_unit_file() {
     log_test ""
     log_test "========== 准备 Systemd Unit 文件 =========="
+    log_test "[PACKAGED_UNIT_VALIDATION] 开始检查仓库正式 Unit..."
 
-    if [ ! -f "${SYSTEMD_DST}" ]; then
-        if [ -f "${SYSTEMD_SRC}" ]; then
-            cp "${SYSTEMD_SRC}" "${SYSTEMD_DST}"
-            ok "Unit 文件已安装: ${SYSTEMD_SRC} -> ${SYSTEMD_DST}"
+    # R3-b fix: 测试必须使用仓库正式 Unit packaging/systemd/kylin-memory-echo.service
+    # 动态生成 Unit 仅保留为人工诊断工具，不计入正式 PASS
+    local _unit_validated=false
+
+    if [ -f "${SYSTEMD_DST}" ]; then
+        # 已安装的 Unit — 检查是否来自仓库正式模板
+        local _installed_user
+        _installed_user=$(grep '^User=' "${SYSTEMD_DST}" | cut -d= -f2 | tr -d ' ')
+        if [ "${_installed_user}" = "__USERNAME__" ]; then
+            log_test "  ❌ PACKAGED_UNIT_VALIDATION=FAIL: 已安装 Unit 仍含 __USERNAME__ 占位符 (未替换)"
+            no "PACKAGED_UNIT_VALIDATION=FAIL (占位符未替换)"
         else
-            # 动态生成 unit (RuntimeDirectory + UNVERIFIED)
-            cat > "${SYSTEMD_DST}" << UNITEOF
+            ok "Unit 文件已安装且用户名已替换: ${SYSTEMD_DST} (User=${_installed_user})"
+            _unit_validated=true
+        fi
+    elif [ -f "${SYSTEMD_SRC}" ]; then
+        # 仓库正式 Unit 存在 — 替换占位符并安装
+        log_test "  使用仓库正式 Unit: ${SYSTEMD_SRC}"
+        # 检查 __USERNAME__ 占位符
+        if grep -q '__USERNAME__' "${SYSTEMD_SRC}"; then
+            sed "s/__USERNAME__/${KUSER}/g" "${SYSTEMD_SRC}" > "${SYSTEMD_DST}"
+            chmod 644 "${SYSTEMD_DST}"
+            ok "PACKAGED_UNIT_VALIDATION=PASS: 仓库正式 Unit 已安装 (${SYSTEMD_SRC} -> ${SYSTEMD_DST}, User=${KUSER})"
+            _unit_validated=true
+        else
+            cp "${SYSTEMD_SRC}" "${SYSTEMD_DST}"
+            ok "PACKAGED_UNIT_VALIDATION=PASS: 仓库正式 Unit 已安装 (无占位符)"
+            _unit_validated=true
+        fi
+    else
+        # 仓库正式 Unit 缺失 — FAIL
+        log_test "  ❌ PACKAGED_UNIT_VALIDATION=FAIL: 仓库正式 Unit 不存在 (${SYSTEMD_SRC})"
+        log_test "  ⚠️  请确保 packaging/systemd/kylin-memory-echo.service 已部署到服务器"
+        no "PACKAGED_UNIT_VALIDATION=FAIL (仓库正式 Unit 缺失)"
+
+        # 动态生成 Unit 仅作为人工诊断工具 (不计入正式 PASS)
+        log_test "  [诊断] 动态生成临时 Unit 供人工调试 (此步骤不计入 PASS)..."
+        cat > "${SYSTEMD_DST}" << UNITEOF
 [Unit]
-Description=Kylin Memory Echo Server — UDS 最小验证服务
+Description=Kylin Memory Echo Server — 动态生成 (诊断用, 非正式 Unit)
 After=network.target
 
 [Service]
@@ -92,26 +124,43 @@ StandardError=append:/home/${KUSER}/kylin-memory-echo/logs/systemd_stderr.log
 NoNewPrivileges=yes
 RestrictAddressFamilies=AF_UNIX
 
-# UNVERIFIED: 银河麒麟桌面V11验证通过，生产系统未测试
+# UNVERIFIED: 动态生成 Unit，非仓库正式版本
 
 [Install]
 WantedBy=default.target
 UNITEOF
-            ok "Unit 文件已动态生成 (RuntimeDirectory): ${SYSTEMD_DST}"
+        log_test "  [诊断] 动态 Unit 已生成: ${SYSTEMD_DST} (不计入 PACKAGED_UNIT_VALIDATION)"
+    fi
+
+    # systemd-analyze verify (如果 systemd 版本支持)
+    if ${_unit_validated} && command -v systemd-analyze &>/dev/null; then
+        if systemd-analyze verify "${SYSTEMD_DST}" >> "${TEST_LOG}" 2>&1; then
+            ok "PACKAGED_UNIT_VALIDATION: systemd-analyze verify PASS"
+        else
+            log_test "  ⚠️  systemd-analyze verify 警告 (非致命, 见日志)"
         fi
-    else
-        ok "Unit 文件已存在: ${SYSTEMD_DST}"
     fi
 }
 
 cleanup_legacy() {
     log_test ""
     log_test "========== 清理旧路径残留 =========="
-    pkill -f "kylin-memory-echo-server" 2>/dev/null || true
+    # 使用 systemctl stop 停止服务，禁止使用 pkill -f 误杀其他用户/并行测试进程
+    systemctl stop "${SERVICE}" 2>/dev/null || true
+    # 通过 MainPID 确认服务已停止
+    local main_pid
+    main_pid=$(systemctl show -p MainPID "${SERVICE}" 2>/dev/null | cut -d= -f2)
+    if [ -n "$main_pid" ] && [ "$main_pid" != "0" ]; then
+        # 如果 MainPID 仍非零,等待其退出
+        sleep 2
+        if kill -0 "$main_pid" 2>/dev/null; then
+            no "服务进程未停止 (MainPID=$main_pid)"
+        fi
+    fi
     rm -f "${LEGACY_SOCKET_PATH}" 2>/dev/null || true
     rm -rf /tmp/kylin-memory-echo 2>/dev/null || true
     sleep 1
-    ok "旧 /tmp 路径残留已清理"
+    ok "旧路径残留已通过 systemctl stop 清理 (非 pkill)"
 }
 
 # ---- 测试主流程 ----
@@ -221,9 +270,21 @@ main() {
     fi
 
     # Step 8: UDS communication verification (RuntimeDirectory socket)
+    # R3-a fix: 拆分为独立结果 SYSTEMD_SERVER_LIFECYCLE / CPP_CLIENT_OVER_SYSTEMD / PYTHON_DIAGNOSTIC_FALLBACK
     log_test ""
     log_test "--- Step 8: UDS 通信 (RuntimeDirectory socket) ---"
-    # Step 0.5: 自动发现 kaiming_memory_client 实际路径 (R3-A fix)
+
+    # -- 服务端启停验证 (SYSTEMD_SERVER_LIFECYCLE) --
+    log_test "  [SYSTEMD_SERVER_LIFECYCLE] 服务端启停验证..."
+    local _svc_active
+    _svc_active=$(systemctl is-active "${SERVICE}" 2>/dev/null || echo "unknown")
+    if [ "${_svc_active}" = "active" ]; then
+        ok "SYSTEMD_SERVER_LIFECYCLE=PASS (systemd 报告 active)"
+    else
+        no "SYSTEMD_SERVER_LIFECYCLE=FAIL (systemd 报告 ${_svc_active})"
+    fi
+
+    # -- 自动发现 kaiming_memory_client 实际路径 --
     local _actual_client=""
     for _cand in "${KAIMING_CLIENT}" "${KAIMING_CLIENT_FALLBACK}" "${KAIMING_CLIENT_FALLBACK2}"; do
         if [ -f "${_cand}" ] && [ -x "${_cand}" ]; then
@@ -232,7 +293,6 @@ main() {
         fi
     done
     if [ -z "${_actual_client}" ]; then
-        # 最后一次尝试: find
         _actual_client=$(find "${DEPLOY_BASE}" -name kaiming_memory_client -type f -executable 2>/dev/null | head -1 || true)
     fi
 
@@ -243,12 +303,11 @@ main() {
             _test_sock="${LEGACY_SOCKET_PATH}"
         fi
         if [ ! -S "${_test_sock}" ]; then
-            no "无可用 socket"
+            no "CPP_CLIENT_OVER_SYSTEMD=FAIL (无可用 socket)"
         else
             log_test "    Using socket: ${_test_sock}"
 
-            # R3-A fix: KYSEC 安全模块可能拒绝未授权二进制访问 UDS socket
-            # 尝试通过 kysec_authorize.sh 授权 (如果可用)
+            # KYSEC 授权 (如果可用)
             local _kysec_script=""
             for _ks in "${DEPLOY_BASE}/kysec_authorize.sh" \
                        "${DEPLOY_BASE}/packaging/deploy-package/scripts/kysec_authorize.sh" \
@@ -260,21 +319,41 @@ main() {
                 bash "${_kysec_script}" authorize --socket "${_test_sock}" >> "${TEST_LOG}" 2>&1 || true
             fi
 
-            # 以服务用户身份运行客户端 (匹配 socket owner; 绕过 root 的 KYSEC ACL)
+            # 以服务用户身份运行客户端
             local _uid_cmd=""
             if [ "$(id -u)" = "0" ] && [ -n "${KUSER}" ] && [ "${KUSER}" != "root" ]; then
                 _uid_cmd="sudo -u ${KUSER}"
                 log_test "    Running as ${KUSER} (socket owner)"
             fi
 
-            local _echo_pass=0 _health_pass=0
+            local _cpp_echo_fail=0 _cpp_health_fail=0
+            local _py_diag_needed=0
 
+            # -- C++ 客户端 echo 验证 (CPP_CLIENT_OVER_SYSTEMD) --
             if ${_uid_cmd} "${_actual_client}" --method echo --socket "${_test_sock}" >> "${TEST_LOG}" 2>&1; then
-                ok "UDS echo 通过 systemd 服务成功 (socket=${_test_sock})"
-                _echo_pass=1
+                ok "CPP_CLIENT_OVER_SYSTEMD: echo PASS"
             else
-                log_test "    C++ client echo failed, attempting Python UDS fallback..."
-                # Python UDS fallback: 绕过二进制 KYSEC 限制
+                no "CPP_CLIENT_OVER_SYSTEMD: echo FAIL"
+                _cpp_echo_fail=1
+                _py_diag_needed=1
+            fi
+
+            # -- C++ 客户端 health 验证 (CPP_CLIENT_OVER_SYSTEMD) --
+            if ${_uid_cmd} "${_actual_client}" --method health --socket "${_test_sock}" >> "${TEST_LOG}" 2>&1; then
+                ok "CPP_CLIENT_OVER_SYSTEMD: health PASS"
+            else
+                no "CPP_CLIENT_OVER_SYSTEMD: health FAIL"
+                _cpp_health_fail=1
+                _py_diag_needed=1
+            fi
+
+            # -- Python diagnostic fallback (PYTHON_DIAGNOSTIC_FALLBACK) --
+            # 仅诊断信息，不计入 C++ PASS/FAIL
+            # Python fallback 成功不得修改 C++ 测试结果
+            if [ "${_py_diag_needed}" -eq 1 ]; then
+                log_test "  [PYTHON_DIAGNOSTIC_FALLBACK] C++ Client 失败, 执行 Python 诊断 (不计入 C++ 结果)..."
+                local _py_diag_echo_ok=0 _py_diag_health_ok=0
+
                 if python3 -c "
 import socket, struct, json, sys
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -296,18 +375,9 @@ except Exception as e:
 finally:
     sock.close()
 " >> "${TEST_LOG}" 2>&1; then
-                    ok "UDS echo 通过 Python 回退方案成功"
-                    _echo_pass=1
-                else
-                    no "UDS echo 失败 (C++ + Python 回退均失败)"
+                    _py_diag_echo_ok=1
                 fi
-            fi
 
-            if ${_uid_cmd} "${_actual_client}" --method health --socket "${_test_sock}" >> "${TEST_LOG}" 2>&1; then
-                ok "UDS health 通过 systemd 服务成功"
-                _health_pass=1
-            else
-                log_test "    C++ client health failed, attempting Python UDS fallback..."
                 if python3 -c "
 import socket, struct, json, sys
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -329,20 +399,25 @@ except Exception as e:
 finally:
     sock.close()
 " >> "${TEST_LOG}" 2>&1; then
-                    ok "UDS health 通过 Python 回退方案成功"
-                    _health_pass=1
-                else
-                    no "UDS health 失败 (C++ + Python 回退均失败)"
+                    _py_diag_health_ok=1
                 fi
+
+                if [ "${_py_diag_echo_ok}" -eq 1 ] && [ "${_py_diag_health_ok}" -eq 1 ]; then
+                    log_test "  [PYTHON_DIAGNOSTIC_FALLBACK] Python 诊断: echo PASS, health PASS (仅供诊断, C++ 结果不受影响)"
+                else
+                    log_test "  [PYTHON_DIAGNOSTIC_FALLBACK] Python 诊断: echo=$(if [ "${_py_diag_echo_ok}" -eq 1 ]; then echo PASS; else echo FAIL; fi), health=$(if [ "${_py_diag_health_ok}" -eq 1 ]; then echo PASS; else echo FAIL; fi) (仅供诊断)"
+                fi
+            else
+                log_test "  [PYTHON_DIAGNOSTIC_FALLBACK] NOT NEEDED (C++ Client 全部通过)"
             fi
 
-            # 如果 kysec 授权过, 回退
+            # kysec 回退
             if [ -n "${_kysec_script}" ] && [ -x "${_kysec_script}" ]; then
                 bash "${_kysec_script}" rollback --socket "${_test_sock}" >> "${TEST_LOG}" 2>&1 || true
             fi
         fi
     else
-        no "Kaiming 客户端不可用 (尝试了: ${KAIMING_CLIENT}, ${KAIMING_CLIENT_FALLBACK}, ${KAIMING_CLIENT_FALLBACK2}, find)"
+        no "CPP_CLIENT_OVER_SYSTEMD=FAIL (Kaiming 客户端不可用: ${KAIMING_CLIENT}, ${KAIMING_CLIENT_FALLBACK}, ${KAIMING_CLIENT_FALLBACK2})"
     fi
 
     # Step 9: stop

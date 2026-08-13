@@ -2,7 +2,7 @@
 """Direct UDS test via SSH - writes results to local client.log"""
 import paramiko, os, time, json
 
-PW = 'Zyf790043'
+PW = '***REMOVED_PASSWORD***'
 OUT = os.path.join(os.path.dirname(__file__), 'final')
 os.makedirs(OUT, exist_ok=True)
 

@@ -14,7 +14,7 @@ import hashlib
 HOST = '127.0.0.1'
 PORT = 2222
 USER = 'kylin-agent'
-PASSWORD = 'Zyf790043'
+PASSWORD = '***REMOVED_PASSWORD***'
 DEPLOY_HOME = '/home/kylin-agent'
 REPO_PATH = f'{DEPLOY_HOME}/kylin-memory-echo'
 TEST_DIR = f'{DEPLOY_HOME}/uds-echo-test'
