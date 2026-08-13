@@ -307,7 +307,7 @@ entries:
     tested_commit: "33180385e0db350a97915e40b978424381052f9c"  # Day5 分支 tip（cherry-pick 后最终代码，README 状态段已同步）
     evidence_commit: "33180385e0db350a97915e40b978424381052f9c"  # 证据日志与代码同分支提交（Day5 PR 合入后回填 evidence_commit 为证据提交 SHA）
     commit: "33180385e0db350a97915e40b978424381052f9c"  # 历史兼容字段（= tested_commit）
-    date: "2026-08-09"
+    date: "2026-08-13"
     reviewer: "pending"
     limitations: "启动期降级缺口（无 SDK 时 EmbeddingUDSServer 构造抛 RuntimeError，P2-2 待登记技术债）；真实 so 缺失端到端降级未在 VM 复现（mock 覆盖）；异步、并发、主动超时、多模态未覆盖；envelope deadline_ms 解析但未强制执行（用 payload.timeout_ms）"
     checksum_sha256: "2f506a898b3d01f20b80e8477833d5e64dd9f387d23805dc6ec26bf65270c038"
@@ -326,17 +326,17 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day6_verify_latest.log"
-    tested_commit: "2ffbf36d31541e9828ac2d077de3be8f1967825a"  # Day6 分支 tip（feat/day6-event-quality-pipeline）
-    evidence_commit: "2ffbf36d31541e9828ac2d077de3be8f1967825a"  # 证据日志与代码同分支提交（Day6 PR 合入后回填 evidence_commit 为证据提交 SHA）
-    commit: "2ffbf36d31541e9828ac2d077de3be8f1967825a"  # 历史兼容字段（= tested_commit）
-    date: "2026-08-09"
+    tested_commit: "62c4d8cb2f96b4d1a4822929c3b73abdd542e095"  # Day6 分支 tip（feat/day6-event-quality-pipeline）
+    evidence_commit: "62c4d8cb2f96b4d1a4822929c3b73abdd542e095"  # 证据日志与代码同分支提交（Day6 PR 合入后回填 evidence_commit 为证据提交 SHA）
+    commit: "62c4d8cb2f96b4d1a4822929c3b73abdd542e095"  # 历史兼容字段（= tested_commit）
+    date: "2026-08-13"
     reviewer: "pending"
-    limitations: "E 轨业务 Schema v0.1 仍为 DRAFT（部分字段 UNVERIFIED，待 C 轨麒麟取证）；ExtractionProvider 规则置信度（0.7/0.85）为基线值待 E 轨数据集评测调优；未接入真实 LLM（无凭证，接口预留）；敏感识别只做标记不落明文日志；低质量事件只保留最小审计不进入提取"
-    checksum_sha256: "609511efb02aec3952811bda5e44a63f7da768e96a6a51b82de390f3129c9d42"
+    limitations: "E 轨业务 Schema v0.1 仍为 DRAFT（部分字段 UNVERIFIED，待 C 轨麒麟取证）；ExtractionProvider 规则置信度（0.7/0.85）为基线值待 E 轨数据集评测调优；未接入真实 LLM（无凭证，接口预留）；TD-A-005-09 完整修复（Provider 延迟构造）留待独立 PR；TD-A-005-01 仍 Open（Bridge 内部无真正中断）"
+    checksum_sha256: "4cdf8edb6a18f06c941c1ec7eb0c3a81bd0bbcc56b39adc0ec0e2f3d47df399e"
     details: |
       Day6 多源接入/质量/安全管线（架构 v1 §6.2 六步 + Day3 ExtractionProvider 契约）麒麟 VM 验证
-      （2026-08-09，被测 2ffbf36）：
-      全量 pytest 143 passed / 0 skipped / 0 failed（Python 3.12.3, pydantic 2.13.4）：
+      （2026-08-13，被测 62c4d8c，Reviewer BLOCKED 全部修复后 R6 重跑）：
+      全量 pytest 194 passed / 0 skipped / 0 failed（Python 3.12.3, pydantic 2.13.4）：
       - Day6 新增 60 项（cleaner 15 / quality 8 / fingerprint 9 / sensitive 9 / extraction 14 / integration 5）
       - 真实 SDK 8 项（768 维/中文/空串/batch/envelope/health/降级）
       - Day4 生命周期/错误映射 47 项 + Day5 协议/Service 23 项 + 基础 5 项
