@@ -21,7 +21,7 @@
 
 - 基线：main @ 2e3f919。
 - 交付：偏好抽取深化三项（见下）+ 任务卡 docs/day7/01_task_card.md + 本地 L1 证据（evidence/l1/day7_pref_extraction_local.log，215 passed + 47 skipped）+ **麒麟 VM L2 证据（evidence/l2-kylin-vm/day7_verify_latest.log，262 passed / 0 skipped / 0 failed，被测 45827f4）** + evidence/index.yaml 条目 D7-A-PREF-EXTRACTION（已升级 HOST_VERIFIED/E4）。含独立审查修复 3 项（unhashable 字段值降级 / 超时后 llm-busy-skip / LLM 间去重标签）。
-- **麒麟 VM L2 待补**：VM 开机后跑全量 pytest（预期无 skip 全过），并回填 tested_commit/checksum。
+- ⚠️ **VM L2 后有一项自我检查修复（R5 复核收紧，commit e3a3f9e）**：LLM 路径敏感复核扩展到 evidence/conditions（与规则路径一致）——防御性增强（正常输入行为不变，新增 2 项负向测试，本地 217 passed + 47 skipped）；**VM 复跑待补**（预期 264 passed / 0 skipped），跑完更新 evidence tested_commit 至 e3a3f9e。
 
 ### Day7 A 轨交付内容（xlsx R37）
 
