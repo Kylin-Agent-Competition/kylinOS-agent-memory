@@ -206,6 +206,37 @@ def test_llm_timeout_knowledge_degrades():
     p.close()
 
 
+def test_llm_busy_skip_after_timeout():
+    """Review 修复：超时后 in-flight 任务未完成 → 新 LLM 调用跳过（llm-busy-skip），
+    不排队拖死；挂起任务完成后自动恢复。"""
+    import threading
+    release = threading.Event()
+
+    def slow_llm(kind, text):
+        release.wait(timeout=2.0)  # 挂起直到测试释放
+        return [{"key": "response.language", "value": "中文",
+                 "confidence": 0.9, "evidence": "e"}]
+
+    p = ExtractionProvider(llm_extractor=slow_llm, llm_timeout_ms=30)
+    # 第一次：超时
+    out1 = p.extract_preferences_with_meta(_turn(source_event_id="evt_bs1"))
+    assert out1.llm_timeout is True
+    # 第二次：in-flight 未完成 → skip（不阻塞，不排队）
+    start = time.monotonic()
+    out2 = p.extract_preferences_with_meta(_turn(source_event_id="evt_bs2"))
+    assert time.monotonic() - start < 0.2  # 未等待挂起任务
+    assert out2.llm_timeout is False
+    assert out2.candidates == []
+    assert any(a["error"] == "llm-busy-skip" for a in p.audit)
+    # 释放挂起任务后，下一次调用恢复正常
+    release.set()
+    time.sleep(0.1)
+    out3 = p.extract_preferences_with_meta(_turn(source_event_id="evt_bs3"))
+    assert out3.llm_timeout is False
+    assert any(c.key == "response.language" for c in out3.candidates)
+    p.close()
+
+
 # ── 4. 非法字段降级（D7：可选字段坏值 → 默认值 + audit；R4 必需字段不变） ──
 
 def _llm_returning(**overrides):
@@ -275,6 +306,23 @@ def test_field_degrade_required_field_still_rejected():
     assert any("validation" in a["error"] for a in p.audit)
 
 
+def test_field_degrade_unhashable_value_no_crash():
+    """Review 修复：category/scope/explicitness 为 list/dict（unhashable）不崩溃，降级默认值。"""
+    p = ExtractionProvider(llm_extractor=_llm_returning(
+        category=["a"], scope={"x": 1}, explicitness=["inferred"]))
+    cands = p.extract_preferences(
+        _turn(user_text="我喜欢简洁的回答", source_event_id="evt_fd6"))
+    lang = [c for c in cands if c.key == "response.language"]
+    assert len(lang) == 1
+    assert lang[0].category == "presentation"
+    assert lang[0].scope == "session"
+    assert lang[0].explicitness == "explicit"
+    errors = [a["error"] for a in p.audit]
+    assert "field-degraded:category" in errors
+    assert "field-degraded:scope" in errors
+    assert "field-degraded:explicitness" in errors
+
+
 # ── 5. 规则 + LLM 协同（合并去重，规则优先） ──
 
 def test_coop_keeps_distinct_keys():
@@ -315,6 +363,28 @@ def test_coop_conflict_rule_wins():
     assert len(cands) == 1
     assert "简洁" in cands[0].value  # 规则 value 保留
     assert any(a["error"] == "conflict-rule-wins" for a in p.audit)
+
+
+def test_coop_llm_vs_llm_dedup_label():
+    """Review 修复：LLM 候选之间重复 → dedup-llm（非误导性 dedup-rule-wins）。"""
+    def llm(kind, text):
+        return [
+            {"key": "response.detail", "value": "更详细", "confidence": 0.8,
+             "evidence": "e"},
+            {"key": "response.detail", "value": "更详细", "confidence": 0.9,
+             "evidence": "e"},  # 与上一条完全重复
+            {"key": "response.detail", "value": "更详细一些", "confidence": 0.8,
+             "evidence": "e"},  # 同 key 不同 value（LLM 间冲突）
+        ]
+    p = ExtractionProvider(llm_extractor=llm)
+    cands = p.extract_preferences(
+        _turn(user_text="我喜欢简洁的回答", source_event_id="evt_coop4"))
+    detail = [c for c in cands if c.key == "response.detail"]
+    assert len(detail) == 1  # 仅第一条 LLM 候选保留
+    errors = [a["error"] for a in p.audit]
+    assert "dedup-llm" in errors
+    assert "conflict-llm" in errors
+    assert "dedup-rule-wins" not in errors  # 无规则参与，不出现误导标签
 
 
 # ── 6. 评测输出（D7：偏好字段级评测统一结果格式） ──

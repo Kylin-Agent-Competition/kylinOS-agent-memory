@@ -161,7 +161,8 @@ def _degrade_optional_fields(raw: Dict[str, Any], kind: str,
     - is_temporary/should_persist 非 bool → 剥离（用 Pydantic 默认值）+ audit
 
     仅作用于偏好路径的可选字段；必需字段（key/value/evidence）缺失或类型错误
-    仍由 Pydantic 校验拒绝（R4：非法候选不进入业务真源）。
+    仍由 Pydantic 校验拒绝（R4：非法候选不进入业务真源）。confidence 缺失由
+    Pydantic 拒绝（无默认值），仅非法值（非数值/越界）降级。
     """
     out = dict(raw)
     conf = out.get("confidence")
@@ -176,7 +177,8 @@ def _degrade_optional_fields(raw: Dict[str, Any], kind: str,
             ("scope", _VALID_SCOPES, "session"),
             ("explicitness", _VALID_EXPLICITNESS, "explicit")):
         v = out.get(fname)
-        if v is not None and v not in valid:
+        # isinstance(v, str) 防止 list/dict 等 unhashable 值在集合成员检查时抛 TypeError
+        if v is not None and (not isinstance(v, str) or v not in valid):
             out[fname] = default
             audit.append({"kind": kind, "event_id": trusted_id,
                           "error": f"field-degraded:{fname}"})
@@ -429,6 +431,10 @@ class ExtractionProvider:
         self._executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="llm-extract")
         self._closed = False
+        # Review 修复：跟踪超时后仍在运行的 in-flight LLM 任务。
+        # 单 worker 池中挂起的任务会阻塞后续 submit 排队（排队时间计入 deadline），
+        # 导致每次新调用都超时——挂起期间跳过新 LLM 调用（llm-busy-skip）而非排队拖死。
+        self._in_flight: Optional[concurrent.futures.Future] = None
         self._audit: List[Dict[str, Any]] = []  # 非法候选审计（最小审计，不落原文）
 
     def close(self) -> None:
@@ -541,21 +547,34 @@ class ExtractionProvider:
         trusted_id: str,
     ) -> List[PreferenceCandidate]:
         """规则优先合并：完全重复（key+value+scope）去重；同 key 不同 value
-        规则优先（LLM 冲突候选进 audit，不进入正常返回）。"""
+        规则优先（LLM 冲突候选进 audit，不进入正常返回）。
+
+        审计标签区分来源：rule 与 LLM 重复 → dedup-rule-wins/conflict-rule-wins；
+        LLM 候选之间重复/冲突 → dedup-llm/conflict-llm。
+        """
+        rule_full = {(c.key, c.value, c.scope) for c in rule_candidates}
+        rule_keys = {c.key for c in rule_candidates}
         merged = list(rule_candidates)
-        seen_full = {(c.key, c.value, c.scope) for c in rule_candidates}
-        seen_keys = {c.key for c in rule_candidates}
+        seen_full = set(rule_full)
+        seen_keys = set(rule_keys)
         for c in llm_candidates:
-            if (c.key, c.value, c.scope) in seen_full:
+            full = (c.key, c.value, c.scope)
+            if full in seen_full:
+                label = "dedup-rule-wins" if full in rule_full else "dedup-llm"
                 self._audit.append({"kind": "preference", "event_id": trusted_id,
-                                    "error": "dedup-rule-wins"})
+                                    "error": label})
                 continue
-            if c.key in seen_keys:
+            if c.key in rule_keys:
                 self._audit.append({"kind": "preference", "event_id": trusted_id,
                                     "error": "conflict-rule-wins"})
                 continue
+            if c.key in seen_keys:
+                # LLM 候选之间同 key 不同 value：保守丢弃（避免未复核冲突入候选）
+                self._audit.append({"kind": "preference", "event_id": trusted_id,
+                                    "error": "conflict-llm"})
+                continue
             merged.append(c)
-            seen_full.add((c.key, c.value, c.scope))
+            seen_full.add(full)
             seen_keys.add(c.key)
         return merged
 
@@ -590,17 +609,31 @@ class ExtractionProvider:
         if self._closed:
             return [], False  # Provider 已关闭：LLM 降级为空（规则路径仍可用）
 
+        # 上一次 LLM 调用超时后仍在运行 → 跳过本次调用（避免在单 worker 池中排队拖死），
+        # 记 audit；挂起任务完成后自动恢复。
+        if self._in_flight is not None and not self._in_flight.done():
+            self._audit.append({"kind": kind, "event_id": trusted_source_event_id,
+                                "error": "llm-busy-skip"})
+            return [], False
+
         try:
             future = self._executor.submit(_invoke)
+            self._in_flight = future
             raw_list = future.result(timeout=self._llm_timeout_ms / 1000.0)
         except concurrent.futures.TimeoutError:
-            # 超时：返回空候选列表 + 审计（Day3 契约降级；后台线程结果丢弃）
+            # 超时：返回空候选列表 + 审计（Day3 契约降级；后台线程结果丢弃，
+            # in_flight 保留——下次调用会 skip 直至其完成）
             self._audit.append({"kind": kind, "event_id": trusted_source_event_id,
                                 "error": "timeout"})
             return [], True
         except Exception:
+            self._in_flight = None  # LLM 内部异常：任务已结束，清除 in-flight
             # LLM 内部异常 → 返回空候选列表（Day3 契约降级）
             return [], False
+        finally:
+            # 仅在任务确实完成时清空 in-flight；超时未完成的任务保留
+            if self._in_flight is not None and self._in_flight.done():
+                self._in_flight = None
 
         if not isinstance(raw_list, list):
             self._audit.append({"kind": kind, "event_id": trusted_source_event_id,
