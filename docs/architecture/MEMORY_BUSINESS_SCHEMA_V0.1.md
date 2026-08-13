@@ -285,6 +285,7 @@
 | `tool_call_id` | 关联的 Tool 调用标识（**触发条件**：`source_type` 为 `tool_result` 时必填，其余情况为 N/A） | `string` | conditional | 业务事件 | UNVERIFIED | `"tool_file_search_v2_001"` |
 | `sensitivity` | 敏感度等级（见枚举 2.10） | `string` | required | 派生计算 | UNVERIFIED | `"low"` |
 | `is_sensitive_matched` | 是否命中敏感过滤规则 | `boolean` | required | 派生计算 | UNVERIFIED | `false` |
+| `payload_security_checked` | 上游 Raw Payload 安全检查是否已实际执行并通过（*禁止 LLM 生成*、*禁止普通业务输入自行控制*；`source_type=tool_result` 且为 `false` 时必须 fail-close，不进入 Extraction） | `boolean` | required | 系统生成 / 上游安全过滤组件 | UNVERIFIED | `false` |
 | `requires_embedding` | 是否需要生成 Embedding 向量 | `boolean` | required | 派生计算 | UNVERIFIED | `true` |
 | `has_structured_payload` | 是否包含可抽取的结构化载荷 | `boolean` | optional | 派生计算 | UNVERIFIED | `true` |
 | `language_tag` | 内容语言标记（BCP 47） | `string` | optional | 派生计算 | PARTIAL | `"zh-CN"` |

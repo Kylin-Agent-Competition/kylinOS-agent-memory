@@ -1,0 +1,9 @@
+# memory-service 运行时依赖（H4：正式依赖声明，2026-08-13）
+# 安装：pip install -r memory-service/requirements.txt
+# 对齐：总体架构 v1 技术栈（Pydantic v2）+ Day3 契约
+
+pydantic>=2,<3        # 事件模型/候选模型校验（架构批准 Pydantic v2）
+
+# ── 测试依赖（开发环境） ──
+pytest>=8              # 全量 pytest（L0/L1）
+pybind11>=2.11         # kylin_embedding pybind11 模块构建（麒麟 VM 编译用）

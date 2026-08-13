@@ -220,7 +220,7 @@ entries:
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-     limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）；ACL_SPIKE=VERIFIED, KYSEC_REAL_RULE=UNVERIFIED"
+    limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）；ACL_SPIKE=VERIFIED, KYSEC_REAL_RULE=UNVERIFIED"
     checksum_sha256: 8f7b9fefc21d58cd8d7d48eae5b1a1002839e77ddf3cab7c29f71bb9a09c655d
     details: |
       Day1 环境基线已冻结: environment.log (SHA-256: cdf60d8414...) 包含 16 项系统信息采集。
@@ -307,7 +307,7 @@ entries:
     tested_commit: "33180385e0db350a97915e40b978424381052f9c"  # Day5 分支 tip（cherry-pick 后最终代码，README 状态段已同步）
     evidence_commit: "33180385e0db350a97915e40b978424381052f9c"  # 证据日志与代码同分支提交（Day5 PR 合入后回填 evidence_commit 为证据提交 SHA）
     commit: "33180385e0db350a97915e40b978424381052f9c"  # 历史兼容字段（= tested_commit）
-    date: "2026-08-09"
+    date: "2026-08-13"
     reviewer: "pending"
     limitations: "启动期降级缺口（无 SDK 时 EmbeddingUDSServer 构造抛 RuntimeError，P2-2 待登记技术债）；真实 so 缺失端到端降级未在 VM 复现（mock 覆盖）；异步、并发、主动超时、多模态未覆盖；envelope deadline_ms 解析但未强制执行（用 payload.timeout_ms）"
     checksum_sha256: "2f506a898b3d01f20b80e8477833d5e64dd9f387d23805dc6ec26bf65270c038"
@@ -318,6 +318,35 @@ entries:
       health bridge_loaded=true / bridge_has_session=true；embed ok=true dim=768；
       request_id/trace_id 回显正确）
       本地复核：全量 pytest 36 passed + 47 skipped（skip 为依赖 SDK 的既有测试），顺序无关
+      运行输出见原始日志
+
+  - id: "EMBED-CALL-005"
+    task_id: "D6-A"
+    description: "Day 6 统一事件清洗/质量评分管线 + 结构化抽取 Provider + 内容指纹重复检测 麒麟 VM 验证"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/day6_verify_latest.log"
+    tested_commit: "1d98fdddf2eb7b91297e7941e175d99a8ac54c20"  # Day6 分支 tip（feat/day6-event-quality-pipeline）
+    evidence_commit: "1d98fdddf2eb7b91297e7941e175d99a8ac54c20"  # 证据日志与代码同分支提交（Day6 PR 合入后回填 evidence_commit 为证据提交 SHA）
+    commit: "1d98fdddf2eb7b91297e7941e175d99a8ac54c20"  # 历史兼容字段（= tested_commit）
+    date: "2026-08-13"
+    reviewer: "pending"
+    limitations: "E 轨业务 Schema v0.1 仍为 DRAFT（部分字段 UNVERIFIED，待 C 轨麒麟取证）；ExtractionProvider 规则置信度（0.7/0.85）为基线值待 E 轨数据集评测调优；未接入真实 LLM（无凭证，接口预留）；TD-A-005-09 完整修复（Provider 延迟构造）留待独立 PR；TD-A-005-01 仍 Open（Bridge 内部无真正中断）；TD-A-D6-EXEC-RACE / TD-A-D6-TOOL-PARTIAL 已登记（Reviewer 第三轮收敛非阻断）"
+    checksum_sha256: "c5f6c74be8b6567ac8ed5abc222d06c859aa1c020033c68583b280d2196a0018"
+    details: |
+      Day6 多源接入/质量/安全管线（架构 v1 §6.2 六步 + Day3 ExtractionProvider 契约）麒麟 VM 验证
+      （2026-08-13，被测 1d98fdd，Reviewer 第三轮 B1/B2/H1/H3 修复后 L2 重跑）：
+      全量 pytest 209 passed / 0 skipped / 0 failed（7.95s，Python 3.12.3, pydantic 2.13.4）：
+      - 真实 SDK 8 项（768 维/中文/空串/batch/envelope/health/降级）
+      - Day4 生命周期/错误映射 47 项 + Day5 协议/Service/executor 23 项
+      - Day6 全量 131 项（含第三轮新增 B1 6 / B2 3 / H1 3 / H3 3 = 15 项负向测试）
+      本地对照：162 passed + 47 skipped（WSL 无 SDK skip）→ VM 209 全过，数字完全吻合
+      覆盖：Pydantic 校验拒绝（缺失/类型错/未知字段）、时间 UTC 标准化、六维质量评分 +
+      提取门控（可靠性下限 + 安全 Gate fail-close）、内容指纹/幂等键/判重、敏感识别
+      （API Key/JWT/密码/手机号/身份证/敏感路径）、success Tool evidence 门控（B1）、
+      memory_status=candidate 可信级标记（B2）、payload_security_checked fail-close（H1）、
+      ProcessingStatus D3 五值契约（H3）、ExtractionProvider 规则优先 + LLM 注入 +
+      Pydantic 非法输出降级（audit 隔离不进真源）
       运行输出见原始日志
 
   - id: "D2-3-DEPLOY-STARTUP"
