@@ -8,9 +8,9 @@ from pipeline.schemas import SensitivityLevel
 from pipeline.sensitive import detect_sensitivity, is_high_or_critical
 
 
-def test_clean_text_low():
+def test_clean_text_none():
     level, matched = detect_sensitivity("用户查询了文件排序方式")
-    assert level == SensitivityLevel.LOW
+    assert level == SensitivityLevel.NONE
     assert matched is False
 
 
@@ -49,15 +49,15 @@ def test_detect_sensitive_path():
     assert matched is True
 
 
-def test_empty_text_low():
+def test_empty_text_none():
     level, matched = detect_sensitivity("")
-    assert level == SensitivityLevel.LOW
+    assert level == SensitivityLevel.NONE
     assert matched is False
 
 
-def test_none_low():
+def test_none_text_none():
     level, matched = detect_sensitivity(None)
-    assert level == SensitivityLevel.LOW
+    assert level == SensitivityLevel.NONE
     assert matched is False
 
 

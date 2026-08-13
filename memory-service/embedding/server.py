@@ -40,6 +40,7 @@ class EmbeddingUDSServer:
         self._service = EmbeddingService(provider=provider)
         self._server_sock: Optional[socket.socket] = None
         self._running = False
+        self._stopped = False  # H3: stop 后拒绝新业务请求（防旧连接重建 executor）
 
     def start(self) -> None:
         """启动 UDS 服务器（阻塞式 accept 循环）。"""
@@ -51,6 +52,7 @@ class EmbeddingUDSServer:
         self._server_sock.bind(self._socket_path)
         self._server_sock.listen(8)
         self._running = True
+        self._stopped = False  # H3: restart 时重置停止标记
         print(f"[server] listening on {self._socket_path}", flush=True)
 
         while self._running:
@@ -64,6 +66,7 @@ class EmbeddingUDSServer:
 
     def stop(self) -> None:
         self._running = False
+        self._stopped = True  # H3: 先置停止标记，拒绝后续业务请求
         if self._server_sock:
             try:
                 self._server_sock.close()
@@ -84,6 +87,16 @@ class EmbeddingUDSServer:
                 while True:
                     chunk = conn.recv(4096)
                     if not chunk:
+                        break
+                    # H3: recv 后检查——服务可能已在 recv 阻塞期间停止，
+                    # 旧连接不得继续提交任务（防 executor 被旧连接重建）
+                    if self._stopped:
+                        try:
+                            conn.sendall(encode({"ok": False,
+                                                 "error": {"code": "ERR_SERVICE_STOPPED",
+                                                           "message": "server is stopped"}}))
+                        except OSError:
+                            pass
                         break
                     buf += chunk
                     try:

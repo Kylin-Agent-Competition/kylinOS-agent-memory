@@ -105,21 +105,33 @@ def test_clean_normalizes_tz_offset():
 
 # ── 状态标准化 ──
 
-def test_clean_sets_processing_status_cleaned():
+def test_clean_sets_processing_status_extracting():
+    """清洗完成后 processing_status=extracting（D3 契约五值）。"""
     ev = cleaner.clean(_raw())
-    assert ev.processing_status == ProcessingStatus.CLEANED
+    assert ev.processing_status == ProcessingStatus.EXTRACTING
 
 
 def test_clean_preserves_source_business_status():
-    ev = cleaner.clean(_raw(source_business_status="failure"))
-    assert ev.source_business_status.value == "failure"
+    ev = cleaner.clean(_raw(source_business_status="failed"))
+    assert ev.source_business_status.value == "failed"
 
 
 # ── 条件字段（E 轨 Schema） ──
 
-def test_tool_result_requires_tool_call_id():
+def test_tool_result_requires_tool_call_id_explicit_none():
+    """H2: source_type=tool_result + tool_call_id=None 显式 → 必须拒绝。"""
     raw = _raw(source_type="tool_result", event_type="agent_response",
                tool_call_id=None)
+    with pytest.raises(EventValidationError) as ei:
+        cleaner.clean(raw)
+    assert "tool_call_id" in str(ei.value)
+
+
+def test_tool_result_requires_tool_call_id_omitted():
+    """H2: source_type=tool_result + 完全省略 tool_call_id → 必须拒绝（对象级校验）。"""
+    # _raw() 默认不含 tool_call_id 键（完全省略场景）
+    raw = _raw(source_type="tool_result", event_type="agent_response")
+    assert "tool_call_id" not in raw
     with pytest.raises(EventValidationError) as ei:
         cleaner.clean(raw)
     assert "tool_call_id" in str(ei.value)

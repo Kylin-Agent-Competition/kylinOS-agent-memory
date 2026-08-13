@@ -42,8 +42,8 @@ def test_score_full_event_high():
     assert s.validity >= 0.5
     assert s.reliability > 0.4  # chat 基线 0.45
     # occurred_at 10:00+08:00 = 02:00 UTC，NOW=12:00 UTC → 差 10h
-    # freshness = exp(-36000/604800) ≈ 0.9422
-    assert abs(s.freshness - 0.9422) < 1e-3
+    # freshness = exp(-ln2 * 36000/604800) = 2^(-36000/604800) ≈ 0.9596
+    assert abs(s.freshness - 0.9596) < 1e-3
     assert s.consistency == 1.0
     assert s.extractability == 1.0
     assert s.overall > 0.6
@@ -73,7 +73,8 @@ def test_freshness_decay():
     f_new = scorer.score(ev_new).freshness
     f_old = scorer.score(ev_old).freshness
     assert f_new > f_old
-    assert abs(f_old - math.exp(-1.0)) < 1e-3  # 一个半衰期 → e^-1
+    # 标准半衰期语义（M1）：一个半衰期后 freshness = 0.5
+    assert abs(f_old - 0.5) < 1e-3
 
 
 def test_tool_failure_reliability_penalty():
@@ -82,7 +83,7 @@ def test_tool_failure_reliability_penalty():
     ev_ok = _event(source_type="tool_result", event_type="agent_response",
                    tool_call_id="t1", source_business_status="success")
     ev_fail = _event(source_type="tool_result", event_type="agent_response",
-                     tool_call_id="t2", source_business_status="failure")
+                     tool_call_id="t2", source_business_status="failed")
     r_ok = scorer.score(ev_ok).reliability
     r_fail = scorer.score(ev_fail).reliability
     assert r_ok > r_fail

@@ -42,7 +42,7 @@ class EventCleaner:
             raw: 外部输入事件 dict（MemorySourceEvent 字段）。
 
         Returns:
-            NormalizedEvent（时间/状态已标准化，processing_status=CLEANED）。
+            NormalizedEvent（时间/状态已标准化，processing_status=EXTRACTING）。
 
         Raises:
             EventValidationError: Pydantic 校验失败或标识字段格式非法。
@@ -73,8 +73,8 @@ class EventCleaner:
                 "ERR_EVENT_VALIDATION", f"{loc}: {msg}") from exc
 
         # 3. 状态标准化：source_business_status 由 raw 归一（枚举已由 Pydantic 保证）；
-        #    processing_status 置 CLEANED（本阶段完成清洗）。
-        status = ProcessingStatus.CLEANED
+        #    processing_status 置 EXTRACTING（D3 契约五值：清洗完成进入抽取阶段）。
+        status = ProcessingStatus.EXTRACTING
 
         # 4. 构建标准化输出（字段一一映射，extra=forbid 保证不丢字段）
         return NormalizedEvent(
@@ -100,6 +100,7 @@ class EventCleaner:
             tool_call_id=event.tool_call_id,
             sensitivity=event.sensitivity,
             is_sensitive_matched=event.is_sensitive_matched,
+            should_ignore=event.should_ignore,
             requires_embedding=event.requires_embedding,
             has_structured_payload=event.has_structured_payload,
             language_tag=event.language_tag,

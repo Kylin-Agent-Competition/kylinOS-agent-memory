@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # ── 枚举（对齐 E 轨 Schema v0.1 §2 枚举编号） ──
 
@@ -49,35 +49,42 @@ class EventType(str, Enum):
 
 
 class SourceBusinessStatus(str, Enum):
-    """来源事件业务结果状态（§2.3）。"""
+    """来源事件业务结果状态（§2.3，D3 契约八值冻结）。"""
 
     RAW = "raw"
+    COMPLETED = "completed"
     SUCCESS = "success"
-    FAILURE = "failure"
+    PARTIAL = "partial"
+    FAILED = "failed"
     CANCELLED = "cancelled"
+    TIMEOUT = "timeout"
+    IGNORED = "ignored"
 
 
 class ProcessingStatus(str, Enum):
-    """内部处理流水线状态（§2.4，技术候选）。"""
+    """内部处理流水线状态（§2.4，技术候选：pending/extracting/extracted/embedded/stored）。"""
 
     PENDING = "pending"
-    CLEANED = "cleaned"
-    QUALITY_CHECKED = "quality_checked"
+    EXTRACTING = "extracting"
     EXTRACTED = "extracted"
-    REJECTED = "rejected"
+    EMBEDDED = "embedded"
+    STORED = "stored"
+    REJECTED = "rejected"  # 安全/质量门控拒绝（A 轨技术候选扩展）
 
 
 class MemoryType(str, Enum):
-    """记忆类型（§2.7）。"""
+    """记忆类型（§2.7，D3 契约四值）。"""
 
     SHORT_TERM = "short_term"
     MEDIUM_TERM = "medium_term"
     LONG_TERM = "long_term"
+    EPHEMERAL = "ephemeral"
 
 
 class SensitivityLevel(str, Enum):
-    """敏感度等级（§2.10）。"""
+    """敏感度等级（§2.10，D3 契约五级）。"""
 
+    NONE = "none"
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -86,10 +93,11 @@ class SensitivityLevel(str, Enum):
 
 # 敏感等级顺序（用于等级比较，避免字典序陷阱）
 _SENSITIVITY_ORDER = {
-    SensitivityLevel.LOW: 0,
-    SensitivityLevel.MEDIUM: 1,
-    SensitivityLevel.HIGH: 2,
-    SensitivityLevel.CRITICAL: 3,
+    SensitivityLevel.NONE: 0,
+    SensitivityLevel.LOW: 1,
+    SensitivityLevel.MEDIUM: 2,
+    SensitivityLevel.HIGH: 3,
+    SensitivityLevel.CRITICAL: 4,
 }
 
 
@@ -111,6 +119,8 @@ _SENSITIVE_PATTERNS: List[re.Pattern] = [
     re.compile(r"\b\d{17}[\dXx]\b"),  # 身份证
     re.compile(r"(?i)(/etc/passwd|/etc/shadow|\.ssh/|id_rsa|id_ed25519)"),  # 敏感路径（无 \b：/ 为非单词字符）
     re.compile(r"\b[A-Za-z0-9]{32,}\b"),  # 疑似长密钥（32+ 位）
+    re.compile(r"\b(?:sk|pk|ak|rk)_[A-Za-z0-9_\-]{16,}\b"),  # 云厂商 API Key 前缀（sk-live- 等）
+    re.compile(r"(?i)\b(?:p[a@]ssw[o0]rd|p[a@]ss|p[a@]ssw0rd)[^\s]{0,12}\b"),  # 密码 leetspeak 变体
 ]
 
 
@@ -145,31 +155,29 @@ class MemorySourceEvent(BaseModel):
     content_summary: Optional[str] = None
     turn_id: Optional[str] = None
     tool_call_id: Optional[str] = None
-    sensitivity: SensitivityLevel = SensitivityLevel.LOW
+    sensitivity: SensitivityLevel = SensitivityLevel.NONE
     is_sensitive_matched: bool = False
+    should_ignore: bool = False  # D3 安全契约：命中 S-01..S-04/S-08 必须 true
     requires_embedding: bool = True
     has_structured_payload: bool = False
     language_tag: Optional[str] = None
 
-    # ── 触发条件校验（E 轨 Schema conditional 字段） ──
+    # ── 触发条件校验（E 轨 Schema conditional 字段 + D3 契约） ──
 
-    @field_validator("turn_id")
-    @classmethod
-    def _turn_id_conditional(cls, v: Optional[str], info: Any) -> Optional[str]:
-        event_type = info.data.get("event_type")
-        if v is None and event_type in (EventType.USER_MESSAGE, EventType.AGENT_RESPONSE):
-            # 宿主未提供 Turn 边界时为合法 optional；不强制（C 轨取证后收紧）
-            return v
-        return v
-
-    @field_validator("tool_call_id")
-    @classmethod
-    def _tool_call_id_conditional(cls, v: Optional[str], info: Any) -> Optional[str]:
-        source_type = info.data.get("source_type")
-        if v is None and source_type == SourceType.TOOL_RESULT:
+    @model_validator(mode="after")
+    def _conditional_fields(self) -> "MemorySourceEvent":
+        """对象级条件校验（H2：覆盖字段完全缺失场景）。"""
+        # tool_call_id：source_type=tool_result 时必填（显式 None 或完全省略均拒绝）
+        if self.source_type == SourceType.TOOL_RESULT and self.tool_call_id is None:
             raise ValueError(
                 "tool_call_id required when source_type=tool_result (E 轨 Schema §3.1)")
-        return v
+        # ignored 状态必须应带 should_ignore=true（D3 安全契约 §7.7）
+        if self.source_business_status == SourceBusinessStatus.IGNORED:
+            if not self.should_ignore:
+                raise ValueError(
+                    "source_business_status=ignored requires should_ignore=true "
+                    "(D3 安全契约 §7.7)")
+        return self
 
     @field_validator("occurred_at", "captured_at")
     @classmethod
@@ -199,7 +207,7 @@ class NormalizedEvent(BaseModel):
     consent_scope: ConsentScope
     idempotency_key: str
     source_business_status: SourceBusinessStatus
-    processing_status: ProcessingStatus = ProcessingStatus.CLEANED
+    processing_status: ProcessingStatus = ProcessingStatus.EXTRACTING
     memory_type: Optional[MemoryType]
     occurred_at: datetime
     captured_at: datetime
@@ -210,6 +218,7 @@ class NormalizedEvent(BaseModel):
     tool_call_id: Optional[str]
     sensitivity: SensitivityLevel
     is_sensitive_matched: bool
+    should_ignore: bool = False  # D3 安全契约：命中 S-01..S-04/S-08 必须 true
     requires_embedding: bool
     has_structured_payload: bool
     language_tag: Optional[str]

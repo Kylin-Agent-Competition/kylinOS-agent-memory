@@ -137,18 +137,21 @@ class QualityScorer:
         base = _SOURCE_RELIABILITY.get(event.source_type.value, 0.5)
         # Tool 失败/取消降可信度（失败知识不沉淀为成功知识，架构 8 章）
         if event.source_type == SourceType.TOOL_RESULT:
-            if event.source_business_status.value in ("failure", "cancelled"):
+            if event.source_business_status.value in ("failed", "cancelled", "timeout"):
                 base *= 0.5
         return max(0.0, min(1.0, base))
 
     def _freshness(self, event: NormalizedEvent) -> float:
-        """新鲜度：指数衰减 exp(-dt / half_life)。"""
+        """新鲜度：半衰期指数衰减 exp(-ln2 * dt / half_life)（M1 修正）。
+
+        标准半衰期语义：经过一个半衰期（7 天）freshness = 0.5。
+        """
         now = self._now or datetime.now(timezone.utc)
         occurred = event.occurred_at
         if occurred.tzinfo is None:
             occurred = occurred.replace(tzinfo=timezone.utc)
         dt = max(0.0, (now - occurred).total_seconds())
-        return math.exp(-dt / FRESHNESS_HALF_LIFE)
+        return math.exp(-math.log(2) * dt / FRESHNESS_HALF_LIFE)
 
     @staticmethod
     def _consistency(event: NormalizedEvent) -> float:
