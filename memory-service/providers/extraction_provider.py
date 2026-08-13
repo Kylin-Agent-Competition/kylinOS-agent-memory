@@ -695,8 +695,13 @@ class ExtractionProvider:
             return None
 
         # R5: 敏感复核（候选正文含 high/critical 敏感原文 → 拒绝）
-        text = cand.value if kind == "preference" else cand.fact
-        if _contains_high_sensitivity(text):
+        # 与规则路径（_extract_preferences_rules 复核 value+evidence）一致：
+        # preference 复核 value+evidence；knowledge 复核 fact+conditions。
+        if kind == "preference":
+            check_text = f"{cand.value} {cand.evidence}"
+        else:
+            check_text = f"{cand.fact} {cand.conditions or ''}"
+        if _contains_high_sensitivity(check_text):
             self._audit.append({
                 "kind": kind,
                 "event_id": trusted_source_event_id,

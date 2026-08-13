@@ -323,6 +323,36 @@ def test_field_degrade_unhashable_value_no_crash():
     assert "field-degraded:explicitness" in errors
 
 
+# ── 自查修复：R5 LLM 路径 evidence/conditions 复核（与规则路径一致） ──
+
+def test_llm_sensitive_evidence_rejected():
+    """R5: LLM 候选 evidence 含敏感原文 → 拒绝（与规则路径 value+evidence
+    复核一致，敏感 fail-open 不得重开）。"""
+    def llm(kind, text):
+        return [{"key": "response.language", "value": "中文", "confidence": 0.9,
+                 "evidence": "用户要求保存凭据 a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"}]
+    p = ExtractionProvider(llm_extractor=llm)
+    cands = p.extract_preferences(_turn(source_event_id="evt_r5ev"))
+    assert cands == []
+    assert any("sensitive-content-rejected" in a["error"] for a in p.audit)
+
+
+def test_llm_sensitive_conditions_rejected():
+    """R5: knowledge 候选 conditions 含敏感原文 → LLM 候选拒绝（规则候选保留）。"""
+    from providers.extraction_provider import ToolResult
+    def llm(kind, text):
+        return [{"fact": "安装成功", "category": "fact", "confidence": 0.9,
+                 "conditions": "token a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"}]
+    p = ExtractionProvider(llm_extractor=llm)
+    ev = _turn(assistant_text="工具执行成功",
+               tool_results=[ToolResult(tool_name="x", arguments={},
+                                        status="success", result="安装成功")],
+               source_event_id="evt_r5cond")
+    cands = p.extract_knowledge(ev)
+    assert all("a1b2c3d4" not in (c.conditions or "") for c in cands)
+    assert any("sensitive-content-rejected" in a["error"] for a in p.audit)
+
+
 # ── 5. 规则 + LLM 协同（合并去重，规则优先） ──
 
 def test_coop_keeps_distinct_keys():

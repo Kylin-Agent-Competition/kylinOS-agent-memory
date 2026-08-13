@@ -27,7 +27,7 @@ scope 可推导）。对齐基线：
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 # ── 偏好类别（架构 TABLE 19 六类） ──
 
