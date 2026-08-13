@@ -355,23 +355,25 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day7_verify_latest.log"
-    tested_commit: "45827f4a283a6305de678c161ee89eb462e288c4"  # feat/day7-preference-extraction tip
-    evidence_commit: "45827f4a283a6305de678c161ee89eb462e288c4"
-    commit: "45827f4a283a6305de678c161ee89eb462e288c4"  # 历史兼容字段（= tested_commit）
+    tested_commit: "e3a3f9e395a902b2382f97fcea7d7765f18e010c"  # R5 复核收紧修复后 tip（被测代码）
+    evidence_commit: "e3a3f9e395a902b2382f97fcea7d7765f18e010c"
+    commit: "e3a3f9e395a902b2382f97fcea7d7765f18e010c"  # 历史兼容字段（= tested_commit）
     date: "2026-08-14"
     reviewer: "pending"
-    limitations: "未接入真实 LLM（无凭证，接口预留）；规则置信度/关键词为基线值待 E 轨数据集评测调优；本地对照 215 passed + 47 skipped（WSL 无 SDK skip）→ VM 262 全过数字吻合（262 = 209 Day6 VM + 53 D7 新增）；全量 -v 本地一次偶发 test_server_lifecycle 复跑即绿（关联 TD-A-D6-EXEC-RACE 已知非阻断竞态窗口，VM 262 无此现象）"
-    checksum_sha256: "71e6155cd8e09ecb7831c16c9b13d3ce14f417369a050c7ce159817adca5e029"
+    limitations: "未接入真实 LLM（无凭证，接口预留）；规则置信度/关键词为基线值待 E 轨数据集评测调优；本地对照 217 passed + 47 skipped（WSL 无 SDK skip）→ VM 264 全过数字吻合（264 = 209 Day6 VM + 53 D7 新增 + 2 R5 修复测试）；全量 -v 本地一次偶发 test_server_lifecycle 复跑即绿（关联 TD-A-D6-EXEC-RACE 已知非阻断竞态窗口，VM 两次 262/264 均无此现象）"
+    checksum_sha256: "0270469fa42108676717a1a26d1230daeb3a2fe75dd8d69923faa45ea5ecd069"
     details: |
       Day7 偏好提取深化（架构 v1 TABLE 19/20 + E 轨 Schema §2.5/§2.9/§3.2，
-      docs/day7/01_task_card.md）麒麟 VM 验证（2026-08-14，被测 45827f4）：
-      全量 pytest 262 passed / 0 skipped / 0 failed（8.80s）：
+      docs/day7/01_task_card.md）麒麟 VM 验证（2026-08-14，被测 e3a3f9e，
+      R5 复核收紧修复后复跑）：
+      全量 pytest 264 passed / 0 skipped / 0 failed（8.38s）：
       - Day4/5/6 回归 209 项（含真实 SDK Embedding 768 维/中文/空串/batch/health/降级）
       - D7 新增 53 项：偏好六类识别 / 临时-长期（TABLE 20 原句）/ scope 五值推导 /
         类别键 / explicitness / LRU 缓存（深拷贝/空结果/TTL/串键隔离）/ LLM 超时降级 /
         llm-busy-skip / 可选字段降级（含 unhashable 值）/ 规则+LLM 合并去重（含
         dedup-llm/conflict-llm 标签）/ 评测输出（JSONL 导出）
-      本地对照：215 passed + 47 skipped（WSL 无 SDK skip）→ VM 262 全过，数字完全吻合
+      - R5 修复新增 2 项：LLM evidence/conditions 敏感复核（自查发现，与规则路径一致）
+      本地对照：217 passed + 47 skipped（WSL 无 SDK skip）→ VM 264 全过，数字完全吻合
       运行输出见原始日志
 
   - id: "D2-3-DEPLOY-STARTUP"
