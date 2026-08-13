@@ -12,7 +12,7 @@
 #   ./d2c_prechat_context_probe.sh collect         # 三路证据采集
 #
 # 安全声明: 只读观察脚本, 不修改 AI 助手进程、数据库或配置
-# 标记字符串: [D2C-MARKER-PRECHAT-001] 用于在三路证据中检索
+# 标记字符串由 D2C_RUN_ID 生成，避免历史 Run 命中当前实验。
 # KYSEC: 如需执行, 对本脚本设置单文件 verified
 
 set -euo pipefail
@@ -52,26 +52,31 @@ USER_HOME="$(get_user_home)"
 STATE_DIR="${USER_HOME}/.d2c-probe-state"
 mkdir -p "${STATE_DIR}"
 
-TIMESTAMP_FILE="${STATE_DIR}/prechat_last_timestamp"
 META_FILE="${STATE_DIR}/prechat_capture.meta"
 CAPTURE_PID_FILE="${STATE_DIR}/prechat_capture.pid"
-MARKER="[D2C-MARKER-PRECHAT-001]"
+BASELINE_META_FILE="${STATE_DIR}/prechat_baseline.meta"
 
-get_or_set_timestamp() {
-    if [ -n "${1:-}" ]; then
-        echo "${1}" > "${TIMESTAMP_FILE}"
-        echo "${1}"
-    elif [ -f "${TIMESTAMP_FILE}" ]; then
-        cat "${TIMESTAMP_FILE}"
-    else
-        date +%Y%m%d_%H%M%S
+require_run_id() {
+    if [ -z "${D2C_RUN_ID:-}" ]; then
+        echo "ERROR: D2C_RUN_ID is required; one Canonical Run must be shared by every D2-C probe" >&2
+        exit 2
     fi
+    case "${D2C_RUN_ID}" in
+        *[!A-Za-z0-9_.-]*|'')
+            echo "ERROR: D2C_RUN_ID may contain only A-Z, a-z, 0-9, _, . and -" >&2
+            exit 2
+            ;;
+    esac
+    printf '%s' "${D2C_RUN_ID}"
 }
 
-TIMESTAMP="$(get_or_set_timestamp)"
+RUN_ID="$(require_run_id)"
+TIMESTAMP="${RUN_ID}"
+MARKER="[D2C-PRECHAT-${RUN_ID}]"
+USER_TEXT="${MARKER} 帮我回忆上次讨论的麒麟记忆系统架构。"
 BASELINE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.baseline.json"
 CAPTURE_LOG_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.capture.log"
-MODEL_REQUEST_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.model_request.jsonl"
+STRACE_FILTER_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.strace_filtered.log"
 AUDIT_SOURCE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.gateway_audit.jsonl"
 DB_MESSAGE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.db_message.txt"
 UI_SCREENSHOT_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.ui_screenshot.png"
@@ -137,28 +142,43 @@ find_ai_pid() {
     fi
 }
 
-# 重新解析文件路径 (capture-stop / collect 调用时从 meta/timestamp_file 恢复)
-reload_paths() {
-    local ts_from_meta=""
-    if [ -f "${META_FILE}" ]; then
-        ts_from_meta="$(grep '^timestamp=' "${META_FILE}" | cut -d= -f2-)"
-    fi
-    if [ -n "${ts_from_meta}" ]; then
-        TIMESTAMP="${ts_from_meta}"
-    fi
+set_paths_for_current_run() {
+    TIMESTAMP="${RUN_ID}"
     BASELINE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.baseline.json"
     CAPTURE_LOG_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.capture.log"
-    MODEL_REQUEST_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.model_request.jsonl"
+    STRACE_FILTER_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.strace_filtered.log"
     AUDIT_SOURCE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.gateway_audit.jsonl"
     DB_MESSAGE_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.db_message.txt"
     UI_SCREENSHOT_FILE="${OUT_DIR}/prechat_${TIMESTAMP}.ui_screenshot.png"
 }
 
+# meta 只可用于验证当前 Run 的捕获状态，文件路径始终由 RUN_ID 重新推导。
+reload_paths() {
+    local ts_from_meta="" run_id_from_meta=""
+    if [ -f "${META_FILE}" ]; then
+        ts_from_meta="$(grep '^timestamp=' "${META_FILE}" | cut -d= -f2-)"
+        run_id_from_meta="$(grep '^run_id=' "${META_FILE}" | cut -d= -f2-)"
+        if [ "${run_id_from_meta}" != "${RUN_ID}" ] || [ "${ts_from_meta}" != "${RUN_ID}" ]; then
+            echo "ERROR: refusing stale PreChat meta; expected run_id=${RUN_ID}, got ${run_id_from_meta:-missing}" >&2
+            exit 1
+        fi
+    fi
+    set_paths_for_current_run
+}
+
+require_current_baseline() {
+    local baseline_run_id=""
+    if [ -f "${BASELINE_META_FILE}" ]; then
+        baseline_run_id="$(grep '^run_id=' "${BASELINE_META_FILE}" | cut -d= -f2-)"
+    fi
+    if [ "${baseline_run_id}" != "${RUN_ID}" ] || [ ! -f "${BASELINE_FILE}" ]; then
+        echo "ERROR: current-Run baseline is required; run baseline with D2C_RUN_ID=${RUN_ID} first" >&2
+        return 1
+    fi
+}
+
 cmd_baseline() {
-    # 每次 baseline 生成新时间戳, 作为后续 capture / collect 共用
-    TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-    TIMESTAMP="$(get_or_set_timestamp "${TIMESTAMP}")"
-    reload_paths
+    set_paths_for_current_run
 
     local pid
     pid="$(find_ai_pid)"
@@ -172,18 +192,22 @@ cmd_baseline() {
         rowid_max="$(sqlite3 "${DB_PATH}" "SELECT MAX(rowid) FROM RECORD;" 2>/dev/null || echo "N/A")"
     fi
 
-    # 持久化 baseline rowid 供 cmd_collect 限制查询范围 (仅查实验后新增记录)
-    echo "${rowid_max}" > "${STATE_DIR}/prechat_baseline_rowid"
+    # 基线与 RUN_ID 一起保存；没有可用 rowid 时 collect 必须 fail closed。
+    cat > "${BASELINE_META_FILE}" <<EOF
+run_id=${RUN_ID}
+baseline_rowid=${rowid_max}
+EOF
 
     cat > "${BASELINE_FILE}" <<EOF
 {
   "experiment": "H2C-PreChat",
+  "run_id": "${RUN_ID}",
   "timestamp": "${TIMESTAMP}",
   "marker": "${MARKER}",
   "ai_pid": "${pid}",
   "db_path": "${DB_PATH}",
   "record_rowid_max_before": "${rowid_max}",
-  "note": "请在 AI 助手中输入包含 ${MARKER} 的文本"
+  "expected_user_text": "${USER_TEXT}"
 }
 EOF
 
@@ -195,14 +219,15 @@ EOF
     echo "  标记字符串:          ${MARKER}"
     echo ""
     echo "  请在 AI 助手中输入:"
-    echo "    ${MARKER} 帮我回忆上次讨论的麒麟记忆系统架构。"
+    echo "    ${USER_TEXT}"
     echo ""
     echo "  基线: ${BASELINE_FILE}"
     echo "=============================================="
 }
 
 cmd_capture_start() {
-    reload_paths
+    set_paths_for_current_run
+    require_current_baseline
     local pid
     pid="$(find_ai_pid)"
     if [ -z "${pid}" ]; then
@@ -217,7 +242,7 @@ cmd_capture_start() {
     fi
 
     echo "INFO: 启动模型请求捕获 (strace IPC 跟踪) -> ${CAPTURE_LOG_FILE}"
-    echo "INFO: strace 直接写入原始日志 (不经过 grep 管道), capture-stop 时离线生成 MODEL_REQUEST_FILE"
+    echo "INFO: strace 直接写入原始日志; capture-stop 仅生成诊断 strace_filtered.log，不充当网关 JSONL"
     echo "INFO: 捕获范围: write,writev,sendmsg,sendto,recvmsg,read,poll (扩至常见 IPC)"
 
     # strace 独立 nohup 直接写原始日志文件
@@ -253,8 +278,9 @@ cmd_capture_start() {
 strace_pid=${cap_pid}
 ai_pid=${pid}
 capture_log=${CAPTURE_LOG_FILE}
-model_request_file=${MODEL_REQUEST_FILE}
+strace_filtered_log=${STRACE_FILTER_FILE}
 timestamp=${TIMESTAMP}
+run_id=${RUN_ID}
 started_at=$(date '+%Y-%m-%d %H:%M:%S')
 EOF
 
@@ -268,15 +294,9 @@ cmd_capture_stop() {
         exit 1
     fi
     reload_paths
-    # 从 meta 文件恢复 capture_log / model_request 路径
-    local cap_pid capture_log_from_meta model_request_from_meta
+    # 不从 meta 恢复路径，避免旧 Run 或伪造路径被当前 Run 消费。
+    local cap_pid
     cap_pid="$(cat "${CAPTURE_PID_FILE}")"
-    if [ -f "${META_FILE}" ]; then
-        capture_log_from_meta="$(grep '^capture_log=' "${META_FILE}" | cut -d= -f2-)"
-        model_request_from_meta="$(grep '^model_request_file=' "${META_FILE}" | cut -d= -f2-)"
-        [ -n "${capture_log_from_meta}" ] && CAPTURE_LOG_FILE="${capture_log_from_meta}"
-        [ -n "${model_request_from_meta}" ] && MODEL_REQUEST_FILE="${model_request_from_meta}"
-    fi
 
     echo "INFO: 停止 strace 进程 ${cap_pid}"
     kill "${cap_pid}" 2>/dev/null || true
@@ -291,10 +311,10 @@ cmd_capture_stop() {
     fi
     echo "INFO: 原始捕获日志大小: ${log_size} bytes"
 
-    # 离线过滤: 从原始 strace 日志 grep 生成 MODEL_REQUEST_FILE
-    # 注: MARKER 含方括号 [D2C-MARKER-PRECHAT-001], 在正则中是字符集, 必须用 grep -F (固定字符串) 匹配
+    # 离线过滤仅产生诊断日志，绝不能伪装成协议解码的 JSONL。
+    # 注: MARKER 含方括号，必须用 grep -F (固定字符串) 匹配。
     # memory_context 关键词扩到常见变体 (驼峰/中文/前缀名)
-    echo "INFO: 从原始日志离线过滤关键词 -> ${MODEL_REQUEST_FILE}"
+    echo "INFO: 从原始日志离线过滤关键词 -> ${STRACE_FILTER_FILE}"
     if [ -f "${CAPTURE_LOG_FILE}" ]; then
         {
             # 1) 固定字符串匹配 marker (含 [], 不能用正则)
@@ -302,20 +322,20 @@ cmd_capture_stop() {
             # 2) 正则匹配其他关键词 (message_type/chat/model_request/memory 常见变体)
             grep -E 'message_type|"chat"|model_request|memory[_-]?[Cc]ontext|MemoryContext|记忆上下文|记忆\s*上下|prompt|system_prompt|context' \
                 "${CAPTURE_LOG_FILE}" 2>/dev/null || true
-        } | sort -u > "${MODEL_REQUEST_FILE}" 2>/dev/null || true
+        } | sort -u > "${STRACE_FILTER_FILE}" 2>/dev/null || true
     fi
 
     local line_count=0
-    if [ -f "${MODEL_REQUEST_FILE}" ]; then
-        line_count="$(wc -l < "${MODEL_REQUEST_FILE}" || echo 0)"
+    if [ -f "${STRACE_FILTER_FILE}" ]; then
+        line_count="$(wc -l < "${STRACE_FILTER_FILE}" || echo 0)"
     fi
     # 如果 grep 过滤仍为 0, 退一步: 只过滤 sendmsg+assistant.sock 的所有行 (DBus 回调)
     if [ "${line_count}" -eq 0 ] && [ -f "${CAPTURE_LOG_FILE}" ]; then
         echo "WARN: 关键词过滤 0 行, 退化为提取所有 sendmsg 到 assistant.sock 的 DBus 行"
         grep -E 'sendmsg.*assistant\.sock' "${CAPTURE_LOG_FILE}" \
-            > "${MODEL_REQUEST_FILE}" 2>/dev/null || true
-        if [ -f "${MODEL_REQUEST_FILE}" ]; then
-            line_count="$(wc -l < "${MODEL_REQUEST_FILE}" || echo 0)"
+            > "${STRACE_FILTER_FILE}" 2>/dev/null || true
+        if [ -f "${STRACE_FILTER_FILE}" ]; then
+            line_count="$(wc -l < "${STRACE_FILTER_FILE}" || echo 0)"
         fi
     fi
 
@@ -324,7 +344,7 @@ cmd_capture_stop() {
     echo "=============================================="
     echo "  原始日志: ${CAPTURE_LOG_FILE}"
     echo "  过滤行数: ${line_count}"
-    echo "  输出文件: ${MODEL_REQUEST_FILE}"
+    echo "  诊断输出: ${STRACE_FILTER_FILE}"
     if [ "${line_count}" -eq 0 ] && [ -f "${CAPTURE_LOG_FILE}" ]; then
         local raw_total
         raw_total="$(wc -l < "${CAPTURE_LOG_FILE}" 2>/dev/null || echo 0)"
@@ -336,20 +356,44 @@ cmd_capture_stop() {
 
 cmd_import_audit() {
     local source_file="${2:-}"
-    reload_paths
+    set_paths_for_current_run
+    require_current_baseline
     if [ -z "${source_file}" ] || [ ! -f "${source_file}" ]; then
         echo "ERROR: formal redacted gateway audit JSONL file is required" >&2
         exit 1
     fi
-    python3 - "${source_file}" "${AUDIT_SOURCE_FILE}" "${MODEL_REQUEST_FILE}" "${MARKER}" <<'PY'
+    python3 - "${source_file}" "${AUDIT_SOURCE_FILE}" "${RUN_ID}" "${MARKER}" <<'PY'
 import json
 import pathlib
 import sys
 
-source_path, audit_out, request_out = map(pathlib.Path, sys.argv[1:4])
-marker = sys.argv[4]
-required = {"timestamp", "source", "request_id", "user_marker", "memory_context_present", "context_sha256", "field_names"}
+source_path, audit_out = map(pathlib.Path, sys.argv[1:3])
+run_id, marker = sys.argv[3:5]
+required = {"run_id", "timestamp", "source", "request_id", "user_marker", "memory_context_present", "context_sha256", "field_names"}
 allowed = required | {"schema_version", "model", "redaction"}
+secret_keys = {"api_key", "authorization", "password", "secret", "token", "private_key", "credential"}
+
+def validate_safe(value, path="$"):
+    if isinstance(value, str):
+        if len(value) > 8192:
+            raise SystemExit(f"ERROR: {path} exceeds the audit string limit")
+    elif isinstance(value, list):
+        if len(value) > 100:
+            raise SystemExit(f"ERROR: {path} exceeds the audit list limit")
+        for index, child in enumerate(value):
+            validate_safe(child, f"{path}[{index}]")
+    elif isinstance(value, dict):
+        if len(value) > 50:
+            raise SystemExit(f"ERROR: {path} exceeds the audit object limit")
+        for key, child in value.items():
+            if not isinstance(key, str):
+                raise SystemExit(f"ERROR: {path} has a non-string field name")
+            if key.casefold() in secret_keys:
+                raise SystemExit(f"ERROR: {path}.{key} is a sensitive field")
+            validate_safe(child, f"{path}.{key}")
+    elif value is not None and not isinstance(value, (bool, int, float)):
+        raise SystemExit(f"ERROR: {path} has an unsupported audit value")
+
 records = []
 for number, raw in enumerate(source_path.read_text(encoding="utf-8").splitlines(), 1):
     if not raw.strip():
@@ -361,37 +405,39 @@ for number, raw in enumerate(source_path.read_text(encoding="utf-8").splitlines(
         raise SystemExit(f"ERROR: line {number} has undeclared fields; refusing possible raw or sensitive data")
     if item["source"] != "kylin-bot-gateway":
         raise SystemExit(f"ERROR: line {number} is not a formal kylin-bot gateway audit record")
+    validate_safe(item)
+    if item["run_id"] != run_id:
+        continue
     if item["user_marker"] != marker:
         continue
     digest = item["context_sha256"]
     if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest.lower()):
         raise SystemExit(f"ERROR: line {number} has invalid context_sha256")
-    if not isinstance(item["memory_context_present"], bool) or not isinstance(item["field_names"], list):
+    if not isinstance(item["timestamp"], str) or not item["timestamp"] or not isinstance(item["request_id"], str) or not item["request_id"] or not isinstance(item["memory_context_present"], bool) or not isinstance(item["field_names"], list):
         raise SystemExit(f"ERROR: line {number} has invalid audit field types")
     records.append(item)
 if not records:
     raise SystemExit("ERROR: no matching formal gateway audit record for marker")
 payload = "\n".join(json.dumps(item, ensure_ascii=False, sort_keys=True) for item in records) + "\n"
 pathlib.Path(audit_out).write_text(payload, encoding="utf-8")
-pathlib.Path(request_out).write_text(payload, encoding="utf-8")
 print(f"INFO: imported {len(records)} formal redacted gateway audit record(s)")
 PY
     echo "INFO: formal audit source: ${AUDIT_SOURCE_FILE}"
-    echo "INFO: model request evidence: ${MODEL_REQUEST_FILE}"
+    echo "INFO: formal gateway audit evidence: ${AUDIT_SOURCE_FILE}"
 }
 
 cmd_collect() {
-    reload_paths
+    set_paths_for_current_run
     echo "=============================================="
     echo " H2C-PreChat 三路证据采集"
     echo "=============================================="
 
-    # 路径 1: UI 截图 (人工触发或 kylin-screenshot)
+    # 路径 1: UI 截图（使用已验证的桌面截图方式或宿主 VM 截图）
     echo ""
     echo "[1/3] UI 路径截图"
     echo "  请手动截图 AI 助手当前对话界面, 保存为:"
     echo "  ${UI_SCREENSHOT_FILE}"
-    echo "  或运行: kylin-screenshot -s ${UI_SCREENSHOT_FILE}"
+    echo "  使用当前桌面可用的截图工具，或将宿主 VM 截图复制到该路径"
     echo "  (等待 10 秒, 若文件存在则继续)"
     sleep 10
     if [ -f "${UI_SCREENSHOT_FILE}" ]; then
@@ -406,17 +452,15 @@ cmd_collect() {
     if [ ! -f "${DB_PATH}" ]; then
         echo "  ✗ 数据库不存在: ${DB_PATH}"
     else
-        # 读取 baseline rowid, 仅查询实验后新增的记录 (避免历史污染干扰)
+        # 只允许本 Run 的基线；缺失或不可用基线一律 NOT_VERIFIED。
         local baseline_rowid="N/A"
-        if [ -f "${STATE_DIR}/prechat_baseline_rowid" ]; then
-            baseline_rowid="$(cat "${STATE_DIR}/prechat_baseline_rowid" 2>/dev/null || echo "N/A")"
+        if require_current_baseline; then
+            baseline_rowid="$(grep '^baseline_rowid=' "${BASELINE_META_FILE}" | cut -d= -f2-)"
         fi
 
         if [ "${baseline_rowid}" = "N/A" ] || [ -z "${baseline_rowid}" ]; then
-            echo "  WARN: baseline_rowid 不可用 (N/A), 使用原查询 (无 rowid 限制)"
-            sqlite3 "${DB_PATH}" \
-                "SELECT rowid, sessionID, msgIndex, message, operateTime FROM RECORD WHERE message LIKE '%${MARKER}%';" \
-                > "${DB_MESSAGE_FILE}" 2>/dev/null || true
+            echo "  ! H2C-PreChat-2 NOT_VERIFIED: current-Run baseline_rowid 不可用；拒绝查询历史记录"
+            : > "${DB_MESSAGE_FILE}"
         else
             echo "  baseline_rowid = ${baseline_rowid} (仅查询此后新增的记录)"
             sqlite3 "${DB_PATH}" \
@@ -431,14 +475,17 @@ cmd_collect() {
         echo "  匹配行数: ${db_match_count}"
         echo "  输出文件: ${DB_MESSAGE_FILE}"
 
-        # 检查是否包含 memory_context 字样 (污染检测)
-        # 前置条件: db_match_count >= 1, 否则无法判定无污染
+        # 同时验证当前 Run 的用户 message 精确等于预期原始输入，且无 Memory Context 污染。
         local raw_pol
         raw_pol="$(grep -cE 'memory_context|MemoryContext|记忆上下文' "${DB_MESSAGE_FILE}" 2>/dev/null || echo 0)"
         local pollution_check
         pollution_check="$(to_int "${raw_pol}")"
-        if [ "${db_match_count}" -eq 0 ]; then
-            echo "  ✗ H2C-PreChat-2 失败: 数据库中未找到 MARKER 记录 (db_match_count=0), 无法判定无污染"
+        local expected_count
+        expected_count="$(to_int "$(grep -cF "\"message\":\"${USER_TEXT}\"" "${DB_MESSAGE_FILE}" 2>/dev/null || echo 0)")"
+        if [ "${baseline_rowid}" = "N/A" ] || [ -z "${baseline_rowid}" ]; then
+            true
+        elif [ "${db_match_count}" -eq 0 ] || [ "${expected_count}" -eq 0 ]; then
+            echo "  ✗ H2C-PreChat-2 失败: 未找到本轮精确原始用户 message"
         else
             if [ "${pollution_check}" -eq 0 ]; then
                 echo "  ✓ H2C-PreChat-2 通过: 数据库 message 不含 Memory Context"
@@ -450,32 +497,32 @@ cmd_collect() {
 
     # 路径 3: 模型请求
     echo ""
-    echo "[3/3] 模型请求路径检查"
-    if [ ! -f "${MODEL_REQUEST_FILE}" ]; then
-        echo "  ✗ 模型请求文件不存在, 请先运行 capture-start/capture-stop"
+    echo "[3/3] 正式 Gateway Audit 路径检查"
+    if [ ! -f "${AUDIT_SOURCE_FILE}" ]; then
+        echo "  ! H2C-PreChat-3 未确认: 正式当前 Run Gateway Audit 不存在"
     else
         local raw_mm raw_mir
         # MARKER 含 [], 必须 grep -F (固定字符串), 不能用正则
-        raw_mm="$(grep -cF "${MARKER}" "${MODEL_REQUEST_FILE}" 2>/dev/null || echo 0)"
+        raw_mm="$(grep -cF "${MARKER}" "${AUDIT_SOURCE_FILE}" 2>/dev/null || echo 0)"
         local model_match_count
         model_match_count="$(to_int "${raw_mm}")"
         echo "  含标记的请求行数: ${model_match_count}"
 
         raw_mir="$(grep -c '"memory_context_present"[[:space:]]*:[[:space:]]*true' \
-            "${MODEL_REQUEST_FILE}" 2>/dev/null || echo 0)"
+            "${AUDIT_SOURCE_FILE}" 2>/dev/null || echo 0)"
         local memory_in_request
         memory_in_request="$(to_int "${raw_mir}")"
-        if [ "${memory_in_request}" -gt 0 ] && [ -f "${AUDIT_SOURCE_FILE}" ]; then
+        if [ "${memory_in_request}" -gt 0 ]; then
             echo "  PASS H2C-PreChat-3: formal redacted gateway audit confirms Memory Context"
         else
             echo "  ! H2C-PreChat-3 未确认: 模型请求未观察到 Memory Context"
             echo "    (可能 Hook 点 A 未注入 或 MemoryClient 未连接 或 关键词仍需扩展)"
-            # 辅助: 打印 MODEL_REQUEST_FILE 内容提示（最多 30 行）
+            # 辅助: 打印正式 audit 内容提示（最多 10 行）
             local fl
-            fl="$(wc -l < "${MODEL_REQUEST_FILE}" 2>/dev/null || echo 0)"
+            fl="$(wc -l < "${AUDIT_SOURCE_FILE}" 2>/dev/null || echo 0)"
             if [ "${fl}" -gt 0 ]; then
-                echo "    提示: ${MODEL_REQUEST_FILE} 共 ${fl} 行, 截取前 10 行供人工定位实际关键词:"
-                head -n 10 "${MODEL_REQUEST_FILE}" 2>/dev/null | sed 's/^/    > /' || true
+                echo "    提示: ${AUDIT_SOURCE_FILE} 共 ${fl} 行, 截取前 10 行供人工定位:"
+                head -n 10 "${AUDIT_SOURCE_FILE}" 2>/dev/null | sed 's/^/    > /' || true
             fi
         fi
     fi
@@ -486,7 +533,8 @@ cmd_collect() {
     echo "=============================================="
     echo "  UI 截图:       ${UI_SCREENSHOT_FILE}"
     echo "  数据库 message: ${DB_MESSAGE_FILE}"
-    echo "  模型请求:       ${MODEL_REQUEST_FILE}"
+    echo "  strace 诊断:    ${STRACE_FILTER_FILE}"
+    echo "  Gateway Audit:  ${AUDIT_SOURCE_FILE}"
     echo "=============================================="
 }
 

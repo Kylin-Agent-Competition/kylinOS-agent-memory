@@ -169,6 +169,12 @@ sudo setstatus -p /home/<user>/d2c-probe/d2c_postturn_isend_counter.sh verified
 
 ### 3.3 执行步骤
 
+**Canonical Run 前置条件：** 三个 Probe 和 Collector 必须使用同一个显式 `D2C_RUN_ID`；不得让脚本读取旧 state 自动恢复。示例：
+
+```bash
+export D2C_RUN_ID="$(date +%Y%m%d_%H%M%S)"
+```
+
 **步骤 B1：** 记录实验前基线
 
 ```bash
@@ -178,7 +184,7 @@ sudo setstatus -p /home/<user>/d2c-probe/d2c_postturn_isend_counter.sh verified
 脚本将：
 - 记录当前 RECORD 表 `rowid` 最大值
 - 记录当前 AI 助手进程 PID
-- 输出 `~/d2c-probe/out/prechat_<timestamp>.baseline.json`
+- 输出 `~/d2c-probe/out/prechat_<run_id>.baseline.json`，其中保存本轮 marker、预期原始用户文本与 baseline rowid
 
 **步骤 B2：** 启动模型请求捕获
 
@@ -186,14 +192,14 @@ sudo setstatus -p /home/<user>/d2c-probe/d2c_postturn_isend_counter.sh verified
 ~/d2c-probe/d2c_prechat_context_probe.sh capture-start
 ```
 
-脚本将使用 `strace` + 关键词过滤捕获系统调用文本 (非协议解码后的真实 chatAsync 入参 JSON), 按 marker/memory_context/prompt/context 等关键词过滤后保存到 `~/d2c-probe/out/prechat_<timestamp>.model_request.jsonl`。
+脚本将使用 `strace` + 关键词过滤生成诊断文本 `~/d2c-probe/out/prechat_<run_id>.strace_filtered.log`。该日志不是协议解码后的真实 chatAsync 入参 JSON，不能作为 H2C-PreChat-3 的正式请求证据。
 
 > **注意：** 实际使用 `strace -e write` + 关键词过滤捕获 socket 写入内容（LD_PRELOAD 因 KYSEC/签名限制未采用）。该文件是关键词过滤后的系统调用文本, 不是经过协议解码后确认的模型请求 JSON; 关键词未命中只能说明当前 strace 观察方式未发现这些明文字段, 不能直接证明 Hook 点 A 未实现。需源码 instrument、D-Bus 解码或真实 chatAsync 入参捕获确认。
 
 **步骤 B3：** 发起带标记的用户输入
 
-- 用户输入：`[D2C-MARKER-PRECHAT-001] 帮我回忆上次讨论的麒麟记忆系统架构。`
-- 标记字符串 `[D2C-MARKER-PRECHAT-001]` 用于后续在三路证据中检索。
+- 用户输入：`[D2C-PRECHAT-${D2C_RUN_ID}] 帮我回忆上次讨论的麒麟记忆系统架构。`
+- 标记字符串绑定当前 `D2C_RUN_ID`，用于拒绝历史 Run 的 DB / Audit 命中。
 
 **步骤 B4：** 等待回答完成，停止捕获
 
@@ -209,25 +215,25 @@ sudo setstatus -p /home/<user>/d2c-probe/d2c_postturn_isend_counter.sh verified
 
 脚本将采集：
 
-1. **UI 路径：** 截图 `~/d2c-probe/out/prechat_<timestamp>.ui_screenshot.png`（人工截图或 `kylin-screenshot`）
-2. **聊天库路径：** 查询 RECORD 表中包含 `[D2C-MARKER-PRECHAT-001]` 的行，导出 `message` 字段到 `~/d2c-probe/out/prechat_<timestamp>.db_message.txt`
-3. **模型请求路径：** 从 `model_request.jsonl` 中提取包含 `[D2C-MARKER-PRECHAT-001]` 的请求体
+1. **UI 路径：** 截图 `~/d2c-probe/out/prechat_<run_id>.ui_screenshot.png`（人工截图或 `kylin-screenshot`）
+2. **聊天库路径：** 只查询当前 baseline rowid 之后、且精确等于本轮原始用户输入的 RECORD.message；基线缺失时为 `NOT_VERIFIED`，不搜索历史记录。
+3. **Gateway Audit 路径：** 通过 `import-audit FILE.jsonl` 导入正式脱敏 Gateway JSONL。每条记录必须含 `run_id`、非空 `request_id`、当前 marker、timestamp、`memory_context_present` 与 `context_sha256`；脚本拒绝不匹配 Run/Marker 的记录及任意嵌套敏感字段。
 
 ### 3.4 通过标准
 
 | 编号 | 验证项 | 通过标准 |
 | --- | --- | --- |
-| H2C-PreChat-1 | UI 显示原始用户文本 | UI 截图中用户气泡仅含 `[D2C-MARKER-PRECHAT-001] 帮我回忆...`，无 Memory Context |
+| H2C-PreChat-1 | UI 显示原始用户文本 | UI 截图中用户气泡仅含当前 Run 的 `[D2C-PRECHAT-<run_id>] 帮我回忆...`，无 Memory Context |
 | H2C-PreChat-2 | 数据库 message 不含 Memory Context | RECORD.message 与用户输入一致，无额外记忆前缀 |
-| H2C-PreChat-3 | 模型请求含 Memory Context（注入后） | model_request.jsonl 中请求体含记忆上下文字段 |
-| H2C-PreChat-4 | MemoryClient 超时降级 | 断开 UDS 后聊天继续，model_request 不含记忆上下文但请求成功 |
+| H2C-PreChat-3 | 模型请求含 Memory Context（注入后） | 当前 Run 的正式 `gateway_audit.jsonl` 中 `memory_context_present=true`，且 request_id 非空 |
+| H2C-PreChat-4 | MemoryClient 超时降级 | 断开 UDS 后聊天继续，当前 Run 的正式 Gateway Audit 不含记忆上下文但请求成功 |
 
 ### 3.5 失败路由
 
 - UI 含记忆上下文：违反原文隔离红线（02 §4.1），记录为 Blocker，返回 D1 重新设计 Hook 点 A。
 - 数据库 message 含记忆上下文：同上 Blocker。
 - 模型请求不含记忆上下文：Hook 点 A 未生效或 MemoryClient 未连接，检查 IPC-001（UDS Echo）。
-- 无法拦截 chatAsync 入参：改用源码分支 instrument 或 DBus 监听，记录为 TD。
+  - 无法取得当前 Run 的正式 Gateway Audit：保持 `BLOCKED`；strace 诊断文本不得替代审计 JSONL。
 
 ---
 
@@ -310,7 +316,7 @@ sudo setstatus -p /home/<user>/d2c-probe/d2c_postturn_isend_counter.sh verified
 ~/d2c-probe/d2c_evidence_collector.sh pack
 ```
 
-生成 `~/d2c-probe/out/d2c_evidence_<timestamp>.tar.gz`，包含：
+生成 `~/d2c-probe/out/d2c_evidence_<run_id>.tar.gz`，包含：
 
 ```
 d2c_evidence_<timestamp>/
@@ -324,7 +330,8 @@ d2c_evidence_<timestamp>/
 │   ├── prechat_<ts>.baseline.json     # 基线
 │   ├── prechat_<ts>.ui_screenshot.png  # UI 截图
 │   ├── prechat_<ts>.db_message.txt     # 数据库 message
-│   └── prechat_<ts>.model_request.jsonl # 模型请求
+│   ├── prechat_<run_id>.strace_filtered.log # 仅诊断用途的 strace 过滤文本
+│   └── prechat_<run_id>.gateway_audit.jsonl # 正式脱敏 Gateway Audit（JSONL）
 ├── tool/
 │   ├── tool_<ts>.log                  # 原始日志
 │   └── tool_<ts>.summary.json         # 事件报告

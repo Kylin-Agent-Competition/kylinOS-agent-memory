@@ -47,22 +47,25 @@ USER_HOME="$(get_user_home)"
 STATE_DIR="${USER_HOME}/.d2c-probe-state"
 mkdir -p "${STATE_DIR}"
 
-TIMESTAMP_FILE="${STATE_DIR}/tool_last_timestamp"
 META_FILE="${STATE_DIR}/tool_capture.meta"
 PID_FILE="${STATE_DIR}/tool_capture.pid"
 
-get_or_set_timestamp() {
-    if [ -n "${1:-}" ]; then
-        echo "${1}" > "${TIMESTAMP_FILE}"
-        echo "${1}"
-    elif [ -f "${TIMESTAMP_FILE}" ]; then
-        cat "${TIMESTAMP_FILE}"
-    else
-        date +%Y%m%d_%H%M%S
+require_run_id() {
+    if [ -z "${D2C_RUN_ID:-}" ]; then
+        echo "ERROR: D2C_RUN_ID is required; one Canonical Run must be shared by every D2-C probe" >&2
+        exit 2
     fi
+    case "${D2C_RUN_ID}" in
+        *[!A-Za-z0-9_.-]*|'')
+            echo "ERROR: D2C_RUN_ID may contain only A-Z, a-z, 0-9, _, . and -" >&2
+            exit 2
+            ;;
+    esac
+    printf '%s' "${D2C_RUN_ID}"
 }
 
-TIMESTAMP="$(get_or_set_timestamp)"
+RUN_ID="$(require_run_id)"
+TIMESTAMP="${RUN_ID}"
 RAW_LOG_FILE="${OUT_DIR}/tool_${TIMESTAMP}.raw.log"
 LOG_FILE="${OUT_DIR}/tool_${TIMESTAMP}.log"
 SUMMARY_FILE="${OUT_DIR}/tool_${TIMESTAMP}.summary.json"
@@ -145,9 +148,14 @@ find_ai_pid() {
 }
 
 reload_paths() {
-    local ts_from_meta=""
+    local ts_from_meta="" run_id_from_meta=""
     if [ -f "${META_FILE}" ]; then
         ts_from_meta="$(grep '^timestamp=' "${META_FILE}" | cut -d= -f2-)"
+        run_id_from_meta="$(grep '^run_id=' "${META_FILE}" | cut -d= -f2-)"
+        if [ "${run_id_from_meta}" != "${RUN_ID}" ] || [ "${ts_from_meta}" != "${RUN_ID}" ]; then
+            echo "ERROR: refusing stale Tool meta; expected run_id=${RUN_ID}, got ${run_id_from_meta:-missing}" >&2
+            exit 1
+        fi
     fi
     if [ -n "${ts_from_meta}" ]; then
         TIMESTAMP="${ts_from_meta}"
@@ -157,8 +165,16 @@ reload_paths() {
     SUMMARY_FILE="${OUT_DIR}/tool_${TIMESTAMP}.summary.json"
 }
 
+set_paths_for_current_run() {
+    TIMESTAMP="${RUN_ID}"
+    RAW_LOG_FILE="${OUT_DIR}/tool_${TIMESTAMP}.raw.log"
+    LOG_FILE="${OUT_DIR}/tool_${TIMESTAMP}.log"
+    SUMMARY_FILE="${OUT_DIR}/tool_${TIMESTAMP}.summary.json"
+}
+
 cmd_start() {
-    reload_paths
+    # 新 Run 直接按 D2C_RUN_ID 派生路径；不读取、也不继承旧 meta。
+    set_paths_for_current_run
     local pid
     pid="$(find_ai_pid)"
     if [ -z "${pid}" ]; then
@@ -172,10 +188,7 @@ cmd_start() {
         exit 1
     fi
 
-    # 每次 start 生成新时间戳
-    TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-    TIMESTAMP="$(get_or_set_timestamp "${TIMESTAMP}")"
-    reload_paths
+    set_paths_for_current_run
 
     echo "INFO: 启动 Tool 事件观察 (strace 原始日志) -> ${RAW_LOG_FILE}"
     echo "INFO: strace 直接写入原始日志 (不经过 grep 管道), stop 时离线过滤"
@@ -215,6 +228,7 @@ ai_pid=${pid}
 raw_log=${RAW_LOG_FILE}
 filtered_log=${LOG_FILE}
 timestamp=${TIMESTAMP}
+run_id=${RUN_ID}
 started_at=$(date '+%Y-%m-%d %H:%M:%S')
 EOF
 
@@ -283,7 +297,7 @@ cmd_stop() {
     intent_count="$(to_int "${raw_intent}")"
     enable_search_count="$(to_int "${raw_enable_search}")"
 
-    # 验证 OpenAI 风格关键词确实为 0 (证明麒麟不使用这套架构)
+    # 只记录 OpenAI 风格关键词是否在本次观察中出现；零命中不证明内部架构。
     local raw_openai
     raw_openai="$(grep -cE "${OPENAI_TOOL_KEYWORDS}" "${RAW_LOG_FILE}" 2>/dev/null || echo 0)"
     local openai_keyword_count
@@ -337,14 +351,14 @@ PYEOF
     cat > "${SUMMARY_FILE}" <<EOF
 {
   "experiment": "H2C-Tool",
+  "run_id": "${RUN_ID}",
   "timestamp": "${TIMESTAMP}",
   "log_file": "$(basename "${LOG_FILE}")",
   "raw_log_bytes": ${log_size},
-  "architecture_finding": {
-    "uses_openai_tool_call": false,
+  "diagnostic_observation": {
+    "openai_style_tool_call": "NOT_OBSERVED",
     "openai_keyword_hits": ${openai_keyword_count},
-    "actual_mechism": "DBus chat/ChatResult + intentionrecognition.cpp inside kylin-ai-runtime",
-    "note": "麒麟 AI 助手不使用 OpenAI 风格 tool_call/function_call, Tool 动作由 runtime 内部 intentionrecognition 模块直接执行"
+    "note": "本次观察未捕获 OpenAI 风格关键词；该结果不构成对麒麟内部 Tool 架构的证明"
   },
   "metrics": {
     "ChatResult_signal_count": ${chat_signal_count},
@@ -364,9 +378,10 @@ PYEOF
     "H2C-Tool-1": "NOT_VERIFIED (未捕获成功 ToolExecutionEvent)",
     "H2C-Tool-2": "NOT_VERIFIED (未捕获失败 ToolExecutionEvent)",
     "H2C-Tool-3": "NOT_VERIFIED (stop_chat 仅是取消线索，不能证明取消 ToolExecutionEvent)",
-    "H2C-Tool-4": "NOT_VERIFIED (关键词计数不能证明 Prompt Skill 未被分类为 Tool)"
+    "H2C-Tool-4": "NOT_VERIFIED (关键词计数不能证明 Prompt Skill 未被分类为 Tool)",
+    "H2C-Tool-5": "BLOCKED (尚无 FailureMemory 写入/隔离的结构化验收证据)"
   },
-  "note": "基于 D2-C 实验 C 实测: 麒麟 AI 助手所有用户输入(含打开应用/翻译)均以 message_type=chat 发送, 无 OpenAI 风格 tool_call 事件",
+  "note": "本报告仅保存当前 Run 的诊断观察；不据零关键词命中推断完整内部架构",
   "disclaimer": "判定权交由 Reviewer, 脚本仅记录观察结果"
 }
 EOF
@@ -382,8 +397,8 @@ EOF
     echo "  intentionrecognition 日志: ${intent_count}  (意图识别触发 Tool 动作)"
     echo "  enable_search 请求:        ${enable_search_count}  (搜索增强)"
     echo ""
-    echo "  [架构验证]"
-    echo "  OpenAI 风格关键词命中:     ${openai_keyword_count}  (预期 0, 证明麒麟不用 tool_call)"
+    echo "  [诊断观察]"
+    echo "  OpenAI 风格关键词命中:     ${openai_keyword_count}  (NOT_OBSERVED 不构成架构证明)"
     echo "  Prompt Skill 关键词:       ${prompt_skill_count}  (英文 ${prompt_skill_en_count} + 中文 ${prompt_skill_cn_count})"
     echo ""
     echo "  [观察结果]"
@@ -395,7 +410,7 @@ EOF
     echo "  DIAGNOSTIC: OpenAI 风格关键词计数=${openai_keyword_count} (不能证明 H2C-Tool-4)"
     echo "  判定权交由 Reviewer, 脚本仅记录观察结果"
     echo ""
-    echo "  H2C-Tool-1/2/3/4: NOT_VERIFIED"
+    echo "  H2C-Tool-1/2/3/4: NOT_VERIFIED；H2C-Tool-5: BLOCKED"
     echo "    原因: 当前诊断仅跟踪真实 AI 助手主进程，尚未定位可审计的结构化 Tool 事件来源。"
     echo ""
     echo "  报告: ${SUMMARY_FILE}"

@@ -23,7 +23,7 @@
 | 实验 | 当前审计状态 | 阻塞原因 |
 |---|---|---|
 | H2C-PostTurn | BLOCKED | 缺数据库快照、15 秒稳定性及 UI/RECORD 一致性证据 |
-| H2C-PreChat | BLOCKED | 缺 UI 截图；未取得已解码模型请求的注入证明 |
+| H2C-PreChat | PARTIAL（H2C-PreChat-3 WAIVED） | 本轮 UI 原文与 RECORD 精确原文已验证；正式 Gateway Audit 未开放，D/E 已书面豁免 H2C-PreChat-3。该豁免不是技术 PASS，仍保留“无法证明请求前注入 Memory Context”的风险。 |
 | H2C-Tool | BLOCKED | 未捕获成功、失败、取消的真实结构化 Tool 事件 |
 
 下表为历史观察记录，不改变上述当前审计状态。
@@ -56,7 +56,8 @@ evidence/l2-kylin-vm/d2c/
 │   ├── prechat_<ts>.baseline.json     # H2C-PreChat 基线
 │   ├── prechat_<ts>.ui_screenshot.png  # UI 截图（含用户气泡）
 │   ├── prechat_<ts>.db_message.txt     # 数据库 message 导出
-│   └── prechat_<ts>.model_request.jsonl # 模型请求 JSONL
+│   ├── prechat_<ts>.strace_filtered.log  # 仅诊断用途的 strace 过滤文本
+│   └── prechat_<ts>.gateway_audit.jsonl  # 正式脱敏 Gateway Audit JSONL
 ├── tool/
 │   ├── tool_<ts>.log                  # H2C-Tool 原始日志
 │   └── tool_<ts>.summary.json         # Tool 事件报告

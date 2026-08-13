@@ -57,22 +57,23 @@ mkdir -p "${STATE_DIR}"
 
 RUN_ID_FILE="${STATE_DIR}/d2c_run_id"
 
-# 获取或生成 RUN_ID: 优先 D2C_RUN_ID 环境变量, 其次状态文件, 最后新建时间戳
-get_or_init_run_id() {
-    if [ -n "${D2C_RUN_ID:-}" ]; then
-        echo "${D2C_RUN_ID}" > "${RUN_ID_FILE}"
-        echo "${D2C_RUN_ID}"
-    elif [ -f "${RUN_ID_FILE}" ]; then
-        cat "${RUN_ID_FILE}"
-    else
-        local new_id
-        new_id="$(date +%Y%m%d_%H%M%S)"
-        echo "${new_id}" > "${RUN_ID_FILE}"
-        echo "${new_id}"
+# 证据包只能服务显式指定的 Canonical Run；不复用 state 文件中的旧 Run。
+require_run_id() {
+    if [ -z "${D2C_RUN_ID:-}" ]; then
+        echo "ERROR: D2C_RUN_ID is required; export one value before all probes and collector commands" >&2
+        exit 2
     fi
+    case "${D2C_RUN_ID}" in
+        *[!A-Za-z0-9_.-]*|'')
+            echo "ERROR: D2C_RUN_ID may contain only A-Z, a-z, 0-9, _, . and -" >&2
+            exit 2
+            ;;
+    esac
+    printf '%s\n' "${D2C_RUN_ID}" > "${RUN_ID_FILE}"
+    printf '%s' "${D2C_RUN_ID}"
 }
 
-RUN_ID="$(get_or_init_run_id)"
+RUN_ID="$(require_run_id)"
 EVIDENCE_DIR="${OUT_DIR}/d2c_evidence_${RUN_ID}"
 ENV_FILE="${EVIDENCE_DIR}/environment.json"
 
@@ -243,7 +244,8 @@ cmd_pack() {
     cp "${OUT_DIR}/prechat_${RUN_ID}.baseline.json" "${EVIDENCE_DIR}/prechat/" 2>/dev/null || true
     cp "${OUT_DIR}/prechat_${RUN_ID}.ui_screenshot.png" "${EVIDENCE_DIR}/prechat/" 2>/dev/null || true
     cp "${OUT_DIR}/prechat_${RUN_ID}.db_message.txt" "${EVIDENCE_DIR}/prechat/" 2>/dev/null || true
-    cp "${OUT_DIR}/prechat_${RUN_ID}.model_request.jsonl" "${EVIDENCE_DIR}/prechat/" 2>/dev/null || true
+    cp "${OUT_DIR}/prechat_${RUN_ID}.strace_filtered.log" "${EVIDENCE_DIR}/prechat/" 2>/dev/null || true
+    cp "${OUT_DIR}/prechat_${RUN_ID}.gateway_audit.jsonl" "${EVIDENCE_DIR}/prechat/" 2>/dev/null || true
 
     # 4. 复制 Tool 证据 (仅本轮 RUN_ID)
     mkdir -p "${EVIDENCE_DIR}/tool"
@@ -263,11 +265,11 @@ cmd_pack() {
     require_file  "PreChat baseline"        "${EVIDENCE_DIR}/prechat/prechat_${RUN_ID}.baseline.json"
     require_file  "PreChat 截图"            "${EVIDENCE_DIR}/prechat/prechat_${RUN_ID}.ui_screenshot.png"
     require_file  "PreChat 数据库导出"      "${EVIDENCE_DIR}/prechat/prechat_${RUN_ID}.db_message.txt"
-    require_file  "PreChat 请求证据"        "${EVIDENCE_DIR}/prechat/prechat_${RUN_ID}.model_request.jsonl"
+    require_file  "PreChat Gateway Audit"  "${EVIDENCE_DIR}/prechat/prechat_${RUN_ID}.gateway_audit.jsonl"
     require_glob  "Tool 原始日志"           "${EVIDENCE_DIR}/tool/tool_${RUN_ID}*.log"
     require_glob  "Tool summary"            "${EVIDENCE_DIR}/tool/tool_${RUN_ID}*.summary.json"
 
-    # 6. JSON 完整性校验 (打包前对所有 .json 文件用 python3 json.loads 校验)
+    # 6. JSON / JSONL 完整性校验（Gateway Audit 按 JSONL 逐行解析）
     echo "=============================================="
     echo " JSON 完整性校验"
     echo "=============================================="
@@ -280,6 +282,14 @@ cmd_pack() {
             echo "  ✓ ${jf}"
         fi
     done < <(find "${EVIDENCE_DIR}" -type f -name '*.json' -print0)
+    while IFS= read -r -d '' jf; do
+        if ! python3 -c "import json,sys; [json.loads(line) for line in open(sys.argv[1],encoding='utf-8') if line.strip()]" "${jf}" 2>/dev/null; then
+            echo "ERROR: JSONL 校验失败: ${jf}" >&2
+            json_failed=1
+        else
+            echo "  ✓ ${jf}"
+        fi
+    done < <(find "${EVIDENCE_DIR}" -type f -name '*.jsonl' -print0)
     if [ "${json_failed}" -ne 0 ]; then
         echo "ERROR: 存在非法 JSON 文件, 打包终止" >&2
         exit 1
@@ -362,7 +372,7 @@ case "${1:-}" in
         echo "  env  - 收集环境信息 (生成/复用 RUN_ID)"
         echo "  pack - 打包所有 D2-C 证据 (仅收集本轮 RUN_ID 文件)"
         echo ""
-        echo "  RUN_ID 可通过 D2C_RUN_ID 环境变量指定, 否则自动生成时间戳并持久化"
+        echo "  RUN_ID 必须通过 D2C_RUN_ID 环境变量显式指定，四个脚本共用同一个值"
         echo "  三项实验应使用同一 RUN_ID, 例如:"
         echo "    export D2C_RUN_ID=\"\$(date +%Y%m%d_%H%M%S)\""
         echo "    ./d2c_postturn_isend_counter.sh start \"\${D2C_RUN_ID}\""

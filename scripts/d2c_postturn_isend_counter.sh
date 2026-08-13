@@ -6,7 +6,7 @@
 # 依据: 02 文档 §4.2 Post-Turn 观察接入, §16.15 步骤 14
 #
 # 用法:
-#   ./d2c_postturn_isend_counter.sh start    # 启动日志捕获
+#   D2C_RUN_ID=20260813_120000 ./d2c_postturn_isend_counter.sh start
 #   ./d2c_postturn_isend_counter.sh stop     # 停止捕获并生成计数报告
 #   ./d2c_postturn_isend_counter.sh dbcheck  # 数据库落库验证
 #
@@ -48,23 +48,25 @@ USER_HOME="$(get_user_home)"
 STATE_DIR="${USER_HOME}/.d2c-probe-state"
 mkdir -p "${STATE_DIR}"
 
-TIMESTAMP_FILE="${STATE_DIR}/postturn_last_timestamp"
 PID_FILE="${STATE_DIR}/postturn_capture.pid"
 META_FILE="${STATE_DIR}/postturn_capture.meta"
 
-# 每次 start 生成一个时间戳并持久化, stop/dbcheck 复用
-get_or_set_timestamp() {
-    if [ -n "${1:-}" ]; then
-        echo "${1}" > "${TIMESTAMP_FILE}"
-        echo "${1}"
-    elif [ -f "${TIMESTAMP_FILE}" ]; then
-        cat "${TIMESTAMP_FILE}"
-    else
-        date +%Y%m%d_%H%M%S
+require_run_id() {
+    if [ -z "${D2C_RUN_ID:-}" ]; then
+        echo "ERROR: D2C_RUN_ID is required; one Canonical Run must be shared by every D2-C probe" >&2
+        exit 2
     fi
+    case "${D2C_RUN_ID}" in
+        *[!A-Za-z0-9_.-]*|'')
+            echo "ERROR: D2C_RUN_ID may contain only A-Z, a-z, 0-9, _, . and -" >&2
+            exit 2
+            ;;
+    esac
+    printf '%s' "${D2C_RUN_ID}"
 }
 
-TIMESTAMP="$(get_or_set_timestamp)"
+RUN_ID="$(require_run_id)"
+TIMESTAMP="${RUN_ID}"
 LOG_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.log"
 SUMMARY_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.summary.json"
 DB_SNAPSHOT_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.db_snapshots.json"
@@ -168,9 +170,8 @@ cmd_start() {
         exit 1
     fi
 
-    # 启动时生成新时间戳
-    TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-    TIMESTAMP="$(get_or_set_timestamp "${TIMESTAMP}")"
+    # Canonical Run 的文件名只能由调用方提供的 D2C_RUN_ID 决定。
+    TIMESTAMP="${RUN_ID}"
     LOG_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.log"
 
     echo "INFO: 启动 strace 日志捕获 -> ${LOG_FILE}"
@@ -226,6 +227,7 @@ cmd_start() {
 strace_pid=${cap_pid}
 ai_pid=${pid}
 runtime_pid=${runtime_pid:-}
+run_id=${RUN_ID}
 log_file=${LOG_FILE}
 timestamp=${TIMESTAMP}
 started_at=$(date '+%Y-%m-%d %H:%M:%S')
@@ -241,15 +243,19 @@ cmd_stop() {
         echo "ERROR: 未找到运行中的捕获任务" >&2
         exit 1
     fi
-    # 从 meta 文件读取 start 时的时间戳和日志路径, 确保 stop 与 start 一致
-    local cap_pid log_file_from_meta ts_from_meta
+    # 只允许消费当前 Canonical Run 的 meta；绝不静默复用旧 Run。
+    local cap_pid log_file_from_meta ts_from_meta run_id_from_meta
     cap_pid="$(cat "${PID_FILE}")"
     if [ -f "${META_FILE}" ]; then
         log_file_from_meta="$(grep '^log_file=' "${META_FILE}" | cut -d= -f2-)"
         ts_from_meta="$(grep '^timestamp=' "${META_FILE}" | cut -d= -f2-)"
+        run_id_from_meta="$(grep '^run_id=' "${META_FILE}" | cut -d= -f2-)"
+        if [ "${run_id_from_meta}" != "${RUN_ID}" ] || [ "${ts_from_meta}" != "${RUN_ID}" ]; then
+            echo "ERROR: refusing stale PostTurn meta; expected run_id=${RUN_ID}, got ${run_id_from_meta:-missing}" >&2
+            exit 1
+        fi
         if [ -n "${ts_from_meta}" ]; then
             TIMESTAMP="${ts_from_meta}"
-            get_or_set_timestamp "${TIMESTAMP}" >/dev/null
             LOG_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.log"
             SUMMARY_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.summary.json"
             DB_SNAPSHOT_FILE="${OUT_DIR}/postturn_${TIMESTAMP}.db_snapshots.json"
@@ -345,6 +351,7 @@ cmd_stop() {
     cat > "${SUMMARY_FILE}" <<EOF
 {
   "experiment": "H2C-PostTurn",
+  "run_id": "${RUN_ID}",
   "timestamp": "${TIMESTAMP}",
   "log_file": "$(basename "${LOG_FILE}")",
   "raw_log_bytes": ${log_size},
@@ -432,7 +439,7 @@ cmd_diagnose() {
     local target_log="${1:-}"
     if [ -z "${target_log}" ]; then
         local ts
-        ts="$(get_or_set_timestamp)"
+        ts="${RUN_ID}"
         target_log="${OUT_DIR}/postturn_${ts}.log"
     fi
     if [ ! -f "${target_log}" ]; then
