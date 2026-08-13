@@ -111,3 +111,40 @@ def test_pipeline_duplicate_detection_across_events():
     r2 = pipe.process(_raw(event_id="evt_b", idempotency_key="idem_b"))
     assert r1.event.content_fingerprint == r2.event.content_fingerprint
     assert is_duplicate(r2.event.content_fingerprint, {r1.event.content_fingerprint})
+
+
+# ── H1-mini: Raw Payload 安全前置责任边界 ──
+
+def test_h1_tool_result_without_payload_check_fail_closed():
+    """H1: tool_result 事件未过 Raw Payload 安全检查 → fail-close（不进入 Extraction）。"""
+    pipe = EventPipeline(scorer=QualityScorer(now=NOW))
+    result = pipe.process(_raw(
+        source_type="tool_result", event_type="agent_response",
+        tool_call_id="t_h1", content_summary="工具执行完成",
+        raw_payload_ref="tool-result://event/123",
+        payload_security_checked=False))  # 上游漏做安全扫描
+    # A Pipeline 不 silent fail-open：即使 summary 无敏感，也拦截
+    assert result.security_gate_triggered is True
+    assert result.eligible_for_extraction is False
+    assert result.event.should_ignore is True
+    assert result.event.source_business_status.value == "ignored"
+
+
+def test_h1_tool_result_with_payload_check_allowed():
+    """H1 正向: tool_result 已过安全检查 → 不触发安全 Gate（由质量 Gate 决定）。"""
+    pipe = EventPipeline(scorer=QualityScorer(now=NOW))
+    result = pipe.process(_raw(
+        source_type="tool_result", event_type="agent_response",
+        tool_call_id="t_h1b", content_summary="工具执行完成",
+        raw_payload_ref="tool-result://event/124",
+        payload_security_checked=True))
+    assert result.security_gate_triggered is False
+    assert result.eligible_for_extraction is True
+
+
+def test_h1_chat_event_not_affected_by_payload_flag():
+    """H1: 非 tool_result 事件不受 payload_security_checked 门控（仅 Tool Payload 场景）。"""
+    pipe = EventPipeline(scorer=QualityScorer(now=NOW))
+    result = pipe.process(_raw(payload_security_checked=False))  # chat 事件，默认未检查
+    assert result.security_gate_triggered is False
+    assert result.eligible_for_extraction is True

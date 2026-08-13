@@ -259,3 +259,115 @@ def test_audit_does_not_contain_raw_text():
     p.extract_preferences(_turn(user_text="这是敏感正文不要落审计", source_event_id="evt_aud"))
     for item in p.audit:
         assert "敏感正文不要落审计" not in str(item)
+
+
+# ── B1: 成功知识必须建立在真实 success ToolResult 之上 ──
+
+def _llm_knowledge_claim():
+    """LLM 声称工具执行成功（但可能无真实证据）。"""
+    def llm(kind, text):
+        return [{"fact": "工具已成功修改配置，系统处于可用状态", "category": "fact",
+                 "confidence": 0.9, "conditions": "tool=config"}]
+    return llm
+
+
+def test_b1_no_tool_results_llm_knowledge_rejected():
+    """B1 负向: 无 tool_results + assistant 声称成功 → 不形成成功知识。"""
+    p = ExtractionProvider(llm_extractor=_llm_knowledge_claim())
+    ev = _turn(user_text="", assistant_text="工具已经成功修改配置",
+               source_event_id="evt_b1a")
+    cands = p.extract_knowledge(ev)
+    assert cands == []  # 无真实 success Tool evidence，LLM 知识被拒绝
+    assert any("no-success-tool-evidence" in a["error"] for a in p.audit)
+
+
+def test_b1_failure_tool_llm_knowledge_rejected():
+    """B1 负向: failure Tool + assistant 声称成功 → 不形成成功知识。"""
+    p = ExtractionProvider(llm_extractor=_llm_knowledge_claim())
+    ev = _turn(assistant_text="工具已经成功修改配置",
+               source_event_id="evt_b1b",
+               tool_results=[ToolResult(tool_name="config", arguments={},
+                                        status="failure", error="perm denied")])
+    cands = p.extract_knowledge(ev)
+    assert cands == []
+    assert any("no-success-tool-evidence" in a["error"] for a in p.audit)
+
+
+def test_b1_cancelled_tool_llm_knowledge_rejected():
+    """B1 负向: cancelled Tool + assistant 声称成功 → 不形成成功知识。"""
+    p = ExtractionProvider(llm_extractor=_llm_knowledge_claim())
+    ev = _turn(assistant_text="工具已经成功修改配置",
+               source_event_id="evt_b1c",
+               tool_results=[ToolResult(tool_name="config", arguments={},
+                                        status="cancelled", result=None)])
+    cands = p.extract_knowledge(ev)
+    assert cands == []
+
+
+def test_b1_timeout_tool_llm_knowledge_rejected():
+    """B1 负向: timeout Tool + assistant 声称成功 → 不形成成功知识。"""
+    p = ExtractionProvider(llm_extractor=_llm_knowledge_claim())
+    ev = _turn(assistant_text="工具已经成功修改配置",
+               source_event_id="evt_b1d",
+               tool_results=[ToolResult(tool_name="config", arguments={},
+                                        status="timeout", result=None)])
+    cands = p.extract_knowledge(ev)
+    assert cands == []
+
+
+def test_b1_partial_tool_conservative_no_knowledge():
+    """B1/TD-2: partial Tool 保守不形成成功知识（漏记而非错记）。"""
+    p = ExtractionProvider(llm_extractor=_llm_knowledge_claim())
+    ev = _turn(assistant_text="工具部分成功",
+               source_event_id="evt_b1e",
+               tool_results=[ToolResult(tool_name="batch", arguments={},
+                                        status="partial", result="部分项成功")])
+    cands = p.extract_knowledge(ev)
+    assert cands == []
+
+
+def test_b1_success_tool_llm_knowledge_allowed():
+    """B1 正向: success Tool + 真实 result → LLM 可形成知识候选。"""
+    p = ExtractionProvider(llm_extractor=_llm_knowledge_claim())
+    ev = _turn(assistant_text="工具已经成功修改配置",
+               source_event_id="evt_b1f",
+               tool_results=[ToolResult(tool_name="config", arguments={},
+                                        status="success", result="配置已更新")])
+    cands = p.extract_knowledge(ev)
+    assert len(cands) >= 1
+    assert all(c.memory_status == "candidate" for c in cands)  # B2
+
+
+# ── B2: LLM 候选最小可信级标记 ──
+
+def test_b2_llm_candidate_has_memory_status_candidate():
+    """B2: 所有 LLM 候选 memory_status=candidate（系统强制）。"""
+    def llm(kind, text):
+        return [{"key": "language", "value": "中文", "confidence": 0.9,
+                 "evidence": "e"}]
+    p = ExtractionProvider(llm_extractor=llm)
+    cands = p.extract_preferences(_turn(user_text="我喜欢中文", source_event_id="evt_b2a"))
+    assert len(cands) >= 1
+    assert all(c.memory_status == "candidate" for c in cands)
+
+
+def test_b2_llm_cannot_set_verified():
+    """B2 负向: LLM 试图设置 memory_status=verified → 被强制覆盖为 candidate。"""
+    def llm(kind, text):
+        return [{"key": "language", "value": "中文", "confidence": 0.9,
+                 "evidence": "e", "memory_status": "verified"}]
+    p = ExtractionProvider(llm_extractor=llm)
+    cands = p.extract_preferences(_turn(user_text="我喜欢中文", source_event_id="evt_b2b"))
+    assert len(cands) >= 1
+    for c in cands:
+        assert c.memory_status == "candidate"
+        assert c.memory_status != "verified"
+
+
+def test_b2_rule_candidates_are_candidate():
+    """B2: 规则路径候选同样标 candidate。"""
+    p = ExtractionProvider()
+    ev = _turn(user_text="我喜欢简洁的回答", source_event_id="evt_b2c")
+    cands = p.extract_preferences(ev)
+    assert len(cands) >= 1
+    assert all(c.memory_status == "candidate" for c in cands)

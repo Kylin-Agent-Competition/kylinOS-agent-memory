@@ -67,7 +67,7 @@ class TurnFinalizedEvent:
 
 
 class PreferenceCandidate(BaseModel):
-    """偏好候选（Day3 契约字段 + D6 审计字段）。"""
+    """偏好候选（Day3 契约字段 + D6 审计字段 + B2 可信级标记）。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -77,10 +77,12 @@ class PreferenceCandidate(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     evidence: str = Field(min_length=1)
     source_event_id: str = Field(min_length=1)  # R3: 系统可信 provenance，禁止 LLM 生成/覆盖
+    # B2-mini: 可信级标记——候选仅为 candidate，系统强制设置，LLM 不能改成 verified
+    memory_status: Literal["candidate"] = "candidate"
 
 
 class KnowledgeCandidate(BaseModel):
-    """知识候选（Day3 契约字段 + D6 审计字段）。"""
+    """知识候选（Day3 契约字段 + D6 审计字段 + B2 可信级标记）。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -89,6 +91,8 @@ class KnowledgeCandidate(BaseModel):
     conditions: Optional[str] = None
     source_event_id: str = Field(min_length=1)  # R3: 系统可信 provenance，禁止 LLM 生成/覆盖
     confidence: float = Field(ge=0.0, le=1.0)
+    # B2-mini: 可信级标记——候选仅为 candidate，系统强制设置，LLM 不能改成 verified
+    memory_status: Literal["candidate"] = "candidate"
 
 
 # LLM 抽取器接口（可注入；返回 raw dict 候选列表，由本 Provider 做 Pydantic 校验）
@@ -201,10 +205,25 @@ class ExtractionProvider:
         """提取知识候选（Day3 契约：extract_knowledge(event)）。
 
         R3/R5 同 extract_preferences。
+        B1: 成功知识必须建立在真实 success ToolResult 之上——knowledge LLM 路径
+        仅在事件含至少一个 success ToolResult 时执行；否则 LLM 输出全部拒绝
+        （模型自述成功 ≠ 真实 Tool 执行成功，不得沉淀为知识）。
         """
         trusted_id = event.trusted_source_event_id
         rule_candidates = _extract_knowledge_rules(event, trusted_id)
         if self._llm is None:
+            return rule_candidates
+
+        # B1 门控：必须有真实 success Tool evidence 才允许 knowledge LLM 提取
+        has_success_tool = any(
+            tr.status == "success" and tr.result for tr in (event.tool_results or []))
+        if not has_success_tool:
+            # 无真实 success Tool evidence：LLM 输出不得形成成功知识（进审计）
+            self._audit.append({
+                "kind": "knowledge",
+                "event_id": trusted_id,
+                "error": "no-success-tool-evidence: llm knowledge rejected",
+            })
             return rule_candidates
 
         llm_candidates = self._run_llm("knowledge", event, trusted_id)
@@ -261,8 +280,11 @@ class ExtractionProvider:
 
         # R3: 从 LLM 输出剥离 source_event_id（禁止伪造 provenance）
         raw = {k: v for k, v in raw.items() if k != "source_event_id"}
+        # B2: 剥离 LLM 提供的 memory_status（LLM 不能自封 verified），系统强制 candidate
+        raw = {k: v for k, v in raw.items() if k != "memory_status"}
         # 系统可信字段强制附加（LLM 无法覆盖）
-        merged = {**raw, "source_event_id": trusted_source_event_id}
+        merged = {**raw, "source_event_id": trusted_source_event_id,
+                  "memory_status": "candidate"}
 
         model = PreferenceCandidate if kind == "preference" else KnowledgeCandidate
         try:

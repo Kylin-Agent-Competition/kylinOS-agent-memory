@@ -28,10 +28,10 @@ from pipeline.quality import QualityScorer
 from pipeline.schemas import (
     EventValidationError,
     NormalizedEvent,
-    ProcessingStatus,
     QualityScore,
     SensitivityLevel,
     SourceBusinessStatus,
+    SourceType,
     _SENSITIVITY_ORDER,
 )
 from pipeline.sensitive import detect_sensitivity
@@ -83,17 +83,21 @@ class EventPipeline:
         scorer = self.scorer or QualityScorer()
         quality = scorer.score(event)
 
-        # 5. 安全 Gate（R2：优先于质量 Gate，fail-close）
-        #    high/critical 敏感事件（或输入已标 should_ignore）→ 强制 ignored，
-        #    不得进入 Extraction / Storage / Vector / MemoryContext 路径。
+        # 5. 安全 Gate（R2 + H1-mini：优先于质量 Gate，fail-close）
+        #    - high/critical 敏感事件（或输入已标 should_ignore）→ 强制 ignored
+        #    - H1: tool_result 事件若未经过上游 Raw Payload 安全前置检查
+        #      （payload_security_checked=False）→ fail-close（不得 silent fail-open）
+        #    均不得进入 Extraction / Storage / Vector / MemoryContext 路径。
         security_gate_triggered = False
+        h1_payload_unchecked = (
+            event.source_type == SourceType.TOOL_RESULT
+            and not event.payload_security_checked)
         if (event.sensitivity in (SensitivityLevel.HIGH, SensitivityLevel.CRITICAL)
-                or event.should_ignore):
+                or event.should_ignore or h1_payload_unchecked):
             security_gate_triggered = True
             event = event.model_copy(update={
                 "should_ignore": True,
                 "source_business_status": SourceBusinessStatus.IGNORED,
-                "processing_status": ProcessingStatus.REJECTED,
                 "requires_embedding": False,  # 不生成向量
             })
             quality = quality.model_copy(update={

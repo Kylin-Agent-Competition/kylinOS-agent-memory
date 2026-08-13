@@ -62,14 +62,13 @@ class SourceBusinessStatus(str, Enum):
 
 
 class ProcessingStatus(str, Enum):
-    """内部处理流水线状态（§2.4，技术候选：pending/extracting/extracted/embedded/stored）。"""
+    """内部处理流水线状态（§2.4，技术候选：pending/extracting/extracted/embedded/stored，D3 契约五值）。"""
 
     PENDING = "pending"
     EXTRACTING = "extracting"
     EXTRACTED = "extracted"
     EMBEDDED = "embedded"
     STORED = "stored"
-    REJECTED = "rejected"  # 安全/质量门控拒绝（A 轨技术候选扩展）
 
 
 class MemoryType(str, Enum):
@@ -158,6 +157,7 @@ class MemorySourceEvent(BaseModel):
     sensitivity: SensitivityLevel = SensitivityLevel.NONE
     is_sensitive_matched: bool = False
     should_ignore: bool = False  # D3 安全契约：命中 S-01..S-04/S-08 必须 true
+    payload_security_checked: bool = False  # H1-mini: 上游 Raw Payload 安全前置检查标记
     requires_embedding: bool = True
     has_structured_payload: bool = False
     language_tag: Optional[str] = None
@@ -219,6 +219,7 @@ class NormalizedEvent(BaseModel):
     sensitivity: SensitivityLevel
     is_sensitive_matched: bool
     should_ignore: bool = False  # D3 安全契约：命中 S-01..S-04/S-08 必须 true
+    payload_security_checked: bool = False  # H1-mini: 上游 Raw Payload 安全前置检查标记
     requires_embedding: bool
     has_structured_payload: bool
     language_tag: Optional[str]

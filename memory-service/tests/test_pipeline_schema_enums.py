@@ -137,3 +137,40 @@ def test_should_ignore_propagates_to_normalized():
     """should_ignore 从输入事件传递到清洗输出。"""
     ev = cleaner.clean(_raw(should_ignore=True))
     assert ev.should_ignore is True
+
+
+# ── H3: ProcessingStatus 保持 D3 契约五值（无 rejected 扩展） ──
+
+def test_h3_rejected_not_in_processing_status():
+    """H3: ProcessingStatus 不得包含 rejected（共享契约五值）。"""
+    assert "rejected" not in ProcessingStatus._value2member_map_
+
+
+def test_h3_processing_status_exact_five_values():
+    """H3: ProcessingStatus 恰好五值（pending/extracting/extracted/embedded/stored）。"""
+    values = sorted(m.value for m in ProcessingStatus)
+    assert values == ["embedded", "extracted", "extracting", "pending", "stored"]
+
+
+def test_h3_security_rejection_uses_ignored_not_rejected():
+    """H3: 安全拒绝通过 source_business_status=ignored 表达，不依赖 processing_status=rejected。"""
+    from pipeline.pipeline import EventPipeline
+    from pipeline.quality import QualityScorer
+    from datetime import datetime, timezone
+    pipe = EventPipeline(scorer=QualityScorer(now=datetime(2026, 8, 13, 12, 0, 0,
+                                                          tzinfo=timezone.utc)))
+    raw = {
+        "event_id": "evt_h3", "user_id": "u1", "actor_id": "u1",
+        "source_type": "chat", "event_type": "user_message",
+        "consent_scope": "memory_only", "idempotency_key": "idem_h3",
+        "occurred_at": "2026-08-13T10:00:00+08:00", "captured_at": "2026-08-13T10:00:05Z",
+        "session_id": "sess_h3", "turn_id": "t1",
+        "content_summary": "api_key=sk-demo-1234567890abcdefghij 已配置",
+    }
+    result = pipe.process(raw)
+    # 安全拒绝：ignored + should_ignore + eligible=false（processing_status 不设 rejected）
+    assert result.event.source_business_status.value == "ignored"
+    assert result.event.should_ignore is True
+    assert result.eligible_for_extraction is False
+    assert result.event.processing_status.value in ("pending", "extracting",
+                                                     "extracted", "embedded", "stored")

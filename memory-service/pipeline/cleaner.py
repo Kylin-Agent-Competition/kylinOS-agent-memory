@@ -101,6 +101,7 @@ class EventCleaner:
             sensitivity=event.sensitivity,
             is_sensitive_matched=event.is_sensitive_matched,
             should_ignore=event.should_ignore,
+            payload_security_checked=event.payload_security_checked,
             requires_embedding=event.requires_embedding,
             has_structured_payload=event.has_structured_payload,
             language_tag=event.language_tag,
