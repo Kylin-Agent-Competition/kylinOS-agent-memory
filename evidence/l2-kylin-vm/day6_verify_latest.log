@@ -1,14 +1,17 @@
-62c4d8cb2f96b4d1a4822929c3b73abdd542e095
+1d98fdddf2eb7b91297e7941e175d99a8ac54c20
 --- git rev-parse HEAD (exit=0) ---
-stdout: 62c4d8cb2f96b4d1a4822929c3b73abdd542e095
-  [PASS] 被测 Commit = 62c4d8c（Day6 分支冻结 HEAD，Reviewer BLOCKED 全部修复后）
+stdout: 1d98fdddf2eb7b91297e7941e175d99a8ac54c20
+  [PASS] 被测 Commit = 1d98fdd（Day6 分支冻结 HEAD，Reviewer 第三轮 B1/B2/H1/H3 修复后）
 
 ===== Runtime 输出（Step 2 起） =====
-# Day6 麒麟 VM 验证原始日志（Reviewer R6 重跑，KYLIN_L2=1，真实 SDK）
-# 被测 Commit: 62c4d8cb2f96b4d1a4822929c3b73abdd542e095
+# Day6 麒麟 VM 验证原始日志（Reviewer 第三轮 L2 重跑，KYLIN_L2=1，真实 SDK）
+# 被测 Commit: 1d98fdddf2eb7b91297e7941e175d99a8ac54c20
 # Date: 2026-08-13
 # 环境: 银河麒麟 V11 x86_64, Python 3.12.3, pytest 9.1.1,
 #       pydantic 2.13.4（requirements.txt 声明）, kylin_embedding.cpython-312-x86_64-linux-gnu.so
+# 备注: VM /mnt/shared 为 vboxsf 共享挂载 WSL 仓库目录（hostPath=WSL 仓库，
+#       autoMountPoint=/mnt/shared），代码已与 WSL 侧 1d98fdd 同步，
+#       git fetch 在 VM 无外网环境下失败但本地分支已就绪，无需网络操作。
 
 ===== Step A: venv + 依赖（requirements.txt 声明） =====
 命令:
@@ -18,9 +21,9 @@ stdout: 62c4d8cb2f96b4d1a4822929c3b73abdd542e095
 Requirement already satisfied: pydantic<3,>=2 ... (2.13.4)
 Requirement already satisfied: pytest>=8 ... (9.1.1)
 Requirement already satisfied: pybind11>=2.11 ... (3.1.0)
-  [PASS] 依赖按 memory-service/requirements.txt（H4）安装，pydantic v2 可复现
+  [PASS] 依赖按 memory-service/requirements.txt（H4-old）安装，pydantic v2 可复现
 
-===== Step B: 全量 pytest（194 项，KYLIN_L2=1 无 Skip） =====
+===== Step B: 全量 pytest（209 项，KYLIN_L2=1 无 Skip） =====
 命令:
   cd /mnt/shared
   PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
@@ -28,7 +31,7 @@ Requirement already satisfied: pybind11>=2.11 ... (3.1.0)
   KYLIN_L2=1 \
   /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -v
 
-输出（原始，逐项）:
+输出（原始，逐项 209 项全部 PASSED）:
 memory-service/tests/test_embedding_provider_import.py::test_providers_package_importable PASSED
 memory-service/tests/test_embedding_provider_import.py::test_provider_contract_methods_exist PASSED
 memory-service/tests/test_embedding_provider_import.py::test_embedding_result_fields PASSED
@@ -104,6 +107,15 @@ memory-service/tests/test_extraction_provider.py::test_llm_sensitive_candidate_r
 memory-service/tests/test_extraction_provider.py::test_llm_exception_returns_empty PASSED
 memory-service/tests/test_extraction_provider.py::test_no_llm_rules_only PASSED
 memory-service/tests/test_extraction_provider.py::test_audit_does_not_contain_raw_text PASSED
+memory-service/tests/test_extraction_provider.py::test_b1_no_tool_results_llm_knowledge_rejected PASSED
+memory-service/tests/test_extraction_provider.py::test_b1_failure_tool_llm_knowledge_rejected PASSED
+memory-service/tests/test_extraction_provider.py::test_b1_cancelled_tool_llm_knowledge_rejected PASSED
+memory-service/tests/test_extraction_provider.py::test_b1_timeout_tool_llm_knowledge_rejected PASSED
+memory-service/tests/test_extraction_provider.py::test_b1_partial_tool_conservative_no_knowledge PASSED
+memory-service/tests/test_extraction_provider.py::test_b1_success_tool_llm_knowledge_allowed PASSED
+memory-service/tests/test_extraction_provider.py::test_b2_llm_candidate_has_memory_status_candidate PASSED
+memory-service/tests/test_extraction_provider.py::test_b2_llm_cannot_set_verified PASSED
+memory-service/tests/test_extraction_provider.py::test_b2_rule_candidates_are_candidate PASSED
 memory-service/tests/test_interpreter_exit.py::test_interpreter_exit_no_abort PASSED
 memory-service/tests/test_load_idempotent.py::test_start_close PASSED
 memory-service/tests/test_load_idempotent.py::test_context_manager_pass PASSED
@@ -150,6 +162,9 @@ memory-service/tests/test_pipeline_integration.py::test_pipeline_should_ignore_i
 memory-service/tests/test_pipeline_integration.py::test_pipeline_low_quality_not_eligible PASSED
 memory-service/tests/test_pipeline_integration.py::test_pipeline_deterministic PASSED
 memory-service/tests/test_pipeline_integration.py::test_pipeline_duplicate_detection_across_events PASSED
+memory-service/tests/test_pipeline_integration.py::test_h1_tool_result_without_payload_check_fail_closed PASSED
+memory-service/tests/test_pipeline_integration.py::test_h1_tool_result_with_payload_check_allowed PASSED
+memory-service/tests/test_pipeline_integration.py::test_h1_chat_event_not_affected_by_payload_flag PASSED
 memory-service/tests/test_pipeline_quality.py::test_score_full_event_high PASSED
 memory-service/tests/test_pipeline_quality.py::test_score_low_quality_not_eligible PASSED
 memory-service/tests/test_pipeline_quality.py::test_freshness_decay PASSED
@@ -189,6 +204,9 @@ memory-service/tests/test_pipeline_schema_enums.py::test_should_ignore_field_exi
 memory-service/tests/test_pipeline_schema_enums.py::test_ignored_status_requires_should_ignore PASSED
 memory-service/tests/test_pipeline_schema_enums.py::test_ignored_status_with_should_ignore_ok PASSED
 memory-service/tests/test_pipeline_schema_enums.py::test_should_ignore_propagates_to_normalized PASSED
+memory-service/tests/test_pipeline_schema_enums.py::test_h3_rejected_not_in_processing_status PASSED
+memory-service/tests/test_pipeline_schema_enums.py::test_h3_processing_status_exact_five_values PASSED
+memory-service/tests/test_pipeline_schema_enums.py::test_h3_security_rejection_uses_ignored_not_rejected PASSED
 memory-service/tests/test_pipeline_sensitive.py::test_clean_text_none PASSED
 memory-service/tests/test_pipeline_sensitive.py::test_detect_api_key_critical PASSED
 memory-service/tests/test_pipeline_sensitive.py::test_detect_jwt_critical PASSED
@@ -223,13 +241,11 @@ memory-service/tests/test_server_lifecycle.py::test_stopped_conn_thread_rejects 
 memory-service/tests/test_server_lifecycle.py::test_executor_not_recreated_by_stale_conn PASSED
 memory-service/tests/test_server_lifecycle.py::test_restart_reinitializes PASSED
 memory-service/tests/test_server_lifecycle.py::test_stop_joins_conn_threads PASSED
-  [PASS] 194 项全部 PASSED，0 skipped，0 failed
+  [PASS] 209 项全部 PASSED，0 skipped，0 failed（7.95s）
 
 ===== 汇总 =====
-全部验证通过（FAILURES=0）：194 passed / 0 skipped / 0 failed（6.32s）
+全部验证通过（FAILURES=0）：209 passed / 0 skipped / 0 failed（7.95s）
 - 真实 SDK 8 项（768 维/中文/空串/batch/envelope/health/降级）
 - Day4 生命周期/错误映射 47 项 + Day5 协议/Service/executor 23 项
-- Day6 新增 116 项（cleaner 14 / quality 7 / fingerprint 9 / sensitive 9 /
-  integration 7 / schema_enums 32 / extraction 19 / server_lifecycle 6 / 其他 13）
-- H4 依赖按 requirements.txt 声明安装（pydantic 2.13.4）
-本地对照：147 passed + 47 skipped（WSL 无 SDK skip）→ VM 194 全过，数字完全吻合
+- Day6 全量 131 项（含 Reviewer 第三轮新增：B1 6 / B2 3 / H1 3 / H3 3 = 15 项负向测试）
+本地对照：162 passed + 47 skipped（WSL 无 SDK skip）→ VM 209 全过，数字完全吻合

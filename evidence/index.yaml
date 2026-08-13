@@ -326,17 +326,17 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day6_verify_latest.log"
-    tested_commit: "62c4d8cb2f96b4d1a4822929c3b73abdd542e095"  # Day6 分支 tip（feat/day6-event-quality-pipeline）
-    evidence_commit: "62c4d8cb2f96b4d1a4822929c3b73abdd542e095"  # 证据日志与代码同分支提交（Day6 PR 合入后回填 evidence_commit 为证据提交 SHA）
-    commit: "62c4d8cb2f96b4d1a4822929c3b73abdd542e095"  # 历史兼容字段（= tested_commit）
+    tested_commit: "1d98fdddf2eb7b91297e7941e175d99a8ac54c20"  # Day6 分支 tip（feat/day6-event-quality-pipeline）
+    evidence_commit: "1d98fdddf2eb7b91297e7941e175d99a8ac54c20"  # 证据日志与代码同分支提交（Day6 PR 合入后回填 evidence_commit 为证据提交 SHA）
+    commit: "1d98fdddf2eb7b91297e7941e175d99a8ac54c20"  # 历史兼容字段（= tested_commit）
     date: "2026-08-13"
     reviewer: "pending"
-    limitations: "E 轨业务 Schema v0.1 仍为 DRAFT（部分字段 UNVERIFIED，待 C 轨麒麟取证）；ExtractionProvider 规则置信度（0.7/0.85）为基线值待 E 轨数据集评测调优；未接入真实 LLM（无凭证，接口预留）；TD-A-005-09 完整修复（Provider 延迟构造）留待独立 PR；TD-A-005-01 仍 Open（Bridge 内部无真正中断）"
-    checksum_sha256: "4cdf8edb6a18f06c941c1ec7eb0c3a81bd0bbcc56b39adc0ec0e2f3d47df399e"
+    limitations: "E 轨业务 Schema v0.1 仍为 DRAFT（部分字段 UNVERIFIED，待 C 轨麒麟取证）；ExtractionProvider 规则置信度（0.7/0.85）为基线值待 E 轨数据集评测调优；未接入真实 LLM（无凭证，接口预留）；TD-A-005-09 完整修复（Provider 延迟构造）留待独立 PR；TD-A-005-01 仍 Open（Bridge 内部无真正中断）；TD-A-D6-EXEC-RACE / TD-A-D6-TOOL-PARTIAL 已登记（Reviewer 第三轮收敛非阻断）"
+    checksum_sha256: "c5f6c74be8b6567ac8ed5abc222d06c859aa1c020033c68583b280d2196a0018"
     details: |
       Day6 多源接入/质量/安全管线（架构 v1 §6.2 六步 + Day3 ExtractionProvider 契约）麒麟 VM 验证
       （2026-08-13，被测 62c4d8c，Reviewer BLOCKED 全部修复后 R6 重跑）：
-      全量 pytest 194 passed / 0 skipped / 0 failed（Python 3.12.3, pydantic 2.13.4）：
+      全量 pytest 209 passed / 0 skipped / 0 failed（Python 3.12.3, pydantic 2.13.4）：
       - Day6 新增 60 项（cleaner 15 / quality 8 / fingerprint 9 / sensitive 9 / extraction 14 / integration 5）
       - 真实 SDK 8 项（768 维/中文/空串/batch/envelope/health/降级）
       - Day4 生命周期/错误映射 47 项 + Day5 协议/Service 23 项 + 基础 5 项
