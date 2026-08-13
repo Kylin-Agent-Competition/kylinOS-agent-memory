@@ -41,6 +41,8 @@ class EmbeddingUDSServer:
         self._server_sock: Optional[socket.socket] = None
         self._running = False
         self._stopped = False  # H3: stop 后拒绝新业务请求（防旧连接重建 executor）
+        self._conn_threads: list = []  # H3: 连接线程跟踪（stop 时 join，active worker 正确退出）
+        self._conn_lock = threading.Lock()
 
     def start(self) -> None:
         """启动 UDS 服务器（阻塞式 accept 循环）。"""
@@ -62,6 +64,8 @@ class EmbeddingUDSServer:
                 break
             # 每连接独立线程：连接间不互相阻塞
             t = threading.Thread(target=self._handle_conn, args=(conn,), daemon=True)
+            with self._conn_lock:
+                self._conn_threads.append(t)
             t.start()
 
     def stop(self) -> None:
@@ -75,6 +79,12 @@ class EmbeddingUDSServer:
         self._service.close()
         # 审查报告 #3：服务停止时释放 Bridge 线程池资源（幂等；再次 start 会惰性重建）
         shutdown_executor()
+        # H3: join 已建立的连接线程（recv 超时 0.5s → 最多等待 2s），
+        # 确保 active worker 正确退出；残留线程因 _stopped=True 无法再提交任务
+        with self._conn_lock:
+            threads, self._conn_threads = list(self._conn_threads), []
+        for t in threads:
+            t.join(timeout=2.0)
         if os.path.exists(self._socket_path):
             os.unlink(self._socket_path)
 
@@ -84,8 +94,18 @@ class EmbeddingUDSServer:
         buf = b""
         try:
             with conn:
+                # H3: 超时 recv——stop 后能及时退出（active worker 正确退出）
+                conn.settimeout(0.5)
                 while True:
-                    chunk = conn.recv(4096)
+                    try:
+                        chunk = conn.recv(4096)
+                    except socket.timeout:
+                        # 超时：若已停止则退出，否则继续等待
+                        if self._stopped:
+                            break
+                        continue
+                    except OSError:
+                        break
                     if not chunk:
                         break
                     # H3: recv 后检查——服务可能已在 recv 阻塞期间停止，

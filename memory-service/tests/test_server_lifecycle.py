@@ -39,19 +39,29 @@ class FakeProvider:
         return EmbeddingResult(vector=[0.1] * 768, dimension=768, l2_norm=1.0)
 
 
-def _send(sock: socket.socket, method: str, payload: dict) -> dict:
+def _send(sock: socket.socket, method: str, payload: dict, timeout: float = 3.0) -> dict:
     import json
     env = {"protocol_version": "1.0", "request_id": "req-t", "trace_id": "trc-t",
            "method": method, "deadline_ms": 5000, "payload": payload}
     body = json.dumps(env, ensure_ascii=False).encode("utf-8")
+    sock.settimeout(timeout)
     sock.sendall(struct.pack(">I", len(body)) + body)
     buf = b""
-    while len(buf) < 4:
-        buf += sock.recv(4096)
-    (n,) = struct.unpack(">I", buf[:4])
-    while len(buf) < 4 + n:
-        buf += sock.recv(4096)
-    return json.loads(buf[4:4 + n].decode("utf-8"))
+    try:
+        while len(buf) < 4:
+            chunk = sock.recv(4096)
+            if not chunk:
+                raise ConnectionError("conn closed by server")
+            buf += chunk
+        (n,) = struct.unpack(">I", buf[:4])
+        while len(buf) < 4 + n:
+            chunk = sock.recv(4096)
+            if not chunk:
+                raise ConnectionError("conn closed by server")
+            buf += chunk
+        return json.loads(buf[4:4 + n].decode("utf-8"))
+    except socket.timeout:
+        raise ConnectionError("recv timeout (server not responding after stop)")
 
 
 @pytest.fixture
@@ -90,7 +100,12 @@ def test_stop_rejects_new_business_request(server):
 
 
 def test_stopped_conn_thread_rejects(server):
-    """H3: 已建立连接的线程在 stop 后收到请求 → 拒绝（ERR_SERVICE_STOPPED）。"""
+    """H3: 已建立连接在 stop 后不得再获业务处理。
+
+    允许两种正确行为（都证明业务不再处理）：
+    - 返回 ERR_SERVICE_STOPPED（数据已到达，recv 后检查拦截）
+    - 连接关闭 / 超时（线程已退出，不再 recv/处理）
+    """
     srv, sock_path = server
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.connect(sock_path)
@@ -99,10 +114,13 @@ def test_stopped_conn_thread_rejects(server):
     assert resp["ok"] is True
     # stop 服务（连接线程仍在）
     srv.stop()
-    # 再发请求 → 连接线程检测到 stopped，返回 ERR_SERVICE_STOPPED 并关闭
-    resp = _send(s, "memory.embed", {"text": "after-stop"})
-    assert resp["ok"] is False
-    assert resp["error"]["code"] == "ERR_SERVICE_STOPPED"
+    # 再发请求 → 必须不被业务处理（ERR_SERVICE_STOPPED 或连接关闭/超时）
+    try:
+        resp = _send(s, "memory.embed", {"text": "after-stop"})
+        assert resp["ok"] is False
+        assert resp["error"]["code"] == "ERR_SERVICE_STOPPED"
+    except ConnectionError:
+        pass  # 连接关闭/超时 = 线程已退出，业务未处理（同样正确）
     s.close()
 
 
@@ -113,10 +131,13 @@ def test_executor_not_recreated_by_stale_conn(server):
     s.connect(sock_path)
     _send(s, "memory.embed", {"text": "before"})
     srv.stop()
-    # 旧连接发请求 → 被拒绝（ERR_SERVICE_STOPPED），不触发 handle_request/_submit_bridge
-    resp = _send(s, "memory.embed", {"text": "after"})
-    assert resp["ok"] is False
-    assert resp["error"]["code"] == "ERR_SERVICE_STOPPED"
+    # 旧连接发请求 → 必须不被业务处理（不触发 handle_request/_submit_bridge）
+    try:
+        resp = _send(s, "memory.embed", {"text": "after"})
+        assert resp["ok"] is False
+        assert resp["error"]["code"] == "ERR_SERVICE_STOPPED"
+    except ConnectionError:
+        pass  # 连接关闭/超时 = 未处理（executor 未被重建）
     assert srv._stopped is True
     s.close()
     shutdown_executor()  # 幂等清理
@@ -139,3 +160,22 @@ def test_restart_reinitializes(server):
     assert resp["result"]["dimension"] == 768
     s.close()
     srv.stop()
+
+
+def test_stop_joins_conn_threads(server):
+    """H3: stop() 后连接线程被 join（active worker 正确退出）。"""
+    srv, sock_path = server
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect(sock_path)
+    _send(s, "memory.embed", {"text": "before"})
+    # 记录当前连接线程
+    with srv._conn_lock:
+        assert len(srv._conn_threads) >= 1
+        threads = list(srv._conn_threads)
+    srv.stop()
+    # 连接线程应已退出（join 完成；recv 超时循环最多 0.5s）
+    assert all(not t.is_alive() for t in threads)
+    # 线程列表已清空
+    with srv._conn_lock:
+        assert srv._conn_threads == []
+    s.close()
