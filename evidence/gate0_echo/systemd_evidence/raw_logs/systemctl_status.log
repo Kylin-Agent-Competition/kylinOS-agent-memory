@@ -1,0 +1,12 @@
+● kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务
+     Loaded: loaded (/etc/systemd/system/kylin-memory-echo.service; enabled; preset: enabled)
+     Active: active (running) since Mon 2026-08-10 23:08:54 CST; 4s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 48657 (python3)
+      Tasks: 1 (limit: 9405)
+     Memory: 6.6M (peak: 6.9M)
+        CPU: 69ms
+     CGroup: /system.slice/kylin-memory-echo.service
+             └─48657 /usr/bin/python3 /home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server
+
+8月 10 23:08:54 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.

@@ -1,0 +1,121 @@
+8月 05 20:54:26 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 21:24:24 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 05 21:24:24 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 05 21:24:24 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 21:24:27 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 21:24:31 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=killed, status=9/KILL
+8月 05 21:24:31 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Failed with result 'signal'.
+8月 05 21:24:33 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 1.
+8月 05 21:24:34 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 21:25:55 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 05 21:25:55 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 05 21:25:55 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 21:25:58 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 21:26:03 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=killed, status=9/KILL
+8月 05 21:26:03 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Failed with result 'signal'.
+8月 05 21:26:05 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 1.
+8月 05 21:26:05 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 21:26:35 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 05 21:26:35 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 05 21:26:35 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 21:26:38 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 21:26:42 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=killed, status=9/KILL
+8月 05 21:26:42 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Failed with result 'signal'.
+8月 05 21:26:44 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 1.
+8月 05 21:26:44 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 22:09:32 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 05 22:09:33 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 05 22:09:33 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+-- Boot 7a7a252e6eb9465dab42481bca33ad31 --
+8月 05 22:09:52 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 22:43:14 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 05 22:43:14 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 05 22:43:14 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+-- Boot 65020b8d16a94dffaa7a039bfb38b7c4 --
+8月 05 22:43:31 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 22:51:08 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 05 22:51:09 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 05 22:51:09 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+-- Boot 126432bc0650427b9ad8efb39877ed4e --
+8月 05 15:03:39 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 23:19:42 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 05 23:19:42 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 05 23:19:42 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 23:19:44 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 05 23:21:50 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 05 23:21:50 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 05 23:21:50 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+-- Boot ff9927634e9941aea7f80b7689403ba7 --
+8月 05 23:22:05 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 00:14:08 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 06 00:14:08 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 06 00:14:08 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 00:14:09 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 00:14:42 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 06 00:14:43 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 06 00:14:43 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 00:18:14 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 00:18:17 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 06 00:18:17 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 06 00:18:17 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 00:18:18 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+-- Boot 22f7805f1fcf456e8e3a95a788b94fc2 --
+8月 06 00:32:56 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 08:47:20 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 06 08:47:20 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 06 08:47:20 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 08:47:57 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 08:51:17 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 06 08:51:17 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 06 08:51:17 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 09:49:45 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 09:50:50 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 06 09:50:50 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 06 09:50:50 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 10:13:31 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 10:14:35 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 06 10:14:35 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 06 10:14:35 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 11:01:14 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 06 11:02:19 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 06 11:02:19 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=exited, status=1/FAILURE
+8月 06 11:02:19 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Failed with result 'exit-code'.
+8月 06 11:02:19 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+-- Boot b9af807ec4f245e88e2d863fb92d84b5 --
+8月 07 13:22:04 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — 动态生成 (诊断用, 非正式 Unit).
+8月 07 13:23:13 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — 动态生成 (诊断用, 非正式 Unit)...
+8月 07 13:23:13 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=exited, status=1/FAILURE
+8月 07 13:23:13 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Failed with result 'exit-code'.
+8月 07 13:23:13 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — 动态生成 (诊断用, 非正式 Unit).
+-- Boot a268bb56eca9400ab89384a5b0a2a281 --
+8月 08 20:59:14 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 08 21:00:15 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 08 21:00:15 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 08 21:00:15 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 08 21:00:19 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 08 21:00:51 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 08 21:00:51 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 08 21:00:51 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 08 21:00:55 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 08 22:39:34 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=killed, status=9/KILL
+8月 08 22:39:34 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Failed with result 'signal'.
+8月 08 22:39:36 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 1.
+8月 08 22:39:36 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 08 22:39:38 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Main process exited, code=killed, status=9/KILL
+8月 08 22:39:38 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Failed with result 'signal'.
+8月 08 22:39:41 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Scheduled restart job, restart counter is at 2.
+8月 08 22:39:41 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 08 22:43:14 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 08 22:43:14 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 08 22:43:14 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+-- Boot b3ddfee05d0444a790591864caaaa2ed --
+8月 09 13:50:06 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 10 09:26:30 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 10 09:26:30 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 10 09:26:30 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+-- Boot 080cb2c04b704d9d99a889346ab5e760 --
+8月 10 14:56:15 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 10 23:08:50 ZhouYifan-pc systemd[1]: Stopping kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务...
+8月 10 23:08:50 ZhouYifan-pc systemd[1]: kylin-memory-echo.service: Deactivated successfully.
+8月 10 23:08:50 ZhouYifan-pc systemd[1]: Stopped kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.
+8月 10 23:08:54 ZhouYifan-pc systemd[1]: Started kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务.

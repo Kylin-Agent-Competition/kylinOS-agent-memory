@@ -1,5 +1,5 @@
 # R2+R3 修复后重新验证
-# Time: 2026-08-06T11:01:06
+# Time: 2026-08-07T13:21:59
 
 ## R2: KAIMING-STORE
 
@@ -9,35 +9,33 @@ Echo PID: running
 
 ### --method all 输出
 ```
-=========================================
- Kaiming Memory Client - v1.2 (robust JSON)
- Socket: /tmp/kylin-memory-echo/echo.sock
+n-memory-echo/echo.sock
  Method: all
  User: kylin-agent
 ============================================
-[2026-08-06T03:01:10Z] [INFO] TEST: echo method
-[2026-08-06T03:01:10Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"echo": "Hello from Kaiming AI Assistant", "received_at": "2026-08-06T03:01:10.532458+00:00"}, "server_ts": "2026-08-06T03:01:10.532474+00:00"}
+[2026-08-07T05:22:01Z] [INFO] TEST: echo method
+[2026-08-07T05:22:01Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"echo": "Hello from Kaiming AI Assistant", "received_at": "2026-08-07T05:22:01.783889+00:00"}, "server_ts": "2026-08-07T05:22:01.783904+00:00"}
 RESULT KAIMING-ECHO PASS
-[2026-08-06T03:01:10Z] [INFO] KAIMING-ECHO PASS: echo roundtrip payload=Hello from Kaiming AI Assistant
-[2026-08-06T03:01:10Z] [INFO] TEST: health method
-[2026-08-06T03:01:10Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"status": "healthy", "uptime_seconds": 2.065424680709839, "socket_path": "/tmp/kylin-memory-echo/echo.sock", "pid": 89825}, "server_ts": "2026-08-06T03:01:10.533776+00:00"}
+[2026-08-07T05:22:01Z] [INFO] KAIMING-ECHO PASS: echo roundtrip payload=Hello from Kaiming AI Assistant
+[2026-08-07T05:22:01Z] [INFO] TEST: health method
+[2026-08-07T05:22:01Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"status": "healthy", "uptime_seconds": 2.0712530612945557, "socket_path": "/tmp/kylin-memory-echo/echo.sock", "pid": 63290}, "server_ts": "2026-08-07T05:22:01.785015+00:00"}
 RESULT KAIMING-HEALTH PASS
-[2026-08-06T03:01:10Z] [INFO] KAIMING-HEALTH PASS: health query returned healthy
-[2026-08-06T03:01:10Z] [INFO] TEST: memory.retrieve method
-[2026-08-06T03:01:10Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"contexts": [], "total_found": 0, "elapsed_ms": 0.0, "fallback": false}, "server_ts": "2026-08-06T03:01:10.534850+00:00"}
+[2026-08-07T05:22:01Z] [INFO] KAIMING-HEALTH PASS: health query returned healthy
+[2026-08-07T05:22:01Z] [INFO] TEST: memory.retrieve method
+[2026-08-07T05:22:01Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "ok", "data": {"contexts": [], "total_found": 0, "elapsed_ms": 0.0, "fallback": false}, "server_ts": "2026-08-07T05:22:01.785855+00:00"}
 RESULT KAIMING-RETRIEVE PASS
-[2026-08-06T03:01:10Z] [INFO] KAIMING-RETRIEVE PASS: memory.retrieve returned empty context (Echo simulation)
-[2026-08-06T03:01:10Z] [INFO] TEST: memory.store method (verify protocol compatibility)
-[2026-08-06T03:01:10Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "", "trace_id": "", "status": "error", "data": {"error_code": "INTERNAL_ERROR", "message": "Protocol error occurred while processing request"}, "server_ts": "2026-08-06T03:01:10.543204+00:00"}
+[2026-08-07T05:22:01Z] [INFO] KAIMING-RETRIEVE PASS: memory.retrieve returned empty context (Echo simulation)
+[2026-08-07T05:22:01Z] [INFO] TEST: memory.store method (verify protocol compatibility)
+[2026-08-07T05:22:01Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_store_001", "trace_id": "kaiming_trc_store", "status": "error", "data": {"error_code": "UNSUPPORTED_METHOD", "message": "Requested method is not supported by this service"}, "server_ts": "2026-08-07T05:22:01.787881+00:00"}
 RESULT KAIMING-STORE PASS
-[2026-08-06T03:01:10Z] [INFO] KAIMING-STORE PASS: memory.store correctly returned status=error with error_code (Echo not implemented)
-[2026-08-06T03:01:10Z] [INFO] TEST: unknown method degradation
-[2026-08-06T03:01:10Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "error", "data": {"error_code": "UNSUPPORTED_METHOD", "message": "Requested method is not supported by this service"}, "server_ts": "2026-08-06T03:01:10.544431+00:00"}
+[2026-08-07T05:22:01Z] [INFO] KAIMING-STORE PASS: memory.store correctly returned status=error with error_code=UNSUPPORTED_METHOD (Echo not implemented)
+[2026-08-07T05:22:01Z] [INFO] TEST: unknown method degradation
+[2026-08-07T05:22:01Z] [INFO] Response: {"protocol_version": "1.0", "request_id": "kaiming_req_001", "trace_id": "kaiming_trc_001", "status": "error", "data": {"error_code": "UNSUPPORTED_METHOD", "message": "Requested method is not supported by this service"}, "server_ts": "2026-08-07T05:22:01.788516+00:00"}
 RESULT KAIMING-UNKNOWN PASS
-[2026-08-06T03:01:10Z] [INFO] KAIMING-UNKNOWN PASS: unknown method returned status=error (degradation normal)
-[2026-08-06T03:01:10Z] [INFO] TEST: 5 consecutive rapid requests (simulating high-frequency calls)
+[2026-08-07T05:22:01Z] [INFO] KAIMING-UNKNOWN PASS: unknown method correctly returned status=error with error_code=UNSUPPORTED_METHOD (degradation normal)
+[2026-08-07T05:22:01Z] [INFO] TEST: 5 consecutive rapid requests (simulating high-frequency calls)
 RESULT KAIMING-RAPID PASS
-[2026-08-06T03:01:10Z] [INFO] KAIMING-RAPID PASS: 5/5 rapid requests succeeded
+[2026-08-07T05:22:01Z] [INFO] KAIMING-RAPID PASS: 5/5 rapid requests succeeded
 
 ============================================
  Passed: 6 / Failed: 0
@@ -49,33 +47,31 @@ exit_code: 0
 - 'error_message' in response: False
 - 'message' in response: True
 - Service log PROTOCOL_ERROR: False
-- Service log Extra data: True
+- Service log Extra data: False
 ```
-  return _default_decoder.decode(s)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/json/decoder.py", line 340, in decode
-    raise JSONDecodeError("Extra data", s, end)
-json.decoder.JSONDecodeError: Extra data: line 1 column 270 (char 269)
-
-[2026-08-06T03:01:10.544Z] [INFO] Client connected
-[2026-08-06T03:01:10.544Z] [INFO] Request method=kaiming.custom.analyze request_id=kaiming_req_001
-[2026-08-06T03:01:10.544Z] [WARN] Unknown method: kaiming.custom.analyze
-[2026-08-06T03:01:10.544Z] [INFO] Response sent: status=error
-[2026-08-06T03:01:10.545Z] [INFO] Client connected
-[2026-08-06T03:01:10.545Z] [INFO] Request method=echo request_id=kaiming_req_001
-[2026-08-06T03:01:10.545Z] [INFO] Response sent: status=ok
-[2026-08-06T03:01:10.546Z] [INFO] Client connected
-[2026-08-06T03:01:10.546Z] [INFO] Request method=echo request_id=kaiming_req_001
-[2026-08-06T03:01:10.546Z] [INFO] Response sent: status=ok
-[2026-08-06T03:01:10.546Z] [INFO] Client connected
-[2026-08-06T03:01:10.546Z] [INFO] Request method=echo request_id=kaiming_req_001
-[2026-08-06T03:01:10.547Z] [INFO] Response sent: status=ok
-[2026-08-06T03:01:10.547Z] [INFO] Client connected
-[2026-08-06T03:01:10.547Z] [INFO] Request method=echo request_id=kaiming_req_001
-[2026-08-06T03:01:10.547Z] [INFO] Response sent: status=ok
-[2026-08-06T03:01:10.548Z] [INFO] Client connected
-[2026-08-06T03:01:10.548Z] [INFO] Request method=echo request_id=kaiming_req_001
-[2026-08-06T03:01:10.548Z] [INFO] Response sent: status=ok
+8-07T05:22:01.786Z] [INFO] Client connected
+[2026-08-07T05:22:01.786Z] [INFO] Request method=memory.store request_id=kaiming_store_001
+[2026-08-07T05:22:01.787Z] [WARN] Unknown method: memory.store
+[2026-08-07T05:22:01.787Z] [INFO] Response sent: status=error
+[2026-08-07T05:22:01.788Z] [INFO] Client connected
+[2026-08-07T05:22:01.788Z] [INFO] Request method=kaiming.custom.analyze request_id=kaiming_req_001
+[2026-08-07T05:22:01.788Z] [WARN] Unknown method: kaiming.custom.analyze
+[2026-08-07T05:22:01.788Z] [INFO] Response sent: status=error
+[2026-08-07T05:22:01.789Z] [INFO] Client connected
+[2026-08-07T05:22:01.789Z] [INFO] Request method=echo request_id=kaiming_req_001
+[2026-08-07T05:22:01.789Z] [INFO] Response sent: status=ok
+[2026-08-07T05:22:01.789Z] [INFO] Client connected
+[2026-08-07T05:22:01.790Z] [INFO] Request method=echo request_id=kaiming_req_001
+[2026-08-07T05:22:01.790Z] [INFO] Response sent: status=ok
+[2026-08-07T05:22:01.791Z] [INFO] Client connected
+[2026-08-07T05:22:01.791Z] [INFO] Request method=echo request_id=kaiming_req_001
+[2026-08-07T05:22:01.791Z] [INFO] Response sent: status=ok
+[2026-08-07T05:22:01.792Z] [INFO] Client connected
+[2026-08-07T05:22:01.792Z] [INFO] Request method=echo request_id=kaiming_req_001
+[2026-08-07T05:22:01.792Z] [INFO] Response sent: status=ok
+[2026-08-07T05:22:01.792Z] [INFO] Client connected
+[2026-08-07T05:22:01.793Z] [INFO] Request method=echo request_id=kaiming_req_001
+[2026-08-07T05:22:01.793Z] [INFO] Response sent: status=ok
 
 ```
 
@@ -83,93 +79,100 @@ json.decoder.JSONDecodeError: Extra data: line 1 column 270 (char 269)
 
 ### Lifecycle test output
 ```
-[11:01:11] ==========================================
-[11:01:11]  Phase C: Systemd 完整生命周期测试
-[11:01:11]  服务: kylin-memory-echo
-[11:01:11]  Socket (RuntimeDirectory): /run/kylin-memory-echo/echo.sock
-[11:01:11]  状态: UNVERIFIED (生产系统未测试)
-[11:01:11]  日志: /home/kylin-agent/kylin-memory-echo/logs/systemd_test_20260806_110111.log
-[11:01:11] ==========================================
-[11:01:11] 
-[11:01:11] ========== 准备 Systemd Unit 文件 ==========
-[11:01:11]   ✅ Unit 文件已动态生成 (RuntimeDirectory): /etc/systemd/system/kylin-memory-echo.service
-[11:01:11] 
-[11:01:11] ========== 清理旧路径残留 ==========
-[11:01:12]   ✅ 旧 /tmp 路径残留已清理
-[11:01:12] 
-[11:01:12] --- Step 1: daemon-reload ---
-[11:01:13]   ✅ daemon-reload 成功
-[11:01:13] 
-[11:01:13] --- Step 2: enable ---
-[11:01:14]   ✅ enable 成功
-[11:01:14]   ✅ symlink 已创建
-[11:01:14] 
-[11:01:14] --- Step 3: start ---
-[11:01:14]   ✅ start 命令成功
-[11:01:17] 
-[11:01:17] --- Step 4: 进程验证 ---
-[11:01:17]   ✅ 进程存活 (MainPID=90271)
-[11:01:17] 
-[11:01:17] --- Step 5: RuntimeDirectory ---
-[11:01:17]   ✅ RuntimeDirectory 已创建 (/run/kylin-memory-echo)
+[13:22:02] ==========================================
+[13:22:02]  Phase C: Systemd 完整生命周期测试
+[13:22:02]  服务: kylin-memory-echo
+[13:22:02]  Socket (RuntimeDirectory): /run/kylin-memory-echo/echo.sock
+[13:22:02]  状态: UNVERIFIED (生产系统未测试)
+[13:22:02]  日志: /home/kylin-agent/kylin-memory-echo/logs/systemd_test_20260807_132202.log
+[13:22:02] ==========================================
+[13:22:02] 
+[13:22:02] ========== 准备 Systemd Unit 文件 ==========
+[13:22:02] [PACKAGED_UNIT_VALIDATION] 开始检查仓库正式 Unit...
+[13:22:02]   ❌ PACKAGED_UNIT_VALIDATION=FAIL: 仓库正式 Unit 不存在 (/home/kylin-agent/kylin-memory-echo/share/kylin-memory-echo.service)
+[13:22:02]   ⚠️  请确保 packaging/systemd/kylin-memory-echo.service 已部署到服务器
+[13:22:02]   ❌ PACKAGED_UNIT_VALIDATION=FAIL (仓库正式 Unit 缺失)
+[13:22:02]   [诊断] 动态生成临时 Unit 供人工调试 (此步骤不计入 PASS)...
+[13:22:02]   [诊断] 动态 Unit 已生成: /etc/systemd/system/kylin-memory-echo.service (不计入 PACKAGED_UNIT_VALIDATION)
+[13:22:02] 
+[13:22:02] ========== 清理旧路径残留 ==========
+[13:22:03]   ✅ 旧路径残留已通过 systemctl stop 清理 (非 pkill)
+[13:22:03] 
+[13:22:03] --- Step 1: daemon-reload ---
+[13:22:04]   ✅ daemon-reload 成功
+[13:22:04] 
+[13:22:04] --- Step 2: enable ---
+[13:22:04]   ✅ enable 成功
+[13:22:04]   ✅ symlink 已创建
+[13:22:04] 
+[13:22:04] --- Step 3: start ---
+[13:22:04]   ✅ start 命令成功
+[13:22:07] 
+[13:22:07] --- Step 4: 进程验证 ---
+[13:22:07]   ✅ 进程存活 (MainPID=63721)
+[13:22:07] 
+[13:22:07] --- Step 5: RuntimeDirectory ---
+[13:22:07]   ✅ RuntimeDirectory 已创建 (/run/kylin-memory-echo)
 总计 0
-drwxr-xr-x  2 kylin-agent kylin-agent   60  8月 6日 11:01 .
-drwxr-xr-x 39 root        root        1160  8月 6日 11:01 ..
-srwx------  1 kylin-agent kylin-agent    0  8月 6日 11:01 echo.sock
-[11:01:17] 
-[11:01:17] --- Step 6: Socket 验证 ---
-[11:01:17]   ✅ Socket 存在 (/run/kylin-memory-echo/echo.sock)
-[11:01:17]     RuntimeDirectory socket: perm=700, owner=kylin-agent:kylin-agent
-[11:01:17] 
-[11:01:17] --- Step 7: status ---
-● kylin-memory-echo.service - Kylin Memory Echo Server — UDS 最小验证服务
+drwxr-xr-x  2 kylin-agent kylin-agent   60  8月 7日 13:22 .
+drwxr-xr-x 39 root        root        1140  8月 7日 13:22 ..
+srwx------  1 kylin-agent kylin-agent    0  8月 7日 13:22 echo.sock
+[13:22:07] 
+[13:22:07] --- Step 6: Socket 验证 ---
+[13:22:07]   ✅ Socket 存在 (/run/kylin-memory-echo/echo.sock)
+[13:22:07]     RuntimeDirectory socket: perm=700, owner=kylin-agent:kylin-agent
+[13:22:08] 
+[13:22:08] --- Step 7: status ---
+● kylin-memory-echo.service - Kylin Memory Echo Server — 动态生成 (诊断用, 非正式 Unit)
      Loaded: loaded (/etc/systemd/system/kylin-memory-echo.service; enabled; preset: enabled)
-     Active: active (running) since Thu 2026-08-06 11:01:14 CST; 3s ago
-   Main PID: 90271 (python3)
+     Active: active (running) since Fri 2026-08-07 13:22:04 CST; 3s ago
+   Main PID: 63721 (python3)
       Tasks: 1 (limit: 9405)
-     Memory: 6.6M (peak: 6.8M)
-        CPU: 84ms
+     Memory: 6.7M (peak: 6.8M)
+        CPU: 83ms
      CGroup: /system.slice/kylin-memory-echo.service
-             └─90271 /usr/bin/python3 /home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server
+             └─63721 /usr/bin/python3 /home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server
 
-[11:01:17]   ✅ status: active (running)
-[11:01:17] 
-[11:01:17] --- Step 8: UDS 通信 (RuntimeDirectory socket) ---
-[11:01:17]     Using client: /home/kylin-agent/kylin-memory-echo/bin/kaiming_memory_client
-[11:01:17]     Using socket: /run/kylin-memory-echo/echo.sock
-[11:01:17]     Running kysec authorize for socket=/run/kylin-memory-echo/echo.sock...
-[11:01:17]     Running as kylin-agent (socket owner)
-[11:01:48]     C++ client echo failed, attempting Python UDS fallback...
-[11:01:48]   ✅ UDS echo 通过 Python 回退方案成功
-[11:02:19]     C++ client health failed, attempting Python UDS fallback...
-[11:02:19]   ✅ UDS health 通过 Python 回退方案成功
-[11:02:19] 
-[11:02:19] --- Step 9: stop ---
-[11:02:19]   ✅ stop 命令成功
-[11:02:21]   ✅ 进程已终止
-[11:02:21] 
-[11:02:21] --- Step 10: disable ---
-[11:02:22]   ✅ disable 成功
-[11:02:22]   ✅ symlink 已清理
-[11:02:22] 
-[11:02:22] --- Step 11: uninstall ---
-[11:02:22]   ✅ Unit 文件已删除 (uninstall)
-[11:02:22]   ✅ systemd 已确认注销服务
-[11:02:22] 
-[11:02:22] ==========================================
-[11:02:22]  Phase C 汇总
-[11:02:22] ==========================================
-[11:02:22]   通过: 18
-[11:02:22]   失败: 0
-[11:02:22]   总计: 18
-[11:02:22]   状态: UNVERIFIED (生产系统未测试)
-[11:02:22]   日志: /home/kylin-agent/kylin-memory-echo/logs/systemd_test_20260806_110111.log
-[11:02:22] ==========================================
-[11:02:22]   ✅ Systemd 生命周期全部通过! (直实验证, 生产系统待验证)
+[13:22:08]   ✅ status: active (running)
+[13:22:08] 
+[13:22:08] --- Step 8: UDS 通信 (RuntimeDirectory socket) ---
+[13:22:08]   [SYSTEMD_SERVER_LIFECYCLE] 服务端启停验证...
+[13:22:08]   ✅ SYSTEMD_SERVER_LIFECYCLE=PASS (systemd 报告 active)
+[13:22:08]     Using client: /home/kylin-agent/kylin-memory-echo/bin/kaiming_memory_client
+[13:22:08]     Using socket: /run/kylin-memory-echo/echo.sock
+[13:22:08]     Running kysec authorize for socket=/run/kylin-memory-echo/echo.sock...
+[13:22:08]     Running as kylin-agent (socket owner)
+[13:22:41]   ❌ CPP_CLIENT_OVER_SYSTEMD: echo FAIL
+[13:23:12]   ❌ CPP_CLIENT_OVER_SYSTEMD: health FAIL
+[13:23:12]   [PYTHON_DIAGNOSTIC_FALLBACK] C++ Client 失败, 执行 Python 诊断 (不计入 C++ 结果)...
+[13:23:12]   [PYTHON_DIAGNOSTIC_FALLBACK] Python 诊断: echo PASS, health PASS (仅供诊断, C++ 结果不受影响)
+[13:23:13] 
+[13:23:13] --- Step 9: stop ---
+[13:23:13]   ✅ stop 命令成功
+[13:23:15]   ✅ 进程已终止
+[13:23:15] 
+[13:23:15] --- Step 10: disable ---
+[13:23:15]   ✅ disable 成功
+[13:23:15]   ✅ symlink 已清理
+[13:23:15] 
+[13:23:15] --- Step 11: uninstall ---
+[13:23:15]   ✅ Unit 文件已删除 (uninstall)
+[13:23:16]   ✅ systemd 已确认注销服务
+[13:23:16] 
+[13:23:16] ==========================================
+[13:23:16]  Phase C 汇总
+[13:23:16] ==========================================
+[13:23:16]   通过: 16
+[13:23:16]   失败: 3
+[13:23:16]   总计: 19
+[13:23:16]   状态: UNVERIFIED (生产系统未测试)
+[13:23:16]   日志: /home/kylin-agent/kylin-memory-echo/logs/systemd_test_20260807_132202.log
+[13:23:16] ==========================================
+[13:23:16]   ❌ 有 3 项失败
 
 ```
 STDERR: 输入密码
-exit_code: 0
+exit_code: 1
 - Step 8 UDS echo PASS: False
 - Step 11 '已确认注销服务': True
-- Pass/Fail: 18/0
+- Pass/Fail: 16/3
