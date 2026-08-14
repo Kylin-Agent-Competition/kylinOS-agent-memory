@@ -52,6 +52,7 @@ from pipeline.fingerprint import content_fingerprint
 from pipeline.sensitive import detect_sensitivity, is_high_or_critical
 from providers.preference_rules import (
     PREFERENCE_EXPLICIT_PATTERN,
+    PREFERENCE_INSTRUCTION_PATTERN,
     classify_preference_category,
     classify_temporality,
     derive_preference_key,
@@ -148,7 +149,6 @@ _VALID_CATEGORIES = {"presentation", "tool_selection", "workflow",
                      "safety", "environment", "scene_specific"}
 _VALID_SCOPES = {"global", "topic", "tool", "session", "time_window"}
 _VALID_EXPLICITNESS = {"explicit", "implicit"}
-_DEFAULT_CONFIDENCE = 0.5  # 非法 confidence 的降级默认值
 
 
 def _degrade_optional_fields(raw: Dict[str, Any], kind: str,
@@ -156,22 +156,16 @@ def _degrade_optional_fields(raw: Dict[str, Any], kind: str,
                              audit: List[Dict[str, Any]]) -> Dict[str, Any]:
     """可选字段非法值降级：剥离/替换为默认值 + audit（D7）。
 
-    - confidence 非数值/越界 → 默认 0.5 + audit
     - category/scope/explicitness 非枚举 → 默认值 + audit
     - is_temporary/should_persist 非 bool → 剥离（用 Pydantic 默认值）+ audit
 
-    仅作用于偏好路径的可选字段；必需字段（key/value/evidence）缺失或类型错误
-    仍由 Pydantic 校验拒绝（R4：非法候选不进入业务真源）。confidence 缺失由
-    Pydantic 拒绝（无默认值），仅非法值（非数值/越界）降级。
+    仅作用于偏好路径的可选字段；必需字段（key/value/evidence/confidence）
+    缺失或类型错误仍由 Pydantic 校验拒绝（R4：非法候选不进入业务真源）。
+    confidence 为契约 required 字段（Day3 契约 + E 轨 §3.2 confidence_score），
+    非法值（非数值/越界/缺失）一律 candidate-level reject，不做默认值替换
+    （PR #36 HIGH-02：不得把非法 required 字段重新制造成合法业务值）。
     """
     out = dict(raw)
-    conf = out.get("confidence")
-    if conf is not None and (
-            isinstance(conf, bool) or not isinstance(conf, (int, float))
-            or not (0.0 <= float(conf) <= 1.0)):
-        out["confidence"] = _DEFAULT_CONFIDENCE
-        audit.append({"kind": kind, "event_id": trusted_id,
-                      "error": "field-degraded:confidence"})
     for fname, valid, default in (
             ("category", _VALID_CATEGORIES, "presentation"),
             ("scope", _VALID_SCOPES, "session"),
@@ -196,44 +190,71 @@ def _degrade_optional_fields(raw: Dict[str, Any], kind: str,
 
 def _extract_preferences_rules(event: TurnFinalizedEvent,
                                source_event_id: str) -> List[PreferenceCandidate]:
-    """规则路径：从用户文本提取显式偏好候选（真实规则，可解释，独立工作）。
+    """规则路径：从用户文本提取偏好候选（真实规则，可解释，独立工作）。
 
     D7：类别识别（TABLE 19）、临时/长期（TABLE 20）、scope 推导（E 轨 §2.9）、
     类别键派生、显式置信度基线——全部来自 providers/preference_rules.py。
+
+    两阶段规则入口（PR #36 HIGH-01 修复）：
+    1. 显式偏好词（PREFERENCE_EXPLICIT_PATTERN，如 我喜欢/以后/希望…）
+    2. 显式词未命中时，尝试指令式表达（PREFERENCE_INSTRUCTION_PATTERN，
+       如 TABLE 20 原句 "这次只用三句话回答"——时态限定词 + 指令动词）
+    两阶段均非硬编码特判；阶段 1 命中时不再执行阶段 2（避免重复候选）。
 
     R5 安全：候选 value/evidence 若命中 high/critical 敏感原文 → 拒绝
     （不进入正常候选；由调用方决定审计）。
     """
     candidates: List[PreferenceCandidate] = []
     text = event.user_text or ""
-    for m in PREFERENCE_EXPLICIT_PATTERN.finditer(text):
-        value = m.group(2).strip("，。！？,.!?；; ")
-        if not value:
-            continue
-        evidence = text[:120]
-        # R5 防御性敏感复核：候选内容含高敏原文 → 不进入正常候选
-        if _contains_high_sensitivity(value) or _contains_high_sensitivity(evidence):
-            continue
-        category = classify_preference_category(text)
-        scope = derive_preference_scope(text)
-        is_temporary, should_persist = classify_temporality(text)
-        key = derive_preference_key(category, text)
-        confidence = rule_confidence(
-            is_temporary=is_temporary,
-            has_long_term_marker=has_long_term_marker(text))
-        candidates.append(PreferenceCandidate(
-            key=key,
-            value=value,
-            category=category,
-            scope=scope,
-            confidence=confidence,
-            explicitness="explicit",  # 规则路径仅处理显式表述（E 轨 §2.5）
-            is_temporary=is_temporary,
-            should_persist=should_persist,
-            evidence=evidence,
-            source_event_id=source_event_id,
-        ))
+    explicit_matches = list(PREFERENCE_EXPLICIT_PATTERN.finditer(text))
+    if explicit_matches:
+        for m in explicit_matches:
+            cand = _build_preference_rule_candidate(
+                m.group(2), text, source_event_id)
+            if cand is not None:
+                candidates.append(cand)
+        return candidates
+    # TABLE 20 临时指令式表达：显式偏好词未命中时启用指令模式
+    for m in PREFERENCE_INSTRUCTION_PATTERN.finditer(text):
+        cand = _build_preference_rule_candidate(
+            m.group(1), text, source_event_id)
+        if cand is not None:
+            candidates.append(cand)
     return candidates
+
+
+def _build_preference_rule_candidate(value: str, text: str,
+                                     source_event_id: str
+                                     ) -> Optional[PreferenceCandidate]:
+    """规则路径候选构造（显式/指令两阶段共用）。
+
+    R5 安全：候选 value/evidence 命中 high/critical 敏感原文 → None（拒绝）。
+    """
+    value = value.strip("，。！？,.!?；; ")
+    if not value:
+        return None
+    evidence = text[:120]
+    if _contains_high_sensitivity(value) or _contains_high_sensitivity(evidence):
+        return None
+    category = classify_preference_category(text)
+    scope = derive_preference_scope(text)
+    is_temporary, should_persist = classify_temporality(text)
+    key = derive_preference_key(category, text)
+    confidence = rule_confidence(
+        is_temporary=is_temporary,
+        has_long_term_marker=has_long_term_marker(text))
+    return PreferenceCandidate(
+        key=key,
+        value=value,
+        category=category,
+        scope=scope,
+        confidence=confidence,
+        explicitness="explicit",  # 规则路径仅处理显式/明确指令表述（E 轨 §2.5）
+        is_temporary=is_temporary,
+        should_persist=should_persist,
+        evidence=evidence,
+        source_event_id=source_event_id,
+    )
 
 
 def _extract_knowledge_rules(event: TurnFinalizedEvent,
@@ -693,6 +714,14 @@ class ExtractionProvider:
                 "error": f"validation: {loc}: {msg}",
             })
             return None
+
+        # MEDIUM-01（PR #36）：is_temporary=True && should_persist=True 业务矛盾
+        # → 按 E 轨 §3.2 语义规范化（临时指令不得持久化为正式偏好）+ audit。
+        if kind == "preference" and cand.is_temporary and cand.should_persist:
+            cand = cand.model_copy(update={"should_persist": False})
+            self._audit.append({"kind": kind,
+                                "event_id": trusted_source_event_id,
+                                "error": "temporary-implies-no-persist"})
 
         # R5: 敏感复核（候选正文含 high/critical 敏感原文 → 拒绝）
         # 与规则路径（_extract_preferences_rules 复核 value+evidence）一致：

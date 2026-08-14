@@ -22,7 +22,7 @@ Day6（PR #27）已交付统一事件清洗/质量评分管线与结构化抽取
   - `_degrade_optional_fields`：可选字段非法值 → 默认值+audit（含 unhashable list/dict 值不崩溃）
   - 评测输出：`PreferenceExtractionOutput` / `to_evaluation_record` / `export_preference_records`
 - **`memory-service/tests/test_preference_rules.py`（新增，24 项）**：六类/临时长期/scope/key/explicitness/置信度/确定性
-- **`memory-service/tests/test_extraction_provider_d7.py`（新增，31 项）**：规则深化、缓存（命中/深拷贝/空结果/串键隔离/TTL）、超时（降级/busy-skip）、字段降级（含 unhashable）、协同去重（含 dedup-llm/conflict-llm 标签）、评测输出、close 幂等、R5 evidence/conditions 复核
+- **`memory-service/tests/test_extraction_provider_d7.py`（新增，38 项）**：规则深化（含 TABLE 20 原句 E2E、指令式入口泛化）、缓存（命中/深拷贝/空结果/串键隔离/TTL/TTL=0/cache hit 不重复调 LLM）、超时（降级/busy-skip/timeout=0）、字段降级（含 unhashable）、**confidence 非法值 reject（HIGH-02）**、矛盾规范化（MEDIUM-01）、协同去重（含 dedup-llm/conflict-llm 标签）、评测输出、close 幂等、R5 evidence/conditions 复核
 - **`docs/day7/01_task_card.md`（新增）**：D7-A 任务卡（含契约演进记录）
 - **`docs/project-management/session-handoff-20260814.md`（新增）**：Day7 交接文档
 - **`evidence/l1/day7_pref_extraction_local.log`、`evidence/l2-kylin-vm/day7_verify_latest.log`（新增）**：L1/L2 证据日志
@@ -42,6 +42,7 @@ Day6（PR #27）已交付统一事件清洗/质量评分管线与结构化抽取
 - 任务卡：`docs/day7/01_task_card.md`（D7-A，Reviewer：D 主审；安全/评测影响 E 补审）
 - TD 新增：无（缓存/线程生命周期风险点有测试覆盖，未登记）
 - 保持 Open（本 PR 不涉及）：TD-A-D6-LLM-TOOL-INPUT（knowledge LLM 输入绑定，D8 深化）、TD-A-D6-TOOL-PARTIAL、TD-A-D6-EXEC-RACE（全量 -v 本地一次偶发 test_server_lifecycle 复跑即绿；VM 两次 262/264 均无此现象）
+- **PR #36 REWORK 新增登记**：TD-A-D7-CACHE-USER-DIMENSION（缓存键缺 user 维度，MEDIUM-02）、TD-A-D7-LLM-HANG-DEGRADE（LLM 永久挂死 → 永久 busy-skip，MEDIUM-03）——见 docs/technical-debt/TECHNICAL_DEBT_REGISTER.md
 
 ## 架构与能力边界依据
 
@@ -64,11 +65,11 @@ Day6（PR #27）已交付统一事件清洗/质量评分管线与结构化抽取
 | memory-service/providers/preference_rules.py | 新增（246 行） | 偏好规则纯函数模块 |
 | memory-service/providers/extraction_provider.py | 修改（+414/-49） | v0.2 候选/规则接入/缓存/超时/字段降级/协同/评测输出 |
 | memory-service/tests/test_preference_rules.py | 新增（24 项） | 规则单元测试 |
-| memory-service/tests/test_extraction_provider_d7.py | 新增（31 项） | D7 深化测试 |
+| memory-service/tests/test_extraction_provider_d7.py | 新增（38 项） | D7 深化测试（含 PR #36 修复测试） |
 | docs/day7/01_task_card.md | 新增 | D7-A 任务卡 |
 | docs/project-management/session-handoff-20260814.md | 新增 | Day7 交接文档 |
 | evidence/index.yaml | 修改 | D7-A-PREF-EXTRACTION 条目 |
-| evidence/l1/day7_pref_extraction_local.log | 新增 | 本地 L1 证据（217 passed + 47 skipped） |
+| evidence/l1/day7_pref_extraction_local.log | 新增 | 本地 L1 证据（224 passed + 47 skipped） |
 | evidence/l2-kylin-vm/day7_verify_latest.log | 新增 | VM L2 证据（264 passed / 0 skipped） |
 
 ## 数据库与配置变化
@@ -88,18 +89,24 @@ cd memory-service && /tmp/day7-venv/bin/python -m compileall -q providers/ tests
 
 ```bash
 cd memory-service && /tmp/day7-venv/bin/python -m pytest tests/ -q
-# → 217 passed, 47 skipped in 3.76s（skipped 为 VM/SDK 专属，WSL 无 SDK）
+# → 224 passed, 47 skipped in 3.79s（skipped 为 VM/SDK 专属，WSL 无 SDK）
 # 3 次乱序文件顺序运行均通过（顺序无关）
 # 证据：evidence/l1/day7_pref_extraction_local.log
 ```
 
 ### 安全与假实现审查
 
-- 独立审查 1 轮（isolated review）+ 架构红线自查 1 轮，共修复 4 项并补测试：
-  1. unhashable 字段值（list/dict）在降级时不抛 TypeError（`test_field_degrade_unhashable_value_no_crash`）
-  2. LLM 超时后 in-flight 未完成 → `llm-busy-skip` 不排队拖死，完成后自动恢复（`test_llm_busy_skip_after_timeout`）
-  3. LLM 候选间去重/冲突审计标签区分 `dedup-llm`/`conflict-llm`（`test_coop_llm_vs_llm_dedup_label`）
-  4. **R5 复核收紧**：LLM 路径敏感复核扩展到 evidence/conditions（与规则路径 value+evidence 一致，防敏感 fail-open）（`test_llm_sensitive_evidence_rejected` / `test_llm_sensitive_conditions_rejected`）
+- 独立审查 1 轮（isolated review）+ 架构红线自查 1 轮 + **PR #36 REWORK 复审修复**：
+  - **HIGH-01**（TABLE 20 临时原句无法主链抽取）：规则入口两阶段——显式偏好词 + 指令式模式
+    （`PREFERENCE_INSTRUCTION_PATTERN`：时态限定词 + 指令动词，非硬编码特判）；原句
+    “这次只用三句话回答”经 `extract_preferences()` 主链产出候选（is_temporary/scope=session/
+    memory_status=candidate），新增原句 E2E + 泛化测试，长期原句无回归
+  - **HIGH-02**（required confidence 非法值被降级 0.5）：confidence 为契约 required 字段——
+    缺失/类型非法/越界一律 candidate-level reject + validation audit（删除 `_DEFAULT_CONFIDENCE`），
+    参数化测试 5 种非法形态（missing/"high"/-0.1/1.1/2.0）
+  - **MEDIUM-01**（is_temporary && should_persist 矛盾）：按 E 轨 §3.2 规范化
+    （is_temporary=True → should_persist=False）+ audit（temporary-implies-no-persist）
+  - 前一轮 4 项（unhashable/llm-busy-skip/dedup-llm 标签/R5 evidence-conditions 复核）保持
 - 无 Mock 冒充 Runtime：降级 = 真实规则结果或空列表（非固定样例，TABLE 54）
 - 无密钥泄露：audit 不含正文原文（`test_audit_does_not_contain_raw_text`）
 - 无硬编码配置：规则置信度/关键词为基线值，标注待 E 轨数据集评测调优
@@ -111,7 +118,8 @@ cd /mnt/shared && PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-ser
   LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 \
   /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -q
 # → 264 passed in 8.38s（0 failed / 0 skipped）
-# 被测 commit: e3a3f9e395a902b2382f97fcea7d7765f18e010c
+# 被测 commit: e3a3f9e395a902b2382f97fcea7d7765f18e010c（PR #36 修复前；
+#   PR #36 HIGH-01/HIGH-02/MEDIUM-01 修复后生产代码已变更，L2 待用最终 commit 重跑）
 # 证据：evidence/l2-kylin-vm/day7_verify_latest.log（checksum 0270469f…）
 # index.yaml: D7-A-PREF-EXTRACTION（HOST_VERIFIED / E4，tested_commit e3a3f9e）
 ```
@@ -129,9 +137,12 @@ cd /mnt/shared && PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-ser
 ## 已知限制
 
 - 未接入真实 LLM（无模型凭证；`LLMExtractor` 接口预留，规则路径独立工作）——`TD-A-D6-LLM-TOOL-INPUT` 验收条件保持 Open
+- **implicit 未实现真实推断（LOW-01）**：`explicitness` 仅保留 Schema 枚举与 Provider 接口能力，本阶段未实现基于多 Turn 行为证据的隐式偏好推断（规则路径始终生成 explicit）
+- **缓存键缺 user 维度（MEDIUM-02）**：登记 TD-A-D7-CACHE-USER-DIMENSION——TurnFinalizedEvent 为 Day3 冻结契约（无 user_id），键 = kind+source_event_id+内容指纹；单用户端侧场景运行，事件契约加 user_id 后缓存键必须升级，多用户启用前必须关闭该 TD
+- **LLM 永久挂死风险（MEDIUM-03）**：登记 TD-A-D7-LLM-HANG-DEGRADE——超时后 in-flight 未完成会 llm-busy-skip；接入真实 LLM 前需提供 worker reset/executor 重建/health recovery 之一
 - 规则置信度基线（0.6/0.7/0.75）与类别关键词为基线值，待 E 轨数据集评测调优（偏好准确率 ≥85% 口径）
-- 缓存键不含 user 维度：`TurnFinalizedEvent` 为 Day3 冻结契约（无 `user_id` 字段），键 = kind+source_event_id+内容指纹；端侧单用户场景风险极低，若引入多用户并发需契约演进
 - knowledge 路径保持 D6 行为（B1 门控/规则提取），结构化知识抽取（六类/失败 Tool 策略）属 D8 任务
+- 评测字段定义（LOW-02）：`to_evaluation_record()` 输出含 memory_status（B2 恒 candidate），任务卡/PR 描述/JSONL 字段已统一
 
 ## 回滚方式
 

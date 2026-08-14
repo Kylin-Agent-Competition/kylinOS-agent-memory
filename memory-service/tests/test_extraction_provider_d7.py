@@ -55,6 +55,37 @@ def test_d7_rule_temporary_example():
     assert c.confidence == 0.6  # 临时指令置信度基线
 
 
+def test_d7_rule_table20_temporary_original_sentence():
+    """PR #36 HIGH-01：TABLE 20 临时原句直接经 Provider 主链抽取（非硬编码特判）。
+
+    原句不含显式偏好词，必须通过指令式规则入口（PREFERENCE_INSTRUCTION_PATTERN）
+    产生 PreferenceCandidate。
+    """
+    p = ExtractionProvider()
+    cands = p.extract_preferences(
+        _turn(user_text="这次只用三句话回答", source_event_id="evt_d7t20"))
+    assert len(cands) == 1
+    c = cands[0]
+    assert c.is_temporary is True
+    assert c.should_persist is False
+    assert c.scope == "session"
+    assert c.memory_status == "candidate"
+    assert c.explicitness == "explicit"
+    assert c.confidence == 0.6
+
+
+def test_d7_rule_instruction_generalizes():
+    """PR #36 HIGH-01：指令式入口为通用规则（非固定字符串特判）——同类临时指令可抽取。"""
+    p = ExtractionProvider()
+    cands = p.extract_preferences(
+        _turn(user_text="这次不要用表格", source_event_id="evt_d7t20b"))
+    assert len(cands) == 1
+    c = cands[0]
+    assert c.is_temporary is True
+    assert c.should_persist is False
+    assert c.scope == "session"
+
+
 def test_d7_rule_long_term_example():
     """TABLE 20 长期偏好原句：meeting 场景 topic 长期版本。"""
     p = ExtractionProvider()
@@ -170,6 +201,33 @@ def test_cache_ttl_expiry():
     assert out2.cache_hit is False  # TTL 过期 → 重新提取
 
 
+def test_cache_ttl_zero_expires_immediately():
+    """LOW-03：TTL=0 → 每次提取都重新计算（缓存不命中）。"""
+    cache = PreferenceExtractionCache(ttl_seconds=0.0)
+    p = ExtractionProvider(cache=cache)
+    ev = _turn(user_text="以后都用中文回答", source_event_id="evt_ttl0")
+    out1 = p.extract_preferences_with_meta(ev)
+    assert out1.cache_hit is False
+    out2 = p.extract_preferences_with_meta(ev)
+    assert out2.cache_hit is False  # TTL=0 立即过期
+
+
+def test_cache_hit_does_not_call_llm_again():
+    """LOW-03：cache hit 明确验证不会再次调用 LLM。"""
+    calls = {"n": 0}
+    def counting_llm(kind, text):
+        calls["n"] += 1
+        return [{"key": "response.language", "value": "中文",
+                 "confidence": 0.9, "evidence": "e"}]
+    p = ExtractionProvider(llm_extractor=counting_llm)
+    ev = _turn(user_text="", source_event_id="evt_hit1")
+    out1 = p.extract_preferences_with_meta(ev)
+    assert calls["n"] == 1
+    out2 = p.extract_preferences_with_meta(ev)
+    assert out2.cache_hit is True
+    assert calls["n"] == 1  # 命中后未再次调用 LLM
+
+
 # ── 3. 超时（Day3 契约降级） ──
 
 def test_llm_timeout_returns_empty_and_audits():
@@ -186,6 +244,20 @@ def test_llm_timeout_returns_empty_and_audits():
     assert out.llm_timeout is True
     assert elapsed < 0.5  # 不等待 LLM 完成（50ms 超时）
     # 超时 → LLM 候选为空（真实降级，非固定样例）
+    assert out.candidates == []
+    assert any(a["error"] == "timeout" for a in p.audit)
+    p.close()
+
+
+def test_llm_timeout_ms_zero_immediate_timeout():
+    """LOW-03：llm_timeout_ms=0 → 立即超时降级（不等待），audit(timeout)。"""
+    def slow_llm(kind, text):
+        time.sleep(0.5)
+        return [{"key": "response.language", "value": "中文",
+                 "confidence": 0.9, "evidence": "e"}]
+    p = ExtractionProvider(llm_extractor=slow_llm, llm_timeout_ms=0)
+    out = p.extract_preferences_with_meta(_turn(user_text="", source_event_id="evt_to0"))
+    assert out.llm_timeout is True
     assert out.candidates == []
     assert any(a["error"] == "timeout" for a in p.audit)
     p.close()
@@ -248,16 +320,38 @@ def _llm_returning(**overrides):
     return llm
 
 
-def test_field_degrade_confidence_invalid():
-    """confidence 非数值 → 默认 0.5 + audit(field-degraded:confidence)，候选保留。"""
-    p = ExtractionProvider(llm_extractor=_llm_returning(confidence="high"))
-    # user_text 触发规则候选（response.conciseness），LLM 用不同 key 隔离验证降级
-    cands = p.extract_preferences(
-        _turn(user_text="我喜欢简洁的回答", source_event_id="evt_fd1"))
-    lang = [c for c in cands if c.key == "response.language"]
-    assert len(lang) == 1
-    assert lang[0].confidence == 0.5
-    assert any("field-degraded:confidence" in a["error"] for a in p.audit)
+def test_field_reject_invalid_confidence():
+    """PR #36 HIGH-02：confidence 为契约 required 字段——缺失/类型非法/越界
+    一律 candidate-level reject + validation audit，不做 0.5 默认值替换。"""
+    bad_values = ["high", -0.1, 1.1, 2.0]
+    for bad in bad_values:
+        p = ExtractionProvider(llm_extractor=_llm_returning(confidence=bad))
+        cands = p.extract_preferences(_turn(user_text="", source_event_id="evt_fd1"))
+        assert cands == [], f"confidence={bad!r} 应被拒绝"
+        assert any("validation" in a["error"] and "confidence" in a["error"]
+                   for a in p.audit), f"confidence={bad!r} 应有 validation audit"
+
+
+def test_field_reject_missing_confidence():
+    """PR #36 HIGH-02：confidence 完全缺失 → candidate-level reject（Field required）。"""
+    p = ExtractionProvider(llm_extractor=_llm_returning(confidence=None))
+    # _llm_returning 会把 confidence 覆盖为 None → 等同缺失
+    cands = p.extract_preferences(_turn(user_text="", source_event_id="evt_fd1b"))
+    assert cands == []
+    assert any("validation" in a["error"] and "confidence" in a["error"]
+               for a in p.audit)
+
+
+def test_llm_temporary_persist_contradiction_normalized():
+    """PR #36 MEDIUM-01：LLM 返回 is_temporary=True && should_persist=True 矛盾组合
+    → 按 E 轨 §3.2 规范化（临时指令不得持久化）+ audit，不静默接受。"""
+    p = ExtractionProvider(llm_extractor=_llm_returning(
+        is_temporary=True, should_persist=True))
+    cands = p.extract_preferences(_turn(user_text="", source_event_id="evt_m1"))
+    assert len(cands) == 1
+    assert cands[0].is_temporary is True
+    assert cands[0].should_persist is False  # 规范化
+    assert any(a["error"] == "temporary-implies-no-persist" for a in p.audit)
 
 
 def test_field_degrade_scope_out_of_enum():

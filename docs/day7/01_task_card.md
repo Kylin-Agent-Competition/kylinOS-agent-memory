@@ -54,7 +54,7 @@
   - `evidence`、`source_event_id`（R3 系统可信）、`memory_status`（B2 恒 candidate）
 - `PreferenceExtractionOutput`：event_id / provider_mode（rules|llm|coop）/ candidates / cache_hit / llm_timeout / duration_ms
 - `export_preference_records(events, provider, path) -> int`：JSONL 输出（每行一个 output），供 E 轨偏好评测
-- `to_evaluation_record(candidate) -> dict`：字段级统一结果格式（key/value/category/scope/confidence/explicitness/is_temporary/should_persist/evidence/source_event_id）
+- `to_evaluation_record(candidate) -> dict`：字段级统一结果格式（key/value/category/scope/confidence/explicitness/is_temporary/should_persist/evidence/source_event_id/memory_status，与 E 轨 §3.2 口径一致）
 
 ## 错误语义
 
@@ -98,6 +98,20 @@
 |----|------------|-----------|------|
 | PreferenceCandidate.scope | `global/session/project` | `global/topic/tool/session/time_window` | E 轨 Schema v0.1 §2.9（权威业务 Schema）；Day3 契约标注"待架构文档确认后调整" |
 | PreferenceCandidate 字段 | key/value/scope/confidence/evidence/source_event_id/memory_status | + category/explicitness/is_temporary/should_persist | E 轨 §3.2（expression_type/preference_scope/is_temporary/should_persist）+ 架构 TABLE 19 |
+
+## 审查报告（PR #36 REWORK）落实记录（Day7 复审修复同步）
+
+| 报告项 | 处置 | 位置 |
+|--------|------|------|
+| HIGH-01 TABLE 20 临时原句无法主链抽取 | 已修复：规则入口两阶段（显式偏好词 + 指令式模式 `PREFERENCE_INSTRUCTION_PATTERN`），原句 "这次只用三句话回答" 经 Provider 主链产出候选（非硬编码特判）；新增原句 E2E + 泛化测试；长期原句无回归 | preference_rules.py / extraction_provider.py |
+| HIGH-02 required confidence 非法值被降级 0.5 | 已修复：confidence 为契约 required 字段，缺失/类型非法/越界一律 candidate-level reject + validation audit，不做默认值替换（删除 _DEFAULT_CONFIDENCE）；参数化测试 5 种非法形态 | extraction_provider.py |
+| MEDIUM-01 is_temporary && should_persist 矛盾 | 已修复：E 轨 §3.2 语义规范化（is_temporary=True → should_persist=False）+ audit（temporary-implies-no-persist） | extraction_provider.py |
+| MEDIUM-02 缓存键缺 user 维度 | 已登记 TD-A-D7-CACHE-USER-DIMENSION（单用户端侧运行；契约加 user_id 后缓存键必须升级；多用户前必须关闭） | TECHNICAL_DEBT_REGISTER.md |
+| MEDIUM-03 LLM 永久挂死 → 永久 busy-skip | 已登记 TD-A-D7-LLM-HANG-DEGRADE（接入真实 LLM 前需 worker reset/executor 重建/health recovery 之一） | TECHNICAL_DEBT_REGISTER.md |
+| MEDIUM-04 L1 Evidence 旧版本 | 已修复：最终修复 commit 重跑 L1 并刷新 evidence/l1/day7_pref_extraction_local.log（224 passed + 47 skipped），PR 描述/交接文档/index.yaml/log 数字统一 | evidence/l1/ |
+| LOW-01 implicit 无真实实现 | 已注明：implicit 仅保留 Schema 枚举与 Provider 接口能力，本阶段未实现基于多 Turn 行为证据的隐式偏好推断 | 本任务卡 / PR 描述 |
+| LOW-02 评测字段文档未含 memory_status | 已统一：任务卡/PR 描述/JSONL 输出字段定义均含 memory_status | 本任务卡 / PR 描述 |
+| LOW-03 缓存/超时边界测试 | 已补充：TTL=0 / llm_timeout_ms=0 / cache hit 不重复调用 LLM | test_extraction_provider_d7.py |
 
 ## 审查报告（PR #27）相关记录（不重开已关闭问题）
 

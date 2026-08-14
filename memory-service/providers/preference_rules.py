@@ -182,6 +182,23 @@ def is_explicit_expression(text: str) -> bool:
     return bool(text) and bool(PREFERENCE_EXPLICIT_PATTERN.search(text))
 
 
+# ── 指令式/临时偏好表达（架构 TABLE 20 临时例） ──
+
+# 指令式表达正则：仅覆盖不含显式偏好词、但表达了明确指令/要求的临时表达。
+# 结构：可选时态限定词（这次/本次/现在/当前/今天）+ 指令动词 + 宾语。
+# 覆盖 TABLE 20 原句：“这次只用三句话回答”。
+# 设计约束（PR #36 HIGH-01）：
+# - 非硬编码特判：按“时态限定 + 指令动词”通用模式匹配，可推广到同类临时指令；
+# - 仅在 PREFERENCE_EXPLICIT_PATTERN 未命中时由主链启用（避免与显式词重复候选）；
+# - 指令词集合限定为“数量/长度/形式”类动词，减少普通陈述句误报。
+PREFERENCE_INSTRUCTION_PATTERN = re.compile(
+    r"(?i)(?:这次|本次|现在|当前|今天)?\s*"
+    r"(?:只用|控制在|保持|限定在|不超过|不多于|至多|最多|至少|不少于|"
+    r"不要|别|改用|换成|分点|列成表格|按表格|按列表)"
+    r"\s*(.{2,40}?)(?=[，。！？.!?；;]|$)"
+)
+
+
 # ── 类别键派生（key 为业务语义标识，E 轨 §3.2 preference_key） ──
 
 _PRESENTATION_KEYS: List[Tuple[re.Pattern, str]] = [

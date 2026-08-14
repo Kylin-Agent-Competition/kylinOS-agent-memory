@@ -20,8 +20,8 @@
 ### PR（Day7）——feat/day7-preference-extraction @ 本地 HEAD（已推送）
 
 - 基线：main @ 2e3f919。
-- 交付：偏好抽取深化三项（见下）+ 任务卡 docs/day7/01_task_card.md + 本地 L1 证据（evidence/l1/day7_pref_extraction_local.log，215 passed + 47 skipped）+ **麒麟 VM L2 证据（evidence/l2-kylin-vm/day7_verify_latest.log，262 passed / 0 skipped / 0 failed，被测 45827f4）** + evidence/index.yaml 条目 D7-A-PREF-EXTRACTION（已升级 HOST_VERIFIED/E4）。含独立审查修复 3 项（unhashable 字段值降级 / 超时后 llm-busy-skip / LLM 间去重标签）。
-- ✅ **VM 复跑已确认**（被测 e3a3f9e，264 passed / 0 skipped / 0 failed，8.38s，evidence/l2-kylin-vm/day7_verify_latest.log 已覆盖更新）：R5 复核收紧修复在真实宿主验证通过，evidence tested_commit 已更新至 e3a3f9e。
+- 交付：偏好抽取深化三项（见下）+ 任务卡 docs/day7/01_task_card.md + 本地 L1 证据（evidence/l1/day7_pref_extraction_local.log，224 passed + 47 skipped）+ 麒麟 VM L2 证据（evidence/l2-kylin-vm/day7_verify_latest.log）+ evidence/index.yaml 条目 D7-A-PREF-EXTRACTION（HOST_VERIFIED/E4）。
+- ⚠️ **PR #36 REWORK 修复中（本轮）**：HIGH-01（TABLE 20 临时原句指令式规则入口）、HIGH-02（required confidence reject 不降级 0.5）、MEDIUM-01（矛盾规范化）已修复并本地验证（224 passed + 47 skipped）；TD-A-D7-CACHE-USER-DIMENSION / TD-A-D7-LLM-HANG-DEGRADE 已登记；**VM L2 待用最终修复 commit 重跑**（届时更新 tested_commit 与 L2 日志）。
 
 ### Day7 A 轨交付内容（xlsx R37）
 
@@ -92,7 +92,7 @@ D1-D7 全部完成。D8 起待做（按 [[tasks-75-track-a]]）：
 - 任务卡：`docs/day7/01_task_card.md`（含契约演进记录）
 - 代码：`memory-service/providers/preference_rules.py`、`memory-service/providers/extraction_provider.py`
 - 测试：`memory-service/tests/test_preference_rules.py`（24）、`memory-service/tests/test_extraction_provider_d7.py`（26）
-- 证据：`evidence/l2-kylin-vm/day7_verify_latest.log`（VM 264 passed / 0 skipped，被测 e3a3f9e）、`evidence/l1/day7_pref_extraction_local.log`（本地 217 passed + 47 skipped）、`evidence/index.yaml`（D7-A-PREF-EXTRACTION，HOST_VERIFIED/E4）
+- 证据：`evidence/l2-kylin-vm/day7_verify_latest.log`（VM 264 passed，被测 e3a3f9e，**PR #36 修复后待重跑**）、`evidence/l1/day7_pref_extraction_local.log`（本地 224 passed + 47 skipped）、`evidence/index.yaml`（D7-A-PREF-EXTRACTION，HOST_VERIFIED/E4，L2 tested_commit 待更新）
 - 契约：`docs/architecture/MEMORY_BUSINESS_SCHEMA_V0.1.md`（§2.5/§2.9/§3.2 偏好）、`docs/day3/06_provider_contract_v1.md`（ExtractionProvider）、`docs/architecture/D3_MEMORY_BUSINESS_CONTRACT_V1.md`
 - 历史：`docs/project-management/session-handoff-20260813.md`（Day6）、`session-handoff-20260809.md`（Day4/5）
 - 项目记忆（新会话自动加载）：architecture-v1-requirements / tasks-75-track-a / day4-pr17-round7-pushed / day1-4-session-archive / single-step-inputs-no-iteration
