@@ -9,7 +9,7 @@
 - 任务：D3-C「路径选择与共享契约冻结」
 - 临时负责人：高翌哲（仅临时接手 D3-C，不改变 B 轨长期责任）
 - 目标基线：`origin/main` @ `d37fb95eca9083eb480491cda2464ebe8515477d`（含 PR #19 D2-C squash 合并）
-- 当前 worktree HEAD：`d37fb95eca9083eb480491cda2464ebe8515477d`（已与 `origin/main` 同步）
+- 开工时 worktree HEAD：`d37fb95eca9083eb480491cda2464ebe8515477d`（已与 `origin/main` 同步）
 - 工作分支：`feat/C-d3-host-contract-v1`
 - Reviewer：D 主审；用户交互与安全影响由 E 补审
 
@@ -46,7 +46,7 @@
 | 检查 | 结果 | 状态 | 对 D3-C 的影响 |
 |---|---|---|---|
 | GitHub `main` HEAD | `d37fb95`，PR #19 已 squash 合并 | `SOURCE_VERIFIED` | D3-C 已采用该共同基线 |
-| 当前 worktree HEAD | `d37fb95`，与 `origin/main` 一致 | `PASS_LOCAL` | 已经用户授权以 fast-forward 同步，无 merge commit |
+| 开工时 worktree HEAD | `d37fb95`，与 `origin/main` 一致 | `PASS_LOCAL` | 已经用户授权以 fast-forward 同步，无 merge commit |
 | 原工作区 | `docs/C-d2-osagent-runtime`，含未跟踪 `.scratch/` | `SOURCE_VERIFIED` | 不在该分支修改；已用独立 worktree 隔离 |
 | D2-C 合并状态 | PR #19 已以 `d37fb95` squash 合并；来源提交不成为 main 祖先是 squash 的正常结果 | `SOURCE_VERIFIED` | 只采用 `d37fb95` 中的合并内容，不采用来源分支作为基线 |
 | D3-C 远端分支/提交 | 未找到 | `NOT_FOUND` | 本批次须建立独立分支和后续独立 PR |
@@ -147,9 +147,9 @@
 | G0 范围与基线 | D3-C 单一范围；隔离分支；worktree fast-forward 到 `d37fb95` | `PASS_LOCAL` |
 | G1 输入可追溯 | D1/D2/D3、PR #19 合并证据与外部正式基线已建立来源矩阵 | `PASS_LOCAL_WITH_STATE_DRIFT` |
 | G2 公共测试 seam | 用户确认 C++ 值对象、JSON、枚举/错误三个 seam | `PASS_LOCAL` |
-| G3 候选实现 | 四对象、示例和 Qt 契约测试通过 | `NOT_STARTED` |
+| G3 候选实现 | 四对象、示例和 Qt 契约测试通过 | `PASS_LOCAL / REVIEW_REMEDIATION` |
 | G4 C 宿主取证 | PR #19 已合并部分/诊断证据；正式 D2-C 条目仍 `BLOCKED/E2` | `BLOCKED / OUT_OF_SCOPE` |
-| G5 跨轨与人工审查 | D 主审，E 覆盖用户交互/安全；未决枚举/IPC 已决议 | `PENDING_REVIEW` |
+| G5 跨轨与人工审查 | D 主审，E 覆盖用户交互/安全；未决枚举/IPC 仍待责任轨决议 | `PENDING_REVIEW` |
 
 **当前总体结论：工作树基线与公共测试 seams 均已确认，可以继续候选契约的
 本地 TDD 工作；最终冻结仍被 G4/G5 及跨轨依赖阻断。**

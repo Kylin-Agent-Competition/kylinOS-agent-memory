@@ -18,6 +18,8 @@
 
 **D3-C 已实现 Qt/C++/JSON v1 候选契约、脱敏示例和本地契约测试；生产 Hook、MemoryClient
 接入与真实宿主映射仍未实现。**
+当前只有 Pre-Chat、Post-Turn、Tool Result 语义 seams，未找到受支持且符合本模块边界的
+生产扩展点，也没有已批准备用路径，故生产接入保持 `BLOCKED`。
 
 - 契约：`contracts/memory_event_contract_v1.h/.cpp`
 - 示例：`contracts/examples/*.json`
@@ -28,6 +30,10 @@
 
 当前候选不得表述为最终 `FROZEN` 或 `HOST_VERIFIED`；真实 Context、Tool、Turn 仍受 D2-C
 证据和后续 D/E 审查阻断。
+
+C++ `TurnFinalizedEvent` 是宿主元数据事件，不是既有 Python ExtractionProvider 的内容输入。
+后续必须通过单独 `TurnExtractionAdapter` 和受控 resolver 获取正文/Tool Result；该 Adapter
+当前未实现，本批次不修改 `memory-service`。
 
 ## 明确不负责的内容
 

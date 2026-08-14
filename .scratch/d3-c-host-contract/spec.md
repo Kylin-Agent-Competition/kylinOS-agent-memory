@@ -19,13 +19,13 @@ Status: resolved
 3. `TurnFinalizedEvent`
 4. `ToolExecutionEvent`
 
-同时记录主 Hook、批准备用路径、禁止路径及其证据等级。证据不足的内容必须保持 `UNVERIFIED`、`PENDING_*` 或 `BLOCKED`，不得为了完成 D3-C 宣称最终冻结。
+同时记录合规生产 Hook 路径是否存在、备用候选、禁止路径及其证据等级。证据不足的内容必须保持 `UNVERIFIED`、`PENDING_*` 或 `BLOCKED`，不得为了完成 D3-C 宣称最终冻结。
 
 ## 正式交付物
 
 - `docs/day3/10_os_agent_contract_start_gate.md`：输入证据、依赖和冻结门禁矩阵。
 - `docs/day3/11_os_agent_event_contract_v1.md`：C++/JSON 字段、约束、版本兼容和错误语义。
-- `docs/day3/12_os_agent_hook_path_decision.md`：主路径、备用路径、禁止路径及证据状态。
+- `docs/day3/12_os_agent_hook_path_decision.md`：合规生产路径条件、备用路径、禁止路径及证据状态。
 - `docs/day3/13_os_agent_contract_validation_report.md`：本地 TDD、构建、数据检查和宿主阻断交接。
 - `os-agent-integration/contracts/memory_event_contract_v1.h/.cpp`：Qt/C++ 公共契约与 JSON 转换接口。
 - `os-agent-integration/contracts/examples/*.json`：独立的已知良好示例 Payload。
@@ -73,6 +73,6 @@ D2-C 只采用 `origin/main@d37fb95` 中已经 squash 合并的内容；不得�
 
 - 四个对象的字段、必填性、来源、禁止模型生成字段、枚举和兼容规则可追溯到输入来源。
 - C++/JSON 示例一致，Qt 测试覆盖认可的公共 seams，并严格经历 red → green。
-- 主/备用/禁止 Hook 路径均有证据等级；真实 Tool/Turn 未验证时如实保持阻塞。
+- 合规生产/备用/禁止 Hook 路径均有证据等级；真实 Tool/Turn 未验证时如实保持阻塞。
 - 本地可运行检查全部记录；麒麟 L2 无法执行时列出命令、环境和待补证据。
 - 提供修改文件、Diff、测试、风险、未完成项及建议提交信息，停止等待人工审核。

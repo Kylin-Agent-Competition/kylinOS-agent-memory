@@ -41,6 +41,7 @@
 - `ContractError { code, field, safeMessage }`
 - `ValidationResult { errors, ok() }`
 - `ParseResult<T> { optional<T> value, errors, ok() }`
+- `EventMetadata`
 - `MemoryQuery`
 - `MemoryContext`
 - `ToolExecutionEvent`
@@ -63,6 +64,11 @@
 `ParseResult<T>::ok()` 仅在 `value` 存在且 `errors` 为空时返回真；解析失败不返回部分值，
 避免调用者误用被默认值填充的对象。
 
+`EventMetadata` 是 `MemoryContext`、`ToolExecutionEvent` 和 `TurnFinalizedEvent`
+共享的 C++ 值对象，JSON 仍保持扁平字段。必填布尔/枚举使用 `std::optional`
+表示“是否显式提供”；因此直接构造 C++ 对象后调用公开 `validate`，也能区分缺字段与
+合法的 `false`/枚举值。
+
 ## 3. JSON 通用规则
 
 | 规则 | v1 候选语义 |
@@ -73,6 +79,7 @@
 | 未知主版本 | `2.x` 等拒绝为 `unsupported_schema_version` |
 | 未知字段 | 读取时忽略，重新序列化时不回写 |
 | 必填字段缺失 | 不使用 Qt 默认值掩盖，返回 `required` |
+| 可选元数据缺失 | `trace_id`、条件 `turn_id`、`source_reference` 未提供时，规范输出省略 key，不写空字符串 |
 | JSON 类型错误 | 返回 `invalid_type`；数组元素也逐项检查 |
 | 整数字段 | 必须为有限、无小数且在 C++ `int` 范围内的 JSON number |
 | 时间 | ISO 8601 字符串；规范输出为 UTC 且保留毫秒 |
@@ -80,6 +87,45 @@
 
 兼容性是“宽读未知可选字段、严查已知字段”。旧读端不得把新主版本当作 v1 处理；新写端
 只输出本文列出的规范字段。
+
+### 3.1 D2 公共事件字段决议
+
+D2 的 14 个候选公共字段不是已冻结协议。D3-C 按已合并来源逐项作出以下决议：
+
+| D2 字段 | D3-C 决议 | C++ / JSON 落点 | 说明 |
+|---|---|---|---|
+| `schema_version` | `include` | `metadata.schemaVersion` | 三类事件必填，接受 `1.x` |
+| `event_id` | `include` | `metadata.eventId` | 必填，不替代幂等键 |
+| `trace_id` | `map` | `metadata.traceId` | 可选；统一承接已有追踪语义，不再定义 `source_trace_id` |
+| `user_id` | `include` | `metadata.userId` | 必填，来自可信宿主 |
+| `session_id` | `include` | `metadata.sessionId` | 必填，来自可信宿主 |
+| `turn_id` | `include` | `metadata.turnId` | 条件字段；`TurnFinalizedEvent` 中必填 |
+| `source_type` | `defer` | 无 | 候选值域和真实宿主来源尚未终审 |
+| `event_type` | `defer` | 无 | 三个强类型入口已区分类型，是否再写入 JSON 待跨轨决议 |
+| `occurred_at` | `include` | `metadata.occurredAt` | 必填 ISO 8601，规范输出 UTC 毫秒 |
+| `collected_at` | `include` | `metadata.collectedAt` | 必填 ISO 8601，规范输出 UTC 毫秒 |
+| `source_reference` | `include` | `metadata.sourceReference` | 可选/条件；只存受控引用，不存正文 |
+| `consent_scope` | `defer` | 无 | 待 E 轨同意模型终审 |
+| `idempotency_key` | `include` | `metadata.idempotencyKey` | 必填，与 `event_id` 语义独立 |
+| `sensitivity` | `defer` | 无 | 待 E 轨敏感分级终审 |
+
+`user_confirmed` 不在上述 D2 公共字段集中，也无已合并 D/E 来源，因此 v1 不纳入强类型对象；
+宽读规则会忽略该未知 key，重新序列化时不回写。
+
+### 3.2 三类事件共享元数据
+
+| JSON | C++ | 类型 | 输入 |
+|---|---|---|---|
+| `schema_version` | `metadata.schemaVersion` | string | required |
+| `event_id` | `metadata.eventId` | string | required |
+| `trace_id` | `metadata.traceId` | string | optional |
+| `user_id` | `metadata.userId` | string | required |
+| `session_id` | `metadata.sessionId` | string | required |
+| `turn_id` | `metadata.turnId` | string | conditional |
+| `occurred_at` | `metadata.occurredAt` | ISO 8601 | required |
+| `collected_at` | `metadata.collectedAt` | ISO 8601 | required |
+| `source_reference` | `metadata.sourceReference` | string | optional/conditional |
+| `idempotency_key` | `metadata.idempotencyKey` | string | required |
 
 ## 4. `MemoryQuery`
 
@@ -101,10 +147,10 @@ C 轨在本对象中单方面冻结。
 
 用途：Memory Service 组装后、仅进入 `model_request` 的上下文元数据。当前对象不承载记忆正文，
 避免正式示例、普通日志或错误消息泄漏内容。
+本对象继承 §3.2 共享元数据。
 
 | JSON | C++ | 类型 | 输入 | 约束 |
 |---|---|---|---|---|
-| `schema_version` | `schemaVersion` | string | required | `1.x` |
 | `query_id` | `queryId` | string | required | 非空；与 D `request_id` 的映射待 D 确认 |
 | `selected_memory_ids` | `selectedMemoryIds` | string array | required | 可为空；元素必须为字符串 |
 | `context_version` | `contextVersion` | string | required | 非空；跨 Turn 复用仍待 C/D 决策 |
@@ -131,10 +177,10 @@ C 轨在本对象中单方面冻结。
 
 用途：单次真实 Tool 执行结果候选。`arguments_ref`、`result_ref` 是脱敏引用，不是内嵌正文；
 模型自述、Prompt Skill 或 UI 文本不得伪装为该事件。
+本对象继承 §3.2 共享元数据。
 
 | JSON | C++ | 类型 | 输入 | 约束 |
 |---|---|---|---|---|
-| `schema_version` | `schemaVersion` | string | required | `1.x` |
 | `tool_call_id` | `toolCallId` | string | required | 非空 |
 | `tool_name` | `toolName` | string | required | 非空 |
 | `arguments_ref` | `argumentsRef` | string | optional | 脱敏引用 |
@@ -145,10 +191,8 @@ C 轨在本对象中单方面冻结。
 | `error_type` | `errorType` | string | optional | 结构化、非敏感类型 |
 | `error_message_safe` | `errorMessageSafe` | string | optional | 不得包含敏感原文 |
 | `side_effect` | `sideEffect` | boolean | required | 不得用缺省 false 掩盖缺字段 |
-| `user_confirmed` | `userConfirmed` | boolean | optional | 缺省 false |
 | `rollback_required` | `rollbackRequired` | boolean | optional | 缺省 false；事务语义待 D/E |
 | `rollback_status` | `rollbackStatus` | string | optional | 暂不冻结枚举，待 D/E |
-| `source_trace_id` | `sourceTraceId` | string | optional | 宿主来源追踪 |
 
 `ToolExecutionStatus` 候选五态：
 
@@ -169,16 +213,10 @@ C 轨在本对象中单方面冻结。
 用途：单个 Turn 收尾、重试和 Tool 关联候选。为避免在共享事件和普通日志中复制原始正文，
 本候选使用 `source_reference` 指向受控来源记录，不采用 D1 伪代码中的内嵌
 `userText/assistantText` 作为冻结字段。
+本对象继承 §3.2 共享元数据，且 `turn_id` 在此对象中必填。
 
 | JSON | C++ | 类型 | 输入 | 约束 |
 |---|---|---|---|---|
-| `schema_version` | `schemaVersion` | string | required | `1.x` |
-| `event_id` | `eventId` | string | required | 非空；不得替代幂等键 |
-| `user_id` | `userId` | string | required | 非空；宿主归属字段 |
-| `session_id` | `sessionId` | string | required | 非空 |
-| `turn_id` | `turnId` | string | required | 非空 |
-| `source_reference` | `sourceReference` | string | optional | 受控来源引用，不是正文 |
-| `idempotency_key` | `idempotencyKey` | string | required | 非空，独立于 `event_id` |
 | `final_message_id` | `finalMessageId` | string | optional | 宿主消息引用 |
 | `is_final` | `isFinal` | boolean | required | 不得用缺省 false 掩盖缺字段 |
 | `finalization_reason` | `finalizationReason` | string | optional | 暂不冻结枚举，待 E |
@@ -189,6 +227,23 @@ C 轨在本对象中单方面冻结。
 
 Post-Turn 的候选语义位置已有部分/诊断证据，但 D2-C 正式索引仍为 `BLOCKED/E2`；Stop、Retry、
 续轮与真实字段映射未闭合，因此本文只冻结候选接口，不宣称事件已在宿主发布。
+
+### 7.1 与既有 Python Provider 输入的 Adapter 边界
+
+`docs/day3/06_provider_contract_v1.md` 中的 Python `TurnFinalizedEvent` 是抽取层输入，需要
+`user_text` / `assistant_text` / `tool_results`；本文的 C++ `TurnFinalizedEvent` 是宿主元数据事件。
+两者不是同一线上结构，不得直接强制转换。
+
+后续需由单独的 `TurnExtractionAdapter` 完成以下边界：
+
+1. 以 C++ `event_id` 生成 Provider 候选的 `source_event_id` 关联；
+2. 传递 `session_id`、`occurred_at`、`collected_at` 及真实来源类型；
+3. 只通过受控 `source_reference` resolver 取得用户/助手正文，不在 C++ 事件、普通日志或临时 JSON 复制正文；
+4. 通过 `tool_call_ids` 和受控 Tool Result resolver 组装 Provider `tool_results`，不把模型自述当真实执行结果；
+5. 提供生产 resolver 与纯内存测试 resolver，但不修改 `memory-service` Provider 契约。
+
+该 Adapter 在 D3-C 仅作后续必备要求，当前 `NOT_IMPLEMENTED / BLOCKED_BY_HOST_MAPPING`；
+不得据此声称既有 Provider 已可消费 C++ 事件。
 
 ## 8. 错误模型
 
