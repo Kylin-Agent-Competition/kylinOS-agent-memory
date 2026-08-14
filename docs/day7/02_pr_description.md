@@ -22,7 +22,7 @@ Day6（PR #27）已交付统一事件清洗/质量评分管线与结构化抽取
   - `_degrade_optional_fields`：可选字段非法值 → 默认值+audit（含 unhashable list/dict 值不崩溃）
   - 评测输出：`PreferenceExtractionOutput` / `to_evaluation_record` / `export_preference_records`
 - **`memory-service/tests/test_preference_rules.py`（新增，24 项）**：六类/临时长期/scope/key/explicitness/置信度/确定性
-- **`memory-service/tests/test_extraction_provider_d7.py`（新增，38 项）**：规则深化（含 TABLE 20 原句 E2E、指令式入口泛化）、缓存（命中/深拷贝/空结果/串键隔离/TTL/TTL=0/cache hit 不重复调 LLM）、超时（降级/busy-skip/timeout=0）、字段降级（含 unhashable）、**confidence 非法值 reject（HIGH-02）**、矛盾规范化（MEDIUM-01）、协同去重（含 dedup-llm/conflict-llm 标签）、评测输出、close 幂等、R5 evidence/conditions 复核
+- **`memory-service/tests/test_extraction_provider_d7.py`（新增，43 项）**：规则深化（含 TABLE 20 原句 E2E、指令式入口泛化、MEDIUM-08 负向 5 条）、缓存（命中/深拷贝/空结果/串键隔离/TTL/TTL=0/cache hit 不重复调 LLM）、超时（降级/busy-skip/timeout=0）、字段降级（含 unhashable/None 降级 MEDIUM-05）、**confidence strict reject（HIGH-02/HIGH-03，含 missing key/None/bool/str/越界/合法 float）**、矛盾规范化（MEDIUM-01）、协同去重（含 dedup-llm/conflict-llm 标签）、评测输出、close 幂等、R5 evidence/conditions 复核
 - **`docs/day7/01_task_card.md`（新增）**：D7-A 任务卡（含契约演进记录）
 - **`docs/project-management/session-handoff-20260814.md`（新增）**：Day7 交接文档
 - **`evidence/l1/day7_pref_extraction_local.log`、`evidence/l2-kylin-vm/day7_verify_latest.log`（新增）**：L1/L2 证据日志
@@ -65,11 +65,11 @@ Day6（PR #27）已交付统一事件清洗/质量评分管线与结构化抽取
 | memory-service/providers/preference_rules.py | 新增（246 行） | 偏好规则纯函数模块 |
 | memory-service/providers/extraction_provider.py | 修改（+414/-49） | v0.2 候选/规则接入/缓存/超时/字段降级/协同/评测输出 |
 | memory-service/tests/test_preference_rules.py | 新增（24 项） | 规则单元测试 |
-| memory-service/tests/test_extraction_provider_d7.py | 新增（38 项） | D7 深化测试（含 PR #36 修复测试） |
+| memory-service/tests/test_extraction_provider_d7.py | 新增（43 项） | D7 深化测试（含 PR #36 两轮修复测试） |
 | docs/day7/01_task_card.md | 新增 | D7-A 任务卡 |
 | docs/project-management/session-handoff-20260814.md | 新增 | Day7 交接文档 |
 | evidence/index.yaml | 修改 | D7-A-PREF-EXTRACTION 条目 |
-| evidence/l1/day7_pref_extraction_local.log | 新增 | 本地 L1 证据（224 passed + 47 skipped） |
+| evidence/l1/day7_pref_extraction_local.log | 新增 | 本地 L1 证据（229 passed + 47 skipped，被测 e5c52e6） |
 | evidence/l2-kylin-vm/day7_verify_latest.log | 新增 | VM L2 证据（271 passed / 0 skipped，被测 8e93118） |
 
 ## 数据库与配置变化
@@ -89,7 +89,8 @@ cd memory-service && /tmp/day7-venv/bin/python -m compileall -q providers/ tests
 
 ```bash
 cd memory-service && /tmp/day7-venv/bin/python -m pytest tests/ -q
-# → 224 passed, 47 skipped in 3.79s（skipped 为 VM/SDK 专属，WSL 无 SDK）
+# → 229 passed, 47 skipped in 3.78s（skipped 为 VM/SDK 专属，WSL 无 SDK）
+# 被测 commit: e5c52e6（第二轮 REWORK 修复：HIGH-03 strict confidence / MEDIUM-05 / MEDIUM-08）
 # 3 次乱序文件顺序运行均通过（顺序无关）
 # 证据：evidence/l1/day7_pref_extraction_local.log
 ```
@@ -107,6 +108,17 @@ cd memory-service && /tmp/day7-venv/bin/python -m pytest tests/ -q
   - **MEDIUM-01**（is_temporary && should_persist 矛盾）：按 E 轨 §3.2 规范化
     （is_temporary=True → should_persist=False）+ audit（temporary-implies-no-persist）
   - 前一轮 4 项（unhashable/llm-busy-skip/dedup-llm 标签/R5 evidence-conditions 复核）保持
+  - **第二轮（commit e5c52e6）**：
+    - **HIGH-03**（confidence 无 strict 类型约束，bool/str 自动转换进入候选）：
+      PreferenceCandidate/KnowledgeCandidate confidence 均改 `Field(strict=True, ge=0.0, le=1.0)`——
+      True/False/"0.9"/"1"/None/"high"/越界/missing key 全部 reject + validation audit；
+      合法 float 0.0/0.5/0.9/1.0 通过（参数化 + 真 missing key 测试）
+    - **MEDIUM-05**（optional None 与字段级降级契约不一致）：方案 A——显式 None 视为非法
+      optional 值 → 降级默认值 + audit（category→presentation/scope→session/explicitness→explicit/
+      is_temporary→False/should_persist→True）；字段缺失仍走 Pydantic 默认值（无 audit）
+    - **MEDIUM-08**（指令模式误报）：时态限定词（这次/本次/现在/当前/今天）改为必选——
+      “不要慌，再试一次”/“别问了”/“保持联系”/“不要忘记密码”不再误抽取；
+      负向测试 5 条 + 正向保留 3 条
 - 无 Mock 冒充 Runtime：降级 = 真实规则结果或空列表（非固定样例，TABLE 54）
 - 无密钥泄露：audit 不含正文原文（`test_audit_does_not_contain_raw_text`）
 - 无硬编码配置：规则置信度/关键词为基线值，标注待 E 轨数据集评测调优

@@ -65,3 +65,55 @@ HIGH-02 OK: missing/'high'/‑0.1/1.1/2.0 全部 candidate-level reject + valida
 `evidence/index.yaml` tested_commit/evidence_commit/commit = `8e93118`，PR 描述与交接文档同步。
 
 Reviewer 三件事全部有证据：① 原句主链抽取 ✅ ② confidence reject ✅ ③ L1（224+47）与 VM L2（271）绑定最终代码 ✅。
+---
+
+# 第二轮复审响应（PR #36，2026-08-14）
+
+## HIGH-03（Blocking）：required confidence 未执行严格类型隔离 —— 已修复
+
+- **修复**（commit `e5c52e6`）：`PreferenceCandidate.confidence` / `KnowledgeCandidate.confidence`
+  均改为 `Field(strict=True, ge=0.0, le=1.0)`——禁止 bool（True→1.0 / False→0.0）与字符串数字
+  （"0.9"→0.9 / "1"→1.0）经 Pydantic 自动转换进入候选。
+- **验证**（最终代码实测）：
+
+```
+confidence=None/'high'/'0.9'/'1'/True/False/-0.1/1.1/2.0/missing-key → cands=0 + validation audit
+confidence=0.0/0.5/0.9/1.0（合法 float）→ 候选保留
+```
+
+- **测试**：`test_field_reject_invalid_confidence`（8 种非法值参数化）、
+  `test_field_reject_missing_confidence_key`（**真正 missing key**，raw dict 不含 confidence 键）、
+  `test_field_reject_confidence_none`、`test_confidence_legal_floats_accepted`（0.0/0.5/0.9/1.0）
+
+## MEDIUM-05：optional None 与字段级降级契约不一致 —— 已修复（方案 A）
+
+- 显式 `None` 视为非法 optional 值 → 降级默认值 + audit：category→presentation / scope→session /
+  explicitness→explicit / is_temporary→False / should_persist→True（`field-degraded:<field>`）；
+  **字段缺失**（不在 raw dict 中）仍走 Pydantic 默认值（无 audit）——区分缺失与显式 None。
+- 测试：`test_field_degrade_none_optional`（5 字段 None 断言默认值 + audit）
+
+## MEDIUM-08：PREFERENCE_INSTRUCTION_PATTERN 误报 —— 已修复
+
+- 时态限定词（这次/本次/现在/当前/今天）改为**必选**；通用"不要/别/保持"不得单独成为偏好判定依据。
+- 负向（不产生候选）：`不要慌，再试一次` / `别问了` / `保持联系` / `不要忘记密码` / `今天天气不错`
+- 正向保留：`这次只用三句话回答` / `这次不要用表格` / `这次至少列出三个要点`
+- 测试：`test_d7_instruction_no_false_positive`（5 负向）+ `test_d7_instruction_positive_cases_kept`（3 正向）
+
+## MEDIUM-06：GitHub PR Body 旧数据 —— 仓库 PR 描述已同步，PR 页面待同步
+
+- `docs/day7/02_pr_description.md` 已更新：L1 229+47、L2 271 @ 8e93118、43 项 D7 测试、
+  2 个 D7 TD、HIGH-03/MEDIUM-05/08 说明。
+- GitHub PR #36 Body 同步：作者侧凭据待验证（token 曾 401 失效）；若可用则直接 PATCH，否则需宿主
+  用 `docs/day7/02_pr_description.md` 更新 PR 页面。
+
+## MEDIUM-07：evidence_commit 元数据不一致 —— 已修正
+
+- L2 条目：`tested_commit = 8e93118`（被测生产代码）≠ `evidence_commit = 691db29`（L2 证据正式回填
+  仓库的 commit）；`index_contract` 已补充字段语义注释（tested_commit/evidence_commit/commit）。
+
+## L1/L2 Evidence 状态
+
+- **L1**：`evidence/l1/day7_pref_extraction_local.log` —— **229 passed + 47 skipped**
+  （checksum `77e8229a...`，tested_commit = `e5c52e6`，含元数据头）
+- **L2**：`evidence/l2-kylin-vm/day7_verify_latest.log` —— **271 passed @ 8e93118**（checksum 37d3d789...）；
+  ⏳ **e5c52e6（HIGH-03/MEDIUM-05/08 修复后）待麒麟 VM 重跑**（预期 276 passed = 229 + 47）

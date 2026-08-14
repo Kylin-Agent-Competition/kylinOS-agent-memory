@@ -113,6 +113,16 @@
 | LOW-02 评测字段文档未含 memory_status | 已统一：任务卡/PR 描述/JSONL 输出字段定义均含 memory_status | 本任务卡 / PR 描述 |
 | LOW-03 缓存/超时边界测试 | 已补充：TTL=0 / llm_timeout_ms=0 / cache hit 不重复调用 LLM | test_extraction_provider_d7.py |
 
+## 审查报告（PR #36 第二轮复审）落实记录（2026-08-14）
+
+| 报告项 | 处置 | 位置 |
+|--------|------|------|
+| HIGH-03 required confidence 无 strict 类型约束（True→1.0/False→0.0/"0.9"→0.9/"1"→1.0 进入候选） | 已修复：PreferenceCandidate/KnowledgeCandidate confidence 均改 `Field(strict=True, ge=0.0, le=1.0)`——bool/字符串数字/None/越界全部 candidate-level reject + validation audit；合法 float 0.0/0.5/0.9/1.0 通过；补真 missing key（不含 confidence 键）测试 | extraction_provider.py / test_extraction_provider_d7.py |
+| MEDIUM-05 optional None 与字段级降级契约不一致 | 已修复（方案 A）：optional 字段显式 None → 降级默认值 + audit（category→presentation/scope→session/explicitness→explicit/is_temporary→False/should_persist→True）；字段缺失仍走 Pydantic 默认值（无 audit）——区分缺失与显式 None | extraction_provider.py / test_extraction_provider_d7.py |
+| MEDIUM-06 GitHub PR Body 旧数据 | PR 描述已同步最新（229/47、271 @ 8e93118、38 项测试、2 TD、tested_commit e5c52e6/8e93118）；GitHub PR #36 Body 需宿主同步（凭据可用则代更，否则提供 body 文本） | docs/day7/02_pr_description.md |
+| MEDIUM-07 evidence_commit 与实际 Git 历史不一致 | 已修正：L2 条目 evidence_commit = 691db29（真实回填 commit）≠ tested_commit = 8e93118（被测代码）；index_contract 已补充字段语义注释 | evidence/index.yaml |
+| MEDIUM-08 PREFERENCE_INSTRUCTION_PATTERN 误报（不要慌，再试一次/别问了/保持联系/不要忘记密码） | 已修复：时态限定词（这次/本次/现在/当前/今天）改为**必选**，通用“不要/别/保持”不得单独成为判定依据；负向测试 5 条 + 正向保留 3 条 | preference_rules.py / test_extraction_provider_d7.py |
+
 ## 审查报告（PR #27）相关记录（不重开已关闭问题）
 
 - TD-A-D6-LLM-TOOL-INPUT（knowledge LLM 输入绑定）：本任务仅偏好路径，知识路径不动，验收条件保持 Open 待真实 LLM
