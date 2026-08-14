@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "tool_call_id": "tool-call-001",
+  "tool_name": "calendar.lookup",
+  "arguments_ref": "ref:tool-arguments:001",
+  "started_at": "2026-08-14T05:00:00.000Z",
+  "finished_at": "2026-08-14T05:00:00.150Z",
+  "execution_status": "success",
+  "result_ref": "ref:tool-result:001",
+  "side_effect": false,
+  "user_confirmed": true,
+  "rollback_required": false,
+  "rollback_status": "not_applicable",
+  "source_trace_id": "trace-001"
+}

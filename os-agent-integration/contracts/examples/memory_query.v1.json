@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "user_id": "local-user",
+  "session_id": "session-001",
+  "query_text": "继续昨天的任务",
+  "scene": "software_development",
+  "max_context_tokens": 800
+}

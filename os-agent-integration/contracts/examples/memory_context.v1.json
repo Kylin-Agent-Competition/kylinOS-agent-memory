@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "query_id": "query-001",
+  "selected_memory_ids": ["memory-001", "memory-002"],
+  "context_version": "context-v1",
+  "token_budget": 800,
+  "actual_token_count": 120,
+  "sensitive_excluded_count": 1,
+  "forgotten_excluded_count": 2,
+  "conflict_excluded_count": 0,
+  "injection_status": "prepared"
+}
