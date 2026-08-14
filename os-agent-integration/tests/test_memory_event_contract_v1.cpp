@@ -36,6 +36,15 @@ QJsonObject knownMemoryContextPayload()
     const QByteArray knownPayload = R"json(
 {
   "schema_version": "1.0",
+  "event_id": "event-context-001",
+  "trace_id": "trace-001",
+  "user_id": "local-user",
+  "session_id": "session-001",
+  "turn_id": "turn-002",
+  "occurred_at": "2026-08-14T04:59:59.900Z",
+  "collected_at": "2026-08-14T05:00:00.000Z",
+  "source_reference": "ref:context-build:001",
+  "idempotency_key": "memory-context:query-001",
   "query_id": "query-001",
   "selected_memory_ids": ["memory-001", "memory-002"],
   "context_version": "context-v1",
@@ -60,6 +69,15 @@ QJsonObject knownToolExecutionPayload()
     const QByteArray knownPayload = R"json(
 {
   "schema_version": "1.0",
+  "event_id": "event-tool-001",
+  "trace_id": "trace-001",
+  "user_id": "local-user",
+  "session_id": "session-001",
+  "turn_id": "turn-002",
+  "occurred_at": "2026-08-14T05:00:00.150Z",
+  "collected_at": "2026-08-14T05:00:00.200Z",
+  "source_reference": "ref:tool-event:001",
+  "idempotency_key": "tool-execution:tool-call-001",
   "tool_call_id": "tool-call-001",
   "tool_name": "calendar.lookup",
   "arguments_ref": "ref:tool-arguments:001",
@@ -68,10 +86,8 @@ QJsonObject knownToolExecutionPayload()
   "execution_status": "success",
   "result_ref": "ref:tool-result:001",
   "side_effect": false,
-  "user_confirmed": true,
   "rollback_required": false,
-  "rollback_status": "not_applicable",
-  "source_trace_id": "trace-001"
+  "rollback_status": "not_applicable"
 }
 )json";
 
@@ -88,9 +104,12 @@ QJsonObject knownTurnFinalizedPayload()
 {
   "schema_version": "1.0",
   "event_id": "event-turn-002",
+  "trace_id": "trace-001",
   "user_id": "local-user",
   "session_id": "session-001",
   "turn_id": "turn-002",
+  "occurred_at": "2026-08-14T05:01:00.000Z",
+  "collected_at": "2026-08-14T05:01:00.050Z",
   "source_reference": "ref:chat-record:message-003",
   "idempotency_key": "turn-finalized:session-001:turn-002",
   "final_message_id": "message-003",
@@ -110,6 +129,41 @@ QJsonObject knownTurnFinalizedPayload()
     return document.object();
 }
 
+enum class ContractObjectKind {
+    MemoryQuery,
+    MemoryContext,
+    ToolExecutionEvent,
+    TurnFinalizedEvent,
+};
+
+struct ParseObservation {
+    bool ok = false;
+    QList<contract::ContractError> errors;
+};
+
+ParseObservation parseContractObject(ContractObjectKind kind, const QJsonObject& payload)
+{
+    switch (kind) {
+    case ContractObjectKind::MemoryQuery: {
+        const auto parsed = contract::memoryQueryFromJson(payload);
+        return {parsed.ok(), parsed.errors};
+    }
+    case ContractObjectKind::MemoryContext: {
+        const auto parsed = contract::memoryContextFromJson(payload);
+        return {parsed.ok(), parsed.errors};
+    }
+    case ContractObjectKind::ToolExecutionEvent: {
+        const auto parsed = contract::toolExecutionEventFromJson(payload);
+        return {parsed.ok(), parsed.errors};
+    }
+    case ContractObjectKind::TurnFinalizedEvent: {
+        const auto parsed = contract::turnFinalizedEventFromJson(payload);
+        return {parsed.ok(), parsed.errors};
+    }
+    }
+    return {};
+}
+
 }
 
 class MemoryEventContractV1Test final : public QObject {
@@ -120,13 +174,28 @@ private slots:
     void memoryQueryValidationReportsMissingUserId();
     void memoryQueryJsonRejectsMissingUserId();
     void memoryContextRoundTripsKnownPayload();
+    void memoryContextJsonRequiresEventId();
+    void memoryContextJsonRequiresTrustedMetadata_data();
+    void memoryContextJsonRequiresTrustedMetadata();
+    void memoryContextValidationRequiresExplicitInjectionStatus();
+    void memoryContextValidationRequiresTrustedMetadata_data();
+    void memoryContextValidationRequiresTrustedMetadata();
     void memoryContextRejectsTokenCountAboveBudget();
     void memoryContextRejectsUnknownInjectionStatus();
     void toolExecutionStatusParsesKnownValues_data();
     void toolExecutionStatusParsesKnownValues();
     void toolExecutionStatusRejectsUnknownValue();
     void toolExecutionEventRoundTripsKnownPayload();
+    void toolExecutionJsonRequiresTrustedMetadata_data();
+    void toolExecutionJsonRequiresTrustedMetadata();
+    void toolExecutionValidationRequiresExplicitStatusAndSideEffect();
+    void toolExecutionValidationRequiresTrustedMetadata();
     void turnFinalizedEventRoundTripsKnownPayload();
+    void optionalEventMetadataIsOmittedFromCanonicalJson();
+    void turnFinalizedJsonRequiresEventTimestamps_data();
+    void turnFinalizedJsonRequiresEventTimestamps();
+    void turnFinalizedValidationRequiresExplicitFinality();
+    void turnFinalizedValidationRequiresCollectedAt();
     void turnFinalizedEventRejectsSelfRetry();
     void schemaVersionRejectsUnknownMajor_data();
     void schemaVersionRejectsUnknownMajor();
@@ -145,6 +214,8 @@ private slots:
     void requiredJsonKeysAreNotDefaulted();
     void wrongJsonTypesAreRejected_data();
     void wrongJsonTypesAreRejected();
+    void eventMetadataWrongJsonTypesAreRejected_data();
+    void eventMetadataWrongJsonTypesAreRejected();
     void idArraysRejectNonStringElements_data();
     void idArraysRejectNonStringElements();
     void integerFieldsRejectFractionalValues();
@@ -210,6 +281,112 @@ void MemoryEventContractV1Test::memoryContextRoundTripsKnownPayload()
     QVERIFY2(parsed.ok(), "Known-good MemoryContext payload must satisfy the public contract");
     QVERIFY(parsed.value.has_value());
     QCOMPARE(contract::toJson(*parsed.value), expected);
+}
+
+void MemoryEventContractV1Test::memoryContextJsonRequiresEventId()
+{
+    QJsonObject payload = knownMemoryContextPayload();
+    payload.remove(QStringLiteral("event_id"));
+
+    const auto parsed = contract::memoryContextFromJson(payload);
+
+    QVERIFY(!parsed.ok());
+    QVERIFY(!parsed.value.has_value());
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("required"));
+    QCOMPARE(parsed.errors.first().field, QStringLiteral("event_id"));
+}
+
+void MemoryEventContractV1Test::memoryContextJsonRequiresTrustedMetadata_data()
+{
+    QTest::addColumn<QString>("field");
+
+    QTest::newRow("user_id") << QStringLiteral("user_id");
+    QTest::newRow("session_id") << QStringLiteral("session_id");
+    QTest::newRow("occurred_at") << QStringLiteral("occurred_at");
+    QTest::newRow("collected_at") << QStringLiteral("collected_at");
+    QTest::newRow("idempotency_key") << QStringLiteral("idempotency_key");
+}
+
+void MemoryEventContractV1Test::memoryContextJsonRequiresTrustedMetadata()
+{
+    QFETCH(QString, field);
+    QJsonObject payload = knownMemoryContextPayload();
+    payload.remove(field);
+
+    const auto parsed = contract::memoryContextFromJson(payload);
+
+    QVERIFY(!parsed.ok());
+    QVERIFY(!parsed.value.has_value());
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("required"));
+    QCOMPARE(parsed.errors.first().field, field);
+}
+
+void MemoryEventContractV1Test::memoryContextValidationRequiresExplicitInjectionStatus()
+{
+    contract::MemoryContext context;
+    context.metadata.schemaVersion = QStringLiteral("1.0");
+    context.metadata.eventId = QStringLiteral("event-context-001");
+    context.metadata.userId = QStringLiteral("local-user");
+    context.metadata.sessionId = QStringLiteral("session-001");
+    context.metadata.occurredAt = QDateTime::fromString(
+        QStringLiteral("2026-08-14T04:59:59.900Z"), Qt::ISODateWithMs);
+    context.metadata.collectedAt = QDateTime::fromString(
+        QStringLiteral("2026-08-14T05:00:00.000Z"), Qt::ISODateWithMs);
+    context.metadata.idempotencyKey = QStringLiteral("memory-context:query-001");
+    context.queryId = QStringLiteral("query-001");
+    context.selectedMemoryIds = QStringList{QStringLiteral("memory-001")};
+    context.contextVersion = QStringLiteral("context-v1");
+    context.tokenBudget = 800;
+    context.actualTokenCount = 120;
+
+    const auto validation = contract::validate(context);
+
+    QVERIFY(!validation.ok());
+    QCOMPARE(validation.errors.size(), 1);
+    QCOMPARE(validation.errors.first().code, QStringLiteral("required"));
+    QCOMPARE(validation.errors.first().field, QStringLiteral("injection_status"));
+}
+
+void MemoryEventContractV1Test::memoryContextValidationRequiresTrustedMetadata_data()
+{
+    QTest::addColumn<QString>("field");
+
+    QTest::newRow("event_id") << QStringLiteral("event_id");
+    QTest::newRow("user_id") << QStringLiteral("user_id");
+    QTest::newRow("session_id") << QStringLiteral("session_id");
+    QTest::newRow("occurred_at") << QStringLiteral("occurred_at");
+    QTest::newRow("collected_at") << QStringLiteral("collected_at");
+    QTest::newRow("idempotency_key") << QStringLiteral("idempotency_key");
+}
+
+void MemoryEventContractV1Test::memoryContextValidationRequiresTrustedMetadata()
+{
+    QFETCH(QString, field);
+    const auto parsed = contract::memoryContextFromJson(knownMemoryContextPayload());
+    QVERIFY(parsed.ok());
+    contract::MemoryContext context = *parsed.value;
+
+    if (field == QStringLiteral("event_id")) {
+        context.metadata.eventId.clear();
+    } else if (field == QStringLiteral("user_id")) {
+        context.metadata.userId.clear();
+    } else if (field == QStringLiteral("session_id")) {
+        context.metadata.sessionId.clear();
+    } else if (field == QStringLiteral("occurred_at")) {
+        context.metadata.occurredAt = {};
+    } else if (field == QStringLiteral("collected_at")) {
+        context.metadata.collectedAt = {};
+    } else if (field == QStringLiteral("idempotency_key")) {
+        context.metadata.idempotencyKey.clear();
+    }
+
+    const auto validation = contract::validate(context);
+
+    QVERIFY(!validation.ok());
+    QCOMPARE(validation.errors.size(), 1);
+    QCOMPARE(validation.errors.first().field, field);
 }
 
 void MemoryEventContractV1Test::memoryContextRejectsTokenCountAboveBudget()
@@ -295,6 +472,77 @@ void MemoryEventContractV1Test::toolExecutionEventRoundTripsKnownPayload()
     QCOMPARE(contract::toJson(*parsed.value), expected);
 }
 
+void MemoryEventContractV1Test::toolExecutionJsonRequiresTrustedMetadata_data()
+{
+    QTest::addColumn<QString>("field");
+
+    QTest::newRow("event_id") << QStringLiteral("event_id");
+    QTest::newRow("user_id") << QStringLiteral("user_id");
+    QTest::newRow("session_id") << QStringLiteral("session_id");
+    QTest::newRow("occurred_at") << QStringLiteral("occurred_at");
+    QTest::newRow("collected_at") << QStringLiteral("collected_at");
+    QTest::newRow("idempotency_key") << QStringLiteral("idempotency_key");
+}
+
+void MemoryEventContractV1Test::toolExecutionJsonRequiresTrustedMetadata()
+{
+    QFETCH(QString, field);
+    QJsonObject payload = knownToolExecutionPayload();
+    payload.remove(field);
+
+    const auto parsed = contract::toolExecutionEventFromJson(payload);
+
+    QVERIFY(!parsed.ok());
+    QVERIFY(!parsed.value.has_value());
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("required"));
+    QCOMPARE(parsed.errors.first().field, field);
+}
+
+void MemoryEventContractV1Test::toolExecutionValidationRequiresExplicitStatusAndSideEffect()
+{
+    contract::ToolExecutionEvent event;
+    event.metadata.schemaVersion = QStringLiteral("1.0");
+    event.metadata.eventId = QStringLiteral("event-tool-001");
+    event.metadata.userId = QStringLiteral("local-user");
+    event.metadata.sessionId = QStringLiteral("session-001");
+    event.metadata.occurredAt = QDateTime::fromString(
+        QStringLiteral("2026-08-14T05:00:00.150Z"), Qt::ISODateWithMs);
+    event.metadata.collectedAt = QDateTime::fromString(
+        QStringLiteral("2026-08-14T05:00:00.200Z"), Qt::ISODateWithMs);
+    event.metadata.idempotencyKey = QStringLiteral("tool-execution:tool-call-001");
+    event.toolCallId = QStringLiteral("tool-call-001");
+    event.toolName = QStringLiteral("calendar.lookup");
+    event.startedAt = QDateTime::fromString(
+        QStringLiteral("2026-08-14T05:00:00.000Z"), Qt::ISODateWithMs);
+    event.finishedAt = QDateTime::fromString(
+        QStringLiteral("2026-08-14T05:00:00.150Z"), Qt::ISODateWithMs);
+
+    const auto validation = contract::validate(event);
+
+    QVERIFY(!validation.ok());
+    QCOMPARE(validation.errors.size(), 2);
+    QCOMPARE(validation.errors.at(0).code, QStringLiteral("required"));
+    QCOMPARE(validation.errors.at(0).field, QStringLiteral("execution_status"));
+    QCOMPARE(validation.errors.at(1).code, QStringLiteral("required"));
+    QCOMPARE(validation.errors.at(1).field, QStringLiteral("side_effect"));
+}
+
+void MemoryEventContractV1Test::toolExecutionValidationRequiresTrustedMetadata()
+{
+    const auto parsed = contract::toolExecutionEventFromJson(knownToolExecutionPayload());
+    QVERIFY(parsed.ok());
+    contract::ToolExecutionEvent event = *parsed.value;
+    event.metadata.eventId.clear();
+
+    const auto validation = contract::validate(event);
+
+    QVERIFY(!validation.ok());
+    QCOMPARE(validation.errors.size(), 1);
+    QCOMPARE(validation.errors.first().code, QStringLiteral("required"));
+    QCOMPARE(validation.errors.first().field, QStringLiteral("event_id"));
+}
+
 void MemoryEventContractV1Test::turnFinalizedEventRoundTripsKnownPayload()
 {
     const QJsonObject expected = knownTurnFinalizedPayload();
@@ -305,6 +553,94 @@ void MemoryEventContractV1Test::turnFinalizedEventRoundTripsKnownPayload()
     QVERIFY(parsed.value.has_value());
     QCOMPARE(parsed.value->toolCallIds, QStringList{QStringLiteral("tool-call-001")});
     QCOMPARE(contract::toJson(*parsed.value), expected);
+}
+
+void MemoryEventContractV1Test::optionalEventMetadataIsOmittedFromCanonicalJson()
+{
+    QJsonObject memoryContextPayload = knownMemoryContextPayload();
+    memoryContextPayload.remove(QStringLiteral("trace_id"));
+    memoryContextPayload.remove(QStringLiteral("turn_id"));
+    memoryContextPayload.remove(QStringLiteral("source_reference"));
+    const auto memoryContext = contract::memoryContextFromJson(memoryContextPayload);
+    QVERIFY(memoryContext.ok());
+    QCOMPARE(contract::toJson(*memoryContext.value), memoryContextPayload);
+
+    QJsonObject toolEventPayload = knownToolExecutionPayload();
+    toolEventPayload.remove(QStringLiteral("trace_id"));
+    toolEventPayload.remove(QStringLiteral("turn_id"));
+    toolEventPayload.remove(QStringLiteral("source_reference"));
+    const auto toolEvent = contract::toolExecutionEventFromJson(toolEventPayload);
+    QVERIFY(toolEvent.ok());
+    QCOMPARE(contract::toJson(*toolEvent.value), toolEventPayload);
+
+    QJsonObject turnEventPayload = knownTurnFinalizedPayload();
+    turnEventPayload.remove(QStringLiteral("trace_id"));
+    turnEventPayload.remove(QStringLiteral("source_reference"));
+    const auto turnEvent = contract::turnFinalizedEventFromJson(turnEventPayload);
+    QVERIFY(turnEvent.ok());
+    QCOMPARE(contract::toJson(*turnEvent.value), turnEventPayload);
+}
+
+void MemoryEventContractV1Test::turnFinalizedJsonRequiresEventTimestamps_data()
+{
+    QTest::addColumn<QString>("field");
+
+    QTest::newRow("occurred_at") << QStringLiteral("occurred_at");
+    QTest::newRow("collected_at") << QStringLiteral("collected_at");
+}
+
+void MemoryEventContractV1Test::turnFinalizedJsonRequiresEventTimestamps()
+{
+    QFETCH(QString, field);
+    QJsonObject payload = knownTurnFinalizedPayload();
+    payload.remove(field);
+
+    const auto parsed = contract::turnFinalizedEventFromJson(payload);
+
+    QVERIFY(!parsed.ok());
+    QVERIFY(!parsed.value.has_value());
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("required"));
+    QCOMPARE(parsed.errors.first().field, field);
+}
+
+void MemoryEventContractV1Test::turnFinalizedValidationRequiresExplicitFinality()
+{
+    contract::TurnFinalizedEvent event;
+    event.metadata.schemaVersion = QStringLiteral("1.0");
+    event.metadata.eventId = QStringLiteral("event-turn-002");
+    event.metadata.userId = QStringLiteral("local-user");
+    event.metadata.sessionId = QStringLiteral("session-001");
+    event.metadata.turnId = QStringLiteral("turn-002");
+    event.metadata.occurredAt = QDateTime::fromString(
+        QStringLiteral("2026-08-14T05:01:00.000Z"), Qt::ISODateWithMs);
+    event.metadata.collectedAt = QDateTime::fromString(
+        QStringLiteral("2026-08-14T05:01:00.050Z"), Qt::ISODateWithMs);
+    event.metadata.idempotencyKey = QStringLiteral("turn-finalized:session-001:turn-002");
+    event.finalizedAt = QDateTime::fromString(
+        QStringLiteral("2026-08-14T05:01:00.000Z"), Qt::ISODateWithMs);
+
+    const auto validation = contract::validate(event);
+
+    QVERIFY(!validation.ok());
+    QCOMPARE(validation.errors.size(), 1);
+    QCOMPARE(validation.errors.first().code, QStringLiteral("required"));
+    QCOMPARE(validation.errors.first().field, QStringLiteral("is_final"));
+}
+
+void MemoryEventContractV1Test::turnFinalizedValidationRequiresCollectedAt()
+{
+    const auto parsed = contract::turnFinalizedEventFromJson(knownTurnFinalizedPayload());
+    QVERIFY(parsed.ok());
+    contract::TurnFinalizedEvent event = *parsed.value;
+    event.metadata.collectedAt = {};
+
+    const auto validation = contract::validate(event);
+
+    QVERIFY(!validation.ok());
+    QCOMPARE(validation.errors.size(), 1);
+    QCOMPARE(validation.errors.first().code, QStringLiteral("invalid_timestamp"));
+    QCOMPARE(validation.errors.first().field, QStringLiteral("collected_at"));
 }
 
 void MemoryEventContractV1Test::turnFinalizedEventRejectsSelfRetry()
@@ -343,10 +679,14 @@ void MemoryEventContractV1Test::schemaVersionRejectsUnknownMajor_data()
     QJsonObject turnEvent = knownTurnFinalizedPayload();
     turnEvent.insert(QStringLiteral("schema_version"), QStringLiteral("2.0"));
 
-    QTest::newRow("MemoryQuery") << 0 << memoryQuery;
-    QTest::newRow("MemoryContext") << 1 << memoryContext;
-    QTest::newRow("ToolExecutionEvent") << 2 << toolEvent;
-    QTest::newRow("TurnFinalizedEvent") << 3 << turnEvent;
+    QTest::newRow("MemoryQuery")
+        << static_cast<int>(ContractObjectKind::MemoryQuery) << memoryQuery;
+    QTest::newRow("MemoryContext")
+        << static_cast<int>(ContractObjectKind::MemoryContext) << memoryContext;
+    QTest::newRow("ToolExecutionEvent")
+        << static_cast<int>(ContractObjectKind::ToolExecutionEvent) << toolEvent;
+    QTest::newRow("TurnFinalizedEvent")
+        << static_cast<int>(ContractObjectKind::TurnFinalizedEvent) << turnEvent;
 }
 
 void MemoryEventContractV1Test::schemaVersionRejectsUnknownMajor()
@@ -354,42 +694,15 @@ void MemoryEventContractV1Test::schemaVersionRejectsUnknownMajor()
     QFETCH(int, objectKind);
     QFETCH(QJsonObject, payload);
 
-    bool ok = false;
-    QList<contract::ContractError> errors;
-    switch (objectKind) {
-    case 0: {
-        const auto parsed = contract::memoryQueryFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    case 1: {
-        const auto parsed = contract::memoryContextFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    case 2: {
-        const auto parsed = contract::toolExecutionEventFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    case 3: {
-        const auto parsed = contract::turnFinalizedEventFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    default:
-        QFAIL("Unexpected object kind");
-    }
+    const ParseObservation parsed = parseContractObject(
+        static_cast<ContractObjectKind>(objectKind), payload);
 
-    QVERIFY(!ok);
-    QCOMPARE(errors.size(), 1);
-    QCOMPARE(errors.first().code, QStringLiteral("unsupported_schema_version"));
-    QCOMPARE(errors.first().field, QStringLiteral("schema_version"));
-    QCOMPARE(errors.first().safeMessage, QStringLiteral("Unsupported schema major version."));
+    QVERIFY(!parsed.ok);
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("unsupported_schema_version"));
+    QCOMPARE(parsed.errors.first().field, QStringLiteral("schema_version"));
+    QCOMPARE(parsed.errors.first().safeMessage,
+             QStringLiteral("Unsupported schema major version."));
 }
 
 void MemoryEventContractV1Test::schemaVersionRejectsInvalidFormat()
@@ -596,17 +909,23 @@ void MemoryEventContractV1Test::requiredJsonKeysAreNotDefaulted_data()
     turnEvent.remove(QStringLiteral("is_final"));
 
     QTest::newRow("MemoryQuery.max_context_tokens")
-        << 0 << memoryQuery << QStringLiteral("max_context_tokens");
+        << static_cast<int>(ContractObjectKind::MemoryQuery)
+        << memoryQuery << QStringLiteral("max_context_tokens");
     QTest::newRow("MemoryContext.selected_memory_ids")
-        << 1 << contextIds << QStringLiteral("selected_memory_ids");
+        << static_cast<int>(ContractObjectKind::MemoryContext)
+        << contextIds << QStringLiteral("selected_memory_ids");
     QTest::newRow("MemoryContext.actual_token_count")
-        << 1 << contextCount << QStringLiteral("actual_token_count");
+        << static_cast<int>(ContractObjectKind::MemoryContext)
+        << contextCount << QStringLiteral("actual_token_count");
     QTest::newRow("MemoryContext.injection_status")
-        << 1 << contextStatus << QStringLiteral("injection_status");
+        << static_cast<int>(ContractObjectKind::MemoryContext)
+        << contextStatus << QStringLiteral("injection_status");
     QTest::newRow("ToolExecutionEvent.side_effect")
-        << 2 << toolEvent << QStringLiteral("side_effect");
+        << static_cast<int>(ContractObjectKind::ToolExecutionEvent)
+        << toolEvent << QStringLiteral("side_effect");
     QTest::newRow("TurnFinalizedEvent.is_final")
-        << 3 << turnEvent << QStringLiteral("is_final");
+        << static_cast<int>(ContractObjectKind::TurnFinalizedEvent)
+        << turnEvent << QStringLiteral("is_final");
 }
 
 void MemoryEventContractV1Test::requiredJsonKeysAreNotDefaulted()
@@ -615,42 +934,14 @@ void MemoryEventContractV1Test::requiredJsonKeysAreNotDefaulted()
     QFETCH(QJsonObject, payload);
     QFETCH(QString, removedKey);
 
-    bool ok = false;
-    QList<contract::ContractError> errors;
-    switch (objectKind) {
-    case 0: {
-        const auto parsed = contract::memoryQueryFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    case 1: {
-        const auto parsed = contract::memoryContextFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    case 2: {
-        const auto parsed = contract::toolExecutionEventFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    case 3: {
-        const auto parsed = contract::turnFinalizedEventFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    default:
-        QFAIL("Unexpected object kind");
-    }
+    const ParseObservation parsed = parseContractObject(
+        static_cast<ContractObjectKind>(objectKind), payload);
 
-    QVERIFY(!ok);
-    QCOMPARE(errors.size(), 1);
-    QCOMPARE(errors.first().code, QStringLiteral("required"));
-    QCOMPARE(errors.first().field, removedKey);
-    QCOMPARE(errors.first().safeMessage, QStringLiteral("Required field is missing."));
+    QVERIFY(!parsed.ok);
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("required"));
+    QCOMPARE(parsed.errors.first().field, removedKey);
+    QCOMPARE(parsed.errors.first().safeMessage, QStringLiteral("Required field is missing."));
 }
 
 void MemoryEventContractV1Test::wrongJsonTypesAreRejected_data()
@@ -669,13 +960,17 @@ void MemoryEventContractV1Test::wrongJsonTypesAreRejected_data()
     turnEvent.insert(QStringLiteral("is_final"), QStringLiteral("true"));
 
     QTest::newRow("MemoryQuery.max_context_tokens")
-        << 0 << memoryQuery << QStringLiteral("max_context_tokens");
+        << static_cast<int>(ContractObjectKind::MemoryQuery)
+        << memoryQuery << QStringLiteral("max_context_tokens");
     QTest::newRow("MemoryContext.selected_memory_ids")
-        << 1 << memoryContext << QStringLiteral("selected_memory_ids");
+        << static_cast<int>(ContractObjectKind::MemoryContext)
+        << memoryContext << QStringLiteral("selected_memory_ids");
     QTest::newRow("ToolExecutionEvent.side_effect")
-        << 2 << toolEvent << QStringLiteral("side_effect");
+        << static_cast<int>(ContractObjectKind::ToolExecutionEvent)
+        << toolEvent << QStringLiteral("side_effect");
     QTest::newRow("TurnFinalizedEvent.is_final")
-        << 3 << turnEvent << QStringLiteral("is_final");
+        << static_cast<int>(ContractObjectKind::TurnFinalizedEvent)
+        << turnEvent << QStringLiteral("is_final");
 }
 
 void MemoryEventContractV1Test::wrongJsonTypesAreRejected()
@@ -684,42 +979,56 @@ void MemoryEventContractV1Test::wrongJsonTypesAreRejected()
     QFETCH(QJsonObject, payload);
     QFETCH(QString, invalidField);
 
-    bool ok = false;
-    QList<contract::ContractError> errors;
-    switch (objectKind) {
-    case 0: {
-        const auto parsed = contract::memoryQueryFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    case 1: {
-        const auto parsed = contract::memoryContextFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    case 2: {
-        const auto parsed = contract::toolExecutionEventFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    case 3: {
-        const auto parsed = contract::turnFinalizedEventFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-        break;
-    }
-    default:
-        QFAIL("Unexpected object kind");
-    }
+    const ParseObservation parsed = parseContractObject(
+        static_cast<ContractObjectKind>(objectKind), payload);
 
-    QVERIFY(!ok);
-    QCOMPARE(errors.size(), 1);
-    QCOMPARE(errors.first().code, QStringLiteral("invalid_type"));
-    QCOMPARE(errors.first().field, invalidField);
-    QCOMPARE(errors.first().safeMessage, QStringLiteral("Field has an invalid JSON type."));
+    QVERIFY(!parsed.ok);
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("invalid_type"));
+    QCOMPARE(parsed.errors.first().field, invalidField);
+    QCOMPARE(parsed.errors.first().safeMessage,
+             QStringLiteral("Field has an invalid JSON type."));
+}
+
+void MemoryEventContractV1Test::eventMetadataWrongJsonTypesAreRejected_data()
+{
+    QTest::addColumn<int>("objectKind");
+    QTest::addColumn<QJsonObject>("payload");
+    QTest::addColumn<QString>("invalidField");
+
+    QJsonObject memoryContext = knownMemoryContextPayload();
+    memoryContext.insert(QStringLiteral("trace_id"), 42);
+    QJsonObject toolEvent = knownToolExecutionPayload();
+    toolEvent.insert(QStringLiteral("event_id"), 42);
+    QJsonObject turnEvent = knownTurnFinalizedPayload();
+    turnEvent.insert(QStringLiteral("collected_at"), 42);
+
+    QTest::newRow("MemoryContext.trace_id")
+        << static_cast<int>(ContractObjectKind::MemoryContext)
+        << memoryContext << QStringLiteral("trace_id");
+    QTest::newRow("ToolExecutionEvent.event_id")
+        << static_cast<int>(ContractObjectKind::ToolExecutionEvent)
+        << toolEvent << QStringLiteral("event_id");
+    QTest::newRow("TurnFinalizedEvent.collected_at")
+        << static_cast<int>(ContractObjectKind::TurnFinalizedEvent)
+        << turnEvent << QStringLiteral("collected_at");
+}
+
+void MemoryEventContractV1Test::eventMetadataWrongJsonTypesAreRejected()
+{
+    QFETCH(int, objectKind);
+    QFETCH(QJsonObject, payload);
+    QFETCH(QString, invalidField);
+
+    const ParseObservation parsed = parseContractObject(
+        static_cast<ContractObjectKind>(objectKind), payload);
+
+    QVERIFY(!parsed.ok);
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("invalid_type"));
+    QCOMPARE(parsed.errors.first().field, invalidField);
+    QCOMPARE(parsed.errors.first().safeMessage,
+             QStringLiteral("Field has an invalid JSON type."));
 }
 
 void MemoryEventContractV1Test::idArraysRejectNonStringElements_data()
@@ -734,9 +1043,11 @@ void MemoryEventContractV1Test::idArraysRejectNonStringElements_data()
     turnEvent.insert(QStringLiteral("tool_call_ids"), QJsonArray{true});
 
     QTest::newRow("MemoryContext.selected_memory_ids")
-        << 0 << memoryContext << QStringLiteral("selected_memory_ids");
+        << static_cast<int>(ContractObjectKind::MemoryContext)
+        << memoryContext << QStringLiteral("selected_memory_ids");
     QTest::newRow("TurnFinalizedEvent.tool_call_ids")
-        << 1 << turnEvent << QStringLiteral("tool_call_ids");
+        << static_cast<int>(ContractObjectKind::TurnFinalizedEvent)
+        << turnEvent << QStringLiteral("tool_call_ids");
 }
 
 void MemoryEventContractV1Test::idArraysRejectNonStringElements()
@@ -745,23 +1056,15 @@ void MemoryEventContractV1Test::idArraysRejectNonStringElements()
     QFETCH(QJsonObject, payload);
     QFETCH(QString, invalidField);
 
-    bool ok = false;
-    QList<contract::ContractError> errors;
-    if (objectKind == 0) {
-        const auto parsed = contract::memoryContextFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-    } else {
-        const auto parsed = contract::turnFinalizedEventFromJson(payload);
-        ok = parsed.ok();
-        errors = parsed.errors;
-    }
+    const ParseObservation parsed = parseContractObject(
+        static_cast<ContractObjectKind>(objectKind), payload);
 
-    QVERIFY(!ok);
-    QCOMPARE(errors.size(), 1);
-    QCOMPARE(errors.first().code, QStringLiteral("invalid_type"));
-    QCOMPARE(errors.first().field, invalidField);
-    QCOMPARE(errors.first().safeMessage, QStringLiteral("Array elements must be strings."));
+    QVERIFY(!parsed.ok);
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("invalid_type"));
+    QCOMPARE(parsed.errors.first().field, invalidField);
+    QCOMPARE(parsed.errors.first().safeMessage,
+             QStringLiteral("Array elements must be strings."));
 }
 
 void MemoryEventContractV1Test::integerFieldsRejectFractionalValues()

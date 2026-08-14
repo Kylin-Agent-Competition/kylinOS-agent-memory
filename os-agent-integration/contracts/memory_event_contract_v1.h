@@ -52,8 +52,21 @@ enum class InjectionStatus {
     Skipped,
 };
 
-struct MemoryContext {
+struct EventMetadata {
     QString schemaVersion;
+    QString eventId;
+    QString traceId;
+    QString userId;
+    QString sessionId;
+    QString turnId;
+    QDateTime occurredAt;
+    QDateTime collectedAt;
+    QString sourceReference;
+    QString idempotencyKey;
+};
+
+struct MemoryContext {
+    EventMetadata metadata;
     QString queryId;
     QStringList selectedMemoryIds;
     QString contextVersion;
@@ -62,7 +75,7 @@ struct MemoryContext {
     int sensitiveExcludedCount = 0;
     int forgottenExcludedCount = 0;
     int conflictExcludedCount = 0;
-    InjectionStatus injectionStatus = InjectionStatus::Prepared;
+    std::optional<InjectionStatus> injectionStatus;
 };
 
 enum class ToolExecutionStatus {
@@ -74,33 +87,25 @@ enum class ToolExecutionStatus {
 };
 
 struct ToolExecutionEvent {
-    QString schemaVersion;
+    EventMetadata metadata;
     QString toolCallId;
     QString toolName;
     QString argumentsRef;
     QDateTime startedAt;
     QDateTime finishedAt;
-    ToolExecutionStatus executionStatus = ToolExecutionStatus::Failure;
+    std::optional<ToolExecutionStatus> executionStatus;
     QString resultRef;
     QString errorType;
     QString errorMessageSafe;
-    bool sideEffect = false;
-    bool userConfirmed = false;
+    std::optional<bool> sideEffect;
     bool rollbackRequired = false;
     QString rollbackStatus;
-    QString sourceTraceId;
 };
 
 struct TurnFinalizedEvent {
-    QString schemaVersion;
-    QString eventId;
-    QString userId;
-    QString sessionId;
-    QString turnId;
-    QString sourceReference;
-    QString idempotencyKey;
+    EventMetadata metadata;
     QString finalMessageId;
-    bool isFinal = false;
+    std::optional<bool> isFinal;
     QString finalizationReason;
     QString stopReason;
     QString retryOfTurnId;

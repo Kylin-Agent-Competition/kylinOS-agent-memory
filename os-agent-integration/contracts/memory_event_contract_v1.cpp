@@ -86,6 +86,82 @@ std::optional<ContractError> firstNonIntegerNumber(
     return std::nullopt;
 }
 
+std::optional<ContractError> firstMissingRequiredEventMetadataField(
+    const QJsonObject& object)
+{
+    return firstMissingRequiredField(
+        object,
+        {
+            QStringLiteral("schema_version"),
+            QStringLiteral("event_id"),
+            QStringLiteral("user_id"),
+            QStringLiteral("session_id"),
+            QStringLiteral("occurred_at"),
+            QStringLiteral("collected_at"),
+            QStringLiteral("idempotency_key"),
+        });
+}
+
+std::optional<ContractError> firstInvalidEventMetadataJsonType(const QJsonObject& object)
+{
+    return firstInvalidJsonType(
+        object,
+        {
+            {QStringLiteral("schema_version"), QJsonValue::String},
+            {QStringLiteral("event_id"), QJsonValue::String},
+            {QStringLiteral("trace_id"), QJsonValue::String},
+            {QStringLiteral("user_id"), QJsonValue::String},
+            {QStringLiteral("session_id"), QJsonValue::String},
+            {QStringLiteral("turn_id"), QJsonValue::String},
+            {QStringLiteral("occurred_at"), QJsonValue::String},
+            {QStringLiteral("collected_at"), QJsonValue::String},
+            {QStringLiteral("source_reference"), QJsonValue::String},
+            {QStringLiteral("idempotency_key"), QJsonValue::String},
+        });
+}
+
+EventMetadata eventMetadataFromJson(const QJsonObject& object)
+{
+    EventMetadata metadata;
+    metadata.schemaVersion = object.value(QStringLiteral("schema_version")).toString();
+    metadata.eventId = object.value(QStringLiteral("event_id")).toString();
+    metadata.traceId = object.value(QStringLiteral("trace_id")).toString();
+    metadata.userId = object.value(QStringLiteral("user_id")).toString();
+    metadata.sessionId = object.value(QStringLiteral("session_id")).toString();
+    metadata.turnId = object.value(QStringLiteral("turn_id")).toString();
+    metadata.occurredAt = QDateTime::fromString(
+        object.value(QStringLiteral("occurred_at")).toString(), Qt::ISODateWithMs);
+    metadata.collectedAt = QDateTime::fromString(
+        object.value(QStringLiteral("collected_at")).toString(), Qt::ISODateWithMs);
+    metadata.sourceReference = object.value(QStringLiteral("source_reference")).toString();
+    metadata.idempotencyKey = object.value(QStringLiteral("idempotency_key")).toString();
+    return metadata;
+}
+
+QJsonObject eventMetadataToJson(const EventMetadata& metadata)
+{
+    QJsonObject object{
+        {QStringLiteral("schema_version"), metadata.schemaVersion},
+        {QStringLiteral("event_id"), metadata.eventId},
+        {QStringLiteral("user_id"), metadata.userId},
+        {QStringLiteral("session_id"), metadata.sessionId},
+        {QStringLiteral("occurred_at"), metadata.occurredAt.toUTC().toString(Qt::ISODateWithMs)},
+        {QStringLiteral("collected_at"), metadata.collectedAt.toUTC().toString(Qt::ISODateWithMs)},
+        {QStringLiteral("idempotency_key"), metadata.idempotencyKey},
+    };
+
+    if (!metadata.traceId.isEmpty()) {
+        object.insert(QStringLiteral("trace_id"), metadata.traceId);
+    }
+    if (!metadata.turnId.isEmpty()) {
+        object.insert(QStringLiteral("turn_id"), metadata.turnId);
+    }
+    if (!metadata.sourceReference.isEmpty()) {
+        object.insert(QStringLiteral("source_reference"), metadata.sourceReference);
+    }
+    return object;
+}
+
 }
 
 ValidationResult validateSchemaVersion(const QString& version)
@@ -126,6 +202,58 @@ ValidationResult validateSchemaVersion(const QString& version)
     }
 
     return {};
+}
+
+namespace {
+
+ValidationResult validateEventMetadata(const EventMetadata& metadata)
+{
+    ValidationResult result = validateSchemaVersion(metadata.schemaVersion);
+    if (metadata.eventId.isEmpty()) {
+        result.errors.append({
+            QStringLiteral("required"),
+            QStringLiteral("event_id"),
+            QStringLiteral("Required field is missing."),
+        });
+    }
+    if (metadata.userId.isEmpty()) {
+        result.errors.append({
+            QStringLiteral("required"),
+            QStringLiteral("user_id"),
+            QStringLiteral("Required field is missing."),
+        });
+    }
+    if (metadata.sessionId.isEmpty()) {
+        result.errors.append({
+            QStringLiteral("required"),
+            QStringLiteral("session_id"),
+            QStringLiteral("Required field is missing."),
+        });
+    }
+    if (!metadata.occurredAt.isValid()) {
+        result.errors.append({
+            QStringLiteral("invalid_timestamp"),
+            QStringLiteral("occurred_at"),
+            QStringLiteral("Timestamp must be valid ISO 8601."),
+        });
+    }
+    if (!metadata.collectedAt.isValid()) {
+        result.errors.append({
+            QStringLiteral("invalid_timestamp"),
+            QStringLiteral("collected_at"),
+            QStringLiteral("Timestamp must be valid ISO 8601."),
+        });
+    }
+    if (metadata.idempotencyKey.isEmpty()) {
+        result.errors.append({
+            QStringLiteral("required"),
+            QStringLiteral("idempotency_key"),
+            QStringLiteral("Required field is missing."),
+        });
+    }
+    return result;
+}
+
 }
 
 ValidationResult validate(const MemoryQuery& query)
@@ -280,7 +408,7 @@ QString toString(InjectionStatus status)
 
 ValidationResult validate(const MemoryContext& context)
 {
-    ValidationResult result = validateSchemaVersion(context.schemaVersion);
+    ValidationResult result = validateEventMetadata(context.metadata);
     if (context.queryId.isEmpty()) {
         result.errors.append({
             QStringLiteral("required"),
@@ -292,6 +420,13 @@ ValidationResult validate(const MemoryContext& context)
         result.errors.append({
             QStringLiteral("required"),
             QStringLiteral("context_version"),
+            QStringLiteral("Required field is missing."),
+        });
+    }
+    if (!context.injectionStatus.has_value()) {
+        result.errors.append({
+            QStringLiteral("required"),
+            QStringLiteral("injection_status"),
             QStringLiteral("Required field is missing."),
         });
     }
@@ -342,10 +477,14 @@ ValidationResult validate(const MemoryContext& context)
 
 ParseResult<MemoryContext> memoryContextFromJson(const QJsonObject& object)
 {
+    const auto missingMetadataField = firstMissingRequiredEventMetadataField(object);
+    if (missingMetadataField.has_value()) {
+        return {std::nullopt, {*missingMetadataField}};
+    }
+
     const auto missingField = firstMissingRequiredField(
         object,
         {
-            QStringLiteral("schema_version"),
             QStringLiteral("query_id"),
             QStringLiteral("selected_memory_ids"),
             QStringLiteral("context_version"),
@@ -357,10 +496,14 @@ ParseResult<MemoryContext> memoryContextFromJson(const QJsonObject& object)
         return {std::nullopt, {*missingField}};
     }
 
+    const auto invalidMetadataType = firstInvalidEventMetadataJsonType(object);
+    if (invalidMetadataType.has_value()) {
+        return {std::nullopt, {*invalidMetadataType}};
+    }
+
     const auto invalidType = firstInvalidJsonType(
         object,
         {
-            {QStringLiteral("schema_version"), QJsonValue::String},
             {QStringLiteral("query_id"), QJsonValue::String},
             {QStringLiteral("selected_memory_ids"), QJsonValue::Array},
             {QStringLiteral("context_version"), QJsonValue::String},
@@ -412,7 +555,7 @@ ParseResult<MemoryContext> memoryContextFromJson(const QJsonObject& object)
     }
 
     MemoryContext context;
-    context.schemaVersion = object.value(QStringLiteral("schema_version")).toString();
+    context.metadata = eventMetadataFromJson(object);
     context.queryId = object.value(QStringLiteral("query_id")).toString();
     context.selectedMemoryIds = selectedMemoryIds;
     context.contextVersion = object.value(QStringLiteral("context_version")).toString();
@@ -438,18 +581,19 @@ QJsonObject toJson(const MemoryContext& context)
         selectedMemoryIds.append(selectedId);
     }
 
-    return {
-        {QStringLiteral("schema_version"), context.schemaVersion},
-        {QStringLiteral("query_id"), context.queryId},
-        {QStringLiteral("selected_memory_ids"), selectedMemoryIds},
-        {QStringLiteral("context_version"), context.contextVersion},
-        {QStringLiteral("token_budget"), context.tokenBudget},
-        {QStringLiteral("actual_token_count"), context.actualTokenCount},
-        {QStringLiteral("sensitive_excluded_count"), context.sensitiveExcludedCount},
-        {QStringLiteral("forgotten_excluded_count"), context.forgottenExcludedCount},
-        {QStringLiteral("conflict_excluded_count"), context.conflictExcludedCount},
-        {QStringLiteral("injection_status"), toString(context.injectionStatus)},
-    };
+    QJsonObject object = eventMetadataToJson(context.metadata);
+    object.insert(QStringLiteral("query_id"), context.queryId);
+    object.insert(QStringLiteral("selected_memory_ids"), selectedMemoryIds);
+    object.insert(QStringLiteral("context_version"), context.contextVersion);
+    object.insert(QStringLiteral("token_budget"), context.tokenBudget);
+    object.insert(QStringLiteral("actual_token_count"), context.actualTokenCount);
+    object.insert(QStringLiteral("sensitive_excluded_count"), context.sensitiveExcludedCount);
+    object.insert(QStringLiteral("forgotten_excluded_count"), context.forgottenExcludedCount);
+    object.insert(QStringLiteral("conflict_excluded_count"), context.conflictExcludedCount);
+    object.insert(
+        QStringLiteral("injection_status"),
+        context.injectionStatus.has_value() ? toString(*context.injectionStatus) : QString{});
+    return object;
 }
 
 ParseResult<ToolExecutionStatus> toolExecutionStatusFromString(const QString& value)
@@ -499,7 +643,7 @@ QString toString(ToolExecutionStatus status)
 
 ValidationResult validate(const ToolExecutionEvent& event)
 {
-    ValidationResult result = validateSchemaVersion(event.schemaVersion);
+    ValidationResult result = validateEventMetadata(event.metadata);
     if (event.toolCallId.isEmpty()) {
         result.errors.append({
             QStringLiteral("required"),
@@ -528,6 +672,20 @@ ValidationResult validate(const ToolExecutionEvent& event)
             QStringLiteral("Timestamp must be valid ISO 8601."),
         });
     }
+    if (!event.executionStatus.has_value()) {
+        result.errors.append({
+            QStringLiteral("required"),
+            QStringLiteral("execution_status"),
+            QStringLiteral("Required field is missing."),
+        });
+    }
+    if (!event.sideEffect.has_value()) {
+        result.errors.append({
+            QStringLiteral("required"),
+            QStringLiteral("side_effect"),
+            QStringLiteral("Required field is missing."),
+        });
+    }
     if (event.startedAt.isValid() && event.finishedAt.isValid()
         && event.finishedAt < event.startedAt) {
         result.errors.append({
@@ -548,10 +706,14 @@ ValidationResult validate(const ToolExecutionEvent& event)
 
 ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& object)
 {
+    const auto missingMetadataField = firstMissingRequiredEventMetadataField(object);
+    if (missingMetadataField.has_value()) {
+        return {std::nullopt, {*missingMetadataField}};
+    }
+
     const auto missingField = firstMissingRequiredField(
         object,
         {
-            QStringLiteral("schema_version"),
             QStringLiteral("tool_call_id"),
             QStringLiteral("tool_name"),
             QStringLiteral("started_at"),
@@ -563,10 +725,14 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
         return {std::nullopt, {*missingField}};
     }
 
+    const auto invalidMetadataType = firstInvalidEventMetadataJsonType(object);
+    if (invalidMetadataType.has_value()) {
+        return {std::nullopt, {*invalidMetadataType}};
+    }
+
     const auto invalidType = firstInvalidJsonType(
         object,
         {
-            {QStringLiteral("schema_version"), QJsonValue::String},
             {QStringLiteral("tool_call_id"), QJsonValue::String},
             {QStringLiteral("tool_name"), QJsonValue::String},
             {QStringLiteral("arguments_ref"), QJsonValue::String},
@@ -577,10 +743,8 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
             {QStringLiteral("error_type"), QJsonValue::String},
             {QStringLiteral("error_message_safe"), QJsonValue::String},
             {QStringLiteral("side_effect"), QJsonValue::Bool},
-            {QStringLiteral("user_confirmed"), QJsonValue::Bool},
             {QStringLiteral("rollback_required"), QJsonValue::Bool},
             {QStringLiteral("rollback_status"), QJsonValue::String},
-            {QStringLiteral("source_trace_id"), QJsonValue::String},
         });
     if (invalidType.has_value()) {
         return {std::nullopt, {*invalidType}};
@@ -598,7 +762,7 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
     }
 
     ToolExecutionEvent event;
-    event.schemaVersion = object.value(QStringLiteral("schema_version")).toString();
+    event.metadata = eventMetadataFromJson(object);
     event.toolCallId = object.value(QStringLiteral("tool_call_id")).toString();
     event.toolName = object.value(QStringLiteral("tool_name")).toString();
     event.argumentsRef = object.value(QStringLiteral("arguments_ref")).toString();
@@ -611,10 +775,8 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
     event.errorType = object.value(QStringLiteral("error_type")).toString();
     event.errorMessageSafe = object.value(QStringLiteral("error_message_safe")).toString();
     event.sideEffect = object.value(QStringLiteral("side_effect")).toBool();
-    event.userConfirmed = object.value(QStringLiteral("user_confirmed")).toBool();
     event.rollbackRequired = object.value(QStringLiteral("rollback_required")).toBool();
     event.rollbackStatus = object.value(QStringLiteral("rollback_status")).toString();
-    event.sourceTraceId = object.value(QStringLiteral("source_trace_id")).toString();
 
     const ValidationResult validation = validate(event);
     if (!validation.ok()) {
@@ -626,21 +788,21 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
 
 QJsonObject toJson(const ToolExecutionEvent& event)
 {
-    QJsonObject object{
-        {QStringLiteral("schema_version"), event.schemaVersion},
-        {QStringLiteral("tool_call_id"), event.toolCallId},
-        {QStringLiteral("tool_name"), event.toolName},
-        {QStringLiteral("arguments_ref"), event.argumentsRef},
-        {QStringLiteral("started_at"), event.startedAt.toUTC().toString(Qt::ISODateWithMs)},
-        {QStringLiteral("finished_at"), event.finishedAt.toUTC().toString(Qt::ISODateWithMs)},
-        {QStringLiteral("execution_status"), toString(event.executionStatus)},
-        {QStringLiteral("result_ref"), event.resultRef},
-        {QStringLiteral("side_effect"), event.sideEffect},
-        {QStringLiteral("user_confirmed"), event.userConfirmed},
-        {QStringLiteral("rollback_required"), event.rollbackRequired},
-        {QStringLiteral("rollback_status"), event.rollbackStatus},
-        {QStringLiteral("source_trace_id"), event.sourceTraceId},
-    };
+    QJsonObject object = eventMetadataToJson(event.metadata);
+    object.insert(QStringLiteral("tool_call_id"), event.toolCallId);
+    object.insert(QStringLiteral("tool_name"), event.toolName);
+    object.insert(QStringLiteral("arguments_ref"), event.argumentsRef);
+    object.insert(
+        QStringLiteral("started_at"), event.startedAt.toUTC().toString(Qt::ISODateWithMs));
+    object.insert(
+        QStringLiteral("finished_at"), event.finishedAt.toUTC().toString(Qt::ISODateWithMs));
+    object.insert(
+        QStringLiteral("execution_status"),
+        event.executionStatus.has_value() ? toString(*event.executionStatus) : QString{});
+    object.insert(QStringLiteral("result_ref"), event.resultRef);
+    object.insert(QStringLiteral("side_effect"), event.sideEffect.value_or(false));
+    object.insert(QStringLiteral("rollback_required"), event.rollbackRequired);
+    object.insert(QStringLiteral("rollback_status"), event.rollbackStatus);
 
     if (!event.errorType.isEmpty()) {
         object.insert(QStringLiteral("error_type"), event.errorType);
@@ -654,39 +816,18 @@ QJsonObject toJson(const ToolExecutionEvent& event)
 
 ValidationResult validate(const TurnFinalizedEvent& event)
 {
-    ValidationResult result = validateSchemaVersion(event.schemaVersion);
-    if (event.eventId.isEmpty()) {
-        result.errors.append({
-            QStringLiteral("required"),
-            QStringLiteral("event_id"),
-            QStringLiteral("Required field is missing."),
-        });
-    }
-    if (event.userId.isEmpty()) {
-        result.errors.append({
-            QStringLiteral("required"),
-            QStringLiteral("user_id"),
-            QStringLiteral("Required field is missing."),
-        });
-    }
-    if (event.sessionId.isEmpty()) {
-        result.errors.append({
-            QStringLiteral("required"),
-            QStringLiteral("session_id"),
-            QStringLiteral("Required field is missing."),
-        });
-    }
-    if (event.turnId.isEmpty()) {
+    ValidationResult result = validateEventMetadata(event.metadata);
+    if (event.metadata.turnId.isEmpty()) {
         result.errors.append({
             QStringLiteral("required"),
             QStringLiteral("turn_id"),
             QStringLiteral("Required field is missing."),
         });
     }
-    if (event.idempotencyKey.isEmpty()) {
+    if (!event.isFinal.has_value()) {
         result.errors.append({
             QStringLiteral("required"),
-            QStringLiteral("idempotency_key"),
+            QStringLiteral("is_final"),
             QStringLiteral("Required field is missing."),
         });
     }
@@ -697,7 +838,7 @@ ValidationResult validate(const TurnFinalizedEvent& event)
             QStringLiteral("Timestamp must be valid ISO 8601."),
         });
     }
-    if (!event.retryOfTurnId.isEmpty() && event.retryOfTurnId == event.turnId) {
+    if (!event.retryOfTurnId.isEmpty() && event.retryOfTurnId == event.metadata.turnId) {
         result.errors.append({
             QStringLiteral("inconsistent_value"),
             QStringLiteral("retry_of_turn_id"),
@@ -722,15 +863,15 @@ ValidationResult validate(const TurnFinalizedEvent& event)
 
 ParseResult<TurnFinalizedEvent> turnFinalizedEventFromJson(const QJsonObject& object)
 {
+    const auto missingMetadataField = firstMissingRequiredEventMetadataField(object);
+    if (missingMetadataField.has_value()) {
+        return {std::nullopt, {*missingMetadataField}};
+    }
+
     const auto missingField = firstMissingRequiredField(
         object,
         {
-            QStringLiteral("schema_version"),
-            QStringLiteral("event_id"),
-            QStringLiteral("user_id"),
-            QStringLiteral("session_id"),
             QStringLiteral("turn_id"),
-            QStringLiteral("idempotency_key"),
             QStringLiteral("is_final"),
             QStringLiteral("finalized_at"),
         });
@@ -738,16 +879,14 @@ ParseResult<TurnFinalizedEvent> turnFinalizedEventFromJson(const QJsonObject& ob
         return {std::nullopt, {*missingField}};
     }
 
+    const auto invalidMetadataType = firstInvalidEventMetadataJsonType(object);
+    if (invalidMetadataType.has_value()) {
+        return {std::nullopt, {*invalidMetadataType}};
+    }
+
     const auto invalidType = firstInvalidJsonType(
         object,
         {
-            {QStringLiteral("schema_version"), QJsonValue::String},
-            {QStringLiteral("event_id"), QJsonValue::String},
-            {QStringLiteral("user_id"), QJsonValue::String},
-            {QStringLiteral("session_id"), QJsonValue::String},
-            {QStringLiteral("turn_id"), QJsonValue::String},
-            {QStringLiteral("source_reference"), QJsonValue::String},
-            {QStringLiteral("idempotency_key"), QJsonValue::String},
             {QStringLiteral("final_message_id"), QJsonValue::String},
             {QStringLiteral("is_final"), QJsonValue::Bool},
             {QStringLiteral("finalization_reason"), QJsonValue::String},
@@ -779,13 +918,7 @@ ParseResult<TurnFinalizedEvent> turnFinalizedEventFromJson(const QJsonObject& ob
     }
 
     TurnFinalizedEvent event;
-    event.schemaVersion = object.value(QStringLiteral("schema_version")).toString();
-    event.eventId = object.value(QStringLiteral("event_id")).toString();
-    event.userId = object.value(QStringLiteral("user_id")).toString();
-    event.sessionId = object.value(QStringLiteral("session_id")).toString();
-    event.turnId = object.value(QStringLiteral("turn_id")).toString();
-    event.sourceReference = object.value(QStringLiteral("source_reference")).toString();
-    event.idempotencyKey = object.value(QStringLiteral("idempotency_key")).toString();
+    event.metadata = eventMetadataFromJson(object);
     event.finalMessageId = object.value(QStringLiteral("final_message_id")).toString();
     event.isFinal = object.value(QStringLiteral("is_final")).toBool();
     event.finalizationReason = object.value(QStringLiteral("finalization_reason")).toString();
@@ -810,21 +943,12 @@ QJsonObject toJson(const TurnFinalizedEvent& event)
         toolCallIds.append(toolCallId);
     }
 
-    QJsonObject object{
-        {QStringLiteral("schema_version"), event.schemaVersion},
-        {QStringLiteral("event_id"), event.eventId},
-        {QStringLiteral("user_id"), event.userId},
-        {QStringLiteral("session_id"), event.sessionId},
-        {QStringLiteral("turn_id"), event.turnId},
-        {QStringLiteral("idempotency_key"), event.idempotencyKey},
-        {QStringLiteral("is_final"), event.isFinal},
-        {QStringLiteral("tool_call_ids"), toolCallIds},
-        {QStringLiteral("finalized_at"), event.finalizedAt.toUTC().toString(Qt::ISODateWithMs)},
-    };
+    QJsonObject object = eventMetadataToJson(event.metadata);
+    object.insert(QStringLiteral("is_final"), event.isFinal.value_or(false));
+    object.insert(QStringLiteral("tool_call_ids"), toolCallIds);
+    object.insert(
+        QStringLiteral("finalized_at"), event.finalizedAt.toUTC().toString(Qt::ISODateWithMs));
 
-    if (!event.sourceReference.isEmpty()) {
-        object.insert(QStringLiteral("source_reference"), event.sourceReference);
-    }
     if (!event.finalMessageId.isEmpty()) {
         object.insert(QStringLiteral("final_message_id"), event.finalMessageId);
     }
