@@ -361,7 +361,7 @@ entries:
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day7_verify_latest.log"
     tested_commit: "e5c52e689d3958657d6343fc11bf5d90f93e6813"  # L2 实测生产代码（两轮 REWORK 后最终）
-    evidence_commit: "691db29b94867b0b18dc5e5d4c0a26f2e20f5e2c"  # 语义见 index_contract（本轮回填后更新）
+    evidence_commit: "6b27ec5f273b81ffb6bed26f911e24c4274e62cf"  # MEDIUM-07：L2 证据正式回填仓库的 commit（≠ tested_commit，语义见 index_contract）
     commit: "e5c52e689d3958657d6343fc11bf5d90f93e6813"  # 历史兼容字段（= tested_commit）
     date: "2026-08-14"
     reviewer: "pending"
