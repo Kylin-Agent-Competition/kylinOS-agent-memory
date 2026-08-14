@@ -1,6 +1,6 @@
 # [D7-A] 偏好抽取深化——规则/Provider 协同 + 缓存/超时/非法字段降级 + 字段级评测统一结果格式
 
-> 分支：`feat/day7-preference-extraction`（基于 main @ `2e3f919`，18 commits：`59171df`…`82d5d8b`）
+> 分支：`feat/day7-preference-extraction`（基于 main @ `2e3f919`，19 commits：`59171df`…`6f7ca03`）
 > PR 模板：架构 v1 附录 D（docs/architecture 18.1 PR 最小内容）
 
 ## 背景与目标
@@ -26,7 +26,7 @@ Day6（PR #27）已交付统一事件清洗/质量评分管线与结构化抽取
 - **`docs/day7/01_task_card.md`（新增）**：D7-A 任务卡（含契约演进记录）
 - **`docs/project-management/session-handoff-20260814.md`（新增）**：Day7 交接文档
 - **`evidence/l1/day7_pref_extraction_local.log`、`evidence/l2-kylin-vm/day7_verify_latest.log`（新增）**：L1/L2 证据日志
-- **`evidence/index.yaml`（更新）**：`D7-A-PREF-EXTRACTION`（HOST_VERIFIED / E4，tested_commit `8e93118`）
+- **`evidence/index.yaml`（更新）**：`D7-A-PREF-EXTRACTION`（HOST_VERIFIED / E4，tested_commit `e5c52e6`）
 
 ## 明确不修改范围
 
@@ -129,9 +129,9 @@ cd /mnt/shared && PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-ser
   LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 \
   /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -q
 # → 276 passed in 5.97s（0 failed / 0 skipped）
-# 被测 commit: 8e9311808273a698eb6670da54826e8d30a2ba06（PR #36 修复后生产代码）
-# 证据：evidence/l2-kylin-vm/day7_verify_latest.log（checksum 37d3d789…，含元数据头）
-# index.yaml: D7-A-PREF-EXTRACTION（HOST_VERIFIED / E4，tested_commit 8e93118）
+# 被测 commit: e5c52e689d3958657d6343fc11bf5d90f93e6813（两轮 REWORK 后最终生产代码）
+# 证据：evidence/l2-kylin-vm/day7_verify_latest.log（checksum b52d437a…，含元数据头）
+# index.yaml: D7-A-PREF-EXTRACTION（HOST_VERIFIED / E4，tested_commit e5c52e6）
 ```
 
 ### L3 (全链路验收)
