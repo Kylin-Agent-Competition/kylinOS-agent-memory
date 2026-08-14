@@ -69,7 +69,7 @@ Day6（PR #27）已交付统一事件清洗/质量评分管线与结构化抽取
 | docs/project-management/session-handoff-20260814.md | 新增 | Day7 交接文档 |
 | evidence/index.yaml | 修改 | D7-A-PREF-EXTRACTION 条目 |
 | evidence/l1/day7_pref_extraction_local.log | 新增 | 本地 L1 证据（229 passed + 47 skipped，被测 e5c52e6） |
-| evidence/l2-kylin-vm/day7_verify_latest.log | 新增 | VM L2 证据（271 passed / 0 skipped，被测 8e93118） |
+| evidence/l2-kylin-vm/day7_verify_latest.log | 新增 | VM L2 证据（276 passed / 0 skipped，被测 e5c52e6） |
 
 ## 数据库与配置变化
 
@@ -128,7 +128,7 @@ cd memory-service && /tmp/day7-venv/bin/python -m pytest tests/ -q
 cd /mnt/shared && PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
   LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 \
   /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -q
-# → 271 passed in 7.68s（0 failed / 0 skipped）
+# → 276 passed in 5.97s（0 failed / 0 skipped）
 # 被测 commit: 8e9311808273a698eb6670da54826e8d30a2ba06（PR #36 修复后生产代码）
 # 证据：evidence/l2-kylin-vm/day7_verify_latest.log（checksum 37d3d789…，含元数据头）
 # index.yaml: D7-A-PREF-EXTRACTION（HOST_VERIFIED / E4，tested_commit 8e93118）

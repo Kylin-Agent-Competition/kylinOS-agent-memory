@@ -20,9 +20,9 @@
 ### PR（Day7）——feat/day7-preference-extraction @ 本地 HEAD（已推送）
 
 - 基线：main @ 2e3f919。
-- 交付：偏好抽取深化三项（见下）+ 任务卡 docs/day7/01_task_card.md + 本地 L1 证据（evidence/l1/day7_pref_extraction_local.log，229 passed + 47 skipped，被测 e5c52e6）+ 麒麟 VM L2 证据（evidence/l2-kylin-vm/day7_verify_latest.log，271 @ 8e93118，e5c52e6 待重跑）+ evidence/index.yaml 条目 D7-A-PREF-EXTRACTION（HOST_VERIFIED/E4）。
+- 交付：偏好抽取深化三项（见下）+ 任务卡 docs/day7/01_task_card.md + 本地 L1 证据（evidence/l1/day7_pref_extraction_local.log，229 passed + 47 skipped，被测 e5c52e6）+ 麒麟 VM L2 证据（evidence/l2-kylin-vm/day7_verify_latest.log，**276 passed @ e5c52e6**）+ evidence/index.yaml 条目 D7-A-PREF-EXTRACTION（HOST_VERIFIED/E4）。
 - ✅ **PR #36 两轮 REWORK 已修复并推送**（`8e93118` 第一轮：HIGH-01/02/MEDIUM-01 + TD；`e5c52e6` 第二轮：HIGH-03 strict confidence / MEDIUM-05 None 降级 / MEDIUM-08 模式收紧）：L1 已刷新 229 passed + 47 skipped（被测 e5c52e6，checksum 77e8229a…）。
-- ✅ **第一轮 VM L2 已重跑确认**（被测 8e93118，271 passed / 0 skipped / 0 failed，7.68s）；**第二轮修复后 VM L2 待用 e5c52e6 重跑**（预期 276 passed）。
+- ✅ **两轮 VM L2 均已重跑确认**：第一轮 271 @ 8e93118（7.68s）；第二轮 **276 passed / 0 skipped / 0 failed @ e5c52e6（5.97s）**——证据闭环完成（tested_commit == 生产代码最终版本 e5c52e6）。
 - ⚠️ MEDIUM-07 已修正 evidence_commit=691db29（≠ tested_commit）；MEDIUM-06 GitHub PR #36 Body 待同步（凭据验证后 PATCH 或宿主手动）。
 
 ### Day7 A 轨交付内容（xlsx R37）
@@ -94,7 +94,7 @@ D1-D7 全部完成。D8 起待做（按 [[tasks-75-track-a]]）：
 - 任务卡：`docs/day7/01_task_card.md`（含契约演进记录）
 - 代码：`memory-service/providers/preference_rules.py`、`memory-service/providers/extraction_provider.py`
 - 测试：`memory-service/tests/test_preference_rules.py`（24）、`memory-service/tests/test_extraction_provider_d7.py`（26）
-- 证据：`evidence/l2-kylin-vm/day7_verify_latest.log`（VM 271 passed @ 8e93118，evidence_commit 691db29；**e5c52e6 待重跑**）、`evidence/l1/day7_pref_extraction_local.log`（本地 229 passed + 47 skipped，被测 e5c52e6，checksum 77e8229a…）、`evidence/index.yaml`（D7-A-PREF-EXTRACTION，HOST_VERIFIED/E4）
+- 证据：`evidence/l2-kylin-vm/day7_verify_latest.log`（VM **276 passed @ e5c52e6**，checksum b52d437a…，含元数据头）、`evidence/l1/day7_pref_extraction_local.log`（本地 229 passed + 47 skipped，被测 e5c52e6，checksum 77e8229a…）、`evidence/index.yaml`（D7-A-PREF-EXTRACTION，HOST_VERIFIED/E4，tested_commit e5c52e6）
 - 契约：`docs/architecture/MEMORY_BUSINESS_SCHEMA_V0.1.md`（§2.5/§2.9/§3.2 偏好）、`docs/day3/06_provider_contract_v1.md`（ExtractionProvider）、`docs/architecture/D3_MEMORY_BUSINESS_CONTRACT_V1.md`
 - 历史：`docs/project-management/session-handoff-20260813.md`（Day6）、`session-handoff-20260809.md`（Day4/5）
 - 项目记忆（新会话自动加载）：architecture-v1-requirements / tasks-75-track-a / day4-pr17-round7-pushed / day1-4-session-archive / single-step-inputs-no-iteration

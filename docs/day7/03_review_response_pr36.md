@@ -32,7 +32,7 @@ HIGH-02 OK: missing/'high'/‑0.1/1.1/2.0 全部 candidate-level reject + valida
 ### 3️⃣ 修复后最终代码重新取得可信 L1 / 麒麟 VM L2 Evidence
 
 - **L1 已刷新（含 MEDIUM-04 元数据头）**：`evidence/l1/day7_pref_extraction_local.log` —— **224 passed + 47 skipped**（checksum `e12859a845be9bec51e86d0bd6d8ef422863d4677d367db159e8d0913f5b7201`），头部记录 branch/tested_commit（`8e93118`）/command/environment/collected=271/passed=224/failed=0/skipped=47；含最终修复 commit `8e93118` 全部测试
-- **L2 麒麟 VM（已完成）**：`evidence/l2-kylin-vm/day7_verify_latest.log` —— **271 passed / 0 skipped / 0 failed（7.68s）**（checksum `37d3d789331f92a2b392010e1b1aafa71bc4352dad6fa8dadf4661141f8faae2`），tested_commit = `8e9311808273a698eb6670da54826e8d30a2ba06`，头部含元数据头（branch/tested_commit/command/environment/collected=271/passed=271/failed=0/skipped=0）
+- **L2 麒麟 VM（已完成）**：`evidence/l2-kylin-vm/day7_verify_latest.log` —— **276 passed / 0 skipped / 0 failed（5.97s）**（checksum `b52d437a...`），tested_commit = `e5c52e689d3958657d6343fc11bf5d90f93e6813`（两轮 REWORK 后最终生产代码），头部含元数据头（branch/tested_commit/command/environment/collected=276/passed=276/failed=0/skipped=0）
 
 ## 二、逐项响应（P0 必须修复）
 
@@ -60,11 +60,11 @@ HIGH-02 OK: missing/'high'/‑0.1/1.1/2.0 全部 candidate-level reject + valida
 
 ## 四、L2 状态（已闭环）
 
-麒麟 VM 已用最终生产代码 `8e93118` 重跑：**271 passed / 0 skipped / 0 failed（7.68s）**，
-证据 `evidence/l2-kylin-vm/day7_verify_latest.log`（checksum 37d3d789…，含元数据头）已回填，
-`evidence/index.yaml` tested_commit/evidence_commit/commit = `8e93118`，PR 描述与交接文档同步。
+麒麟 VM 已用两轮 REWORK 后最终生产代码 `e5c52e6` 重跑：**276 passed / 0 skipped / 0 failed（5.97s）**，
+证据 `evidence/l2-kylin-vm/day7_verify_latest.log`（checksum b52d437a…，含元数据头）已回填，
+`evidence/index.yaml` tested_commit = `e5c52e6`（evidence_commit 语义见 index_contract）。
 
-Reviewer 三件事全部有证据：① 原句主链抽取 ✅ ② confidence reject ✅ ③ L1（224+47）与 VM L2（271）绑定最终代码 ✅。
+Reviewer 三件事全部有证据：① 原句主链抽取 ✅ ② confidence reject（strict）✅ ③ L1（229+47）与 VM L2（276）绑定最终代码 e5c52e6 ✅。
 ---
 
 # 第二轮复审响应（PR #36，2026-08-14）
@@ -115,5 +115,7 @@ confidence=0.0/0.5/0.9/1.0（合法 float）→ 候选保留
 
 - **L1**：`evidence/l1/day7_pref_extraction_local.log` —— **229 passed + 47 skipped**
   （checksum `77e8229a...`，tested_commit = `e5c52e6`，含元数据头）
-- **L2**：`evidence/l2-kylin-vm/day7_verify_latest.log` —— **271 passed @ 8e93118**（checksum 37d3d789...）；
-  ⏳ **e5c52e6（HIGH-03/MEDIUM-05/08 修复后）待麒麟 VM 重跑**（预期 276 passed = 229 + 47）
+- **L2**：`evidence/l2-kylin-vm/day7_verify_latest.log` —— **276 passed / 0 skipped / 0 failed（5.97s）**
+  （checksum `b52d437a...`，tested_commit = `e5c52e6`，含元数据头）——**两轮 REWORK 证据闭环完成**
+
+Reviewer 目标结论（无新 HIGH/BLOCKER 时）：**PASS_WITH_DEBT**（保留 TD-A-D7-CACHE-USER-DIMENSION / TD-A-D7-LLM-HANG-DEGRADE）。

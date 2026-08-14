@@ -360,21 +360,21 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day7_verify_latest.log"
-    tested_commit: "8e9311808273a698eb6670da54826e8d30a2ba06"  # L2 实测生产代码（第二轮 REWORK 前）
-    evidence_commit: "691db29b94867b0b18dc5e5d4c0a26f2e20f5e2c"  # MEDIUM-07：L2 证据正式回填仓库的 commit（≠ tested_commit，语义见 index_contract）
-    commit: "8e9311808273a698eb6670da54826e8d30a2ba06"  # 历史兼容字段（= tested_commit）
+    tested_commit: "e5c52e689d3958657d6343fc11bf5d90f93e6813"  # L2 实测生产代码（两轮 REWORK 后最终）
+    evidence_commit: "691db29b94867b0b18dc5e5d4c0a26f2e20f5e2c"  # 语义见 index_contract（本轮回填后更新）
+    commit: "e5c52e689d3958657d6343fc11bf5d90f93e6813"  # 历史兼容字段（= tested_commit）
     date: "2026-08-14"
     reviewer: "pending"
-    limitations: "未接入真实 LLM（无凭证，接口预留）；规则置信度/关键词为基线值待 E 轨数据集评测调优；第二轮 REWORK（HIGH-03 strict confidence / MEDIUM-05 None 降级 / MEDIUM-08 模式收紧，commit e5c52e6）后生产代码已变更，**VM L2 待用 e5c52e6 重跑**（届时更新 tested_commit；L1 已用 e5c52e6 刷新为 229+47）；TD-A-D7-CACHE-USER-DIMENSION / TD-A-D7-LLM-HANG-DEGRADE 已登记（PR #36 MEDIUM-02/03）；全量 -v 本地一次偶发 test_server_lifecycle 复跑即绿（关联 TD-A-D6-EXEC-RACE 已知非阻断竞态窗口）"
-    checksum_sha256: "37d3d789331f92a2b392010e1b1aafa71bc4352dad6fa8dadf4661141f8faae2"
+    limitations: "未接入真实 LLM（无凭证，接口预留）；规则置信度/关键词为基线值待 E 轨数据集评测调优；本地对照 229 passed + 47 skipped（WSL 无 SDK skip）→ VM 276 全过数字吻合（276 = 229 + 47）；TD-A-D7-CACHE-USER-DIMENSION / TD-A-D7-LLM-HANG-DEGRADE 已登记（PR #36 MEDIUM-02/03）；全量 -v 本地一次偶发 test_server_lifecycle 复跑即绿（关联 TD-A-D6-EXEC-RACE 已知非阻断竞态窗口，VM 276 无此现象）"
+    checksum_sha256: "b52d437a72aec73facc792ea7e9f6e9053eb5e8aa2f1c97836c45d5d6969c08e"
     details: |
       Day7 偏好提取深化（架构 v1 TABLE 19/20 + E 轨 Schema §2.5/§2.9/§3.2，
       docs/day7/01_task_card.md）验证（2026-08-14）：
       - L1（本地 WSL，被测 e5c52e6）：229 passed + 47 skipped（evidence/l1/day7_pref_extraction_local.log，
         checksum 77e8229a…，含元数据头（branch/tested_commit/command/environment/collected=276/passed=229/failed=0/skipped=47））——含第二轮 REWORK 新增 5 项测试
-      - L2（麒麟 VM，被测 8e93118，第二轮 REWORK 前）：271 passed / 0 skipped / 0 failed（7.68s）
-        ——evidence/l2-kylin-vm/day7_verify_latest.log（checksum 37d3d789…，含元数据头；
-        evidence_commit 691db29 为真实回填 commit，MEDIUM-07）；**e5c52e6 待 VM 重跑**
+      - L2（麒麟 VM，被测 e5c52e6，两轮 REWORK 后最终）：276 passed / 0 skipped / 0 failed（5.97s）
+        ——evidence/l2-kylin-vm/day7_verify_latest.log（checksum b52d437a…，含元数据头）
+        evidence_commit 语义见 index_contract（本轮回填后更新为真实 commit）
       第二轮 REWORK 修复（commit e5c52e6，已本地验证）：
       - HIGH-03：PreferenceCandidate/KnowledgeCandidate confidence 改 Field(strict=True)——
         bool（True→1.0/False→0.0）与字符串数字（'0.9'→0.9/'1'→1.0）不再自动转换，
@@ -385,7 +385,8 @@ entries:
       - MEDIUM-08：PREFERENCE_INSTRUCTION_PATTERN 时态限定词必选——
         '不要慌，再试一次'/'别问了'/'保持联系'/'不要忘记密码' 不再误抽取
       第一轮 REWORK 修复（commit 8e93118，已关闭）：HIGH-01 / HIGH-02 / MEDIUM-01
-      本地对照：229 passed + 47 skipped（WSL 无 SDK skip）；VM L2 待 e5c52e6 重跑
+      本地对照：229 passed + 47 skipped（WSL 无 SDK skip）→ VM 276 全过，数字完全吻合；
+      证据闭环完成（tested_commit == 生产代码最终版本 e5c52e6）
 
   - id: "D2-3-DEPLOY-STARTUP"
     task_id: "D2-3"

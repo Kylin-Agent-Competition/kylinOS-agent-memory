@@ -42,18 +42,12 @@ PASS | MEDIUM-08 正向 这次只用三句话回答/这次不要用表格/这次
 |------|------|------|
 | L0 | ✅ compileall | — |
 | L1 | ✅ 已刷新 | **229 passed + 47 skipped**（被测 e5c52e6，checksum 77e8229a…） |
-| L2 | ⏳ **待 VM 重跑** | 现有 271 @ 8e93118（HIGH-03 修复前）；e5c52e6 预期 **276 passed** |
+| L2 | ✅ **已完成** | **276 passed / 0 skipped**（被测 e5c52e6，5.97s，checksum b52d437a…） |
 | L3 | 不适用 | Provider 层增量，按计划 D14 |
 
 ## 四、待宿主执行
 
-1. **VM L2 重跑**（约 9 秒）：
-   ```bash
-   cd /mnt/shared && PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
-     LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 \
-     /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -q 2>&1 | tee evidence/l2-kylin-vm/day7_verify_latest.log
-   ```
-   预期 **276 passed / 0 skipped**；完成后回填 evidence（tested_commit=e5c52e6）→ index.yaml → 推送。
+1. ~~**VM L2 重跑**~~ —— ✅ 已完成：**276 passed / 0 skipped**（被测 e5c52e6，5.97s）。
 2. **GitHub PR #36 Body 同步**（MEDIUM-06）：更新 token 后 PATCH，或手动用 docs/day7/02_pr_description.md 更新 PR 页面。
 
 完成上述两项后，若无新 HIGH/BLOCKER，PR #36 达到 Reviewer 目标结论 **PASS_WITH_DEBT**（保留 TD-A-D7-CACHE-USER-DIMENSION / TD-A-D7-LLM-HANG-DEGRADE）。
