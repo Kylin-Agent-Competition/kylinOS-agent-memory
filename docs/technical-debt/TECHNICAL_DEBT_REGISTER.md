@@ -53,6 +53,9 @@
 - **TD-A-005-09 产生原因**：Day5 垂直链路审查（2026-08-09）实测复现——无 SDK 环境（WSL 模拟）下 `EmbeddingUDSServer()` 构造即抛 `RuntimeError`：`EmbeddingProvider.__init__` 在 `kylin_embedding` 模块缺失时直接 `raise RuntimeError(_IMPORT_ERROR)`，且 `server.py` 硬编码 `EmbeddingService()`（无 provider 注入点）。因此降级语义（`memory.embed` → 空向量+degraded）只覆盖"Provider 已构造成功、运行期调用失败"场景，不覆盖"启动期 SDK 缺失"场景——后者 UDS server 直接崩溃，客户端只能走连接失败降级（架构 13.1"聊天继续"仍成立，但服务端无结构化降级响应）。`test_embedding_service_real.py::test_degraded_when_so_missing` 自述用 FailProvider 注入、未模拟真实 so 缺失。
   **当前影响**：仅影响 SDK 缺失/损坏时的服务端降级能力；Day5 麒麟 VM 正常路径验证全绿（真实 SDK 8/8 无 Skip + 端到端 UDS bridge_loaded=true / embed dim=768），无假实现、无固定样例。
   **允许延期理由**：属健壮性增强而非核心链路缺陷；麒麟宿主正常安装路径 SDK 存在，未阻断 Day5 垂直链路验证与合并；修复涉及 Provider 构造/注入点重构，计划在 Day6+ 统一处理。
+| TD-007 | 真实 Tool Result Hook 路径未通过源码 instrument 验证 | os-agent-integration / kylin-ai-runtime | Technical Debt | High | Open | C | D 主审；E 安全关注 | D3 阶段 | 源码 instrument 输出结构化 ToolExecutionEvent（trace_id、tool_name、arguments、status、result、error、started_at、finished_at），覆盖成功、失败、取消三类 | PR #19 |
+| TD-008 | Hook 点 A 的 Memory Context 注入实现状态未确认 | os-agent-integration / PreChat | Risk | High | Open | C | D 主审；E 安全关注 | D3 阶段 | 通过源码 instrument、D-Bus 解码或真实 chatAsync 入参捕获确认 Hook 点 A 是否实现 memory_context 注入；strace 外部观察只能得出 NOT_OBSERVED | PR #19 |
+| TD-009 | 非 OpenAI 风格 Tool 执行路径尚未获得结构化事件证据 | os-agent-integration / kylin-ai-runtime | Technical Debt | High | Open | C | D 主审；E 安全关注 | D3 阶段 | 源码 instrument 确认实际 Tool 执行路径并输出结构化事件；OS Agent 设计并验证替代 Hook 方案 | PR #19 |
 
 ## 管理规则
 
