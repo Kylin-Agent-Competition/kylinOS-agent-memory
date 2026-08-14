@@ -20,7 +20,7 @@
 ### PR（Day7）——feat/day7-preference-extraction @ 本地 HEAD（已推送）
 
 - 基线：main @ 2e3f919。
-- 交付：偏好抽取深化三项（见下）+ 任务卡 docs/day7/01_task_card.md + 本地 L1 证据（evidence/l1/day7_pref_extraction_local.log，224 passed + 47 skipped）+ 麒麟 VM L2 证据（evidence/l2-kylin-vm/day7_verify_latest.log）+ evidence/index.yaml 条目 D7-A-PREF-EXTRACTION（HOST_VERIFIED/E4）。
+- 交付：偏好抽取深化三项（见下）+ 任务卡 docs/day7/01_task_card.md + 本地 L1 证据（evidence/l1/day7_pref_extraction_local.log，229 passed + 47 skipped，被测 e5c52e6）+ 麒麟 VM L2 证据（evidence/l2-kylin-vm/day7_verify_latest.log，271 @ 8e93118，e5c52e6 待重跑）+ evidence/index.yaml 条目 D7-A-PREF-EXTRACTION（HOST_VERIFIED/E4）。
 - ✅ **PR #36 两轮 REWORK 已修复并推送**（`8e93118` 第一轮：HIGH-01/02/MEDIUM-01 + TD；`e5c52e6` 第二轮：HIGH-03 strict confidence / MEDIUM-05 None 降级 / MEDIUM-08 模式收紧）：L1 已刷新 229 passed + 47 skipped（被测 e5c52e6，checksum 77e8229a…）。
 - ✅ **第一轮 VM L2 已重跑确认**（被测 8e93118，271 passed / 0 skipped / 0 failed，7.68s）；**第二轮修复后 VM L2 待用 e5c52e6 重跑**（预期 276 passed）。
 - ⚠️ MEDIUM-07 已修正 evidence_commit=691db29（≠ tested_commit）；MEDIUM-06 GitHub PR #36 Body 待同步（凭据验证后 PATCH 或宿主手动）。

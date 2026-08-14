@@ -40,9 +40,8 @@ Day6（PR #27）已交付统一事件清洗/质量评分管线与结构化抽取
 ## 关联任务与技术债
 
 - 任务卡：`docs/day7/01_task_card.md`（D7-A，Reviewer：D 主审；安全/评测影响 E 补审）
-- TD 新增：无（缓存/线程生命周期风险点有测试覆盖，未登记）
-- 保持 Open（本 PR 不涉及）：TD-A-D6-LLM-TOOL-INPUT（knowledge LLM 输入绑定，D8 深化）、TD-A-D6-TOOL-PARTIAL、TD-A-D6-EXEC-RACE（全量 -v 本地一次偶发 test_server_lifecycle 复跑即绿；VM 两次 262/264 均无此现象）
-- **PR #36 REWORK 新增登记**：TD-A-D7-CACHE-USER-DIMENSION（缓存键缺 user 维度，MEDIUM-02）、TD-A-D7-LLM-HANG-DEGRADE（LLM 永久挂死 → 永久 busy-skip，MEDIUM-03）——见 docs/technical-debt/TECHNICAL_DEBT_REGISTER.md
+- TD 新增：**TD-A-D7-CACHE-USER-DIMENSION**（缓存键缺 user 维度，MEDIUM-02）、**TD-A-D7-LLM-HANG-DEGRADE**（LLM 永久挂死 → 永久 busy-skip，MEDIUM-03）——见 docs/technical-debt/TECHNICAL_DEBT_REGISTER.md
+- 保持 Open（本 PR 不涉及）：TD-A-D6-LLM-TOOL-INPUT（knowledge LLM 输入绑定，D8 深化）、TD-A-D6-TOOL-PARTIAL、TD-A-D6-EXEC-RACE（全量 -v 本地一次偶发 test_server_lifecycle 复跑即绿；VM 262/264/271 均无此现象）
 
 ## 架构与能力边界依据
 
