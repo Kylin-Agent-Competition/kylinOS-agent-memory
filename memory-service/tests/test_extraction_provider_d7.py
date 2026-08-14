@@ -86,6 +86,30 @@ def test_d7_rule_instruction_generalizes():
     assert c.scope == "session"
 
 
+def test_d7_instruction_positive_cases_kept():
+    """PR #36 MEDIUM-08：收紧后正向用例仍可抽取（时态词 + 指令动词）。"""
+    p = ExtractionProvider()
+    for text in ["这次只用三句话回答", "这次不要用表格", "这次至少列出三个要点"]:
+        cands = p.extract_preferences(
+            _turn(user_text=text, source_event_id="evt_m8pos"))
+        assert len(cands) == 1, f"{text!r} 应抽取 1 候选（MEDIUM-08 收紧后正向保留）"
+        assert cands[0].is_temporary is True
+
+
+def test_d7_instruction_no_false_positive():
+    """PR #36 MEDIUM-08：指令式模式收紧——无时态限定词的通用表达不得误抽取。
+
+    负向：不要慌，再试一次 / 别问了 / 保持联系 / 不要忘记密码 / 今天天气不错。
+    时态词（这次/本次/现在/当前/今天）为必选，通用“不要/别/保持”不得单独成为
+    偏好判定依据。
+    """
+    p = ExtractionProvider()
+    for text in ["不要慌，再试一次", "别问了", "保持联系", "不要忘记密码", "今天天气不错"]:
+        cands = p.extract_preferences(
+            _turn(user_text=text, source_event_id="evt_m8neg"))
+        assert cands == [], f"{text!r} 不应产生 PreferenceCandidate（MEDIUM-08）"
+
+
 def test_d7_rule_long_term_example():
     """TABLE 20 长期偏好原句：meeting 场景 topic 长期版本。"""
     p = ExtractionProvider()
@@ -321,9 +345,9 @@ def _llm_returning(**overrides):
 
 
 def test_field_reject_invalid_confidence():
-    """PR #36 HIGH-02：confidence 为契约 required 字段——缺失/类型非法/越界
-    一律 candidate-level reject + validation audit，不做 0.5 默认值替换。"""
-    bad_values = ["high", -0.1, 1.1, 2.0]
+    """PR #36 HIGH-02/HIGH-03：confidence 为契约 required strict float——
+    bool/字符串数字/类型非法/越界 一律 candidate-level reject + validation audit。"""
+    bad_values = [True, False, "0.9", "1", "high", -0.1, 1.1, 2.0]
     for bad in bad_values:
         p = ExtractionProvider(llm_extractor=_llm_returning(confidence=bad))
         cands = p.extract_preferences(_turn(user_text="", source_event_id="evt_fd1"))
@@ -332,14 +356,54 @@ def test_field_reject_invalid_confidence():
                    for a in p.audit), f"confidence={bad!r} 应有 validation audit"
 
 
-def test_field_reject_missing_confidence():
-    """PR #36 HIGH-02：confidence 完全缺失 → candidate-level reject（Field required）。"""
-    p = ExtractionProvider(llm_extractor=_llm_returning(confidence=None))
-    # _llm_returning 会把 confidence 覆盖为 None → 等同缺失
+def test_field_reject_missing_confidence_key():
+    """PR #36 HIGH-02/HIGH-03：raw dict 完全不包含 confidence 键（真正 missing key）
+    → candidate-level reject（Field required）。"""
+    def llm(kind, text):
+        return [{"key": "response.language", "value": "中文", "evidence": "e"}]  # 无 confidence 键
+    p = ExtractionProvider(llm_extractor=llm)
     cands = p.extract_preferences(_turn(user_text="", source_event_id="evt_fd1b"))
     assert cands == []
     assert any("validation" in a["error"] and "confidence" in a["error"]
                for a in p.audit)
+
+
+def test_field_reject_confidence_none():
+    """PR #36 HIGH-03：confidence=None → candidate-level reject。"""
+    p = ExtractionProvider(llm_extractor=_llm_returning(confidence=None))
+    cands = p.extract_preferences(_turn(user_text="", source_event_id="evt_fd1c"))
+    assert cands == []
+    assert any("validation" in a["error"] and "confidence" in a["error"]
+               for a in p.audit)
+
+
+def test_confidence_legal_floats_accepted():
+    """PR #36 HIGH-03：合法 float（0.0/0.5/0.9/1.0）正常通过 strict 校验。"""
+    for good in [0.0, 0.5, 0.9, 1.0]:
+        p = ExtractionProvider(llm_extractor=_llm_returning(confidence=good))
+        cands = p.extract_preferences(_turn(user_text="", source_event_id="evt_fd1d"))
+        lang = [c for c in cands if c.key == "response.language"]
+        assert len(lang) == 1, f"confidence={good!r} 应被接受"
+        assert lang[0].confidence == good
+
+
+def test_field_degrade_none_optional():
+    """PR #36 MEDIUM-05（方案 A）：optional 字段显式 None → 字段级降级默认值 + audit。"""
+    cases = [
+        ("category", "presentation"),
+        ("scope", "session"),
+        ("explicitness", "explicit"),
+        ("is_temporary", False),
+        ("should_persist", True),
+    ]
+    for field, default in cases:
+        p = ExtractionProvider(llm_extractor=_llm_returning(**{field: None}))
+        cands = p.extract_preferences(_turn(user_text="", source_event_id="evt_fd1e"))
+        lang = [c for c in cands if c.key == "response.language"]
+        assert len(lang) == 1, f"{field}=None 应保留候选"
+        assert getattr(lang[0], field) == default, f"{field} 应降级为 {default!r}"
+        assert any(a["error"] == f"field-degraded:{field}" for a in p.audit), \
+            f"{field}=None 应有 field-degraded audit"
 
 
 def test_llm_temporary_persist_contradiction_normalized():

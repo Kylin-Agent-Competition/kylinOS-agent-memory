@@ -116,7 +116,9 @@ class PreferenceCandidate(BaseModel):
     value: str = Field(min_length=1)
     category: PreferenceCategory = "presentation"  # 架构 TABLE 19 六类
     scope: PreferenceScope = "session"  # E 轨 §2.9 五值
-    confidence: float = Field(ge=0.0, le=1.0)
+    # HIGH-03（PR #36 R4 严格类型）：required float 必须 strict——
+    # 禁止 bool（True→1.0/False→0.0）与字符串数字（"0.9"→0.9）自动转换后进入候选
+    confidence: float = Field(strict=True, ge=0.0, le=1.0)
     explicitness: Explicitness = "explicit"  # E 轨 §2.5
     is_temporary: bool = False  # TABLE 20：临时指令 vs 长期偏好
     should_persist: bool = True  # E 轨 §3.2
@@ -135,7 +137,8 @@ class KnowledgeCandidate(BaseModel):
     category: Literal["fact", "procedure", "case", "template", "constraint"] = "fact"
     conditions: Optional[str] = None
     source_event_id: str = Field(min_length=1)  # R3: 系统可信 provenance，禁止 LLM 生成/覆盖
-    confidence: float = Field(ge=0.0, le=1.0)
+    # HIGH-03（PR #36 R4 严格类型）：与 PreferenceCandidate 一致，required float strict
+    confidence: float = Field(strict=True, ge=0.0, le=1.0)
     # B2-mini: 可信级标记——候选仅为 candidate，系统强制设置，LLM 不能改成 verified
     memory_status: Literal["candidate"] = "candidate"
 
@@ -156,29 +159,36 @@ def _degrade_optional_fields(raw: Dict[str, Any], kind: str,
                              audit: List[Dict[str, Any]]) -> Dict[str, Any]:
     """可选字段非法值降级：剥离/替换为默认值 + audit（D7）。
 
-    - category/scope/explicitness 非枚举 → 默认值 + audit
-    - is_temporary/should_persist 非 bool → 剥离（用 Pydantic 默认值）+ audit
+    - category/scope/explicitness 非枚举或 None → 默认值 + audit（MEDIUM-05 方案 A）
+    - is_temporary/should_persist 非 bool 或 None → 剥离（用 Pydantic 默认值）+ audit
 
     仅作用于偏好路径的可选字段；必需字段（key/value/evidence/confidence）
     缺失或类型错误仍由 Pydantic 校验拒绝（R4：非法候选不进入业务真源）。
     confidence 为契约 required 字段（Day3 契约 + E 轨 §3.2 confidence_score），
-    非法值（非数值/越界/缺失）一律 candidate-level reject，不做默认值替换
-    （PR #36 HIGH-02：不得把非法 required 字段重新制造成合法业务值）。
+    非法值（非数值/越界/缺失/非 strict float）一律 candidate-level reject，
+    不做默认值替换（PR #36 HIGH-02/HIGH-03：不得把非法 required 字段重新
+    制造成合法业务值）。
     """
     out = dict(raw)
     for fname, valid, default in (
             ("category", _VALID_CATEGORIES, "presentation"),
             ("scope", _VALID_SCOPES, "session"),
             ("explicitness", _VALID_EXPLICITNESS, "explicit")):
-        v = out.get(fname)
+        if fname not in out:
+            continue  # 字段缺失：Pydantic 默认值即可，非降级对象
+        v = out[fname]
+        # MEDIUM-05：显式 None 视为非法 optional 值 → 降级默认值 + audit（与
+        # “可选字段非法值→默认值/剥离+audit”文档契约一致）；字段缺失不降级
         # isinstance(v, str) 防止 list/dict 等 unhashable 值在集合成员检查时抛 TypeError
-        if v is not None and (not isinstance(v, str) or v not in valid):
+        if v is None or not isinstance(v, str) or v not in valid:
             out[fname] = default
             audit.append({"kind": kind, "event_id": trusted_id,
                           "error": f"field-degraded:{fname}"})
     for fname in ("is_temporary", "should_persist"):
-        v = out.get(fname)
-        if v is not None and not isinstance(v, bool):
+        if fname not in out:
+            continue  # 字段缺失：Pydantic 默认值即可，非降级对象
+        v = out[fname]
+        if v is None or not isinstance(v, bool):
             out.pop(fname, None)
             audit.append({"kind": kind, "event_id": trusted_id,
                           "error": f"field-degraded:{fname}"})
