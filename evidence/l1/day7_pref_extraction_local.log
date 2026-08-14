@@ -1,3 +1,13 @@
+# ============================================================
+# 本地 L1 全量 pytest 证据（Day7 偏好抽取深化，PR #36 REWORK 修复后）
+# branch: feat/day7-preference-extraction
+# tested_commit: 8e9311808273a698eb6670da54826e8d30a2ba06
+#   （生产代码最终被测版本；此后 HEAD e01dacf 仅新增响应文档，无生产/测试代码变化）
+# command: /tmp/day7-venv/bin/python -m pytest tests/ -v
+#   （cwd=memory-service；PYTHONPATH 默认含 cwd，KYLIN_L2 未设置）
+# environment: WSL Ubuntu，Python 3.14.4，pytest 9.1.1，pydantic 2.13.4（无麒麟 SDK）
+# collected: 271 | passed: 224 | failed: 0 | skipped: 47（VM/SDK 专属，WSL 无 kylin_embedding）
+# ============================================================
 ============================= test session starts ==============================
 platform linux -- Python 3.14.4, pytest-9.1.1, pluggy-1.6.0 -- /tmp/day7-venv/bin/python
 cachedir: .pytest_cache

@@ -366,7 +366,7 @@ entries:
       Day7 偏好提取深化（架构 v1 TABLE 19/20 + E 轨 Schema §2.5/§2.9/§3.2，
       docs/day7/01_task_card.md）验证（2026-08-14）：
       - L1（本地 WSL）：224 passed + 47 skipped（evidence/l1/day7_pref_extraction_local.log，
-        checksum a3224638…）——含 PR #36 REWORK 修复新增 7 项测试
+        checksum e12859a8…，含 MEDIUM-04 元数据头（branch/tested_commit/command/environment/collected/passed/failed/skipped））——含 PR #36 REWORK 修复新增 7 项测试
       - L2（麒麟 VM，被测 e3a3f9e，PR #36 修复前）：264 passed / 0 skipped / 0 failed（8.38s）
       PR #36 REWORK 修复（生产代码，已本地验证）：
       - HIGH-01：TABLE 20 临时原句“这次只用三句话回答”经指令式规则入口

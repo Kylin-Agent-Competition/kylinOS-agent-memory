@@ -31,7 +31,7 @@ HIGH-02 OK: missing/'high'/‑0.1/1.1/2.0 全部 candidate-level reject + valida
 
 ### 3️⃣ 修复后最终代码重新取得可信 L1 / 麒麟 VM L2 Evidence
 
-- **L1 已刷新**：`evidence/l1/day7_pref_extraction_local.log` —— **224 passed + 47 skipped**（checksum `a3224638c0c7fa1614b9cd84b6ab5a2af224fa0e559cffc26194d06e88c889f5`），含最终修复 commit `8e93118` 全部测试
+- **L1 已刷新（含 MEDIUM-04 元数据头）**：`evidence/l1/day7_pref_extraction_local.log` —— **224 passed + 47 skipped**（checksum `e12859a845be9bec51e86d0bd6d8ef422863d4677d367db159e8d0913f5b7201`），头部记录 branch/tested_commit（`8e93118`）/command/environment/collected=271/passed=224/failed=0/skipped=47；含最终修复 commit `8e93118` 全部测试
 - **L2 麒麟 VM**：⏳ **待执行**——生产代码已变更（`8e93118`），旧证据（264 @ `e3a3f9e`）不再覆盖；VM 侧执行命令与预期如下（见"四、L2 待办"）
 
 ## 二、逐项响应（P0 必须修复）
