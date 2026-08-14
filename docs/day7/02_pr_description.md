@@ -1,6 +1,6 @@
 # [D7-A] 偏好抽取深化——规则/Provider 协同 + 缓存/超时/非法字段降级 + 字段级评测统一结果格式
 
-> 分支：`feat/day7-preference-extraction`（基于 main @ `2e3f919`，7 commits：`59171df`…`a66523a`）
+> 分支：`feat/day7-preference-extraction`（基于 main @ `2e3f919`，18 commits：`59171df`…`82d5d8b`）
 > PR 模板：架构 v1 附录 D（docs/architecture 18.1 PR 最小内容）
 
 ## 背景与目标
