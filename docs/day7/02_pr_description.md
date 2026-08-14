@@ -26,7 +26,7 @@ Day6（PR #27）已交付统一事件清洗/质量评分管线与结构化抽取
 - **`docs/day7/01_task_card.md`（新增）**：D7-A 任务卡（含契约演进记录）
 - **`docs/project-management/session-handoff-20260814.md`（新增）**：Day7 交接文档
 - **`evidence/l1/day7_pref_extraction_local.log`、`evidence/l2-kylin-vm/day7_verify_latest.log`（新增）**：L1/L2 证据日志
-- **`evidence/index.yaml`（更新）**：`D7-A-PREF-EXTRACTION`（HOST_VERIFIED / E4，tested_commit `e3a3f9e`）
+- **`evidence/index.yaml`（更新）**：`D7-A-PREF-EXTRACTION`（HOST_VERIFIED / E4，tested_commit `8e93118`）
 
 ## 明确不修改范围
 
@@ -70,7 +70,7 @@ Day6（PR #27）已交付统一事件清洗/质量评分管线与结构化抽取
 | docs/project-management/session-handoff-20260814.md | 新增 | Day7 交接文档 |
 | evidence/index.yaml | 修改 | D7-A-PREF-EXTRACTION 条目 |
 | evidence/l1/day7_pref_extraction_local.log | 新增 | 本地 L1 证据（224 passed + 47 skipped） |
-| evidence/l2-kylin-vm/day7_verify_latest.log | 新增 | VM L2 证据（264 passed / 0 skipped） |
+| evidence/l2-kylin-vm/day7_verify_latest.log | 新增 | VM L2 证据（271 passed / 0 skipped，被测 8e93118） |
 
 ## 数据库与配置变化
 
@@ -117,11 +117,10 @@ cd memory-service && /tmp/day7-venv/bin/python -m pytest tests/ -q
 cd /mnt/shared && PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
   LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 \
   /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -q
-# → 264 passed in 8.38s（0 failed / 0 skipped）
-# 被测 commit: e3a3f9e395a902b2382f97fcea7d7765f18e010c（PR #36 修复前；
-#   PR #36 HIGH-01/HIGH-02/MEDIUM-01 修复后生产代码已变更，L2 待用最终 commit 重跑）
-# 证据：evidence/l2-kylin-vm/day7_verify_latest.log（checksum 0270469f…）
-# index.yaml: D7-A-PREF-EXTRACTION（HOST_VERIFIED / E4，tested_commit e3a3f9e）
+# → 271 passed in 7.68s（0 failed / 0 skipped）
+# 被测 commit: 8e9311808273a698eb6670da54826e8d30a2ba06（PR #36 修复后生产代码）
+# 证据：evidence/l2-kylin-vm/day7_verify_latest.log（checksum 37d3d789…，含元数据头）
+# index.yaml: D7-A-PREF-EXTRACTION（HOST_VERIFIED / E4，tested_commit 8e93118）
 ```
 
 ### L3 (全链路验收)

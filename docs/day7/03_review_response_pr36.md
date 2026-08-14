@@ -32,7 +32,7 @@ HIGH-02 OK: missing/'high'/‑0.1/1.1/2.0 全部 candidate-level reject + valida
 ### 3️⃣ 修复后最终代码重新取得可信 L1 / 麒麟 VM L2 Evidence
 
 - **L1 已刷新（含 MEDIUM-04 元数据头）**：`evidence/l1/day7_pref_extraction_local.log` —— **224 passed + 47 skipped**（checksum `e12859a845be9bec51e86d0bd6d8ef422863d4677d367db159e8d0913f5b7201`），头部记录 branch/tested_commit（`8e93118`）/command/environment/collected=271/passed=224/failed=0/skipped=47；含最终修复 commit `8e93118` 全部测试
-- **L2 麒麟 VM**：⏳ **待执行**——生产代码已变更（`8e93118`），旧证据（264 @ `e3a3f9e`）不再覆盖；VM 侧执行命令与预期如下（见"四、L2 待办"）
+- **L2 麒麟 VM（已完成）**：`evidence/l2-kylin-vm/day7_verify_latest.log` —— **271 passed / 0 skipped / 0 failed（7.68s）**（checksum `37d3d789331f92a2b392010e1b1aafa71bc4352dad6fa8dadf4661141f8faae2`），tested_commit = `8e9311808273a698eb6670da54826e8d30a2ba06`，头部含元数据头（branch/tested_commit/command/environment/collected=271/passed=271/failed=0/skipped=0）
 
 ## 二、逐项响应（P0 必须修复）
 
@@ -58,17 +58,10 @@ HIGH-02 OK: missing/'high'/‑0.1/1.1/2.0 全部 candidate-level reject + valida
 | L2 | ⏳ 待 VM 重跑（见下） | — |
 | L3 | 不适用（Provider 层增量，按计划 D14 执行） | — |
 
-## 四、L2 待办（唯一剩余项）
+## 四、L2 状态（已闭环）
 
-麒麟 VM（当前运行中）执行：
+麒麟 VM 已用最终生产代码 `8e93118` 重跑：**271 passed / 0 skipped / 0 failed（7.68s）**，
+证据 `evidence/l2-kylin-vm/day7_verify_latest.log`（checksum 37d3d789…，含元数据头）已回填，
+`evidence/index.yaml` tested_commit/evidence_commit/commit = `8e93118`，PR 描述与交接文档同步。
 
-```bash
-cd /mnt/shared && PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -q
-```
-
-预期：**271 passed / 0 skipped / 0 failed**（= 224 + 47）。完成后回填：
-- `evidence/l2-kylin-vm/day7_verify_latest.log`（tested_commit = `8e93118`）
-- `evidence/index.yaml`（D7-A-PREF-EXTRACTION：tested_commit/evidence_commit/checksum 更新）
-- 同步 PR 描述与交接文档数字
-
-> 作者侧无法代跑：SSH 端口转发（2222→22）Connection refused（VM 内 sshd 未监听）、VBoxManage guestcontrol 无 guest 凭据——L2 需宿主执行人（或提供 guest 访问凭据）。
+Reviewer 三件事全部有证据：① 原句主链抽取 ✅ ② confidence reject ✅ ③ L1（224+47）与 VM L2（271）绑定最终代码 ✅。

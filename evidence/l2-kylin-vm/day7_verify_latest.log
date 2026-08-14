@@ -1,10 +1,16 @@
-# VM Day7 全量 pytest 复跑输出（麒麟 VM L2 证据，2026-08-14，R5 复核收紧修复后）
-# 被测分支: feat/day7-preference-extraction @ e3a3f9e（R5 修复 commit；后续 619d0c4 仅文档）
-# 运行位置: /mnt/shared（vboxsf 共享 = WSL 仓库）
-# 命令: cd /mnt/shared && PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
-#        LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 \
-#        /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -q
-................................................................................................................ [ 42%]
-................................................................................................................ [ 84%]
-........................................                                                                         [100%]
-264 passed in 8.38s
+# ============================================================
+# 麒麟 VM 全量 pytest 证据（Day7 偏好抽取深化，PR #36 REWORK 修复后 L2）
+# branch: feat/day7-preference-extraction
+# tested_commit: 8e9311808273a698eb6670da54826e8d30a2ba06
+#   （生产代码最终被测版本；此后 e01dacf/0d68235 仅文档/证据，无生产/测试代码变化）
+# command: cd /mnt/shared && PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
+#           LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 \
+#           /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -q | tee <log>
+# environment: 麒麟 VM（银河麒麟 V11，vboxsf 共享 /mnt/shared = WSL 仓库），Python 3.12，真实 SDK
+# collected: 271 | passed: 271 | failed: 0 | skipped: 0
+# ============================================================
+........................................................................ [ 26%]
+........................................................................ [ 53%]
+........................................................................ [ 79%]
+.......................................................                  [100%]
+271 passed in 7.68s
