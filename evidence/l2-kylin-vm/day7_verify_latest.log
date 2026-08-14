@@ -1,0 +1,16 @@
+# ============================================================
+# 麒麟 VM 全量 pytest 证据（Day7 偏好抽取深化，PR #36 两轮 REWORK 修复后 L2）
+# branch: feat/day7-preference-extraction
+# tested_commit: e5c52e689d3958657d6343fc11bf5d90f93e6813
+#   （HIGH-03/MEDIUM-05/MEDIUM-08 修复后生产代码；此后仅 docs/evidence 变化）
+# command: cd /mnt/shared && PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service \
+#           LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 \
+#           /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -q | tee <log>
+# environment: 麒麟 VM（银河麒麟 V11，vboxsf 共享 /mnt/shared = WSL 仓库），Python 3.12，真实 SDK
+# collected: 276 | passed: 276 | failed: 0 | skipped: 0
+# ============================================================
+........................................................................ [ 26%]
+........................................................................ [ 52%]
+........................................................................ [ 78%]
+............................................................             [100%]
+276 passed in 5.97s
