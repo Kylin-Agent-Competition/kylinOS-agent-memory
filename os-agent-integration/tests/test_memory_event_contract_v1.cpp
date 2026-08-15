@@ -186,6 +186,7 @@ private slots:
     void toolExecutionStatusParsesKnownValues();
     void toolExecutionStatusRejectsUnknownValue();
     void toolExecutionEventRoundTripsKnownPayload();
+    void toolExecutionCanonicalJsonOmitsAbsentOrNonSuccessReferences();
     void toolExecutionJsonRequiresTrustedMetadata_data();
     void toolExecutionJsonRequiresTrustedMetadata();
     void toolExecutionValidationRequiresExplicitStatusAndSideEffect();
@@ -195,6 +196,10 @@ private slots:
     void turnFinalizedJsonRequiresEventTimestamps_data();
     void turnFinalizedJsonRequiresEventTimestamps();
     void turnFinalizedValidationRequiresExplicitFinality();
+    void turnFinalizedValidationRejectsFalseFinality();
+    void turnFinalizedJsonRejectsFalseFinality();
+    void turnFinalizedValidationRequiresResolvableContentReference();
+    void turnFinalizedJsonRequiresResolvableContentReference();
     void turnFinalizedValidationRequiresCollectedAt();
     void turnFinalizedEventRejectsSelfRetry();
     void schemaVersionRejectsUnknownMajor_data();
@@ -204,6 +209,7 @@ private slots:
     void memoryQueryIgnoresUnknownOptionalField();
     void memoryQueryValidationReportsAllInvalidFields();
     void memoryContextRejectsNegativeCount();
+    void memoryContextRejectsEmptyMemoryIdentifier();
     void toolExecutionEventRejectsInvalidTimeline();
     void toolExecutionEventSuccessRequiresResultReference();
     void turnFinalizedEventRejectsInvalidTimestamp();
@@ -472,6 +478,21 @@ void MemoryEventContractV1Test::toolExecutionEventRoundTripsKnownPayload()
     QCOMPARE(contract::toJson(*parsed.value), expected);
 }
 
+void MemoryEventContractV1Test::toolExecutionCanonicalJsonOmitsAbsentOrNonSuccessReferences()
+{
+    QJsonObject payload = knownToolExecutionPayload();
+    payload.insert(QStringLiteral("execution_status"), QStringLiteral("failure"));
+    payload.remove(QStringLiteral("arguments_ref"));
+    payload.remove(QStringLiteral("rollback_status"));
+
+    const auto parsed = contract::toolExecutionEventFromJson(payload);
+
+    QVERIFY(parsed.ok());
+    QJsonObject expected = payload;
+    expected.remove(QStringLiteral("result_ref"));
+    QCOMPARE(contract::toJson(*parsed.value), expected);
+}
+
 void MemoryEventContractV1Test::toolExecutionJsonRequiresTrustedMetadata_data()
 {
     QTest::addColumn<QString>("field");
@@ -575,7 +596,6 @@ void MemoryEventContractV1Test::optionalEventMetadataIsOmittedFromCanonicalJson(
 
     QJsonObject turnEventPayload = knownTurnFinalizedPayload();
     turnEventPayload.remove(QStringLiteral("trace_id"));
-    turnEventPayload.remove(QStringLiteral("source_reference"));
     const auto turnEvent = contract::turnFinalizedEventFromJson(turnEventPayload);
     QVERIFY(turnEvent.ok());
     QCOMPARE(contract::toJson(*turnEvent.value), turnEventPayload);
@@ -616,6 +636,7 @@ void MemoryEventContractV1Test::turnFinalizedValidationRequiresExplicitFinality(
         QStringLiteral("2026-08-14T05:01:00.000Z"), Qt::ISODateWithMs);
     event.metadata.collectedAt = QDateTime::fromString(
         QStringLiteral("2026-08-14T05:01:00.050Z"), Qt::ISODateWithMs);
+    event.metadata.sourceReference = QStringLiteral("ref:chat-record:message-003");
     event.metadata.idempotencyKey = QStringLiteral("turn-finalized:session-001:turn-002");
     event.finalizedAt = QDateTime::fromString(
         QStringLiteral("2026-08-14T05:01:00.000Z"), Qt::ISODateWithMs);
@@ -626,6 +647,73 @@ void MemoryEventContractV1Test::turnFinalizedValidationRequiresExplicitFinality(
     QCOMPARE(validation.errors.size(), 1);
     QCOMPARE(validation.errors.first().code, QStringLiteral("required"));
     QCOMPARE(validation.errors.first().field, QStringLiteral("is_final"));
+}
+
+void MemoryEventContractV1Test::turnFinalizedValidationRejectsFalseFinality()
+{
+    const auto parsed = contract::turnFinalizedEventFromJson(knownTurnFinalizedPayload());
+    QVERIFY(parsed.ok());
+    contract::TurnFinalizedEvent event = *parsed.value;
+    event.isFinal = false;
+
+    const auto validation = contract::validate(event);
+
+    QVERIFY(!validation.ok());
+    QCOMPARE(validation.errors.size(), 1);
+    QCOMPARE(validation.errors.first().code, QStringLiteral("invalid_value"));
+    QCOMPARE(validation.errors.first().field, QStringLiteral("is_final"));
+    QCOMPARE(validation.errors.first().safeMessage,
+             QStringLiteral("Turn finalized event must set is_final to true."));
+}
+
+void MemoryEventContractV1Test::turnFinalizedJsonRejectsFalseFinality()
+{
+    QJsonObject payload = knownTurnFinalizedPayload();
+    payload.insert(QStringLiteral("is_final"), false);
+
+    const auto parsed = contract::turnFinalizedEventFromJson(payload);
+
+    QVERIFY(!parsed.ok());
+    QVERIFY(!parsed.value.has_value());
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("invalid_value"));
+    QCOMPARE(parsed.errors.first().field, QStringLiteral("is_final"));
+    QCOMPARE(parsed.errors.first().safeMessage,
+             QStringLiteral("Turn finalized event must set is_final to true."));
+}
+
+void MemoryEventContractV1Test::turnFinalizedValidationRequiresResolvableContentReference()
+{
+    const auto parsed = contract::turnFinalizedEventFromJson(knownTurnFinalizedPayload());
+    QVERIFY(parsed.ok());
+    contract::TurnFinalizedEvent event = *parsed.value;
+    event.metadata.sourceReference.clear();
+
+    const auto validation = contract::validate(event);
+
+    QVERIFY(!validation.ok());
+    QCOMPARE(validation.errors.size(), 1);
+    QCOMPARE(validation.errors.first().code, QStringLiteral("required"));
+    QCOMPARE(validation.errors.first().field, QStringLiteral("source_reference"));
+    QCOMPARE(validation.errors.first().safeMessage,
+             QStringLiteral("Finalized turn requires a resolvable content reference."));
+}
+
+void MemoryEventContractV1Test::turnFinalizedJsonRequiresResolvableContentReference()
+{
+    QJsonObject payload = knownTurnFinalizedPayload();
+    payload.remove(QStringLiteral("source_reference"));
+    payload.remove(QStringLiteral("final_message_id"));
+
+    const auto parsed = contract::turnFinalizedEventFromJson(payload);
+
+    QVERIFY(!parsed.ok());
+    QVERIFY(!parsed.value.has_value());
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("required"));
+    QCOMPARE(parsed.errors.first().field, QStringLiteral("source_reference"));
+    QCOMPARE(parsed.errors.first().safeMessage,
+             QStringLiteral("Finalized turn requires a resolvable content reference."));
 }
 
 void MemoryEventContractV1Test::turnFinalizedValidationRequiresCollectedAt()
@@ -797,6 +885,23 @@ void MemoryEventContractV1Test::memoryContextRejectsNegativeCount()
     QCOMPARE(parsed.errors.first().code, QStringLiteral("out_of_range"));
     QCOMPARE(parsed.errors.first().field, QStringLiteral("forgotten_excluded_count"));
     QCOMPARE(parsed.errors.first().safeMessage, QStringLiteral("Count must not be negative."));
+}
+
+void MemoryEventContractV1Test::memoryContextRejectsEmptyMemoryIdentifier()
+{
+    QJsonObject payload = knownMemoryContextPayload();
+    payload.insert(QStringLiteral("selected_memory_ids"),
+                   QJsonArray{QStringLiteral("memory-001"), QString{}});
+
+    const auto parsed = contract::memoryContextFromJson(payload);
+
+    QVERIFY(!parsed.ok());
+    QVERIFY(!parsed.value.has_value());
+    QCOMPARE(parsed.errors.size(), 1);
+    QCOMPARE(parsed.errors.first().code, QStringLiteral("invalid_value"));
+    QCOMPARE(parsed.errors.first().field, QStringLiteral("selected_memory_ids"));
+    QCOMPARE(parsed.errors.first().safeMessage,
+             QStringLiteral("Memory identifiers must not be empty."));
 }
 
 void MemoryEventContractV1Test::toolExecutionEventRejectsInvalidTimeline()

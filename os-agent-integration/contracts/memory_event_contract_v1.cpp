@@ -430,6 +430,16 @@ ValidationResult validate(const MemoryContext& context)
             QStringLiteral("Required field is missing."),
         });
     }
+    for (const QString& memoryId : context.selectedMemoryIds) {
+        if (memoryId.isEmpty()) {
+            result.errors.append({
+                QStringLiteral("invalid_value"),
+                QStringLiteral("selected_memory_ids"),
+                QStringLiteral("Memory identifiers must not be empty."),
+            });
+            break;
+        }
+    }
     if (context.tokenBudget <= 0) {
         result.errors.append({
             QStringLiteral("out_of_range"),
@@ -791,7 +801,6 @@ QJsonObject toJson(const ToolExecutionEvent& event)
     QJsonObject object = eventMetadataToJson(event.metadata);
     object.insert(QStringLiteral("tool_call_id"), event.toolCallId);
     object.insert(QStringLiteral("tool_name"), event.toolName);
-    object.insert(QStringLiteral("arguments_ref"), event.argumentsRef);
     object.insert(
         QStringLiteral("started_at"), event.startedAt.toUTC().toString(Qt::ISODateWithMs));
     object.insert(
@@ -799,10 +808,18 @@ QJsonObject toJson(const ToolExecutionEvent& event)
     object.insert(
         QStringLiteral("execution_status"),
         event.executionStatus.has_value() ? toString(*event.executionStatus) : QString{});
-    object.insert(QStringLiteral("result_ref"), event.resultRef);
     object.insert(QStringLiteral("side_effect"), event.sideEffect.value_or(false));
     object.insert(QStringLiteral("rollback_required"), event.rollbackRequired);
-    object.insert(QStringLiteral("rollback_status"), event.rollbackStatus);
+
+    if (!event.argumentsRef.isEmpty()) {
+        object.insert(QStringLiteral("arguments_ref"), event.argumentsRef);
+    }
+    if (event.executionStatus == ToolExecutionStatus::Success && !event.resultRef.isEmpty()) {
+        object.insert(QStringLiteral("result_ref"), event.resultRef);
+    }
+    if (!event.rollbackStatus.isEmpty()) {
+        object.insert(QStringLiteral("rollback_status"), event.rollbackStatus);
+    }
 
     if (!event.errorType.isEmpty()) {
         object.insert(QStringLiteral("error_type"), event.errorType);
@@ -824,11 +841,24 @@ ValidationResult validate(const TurnFinalizedEvent& event)
             QStringLiteral("Required field is missing."),
         });
     }
+    if (event.metadata.sourceReference.isEmpty()) {
+        result.errors.append({
+            QStringLiteral("required"),
+            QStringLiteral("source_reference"),
+            QStringLiteral("Finalized turn requires a resolvable content reference."),
+        });
+    }
     if (!event.isFinal.has_value()) {
         result.errors.append({
             QStringLiteral("required"),
             QStringLiteral("is_final"),
             QStringLiteral("Required field is missing."),
+        });
+    } else if (!*event.isFinal) {
+        result.errors.append({
+            QStringLiteral("invalid_value"),
+            QStringLiteral("is_final"),
+            QStringLiteral("Turn finalized event must set is_final to true."),
         });
     }
     if (!event.finalizedAt.isValid()) {
