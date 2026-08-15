@@ -79,7 +79,7 @@
 | 未知主版本 | `2.x` 等拒绝为 `unsupported_schema_version` |
 | 未知字段 | 读取时忽略，重新序列化时不回写 |
 | 必填字段缺失 | 不使用 Qt 默认值掩盖，返回 `required` |
-| 可选元数据缺失 | `trace_id`、条件 `turn_id`、`source_reference` 未提供时，规范输出省略 key，不写空字符串 |
+| 可选元数据缺失 | `trace_id`、条件 `turn_id` 未提供时，规范输出省略 key，不写空字符串；`source_reference` 对 `MemoryContext`/`ToolExecutionEvent` 同样省略，但对 `TurnFinalizedEvent` 必填 |
 | JSON 类型错误 | 返回 `invalid_type`；数组元素也逐项检查 |
 | 整数字段 | 必须为有限、无小数且在 C++ `int` 范围内的 JSON number |
 | 时间 | ISO 8601 字符串；规范输出为 UTC 且保留毫秒 |
@@ -104,7 +104,7 @@ D2 的 14 个候选公共字段不是已冻结协议。D3-C 按已合并来源�
 | `event_type` | `defer` | 无 | 三个强类型入口已区分类型，是否再写入 JSON 待跨轨决议 |
 | `occurred_at` | `include` | `metadata.occurredAt` | 必填 ISO 8601，规范输出 UTC 毫秒 |
 | `collected_at` | `include` | `metadata.collectedAt` | 必填 ISO 8601，规范输出 UTC 毫秒 |
-| `source_reference` | `include` | `metadata.sourceReference` | 可选/条件；只存受控引用，不存正文 |
+| `source_reference` | `include` | `metadata.sourceReference` | `MemoryContext`/`ToolExecutionEvent` 可选，`TurnFinalizedEvent` 必填；只存受控引用，不存正文 |
 | `consent_scope` | `defer` | 无 | 待 E 轨同意模型终审 |
 | `idempotency_key` | `include` | `metadata.idempotencyKey` | 必填，与 `event_id` 语义独立 |
 | `sensitivity` | `defer` | 无 | 待 E 轨敏感分级终审 |
@@ -124,7 +124,7 @@ D2 的 14 个候选公共字段不是已冻结协议。D3-C 按已合并来源�
 | `turn_id` | `metadata.turnId` | string | conditional |
 | `occurred_at` | `metadata.occurredAt` | ISO 8601 | required |
 | `collected_at` | `metadata.collectedAt` | ISO 8601 | required |
-| `source_reference` | `metadata.sourceReference` | string | optional/conditional |
+| `source_reference` | `metadata.sourceReference` | string | `MemoryContext`/`ToolExecutionEvent` optional；`TurnFinalizedEvent` required |
 | `idempotency_key` | `metadata.idempotencyKey` | string | required |
 
 ## 4. `MemoryQuery`
@@ -152,7 +152,7 @@ C 轨在本对象中单方面冻结。
 | JSON | C++ | 类型 | 输入 | 约束 |
 |---|---|---|---|---|
 | `query_id` | `queryId` | string | required | 非空；与 D `request_id` 的映射待 D 确认 |
-| `selected_memory_ids` | `selectedMemoryIds` | string array | required | 可为空；元素必须为字符串 |
+| `selected_memory_ids` | `selectedMemoryIds` | string array | required | 可为空；元素必须是非空字符串 |
 | `context_version` | `contextVersion` | string | required | 非空；跨 Turn 复用仍待 C/D 决策 |
 | `token_budget` | `tokenBudget` | integer | required | 大于 0 |
 | `actual_token_count` | `actualTokenCount` | integer | required | 非负且不大于预算 |
@@ -183,16 +183,16 @@ C 轨在本对象中单方面冻结。
 |---|---|---|---|---|
 | `tool_call_id` | `toolCallId` | string | required | 非空 |
 | `tool_name` | `toolName` | string | required | 非空 |
-| `arguments_ref` | `argumentsRef` | string | optional | 脱敏引用 |
+| `arguments_ref` | `argumentsRef` | string | optional | 脱敏引用；空值不写入规范输出 |
 | `started_at` | `startedAt` | ISO 8601 | required | 有效时间 |
 | `finished_at` | `finishedAt` | ISO 8601 | required | 不早于 `started_at` |
 | `execution_status` | `executionStatus` | string enum | required | 见下表 |
-| `result_ref` | `resultRef` | string | conditional | `success` 时必须非空 |
+| `result_ref` | `resultRef` | string | conditional | `success` 时必须非空；非 `success` 不写入规范输出 |
 | `error_type` | `errorType` | string | optional | 结构化、非敏感类型 |
 | `error_message_safe` | `errorMessageSafe` | string | optional | 不得包含敏感原文 |
 | `side_effect` | `sideEffect` | boolean | required | 不得用缺省 false 掩盖缺字段 |
 | `rollback_required` | `rollbackRequired` | boolean | optional | 缺省 false；事务语义待 D/E |
-| `rollback_status` | `rollbackStatus` | string | optional | 暂不冻结枚举，待 D/E |
+| `rollback_status` | `rollbackStatus` | string | optional | 空值不写入规范输出；暂不冻结枚举，待 D/E |
 
 `ToolExecutionStatus` 候选五态：
 
@@ -213,12 +213,12 @@ C 轨在本对象中单方面冻结。
 用途：单个 Turn 收尾、重试和 Tool 关联候选。为避免在共享事件和普通日志中复制原始正文，
 本候选使用 `source_reference` 指向受控来源记录，不采用 D1 伪代码中的内嵌
 `userText/assistantText` 作为冻结字段。
-本对象继承 §3.2 共享元数据，且 `turn_id` 在此对象中必填。
+本对象继承 §3.2 共享元数据，且 `turn_id` 和 `source_reference` 在此对象中必填。后者是唯一可由后续受控 resolver 解析正文的引用；`final_message_id` 仅是宿主消息引用，不能替代该来源约束。
 
 | JSON | C++ | 类型 | 输入 | 约束 |
 |---|---|---|---|---|
 | `final_message_id` | `finalMessageId` | string | optional | 宿主消息引用 |
-| `is_final` | `isFinal` | boolean | required | 不得用缺省 false 掩盖缺字段 |
+| `is_final` | `isFinal` | boolean | required | 必须显式为 `true`；不得用缺省 false 掩盖缺字段 |
 | `finalization_reason` | `finalizationReason` | string | optional | 暂不冻结枚举，待 E |
 | `stop_reason` | `stopReason` | string | optional | 暂不冻结枚举，待 C/E |
 | `retry_of_turn_id` | `retryOfTurnId` | string | optional | 不得等于自身 `turn_id` |
@@ -251,7 +251,7 @@ Post-Turn 的候选语义位置已有部分/诊断证据，但 D2-C 正式索引
 |---|---|
 | `required` | 必填 key 或必填值缺失 |
 | `invalid_type` | 已知字段 JSON 基础类型错误，或 ID 数组元素不是字符串 |
-| `invalid_value` | number 不是可表示的整数 |
+| `invalid_value` | 已知字段值违反固定约束，例如 number 不是可表示的整数、ID 为空或 `is_final` 不是 `true` |
 | `out_of_range` | 正数/非负数约束失败 |
 | `invalid_enum` | 注入状态或 Tool 状态未知 |
 | `invalid_version` | 版本不是 `major.minor` |

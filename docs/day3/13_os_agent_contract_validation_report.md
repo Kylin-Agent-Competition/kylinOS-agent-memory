@@ -2,7 +2,7 @@
 
 > **结论：`PASS_LOCAL / BLOCKED_FOR_HOST_AND_REVIEW`**
 
-- 日期：2026-08-14
+- 日期：2026-08-15
 - 任务：D3-C
 - 分支：`feat/C-d3-host-contract-v1`
 - 基线：`origin/main@d37fb95eca9083eb480491cda2464ebe8515477d`
@@ -42,6 +42,9 @@
 | 正式示例返工 | 共享元数据加入后 3 个示例与实现不一致 | 三个示例重新通过独立固定字面值比对 |
 | 测试对象分派 | 三处重复 `switch` 分派 | 测试侧收敛为一个 `parseContractObject` 辅助 seam，行为不变 |
 | 可选元数据规范输出 | 2 pass / 1 fail，缺省 key 被写回空字符串 | 省略规则收敛到 `eventMetadataToJson`，针对用例 3 pass / 0 fail |
+| Turn 收尾语义 | `is_final=false` 和无来源引用被接受 | `is_final` 只接受显式 `true`；`TurnFinalizedEvent` 必须提供可受控 resolver 解析的 `source_reference` |
+| Tool 规范输出 | 空 `arguments_ref`、`rollback_status` 和失败事件的 `result_ref` 被写成空 key 或无效结果 | 空可选引用统一省略；`result_ref` 仅在 `success` 且非空时输出 |
+| Memory ID 质量 | `selected_memory_ids` 可包含空字符串 | 每个 ID 必须为非空字符串，返回安全的 `invalid_value` |
 
 红灯输出保存在 `辅助生成文件/临时文件/`，不属于仓库正式交付物。
 
@@ -67,11 +70,14 @@ ctest --test-dir <build-dir> -C Debug --output-on-failure
 ctest --test-dir <build-dir> -C Release --output-on-failure
 ```
 
-结果：返工后两种配置均 `1/1 passed`。直接运行 QtTest 明细为：
+结果：本轮新增的六个 Review 回归用例均在实现后定向绿灯。完整 Debug 测试首次运行到
+`82 passed / 1 failed`：唯一失败的既有 `turnFinalizedValidationRequiresExplicitFinality` 夹具没有
+设置新必填 `source_reference`，因而正确得到第二条来源错误。夹具已补齐来源引用；获授权读取本机
+Windows SDK 配置后重新构建，Debug、Release CTest 均通过，直接运行的 QtTest 明细为：
 
 ```text
-Debug: 77 passed, 0 failed, 0 skipped, 0 blacklisted
-Release: 77 passed, 0 failed, 0 skipped, 0 blacklisted
+Debug: 83 passed, 0 failed, 0 skipped, 0 blacklisted
+Release: 83 passed, 0 failed, 0 skipped, 0 blacklisted
 ```
 
 ### 3.2 无测试配置
@@ -81,7 +87,7 @@ cmake -S os-agent-integration -B <no-test-build-dir> -DBUILD_TESTING=OFF -DQt5_D
 cmake --build <no-test-build-dir> --config Release --target os_agent_memory_contract_v1
 ```
 
-结果：通过；生产消费者不要求 QtTest，只要求 QtCore。
+结果：本轮重新构建通过；生产消费者不要求 QtTest，只要求 QtCore。
 
 ### 3.3 数据与文本检查
 
@@ -89,13 +95,14 @@ cmake --build <no-test-build-dir> --config Release --target os_agent_memory_cont
 - 正式示例与测试中的独立固定字面值逐对象一致；
 - 所有正式/任务卡文本无行尾空白且以 LF 结束；
 - 新增文件的凭据模式扫描无命中；
-- `git diff --check` 通过；本轮 Review 返工未暂存、未提交、未推送（分支已有 4 个 D3-C 候选历史提交）。
+- 四个 `contracts/examples/*.json` 已在本轮重新独立 JSON 解析；
+- `git diff --check` 已通过；当前 Review 返工保持未暂存、未提交、未推送，等待独立提交授权；
+- 重新构建后，Debug、Release CTest 均 `1/1 passed`，两种 QtTest 配置均 `83 passed / 0 failed`。
 
 ## 4. 范围检查
 
 本批次只修改/新增：
 
-- `.scratch/d3-c-host-contract/` 本地任务卡；
 - `docs/day3/10`–`13` D3-C 文档；
 - `os-agent-integration/README.md`；
 - `os-agent-integration/CMakeLists.txt`；
@@ -103,6 +110,9 @@ cmake --build <no-test-build-dir> --config Release --target os_agent_memory_cont
 - `os-agent-integration/tests/test_memory_event_contract_v1.cpp`。
 
 未修改 B 轨检索/索引代码，未修改 D/E 契约或生产实现，未修改官方 AI 助手源码。
+
+`.scratch/d3-c-host-contract/` 是本地 Issue tracker，保留在开发者工作区但不属于 PR 交付物；
+`.gitignore` 已声明 `.scratch/`。移除既有 Git 跟踪会与本轮提交一并执行，且不会删除本地任务卡。
 
 ## 5. 未完成与阻断
 
@@ -114,18 +124,30 @@ cmake --build <no-test-build-dir> --config Release --target os_agent_memory_cont
 | 合规生产 Hook 路径 | `NOT_FOUND / BLOCKED` | 只能在受支持扩展点取证后提案；官方源码补丁不在当前范围 |
 | 备用路径 | `NO_APPROVED_BACKUP` | D/E 书面批准后才能启用 |
 | `TurnExtractionAdapter` | `NOT_IMPLEMENTED / BLOCKED_BY_HOST_MAPPING` | 后续通过受控 resolver 桥接 C++ 元数据事件与 Python Provider；本批次不修改 `memory-service` |
-| 人工审查 | `PENDING` | D 主审，用户交互/安全由 E 补审 |
-| commit/push/PR | `NOT_AUTHORIZED` | 分别等待用户后续明确授权 |
+| 当前 Review | `CHANGES_REQUESTED` | 两份新 Review 的代码/文档返工完成后需完整回归、单独 commit/push，并保留 GCC/Kylin 独立复验要求 |
+| GCC/Kylin 独立复验 | `REQUIRES_INDEPENDENT_RERUN / ENVIRONMENT_BLOCKED` | 本机 MSVC/Qt 结果不能代替目标 GCC、Kylin L1/L2；需具备目标环境的独立 Reviewer 复跑 |
+| PR 描述状态 | `PENDING_UPDATE` | PR 实际为 Ready for review，描述中旧的 Draft 表述须在 commit/push 后同步 |
+| commit/push/PR | `PENDING_SEPARATE_AUTHORIZATION` | 当前返工未暂存；分别等待用户的 commit、push 与 PR 更新授权 |
 
-## 6. 双轴 Review 返工结果
+## 6. 发布与 Review 快照
+
+2026-08-15 获取 Review 时，已推送的 PR 基线包含 6 个符合中文 Conventional Commit 要求的 D3-C 提交；
+PR #37 处于 `OPEN / Ready for review / CHANGES_REQUESTED / BLOCKED`。本报告所述的本轮返工尚在本地
+工作树，尚未跨越独立 commit/push 门禁。该快照用于避免把历史发布状态与当前未提交修复混为一谈。
+
+当前 PR 是 Ready for review，而旧 PR 描述仍称 Draft。为保持用户手动控制 Draft/Ready 的边界，本轮不
+切换 PR 状态；待本轮提交和推送获授权并完成后，仅同步 PR 描述中的事实状态与验证结果。
+
+## 7. 双轴 Review 返工结果
 
 | 轴线 | 初次发现 | 增量复审 |
 |---|---|---|
 | Spec | D2 公共字段缺失、Provider 映射未定义、无来源字段、C++ required 在场性缺失 | 工作树无新或剩余 finding |
 | Standards | 源码补丁边界冲突、测试分派重复、文档状态漂移、可选元数据策略分散 | 工作树 finding 全部关闭 |
-| 提交历史 | 4 个既有提交的 subject 不符合中文和允许前缀规则 | 仍待用户单独授权后 reword；不属于当前工作树修复 |
+| 提交历史 | 4 个既有提交的 subject 不符合中文和允许前缀规则 | 已在先前获授权的历史改写中完成；当前 PR 基线为 6 个中文 Conventional Commit 提交 |
 
-## 7. 交接结论
+## 8. 交接结论
 
-D3-C 已达到本地人工审查入口：公共契约、示例、路径决策和本地测试完整且一致。它尚未达到最终
-冻结或生产合并资格；宿主证据与 D/E 审查缺口必须继续保留，不能以本地 Qt 测试替代。
+D3-C 的公共契约、示例、路径决策与本地 Debug/Release/无测试 Release 回归均已通过，达到本地人工
+审查入口。它仍未达到最终冻结或生产合并资格；宿主证据与 D/E 审查缺口必须继续保留，不能以本地
+Qt 测试替代。
