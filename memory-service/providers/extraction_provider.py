@@ -26,6 +26,24 @@ D7 阶段（本版）：
 6. 评测输出：PreferenceExtractionOutput + export_preference_records() JSONL
    + to_evaluation_record() 字段级统一结果格式（供 E 轨 D7 偏好准确率评测）。
 
+D8 阶段（本版，台账 R42）：
+1. 知识结构化抽取支持（providers/knowledge_rules.py + KnowledgeCandidate v0.2）：
+   - category 六值对齐 E 轨 Schema §2.6（fact/workflow/case/template/
+     constraint/failure_experience；Day3 五值 procedure → workflow 命名演进）
+   - 六类结构化字段（架构 TABLE 21 必须保留的结构）：evidence/steps/
+     expected_result/problem/outcome/reproducible/template_body/parameters/
+     priority/failure_reason/avoid_condition/alternative（全可选，向后兼容）
+2. 不同抽取策略（B1 红线 + 架构 TABLE 17/22）：
+   - 成功 Tool → 六类成功知识（高可信 0.85，TABLE 17 真实 Tool 成功=高）
+   - 失败 Tool → 仅 failure_experience（失败原因/环境/避免条件/替代方案，
+     中可信 0.6）——失败 Tool 不生成成功知识（B1 + TABLE 22）
+   - 取消 Tool → 不生成任何知识（用户中止无结论，架构 8 章）
+   - 模型推测（无真实 Tool 证据）→ LLM 成功知识门控拒绝（B1 保持）
+3. 失败降级测试：knowledge LLM 非法 category 降级（默认 fact + audit）、
+   结构化字段非法值剥离 + audit、R5 敏感复核覆盖结构化字段。
+4. 评测输出：KnowledgeExtractionOutput + to_knowledge_evaluation_record()
+   + export_knowledge_records() JSONL（E 轨 §3.3 知识评测口径）。
+
 安全（保持 D6 全部红线）：
 - R3：source_event_id 系统可信，LLM 无法伪造/覆盖
 - R4：非法候选不进入正常 candidates（仅可选字段做字段级降级）
@@ -50,6 +68,16 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from pipeline.fingerprint import content_fingerprint
 from pipeline.sensitive import detect_sensitivity, is_high_or_critical
+from providers.knowledge_rules import (
+    KNOWLEDGE_CATEGORIES as _KNOWLEDGE_CATEGORIES,
+    KNOWLEDGE_CATEGORY_FAILURE,
+    build_failure_experience,
+    classify_knowledge_category,
+    is_success_tool_result,
+    tool_failure_confidence,
+    tool_status_knowledge_policy,
+    tool_success_confidence,
+)
 from providers.preference_rules import (
     PREFERENCE_EXPLICIT_PATTERN,
     PREFERENCE_INSTRUCTION_PATTERN,
@@ -128,19 +156,48 @@ class PreferenceCandidate(BaseModel):
     memory_status: Literal["candidate"] = "candidate"
 
 
+# 知识类别（E 轨 Schema §2.6 六值 + 架构 TABLE 21 六类）
+# Day8 契约演进：Day3 五值（fact/procedure/case/template/constraint）→ 六值；
+# procedure → workflow 命名对齐 E 轨（架构 TABLE 21 ProcedureMemory）；
+# 新增 failure_experience（架构 TABLE 21 FailureMemory）。
+KnowledgeCategory = Literal[
+    "fact", "workflow", "case", "template", "constraint", "failure_experience"]
+
+
 class KnowledgeCandidate(BaseModel):
-    """知识候选（Day3 契约字段 + D6 审计字段 + B2 可信级标记）。"""
+    """知识候选 v0.2（Day3 契约字段 + Day8 六类结构化 + D6 审计字段 + B2 可信级标记）。
+
+    Day8 契约演进（见 docs/day8/01_task_card.md）：
+    - category: Day3 五值 → E 轨 §2.6 六值（procedure → workflow；新增 failure_experience）
+    - 新增六类结构化字段（架构 TABLE 21 必须保留的结构，全部可选向后兼容）：
+      evidence（证据）/ steps+expected_result（workflow）/ problem+outcome+
+      reproducible（case）/ template_body+parameters（template）/ priority
+      （constraint）/ failure_reason+avoid_condition+alternative（failure）
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     fact: str = Field(min_length=1)
-    category: Literal["fact", "procedure", "case", "template", "constraint"] = "fact"
+    category: KnowledgeCategory = "fact"
     conditions: Optional[str] = None
+    evidence: Optional[str] = None  # 架构 TABLE 21 证据（R3 系统可信来源，禁止 LLM 伪造）
     source_event_id: str = Field(min_length=1)  # R3: 系统可信 provenance，禁止 LLM 生成/覆盖
     # HIGH-03（PR #36 R4 严格类型）：与 PreferenceCandidate 一致，required float strict
     confidence: float = Field(strict=True, ge=0.0, le=1.0)
     # B2-mini: 可信级标记——候选仅为 candidate，系统强制设置，LLM 不能改成 verified
     memory_status: Literal["candidate"] = "candidate"
+    # ── 六类结构化字段（架构 TABLE 21；全可选） ──
+    steps: Optional[str] = None            # workflow：前置条件/步骤/流程
+    expected_result: Optional[str] = None  # workflow：期望结果
+    problem: Optional[str] = None          # case：问题
+    outcome: Optional[str] = None          # case：结果
+    reproducible: Optional[str] = None     # case：是否复现
+    template_body: Optional[str] = None    # template：模板正文
+    parameters: Optional[str] = None       # template：参数
+    priority: Optional[str] = None         # constraint：优先级
+    failure_reason: Optional[str] = None       # failure：失败原因
+    avoid_condition: Optional[str] = None      # failure：避免条件
+    alternative: Optional[str] = None          # failure：替代方案
 
 
 # LLM 抽取器接口（可注入；返回 raw dict 候选列表，由本 Provider 做 Pydantic 校验）
@@ -189,6 +246,44 @@ def _degrade_optional_fields(raw: Dict[str, Any], kind: str,
             continue  # 字段缺失：Pydantic 默认值即可，非降级对象
         v = out[fname]
         if v is None or not isinstance(v, bool):
+            out.pop(fname, None)
+            audit.append({"kind": kind, "event_id": trusted_id,
+                          "error": f"field-degraded:{fname}"})
+    return out
+
+
+# 知识路径可选字段（D8：category 枚举 + 结构化字符串字段，非法值 → 降级/剥离 + audit）
+_KNOWLEDGE_OPTIONAL_STR_FIELDS = (
+    "conditions", "evidence", "steps", "expected_result", "problem",
+    "outcome", "reproducible", "template_body", "parameters", "priority",
+    "failure_reason", "avoid_condition", "alternative",
+)
+
+
+def _degrade_knowledge_fields(raw: Dict[str, Any], kind: str,
+                              trusted_id: str,
+                              audit: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """知识候选可选字段非法值降级（D8，对齐 D7 偏好字段降级语义）。
+
+    - category 非六值枚举或 None → 默认 fact + audit（MEDIUM-05 方案 A）
+    - 结构化字段（evidence/steps/…）非 str 或 None → 剥离（Pydantic 默认 None）+ audit
+
+    必需字段（fact/confidence）缺失或类型错误仍候选级拒绝（R4 保持）；
+    confidence 为契约 required 字段，非法值一律 reject，不做默认值替换
+    （PR #36 HIGH-02/HIGH-03 语义，与偏好路径一致）。
+    """
+    out = dict(raw)
+    v = out.get("category")
+    if "category" in out and (v is None or not isinstance(v, str)
+                               or v not in _KNOWLEDGE_CATEGORIES):
+        out["category"] = "fact"
+        audit.append({"kind": kind, "event_id": trusted_id,
+                      "error": "field-degraded:category"})
+    for fname in _KNOWLEDGE_OPTIONAL_STR_FIELDS:
+        if fname not in out:
+            continue  # 字段缺失：Pydantic 默认值即可，非降级对象
+        fv = out[fname]
+        if fv is None or not isinstance(fv, str):
             out.pop(fname, None)
             audit.append({"kind": kind, "event_id": trusted_id,
                           "error": f"field-degraded:{fname}"})
@@ -269,28 +364,47 @@ def _build_preference_rule_candidate(value: str, text: str,
 
 def _extract_knowledge_rules(event: TurnFinalizedEvent,
                              source_event_id: str) -> List[KnowledgeCandidate]:
-    """规则路径：从 Tool 成功结果提取知识候选（失败 Tool 不生成成功知识，架构 8 章）。
+    """规则路径：按 Tool 状态分派知识抽取（D8，B1 红线 + 架构 TABLE 17/22）。
 
-    R5 安全：Tool result 若含 high/critical 敏感原文 → 拒绝进入候选。
+    - success   → 六类成功知识（category 由内容识别，高可信 0.85）
+    - failure   → 仅 failure_experience（失败原因/环境/避免条件/替代方案，中可信 0.6）
+    - cancelled → 不生成任何知识（用户中止无结论）
+
+    R5 安全：Tool result/error 若含 high/critical 敏感原文 → 拒绝进入候选。
     """
     candidates: List[KnowledgeCandidate] = []
-    if event.tool_results:
-        for tr in event.tool_results:
-            if tr.status != "success" or not tr.result:
-                continue  # 失败/取消 Tool 不沉淀为成功知识
-            fact = tr.result.strip()
-            if not fact or len(fact) < 8:
+    if not event.tool_results:
+        return candidates
+    for tr in event.tool_results:
+        policy = tool_status_knowledge_policy(tr.status)
+        if policy == "skip":
+            continue  # 取消/未知状态：不沉淀任何知识（B1 + 架构 8 章）
+        if policy == "failure":
+            # 失败 Tool：仅失败经验知识（非成功知识，TABLE 21 FailureMemory）
+            raw = build_failure_experience(
+                tool_name=tr.tool_name, error=tr.error, arguments=tr.arguments,
+                source_event_id=source_event_id)
+            # R5：失败原因/条件含高敏原文 → 拒绝（凭据类错误信息不落知识）
+            if _contains_high_sensitivity(
+                    f"{raw['fact']} {raw.get('conditions') or ''}"):
                 continue
-            # R5 防御性敏感复核：Tool 结果含高敏原文（API Key/JWT 等）→ 拒绝
-            if _contains_high_sensitivity(fact):
-                continue
-            candidates.append(KnowledgeCandidate(
-                fact=fact,
-                category="fact",
-                conditions=f"tool={tr.tool_name}",
-                source_event_id=source_event_id,
-                confidence=0.85,  # 真实 Tool 成功结果高可信（架构 6.3）
-            ))
+            candidates.append(KnowledgeCandidate(**raw))
+            continue
+        # success：成功知识（六类识别 + 证据 + 适用条件）
+        fact = (tr.result or "").strip()
+        if not fact or len(fact) < 8:
+            continue
+        # R5 防御性敏感复核：Tool 结果含高敏原文（API Key/JWT 等）→ 拒绝
+        if _contains_high_sensitivity(fact):
+            continue
+        candidates.append(KnowledgeCandidate(
+            fact=fact,
+            category=classify_knowledge_category(fact),
+            conditions=f"tool={tr.tool_name}",
+            evidence=tr.result[:200],  # 架构 TABLE 21 证据（截断防超长；R3 系统可信来源）
+            source_event_id=source_event_id,
+            confidence=tool_success_confidence(),  # 真实 Tool 成功结果高可信（TABLE 17）
+        ))
     return candidates
 
 
@@ -443,6 +557,62 @@ def export_preference_records(events: List[TurnFinalizedEvent],
     return written
 
 
+class KnowledgeExtractionOutput(BaseModel):
+    """一次知识提取的完整输出（D8，供 E 轨 D8 知识评测与可观测性）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str  # 可信 source_event_id（R3）
+    provider_mode: ProviderMode
+    candidates: List[KnowledgeCandidate]
+    cache_hit: bool = False
+    llm_timeout: bool = False
+    duration_ms: float = 0.0
+
+
+def to_knowledge_evaluation_record(candidate: KnowledgeCandidate) -> Dict[str, Any]:
+    """单知识候选 → 字段级统一评测结果格式（E 轨 §3.3 知识评测口径）。
+
+    字段与 E 轨 Schema §3.3 / 架构 TABLE 21 对齐：fact（content_summary 语义）/
+    category（knowledge_type）/conditions/evidence/source_event_id/confidence/
+    memory_status + 六类结构化字段——供知识检索/冲突评测 Gold Label 比对。
+    """
+    return {
+        "fact": candidate.fact,
+        "category": candidate.category,
+        "conditions": candidate.conditions,
+        "evidence": candidate.evidence,
+        "source_event_id": candidate.source_event_id,
+        "confidence": candidate.confidence,
+        "memory_status": candidate.memory_status,
+        "steps": candidate.steps,
+        "expected_result": candidate.expected_result,
+        "problem": candidate.problem,
+        "outcome": candidate.outcome,
+        "reproducible": candidate.reproducible,
+        "template_body": candidate.template_body,
+        "parameters": candidate.parameters,
+        "priority": candidate.priority,
+        "failure_reason": candidate.failure_reason,
+        "avoid_condition": candidate.avoid_condition,
+        "alternative": candidate.alternative,
+    }
+
+
+def export_knowledge_records(events: List[TurnFinalizedEvent],
+                             provider: "ExtractionProvider",
+                             path: str) -> int:
+    """批量提取并导出 JSONL 知识评测记录（每行一个 KnowledgeExtractionOutput）。"""
+    written = 0
+    with open(path, "w", encoding="utf-8") as f:
+        for ev in events:
+            out = provider.extract_knowledge_with_meta(ev)
+            f.write(json.dumps(out.model_dump(mode="json"),
+                               ensure_ascii=False) + "\n")
+            written += 1
+    return written
+
+
 class ExtractionProvider:
     """偏好/知识提取 Provider（Day3 契约接口，D7 深化）。
 
@@ -538,19 +708,44 @@ class ExtractionProvider:
         仅在事件含至少一个 success ToolResult 时执行；否则 LLM 输出全部拒绝
         （模型自述成功 ≠ 真实 Tool 执行成功，不得沉淀为知识）。
         D7: knowledge 路径同样使用缓存与超时包装（一致性）。
+        D8: 规则路径按 Tool 状态分派（成功→六类；失败→failure_experience；
+        取消→跳过）；LLM 门控保持（无 success Tool 时 LLM 成功知识拒绝）。
         """
+        return self.extract_knowledge_with_meta(event).candidates
+
+    def extract_knowledge_with_meta(
+        self, event: TurnFinalizedEvent
+    ) -> KnowledgeExtractionOutput:
+        """提取知识候选 + 元信息（D8：缓存命中/模式/超时/耗时）。
+
+        流程：缓存查找 → 规则路径（按 Tool 状态分派）→（B1 门控 LLM 协同）→ 写缓存。
+        """
+        start = time.monotonic()
         trusted_id = event.trusted_source_event_id
         cache_key = ("knowledge", trusted_id,
                      content_fingerprint(_event_content_text(event)))
 
         cached = self._cache.get(cache_key)
         if cached is not None:
-            return cached  # 类型同构（KnowledgeCandidate 列表，深拷贝由缓存负责）
+            return KnowledgeExtractionOutput(
+                event_id=trusted_id,
+                provider_mode=self._provider_mode,
+                candidates=cached,
+                cache_hit=True,
+                duration_ms=(time.monotonic() - start) * 1000.0,
+            )
 
         rule_candidates = _extract_knowledge_rules(event, trusted_id)
+        llm_timeout = False
         if self._llm is None:
             self._cache.set(cache_key, rule_candidates)
-            return rule_candidates
+            return KnowledgeExtractionOutput(
+                event_id=trusted_id,
+                provider_mode=self._provider_mode,
+                candidates=rule_candidates,
+                cache_hit=False,
+                duration_ms=(time.monotonic() - start) * 1000.0,
+            )
 
         # B1 门控：必须有真实 success Tool evidence 才允许 knowledge LLM 提取
         has_success_tool = any(
@@ -563,12 +758,25 @@ class ExtractionProvider:
                 "error": "no-success-tool-evidence: llm knowledge rejected",
             })
             self._cache.set(cache_key, rule_candidates)
-            return rule_candidates
+            return KnowledgeExtractionOutput(
+                event_id=trusted_id,
+                provider_mode=self._provider_mode,
+                candidates=rule_candidates,
+                cache_hit=False,
+                duration_ms=(time.monotonic() - start) * 1000.0,
+            )
 
-        llm_candidates, _timeout = self._run_llm("knowledge", event, trusted_id)
+        llm_candidates, llm_timeout = self._run_llm("knowledge", event, trusted_id)
         merged = rule_candidates + llm_candidates
         self._cache.set(cache_key, merged)
-        return merged
+        return KnowledgeExtractionOutput(
+            event_id=trusted_id,
+            provider_mode=self._provider_mode,
+            candidates=merged,
+            cache_hit=False,
+            llm_timeout=llm_timeout,
+            duration_ms=(time.monotonic() - start) * 1000.0,
+        )
 
     # ── 规则 + LLM 协同（D7：合并去重，规则优先） ──
 
@@ -706,6 +914,10 @@ class ExtractionProvider:
         if kind == "preference":
             raw = _degrade_optional_fields(raw, kind, trusted_source_event_id,
                                            self._audit)
+        # D8: 知识路径可选字段非法值降级（category 默认 fact；结构化字段剥离 + audit）
+        elif kind == "knowledge":
+            raw = _degrade_knowledge_fields(raw, kind, trusted_source_event_id,
+                                            self._audit)
         # 系统可信字段强制附加（LLM 无法覆盖）
         merged = {**raw, "source_event_id": trusted_source_event_id,
                   "memory_status": "candidate"}
@@ -735,11 +947,17 @@ class ExtractionProvider:
 
         # R5: 敏感复核（候选正文含 high/critical 敏感原文 → 拒绝）
         # 与规则路径（_extract_preferences_rules 复核 value+evidence）一致：
-        # preference 复核 value+evidence；knowledge 复核 fact+conditions。
+        # preference 复核 value+evidence；knowledge 复核 fact+conditions+
+        # 全部结构化字段（D8：防止敏感原文藏在 evidence/失败原因/模板正文等）。
         if kind == "preference":
             check_text = f"{cand.value} {cand.evidence}"
         else:
-            check_text = f"{cand.fact} {cand.conditions or ''}"
+            structured_parts = [
+                getattr(cand, f) for f in _KNOWLEDGE_OPTIONAL_STR_FIELDS
+                if getattr(cand, f, None)
+            ]
+            check_text = " ".join(
+                [cand.fact, cand.conditions or ""] + list(structured_parts))
         if _contains_high_sensitivity(check_text):
             self._audit.append({
                 "kind": kind,

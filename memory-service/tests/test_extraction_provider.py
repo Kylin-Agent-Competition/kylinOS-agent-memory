@@ -88,13 +88,29 @@ def test_rules_tool_success_produces_knowledge():
     assert cands[0].source_event_id == "evt_e1"  # R3
 
 
-def test_rules_tool_failure_no_knowledge():
-    """失败 Tool 不生成成功知识（架构 8 章红线）。"""
+def test_rules_tool_failure_produces_failure_experience():
+    """失败 Tool 不生成成功知识，但生成 failure_experience（架构 TABLE 21 FailureMemory）。
+
+    Day8 契约演进：失败 Tool 从"不生成任何知识"→ 生成失败经验知识
+    （失败原因/环境/避免条件/替代方案，中可信 0.6），绝不生成 fact 等成功知识
+    （B1 红线 + 架构 TABLE 22：Tool 事实高于模型自述）。
+    """
     p = ExtractionProvider()
     ev = _turn(tool_results=[
-        ToolResult(tool_name="install", arguments={}, status="failure",
-                   error="dependency not found")])
-    assert p.extract_knowledge(ev) == []
+        ToolResult(tool_name="install", arguments={"pkg": "x"}, status="failure",
+                   error="dependency not found")],
+        source_event_id="evt_e2")
+    cands = p.extract_knowledge(ev)
+    assert len(cands) == 1
+    c = cands[0]
+    assert c.category == "failure_experience"  # 非成功知识类别
+    assert c.failure_reason == "dependency not found"
+    assert c.avoid_condition  # 避免条件
+    assert c.alternative is None  # 未知替代方案不臆造
+    assert c.confidence == 0.6  # TABLE 17 中可信
+    assert c.source_event_id == "evt_e2"  # R3
+    assert c.memory_status == "candidate"  # B2
+    assert all(cat != "fact" for cat in [c.category])  # 不生成成功知识
 
 
 def test_rules_tool_cancelled_no_knowledge():
@@ -282,14 +298,21 @@ def test_b1_no_tool_results_llm_knowledge_rejected():
 
 
 def test_b1_failure_tool_llm_knowledge_rejected():
-    """B1 负向: failure Tool + assistant 声称成功 → 不形成成功知识。"""
+    """B1 负向: failure Tool + assistant 声称成功 → 不形成成功知识。
+
+    Day8 契约演进：failure Tool 生成 failure_experience（规则路径，失败经验
+    知识）；LLM 声称的成功知识（category=fact）仍被 B1 门控拒绝（无真实
+    success Tool evidence），不进入正常候选。
+    """
     p = ExtractionProvider(llm_extractor=_llm_knowledge_claim())
     ev = _turn(assistant_text="工具已经成功修改配置",
                source_event_id="evt_b1b",
                tool_results=[ToolResult(tool_name="config", arguments={},
                                         status="failure", error="perm denied")])
     cands = p.extract_knowledge(ev)
-    assert cands == []
+    # 失败经验知识可保留（failure_experience），但成功知识不得出现
+    assert all(c.category == "failure_experience" for c in cands)
+    assert all("成功修改配置" not in c.fact for c in cands)
     assert any("no-success-tool-evidence" in a["error"] for a in p.audit)
 
 
