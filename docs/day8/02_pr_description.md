@@ -29,8 +29,8 @@ Day7（PR #36 已合并）交付偏好抽取深化（规则/Provider 协同 + �
   - `test_rules_tool_failure_no_knowledge` → `test_rules_tool_failure_produces_failure_experience`（失败 Tool 生成 failure_experience，不生成成功知识）
   - `test_b1_failure_tool_llm_knowledge_rejected`：失败经验可保留，LLM 声称的成功知识仍拒绝
 - **`docs/day8/01_task_card.md`、`docs/day8/02_pr_description.md`（新增）**：任务卡 + 本 PR 描述
-- **`evidence/l1/day8_knowledge_extraction_local.log`（新增）**：L1 证据（253 passed + 47 skipped @ 25ec565，checksum 133715d6…）
-- **`evidence/index.yaml`（更新）**：`D8-A-KNOWLEDGE-EXTRACTION`（HOST_VERIFIED / E4，tested_commit 25ec565）
+- **`evidence/l1/day8_knowledge_extraction_local.log`（新增）**：L1 证据（255 passed + 47 skipped @ 95fcad8，checksum 6f78fd48…）
+- **`evidence/index.yaml`（更新）**：`D8-A-KNOWLEDGE-EXTRACTION`（HOST_VERIFIED / E4，tested_commit 95fcad8）
 
 ## 明确不修改范围
 
@@ -59,7 +59,7 @@ Day7（PR #36 已合并）交付偏好抽取深化（规则/Provider 协同 + �
 | 级别 | 命令 | 结果 |
 |------|------|------|
 | L0 | `python -m py_compile memory-service/providers/knowledge_rules.py memory-service/providers/extraction_provider.py` | COMPILE OK |
-| L1 | `/tmp/day8-venv/bin/python -m pytest tests/ -v` | **253 passed + 47 skipped** @ 25ec565（新增 24 项 D8 测试；Day7 基线 229+47 → 253+47） |
+| L1 | `/tmp/day8-venv/bin/python -m pytest tests/ -v` | **255 passed + 47 skipped** @ 95fcad8（新增 26 项 D8 测试：24 项 + 2 项 Review 回归；Day7 基线 229+47 → 255+47） |
 | L2 | 麒麟 VM：`cd /mnt/shared && git rev-parse HEAD` → `PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -v` | 待 VM 执行（evidence/l2-kylin-vm/day8_verify_latest.log） |
 
 ## 性能与安全影响

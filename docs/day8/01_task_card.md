@@ -24,7 +24,7 @@
   - 失败降级：knowledge LLM 非法 category → 默认 fact + audit；结构化字段非法值 → 剥离 + audit（必需字段 fact/confidence 保持 R4 候选级拒绝）
   - R5 敏感复核覆盖结构化字段（evidence/failure_reason/template_body 等，D8 增强）
   - 评测输出：`KnowledgeExtractionOutput` / `to_knowledge_evaluation_record()` / `export_knowledge_records()`（E 轨 §3.3 口径）
-- `memory-service/tests/test_knowledge_extraction_d8.py`（新增，24 项）：六类识别 / 不同 Tool 状态策略 / 失败降级 / 评测输出 / 契约保持
+- `memory-service/tests/test_knowledge_extraction_d8.py`（新增，26 项：24 项 + 2 项 Review 回归）：六类识别 / 不同 Tool 状态策略 / 失败降级 / 评测输出 / 契约保持
 - `memory-service/tests/test_extraction_provider.py`（更新）：`test_rules_tool_failure_no_knowledge` → `test_rules_tool_failure_produces_failure_experience`；`test_b1_failure_tool_llm_knowledge_rejected` 断言随契约演进同步（失败经验可保留、成功知识仍拒绝）
 - `docs/day8/01_task_card.md`（本任务卡）、`docs/day8/02_pr_description.md`
 - `evidence/l1/day8_knowledge_extraction_local.log`、`evidence/index.yaml`（更新 D8-A 条目）

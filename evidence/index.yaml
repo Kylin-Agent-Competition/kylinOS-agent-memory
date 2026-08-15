@@ -478,15 +478,15 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l1/day8_knowledge_extraction_local.log"
-    tested_commit: "25ec565116282dc30aafcf75e8273998f1eee4e3"  # L1 实测生产代码（feat/day8-knowledge-extraction）
+    tested_commit: "95fcad86443ed8ac7f8654d91f9ac904c03b5938"  # L1 实测生产代码（feat/day8-knowledge-extraction，含 Review 修复）
     date: "2026-08-16"
     reviewer: "pending"
     limitations: "未接入真实 LLM（无凭证，接口预留）；六类识别正则/置信度为基线值待 E 轨数据集评测调优；L2 麒麟 VM 验证待执行（无 VM 会话）；KnowledgeCandidate.category 契约演进（Day3 五值→E 轨 §2.6 六值，procedure→workflow + failure_experience）；失败 Tool 语义演进（不生成成功知识，生成 failure_experience）；TD-A-D6-EXEC-RACE 全量 -v 偶发一次复跑即绿（非阻断）"
-    checksum_sha256: "133715d60339b2cbf89a2e069904408765b940a1fdac9a475d6ce7fe2e78978b"
+    checksum_sha256: "6f78fd487cb78d092adfc4af91e05ce8c413f8cf64fe28e9e895e422f4d33243"
     details: |
       Day8 知识结构化抽取（架构 v1 TABLE 21/22/31/17 + E 轨 Schema §2.6/§3.3，
       docs/day8/01_task_card.md）验证（2026-08-16）：
-      - L1（本地 WSL，被测 25ec565）：253 passed + 47 skipped（evidence/l1/day8_knowledge_extraction_local.log）
+      - L1（本地 WSL，被测 95fcad8，含 Review 修复）：255 passed + 47 skipped（evidence/l1/day8_knowledge_extraction_local.log）
       - 新增 memory-service/tests/test_knowledge_extraction_d8.py（24 项）：六类识别
         / success/failure/cancelled/timeout/partial 策略 / 失败降级（category/结构化字段/
         R4/超时/R5）/ B1 门控 / 评测输出 / 契约保持
