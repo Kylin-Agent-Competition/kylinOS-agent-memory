@@ -1,6 +1,6 @@
 # [D8-A] 知识结构化抽取——六类知识 + 失败/取消 Tool 不同策略 + 失败降级测试
 
-> 分支：`feat/day8-knowledge-extraction`（基于 main @ `d37fb95`，PR #36 已合并；本 PR 1 commit：`25ec565`）
+> 分支：`feat/day8-knowledge-extraction`（基于 main @ `d37fb95`，PR #36 已合并；本 PR 5 commits：`25ec565` + `94f34ce` + `95fcad8` + `cd4885f` + `5057551`）
 > PR 模板：架构 v1 附录 D（docs/architecture 18.1 PR 最小内容）
 
 ## 背景与目标
@@ -30,7 +30,9 @@ Day7（PR #36 已合并）交付偏好抽取深化（规则/Provider 协同 + �
   - `test_b1_failure_tool_llm_knowledge_rejected`：失败经验可保留，LLM 声称的成功知识仍拒绝
 - **`docs/day8/01_task_card.md`、`docs/day8/02_pr_description.md`（新增）**：任务卡 + 本 PR 描述
 - **`evidence/l1/day8_knowledge_extraction_local.log`（新增）**：L1 证据（255 passed + 47 skipped @ 95fcad8，checksum 6f78fd48…）
-- **`evidence/index.yaml`（更新）**：`D8-A-KNOWLEDGE-EXTRACTION`（HOST_VERIFIED / E4，tested_commit 95fcad8）
+- **`evidence/l2-kylin-vm/day8_verify_latest.log`（新增）**：L2 麒麟 VM 证据（**302 passed / 0 skipped**，被测生产代码 95fcad8，实测 HEAD 5057551，checksum 7f32f404…）
+- **`scripts/verify_day8_vm.sh`（新增）**：VM 一键验证脚本（Step1 干净状态/venv 重建/全量 pytest/证据落盘）
+- **`evidence/index.yaml`（更新）**：`D8-A-KNOWLEDGE-EXTRACTION`（HOST_VERIFIED / E4，tested_commit 95fcad8，evidence_commit 5057551，L2 checksum 7f32f404…）
 
 ## 明确不修改范围
 
@@ -60,7 +62,7 @@ Day7（PR #36 已合并）交付偏好抽取深化（规则/Provider 协同 + �
 |------|------|------|
 | L0 | `python -m py_compile memory-service/providers/knowledge_rules.py memory-service/providers/extraction_provider.py` | COMPILE OK |
 | L1 | `/tmp/day8-venv/bin/python -m pytest tests/ -v` | **255 passed + 47 skipped** @ 95fcad8（新增 26 项 D8 测试：24 项 + 2 项 Review 回归；Day7 基线 229+47 → 255+47） |
-| L2 | 麒麟 VM：`cd /mnt/shared && git rev-parse HEAD` → `PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 /tmp/day6-venv/bin/python -m pytest memory-service/tests/ -v` | 待 VM 执行（evidence/l2-kylin-vm/day8_verify_latest.log） |
+| L2 | `cd /mnt/shared && bash scripts/verify_day8_vm.sh` | **302 passed / 0 skipped**（被测生产代码 95fcad8，实测 HEAD 5057551；evidence/l2-kylin-vm/day8_verify_latest.log，checksum 7f32f404…） |
 
 ## 性能与安全影响
 
@@ -69,4 +71,4 @@ Day7（PR #36 已合并）交付偏好抽取深化（规则/Provider 协同 + �
 
 ## 回滚方式
 
-- 回滚 `25ec565` 即恢复 Day7 基线（main @ d37fb95）；新增文件（knowledge_rules.py/test_knowledge_extraction_d8.py）随之移除；`extraction_provider.py` 回退后 KnowledgeCandidate 恢复五值枚举，失败 Tool 恢复"不生成任何知识"语义（旧行为，不破坏契约）
+- 回滚 `5057551`（连同其下 4 commits）即恢复 Day7 基线（main @ d37fb95）；新增文件（knowledge_rules.py/test_knowledge_extraction_d8.py/verify_day8_vm.sh）随之移除；`extraction_provider.py` 回退后 KnowledgeCandidate 恢复五值枚举，失败 Tool 恢复"不生成任何知识"语义（旧行为，不破坏契约）

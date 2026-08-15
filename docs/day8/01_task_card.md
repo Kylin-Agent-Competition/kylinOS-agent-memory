@@ -84,7 +84,7 @@
 ## 证据
 
 - L1：`evidence/l1/day8_knowledge_extraction_local.log`（253 passed + 47 skipped @ 25ec565，checksum 133715d6…，含元数据头）
-- L2：待麒麟 VM（KYLIN_L2=1）执行，命令同 Day7（见 session-handoff-20260814.md 六节）
+- L2：`evidence/l2-kylin-vm/day8_verify_latest.log`（**302 passed / 0 skipped**，被测生产代码 95fcad8，实测 HEAD 5057551，checksum 7f32f404…；302 = L1 255+47，VM 上 47 个 SDK 用例真实执行不再 skip）
 
 ## 技术债
 

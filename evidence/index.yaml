@@ -474,15 +474,16 @@ entries:
 
   - id: "D8-A-KNOWLEDGE-EXTRACTION"
     task_id: "D8-A"
-    description: "Day 8 知识结构化抽取——六类知识（E 轨 §2.6）+ 失败/取消 Tool 不同策略（B1）+ 失败降级测试 + 知识评测输出（本地 L1 全量 pytest）"
+    description: "Day 8 知识结构化抽取——六类知识（E 轨 §2.6）+ 失败/取消 Tool 不同策略（B1）+ 失败降级测试 + 知识评测输出（麒麟 VM L2 全量 pytest）"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
-    source: "evidence/l1/day8_knowledge_extraction_local.log"
-    tested_commit: "95fcad86443ed8ac7f8654d91f9ac904c03b5938"  # L1 实测生产代码（feat/day8-knowledge-extraction，含 Review 修复）
+    source: "evidence/l2-kylin-vm/day8_verify_latest.log"  # L2 麒麟 VM（evidence/l1 为本地对照）
+    tested_commit: "95fcad86443ed8ac7f8654d91f9ac904c03b5938"  # 被测生产代码（feat/day8-knowledge-extraction，含 Review 修复）
+    evidence_commit: "5057551b0c615296a590295cfbbe9d86bb017e4c"  # L2 实测 HEAD（含 verify 脚本；生产代码与 tested_commit 零差异）
     date: "2026-08-16"
     reviewer: "pending"
-    limitations: "未接入真实 LLM（无凭证，接口预留）；六类识别正则/置信度为基线值待 E 轨数据集评测调优；L2 麒麟 VM 验证待执行（无 VM 会话）；KnowledgeCandidate.category 契约演进（Day3 五值→E 轨 §2.6 六值，procedure→workflow + failure_experience）；失败 Tool 语义演进（不生成成功知识，生成 failure_experience）；TD-A-D6-EXEC-RACE 全量 -v 偶发一次复跑即绿（非阻断）"
-    checksum_sha256: "6f78fd487cb78d092adfc4af91e05ce8c413f8cf64fe28e9e895e422f4d33243"
+    limitations: "未接入真实 LLM（无凭证，接口预留）；六类识别正则/置信度为基线值待 E 轨数据集评测调优；KnowledgeCandidate.category 契约演进（Day3 五值→E 轨 §2.6 六值，procedure→workflow + failure_experience）；失败 Tool 语义演进（不生成成功知识，生成 failure_experience）；L2 实测 HEAD 5057551（含 verify 脚本），被测生产代码与 L1 相同（95fcad8，git diff 零差异）；TD-A-D6-EXEC-RACE 全量 -v 偶发一次复跑即绿（非阻断）"
+    checksum_sha256: "7f32f404d94e1abe2de385e70cfba0a81626f0f94cffc8364bdb17a6e51462bd"  # L2 证据日志（修正头后）
     details: |
       Day8 知识结构化抽取（架构 v1 TABLE 21/22/31/17 + E 轨 Schema §2.6/§3.3，
       docs/day8/01_task_card.md）验证（2026-08-16）：
@@ -497,4 +498,7 @@ entries:
         to_knowledge_evaluation_record/export_knowledge_records
       - 既有测试演进：test_rules_tool_failure_no_knowledge → produces_failure_experience；
         test_b1_failure_tool_llm_knowledge_rejected 断言同步（失败经验保留、成功知识拒绝）
-      - L2（麒麟 VM）待执行：命令见 docs/project-management/session-handoff-20260814.md 六节
+      - L2（麒麟 VM，被测生产代码 95fcad8）：302 passed / 0 skipped
+        （evidence/l2-kylin-vm/day8_verify_latest.log，checksum 7f32f404…）
+        ——L2 302 = L1 255 passed + 47 skipped（VM 上 47 个 SDK 用例真实执行不再 skip）
+      - L1（本地 WSL）对照：255 passed + 47 skipped（evidence/l1/day8_knowledge_extraction_local.log）
