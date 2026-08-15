@@ -420,10 +420,19 @@ def _contains_high_sensitivity(text: str) -> bool:
 
 
 def _event_content_text(event: TurnFinalizedEvent) -> str:
-    """事件内容文本（user_text + assistant_text + Tool 结果），用于缓存键指纹。"""
+    """事件内容文本（user_text + assistant_text + Tool 结果），用于缓存键指纹。
+
+    D8：包含 tool arguments（failure_experience 的 conditions 内嵌参数摘要，
+    同 tool 同名/同 error 但参数不同的事件不得串缓存键——Review 修复）。
+    """
     parts = [event.user_text or "", event.assistant_text or ""]
     for tr in event.tool_results or []:
-        parts.append(f"{tr.tool_name}:{tr.status}:{tr.result or ''}:{tr.error or ''}")
+        arg_text = ""
+        if tr.arguments:
+            arg_text = ",".join(
+                f"{k}={v}" for k, v in list(tr.arguments.items())[:5])
+        parts.append(
+            f"{tr.tool_name}:{tr.status}:{tr.result or ''}:{tr.error or ''}:{arg_text}")
     return "\n".join(parts)
 
 
@@ -749,7 +758,8 @@ class ExtractionProvider:
 
         # B1 门控：必须有真实 success Tool evidence 才允许 knowledge LLM 提取
         has_success_tool = any(
-            tr.status == "success" and tr.result for tr in (event.tool_results or []))
+            is_success_tool_result(tr.status, tr.result)
+            for tr in (event.tool_results or []))
         if not has_success_tool:
             # 无真实 success Tool evidence：LLM 输出不得形成成功知识（进审计）
             self._audit.append({
@@ -900,6 +910,8 @@ class ExtractionProvider:
         R5: 候选内容命中 high/critical 敏感 → 拒绝进审计。
         D7: 偏好路径可选字段非法值先做字段级降级（剥离/默认值 + audit）；
             必需字段（key/value/evidence）缺失/类型错误仍候选级拒绝（R4）。
+        D8: knowledge 路径同时剥离 LLM 提供的 evidence——evidence 为系统可信
+            证据来源（架构 TABLE 22：Tool 事实高于模型自述），LLM 不得伪造证据。
         """
         if not isinstance(raw, dict):
             self._audit.append({"kind": kind, "event_id": trusted_source_event_id,
@@ -910,6 +922,11 @@ class ExtractionProvider:
         raw = {k: v for k, v in raw.items() if k != "source_event_id"}
         # B2: 剥离 LLM 提供的 memory_status（LLM 不能自封 verified），系统强制 candidate
         raw = {k: v for k, v in raw.items() if k != "memory_status"}
+        # D8 Review 修复（R3 强化）：knowledge 路径剥离 LLM 提供的 evidence——
+        # evidence 为系统可信证据来源（架构 TABLE 22：Tool 事实高于模型自述），
+        # LLM 自述不得充当证据；规则路径证据由系统从真实 ToolResult 附加。
+        if kind == "knowledge":
+            raw = {k: v for k, v in raw.items() if k != "evidence"}
         # D7: 偏好路径可选字段非法值降级（候选仍可返回；audit 记录）
         if kind == "preference":
             raw = _degrade_optional_fields(raw, kind, trusted_source_event_id,

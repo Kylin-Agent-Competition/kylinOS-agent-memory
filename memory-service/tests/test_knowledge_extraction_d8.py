@@ -370,3 +370,43 @@ def test_d8_close_after_rules_still_work():
     cands = p.extract_knowledge(ev)
     assert len(cands) == 1
     assert cands[0].category == "failure_experience"
+
+
+# ── 6. Review 修复回归（2026-08-16） ──
+
+def test_d8_llm_cannot_forge_evidence():
+    """R3 强化（Review 修复）：knowledge LLM 提供的 evidence 被剥离（系统可信来源）。
+
+    架构 TABLE 22：Tool 事实高于模型自述——LLM 自述不得充当知识证据。
+    """
+    def llm(kind, text):
+        return [{"fact": "工具执行成功", "category": "fact", "confidence": 0.9,
+                 "evidence": "LLM 自述成功不可信"}]
+    p = ExtractionProvider(llm_extractor=llm)
+    ev = _turn(assistant_text="工具执行成功",
+               tool_results=[ToolResult(tool_name="x", arguments={},
+                                        status="success", result="工具执行完成")],
+               source_event_id="evt_d8forge")
+    cands = p.extract_knowledge(ev)
+    llm_cands = [c for c in cands
+                 if "LLM 自述成功不可信" not in (c.evidence or "")]
+    assert all(c.evidence is None or "工具执行完成" in c.evidence
+               for c in llm_cands)
+
+
+def test_d8_cache_key_includes_tool_arguments():
+    """Review 修复：缓存键含 tool arguments——同 tool 同名/同 error 但参数不同
+    的失败事件不得串缓存键（failure_experience 的 conditions 内嵌参数摘要）。"""
+    p = ExtractionProvider()
+    ev_a = _turn(tool_results=[ToolResult(
+        tool_name="install", arguments={"pkg": "vim"}, status="failure",
+        error="dep not found")], source_event_id="evt_d8cache_a")
+    ev_b = _turn(tool_results=[ToolResult(
+        tool_name="install", arguments={"pkg": "nginx"}, status="failure",
+        error="dep not found")], source_event_id="evt_d8cache_b")
+    ca = p.extract_knowledge(ev_a)
+    cb = p.extract_knowledge(ev_b)
+    assert len(ca) == 1 and len(cb) == 1
+    assert "pkg=vim" in ca[0].conditions
+    assert "pkg=nginx" in cb[0].conditions
+    assert ca[0].conditions != cb[0].conditions  # 未串键
