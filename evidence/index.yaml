@@ -471,3 +471,30 @@ entries:
     reviewer: "D 主审；E 补审"
     limitations: "证据由旧脚本提交 20adffc 生成；缺少 PostTurn 数据库快照、15 秒稳定性、PreChat UI 截图与真实结构化 Tool 事件。"
     checksum_sha256: "541135db12b7f88d498791192adad032f5f7470e4763fe7dfaa6b4b6446ce619"
+
+  - id: "D8-A-KNOWLEDGE-EXTRACTION"
+    task_id: "D8-A"
+    description: "Day 8 知识结构化抽取——六类知识（E 轨 §2.6）+ 失败/取消 Tool 不同策略（B1）+ 失败降级测试 + 知识评测输出（本地 L1 全量 pytest）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l1/day8_knowledge_extraction_local.log"
+    tested_commit: "25ec565116282dc30aafcf75e8273998f1eee4e3"  # L1 实测生产代码（feat/day8-knowledge-extraction）
+    date: "2026-08-16"
+    reviewer: "pending"
+    limitations: "未接入真实 LLM（无凭证，接口预留）；六类识别正则/置信度为基线值待 E 轨数据集评测调优；L2 麒麟 VM 验证待执行（无 VM 会话）；KnowledgeCandidate.category 契约演进（Day3 五值→E 轨 §2.6 六值，procedure→workflow + failure_experience）；失败 Tool 语义演进（不生成成功知识，生成 failure_experience）；TD-A-D6-EXEC-RACE 全量 -v 偶发一次复跑即绿（非阻断）"
+    checksum_sha256: "133715d60339b2cbf89a2e069904408765b940a1fdac9a475d6ce7fe2e78978b"
+    details: |
+      Day8 知识结构化抽取（架构 v1 TABLE 21/22/31/17 + E 轨 Schema §2.6/§3.3，
+      docs/day8/01_task_card.md）验证（2026-08-16）：
+      - L1（本地 WSL，被测 25ec565）：253 passed + 47 skipped（evidence/l1/day8_knowledge_extraction_local.log）
+      - 新增 memory-service/tests/test_knowledge_extraction_d8.py（24 项）：六类识别
+        / success/failure/cancelled/timeout/partial 策略 / 失败降级（category/结构化字段/
+        R4/超时/R5）/ B1 门控 / 评测输出 / 契约保持
+      - 新增 memory-service/providers/knowledge_rules.py：六类识别 + Tool 状态策略
+        + build_failure_experience + 置信度基线
+      - extraction_provider.py：KnowledgeCandidate v0.2（category 六值 + 12 结构化字段）
+        + _degrade_knowledge_fields + R5 覆盖结构化字段 + KnowledgeExtractionOutput/
+        to_knowledge_evaluation_record/export_knowledge_records
+      - 既有测试演进：test_rules_tool_failure_no_knowledge → produces_failure_experience；
+        test_b1_failure_tool_llm_knowledge_rejected 断言同步（失败经验保留、成功知识拒绝）
+      - L2（麒麟 VM）待执行：命令见 docs/project-management/session-handoff-20260814.md 六节
