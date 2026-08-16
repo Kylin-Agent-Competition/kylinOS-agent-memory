@@ -1,0 +1,82 @@
+# Tool Result Hook 场景测试矩阵 (阶段 4.3)
+
+> **关联**: D1 任务卡 §3.3 Hook C (H2C-Tool-1~5)、TD-007
+> **执行环境**: 麒麟 VM (KylinOS V11 x86_64)，SSH 会话
+> **执行日期**: 2026-08-15
+> **前置状态**: 阶段 3 UDS Echo 全链路已通（见 OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md）
+
+---
+
+## 一、总体结论
+
+| 场景 | 目标 | 结果 | 说明 |
+|------|------|------|------|
+| T1 | 真实 Tool 成功事件 → ToolExecutionEvent(status=success) | ⬜ 未执行（BLOCKED） | Tool 触发为 GUI-only |
+| T2 | 真实 Tool 失败事件 → status=failure + error | ⬜ 未执行（BLOCKED） | 同上 |
+| T3 | Tool 取消事件 → status=cancelled | ⬜ 未执行（BLOCKED） | 同上 |
+| T4 | Prompt Skill 不被误判为 tool_call | ✅ 源码级通过 | 翻译/润色/总结走普通 reply 流 |
+| T5 | 失败 Tool 不形成成功知识 | ⬜ 未执行（BLOCKED） | 依赖 T2 的失败路径 |
+
+**综合结果**: 1/5 源码级通过，4/5 因 Tool 触发为 GUI-only 而阻塞（S4-BLOCK-001）。
+
+---
+
+## 二、逐场景详情
+
+### T1 — 真实 Tool 成功事件
+- **触发方式**: GUI 点击图片生成 / 源文档上传按钮 → `sendToolMessage(toolId, IMAGE/SOURCE, ...)`
+- **预期**: `[ToolExecutionEvent]` 日志含 `status=success`、`result` 非空
+- **实际**: 未执行。SSH 环境无 X11（`DISPLAY` 为空，桌面为 `kylin-wlcom` Wayland 合成器），无 `xdotool`，无法注入 GUI 点击。
+- **dbus 注入评估**: `org.ukui.kylin_aiassistant` 仅暴露 `showOrHideView()`、`showGlobalScribeFloatingBar()` 两个视图方法，无消息/Tool 注入能力。
+- **状态**: BLOCKED（S4-BLOCK-001）
+
+### T2 — 真实 Tool 失败事件
+- **触发方式**: GUI 触发一个会失败的工具调用（如无网络时的图片生成）
+- **预期**: `[ToolExecutionEvent]` 日志含 `status=failure`、`error` 非空
+- **实际**: 未执行（同 T1）
+- **状态**: BLOCKED（S4-BLOCK-001）
+
+### T3 — Tool 取消事件
+- **触发方式**: GUI 中断进行中的 Tool
+- **预期**: `status=cancelled`
+- **实际**: 未执行。且源码审计发现 `cancelled` 状态在宿主 `toolReply` 链路中**未显式建模**（停止生成走 `stopChat()`，不经过 toolReply 的 cancelled 分支）。即使能触发，当前宿主也不会产生 `cancelled` 事件。
+- **状态**: BLOCKED（S4-BLOCK-001 + S4-BLOCK-002）
+
+### T4 — Prompt Skill 不被误判为 tool_call ✅
+- **触发方式**: 翻译 / 润色 / 总结（文本 Skill）
+- **源码级依据**: `systemchat.cpp` 流式解析器中，文本 Skill 走 `messageType != "tool_call"` 的普通 `reply`/`sigGenerateSummary` 路径，**不进入** `if(messageType == "tool_call")` 分支。因此文本 Skill 天然不产生 tool_call 证据。
+- **运行态佐证**: `/home/kylin-agent/.log/kylin-aiassistant.log` 中 getPrompts 显示"翻译助手""周报生成""新建日程""错别字校正"等 Prompt 均为文本类，无 tool_call 日志。
+- **状态**: ✅ 源码级通过
+
+### T5 — 失败 Tool 不形成成功知识
+- **触发方式**: 检查 T2 失败后的知识候选列表
+- **预期**: 候选列表不含成功记忆，仅 FailureMemory
+- **实际**: 未执行（依赖 T2 失败路径；且本 spike 未接入 Memory Service 落库）
+- **状态**: BLOCKED（S4-BLOCK-001）
+
+---
+
+## 三、阻塞根因分析
+
+1. **Tool 触发链路是纯 GUI 驱动**（`msgpane.cpp:3275` 图片、`msgpane.cpp:3626` 源文档），无命令行/dbus 入口。
+2. **SSH 环境无图形自动化能力**: Wayland 合成器（`kylin-wlcom`）+ 无 `xdotool`。
+3. **dbus 接口能力有限**: 仅视图控制，无消息/Tool 注入。
+
+---
+
+## 四、解除方案（人工操作清单）
+
+1. 在麒麟 VM 桌面（物理/虚拟显示器）手动打开"麒灵 AI 助手"。
+2. 触发一次图片生成（"帮我画一只猫"）→ 观察 `[ToolInvocation]` + `[ToolExecutionEvent]` 日志。
+3. 断网后再次触发 → 观察 `status=failure`。
+4. 生成过程中点击"停止" → 观察是否有 `cancelled`（预期：当前宿主无此建模，需补字段）。
+5. 触发一次翻译 → 确认无 tool_call 日志（验证 T4）。
+6. 日志位置: `/home/kylin-agent/.log/kylin-aiassistant.log`（需使用打了 patch 的二进制替换官方二进制后重启，见 S4-BLOCK-003）。
+
+---
+
+## 五、与 TD-007 的关系
+
+- TD-007（真实 Tool Result Hook 宿主验证）**未关闭**：T1/T2/T3/T5 未在真实宿主跑通。
+- 已完成的进度：源码调用链审计（§3.3 Hook C 候选位置确认）+ 最小观察点 patch（已应用 + 头文件语法通过）。
+- 阻塞项: S4-BLOCK-001（GUI-only）、S4-BLOCK-002（字段缺口）、S4-BLOCK-003（构建环境缺失）。

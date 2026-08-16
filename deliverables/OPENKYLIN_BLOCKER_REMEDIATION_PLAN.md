@@ -569,25 +569,44 @@ scp -P $KYLIN_VM_PORT $KYLIN_VM_USER@$KYLIN_VM_HOST:~/evidence/d4_openkylin_reme
 | N3 | Echo server 实现 method 路由 | 支持 `echo` / `health` / `memory.retrieve`（返回空 contexts）；`memory.store`/`memory.forget` 返回 `UNSUPPORTED_METHOD`（不再是纯 echo） |
 | N4 | `kaiming_memory_client` v1.3 | 08-10 新增 C++ 客户端（BuildID=`bddf6f930a2f84e0ab7c9009c9666e539c6b0226`），`--method all` 4 方法测试 PASS |
 | N5 | `evidence.jsonl` 新增 ECHO-001~005 | 08-10 记录，`tested_commit=fbda3fec497c23c6d988283707fa1fb3af7df330` |
+| N6 | 阶段 1 "主程序 73MB 编译成功" 与 build_make.log 不一致 | build_make.log 末尾显示主程序 qmake 失败（`gsettings-qt development package not found`，错误 3），无任何 g++/编译记录；73MB 二进制（BuildID=e62502，含 debug_info）存在但非本次 make 产物，来源待核实 |
+| N7 | 当前 VM "运行时完备、构建环境缺失" | AI 子系统运行时完整运行，但 pkg-config 检查 16 依赖中仅 glib-2.0 可用，其余 -dev 包缺失 |
+| N8 | Tool 触发无命令行/dbus 入口 | dbus `org.ukui.kylin_aiassistant` 仅 showOrHideView/showGlobalScribeFloatingBar 两视图方法，无消息/Tool 注入 |
 
-### 阶段 4-5 ⬜ 待执行
-- [ ] **阶段 4**: sendToolMessage 调用路径已定位
-- [ ] **阶段 4**: ToolExecutionEvent 捕获代码已加入并编译通过
-- [ ] **阶段 4**: 5 种 Tool Result 场景测试全部通过
-- [ ] **阶段 5**: 所有证据文件 SHA-256 校验并上传
-- [ ] **阶段 5**: R-ARCH-05 更新为 Resolved（或标注未通过项）
-- [ ] **阶段 5**: TD-007 更新为 Resolved（或标注未通过项）
-- [ ] **阶段 5**: 修复完成报告已提交
+### 阶段 4-5 🔄 执行完成（部分通过，2026-08-15）
+- [x] **阶段 4.1**: sendToolMessage 调用路径已定位并完整审计
+  - 出站: `SystemChat::sendToolMessage` (systemchat.cpp:692) → `chatAsync`
+  - 回程: 流式解析器 tool_call 分支 (systemchat.cpp:88) → `toolReply` 信号 (:117-120)
+  - UI: `CMsgPane::onRecvTool` (msgpane.cpp:1243)，连接点 msgpane.cpp:146
+  - evidence: `tool_hook_audit.md`
+- [x] **阶段 4.2**: ToolExecutionEvent 最小观察点 patch 已实现
+  - 新增 `tool_execution_observer.h`（header-only，符合 02 表31 Schema）
+  - systemchat.cpp/msgpane.cpp 各注入 1 处观察点
+  - ✅ 头文件 `g++ -fsyntax-only` 通过 (EXIT=0)
+  - ❌ 完整重编译阻塞：VM 缺 ~40 个 -dev 包 + 无 sudo（S4-BLOCK-003）
+  - evidence: `tool_hook_patch.diff`、`tool_execution_observer.h`、`tool_hook_build.log`
+- [x] **阶段 4.3**: 5 场景测试矩阵 → **1/5 通过（源码级）**
+  - T4（Prompt Skill 不误判）✅ 源码级 PASS
+  - T1/T2/T3/T5 ❌ BLOCKED（Tool 触发为 GUI-only，S4-BLOCK-001）
+  - evidence: `tool_result_test_matrix.log`
+- [x] **阶段 5.1**: 证据 SHA-256 校验 + MANIFEST 已生成（36 文件）
+- [x] **阶段 5.2**: R-ARCH-05 进展更新（仍 In Progress）；TD-007 新增登记（Open）
+- [x] **阶段 5.3**: 修复完成报告已提交 `REMEDIATION_COMPLETION_REPORT.md`
+- [x] **阶段 5**: evidence/index.yaml 新增条目 `D4-OPENKYLIN-HOOK`（status=PARTIAL）
 
 ### 残余阻塞项
 | 编号 | 描述 | 状态 | 解除方案 |
 |------|------|------|---------|
-| S1-BLOCK-001 | peony-menu-plugin 编译失败 | BLOCKED | sudo install dev 包或跳过（不影响核心路线） |
+| S1-BLOCK-001 | peony-menu-plugin 编译失败 | BLOCKED（关联 S4-BLOCK-003） | sudo install dev 包或跳过（不影响核心路线） |
 | S3-BLOCK-001 | LD_PRELOAD `failed to map segment` 间歇性失败 | **RESOLVED** (08-15 复核) | 复核确认 LD_PRELOAD 直接加载 `EXIT=0`，无间歇性失败 |
 | S3-BLOCK-002 | Python socket.connect() 与 LD_PRELOAD 兼容性 | **RESOLVED** | C测试客户端编译成功 ✅ |
 | S3-BLOCK-003 | socat 与 4字节帧头协议不兼容 | **RESOLVED** | C 协议客户端 ptest.c 编译成功，协议测试 PASS |
 | S3-BLOCK-004 | timeout命令掩盖底层connect退出码 | **RESOLVED** | 直接 connect 测试，移除 timeout 包装 |
 | S3-BLOCK-005 | kylin-aiassistant二进制丢失(已从VM清理) | **RESOLVED** (08-15 复核) | 二进制已确认存在（73MB ELF，BuildID=e62502...） |
+| S4-BLOCK-001 | 真实 Tool 触发为 GUI-only（Wayland 无 xdotool，dbus 无消息注入） | **BLOCKED** | 手动操作麒麟桌面触发 Tool；或补 X11+xdotool 自动化 |
+| S4-BLOCK-002 | toolReply 信号缺 arguments/tool_call_id/started_at/cancelled 字段 | **OPEN（源码缺口）** | 集成阶段源码补字段（需走 KYSEC 授权+部署回退链路） |
+| S4-BLOCK-003 | VM 缺 ~40 个 -dev 包 + 无 sudo，qmake 报 gsettings-qt development package not found | **BLOCKED** | `sudo apt-get build-dep kylin-aiassistant` 或带完整 dev 依赖的构建环境 |
+| S4-BLOCK-004 | VM 无 git，无法 git diff | **RESOLVED** | 宿主机 Python difflib 生成 tool_hook_patch.diff |
 
 ---
 
@@ -605,6 +624,7 @@ scp -P $KYLIN_VM_PORT $KYLIN_VM_USER@$KYLIN_VM_HOST:~/evidence/d4_openkylin_reme
 | 01:20 | 阶段3 _stage3_fix.py 执行 (C客户端编译成功, Hook 4/6 PASS) | (脚本执行) |
 | 01:24 | 阶段2-3证据提交 | `4f1c0fd` |
 | 2026-08-15 11:28 | 阶段1/2/3 重新验证：产物与结论全部复核通过，S3-BLOCK-001/005 关闭，socket 路径 `/tmp`→`/run` 变更确认 | (本次复核，无 commit) |
+| 2026-08-15 晚场 | 阶段4-5 执行：Tool Hook 调用链审计完成 + 最小观察点 patch 实现（头文件语法通过）；T1/T2/T3/T5 因 GUI-only 阻塞；登记 S4-BLOCK-001/002/003，新增 TD-007 | (本次执行，无 commit) |
 
 **Git 分支**: `feature/d4-gate0-review-freeze` (已推送), commit `4f1c0fd`
 

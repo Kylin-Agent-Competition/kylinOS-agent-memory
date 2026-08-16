@@ -1,0 +1,35 @@
+[2026-08-08T14:30:53.125Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=84232)
+[2026-08-08T14:30:54.157Z] [INFO] Client connected
+[2026-08-08T14:30:54.157Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:54.157Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:54.214Z] [INFO] Client connected
+[2026-08-08T14:30:54.214Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:54.214Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:54.271Z] [INFO] Client connected
+[2026-08-08T14:30:54.271Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:54.271Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:54.326Z] [INFO] Client connected
+[2026-08-08T14:30:54.326Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:54.326Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:54.382Z] [INFO] Client connected
+[2026-08-08T14:30:54.382Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:54.382Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:54.436Z] [INFO] Client connected
+[2026-08-08T14:30:54.436Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:54.436Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:54.491Z] [INFO] Client connected
+[2026-08-08T14:30:54.491Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:54.491Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:54.545Z] [INFO] Client connected
+[2026-08-08T14:30:54.545Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:54.545Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:54.600Z] [INFO] Client connected
+[2026-08-08T14:30:54.601Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:54.601Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:54.654Z] [INFO] Client connected
+[2026-08-08T14:30:54.654Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:54.654Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:54.687Z] [INFO] Client connected
+[2026-08-08T14:30:54.687Z] [INFO] Request method=memory.store request_id=?
+[2026-08-08T14:30:54.687Z] [WARN] Unknown method: memory.store
+[2026-08-08T14:30:54.688Z] [INFO] Response sent: status=error

@@ -282,6 +282,27 @@ entries:
       解除依据: reviewDocuments/openkylin_blocker_survey.md — kylin-aiassistant 在 openkylin 完全开源，源码可获取、可编译、可修改.
       修复计划: deliverables/OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md (阶段 0-5).
 
+  - id: "D4-OPENKYLIN-HOOK"
+    task_id: "D2-1"
+    description: "D4 openkylin 阻塞项修复 阶段4-5 — Tool Result Hook 调用链审计 + 最小观察点 patch（真实宿主端到端验证因 GUI-only 未完成）"
+    status: "PARTIAL"
+    evidence_level: "E3"
+    source: "evidence/l2-kylin-vm/d4_openkylin_remediation/tool_hook_audit.md"
+    report: "evidence/l2-kylin-vm/d4_openkylin_remediation/tool_result_test_matrix.log"
+    date: "2026-08-15"
+    reviewer: "谢嘉然"
+    runtime_result: "PARTIAL"
+    limitations: "Tool Result Hook 调用链已源码级审计（Hook 点=CMsgPane::onRecvTool + SystemChat::sendToolMessage）；最小观察点 patch（tool_execution_observer.h + 2 处注入）已应用，头文件 g++ -fsyntax-only 通过(EXIT=0)。但真实 Tool 触发为 GUI-only（Wayland 无 xdotool，dbus 无消息注入），T1/T2/T3/T5 未执行（S4-BLOCK-001）；toolReply 信号缺 arguments/tool_call_id/started_at/cancelled 字段（S4-BLOCK-002）；VM 缺 ~40 个 -dev 包且无 sudo，qmake 报 gsettings-qt development package not found（S4-BLOCK-003）。T4（Prompt Skill 不误判）源码级通过。TD-007 仍 Open，R-ARCH-05 仍 In Progress"
+    checksum_sha256: "380b1c0c7097bc125003bb07a40bc9c338b017db57d1696034f4796374a8e70a"
+    details: |
+      阶段4.1 审计: sendToolMessage(systemchat.cpp:692) → chatAsync → 流式解析器 tool_call 分支(systemchat.cpp:88)
+        → toolReply 信号(systemchat.cpp:117-120) → CMsgPane::onRecvTool(msgpane.cpp:1243)。
+      阶段4.2 patch: 新增 tool_execution_observer.h + systemchat.cpp/msgpane.cpp 各 1 处观察点注入。
+        头文件语法检查 EXIT=0；完整重编译因缺 dev 包阻塞（S4-BLOCK-003）。
+      阶段4.3 测试矩阵: T4 源码级 PASS；T1/T2/T3/T5 BLOCKED（S4-BLOCK-001/002）。
+      阶段5 证据: tool_hook_audit.md / tool_hook_patch.diff / tool_execution_observer.h /
+        tool_hook_build.log / tool_result_test_matrix.log 已收集并生成 MANIFEST.sha256。
+
   - id: "EMBED-CALL-002"
     task_id: "D2-A"
     description: "Day 2 扩展边界 Embedding 调用验证"

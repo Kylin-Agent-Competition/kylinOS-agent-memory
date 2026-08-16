@@ -1,0 +1,55 @@
+{
+  "stage": "phase3_fix4_final",
+  "started_at": "2026-08-08T22:39:32.653438+08:00",
+  "tests": [
+    {
+      "name": "HookR1",
+      "exit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "HookR2",
+      "exit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "HookR3",
+      "exit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "protocol_direct",
+      "exit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "protocol_via_hook",
+      "exit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "E1a_server_down",
+      "exit": 1,
+      "status": "PASS"
+    },
+    {
+      "name": "E1b_hook_server_down",
+      "exit": 1,
+      "status": "PASS"
+    },
+    {
+      "name": "E2_rapid_5x",
+      "status": "PASS"
+    },
+    {
+      "name": "E3_large_12KB",
+      "exit": 0,
+      "status": "PASS"
+    }
+  ],
+  "strace": "SKIP_NO_BINARY",
+  "finished_at": "2026-08-08T22:39:37.662784+08:00",
+  "total": 9,
+  "passed": 9,
+  "failed": 0
+}
