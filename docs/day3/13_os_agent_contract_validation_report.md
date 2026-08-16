@@ -124,8 +124,8 @@ cmake --build <no-test-build-dir> --config Release --target os_agent_memory_cont
 | 合规生产 Hook 路径 | `NOT_FOUND / BLOCKED` | 只能在受支持扩展点取证后提案；官方源码补丁不在当前范围 |
 | 备用路径 | `NO_APPROVED_BACKUP` | D/E 书面批准后才能启用 |
 | `TurnExtractionAdapter` | `NOT_IMPLEMENTED / BLOCKED_BY_HOST_MAPPING` | 后续通过受控 resolver 桥接 C++ 元数据事件与 Python Provider；本批次不修改 `memory-service` |
-| 当前 Review | `CHANGES_REQUESTED` | 两份新 Review 的代码/文档返工完成后需完整回归、单独 commit/push，并保留 GCC/Kylin 独立复验要求 |
-| GCC/Kylin 独立复验 | `REQUIRES_INDEPENDENT_RERUN / ENVIRONMENT_BLOCKED` | 本机 MSVC/Qt 结果不能代替目标 GCC、Kylin L1/L2；需具备目标环境的独立 Reviewer 复跑 |
+| 当前 Review | `CHANGES_REQUESTED` | 返工代码/文档与 GCC/Kylin 独立复验均已完成（见 docs/day3/14），等待 Reviewer 复审 |
+| GCC/Kylin 独立复验 | `DONE（83/83，B 代替 C 测试）` | 已在 Kylin V11 + GCC 12.3.0 + Qt 5.15.19 宿主独立复跑，Debug/Release 均 83 passed；详见 docs/day3/14 |
 | PR 描述状态 | `PENDING_UPDATE` | PR 实际为 Ready for review，描述中旧的 Draft 表述须在 commit/push 后同步 |
 | commit/push/PR | `PENDING_SEPARATE_AUTHORIZATION` | 当前返工未暂存；分别等待用户的 commit、push 与 PR 更新授权 |
 
