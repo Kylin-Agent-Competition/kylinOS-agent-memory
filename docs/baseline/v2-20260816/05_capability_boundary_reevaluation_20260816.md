@@ -79,7 +79,7 @@
 | AGT-001 | chatAsync ABI | ABI_VERIFIED / E3 | **ABI_VERIFIED（需 5.0.3 重新取证 Build ID）** | `kyai::assistant::OsAssistant::chatAsync` 已确认导出 |
 | AGT-002 | 普通聊天流式完成 | HOST_VERIFIED / E4 | **待复测** | 3.0.67→5.0.3 |
 | AGT-003 | 聊天 DB 落库 | HOST_VERIFIED / E4 | **待复测（Schema 已变）** | RECORD 表新增 6 字段 |
-| AGT-004 | 真实 Tool Result | PARTIAL / E2/E4 | **待重新调查** | 5.0.3 新增 DOCUMENT_REFERENCE/知识库路径 |
+| AGT-004 | 真实 Tool Result | PARTIAL / E2/E4 | **PARTIAL（上调，宿主能力已证 E4）** | 5.0.3 智能体模式 + 工具调用人工验证通过（V1/V2/V3/V5-2 ✅）；本项目 Hook 端到端（事件捕获→落库，成功/失败/取消三场景）待验证 |
 | AGT-005 | Memory Context 注入 | UNTESTED / E0/E2 | **方向有利但需重验** | `request_data` 字段提供潜在注入点，语义未验证 |
 | AGT-006 | 修改版构建/部署/KYSEC/回退 | UNTESTED / E1/E3 | **UNTESTED（部署布局已变）** | 应用从 `/opt/apps` 迁移到 `/opt/kaiming/layers/...` |
 | IPC-001 | Kaiming→UDS | UNTESTED / E0 | UNTESTED（维持） | 无变化证据 |
@@ -139,6 +139,7 @@
 | EMB-002 | 模型列表/选择 | PARTIAL | ABI_VERIFIED | A |
 | EMB-004 | 图像/多模态 | PARTIAL | ABI_VERIFIED（模型已就位） | A |
 | AGT-001 | chatAsync ABI | ABI_VERIFIED(3.0.67) | ABI_VERIFIED(5.0.3，需重取 Build ID) | C/D |
+| AGT-004 | 真实 Tool Result | PARTIAL / E2/E4 | PARTIAL（宿主能力已证 E4，本项目 Hook 端到端待验证） | C/D |
 | AGT-005 | Context 注入 | UNTESTED | UNTESTED（request_data 提供有利方向） | C |
 | MEM-001 | 官方 MemoryClient | NOT_FOUND | NOT_FOUND（维持，视觉记忆 client 非通用） | E |
 | MEM-002 | 完整 Memory Service | NOT_FOUND | NOT_FOUND（维持，屏幕视觉记忆 service） | E |
