@@ -1,0 +1,128 @@
+
+================================================================================
+# 任务: phase10_ui_vs_kernel  @ 2026-08-17T21:58:10.468306
+================================================================================
+
+----- CMD: echo '=== memorymap UND vision/ocr symbols ==='; objdump -T /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap 2>/dev/null | grep 'UND' | grep -iE 'text_recognition|vision|ocr|image_embedding|text_embedding' | sort -u  -----
+# exit=0
+=== memorymap UND vision/ocr symbols ===
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_get_ocr_screenshot_data
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_create_session
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_destroy_session
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_init_session
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_model_config_create
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_model_config_destroy
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_model_config_set_deploy_type
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_model_config_set_name
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_recognize_text_from_image_data_async
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_result_get_text_lines
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_result_set_callback
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_set_model_config
+
+----- CMD:  echo '=== memorymap qml-related strings (qmlRegisterType / qml files) ==='; strings -n 6 /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap 2>/dev/null | grep -iE 'qmlRegister|\.qml|qrc:|import Qt|Backend|View|Model' | sort -u | head -60  -----
+# exit=0
+=== memorymap qml-related strings (qmlRegisterType / qml files) ===
+11DayAppModel
+13MemorymapView
+16MemoryMapBackend
+16VideoPreviewItem
+17VideoPreviewModel
+20PreviewImageTextItem
+21PreviewImageTextModel
+8AppModel
+appModel
+AppModel
+appmodel.cpp
+AppModelRole
+Date not found in appModelMap!
+dayAppModel
+DayAppModel
+dayAppModelChanged
+dayAppModelDeleted
+    function hideVideoPreviewPage() {
+    function showVideoPreviewPage() {
+    height: textMatchGridView.gridViewCellHeight * 4
+                hideVideoPreviewPage()
+imageMatchResultModel
+imageMatchResultModelChanged
+imageTextModel
+import QtQml 2.12
+	import QtQuick 2.0
+import QtQuick 2.0
+	(import QtQuick 2.12
+ import QtQuick 2.12
+;import QtQuick 2.12
+{import QtQuick 2.12
+import QtQuick 2.12
+import QtQuick.Controls 1.4
+import QtQuick.Controls 2.12
+import QtQuick.Controls 2.15
+import QtQuick.Controls 2.5
+import QtQuick.Window 2.12
+Invalid index in DayAppModel::data!
+isPreviewImgEmpty
+i<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+L<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="none" version="1.1" width="16" height="16" viewBox="0 0 16 16"><g><g transform="matrix(-1,0,0,1,32,0)" style="opacity:0.00009999999747378752;"><rect x="16" y="0" width="16" height="16" rx="0" fill="#262626" fill-opacity="1"/></g><g transform="matrix(-1,0,0,1,20,0)"><path d="M9.646447,3.353553Q9.57612,3.283227,9.53806,3.191342Q9.5,3.0994562,9.5,3Q9.5,2.9507543,9.509607,2.9024549Q9.519214999999999,2.854155,9.53806,2.808658Q9.556906,2.763161,9.584265,2.722215Q9.611625,2.681269,9.646447,2.646447Q9.681269,2.611625,9.722215,2.584265Q9.763161,2.556906,9.808658,2.5380599999999998Q9.854155,2.519215,9.9024549,2.509607Q9.9507543,2.5,10,2.5Q10.0994562,2.5,10.191342,2.5380599999999998Q10.283227,2.57612,10.353553,2.646447L15.35355,7.64645Q15.38837,7.68127,15.41573,7.72221Q15.44309,7.76316,15.46194,7.80866Q15.48078,7.85415,15.49039,7.90245Q15.5,7.95075,15.5,8Q15.5,8.049240000000001,15.49039,8.09755Q15.48078,8.14584,15.46194,8.19134Q15.44309,8.23684,15.41573,8.27778Q15.38837,8.31873,15.35355,8.35355L10.353553,13.3536Q10.283227,13.4239,10.191342,13.4619Q10.0994561,13.5,10,13.5Q9.9507543,13.5,9.9024549,13.4904Q9.854155,13.4808,9.808658,13.4619Q9.763161,13.4431,9.722215,13.4157Q9.681269,13.3884,9.646447,13.3536Q9.611625,13.3187,9.584265,13.2778Q9.556906,13.2368,9.53806,13.1913Q9.519214999999999,13.1458,9.509607,13.0975Q9.5,13.0492,9.5,13Q9.5,12.90054,9.53806,12.80866Q9.576121,12.71677,9.646447,12.64645L14.29289,8L9.646447,3.353553L9.646447,3.353553Z" fill-rule="evenodd" fill="#262626" fill-opacity="1"/></g></g></svg>
+MemoryMapBackend
+memorymapbackend.cpp
+MemorymapView
+    model: ["5GB", "10GB", "15GB"]
+modelData
+        onDayAppModelChanged: {
+        onDayAppModelDeleted: {
+previewAppIcon
+previewAppIconChanged
+previewAppName
+previewAppNameChanged
+previewImageDate
+previewImageDateChanged
+PreviewImageTextItem
+PreviewImageTextItem*
+PreviewImageTextModel
+previewimagetextmodel.cpp
+previewImageTime
+previewImageTimeChanged
+
+----- CMD:  echo '=== memorymap classes registered (qmlRegisterType names) ==='; strings -n 4 /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap 2>/dev/null | grep -iE '^Memory|^Recollect|^Ocr|^Video|^Config|^Screen' | sort -u | head -40 -----
+# exit=0
+=== memorymap classes registered (qmlRegisterType names) ===
+ConfigManager
+configmanager.cpp
+MemoryMapBackend
+memorymapbackend.cpp
+Memory Map failed to launch. Please try restarting the application, or exit and try again later
+Memory Map-Memorizing...
+Memory Map Schema not installed
+MemorymapView
+OcrModule
+ocrmodule.cpp
+ocrResultReady
+ocrTaskCancelled
+ocrtext
+ocrTextDatas
+RecollectConfig
+recollectconfig.cpp
+recollect_create_session
+recollect_delete_user_data
+recollect_destroy_session
+recollect_get_app_list_of_day
+recollect_get_first_and_last_day
+recollect_get_maximum_storage_gb
+recollect_get_ocr_screenshot_data
+recollect_get_recording_memory
+recollect_get_screenshot_data_of_day
+recollect_get_screenshot_image_of_video_by_index
+recollect_get_screenshot_interval
+recollect_get_visual_screenshot_data
+recollect_image_free
+recollect_init_session
+recollect_result_free
+RecollectServiceErrorWindow
+recollectserviceerrorwindow.cpp
+recollect_set_active_app_changed_callback
+recollect_set_back_in_time_detected_callback
+recollect_set_frame_deleted_callback
+recollect_set_maximum_storage_gb
+recollect_set_recording_changed_callback
+recollect_set_recording_memory
+recollect_set_screenshot_interval

@@ -3,9 +3,9 @@
 **编号**: KMA-CAPABILITY-MEMORYMAP-20260817
 **性质**: 麒麟 VM 实测能力边界调查（ABI/包/Schema/字符串/依赖级 + 运行态探查）
 **目标环境**: 银河麒麟 V11 2603 x86_64 VirtualBox（VM `kylin-agent-pc`，内核 6.6.0-76-generic）
-**调查时间**: 2026-08-17
+**调查时间**: 2026-08-17（含二次深化：UI/内核职责切分，phase8~10）
 **调查方式**: SSH 127.0.0.1:2222（用户 kylin-agent）
-**证据目录**: `evidence/l2-kylin-vm/memorymap-boundary-20260817/`（phase1~phase7 原始日志 + MANIFEST.sha256）
+**证据目录**: `evidence/l2-kylin-vm/memorymap-boundary-20260817/`（phase1~phase10 原始日志 + MANIFEST.sha256）
 
 > 本报告结论均基于麒麟 VM 实测证据（文件、符号、依赖、Schema、字符串），未做交互式运行时功能验证（recording-memory 默认关闭，服务未运行），能力状态按证据等级如实标注。
 
@@ -19,7 +19,9 @@
 
 3. **技术链路已确证（依赖 + 字符串 + Schema）**：截图采集 → 合成 MP4 → OCR（vision SDK）→ CLIP 图文 Embedding（embedding SDK，`cn-clip_512`）→ SQLite 结构化 + Milvus-Lite 向量库（vector-engine-client）→ 文本/视觉检索 → 时间线浏览 → 删除用户数据。
 
-4. **与赛题关系**：memorymap/recollect 覆盖「屏幕活动视觉记忆」，**不覆盖**赛题的偏好动态提取与版本、知识结构化与冲突、Tool Result 语义、自然语言精准遗忘、短中长期流转、统一 Memory Context 注入。自研 Memory Service 仍为核心原创工作，memorymap 仅可作「屏幕行为」条件数据源（延续 01 §8 对 Recollect 的定位）。
+4. **架构判定（纯 UI vs 记忆内核）**：memorymap 是**纯 UI 前端**，记忆内核在 `kylin-ai-recollect-service` 后台。memorymap 二进制直接依赖（DT_NEEDED）仅含 Qt5 全家桶 + gsettings + KF5WindowSystem + `libkylin-ai-recollect-client` + `libkysdk-coreai-vision`（本地 OCR 辅助），**不含** embedding SDK、vector-engine-client、SQLite、OpenCV、ffmpeg（这些为传递依赖）；其未定义符号只有 `recollect_*`（后端通信）与 `text_recognition_*`（本地 OCR）。而 recollect-service 才是完整「截图→OCR→CLIP embedding→SQLite+Milvus-Lite→检索→删除」的记忆内核（phase9 符号实证）。
+
+5. **与赛题关系**：memorymap/recollect 覆盖「屏幕活动视觉记忆」，**不覆盖**赛题的偏好动态提取与版本、知识结构化与冲突、Tool Result 语义、自然语言精准遗忘、短中长期流转、统一 Memory Context 注入。自研 Memory Service 仍为核心原创工作，memorymap 仅可作「屏幕行为」条件数据源（延续 01 §8 对 Recollect 的定位）。
 
 ---
 
@@ -116,6 +118,29 @@
 | 删除用户数据 | ABI_VERIFIED | E3（`deleteUserData`、SQL DELETE） |
 | 端到端运行/召回效果 | **UNTESTED** | E0（recording-memory=false，服务未运行，未做交互验证） |
 
+### 2.4 架构判定：纯 UI 前端 + 后台记忆内核
+
+**核心问题：memorymap 是纯 UI 还是含记忆内核？—— 纯 UI 前端（含少量本地 OCR 辅助），记忆内核在 recollect-service 后台。**
+
+| 判定维度 | memorymap（UI 前端） | kylin-ai-recollect-service（记忆内核） | 证据 |
+| --- | --- | --- | --- |
+| 角色 | 用户界面、配置、时间线浏览、搜索框 | 截图采集/OCR/embedding/存储/检索/删除后台 daemon | phase1/5 |
+| 直接依赖（DT_NEEDED） | Qt5 全家桶 + gsettings + KF5WindowSystem + recollect-client + **vision SDK** + waylandhelper + log4qt | sqlite3 + **vision SDK** + **embedding SDK** + **vector-engine-client** + opencv + ffmpeg + Qt5 | phase9 `readelf -d` |
+| 是否直接链接 embedding SDK | ❌ 无（传递依赖） | ✅ `image_embedding_*`、`text_embedding_by_image_model`、`embedding_result_*` | phase9 UND |
+| 是否直接链接 vector/Milvus | ❌ 无 | ✅ `VectorDB::Database/CollectionSchema/SearchArguments/SearchResults/IndexDesc` | phase9 UND |
+| 是否直接链接 SQLite | ❌ 无 | ✅ `sqlite3_open/prepare/bind/step/...` | phase9 UND |
+| 是否直接链接 OCR（vision） | ✅ `text_recognition_*`（本地 OcrModule 辅助） | ✅ `text_recognition_recognize_text_from_image_data_async`（落库 OCR） | phase10/phase9 |
+| 是否直接链接 ffmpeg/opencv | ❌ 无（传递） | ✅ `avcodec/avformat/swscale` + `cv::DescriptorMatcher` | phase9 |
+| 未定义符号（外部调用） | 仅 `recollect_*`（后端通信）+ `text_recognition_*`（OCR）+ Qt | embedding/vision/sqlite/vector/opencv/ffmpeg 全套 | phase8/9 |
+| 导出符号（可复用 API） | 无（仅 C++ 工具弱符号，非库） | 无（可执行程序；对外只有 D-Bus） | phase8 `nm -D` |
+| QML 资源形态 | 编译进二进制（qrc 内嵌，无外部 .qml 目录） | 不涉及 | phase8/10 |
+| 注册的 QML 类 | 全部为 UI/数据模型类：`AppModel`/`DayAppModel`/`VideoPreviewModel`/`PreviewImageTextModel`/`MemoryMapBackend`/`MemorymapView`/`ConfigManager`/`RecollectConfig`/`OcrModule` | 不涉及 | phase10 |
+
+**结论**：
+1. memorymap 是**纯 UI 前端**：无 embedding、无向量、无 SQLite、无 ffmpeg/opencv（均为传递依赖）；仅有的「重」能力是本地 OCR 辅助（`OcrModule` 直接调 vision SDK 的 `text_recognition_*`，用于预览/交互识别）。记忆数据链路（embedding→vector→SQLite）完全不落在 UI 侧。
+2. **记忆内核 = recollect-service**：它是完整的「屏幕视觉记忆内核」，但其角色是**编排层 + 数据落库**——底层向量化（CLIP）、OCR、向量检索分别复用官方 `embedding/vision/vector-engine-client` SDK，recollect-service 自身实现的是截图调度、视频合成、OCR/embedding 编排、SQLite Schema 与落库、D-Bus 服务与删除逻辑。
+3. 二者通过 `libkylin-ai-recollect-client`（GDBus `com.kylin.Recollect`）解耦，符合「前端薄、内核在后端」的经典分层。
+
 ---
 
 ## 3 与旧环境基线能力边界比对
@@ -140,6 +165,23 @@
 3. **共享基础设施确认**：官方 recollect 与本项目复用同一套 SDK（`libkysdk-coreai-embedding`、`libkysdk-coreai-vision`、`libkysdk-vector-engine-client`/Milvus-Lite）。这意味着本项目「端侧 Embedding + 轻量向量存储」的技术选型与官方同构，适配/评测风险更低，但也需在资源与隐私边界上与 recollect 隔离（独立 Collection、独立存储路径、独立授权）。
 
 4. **隐私与遗忘仍需自研**：memorymap 的删除是「按时间区间」的底层删除原语，不提供语义级精准遗忘、跨来源级联、preview/confirm/幂等，与赛题「自然语言精准遗忘」仍有本质差距。
+
+### 3.2 可复用 / 重叠 / 互补关系判定
+
+**直接回答：memorymap 不可复用（纯前端应用）；recollect-service 可「只读复用」（条件数据源）；与自研 Memory Service 仅基础设施重叠、功能互补。**
+
+| 维度 | 判定 | 说明 |
+| --- | --- | --- |
+| memorymap（UI）可复用性 | ❌ **不可复用** | 官方应用前端，非库（`nm -D` 无导出 API），QML 内嵌二进制；自研前端应基于 Qt/QML 独立实现，不依赖官方 UI |
+| recollect-service 可复用性 | ⚠️ **只读可复用（条件数据源）** | 通过 D-Bus `com.kylin.Recollect` + `libkylin-ai-recollect-client` 可读取屏幕活动数据（OCR 文本、视觉截图、每日应用列表、时间线、删除），**不可改其内核** |
+| 与自研 Memory Service 功能重叠 | ✅ **仅基础设施重叠** | 两者都调用官方 `embedding/vision/vector-engine-client` SDK + SQLite；但这是**共享基础设施**，不是功能重叠（recollect 不做偏好/知识/冲突/遗忘） |
+| 与自研 Memory Service 功能互补 | ✅ **互补** | recollect = 「屏幕上发生过什么」的视觉/行为原始数据源；自研 = 「用户偏好与知识」的理解、组织、冲突消解、精准遗忘、上下文注入。二者可形成「屏幕行为源 → 记忆业务层」的数据流 |
+| 自研范围是否受冲击 | ✅ **不收缩** | 官方未提供通用 MemoryClient/Memory Service，自研主链（偏好/知识/冲突/遗忘/Tool Result/Context 注入）仍需原创 |
+
+**结论（MEM-001/002 状态定案）**：
+- **MEM-001（官方 MemoryClient）维持 NOT_FOUND**：`libkylin-ai-recollect-client` 是「视觉记忆 client」（截图/OCR/视觉向量读取），非通用偏好/知识 MemoryClient。
+- **MEM-002（完整 Memory Service）维持 NOT_FOUND**：recollect-service 是「屏幕视觉记忆 service」，不含偏好提取/知识结构化/Tool Result/自然语言遗忘/短中长期流转。
+- **新增认知**：官方提供了「视觉记忆」专用组件（memorymap + recollect-service + 知识库/文档/数据管理服务），建议在 MEM 矩阵下新增一条 `MEM-003 官方视觉记忆组件`，状态 `ABI_VERIFIED`，定位「条件数据源」，并同步修订 01 §9 的「官方无记忆能力，全部自研」表述为「官方无通用偏好/知识记忆，但存在视觉记忆与知识库/文档/数据管理能力，需明确边界」。
 
 ---
 
@@ -166,7 +208,10 @@ recording-memory 当前为 false，recollect-service 未运行，因此以下为
 | `phase5_recollect_service.log` | recollect-service unit/二进制/依赖（SQLite+Vision+Embedding+Vector+OpenCV）、数据路径、Schema |
 | `phase6_recollect_gschema_dbus.log` | recollect gschema、D-Bus 名、SQLite CREATE TABLE、存储路径字符串 |
 | `phase7_dbus_api.log` | D-Bus 接口方法/信号全量、CLIP 模型名、embedding/milvus 调用字符串 |
-| `MANIFEST.sha256` | 上述 7 个日志的 SHA-256 |
+| `phase8_arch_boundary.log` | memorymap files 目录树、UND 符号（仅 recollect+text_recognition）、`nm -D` 导出（无业务 API） |
+| `phase9_kernel_depth.log` | memorymap `readelf -d` NEEDED 直接依赖；recollect-service UND 符号（embedding/vision/sqlite/VectorDB/opencv/ffmpeg 全套） |
+| `phase10_ui_vs_kernel.log` | memorymap OCR 符号、QML 内嵌证据、注册的 UI 模型类清单 |
+| `MANIFEST.sha256` | 上述 10 个日志的 SHA-256 |
 
 ## 签署
 

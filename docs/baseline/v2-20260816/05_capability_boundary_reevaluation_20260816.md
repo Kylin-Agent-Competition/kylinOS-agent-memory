@@ -1,4 +1,4 @@
-# 05 能力边界重新评估（v1.2 · 基于 2026-08-16 环境基线 v2）
+# 05 能力边界重新评估（v1.3 · 基于 2026-08-16 环境基线 v2，2026-08-17 memorymap 定案增补）
 
 > **性质**：对 `reviewDocuments/01_sdk_capability_boundary.md`（v1.1）的能力边界结论，依据新环境基线
 > `docs/baseline/02_kylin_vm_environment_baseline_20260816.md`（v2）重新评估的结果。
@@ -31,12 +31,11 @@
    - 新增独立数据库 `knowledgebase_database.db`，含 `KNOWLEDGEBASE` 表（官方知识库）。
    - 旧基线「聊天 Schema 无原始用户文本与模型增强文本分离字段」的结论 **已被部分推翻**：`request_data` 字段可能承载模型请求侧数据，需进一步验证其是否可用于 Memory Context 注入且不污染 `message` 原文。
 
-3. **官方出现了与「记忆」直接相关的组件**，动摇了旧基线 MEM-001/MEM-002「未发现官方 MemoryClient / 完整 Memory Service」的判断：
-   - `cn.kylin.kylin-ai-memorymap 2.0.23`（记忆地图应用）；
-   - `kylin-ai-knowledge-base-service 1.2.0.0-0k1.0` + `KNOWLEDGEBASE` 表；
-   - `kylin-ai-document-qa-service` / `kylin-ai-document-service`（文档问答）；
-   - `kyai-data-management-service`（数据管理业务服务）。
-   上述组件目前仅 ABI/包级确认存在，功能边界未知，**必须列为 P0 重新调查项**，不能继续按「官方无记忆能力，全部自研」的前提开发。
+3. **官方出现了与「记忆」直接相关的组件**。经 2026-08-17 memorymap 能力边界调查（`06_memorymap_capability_boundary_20260817.md`）**定案**：
+   - `cn.kylin.kylin-ai-memorymap 2.0.23`（记忆地图）= 纯 UI 前端，记忆内核为 `kylin-ai-recollect-service`，二者构成「屏幕视觉记忆」（截图→OCR→CLIP→SQLite+Milvus-Lite→检索→删除），**非**偏好/知识/工具结果通用记忆；
+   - MEM-001 / MEM-002 **维持 NOT_FOUND**（官方无通用偏好/知识 MemoryClient / Memory Service）；
+   - 新增 **MEM-003 官方视觉记忆组件**（ABI_VERIFIED/E3），定位条件数据源（只读复用）；
+   - `kylin-ai-knowledge-base-service`、`kylin-ai-document-qa-service`、`kyai-data-management-service` 功能边界仍未知，**继续列为 P0 重新调查项**（R-NEW-1）。
 
 4. **Recollect 从「条件数据源」升级为官方独立服务**：`kylin-ai-recollect-service` + `libkylin-ai-recollect-client` 已作为独立包安装。旧基线「普通聊天未启动 Recollect」的结论需在 5.0.3 上重新验证。
 
@@ -104,29 +103,30 @@
 
 | 编号 | 能力 | 旧状态（v1.1） | 新评估（v1.2） | 依据 |
 | --- | --- | --- | --- | --- |
-| MEM-001 | 官方 MemoryClient | NOT_FOUND / E3 | **待重新调查（不能维持 NOT_FOUND）** | `kylin-ai-memorymap 2.0.23`、`libkyai-data-management-client` 已安装 |
-| MEM-002 | 完整 Memory Service | NOT_FOUND / E1-E4 | **待重新调查** | 知识库服务 + 数据管理服务 + 记忆地图应用构成潜在官方记忆能力 |
+| MEM-001 | 官方 MemoryClient | NOT_FOUND / E3 | **NOT_FOUND（维持）** | `libkylin-ai-recollect-client` 为「视觉记忆 client」，非通用偏好/知识 MemoryClient（06 报告 §3.2） |
+| MEM-002 | 完整 Memory Service | NOT_FOUND / E1-E4 | **NOT_FOUND（维持）** | `kylin-ai-recollect-service` 为「屏幕视觉记忆 service」，不含偏好/知识/冲突/遗忘/流转（06 报告 §3.2） |
+| MEM-003 | 官方视觉记忆组件 | —（新增） | **ABI_VERIFIED / E3** | memorymap（纯 UI）+ recollect-service（记忆内核）= 屏幕视觉记忆；D-Bus `com.kylin.Recollect` + client C API 实证；定位条件数据源（只读复用） |
 
 **新发现组件清单（ABI/包级确认，功能未知）**：
 
 | 组件 | 版本 | 与「记忆」的潜在关系 |
 | --- | --- | --- |
-| kylin-ai-memorymap（记忆地图） | 2.0.23 | 名字直指「记忆」，需确认是 UI 还是含记忆内核 |
+| kylin-ai-memorymap（记忆地图） | 2.0.23 | **已定案**：纯 UI 前端（06 报告 §2.4） |
 | kylin-ai-knowledge-base-service | 1.2.0.0-0k1.0 | 官方知识库服务，`KNOWLEDGEBASE` 表已落地 |
 | kylin-ai-document-qa-service | 1.2.0.0-0k1.0 | 文档问答（DOCUMENT_REFERENCE 表） |
 | kylin-ai-document-service | 1.2.0.0-0k0.6 | 文档解析服务 |
 | kylin-ai-parser-extension | 1.2.0.0-0k0.4 | 解析扩展 |
 | kyai-data-management-service | 1.2.0.0-0k1.10 | 数据管理业务服务（含 client 0k0.3） |
-| kylin-ai-recollect-service | 1.0.0.0-0k1.0 | 用户活动回溯，独立成服务 |
+| kylin-ai-recollect-service | 1.0.0.0-0k1.0 | **已定案**：memorymap 记忆内核（截图+OCR+CLIP+Milvus+SQLite）（06 报告 §2.4） |
 
-**开发影响（严重）**：旧基线把「通用 MemoryClient / 完整 Memory Service」列为自研主范围（01 §9）。现在官方出现记忆地图 + 知识库 + 数据管理组合，**必须先做一次「官方记忆能力边界」调查，判断自研 Memory Service 与官方组件的重叠/互补关系**，否则存在与官方功能重复开发、或对赛题「记忆优化及高效应用」方向误判的风险。
+**开发影响（已定案 + 部分仍待调查）**：memorymap 能力边界已定案（06 报告，2026-08-17）——官方「记忆」= 屏幕视觉记忆，非通用偏好/知识记忆，**自研 Memory Service 主范围不收缩**；recollect-service 可作「屏幕行为」条件数据源（只读复用），与自研仅共享基础设施（embedding/vision/vector-engine-client SDK）、功能互补。但知识库 / 文档 / 数据管理服务的功能边界仍未调查，**继续作为 P0 项**（R-NEW-1），不得按「官方无记忆能力，全部自研」或「官方已有完整记忆」任一侧偏废。
 
 ### 2.5 Recollect（条件数据源）
 
 | 编号 | 能力 | 旧状态（v1.1） | 新评估（v1.2） |
 | --- | --- | --- | --- |
 | REC-001 | 普通聊天参与 | NOT_FOUND / E4 | **待复测**（Recollect 已成独立服务） |
-| REC-002 | D-Bus 数据读取 | SOURCE_VERIFIED / E2/E3 | SOURCE_VERIFIED（上调：正式 client 库已装） |
+| REC-002 | D-Bus 数据读取 | SOURCE_VERIFIED / E2/E3 | **ABI_VERIFIED（上调）**：`com.kylin.Recollect` D-Bus 接口 + `libkylin-ai-recollect-client` 完整 C API 已实证（06 报告 §3） |
 
 **开发影响**：`libkylin-ai-recollect-client` 提供了正式访问入口，条件数据源的可接入性提升；但仍应维持「主链稳定后再接入」的原则。
 
@@ -140,9 +140,10 @@
 | EMB-004 | 图像/多模态 | PARTIAL | ABI_VERIFIED（模型已就位） | A |
 | AGT-001 | chatAsync ABI | ABI_VERIFIED(3.0.67) | ABI_VERIFIED(5.0.3，需重取 Build ID) | C/D |
 | AGT-005 | Context 注入 | UNTESTED | UNTESTED（request_data 提供有利方向） | C |
-| MEM-001 | 官方 MemoryClient | NOT_FOUND | 待重新调查 | E |
-| MEM-002 | 完整 Memory Service | NOT_FOUND | 待重新调查 | E |
-| REC-002 | Recollect 读取 | SOURCE_VERIFIED | SOURCE_VERIFIED（正式 client 已装） | E |
+| MEM-001 | 官方 MemoryClient | NOT_FOUND | NOT_FOUND（维持，视觉记忆 client 非通用） | E |
+| MEM-002 | 完整 Memory Service | NOT_FOUND | NOT_FOUND（维持，屏幕视觉记忆 service） | E |
+| MEM-003 | 官方视觉记忆组件 | —（新增） | ABI_VERIFIED（条件数据源，只读复用） | E |
+| REC-002 | Recollect 读取 | SOURCE_VERIFIED | ABI_VERIFIED（D-Bus + client C API 实证） | E |
 
 ---
 
@@ -150,7 +151,7 @@
 
 | 风险 | 等级 | 影响 | 建议控制 |
 | --- | --- | --- | --- |
-| 官方记忆能力（memorymap/知识库/数据管理）边界未知 | **高** | 自研范围可能与官方重叠，赛题方向判断风险 | P0：立即调查官方记忆组件功能边界，重写 01 §9 |
+| 官方知识库/文档/数据管理能力边界未知（memorymap 已定案） | **高** | 自研范围可能与官方知识库/数据管理重叠 | P0：调查 `kylin-ai-knowledge-base-service`、`kylin-ai-document-qa-service`、`kyai-data-management-service` 功能边界（R-NEW-1） |
 | 助手 5.0.3 源码与 Hook 点未对应 | 高 | 旧 Hook 语义（SystemChat 等类）可能失效 | D1-D3 重新做 5.0.3 ELF/源码定位 |
 | `request_data` 字段语义未验证 | 中高 | 注入契约定案依赖它 | 优先做读写语义实验 |
 | RECORD Schema 新增字段未在旧评估覆盖 | 中 | is_collect/chat_type 可能影响记忆提取 | 纳入聊天 DB 重评估 |
@@ -160,13 +161,20 @@
 
 ## 5 需人工裁决 / 下一步
 
-1. **官方记忆能力边界调查**（最高优先）：确认 `kylin-ai-memorymap`、知识库、数据管理是否为「可复用的官方记忆能力」，还是仅 UI/数据层。结论决定自研 Memory Service 的边界是否需调整。
+1. **官方知识库/文档/数据管理能力边界调查**（最高优先，memorymap 已定案）：`kylin-ai-memorymap` 已定案为「屏幕视觉记忆 UI + recollect 内核」（06 报告），MEM-001/002 维持 NOT_FOUND、新增 MEM-003；仍需确认知识库、文档、数据管理服务是否为「可复用的官方记忆能力」。
 2. **request_data 字段实验**：验证其是否承载模型请求侧数据、能否作为 Memory Context 注入通道且不污染 `message`。
 3. **5.0.3 重新取证**：Build ID、`libkyai-assistant.so` 导入表、Hook 位置、Kaiming 重打包路径（/opt/kaiming/layers）。
 4. **Embedding/Vector 回归**：版本变化后重新跑同步向量化（768 维）与 Vector CRUD/持久化。
 5. **环境修复**：重装 cmake，并更新 v2 基线。
 
 > 本评估结论均为 ABI/包/Schema 级，不得在代码或文档中写「5.0.3 已支持 X」。所有 HOST_VERIFIED 需待麒麟 VM 运行时复测。
+
+## 修订记录
+
+| 版本 | 日期 | 修订内容 |
+| --- | --- | --- |
+| v1.2 | 2026-08-16 | 初版：基于环境基线 v2 的 ABI/包/Schema 级重评 |
+| v1.3 | 2026-08-17 | 增补：memorymap 能力边界定案（06 报告）——MEM-001/002 维持 NOT_FOUND、新增 MEM-003 ABI_VERIFIED、REC-002 上调 ABI_VERIFIED；知识库/文档/数据管理继续 P0 调查 |
 
 ## 签署
 

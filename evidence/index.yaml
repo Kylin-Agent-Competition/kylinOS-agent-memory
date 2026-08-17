@@ -571,3 +571,25 @@ entries:
         （evidence/l2-kylin-vm/day8_verify_latest.log，checksum 7f32f404…）
         ——L2 302 = L1 255 passed + 47 skipped（VM 上 47 个 SDK 用例真实执行不再 skip）
       - L1（本地 WSL）对照：255 passed + 47 skipped（evidence/l1/day8_knowledge_extraction_local.log）
+
+  - id: "MEM-BOUNDARY-001"
+    task_id: "D4-Gate0-补充审查"
+    description: "官方记忆地图（memorymap 2.0.23）能力边界调查 — 纯 UI 前端 + recollect 屏幕视觉记忆内核；MEM-001/002 维持 NOT_FOUND，新增 MEM-003 条件数据源"
+    status: "HOST_VERIFIED"
+    evidence_level: "E3"
+    source: "evidence/l2-kylin-vm/memorymap-boundary-20260817/"
+    report: "docs/baseline/v2-20260816/06_memorymap_capability_boundary_20260817.md"
+    date: "2026-08-17"
+    reviewer: "pending"
+    limitations: "端到端运行/召回效果 UNTESTED（recording-memory=false，recollect-service 未运行，未做交互式运行时验证）；证据等级 E3 为 ABI/符号/依赖/Schema 级，非运行时功能验证；知识库/文档/数据管理能力边界仍未调查（R-NEW-1）；memorymap 删除为按时间区间底层原语，无语义级精准遗忘"
+    checksum_sha256: "270840e4108d764b71a73f94952f0805c061cb31a7f55c010f50b907195b9ed8"
+    details: |
+      memorymap（cn.kylin.kylin-ai-memorymap 2.0.23，Kaiming 分层应用，非 dpkg）主二进制 Build ID 9f0b1cb72c6a1b90b57d8d039f1367f3d4875b5d。
+      架构判定（§2.4）：memorymap = 纯 UI 前端（Qt5 + recollect-client + 本地 OCR 辅助，无 embedding/vector/sqlite/ffmpeg 直接依赖，nm -D 无导出业务 API）；
+      记忆内核 = kylin-ai-recollect-service（截图→合成 MP4→OCR→CLIP cn-clip_512 图文 Embedding→SQLite screenshots 表 + Milvus-Lite 向量→文本/视觉检索→按时间区间删除）。
+      官方「记忆」= 屏幕视觉记忆，非偏好/知识/工具结果通用记忆。
+      MEM-001（官方 MemoryClient）维持 NOT_FOUND：libkylin-ai-recollect-client 为视觉记忆 client；
+      MEM-002（完整 Memory Service）维持 NOT_FOUND：recollect-service 不含偏好/知识/冲突/遗忘/流转；
+      新增 MEM-003（官方视觉记忆组件）ABI_VERIFIED/E3，定位条件数据源（只读复用，D-Bus com.kylin.Recollect）。
+      可复用/重叠/互补（§3.2）：memorymap 不可复用；recollect-service 只读可复用；与自研仅共享基础设施（embedding/vision/vector-engine-client SDK），功能互补，自研范围不收缩。
+      证据包 phase1~phase10 原始日志 + MANIFEST.sha256（10 文件）见 source 目录。

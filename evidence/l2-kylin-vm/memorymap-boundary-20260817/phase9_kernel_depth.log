@@ -1,0 +1,153 @@
+
+================================================================================
+# 任务: phase9_kernel_depth  @ 2026-08-17T21:57:38.145434
+================================================================================
+
+----- CMD: echo '=== memorymap direct NEEDED libs ==='; readelf -d /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap 2>/dev/null | grep NEEDED | sort -u  -----
+# exit=0
+=== memorymap direct NEEDED libs ===
+ 0x0000000000000001 (NEEDED)             共享库：[ld-linux-x86-64.so.2]
+ 0x0000000000000001 (NEEDED)             共享库：[libc.so.6]
+ 0x0000000000000001 (NEEDED)             共享库：[libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             共享库：[libgsettings-qt.so.1]
+ 0x0000000000000001 (NEEDED)             共享库：[libKF5WindowSystem.so.5]
+ 0x0000000000000001 (NEEDED)             共享库：[libkylin-ai-recollect-client.so.1]
+ 0x0000000000000001 (NEEDED)             共享库：[libkysdk-coreai-vision.so.1]
+ 0x0000000000000001 (NEEDED)             共享库：[libkysdk-waylandhelper.so.1]
+ 0x0000000000000001 (NEEDED)             共享库：[libQt5Core.so.5]
+ 0x0000000000000001 (NEEDED)             共享库：[libQt5DBus.so.5]
+ 0x0000000000000001 (NEEDED)             共享库：[libQt5Gui.so.5]
+ 0x0000000000000001 (NEEDED)             共享库：[libQt5Network.so.5]
+ 0x0000000000000001 (NEEDED)             共享库：[libQt5Qml.so.5]
+ 0x0000000000000001 (NEEDED)             共享库：[libQt5Quick.so.5]
+ 0x0000000000000001 (NEEDED)             共享库：[libQt5Widgets.so.5]
+ 0x0000000000000001 (NEEDED)             共享库：[libstdc++.so.6]
+ 0x0000000000000001 (NEEDED)             共享库：[libukui-log4qt.so.1]
+
+----- CMD:  echo '=== recollect-service UND symbols (embedding/vector/vision/ocr) ==='; objdump -T /usr/bin/kylin-ai-recollect-service 2>/dev/null | grep 'UND' | grep -iE 'embedding|vector|milvus|vision|ocr|sqlite|image' | sort -u | head -120  -----
+# exit=0
+=== recollect-service UND symbols (embedding/vector/vision/ocr) ===
+0000000000000000      DF *UND*	0000000000000000  Base        embedding_model_info_get_model_dim
+0000000000000000      DF *UND*	0000000000000000  Base        embedding_model_info_get_model_name
+0000000000000000      DF *UND*	0000000000000000  Base        embedding_model_list_get_count
+0000000000000000      DF *UND*	0000000000000000  Base        embedding_model_list_get_model
+0000000000000000      DF *UND*	0000000000000000  Base        embedding_result_destroy
+0000000000000000      DF *UND*	0000000000000000  Base        embedding_result_get_vector_data
+0000000000000000      DF *UND*	0000000000000000  Base        embedding_result_get_vector_length
+0000000000000000      DF *UND*	0000000000000000  Base        image_embedding_by_base64_image_data
+0000000000000000      DF *UND*	0000000000000000  Base        image_embedding_create_session
+0000000000000000      DF *UND*	0000000000000000  Base        image_embedding_destroy_session
+0000000000000000      DF *UND*	0000000000000000  Base        image_embedding_get_model_list
+0000000000000000      DF *UND*	0000000000000000  Base        image_embedding_init_model
+0000000000000000      DF *UND*	0000000000000000  Base        image_embedding_init_session
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_bind_int
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_bind_int64
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_bind_text
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_close
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_column_int
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_column_int64
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_column_text
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_errmsg
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_exec
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_finalize
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_free
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_open
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_prepare_v2
+0000000000000000      DF *UND*	0000000000000000  Base        sqlite3_step
+0000000000000000      DF *UND*	0000000000000000  Base        text_embedding_by_image_model
+0000000000000000      DF *UND*	0000000000000000  Base        text_recognition_recognize_text_from_image_data_async
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB11FieldSchema13WithDimensionEj
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB11FieldSchema13WithMaxLengthEj
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB11FieldSchemaC1ENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS_8DataTypeES6_bb
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB12ConnectParamC1ENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB13SearchResults7ResultsEv
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB13SearchResultsC1Ev
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB15SearchArguments14AddOutputFieldENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB15SearchArguments15AddTargetVectorENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEOSt6vectorIfSaIfEE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB15SearchArguments17SetCollectionNameENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB15SearchArguments21SetGuaranteeTimestampEm
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB15SearchArguments7SetTopKEl
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB16CollectionSchema8AddFieldEONS_11FieldSchemaE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB16CollectionSchema8AddFieldERKNS_11FieldSchemaE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB16CollectionSchemaC1ENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES6_b
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB7IDArrayC1EOSt6vectorIlSaIlEE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB8Database6CreateEv
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB9FieldDataIiLNS_8DataTypeE4EEC1ENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKSt6vectorIiSaIiEE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB9FieldDataIlLNS_8DataTypeE5EEC1ENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKSt6vectorIlSaIlEE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB9FieldDataINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEELNS_8DataTypeE21EEC1ES6_RKSt6vectorIS6_SaIS6_EE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB9FieldDataISt6vectorIfSaIfEELNS_8DataTypeE101EEC1ENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKS1_IS3_SaIS3_EE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZN8VectorDB9IndexDescC1ENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES6_NS_9IndexTypeENS_10MetricTypeE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZNK2cv17DescriptorMatcher5matchERKNS_11_InputArrayES3_RSt6vectorINS_6DMatchESaIS5_EES3_
+0000000000000000      DF *UND*	0000000000000000  Base        _ZNK8VectorDB10DmlResults7IdArrayEv
+0000000000000000      DF *UND*	0000000000000000  Base        _ZNK8VectorDB12SingleResult11OutputFieldERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+0000000000000000      DF *UND*	0000000000000000  Base        _ZNK8VectorDB12SingleResult3IdsEv
+0000000000000000      DF *UND*	0000000000000000  Base        _ZNK8VectorDB12SingleResult6ScoresEv
+0000000000000000      DF *UND*	0000000000000000  Base        _ZNK8VectorDB6Status4CodeEv
+0000000000000000      DF *UND*	0000000000000000  Base        _ZNK8VectorDB6Status4IsOkEv
+0000000000000000      DF *UND*	0000000000000000  Base        _ZNK8VectorDB6Status7MessageB5cxx11Ev
+0000000000000000      DF *UND*	0000000000000000  Base        _ZNK8VectorDB7IDArray10StrIDArrayB5cxx11Ev
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZN6QImage19setDevicePixelRatioEd
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZN6QImageaSERKS_
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZN6QImageC1EiiNS_6FormatE
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZN6QImageC1EPhiiNS_6FormatEPFvPvES2_
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZN6QImageC1ERK7QStringPKc
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZN6QImageC1ERKS_
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZN6QImageC1Ev
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZN6QImageD1Ev
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZNK6QImage11sizeInBytesEv
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZNK6QImage12bytesPerLineEv
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZNK6QImage4bitsEv
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZNK6QImage4copyERK5QRect
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZNK6QImage4saveEP9QIODevicePKci
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZNK6QImage5widthEv
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZNK6QImage6formatEv
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZNK6QImage6heightEv
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZNK6QImage6isNullEv
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZNK6QImage9constBitsEv
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZNK7QPixmap7toImageEv
+0000000000000000      DO *UND*	0000000000000000  Base        _ZTVN8VectorDB9FieldDataIiLNS_8DataTypeE4EEE
+0000000000000000      DO *UND*	0000000000000000  Base        _ZTVN8VectorDB9FieldDataIlLNS_8DataTypeE5EEE
+0000000000000000      DO *UND*	0000000000000000  Base        _ZTVN8VectorDB9FieldDataINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEELNS_8DataTypeE21EEE
+0000000000000000      DO *UND*	0000000000000000  Base        _ZTVN8VectorDB9FieldDataISt6vectorIfSaIfEELNS_8DataTypeE101EEE
+0000000000000000      DO *UND*	0000000000000000 (Qt_5)       _ZTV6QImage
+
+----- CMD:  echo '=== recollect-service UND symbols (opencv/ffmpeg) ==='; objdump -T /usr/bin/kylin-ai-recollect-service 2>/dev/null | grep 'UND' | grep -iE 'cv::|avcodec|avformat|av_|sws_|swscale' | sort -u | head -40 -----
+# exit=0
+=== recollect-service UND symbols (opencv/ffmpeg) ===
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_alloc_context3
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_find_decoder
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_find_encoder
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_free_context
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_open2
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_parameters_copy
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_parameters_from_context
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_parameters_to_context
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_receive_frame
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_receive_packet
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_send_frame
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) avcodec_send_packet
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) av_packet_alloc
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) av_packet_free
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) av_packet_rescale_ts
+0000000000000000      DF *UND*	0000000000000000 (LIBAVCODEC_60) av_packet_unref
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) avformat_alloc_output_context2
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) avformat_close_input
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) avformat_find_stream_info
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) avformat_free_context
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) avformat_new_stream
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) avformat_open_input
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) avformat_write_header
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) av_interleaved_write_frame
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) avio_closep
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) avio_open
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) av_read_frame
+0000000000000000      DF *UND*	0000000000000000 (LIBAVFORMAT_60) av_write_trailer
+0000000000000000      DF *UND*	0000000000000000 (LIBAVUTIL_58) av_frame_alloc
+0000000000000000      DF *UND*	0000000000000000 (LIBAVUTIL_58) av_frame_free
+0000000000000000      DF *UND*	0000000000000000 (LIBAVUTIL_58) av_frame_get_buffer
+0000000000000000      DF *UND*	0000000000000000 (LIBAVUTIL_58) av_log_set_level
+0000000000000000      DF *UND*	0000000000000000 (LIBAVUTIL_58) av_opt_set
+0000000000000000      DF *UND*	0000000000000000 (LIBAVUTIL_58) av_strerror
+0000000000000000      DF *UND*	0000000000000000 (LIBSWSCALE_7) sws_freeContext
+0000000000000000      DF *UND*	0000000000000000 (LIBSWSCALE_7) sws_getContext
+0000000000000000      DF *UND*	0000000000000000 (LIBSWSCALE_7) sws_scale
