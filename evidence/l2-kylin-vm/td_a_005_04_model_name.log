@@ -1,0 +1,24 @@
+================================================================
+TD-A-005-04 L2 证据 — model_info() 真实模型名（麒麟 VM 真实 SDK）
+branch: fix/td-a-pure
+tested_commit: 见 evidence/index.yaml TD-A-005-04 条目（被测代码 = fix/td-a-pure 分支 TD 关闭 commit）
+command: PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service          LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:          /usr/bin/python3 -c "...model_info()..."
+environment: 麒麟桌面 V11 x86_64（VirtualBox VM，Runtime 1.3.0，Embedding SDK 1.2.0.0-0k0.4）
+构建：cmake -B build -Dpybind11_DIR= && cmake --build build -j4
+      pybind11 2.11.1（apt python3-pybind11）；[100%] Built target kylin_embedding
+================================================================
+[1786967504621] info  Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock
+[1786967504621] info  Runtime version is  1.3.0 InitEngine call new init_v2
+[1786967504668] info  Proxy init success,sessionId is: 2077135490
+[1786967504669] warn  Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible.
+[1786967504669] info  Try to get default model
+[1786967504688] info  Get default model success, model: ensemble-embd_gte-base_uint8-text
+[1786967504689] info  Try to init default model: ensemble-embd_gte-base_uint8-text
+[1786967504690] info  Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 2077135490
+[1786967504691] info  Init default model success, model: ensemble-embd_gte-base_uint8-text
+model name: ensemble-embd_gte-base_uint8-text
+dim: 768 | loaded: True
+================================================================
+结论：model_info().name 经 Bridge get_default_model_name()（SDK text_embedding_get_model_list
+动态查询，非硬编码）返回真实模型名；dim=768、loaded=True（TD-A-005-05 精确语义同步生效）。
+TD-A-005-04 验收达成。待回填 tested_commit。

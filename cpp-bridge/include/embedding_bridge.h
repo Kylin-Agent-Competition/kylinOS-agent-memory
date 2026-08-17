@@ -57,6 +57,14 @@ struct EmbeddingSdkSymbols {
 
     // 模型（可选，Day4 骨架暂不强制）
     int (*init_model)(TextEmbeddingSession*, const char*) = nullptr;
+
+    // [TD-A-005-04 已解决] 模型列表/信息查询（SDK embedding_api.h 声明，nm 确认导出）
+    // 用于 model_info() 获取真实模型名（替代硬编码默认模型名）
+    EmbeddingModelList* (*get_model_list)(TextEmbeddingSession*, int*) = nullptr;
+    int  (*model_list_get_count)(EmbeddingModelList*) = nullptr;
+    EmbeddingModelInfo* (*model_list_get_model)(EmbeddingModelList*, int) = nullptr;
+    const char* (*model_info_get_model_name)(EmbeddingModelInfo*) = nullptr;
+    int  (*model_info_get_model_dim)(EmbeddingModelInfo*) = nullptr;
 };
 
 // ── EmbeddingBridge ──
@@ -93,6 +101,15 @@ public:
 
     /** 单条文本向量化（同步）。不抛出 C++ 异常，异常在内部捕获转为错误。 */
     BridgeResult<EmbeddingVector> embed(const std::string& text, uint32_t timeout_ms = 0);
+
+    // ── 模型信息（TD-A-005-04） ──
+
+    /**
+     * 获取默认模型名（通过 SDK get_model_list 查询真实模型名）。
+     * 返回空串表示不可用（符号缺失 / 查询失败 / 无模型）。
+     * 不抛异常；失败返回空串（调用方回退硬编码默认名）。
+     */
+    std::string get_default_model_name();
 
     // ── 状态查询 ──
 

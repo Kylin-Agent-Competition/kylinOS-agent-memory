@@ -44,6 +44,10 @@ class FakeBridge:
             "l2_norm": 1.0,
         })()
 
+    def get_default_model_name(self):
+        # [TD-A-005-04] FakeBridge 模拟 SDK get_model_list 返回真实模型名
+        return "fake-real-model-001"
+
     def destroy_session(self):
         self.has_session = False
 
@@ -133,3 +137,30 @@ def test_td_005_05_loaded_true_when_ready(monkeypatch, fake_bridge):
     p._lifecycle = _ProviderLifecycle.READY
     info = p.model_info()
     assert info.loaded is True
+
+
+def test_td_005_04_real_model_name_from_bridge(monkeypatch, fake_bridge):
+    """TD-A-005-04：READY 时 model_info().name = Bridge 查询的真实模型名（非硬编码）。"""
+    from providers.embedding_provider import _ProviderLifecycle
+    monkeypatch.setattr(EmbeddingProvider, "_shared_dimension", 768)
+    p = EmbeddingProvider.__new__(EmbeddingProvider)
+    p._bridge = fake_bridge
+    p._lifecycle = _ProviderLifecycle.READY
+    info = p.model_info()
+    assert info.name == "fake-real-model-001"  # 真实模型名（不再硬编码）
+
+
+def test_td_005_04_fallback_when_bridge_returns_empty(monkeypatch, fake_bridge):
+    """TD-A-005-04：Bridge 查询失败/返回空 → 回退 Day2 默认模型名（不崩溃）。"""
+    from providers.embedding_provider import _ProviderLifecycle
+
+    class NoModelBridge(FakeBridge):
+        def get_default_model_name(self):
+            return ""  # 模拟符号缺失/查询失败
+
+    monkeypatch.setattr(EmbeddingProvider, "_shared_dimension", 768)
+    p = EmbeddingProvider.__new__(EmbeddingProvider)
+    p._bridge = NoModelBridge()
+    p._lifecycle = _ProviderLifecycle.READY
+    info = p.model_info()
+    assert info.name == "ensemble-embd_gte-base_uint8-text"  # 回退默认名

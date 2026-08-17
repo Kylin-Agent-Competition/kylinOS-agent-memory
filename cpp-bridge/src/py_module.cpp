@@ -157,5 +157,7 @@ PYBIND11_MODULE(kylin_embedding, m) {
         .def_property_readonly("session_destroyed", &EmbeddingBridge::session_destroyed)
         // P1-High: 暴露不可恢复失败态，使 Provider 能区分"load 前失败(可重置)"与
         // "fatal 失败(已 dlclose/destroy，禁止重置单例再触发 dlopen/destroy→create)"
-        .def_property_readonly("fatal_failure", &EmbeddingBridge::fatal_failure);
+        .def_property_readonly("fatal_failure", &EmbeddingBridge::fatal_failure)
+        // [TD-A-005-04] 获取默认模型名（空串 = 不可用/查询失败，Provider 回退硬编码）
+        .def("get_default_model_name", &EmbeddingBridge::get_default_model_name);
 }

@@ -332,4 +332,32 @@ BridgeResult<EmbeddingVector> EmbeddingBridge::embed_impl(const std::string& tex
     return BridgeResult<EmbeddingVector>::ok(std::move(vec));
 }
 
+std::string EmbeddingBridge::get_default_model_name() {
+    // [TD-A-005-04 已解决] 通过 SDK get_model_list 查询真实默认模型名。
+    // 任一符号缺失/查询失败 → 返回空串（调用方回退硬编码默认名）。
+    if (!syms_.get_model_list || !syms_.model_list_get_count ||
+        !syms_.model_list_get_model || !syms_.model_info_get_model_name) {
+        return "";
+    }
+    if (!session_) {
+        return "";
+    }
+    int error_code = 0;
+    EmbeddingModelList* list = syms_.get_model_list(session_, &error_code);
+    if (!list || error_code != 0) {
+        return "";
+    }
+    int count = syms_.model_list_get_count(list);
+    if (count <= 0) {
+        return "";
+    }
+    // 取第一个模型名（默认模型；SDK 模型列表首项通常为默认）
+    EmbeddingModelInfo* info = syms_.model_list_get_model(list, 0);
+    if (!info) {
+        return "";
+    }
+    const char* name = syms_.model_info_get_model_name(info);
+    return (name != nullptr) ? std::string(name) : "";
+}
+
 } // namespace kylin

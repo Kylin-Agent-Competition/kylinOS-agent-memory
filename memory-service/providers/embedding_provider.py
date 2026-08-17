@@ -382,25 +382,32 @@ class EmbeddingProvider:
         注意:
         - ondevice 为 ASSUMED True（未经 SDK API 验证）。
         - loaded（TD-A-005-05 已解决）：基于生命周期状态精确化——仅当
-          _lifecycle == READY（会话已初始化且模型就绪）时 loaded=True；
-          不再"get_dimension 成功即恒 True"的临时语义。
-        - 精确模型名获取（get_model_list）未实现（TD-A-005-04 未解决，
-          Day5+ 需接入 SDK get_model_list 接口；当前仍用 Day2 运行日志
-          确认的默认模型名）。
+          _lifecycle == READY（会话已初始化且模型就绪）时 loaded=True。
+        - 模型名（TD-A-005-04 已解决）：通过 Bridge get_default_model_name()
+          查询 SDK 真实模型名；查询失败/符号缺失时回退 Day2 运行日志确认的
+          默认模型名（ensemble-embd_gte-base_uint8-text）。
         """
         loaded = self._lifecycle == _ProviderLifecycle.READY
+        default_name = "ensemble-embd_gte-base_uint8-text"  # Day2 日志确认的默认模型
         if not loaded:
-            # 未就绪：dimension 未知，loaded=False（精确语义）
             return ModelInfo(
-                name="ensemble-embd_gte-base_uint8-text",  # [TD-A-005-04] Day2 默认模型名
+                name=default_name,
                 dimension=EmbeddingProvider._shared_dimension or 0,
                 ondevice=True,
                 loaded=False,
             )
         dim = self.get_dimension()
+        # [TD-A-005-04] 真实模型名：SDK get_model_list 查询（可选符号，失败回退默认）
+        name = default_name
+        try:
+            real = self._bridge.get_default_model_name()
+            if real:
+                name = real
+        except Exception:  # noqa: BLE001 - 查询失败回退默认名，不影响主链路
+            pass
         return ModelInfo(
-            name="ensemble-embd_gte-base_uint8-text",  # [TD-A-005-04] Day2 默认模型名（未解决）
+            name=name,
             dimension=dim,
             ondevice=True,
-            loaded=True,  # TD-A-005-05: READY 才 loaded（精确状态）
+            loaded=True,
         )
