@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "event_id": "event-turn-002",
+  "trace_id": "trace-001",
+  "user_id": "local-user",
+  "session_id": "session-001",
+  "turn_id": "turn-002",
+  "occurred_at": "2026-08-14T05:01:00.000Z",
+  "collected_at": "2026-08-14T05:01:00.050Z",
+  "source_reference": "ref:chat-record:message-003",
+  "idempotency_key": "turn-finalized:session-001:turn-002",
+  "final_message_id": "message-003",
+  "is_final": true,
+  "finalization_reason": "completed",
+  "stop_reason": "stop",
+  "retry_of_turn_id": "turn-001",
+  "tool_call_ids": ["tool-call-001"],
+  "finalized_at": "2026-08-14T05:01:00.000Z"
+}
