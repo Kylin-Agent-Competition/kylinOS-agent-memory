@@ -1,0 +1,5 @@
+# HISTORICAL — DO NOT USE AS CANONICAL EVIDENCE
+# This directory contains evidence from PR21 R2 (c9c8143) collected in dev mode.
+# Canonical systemd evidence is at:
+#   evidence/gate0_echo/systemd_evidence/evidence.jsonl
+# Canonical runner: p0bc_systemd_evidence.py

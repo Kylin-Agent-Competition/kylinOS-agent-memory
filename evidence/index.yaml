@@ -1,6 +1,11 @@
 schema_version: "1.1"
 project: "kylin-os-agent-memory"
 index_contract:
+  # 字段语义（MEDIUM-07 明确，2026-08-14）：
+  # - tested_commit: 被实际执行 Runtime 测试的生产代码 commit
+  # - evidence_commit: 最终证据文件正式提交进仓库的 commit（≠ tested_commit；
+  #   证据文件在后续 docs/evidence commit 才回填仓库时，两者不同）
+  # - commit: 历史兼容字段（旧条目 = tested_commit）
   required_fields:
     - id
     - task_id
@@ -228,31 +233,30 @@ entries:
 
   - id: "ECHO-005"
     task_id: "D1-C"
-    description: "麒麟环境独立 UDS Echo Spike 复测 — 环境基线已冻结，证据已提交"
+    description: "麒麟环境独立 UDS Echo Spike 复测 — 环境基线已冻结，fail-closed evidence runner 重建"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
-    source: "evidence/gate0_echo/final/evidence.jsonl"
-    tested_commit: "c9c8143571df036ddf5a34ec64ec6f44096b3fa4"
-    evidence_commit: "c9c8143571df036ddf5a34ec64ec6f44096b3fa4"
-    date: "2026-08-06"
+    source: "evidence/gate0_echo/systemd_evidence/evidence.jsonl"
+    tested_commit: "fbda3fec497c23c6d988283707fa1fb3af7df330"
+    evidence_commit: "fbda3fec497c23c6d988283707fa1fb3af7df330"
+    date: "2026-08-10"
     reviewer: "谢嘉然"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-     limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）；ACL_SPIKE=VERIFIED, KYSEC_REAL_RULE=UNVERIFIED"
-    checksum_sha256: "8e9e95ab9d5f645addc8e2f9c50f46715d8ed95e0aa493ac973d39a3da6e3637"
+    limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）；ACL_SPIKE=VERIFIED, KYSEC_REAL_RULE=UNVERIFIED"
+    checksum_sha256: "8f7b9fefc21d58cd8d7d48eae5b1a1002839e77ddf3cab7c29f71bb9a09c655d"
     details: |
       Day1 环境基线已冻结: environment.log (SHA-256: cdf60d8414...) 包含 16 项系统信息采集。
-      evidence.jsonl 含 ECHO-001 至 ECHO-009 共 9 条记录。
-      ECHO-001 environment baseline: PASS
-      ECHO-002 baseline frozen state (25 files, 2 units): PASS
-      ECHO-003 UDS echo_client + kaiming_memory_client: 6/6 PASS via /run/kylin-memory-echo/echo.sock
-      ECHO-004 systemd lifecycle restart: 12/12 PASS
-      ECHO-005 KYSEC security attribute scan: INFO (sysfs 路径不可用，通过 CLI 替代验证)
-      ECHO-006 rollback (stop/cleanup/restart): PASS
-      ECHO-007 D1 clean deploy: FAIL (重复条目，第二次尝试失败)
-      ECHO-008 D2 clean CMake build: PASS
-      ECHO-009 D3 --dev mode manual start: FAIL
+      evidence.jsonl 含 ECHO-001 至 ECHO-005 + 3 条 systemd 生命周期证据共 8 条记录。
+      ECHO-001 kaiming_memory_client --method all (6/6): PASS
+      ECHO-002 evidence.record removed (active code grep): PASS
+      ECHO-003 health check over systemd socket: PASS
+      ECHO-004 memory.store UNSUPPORTED_METHOD: PASS
+      ECHO-005 C++ compile: PASS
+      SYSTEMD_SERVER_LIFECYCLE: systemd 启动与运行验证 PASS
+      CPP_CLIENT_OVER_SYSTEMD: C++ 客户端通过 systemd socket 通信 PASS
+      PACKAGED_UNIT_VALIDATION: systemd unit 文件结构验证 PASS
       采集人: 周子腾, 采集日期: 2026-08-06.
       麒麟环境: Kylin V11 (2603), Linux 6.6.0-63-generic, systemd 255, Python 3.12.3, g++ 12.3.0, CMake 3.28.3.
        ACL_SPIKE=VERIFIED (chmod + setfacl 纵深防御).
@@ -320,6 +324,112 @@ entries:
       + 重复调用稳定性(5次) + 错误模型名(errorCode=10, fallback 恢复)
       全部通过，统一维度 768，L2 范数=1.000000（单位向量确认）
       运行输出见原始日志
+
+  - id: "EMBED-CALL-003"
+    task_id: "D4-A"
+    description: "Day 4 Bridge/Provider 最小真实 SDK 调用验证"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/day4_verify_latest.log"
+    tested_commit: "939bc2d383a3e7bafdd9d5740564afba4328ad03"  # 最终生产代码 Commit（麒麟 VM 第八轮 L2 全绿 FAILURES=0，三轮 REWORK 修复后）
+    evidence_commit: "03fa9ae4ca7ea4ecd93b024aa54d3354fe72a353"  # 证据日志提交（完整 SHA，第八轮）
+    source_commit: "aba789f84c0f0aa583cbc36e99ac2ab0faa03add"  # 历史兼容字段（状态机修复基线）
+    commit: "aba789f84c0f0aa583cbc36e99ac2ab0faa03add"  # 历史兼容字段（已由 tested/evidence_commit 取代）
+    date: "2026-08-07"
+    reviewer: "pending"
+    limitations: "异步、并发、主动超时、多模态未覆盖；SDK 限制（麒麟实测）：同进程禁止 dlclose 后重载、禁止 session 销毁重建；Provider 进程级单例 + close 后需 restart（模型 B）；并发初始化无类级锁（TD-A-005-06）；dlsym/init_session 失败进入不可恢复终态（P1-High 方案 A）"
+    checksum_sha256: "4021b1cc18621246f02b0960dd88f77ee6c0539c6a87b6edbb94e6d6640bdc8f"
+    details: |
+      C++ Bridge(dlopen/dlsym) + pybind11 模块 + Python EmbeddingProvider 最小真实调用
+      生命周期状态机 + Bridge destroy 终态 + 配置锁定 + 失败阶段区分恢复（P1-High 方案 A）
+      最终 L2 复测（2026-08-08，被测 commit 939bc2d）全绿：
+      ctest 6/6（含 failure_recovery 与 dlsym 缺失）+ pytest 38+13+1=52 项无 Skip + smoke 11 + 生命周期 4 路径
+      运行输出见原始日志
+
+  - id: "EMBED-CALL-004"
+    task_id: "D5-A"
+    description: "Day 5 最小垂直链路——EmbeddingService(UDS+envelope+真实降级) 麒麟 VM 验证"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/day5_verify_latest.log"
+    tested_commit: "33180385e0db350a97915e40b978424381052f9c"  # Day5 分支 tip（cherry-pick 后最终代码，README 状态段已同步）
+    evidence_commit: "33180385e0db350a97915e40b978424381052f9c"  # 证据日志与代码同分支提交（Day5 PR 合入后回填 evidence_commit 为证据提交 SHA）
+    commit: "33180385e0db350a97915e40b978424381052f9c"  # 历史兼容字段（= tested_commit）
+    date: "2026-08-13"
+    reviewer: "pending"
+    limitations: "启动期降级缺口（无 SDK 时 EmbeddingUDSServer 构造抛 RuntimeError，P2-2 待登记技术债）；真实 so 缺失端到端降级未在 VM 复现（mock 覆盖）；异步、并发、主动超时、多模态未覆盖；envelope deadline_ms 解析但未强制执行（用 payload.timeout_ms）"
+    checksum_sha256: "2f506a898b3d01f20b80e8477833d5e64dd9f387d23805dc6ec26bf65270c038"
+    details: |
+      Day5 首个真实垂直链路（架构 v1 4.4 envelope 对齐）麒麟 VM 验证（2026-08-09，被测 3318038）：
+      真实 SDK pytest 8/8 无 Skip（768 维/中文/空串/batch/envelope 分发/health/降级，Python 3.12.3）
+      + 端到端 UDS（server 真实启动，Runtime 1.3.0，模型 ensemble-embd_gte-base_uint8-text；
+      health bridge_loaded=true / bridge_has_session=true；embed ok=true dim=768；
+      request_id/trace_id 回显正确）
+      本地复核：全量 pytest 36 passed + 47 skipped（skip 为依赖 SDK 的既有测试），顺序无关
+      运行输出见原始日志
+
+  - id: "EMBED-CALL-005"
+    task_id: "D6-A"
+    description: "Day 6 统一事件清洗/质量评分管线 + 结构化抽取 Provider + 内容指纹重复检测 麒麟 VM 验证"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/day6_verify_latest.log"
+    tested_commit: "1d98fdddf2eb7b91297e7941e175d99a8ac54c20"  # Day6 分支 tip（feat/day6-event-quality-pipeline）
+    evidence_commit: "1d98fdddf2eb7b91297e7941e175d99a8ac54c20"  # 证据日志与代码同分支提交（Day6 PR 合入后回填 evidence_commit 为证据提交 SHA）
+    commit: "1d98fdddf2eb7b91297e7941e175d99a8ac54c20"  # 历史兼容字段（= tested_commit）
+    date: "2026-08-13"
+    reviewer: "pending"
+    limitations: "E 轨业务 Schema v0.1 仍为 DRAFT（部分字段 UNVERIFIED，待 C 轨麒麟取证）；ExtractionProvider 规则置信度（0.7/0.85）为基线值待 E 轨数据集评测调优；未接入真实 LLM（无凭证，接口预留）；TD-A-005-09 完整修复（Provider 延迟构造）留待独立 PR；TD-A-005-01 仍 Open（Bridge 内部无真正中断）；TD-A-D6-EXEC-RACE / TD-A-D6-TOOL-PARTIAL 已登记（Reviewer 第三轮收敛非阻断）"
+    checksum_sha256: "c5f6c74be8b6567ac8ed5abc222d06c859aa1c020033c68583b280d2196a0018"
+    details: |
+      Day6 多源接入/质量/安全管线（架构 v1 §6.2 六步 + Day3 ExtractionProvider 契约）麒麟 VM 验证
+      （2026-08-13，被测 1d98fdd，Reviewer 第三轮 B1/B2/H1/H3 修复后 L2 重跑）：
+      全量 pytest 209 passed / 0 skipped / 0 failed（7.95s，Python 3.12.3, pydantic 2.13.4）：
+      - 真实 SDK 8 项（768 维/中文/空串/batch/envelope/health/降级）
+      - Day4 生命周期/错误映射 47 项 + Day5 协议/Service/executor 23 项
+      - Day6 全量 131 项（含第三轮新增 B1 6 / B2 3 / H1 3 / H3 3 = 15 项负向测试）
+      本地对照：162 passed + 47 skipped（WSL 无 SDK skip）→ VM 209 全过，数字完全吻合
+      覆盖：Pydantic 校验拒绝（缺失/类型错/未知字段）、时间 UTC 标准化、六维质量评分 +
+      提取门控（可靠性下限 + 安全 Gate fail-close）、内容指纹/幂等键/判重、敏感识别
+      （API Key/JWT/密码/手机号/身份证/敏感路径）、success Tool evidence 门控（B1）、
+      memory_status=candidate 可信级标记（B2）、payload_security_checked fail-close（H1）、
+      ProcessingStatus D3 五值契约（H3）、ExtractionProvider 规则优先 + LLM 注入 +
+      Pydantic 非法输出降级（audit 隔离不进真源）
+      运行输出见原始日志
+
+  - id: "D7-A-PREF-EXTRACTION"
+    task_id: "D7-A"
+    description: "Day 7 偏好抽取深化——规则/Provider 协同 + 缓存/超时/非法字段降级 + 字段级评测统一结果格式（麒麟 VM L2 全量 pytest）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/day7_verify_latest.log"
+    tested_commit: "e5c52e689d3958657d6343fc11bf5d90f93e6813"  # L2 实测生产代码（两轮 REWORK 后最终）
+    evidence_commit: "6b27ec5f273b81ffb6bed26f911e24c4274e62cf"  # MEDIUM-07：L2 证据正式回填仓库的 commit（≠ tested_commit，语义见 index_contract）
+    commit: "e5c52e689d3958657d6343fc11bf5d90f93e6813"  # 历史兼容字段（= tested_commit）
+    date: "2026-08-14"
+    reviewer: "pending"
+    limitations: "未接入真实 LLM（无凭证，接口预留）；规则置信度/关键词为基线值待 E 轨数据集评测调优；本地对照 229 passed + 47 skipped（WSL 无 SDK skip）→ VM 276 全过数字吻合（276 = 229 + 47）；TD-A-D7-CACHE-USER-DIMENSION / TD-A-D7-LLM-HANG-DEGRADE 已登记（PR #36 MEDIUM-02/03）；全量 -v 本地一次偶发 test_server_lifecycle 复跑即绿（关联 TD-A-D6-EXEC-RACE 已知非阻断竞态窗口，VM 276 无此现象）"
+    checksum_sha256: "b52d437a72aec73facc792ea7e9f6e9053eb5e8aa2f1c97836c45d5d6969c08e"
+    details: |
+      Day7 偏好提取深化（架构 v1 TABLE 19/20 + E 轨 Schema §2.5/§2.9/§3.2，
+      docs/day7/01_task_card.md）验证（2026-08-14）：
+      - L1（本地 WSL，被测 e5c52e6）：229 passed + 47 skipped（evidence/l1/day7_pref_extraction_local.log，
+        checksum 77e8229a…，含元数据头（branch/tested_commit/command/environment/collected=276/passed=229/failed=0/skipped=47））——含第二轮 REWORK 新增 5 项测试
+      - L2（麒麟 VM，被测 e5c52e6，两轮 REWORK 后最终）：276 passed / 0 skipped / 0 failed（5.97s）
+        ——evidence/l2-kylin-vm/day7_verify_latest.log（checksum b52d437a…，含元数据头）
+        evidence_commit 语义见 index_contract（本轮回填后更新为真实 commit）
+      第二轮 REWORK 修复（commit e5c52e6，已本地验证）：
+      - HIGH-03：PreferenceCandidate/KnowledgeCandidate confidence 改 Field(strict=True)——
+        bool（True→1.0/False→0.0）与字符串数字（'0.9'→0.9/'1'→1.0）不再自动转换，
+        全套非法输入 reject + validation audit；合法 float 0.0/0.5/0.9/1.0 通过
+      - MEDIUM-05：optional 字段显式 None → 字段级降级默认值 + audit（方案 A：
+        category→presentation/scope→session/explicitness→explicit/is_temporary→False/
+        should_persist→True）；字段缺失仍走 Pydantic 默认值（无 audit）
+      - MEDIUM-08：PREFERENCE_INSTRUCTION_PATTERN 时态限定词必选——
+        '不要慌，再试一次'/'别问了'/'保持联系'/'不要忘记密码' 不再误抽取
+      第一轮 REWORK 修复（commit 8e93118，已关闭）：HIGH-01 / HIGH-02 / MEDIUM-01
+      本地对照：229 passed + 47 skipped（WSL 无 SDK skip）→ VM 276 全过，数字完全吻合；
+      证据闭环完成（tested_commit == 生产代码最终版本 e5c52e6）
 
   - id: "D2-3-DEPLOY-STARTUP"
     task_id: "D2-3"
@@ -417,3 +527,16 @@ entries:
         - 结论: 部分证据，端到端『失败状态建模/失败不沉淀』待 Hook/Memory Service 集成后验证
       PID 12043; 助手二进制路径 /run/build/kylin-aiassistant/kylin-aiassistant/kylin-aiassistant
       MANIFEST.sha256 含 7 个证据文件 SHA-256；证据目录: evidence/l2-kylin-vm/d4_agent_mode_5_0_3_20260816/
+
+  - id: "D2-C-OSAGENT-SPIKE"
+    task_id: "D2-C-OSAGENT-SPIKE"
+    description: "D2-C OS Agent 宿主实验的部分观察证据；三项实验均尚缺 Gate 所需的完整证据。"
+    status: "BLOCKED"
+    review_status: "BLOCKED"
+    merge_qualified: false
+    evidence_level: "E2"
+    source: "evidence/l2-kylin-vm/d2c/d2c_evidence_20260801_195043/checksums.sha256"
+    date: "2026-08-01"
+    reviewer: "D 主审；E 补审"
+    limitations: "证据由旧脚本提交 20adffc 生成；缺少 PostTurn 数据库快照、15 秒稳定性、PreChat UI 截图与真实结构化 Tool 事件。"
+    checksum_sha256: "541135db12b7f88d498791192adad032f5f7470e4763fe7dfaa6b4b6446ce619"

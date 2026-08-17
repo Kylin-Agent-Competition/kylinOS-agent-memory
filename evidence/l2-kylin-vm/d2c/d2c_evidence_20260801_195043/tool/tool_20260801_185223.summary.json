@@ -1,0 +1,33 @@
+{
+  "experiment": "H2C-Tool",
+  "timestamp": "20260801_185223",
+  "log_file": "tool_20260801_185223.log",
+  "raw_log_bytes": 3840693,
+  "architecture_finding": {
+    "uses_openai_tool_call": false,
+    "openai_keyword_hits": 0,
+    "actual_mechism": "DBus chat/ChatResult + intentionrecognition.cpp inside kylin-ai-runtime",
+    "note": "麒麟 AI 助手不使用 OpenAI 风格 tool_call/function_call, Tool 动作由 runtime 内部 intentionrecognition 模块直接执行"
+  },
+  "metrics": {
+    "ChatResult_signal_count": 225,
+    "stop_chat_method_count": 1,
+    "intentionrecognition_log_count": 876,
+    "enable_search_request_count": 4,
+    "openai_style_keyword_count": 0,
+    "prompt_skill_keyword_count": 0
+  },
+  "analysis": {
+    "cancel_event_captured": true,
+    "intent_recognition_triggered": true,
+    "prompt_skill_not_misjudged": true,
+    "tool_event_captured": "N/A - 麒麟架构无独立 tool_call 事件, 用 intentionrecognition + stop_chat 替代验证"
+  },
+  "pass_criteria": {
+    "H2C-Tool-1": "N/A (架构不同: 成功 Tool 由 intentionrecognition 内部执行, 无独立 DBus 事件)",
+    "H2C-Tool-2": "N/A (架构不同: 失败 Tool 由 intentionrecognition 内部处理, 无独立 DBus 事件)",
+    "H2C-Tool-3": "通过: stop_chat DBus 方法已捕获",
+    "H2C-Tool-4": true
+  },
+  "note": "基于 D2-C 实验 C 实测: 麒麟 AI 助手所有用户输入(含打开应用/翻译)均以 message_type=chat 发送, 无 OpenAI 风格 tool_call 事件"
+}

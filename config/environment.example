@@ -34,6 +34,12 @@ KMA_MAX_CONTEXT_TOKENS=800
 # ├── logs/
 # └── build/
 #
+# ---- 构建产物安装路径 (CMake install, 默认 prefix=/usr/local) ----
+# echo_client 二进制:          /usr/local/bin/echo_client
+# kaiming_memory_client 二进制: /usr/local/bin/kaiming_memory_client
+# 服务端脚本 (rename):          /usr/local/bin/kylin-memory-echo-server
+# KYSEC/rollback 脚本:          /usr/local/share/kylin-memory-echo/
+#
 # ---- UDS Socket 路径 (按运行模式区分) ----
 # systemd 模式: /run/kylin-memory-echo/echo.sock
 # dev 模式:     /tmp/kylin-memory-echo/echo.sock  (传递 --dev 或 --socket 参数)

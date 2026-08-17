@@ -1,0 +1,9 @@
+{
+  "experiment": "H2C-PreChat",
+  "timestamp": "20260801_184103",
+  "marker": "[D2C-MARKER-PRECHAT-001]",
+  "ai_pid": "179346",
+  "db_path": "/home/bacon/.config/kylin-aiassistant/kylin_aiassistant_database.db",
+  "record_rowid_max_before": "32",
+  "note": "请在 AI 助手中输入包含 [D2C-MARKER-PRECHAT-001] 的文本"
+}
