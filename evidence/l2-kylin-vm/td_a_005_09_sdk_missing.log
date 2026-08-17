@@ -1,0 +1,25 @@
+================================================================
+TD-A-005-09 L2 证据 — 启动期 SDK 缺失结构化降级（麒麟 VM 真实 so 缺失）
+branch: fix/td-a-pure
+tested_commit: 见 evidence/index.yaml TD-A-005-09 条目（被测代码 = fix/td-a-pure 分支 TD 关闭 commits d4ac53f 起）
+command: PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service          LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:          /usr/bin/python3 - <<'EOF'
+         from embedding.embedding_service import EmbeddingService
+         s = EmbeddingService(); s.start()
+         r = s.embed("测试文本"); print(r["ok"], r["degraded"], r["result"]["dimension"])
+         print(s.health()["result"]["bridge_loaded"]); s.close()
+         EOF
+environment: 麒麟桌面 V11 x86_64（VirtualBox VM，Runtime 1.3.0，Embedding SDK 1.2.0.0-0k0.4）
+场景：sudo mv libkysdk-coreai-embedding.so.1 /tmp/backup.so.1（制造 so 缺失）
+================================================================
+[so 缺失时]
+embed ok: True | degraded: True | dim: 0
+health bridge_loaded: False
+================================================================
+[恢复后（sudo apt-get install --reinstall libkylin-coreai-embedding）]
+libkysdk-coreai-embedding.so.1 -> libkysdk-coreai-embedding.so.1.0.0（软链恢复）
+embed ok: True | degraded: None | dim: 768（真实向量，非降级）
+================================================================
+结论：TD-A-005-09 ①②③ 全部达成——无 SDK 时 UDS server 可启动并返回
+结构化降级响应（memory.embed → ok+degraded 空向量；memory.health →
+bridge_loaded=false）；SDK 重装后真实链路恢复（dim=768）。含历史教训：
+so 缺失验证后必须立即恢复（/tmp 备份易失），本次经 apt 重装 libkylin-coreai-embedding 恢复。
