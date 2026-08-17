@@ -645,6 +645,13 @@ class ExtractionProvider:
         # 单 worker 池中挂起的任务会阻塞后续 submit 排队（排队时间计入 deadline），
         # 导致每次新调用都超时——挂起期间跳过新 LLM 调用（llm-busy-skip）而非排队拖死。
         self._in_flight: Optional[concurrent.futures.Future] = None
+        # [TD-A-D7-LLM-HANG-DEGRADE 已解决] 挂死恢复机制：
+        # in-flight 任务持续超过 hang_threshold 仍未完成 → 判定 LLM 永久挂死，
+        # 重建 executor（释放挂死 worker）恢复 LLM 路径，避免整个进程生命周期内
+        # 永久 busy-skip（台账验收标准：接入真实 LLM 前必须提供恢复能力之一）。
+        self._llm_hang_threshold_ms = 60000.0  # 默认 60s：远大于单次超时（5s），
+        #                              只针对真正挂死（非慢任务），避免误重建
+        self._hang_recovered = 0  # 统计：挂死恢复次数（可观测性）
         self._audit: List[Dict[str, Any]] = []  # 非法候选审计（最小审计，不落原文）
 
     def close(self) -> None:
@@ -757,10 +764,10 @@ class ExtractionProvider:
             )
 
         # B1 门控：必须有真实 success Tool evidence 才允许 knowledge LLM 提取
-        has_success_tool = any(
-            is_success_tool_result(tr.status, tr.result)
-            for tr in (event.tool_results or []))
-        if not has_success_tool:
+        success_tools = [
+            tr for tr in (event.tool_results or [])
+            if is_success_tool_result(tr.status, tr.result)]
+        if not success_tools:
             # 无真实 success Tool evidence：LLM 输出不得形成成功知识（进审计）
             self._audit.append({
                 "kind": "knowledge",
@@ -776,7 +783,16 @@ class ExtractionProvider:
                 duration_ms=(time.monotonic() - start) * 1000.0,
             )
 
-        llm_candidates, llm_timeout = self._run_llm("knowledge", event, trusted_id)
+        # [TD-A-D6-LLM-TOOL-INPUT 已解决] 候选级 ToolResult 绑定：
+        # LLM 输入 = 具体 success ToolResult.result 拼接（含 tool 名），
+        # 建立 candidate → ToolResult 的 provenance 基础（架构 TABLE 22：
+        # Tool 事实高于模型自述——抽取以真实 Tool 结果为事实基础）。
+        tool_context = "\n".join(
+            f"[tool:{tr.tool_name} success]\n{tr.result}"
+            for tr in success_tools)
+
+        llm_candidates, llm_timeout = self._run_llm(
+            "knowledge", event, trusted_id, tool_context=tool_context)
         merged = rule_candidates + llm_candidates
         self._cache.set(cache_key, merged)
         return KnowledgeExtractionOutput(
@@ -834,9 +850,35 @@ class ExtractionProvider:
 
     # ── LLM 路径（D7 超时包装 + Pydantic 非法输出降级 + R4 隔离 + R5 敏感复核） ──
 
+    def _in_flight_timeout(self) -> bool:
+        """[TD-A-D7-LLM-HANG-DEGRADE] in-flight 是否已挂死超过阈值。"""
+        started = getattr(self, "_in_flight_started", None)
+        if started is None:
+            return False
+        return (time.monotonic() - started) * 1000.0 > self._llm_hang_threshold_ms
+
+    def _rebuild_executor(self, kind: str, trusted_id: str) -> None:
+        """[TD-A-D7-LLM-HANG-DEGRADE] 重建 LLM executor（释放挂死 worker）。
+
+        - 旧 executor 挂死 worker 无法 join（任务永不结束）→ shutdown(wait=False)
+        - 新 executor 替换 self._executor，后续 submit 在新池执行
+        - in_flight 引用清除（不再阻塞新调用）
+        """
+        try:
+            self._executor.shutdown(wait=False)
+        except Exception:  # noqa: BLE001 - 重建路径尽力而为
+            pass
+        self._executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="llm-extract")
+        self._in_flight = None
+        self._in_flight_started = None
+        self._audit.append({"kind": kind, "event_id": trusted_id,
+                            "error": "llm-executor-rebuilt"})
+
     def _run_llm(self, kind: str,
                  event: TurnFinalizedEvent,
-                 trusted_source_event_id: str) -> Tuple[List[Any], bool]:
+                 trusted_source_event_id: str,
+                 tool_context: Optional[str] = None) -> Tuple[List[Any], bool]:
         """调用注入的 LLM 抽取器，输出经 Pydantic 校验。
 
         降级语义（Day3 契约 + 台账 D7-A）：
@@ -847,12 +889,26 @@ class ExtractionProvider:
           不返回非法候选；可选字段非法值 → 字段级降级）
         - 敏感候选（R5）→ 进审计，不进入正常返回
 
+        Args:
+            kind: "preference" | "knowledge"
+            event: Turn 事件。
+            trusted_source_event_id: R3 可信事件 ID。
+            tool_context: [TD-A-D6-LLM-TOOL-INPUT 已解决] knowledge 路径的
+                候选级 ToolResult 上下文——具体 success ToolResult.result 的
+                拼接文本，绑定 LLM 输入（不再仅靠事件级门控的
+                user_text/assistant_text）。preference 路径传 None。
+
         Returns:
             (合法候选列表, 是否发生 LLM 超时)
         """
         assert self._llm is not None
 
         def _invoke() -> Any:
+            if tool_context:
+                # TD-A-D6-LLM-TOOL-INPUT：输入绑定具体 success ToolResult.result
+                # （架构 TABLE 22：Tool 事实高于模型自述——LLM 抽取以真实
+                # Tool 结果为事实基础，而非模型自述）
+                return self._llm(kind, tool_context)
             return self._llm(kind, event.user_text or event.assistant_text or "")
 
         if self._closed:
@@ -861,13 +917,24 @@ class ExtractionProvider:
         # 上一次 LLM 调用超时后仍在运行 → 跳过本次调用（避免在单 worker 池中排队拖死），
         # 记 audit；挂起任务完成后自动恢复。
         if self._in_flight is not None and not self._in_flight.done():
-            self._audit.append({"kind": kind, "event_id": trusted_source_event_id,
-                                "error": "llm-busy-skip"})
+            # [TD-A-D7-LLM-HANG-DEGRADE] 挂死检测：in-flight 持续超过阈值
+            # → 重建 executor 释放挂死 worker，恢复 LLM 路径（而非永久 busy-skip）
+            if self._in_flight_timeout():
+                self._rebuild_executor(kind, trusted_source_event_id)
+                self._audit.append({"kind": kind,
+                                    "event_id": trusted_source_event_id,
+                                    "error": "llm-hang-recovered"})
+                self._hang_recovered += 1
+            else:
+                self._audit.append({"kind": kind,
+                                    "event_id": trusted_source_event_id,
+                                    "error": "llm-busy-skip"})
             return [], False
 
         try:
             future = self._executor.submit(_invoke)
             self._in_flight = future
+            self._in_flight_started = time.monotonic()
             raw_list = future.result(timeout=self._llm_timeout_ms / 1000.0)
         except concurrent.futures.TimeoutError:
             # 超时：返回空候选列表 + 审计（Day3 契约降级；后台线程结果丢弃，

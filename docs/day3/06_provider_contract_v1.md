@@ -151,7 +151,7 @@ Provider 层错误码与 Bridge 层错误码的映射关系：
 | `ERR_SDK_NOT_LOADED` | `dlopen` / `dlsym` 失败 | UNTESTED |
 | `ERR_SESSION_FAILED` | `create_session` / `init_session` 异常 | UNTESTED |
 | `ERR_SESSION_DESTROYED` | Bridge destroy 终态后 create/embed；Provider close 后未 restart embed | SOURCE_VERIFIED（麒麟 VM destroy 终态 CTest） |
-| `ERR_FATAL_FAILURE` | dlsym 缺失 / init_session 失败首次失败即进入 fatal 终态；fatal 后重试/调用 | SOURCE_VERIFIED（WSL 假 SDK + Provider pytest；麒麟 VM 第七轮 L2 全绿） |
+| `ERR_FATAL_FAILURE` | dlsym 缺失 / init_session 失败首次失败即进入 fatal 终态；fatal 后重试/调用 | SOURCE_VERIFIED（WSL 假 SDK + Provider pytest；麒麟 VM L2 全绿，最新轮次见 evidence/l2-kylin-vm/day4_verify_latest.log） |
 | `ERR_EMBED_FAILED` | `text_embedding` 返回 false | UNTESTED |
 | `ERR_SDK_ERROR` | `embedding_result_get_error_code != 0` | UNTESTED |
 | `ERR_MODEL_INVALID` | `init_model` 返回 errorCode=10；后续 embed 自动使用默认模型 | HOST_VERIFIED / E4 |
@@ -235,10 +235,17 @@ class PreferenceCandidate:
 @dataclass
 class KnowledgeCandidate:
     fact: str
-    category: str                  # fact | procedure | case | template | constraint
+    # 知识类别（E 轨业务 Schema §2.6 六值；Day8 契约演进自五值：
+    # procedure → workflow 命名对齐 E 轨，新增 failure_experience）
+    category: str                  # fact | workflow | case | template | constraint | failure_experience
     conditions: str | None
+    evidence: str | None           # Day8 新增：证据描述（架构 TABLE 21）
     source_event_id: str
     confidence: float
+    # Day8 新增六类结构化字段（架构 TABLE 21，全可选）：
+    # steps/expected_result（workflow）、problem/outcome/reproducible（case）、
+    # template_body/parameters（template）、priority（constraint）、
+    # failure_reason/avoid_condition/alternative（failure）
 ```
 
 > **ExtractionProvider 所有接口状态：UNTESTED** — 需 LLM 集成和标注数据集完成后才能验证。

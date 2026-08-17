@@ -16,6 +16,7 @@ embed_batch 为应用层批处理（顺序调用），get_dimension/model_info �
 
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -155,6 +156,10 @@ class EmbeddingProvider:
     _shared_dimension: Optional[int] = None
     _shared_so_path: Optional[str] = None  # 首实例锁定路径（P1-2 配置锁定）
     _ref_count = 0
+    # [TD-A-005-06 已解决] 类级锁：保护 Singleton 初始化/重置的并发安全。
+    # 当前 Memory Service 启动链路单线程（无并发入口），但防御性加锁使
+    # 后续引入并发初始化入口时无需升级严重度（台账验收标准）。
+    _singleton_lock = threading.Lock()
     _DEFAULT_SO_PATH = "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1"  # x86_64 宿主证据
 
     @staticmethod
@@ -172,20 +177,22 @@ class EmbeddingProvider:
 
         norm_so_path = self._normalize_so_path(so_path)
 
-        if EmbeddingProvider._shared_bridge is None:
-            params = _bridge.BridgeInitParams()
-            if norm_so_path is not None:
-                params.so_path = norm_so_path
-            EmbeddingProvider._shared_bridge = _bridge.EmbeddingBridge(params)
-            EmbeddingProvider._shared_so_path = norm_so_path
-            EmbeddingProvider._shared_dimension = None
-        else:
-            # P1-2: 单例配置锁定——不同路径必须明确报冲突，不静默忽略
-            if norm_so_path != EmbeddingProvider._shared_so_path:
-                raise ProviderError(
-                    ProviderErrorCode.ERR_CONFIG_CONFLICT,
-                    f"so_path 冲突: 已锁定 {EmbeddingProvider._shared_so_path!r}, "
-                    f"传入 {so_path!r}（进程级单例仅首实例路径生效）")
+        # [TD-A-005-06] 类级锁：Singleton 创建/配置锁定为临界区（并发安全）
+        with EmbeddingProvider._singleton_lock:
+            if EmbeddingProvider._shared_bridge is None:
+                params = _bridge.BridgeInitParams()
+                if norm_so_path is not None:
+                    params.so_path = norm_so_path
+                EmbeddingProvider._shared_bridge = _bridge.EmbeddingBridge(params)
+                EmbeddingProvider._shared_so_path = norm_so_path
+                EmbeddingProvider._shared_dimension = None
+            else:
+                # P1-2: 单例配置锁定——不同路径必须明确报冲突，不静默忽略
+                if norm_so_path != EmbeddingProvider._shared_so_path:
+                    raise ProviderError(
+                        ProviderErrorCode.ERR_CONFIG_CONFLICT,
+                        f"so_path 冲突: 已锁定 {EmbeddingProvider._shared_so_path!r}, "
+                        f"传入 {so_path!r}（进程级单例仅首实例路径生效）")
 
         self._bridge = EmbeddingProvider._shared_bridge
         self._dimension: Optional[int] = None
@@ -234,13 +241,15 @@ class EmbeddingProvider:
             if (EmbeddingProvider._ref_count == 0
                     and not self._bridge.loaded
                     and not self._bridge.fatal_failure):
-                try:
-                    EmbeddingProvider._shared_bridge.destroy_session()
-                except Exception:  # noqa: BLE001 - 恢复路径尽力而为
-                    pass
-                EmbeddingProvider._shared_bridge = None
-                EmbeddingProvider._shared_so_path = None
-                EmbeddingProvider._shared_dimension = None
+                # [TD-A-005-06] 与 __init__ 同锁：Singleton 重置为临界区
+                with EmbeddingProvider._singleton_lock:
+                    try:
+                        EmbeddingProvider._shared_bridge.destroy_session()
+                    except Exception:  # noqa: BLE001 - 恢复路径尽力而为
+                        pass
+                    EmbeddingProvider._shared_bridge = None
+                    EmbeddingProvider._shared_so_path = None
+                    EmbeddingProvider._shared_dimension = None
             if isinstance(exc, ProviderError):
                 raise
             raise self._map_bridge_error(exc) from exc
@@ -287,7 +296,7 @@ class EmbeddingProvider:
             ProviderError: 失败时抛出；ProviderError.code 为 Provider 级错误码
                 （ERR_SDK_NOT_LOADED / ERR_SESSION_FAILED / ERR_EMBED_FAILED /
                 ERR_SDK_ERROR / ERR_MODEL_INVALID / ERR_TIMEOUT /
-                ERR_SESSION_DESTROYED / ERR_UNKNOWN）；
+                ERR_SESSION_DESTROYED / ERR_FATAL_FAILURE / ERR_UNKNOWN）；
                 ProviderError.bridge_error 仅用于诊断（原始 Bridge 异常类型名）。
             非字符串输入抛 ProviderError(ERR_INVALID_TEXT)。
             timeout_ms 为负数抛 ValueError（参数校验在进入 Bridge 之前）。
