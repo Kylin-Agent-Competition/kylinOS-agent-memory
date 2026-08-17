@@ -77,3 +77,40 @@ def test_td_005_09_sdk_missing_health():
     assert h["bridge_loaded"] is False
     assert h["provider"] == "ready"  # 降级 provider 视为就绪（可响应）
     s.close()
+
+
+def test_td_005_09_so_missing_at_start(monkeypatch):
+    """TD-A-005-09 真实场景：kylin_embedding 模块在但 .so 缺失 → start() 不抛。
+
+    EmbeddingProvider 构造成功（模块可导入），但 start() 时 .so 不存在
+    （BridgeSoNotFoundError → ERR_SDK_NOT_LOADED）→ 服务切换降级 provider，
+    embed → ok+degraded 空向量；health → bridge_loaded=false。
+    """
+    from providers import ProviderError, ProviderErrorCode
+
+    class SoMissingProvider:
+        def __init__(self):
+            self._bridge = None
+
+        def start(self):
+            raise ProviderError(ProviderErrorCode.ERR_SDK_NOT_LOADED,
+                                "so not found: libkysdk-coreai-embedding.so.1")
+
+        def close(self):
+            pass
+
+        def get_dimension(self):
+            return 0
+
+        def embed(self, text, *, timeout_ms=5000):
+            raise ProviderError(ProviderErrorCode.ERR_SDK_NOT_LOADED, "so missing")
+
+    s = EmbeddingService(provider=SoMissingProvider())
+    s.start()  # 之前会抛；现在应切换降级不抛
+    assert s._sdk_missing is True
+    r = s.embed("测试文本")
+    assert r["ok"] is True and r["degraded"] is True
+    assert r["result"]["vector"] == []
+    h = s.health()["result"]
+    assert h["bridge_loaded"] is False
+    s.close()

@@ -113,10 +113,24 @@ class EmbeddingService:
     # ── 生命周期 ──
 
     def start(self) -> None:
-        """启动 Service：确保 Provider 就绪。幂等。"""
+        """启动 Service：确保 Provider 就绪。幂等。
+
+        [TD-A-005-09 已解决] 真实"so 缺失"场景（kylin_embedding 模块在但
+        .so 动态库被移走）：EmbeddingProvider.start() 抛 ERR_SDK_NOT_LOADED
+        （BridgeSoNotFoundError）——捕获并切换降级 provider，server 仍可启动
+        （embed → ok+degraded 空向量；health → bridge_loaded=false）。
+        """
         if self._started:
             return
-        self._provider.start()
+        try:
+            self._provider.start()
+        except ProviderError as exc:
+            if exc.code == ProviderErrorCode.ERR_SDK_NOT_LOADED:
+                # .so 缺失/不可加载：降级兜底（服务可启动，返回结构化降级）
+                self._provider = _SdkMissingProvider()
+                self._sdk_missing = True
+            else:
+                raise
         self._started = True
 
     def close(self) -> None:
