@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 if sys.platform=='win32':
     sys.stdout=io.TextIOWrapper(sys.stdout.buffer,encoding='utf-8',errors='replace')
 
-PW='Zyf790043';USER='kylin-agent';REPO=f'/home/{USER}/kylin-memory-echo'
+PW=os.environ.get("KYLIN_VM_PASSWORD", "");USER='kylin-agent';REPO=f'/home/{USER}/kylin-memory-echo'
 PROJ=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEV_SOCK='/tmp/kylin-memory-echo/echo.sock'
 OUT=os.path.join(PROJ,'evidence','gate0_echo','final','evidence.jsonl')

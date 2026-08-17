@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """R2 standalone verification — writes to file to avoid GBK issues"""
 import paramiko, time, os
-pw = 'Zyf790043'
+pw = os.environ.get("KYLIN_VM_PASSWORD", "")
 repo = '/home/kylin-agent/kylin-memory-echo'
 build = f'{repo}/os-agent-integration/echo/build'
 kaiming = f'{build}/kaiming_memory_client'

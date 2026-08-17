@@ -3,7 +3,7 @@
 import paramiko, os, sys, json, time, hashlib
 from io import BytesIO
 
-PW = 'Zyf790043'
+PW = os.environ.get("KYLIN_VM_PASSWORD", "")
 USER = 'kylin-agent'
 HOST = '127.0.0.1'
 PORT = 2222

@@ -19,7 +19,7 @@ import hashlib
 HOST = '127.0.0.1'
 PORT = 2222
 USER = 'kylin-agent'
-PASSWORD = 'Zyf790043'
+PASSWORD = os.environ.get("KYLIN_VM_PASSWORD", "")
 OUT_DIR = os.path.join(os.path.dirname(__file__), 'd2_1_evidence')
 os.makedirs(OUT_DIR, exist_ok=True)
 

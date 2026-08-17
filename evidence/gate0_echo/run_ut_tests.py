@@ -14,7 +14,7 @@ import hashlib
 HOST = '127.0.0.1'
 PORT = 2222
 USER = 'kylin-agent'
-PASSWORD = 'Zyf790043'
+PASSWORD = os.environ.get("KYLIN_VM_PASSWORD", "")
 SOCKET_DIR = '/home/kylin-agent/.echo_run'
 SOCKET_PATH = SOCKET_DIR + '/echo.sock'
 OUT_DIR = os.path.join(os.path.dirname(__file__), 'ut_results')

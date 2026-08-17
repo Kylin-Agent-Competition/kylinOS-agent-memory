@@ -5,7 +5,7 @@ cwd = os.path.dirname(__file__)
 OUT = os.path.join(cwd, 'day2_results')
 os.makedirs(OUT, exist_ok=True)
 
-pw = 'Zyf790043'
+pw = os.environ.get("KYLIN_VM_PASSWORD", "")
 def exec_cmd(ssh, cmd, sudo=False, timeout=120):
     if sudo: cmd = f"echo '{pw}' | sudo -S bash -c '{cmd}'"
     _, so, se = ssh.exec_command(cmd, timeout=timeout)
