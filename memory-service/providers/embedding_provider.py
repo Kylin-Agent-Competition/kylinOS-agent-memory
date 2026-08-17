@@ -352,14 +352,17 @@ class EmbeddingProvider:
 
     def get_dimension(self) -> int:
         """
-        返回当前模型向量维度。
+        返回当前模型向量维度（无副作用——TD-A-005-03 已解决）。
 
-        NOTE: 首次调用若维度未知，会用空串触发一次 embed() 获取维度（有 IPC 副作用）。
-        [TD-A-005-03 get_dimension 副作用] Day4 阶段通过首条空串 embed 触发模型就绪验证
-        并提取维度（Day2 已实测空串返回 768）。
+        start() 完成初始化 embed 时已把维度写入 _shared_dimension（第 219 行），
+        正常路径（start 后）直接返回，**不再触发空串 embed（消除 IPC 副作用）**。
+
+        防御路径：若在未 start() 前调用（非法用法），_shared_dimension 可能为
+        None——保留空串 embed fallback（与 Day2 实测空串返回 768 一致），
+        保证行为兼容但不作为正常路径。
         """
         if EmbeddingProvider._shared_dimension is None:
-            r = self.embed("")
+            r = self.embed("")  # 仅防御：未 start 前的非法调用
             EmbeddingProvider._shared_dimension = r.dimension
         return EmbeddingProvider._shared_dimension
 
@@ -369,15 +372,26 @@ class EmbeddingProvider:
 
         注意:
         - ondevice 为 ASSUMED True（未经 SDK API 验证）。
-        - loaded: 本实现中 model_info() 能正常返回即代表模型可用（get_dimension 内部
-          已触发 embed 成功，_dimension 必然非空），故 loaded 恒为 True。
-          不等同于"SDK 会话已初始化且模型就绪"的精确状态。
-        - 精确模型名获取（get_model_list）未在 Day4 骨架实现。
+        - loaded（TD-A-005-05 已解决）：基于生命周期状态精确化——仅当
+          _lifecycle == READY（会话已初始化且模型就绪）时 loaded=True；
+          不再"get_dimension 成功即恒 True"的临时语义。
+        - 精确模型名获取（get_model_list）未实现（TD-A-005-04 未解决，
+          Day5+ 需接入 SDK get_model_list 接口；当前仍用 Day2 运行日志
+          确认的默认模型名）。
         """
+        loaded = self._lifecycle == _ProviderLifecycle.READY
+        if not loaded:
+            # 未就绪：dimension 未知，loaded=False（精确语义）
+            return ModelInfo(
+                name="ensemble-embd_gte-base_uint8-text",  # [TD-A-005-04] Day2 默认模型名
+                dimension=EmbeddingProvider._shared_dimension or 0,
+                ondevice=True,
+                loaded=False,
+            )
         dim = self.get_dimension()
         return ModelInfo(
-            name="ensemble-embd_gte-base_uint8-text",  # [TD-A-005-04 硬编码模型名] Day2 运行日志确认的默认模型，Day5 接入 get_model_list
+            name="ensemble-embd_gte-base_uint8-text",  # [TD-A-005-04] Day2 默认模型名（未解决）
             dimension=dim,
             ondevice=True,
-            loaded=True,  # [TD-A-005-05 loaded 临时语义] get_dimension 已成功即代表模型可用，Day5 精确化
+            loaded=True,  # TD-A-005-05: READY 才 loaded（精确状态）
         )
