@@ -1,0 +1,121 @@
+
+================================================================================
+# 任务: phase6_recollect_gschema_dbus  @ 2026-08-17T21:39:35.829920
+================================================================================
+
+----- CMD: echo '=== recollect gschema ==='; cat /usr/share/glib-2.0/schemas/com.kylin.recollect.service.gschema.xml 2>&1  -----
+# exit=0
+=== recollect gschema ===
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+    <schema id="com.kylin.recollect.service" path="/com/kylin/recollect/service/">
+        <key name="screenshot-interval" type="u">
+            <default>5</default>
+            <range min="2" max="60"/>
+            <summary>Screenshot interval in seconds.</summary>
+            <description>Specifies how often a screenshot should be taken, in seconds.</description>
+        </key>
+
+        <key name="max-result-number" type="u">
+            <default>18</default>
+            <summary>Maximum number of results.</summary>
+            <description>Defines the maximum number of results that can be searched.</description>
+        </key>
+
+        <key name="max-storage-size-gb" type="u">
+            <default>5</default>
+            <range min="5" max="20"/>
+            <summary>Maximum storage size in megabytes.</summary>
+            <description>Sets the maximum amount of disk space, in megabytes, that can be used for storing data.</description>
+        </key>
+
+        <key name="exclude-apps" type="as">
+            <default>['']</default>
+            <summary>List of excluded applications.</summary>
+            <description>A list of application identifiers that should be excluded from the feature.</description>
+        </key>
+
+       <key name="recording-memory" type="b">
+            <default>false</default>
+            <summary>Is it currently being recorded.</summary>
+            <description>Set whether to start recording.</description>
+        </key>
+    </schema>
+</schemalist>
+
+----- CMD:  echo '=== dbus interface names in recollect-service ==='; strings -n 6 /usr/bin/kylin-ai-recollect-service 2>/dev/null | grep -oE 'com\\.kylin\\.[a-zA-Z0-9_.]+|org\\.(ukui|kylin)\\.[a-zA-Z0-9_.]+' | sort -u | head -60  -----
+# exit=0
+=== dbus interface names in recollect-service ===
+
+----- CMD:  echo '=== dbus names in recollect-client ==='; strings -n 6 /lib/x86_64-linux-gnu/libkylin-ai-recollect-client.so.1 2>/dev/null | grep -oE 'com\\.kylin\\.[a-zA-Z0-9_.]+|org\\.(ukui|kylin)\\.[a-zA-Z0-9_.]+|/com/kylin/[a-zA-Z0-9_/.]+' | sort -u | head -60  -----
+# exit=0
+=== dbus names in recollect-client ===
+/com/kylin/Recollect
+
+----- CMD:  echo '=== recollect-service running? ==='; ps aux 2>/dev/null | grep -iE 'recollect|memorymap' | grep -v grep  -----
+# exit=1
+=== recollect-service running? ===
+
+----- CMD:  echo '=== recollect service data path guess ==='; strings -n 6 /usr/bin/kylin-ai-recollect-service 2>/dev/null | grep -iE '\\.db|sqlite|/home|data|storage|\\.mp4|screenshot|video' | sort -u | head -60 -----
+# exit=0
+=== recollect service data path guess ===
+11DataHandler
+13VideoComposer
+/.box/kylin-ai-memorymap/screenshots
+/.box/kylin-ai-memorymap/screenshots/
+/.box/kylin-ai-memorymap/traditional_database/
+/.box/kylin-ai-memorymap/vector_database
+/.cache/kylin-ai-memorymap/screenshots
+/.cache/kylin-ai-memorymap/traditional_database/
+/.cache/kylin-ai-memorymap/vector_database
+/.cache/kylin-ai-memorymap/vector_database/
+Can't open existing database: 
+convertImagesToVideo
+convertRemainedImagesToVideo
+Could not find input video encoder
+Could not find video stream for: 
+Could not open input video: 
+CREATE TABLE screenshots (id INTEGER PRIMARY KEY AUTOINCREMENT,video_name TEXT NOT NULL,ocr_text TEXT,frame_index_of_video INTEGER NOT NULL,frame_index_of_day INTEGER NOT NULL,real_time INTEGER NOT NULL,desktop_file_path TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_screenshot ON screenshots(video_name, ocr_text, frame_index_of_video, frame_index_of_day, real_time, desktop_file_path);
+^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})\.mp4$
+^\d{4}-\d{2}\.db$
+Database file does not exist: 
+Database not initialized!
+DataHandler
+.data.rel.ro
+__data_start
+DELETE FROM screenshots WHERE real_time > ? AND  real_time <= ?;Failed to drop cdrop collection:
+Delete ocr database failed
+deleteUserData
+Delete vector database failed
+Deleting data at date
+Deleting video
+_edata
+EmbeddingDatabase empty embedding data, will not save to database.
+embedding_result_get_vector_data
+endptr == token_buffer.data() + token_buffer.size()
+Error: AVFrame data pointer is null.
+Error: Could not allocate video codec context
+Error reading image data: 
+Error reading metadata: 
+Error retrieving last screenshot real time
+Failed to connect to milvus vector database.
+Failed to create milvus vector database.
+Failed to delete data from milvus vector database
+Failed to delete frames from video file
+Failed to load image metadata.
+Failed to load vector database file
+Failed to read database
+Failed to take screenshot
+frameindexofvideo
+frameIndexOfVideo
+frameIndexOfVideo field
+g_datalist_clear
+g_datalist_id_set_data_full
+getOcrScreenShotData
+getScreenshotDataOfDay
+getVisualScreenShotData
+Got empty embedding data, will not search database.
+g_signal_connect_data
+handle-delete-user-data
+handleDeleteUserData

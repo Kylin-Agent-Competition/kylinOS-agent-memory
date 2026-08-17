@@ -1,0 +1,212 @@
+
+================================================================================
+# 任务: phase7_dbus_api  @ 2026-08-17T21:39:59.653157
+================================================================================
+
+----- CMD: echo '=== recollect-client full dbus strings ==='; strings -n 4 /lib/x86_64-linux-gnu/libkylin-ai-recollect-client.so.1 2>/dev/null | grep -iE 'com.kylin.Recollect|RecollectService|recollect|getScreenshot|getOcr|getVisual|recording|delete|firstAndLast|appList|screenshotInterval|maximumStorage|activeApp|backInTime|frameDeleted|frameNumber|interface|object' | sort -u | head -120  -----
+# exit=0
+=== recollect-client full dbus strings ===
+activeAppChanged
+backInTimeDetected
+bool nlohmann::json_abi_v3_11_3::detail::json_sax_dom_callback_parser<BasicJsonType>::end_object() [with BasicJsonType = nlohmann::json_abi_v3_11_3::basic_json<>]
+bool nlohmann::json_abi_v3_11_3::detail::json_sax_dom_parser<BasicJsonType>::end_object() [with BasicJsonType = nlohmann::json_abi_v3_11_3::basic_json<>]
+/com/kylin/Recollect
+com.kylin.Recollect
+com.kylin.recollect.service
+delete user data
+deleteUserData
+Failed to create Recollect Service GSettings
+frame-deleted
+frameDeleted
+frameNumber
+g_async_result_get_source_object
+_g_dbus_codegen_marshal_BOOLEAN__OBJECT_STRING
+g_dbus_interface_info_lookup_property
+g_dbus_interface_info_lookup_signal
+g_dbus_interface_skeleton_get_connections
+g_dbus_interface_skeleton_get_object_path
+g_dbus_interface_skeleton_get_type
+g_dbus_proxy_set_interface_info
+getAppListOfDay
+getFirstAndLastDay
+getOcrScreenShotData
+get recording memory
+getRecordingMemory
+getScreenshotDataOfDay
+getVisualScreenShotData
+g-interface-name
+g_object_class_find_property
+g_object_get_property
+g_object_new
+g_object_notify
+g-object-path
+g_object_set_property
+g_object_unref
+g_type_add_interface_static
+g_type_interface_add_prerequisite
+g_value_set_object
+handle-delete-user-data
+handle-get-recording-memory
+handle-set-recording-memory
+isRecordingMemory
+i != val.m_data.m_value.object->cend()
+kylin-ai-recollect-service.servi
+libgobject-2.0.so.0
+libkylin-ai-recollect-client.so.1
+m_data.m_type != value_t::object || m_data.m_value.object != nullptr
+Method %s is not implemented on interface %s
+m_it.array_iterator != m_object->m_data.m_value.array->end()
+m_it.object_iterator != m_object->m_data.m_value.object->end()
+m_object != nullptr
+N9recollect6config13ConfigManagerE
+object
+object_element
+object key
+object separator
+./obj-x86_64-linux-gnu/client/recollectglue.c
+recollect
+recollect_call_delete_user_data
+recollect_call_delete_user_data_finish
+recollect_call_delete_user_data_sync
+recollect_call_get_app_list_of_day
+recollect_call_get_app_list_of_day_finish
+recollect_call_get_app_list_of_day_sync
+recollect_call_get_first_and_last_day
+recollect_call_get_first_and_last_day_finish
+recollect_call_get_first_and_last_day_sync
+recollect_call_get_ocr_screen_shot_data
+recollect_call_get_ocr_screen_shot_data_finish
+recollect_call_get_ocr_screen_shot_data_sync
+recollect_call_get_recording_memory
+recollect_call_get_recording_memory_finish
+recollect_call_get_recording_memory_sync
+recollect_call_get_screenshot_data_of_day
+recollect_call_get_screenshot_data_of_day_finish
+recollect_call_get_screenshot_data_of_day_sync
+recollect_call_get_visual_screen_shot_data
+recollect_call_get_visual_screen_shot_data_finish
+recollect_call_get_visual_screen_shot_data_sync
+recollect_call_set_recording_memory
+recollect_call_set_recording_memory_finish
+recollect_call_set_recording_memory_sync
+RecollectClient
+recollect_complete_delete_user_data
+recollect_complete_get_app_list_of_day
+recollect_complete_get_first_and_last_day
+recollect_complete_get_ocr_screen_shot_data
+recollect_complete_get_recording_memory
+recollect_complete_get_screenshot_data_of_day
+recollect_complete_get_visual_screen_shot_data
+recollect_complete_set_recording_memory
+recollect::config::ConfigManager
+recollect_create_session
+recollect_delete_user_data
+recollect_destroy_session
+recollect_emit_active_app_changed
+recollect_emit_back_in_time_detected
+recollect_emit_frame_deleted
+recollect_emit_recording_memory_changed
+recollect_emit_today_frame_number_changed
+recollect_get_app_list_of_day
+recollect_get_first_and_last_day
+recollect_get_maximum_storage_gb
+recollect_get_ocr_screenshot_data
+recollect_get_recording_memory
+recollect_get_screenshot_data_of_day
+recollect_get_screenshot_image_of_video_by_index
+recollect_get_screenshot_interval
+recollect_get_type
+recollect_get_visual_screenshot_data
+recollect_image_free
+recollect_init_session
+recollect_interface_info
+recollect_override_properties
+RecollectProxy
+recollect_proxy_get_type
+recollect_proxy_new
+recollect_proxy_new_finish
+recollect_proxy_new_for_bus
+
+----- CMD:  echo '=== recollect-service: vision/embedding/vector api strings ==='; strings -n 6 /usr/bin/kylin-ai-recollect-service 2>/dev/null | grep -iE 'vision|ocr|embedding|clip|vector|milvus|collection|search|query' | sort -u | head -80 -----
+# exit=0
+=== recollect-service: vision/embedding/vector api strings ===
+ AND ocr_text LIKE '%
+/.box/kylin-ai-memorymap/vector_database
+/.cache/kylin-ai-memorymap/vector_database
+/.cache/kylin-ai-memorymap/vector_database/
+cannot create std::vector larger than max_size()
+Cannot get HOME for legacy vector db migration.
+const nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::value_type& nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::operator[](const typename object_t::key_type&) const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void; const_reference = const nlohmann::json_abi_v3_11_3::basic_json<>&; typename object_t::key_type = std::__cxx11::basic_string<char>; object_t = std::map<std::__cxx11::basic_string<char>, nlohmann::json_abi_v3_11_3::basic_json<>, std::less<void>, std::allocator<std::pair<const std::__cxx11::basic_string<char>, nlohmann::json_abi_v3_11_3::basic_json<> > > >]
+CREATE TABLE screenshots (id INTEGER PRIMARY KEY AUTOINCREMENT,video_name TEXT NOT NULL,ocr_text TEXT,frame_index_of_video INTEGER NOT NULL,frame_index_of_day INTEGER NOT NULL,real_time INTEGER NOT NULL,desktop_file_path TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_screenshot ON screenshots(video_name, ocr_text, frame_index_of_video, frame_index_of_day, real_time, desktop_file_path);
+DELETE FROM screenshots WHERE real_time > ? AND  real_time <= ?;Failed to drop cdrop collection:
+Delete ocr database failed
+Delete vector database failed
+Dropping unneeded collection after migration:
+EmbeddingDatabase empty embedding data, will not save to database.
+embedding field
+Embedding image elapsed:
+embedding model count:
+embedding model dimension:
+embedding_model_info_get_model_dim
+embedding_model_info_get_model_name
+embedding_model_list_get_count
+embedding_model_list_get_model
+embedding model name:
+embedding_result_destroy
+embedding_result_get_vector_data
+embedding_result_get_vector_length
+ensemble-embd_cn-clip_512-uint8-text|embd_cn-clip_512-uint8-image
+Failed to connect milvus server
+Failed to connect milvus server:
+Failed to connect milvus server, retry
+Failed to connect to milvus vector database.
+Failed to copy legacy vector db from
+Failed to create collection:
+Failed to create milvus vector database.
+Failed to delete data from milvus vector database
+Failed to disconnect milvus server:
+failed to init embedding session:
+failed to init wanted embedding model, error code:
+Failed to load vector database file
+Failed to search:
+Failed to show collections:
+get null image embedding result
+get null text embedding result
+getOcrScreenShotData
+Get wanted embedding model name:
+Got empty embedding data, will not search database.
+handle-get-ocr-screen-shot-data
+imagecollection
+imageEmbedding
+image_embedding_by_base64_image_data
+image_embedding_create_session
+image_embedding_destroy_session
+image_embedding_get_model_list
+image_embedding_init_model
+image_embedding_init_session
+Image embedding session is not initialized.
+imageOCRDataReady
+INSERT OR IGNORE INTO screenshots (video_name, ocr_text, frame_index_of_video, frame_index_of_day, real_time, desktop_file_path) VALUES (?, ?, ?, ?, ?, ?);
+Legacy vector db file not exist, skip migration.
+libkysdk-coreai-embedding.so.1
+libkysdk-coreai-vision.so.1
+libkysdk-vector-engine-client.so.1
+/.local/share/kylin-ai-vector-engine/default.db
+/.local/share/milvus-lite/default.db
+Migrated vector db file success.
+Migrating vector db from legacy path:
+N8VectorDB5FieldE
+No wanted embedding model found
+NSt6thread11_State_implINS_8_InvokerISt5tupleIJM14EmbeddingModelFvvEPS3_EEEEEE
+NSt6thread11_State_implINS_8_InvokerISt5tupleIJM27EmbeddingScreenshotDatabaseFvvEPS3_EEEEEE
+NSt6thread11_State_implINS_8_InvokerISt5tupleIJM8OcrModelFvvEPS3_EEEEEE
+ocr result callback is nullptr
+ocrtext
+ocrTextDatas
+QVector
+QVector<OCRTextData>
+QVector<QImage>
+recollect_call_get_ocr_screen_shot_data
+recollect_call_get_ocr_screen_shot_data_finish
+recollect_call_get_ocr_screen_shot_data_sync

@@ -1,0 +1,65 @@
+
+================================================================================
+# 任务: phase3_interfaces  @ 2026-08-17T21:38:37.553216
+================================================================================
+
+----- CMD: ls -la /usr/bin/kylin-ai-memorymap 2>&1; readlink -f /usr/bin/kylin-ai-memorymap 2>&1  -----
+# exit=0
+ls: 无法访问 '/usr/bin/kylin-ai-memorymap': 没有那个文件或目录
+/usr/bin/kylin-ai-memorymap
+
+----- CMD:  echo '--- dbus services ---'; ls /usr/share/dbus-1/services/ 2>/dev/null | grep -iE 'memory|recollect|kylin'; grep -ril memorymap /usr/share/dbus-1/services/ 2>/dev/null  -----
+# exit=1
+--- dbus services ---
+com.kylin.assistant.sessiondaemon.service
+com.kylin.cloud-sync.service
+com.kylin.kare.Sessionhost.service
+com.kylin.kysdk.softwarecontrol.service
+com.kylin.kysdk.systemsettings.service
+com.kylin.ProcessManager.service
+com.kylin.RemoteDesktop.service
+com.kylin.secriskbox.service
+com.kylin.softwarecenter.getsearchresults.service
+com.kylin.softwarecenter.packageInfo.service
+com.kylin.softwarestore.accessserver.service
+com.kylin.statusmanager.interface.service
+com.kylin.treasurebox.service
+org.dharkael.kylinscreencap.service
+org.dharkael.kylinscreenshot.service
+org.kylinID.service.service
+
+----- CMD:  echo '--- systemd user units ---'; ls /usr/lib/systemd/user/ 2>/dev/null | grep -iE 'memory|recollect|kylin'; systemctl --user list-unit-files 2>/dev/null | grep -iE 'memory|recollect'  -----
+# exit=0
+--- systemd user units ---
+kylin-ai-document-qa-service.service
+kylin-ai-document-service.service
+kylin-ai-knowledgebase-service.service
+kylin-ai-recollect-service.service
+kylin-ai-vector-engine.service
+kylin-background-upgrade-manul.service
+kylin-background-upgrade-manul.timer
+kylin-background-upgrade-silent.service
+kylin-printer-applet.service
+kylin-process-manager.service
+kylin-software-center-plugin-preprocessing.service
+kylin-software-center.service
+kylin-software-center.timer
+kylin-wlcom.service
+kylin-wlcom.target
+kylin-ai-recollect-service.service                                 static    -
+
+----- CMD:  echo '--- gsettings current ---'; gsettings list-recursively com.kylin.memorymap 2>&1  -----
+# exit=0
+--- gsettings current ---
+com.kylin.memorymap close-window-option 'minimize'
+com.kylin.memorymap enabled false
+com.kylin.memorymap exclude-apps ['']
+com.kylin.memorymap max-result-number uint32 18
+com.kylin.memorymap max-storage-size-gb uint32 5
+com.kylin.memorymap no-remind false
+com.kylin.memorymap recording-memory false
+com.kylin.memorymap screenshot-interval uint32 5
+
+----- CMD:  echo '--- data paths ---'; ls -la ~/.config/kylin-memorymap 2>/dev/null; ls -la ~/.local/share/kylin-memorymap 2>/dev/null; find ~/.config ~/.local/share -maxdepth 2 -iname '*memorymap*' 2>/dev/null; find ~/.cache -maxdepth 2 -iname '*memorymap*' 2>/dev/null -----
+# exit=0
+--- data paths ---
