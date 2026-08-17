@@ -391,3 +391,28 @@ entries:
       D2-7.6 Socket 清理: /run/ 和 /tmp/ socket 均不存在.
       P1-6 SHA-256 回退前后一致; P1-7~P1-9 未执行对比.
       关联缺口: P1-6, P1-7, P1-8, P1-9, P1-10.
+
+  - id: "AGT-004-5.0.3-001"
+    task_id: "D4-Gate0-补充审查"
+    description: "麒灵 AI 助手 5.0.3 智能体模式与工具调用能力人工验证（deepseek 云端模型）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d4_agent_mode_5_0_3_20260816/"
+    report: "deliverables/D4_GATE0_AGENT_MODE_MANUAL_VERIFICATION_20260816.md"
+    date: "2026-08-16"
+    reviewer: "周子腾（E）"
+    limitations: "V4 Skill/Harness 调用未验证（日志无 skill 调用记录，无法观测）；V5 取消已验证、失败场景已观测（v5_3 补测）但端到端『失败不沉淀』仍需 Hook 集成后验证（宿主无沉淀机制，无法归因拦截）；本验证仅证明宿主具备智能体模式+工具调用能力，本项目 Hook 集成端到端链路尚未验证"
+    checksum_sha256: "5f96f2ca09d5b4b2dc1b61f4966894d8ac719424973c1cb8255efdce67177bac"
+    details: |
+      V1 智能体模式入口: v1_agentmode_entry.png (411KB)
+      V2 deepseek 云端模型对话: v2_deepseek_chat_log.txt（onRecvTaskMsg 正常回复）
+      V3 工具调用成功闭环: v3_tool_call_result_log.txt
+        - tool_call: shell 工具 gdbus call 查询音量 (call_00_aDWW85DqGTBse5AYgtcr9634)
+        - tool_result: output "(67,)" → 助手回复“当前音量是 **67%**”
+      V5 取消场景: v5_task_cancel_log.txt（User stop task mode!）
+      V5-3 失败场景补测: v5_fail_tool_log.txt + v5_3_fail_no_precipitate_evidence.md
+        - 失败 tool_call: ls -la /root (call_00_DiZp24T3mkyLDs2fJrKV7174) → tool_result "权限不够"（无 is_error 字段）
+        - 失败后宿主日志无沉淀记录（沉淀/知识候选/candidate/偏好/提取/入库 全文 0 命中）
+        - 结论: 部分证据，端到端『失败不沉淀』待 Hook/Memory Service 集成后验证
+      PID 12043; 助手二进制路径 /run/build/kylin-aiassistant/kylin-aiassistant/kylin-aiassistant
+      MANIFEST.sha256 含 6 个证据文件 SHA-256；证据目录: evidence/l2-kylin-vm/d4_agent_mode_5_0_3_20260816/

@@ -1,0 +1,4 @@
+2026-08-16 23:09:47,303(46363261)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "Navig" "chat"
+2026-08-16 23:09:47,304(46363262)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "ations" "chat"
+2026-08-16 23:09:47,305(46363263)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== " " "chat"
+2026-08-16 23:09:47,306(46363264)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1182(onStopReply)|User stop task mode!
