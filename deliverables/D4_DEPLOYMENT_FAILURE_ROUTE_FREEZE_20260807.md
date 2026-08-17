@@ -170,14 +170,18 @@ WantedBy=default.target
 
 #### 2.2.5 idempotency_cache
 
+> **2026-08-17 修订（ADR-006 批准）**：主键由单列 `idempotency_key` 改为**复合主键 `(user_id, session_id, idempotency_key)`**，与 §3.5/FRZ-IPC-005 三元组作用域一致；跨用户同 key 不冲突。
+
 | 列 | 类型 | 约束 | 说明 |
 |----|------|------|------|
-| `idempotency_key` | TEXT | PRIMARY KEY | 幂等键 |
-| `user_id` | TEXT | NOT NULL | 所属用户 |
-| `session_id` | TEXT | NOT NULL | 所属会话 |
+| `user_id` | TEXT | NOT NULL | 所属用户（复合主键之一） |
+| `session_id` | TEXT | NOT NULL | 所属会话（复合主键之一） |
+| `idempotency_key` | TEXT | NOT NULL | 幂等键（复合主键之一） |
 | `response` | TEXT | NOT NULL | 缓存响应 JSON |
 | `created_at` | TEXT | NOT NULL | ISO 8601 |
 | `expires_at` | TEXT | NOT NULL | ISO 8601（TTL = 24h） |
+
+**辅助索引（允许扩展）**：`idx_idempotency_expires` (expires_at)——过期清理任务使用。
 
 ### 2.3 索引（设计冻结）
 
@@ -277,9 +281,9 @@ forget 请求 → preview（预览影响范围）
 |----|------|
 | 工具 | Alembic（SQLAlchemy 2.0 Core） |
 | 迁移目录 | `migrations/` |
-| 命名 | `YYYYMMDD_<description>.py` |
+| 命名 | `YYYYMMDD_<description>.py`；**基线例外（ADR-007）**：基线迁移固定为 `001_initial_schema.py`，后续迁移 `YYYYMMDD_<desc>.py`，二者不混用 |
 | 回滚 | 每个迁移必须有 `downgrade()` |
-| 基线 | 初版 Schema 为 `001_initial_schema.py` |
+| 基线 | 初版 Schema 为 `001_initial_schema.py`（版本链起点） |
 
 ### 4.2 禁止操作
 
