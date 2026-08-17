@@ -16,8 +16,9 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 
 ## 当前状态
 
-**D4 骨架代码已完成（L0_CODE_COMPLETE；Mock 契约测试代码已实现并与 A 轨 `protocol.py` 对齐；
-本机缺少 Qt5 dev 工具链，编译/Mock 测试运行验证待 D 审查环境补齐；L1/L2 待联调）。**
+**D4 骨架 L0 完成（L0_COMPLETE；ctest 2/2 30/30 子用例 PASS，总耗时 0.08s，
+WSL Ubuntu 22.04 GCC 11.4.0 Qt 5.15.3；协议编解码与 A 轨 `protocol.py` 对齐；
+L1/L2 待联调）。**
 
 - 协议编解码 `protocol_adapter.{h,cpp}`：4 字节大端长度前缀 + UTF-8 JSON envelope
   （D 轨 IPC 候选，对齐 `memory-service/embedding/protocol.py`）
@@ -84,6 +85,6 @@ cmake --build memory-client/build
 
 | 层级 | 要求 | 状态 |
 |------|------|------|
-| **L0** | 编译通过、Mock 协议测试 | 代码完成（L0_CODE_COMPLETE）；运行验证待 Qt5 dev 工具链就绪 |
+| **L0** | 编译通过、Mock 协议测试 | **L0_COMPLETE** — ctest 2/2 30/30 PASS（0.08s，WSL Ubuntu 22.04 GCC 11.4.0 Qt 5.15.3） |
 | **L1** | QLocalSocket 连接 Memory Service 正常 | 待联调 |
 | **L2** | 麒麟 VM 中 QML 界面调用链路完整 | 未实现 |

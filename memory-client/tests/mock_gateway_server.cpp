@@ -82,16 +82,34 @@ void MockGatewayServer::handleNewConnection()
                         continue;
                     }
                     const auto [parts, parseError] = parseEnvelope(*decoded.envelope);
-                    if (!parseError.ok()) {
+                    if (!parseError.ok() || !parts.has_value()) {
                         continue;
                     }
-                    received_.push_back({parts.method, parts.payload,
-                                         parts.requestId, parts.traceId,
-                                         parts.deadlineMs});
+                    received_.push_back({parts->method, parts->payload,
+                                         parts->requestId, parts->traceId,
+                                         parts->deadlineMs});
 
                     QJsonObject response = handler_
-                                               ? handler_(parts)
+                                               ? handler_(*parts)
                                                : *decoded.envelope;
+
+                    // 测试后门：若 handler 返回的 envelope 含 "__malformed__": true，
+                    // 则跳过正常编码，向客户端写入畸形字节流，用于验证客户端协议错误
+                    // 处理路径（不可恢复错误 → 触发 connectionError 并断连）。
+                    static const QString kMalformedKey = QStringLiteral("__malformed__");
+                    if (response.value(kMalformedKey).toBool()) {
+                        // 写入超大声明长度头，触发 DeclaredLengthTooLarge。
+                        const quint32 oversized = kMaxMessageLen + 1u;
+                        char bad[4];
+                        bad[0] = static_cast<char>((oversized >> 24) & 0xFF);
+                        bad[1] = static_cast<char>((oversized >> 16) & 0xFF);
+                        bad[2] = static_cast<char>((oversized >> 8) & 0xFF);
+                        bad[3] = static_cast<char>(oversized & 0xFF);
+                        raw->write(bad, 4);
+                        raw->flush();
+                        continue;
+                    }
+
                     const auto packet = encodeEnvelope(response);
                     if (packet.has_value()) {
                         raw->write(*packet);
