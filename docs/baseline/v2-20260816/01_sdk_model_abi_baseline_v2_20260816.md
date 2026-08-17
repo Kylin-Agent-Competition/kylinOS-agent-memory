@@ -244,16 +244,17 @@
 
 | 组件 | 版本 | 与「记忆」的潜在关系 |
 | --- | --- | --- |
-| kylin-ai-memorymap（记忆地图） | 2.0.23 | 名字直指「记忆」，需确认是 UI 还是含记忆内核 |
+| kylin-ai-memorymap（记忆地图） | 2.0.23 | **已定案（06 报告 §2.4）**：纯 UI 前端，记忆内核在 recollect-service |
 | kylin-ai-knowledge-base-service | 1.2.0.0-0k1.0 | 官方知识库服务，`KNOWLEDGEBASE` 表已落地 |
 | kylin-ai-document-qa-service | 1.2.0.0-0k1.0 | 文档问答（DOCUMENT_REFERENCE 表） |
 | kylin-ai-document-service | 1.2.0.0-0k0.6 | 文档解析服务 |
 | kylin-ai-parser-extension | 1.2.0.0-0k0.4 | 解析扩展 |
 | kyai-data-management-service | 1.2.0.0-0k1.10 | 数据管理业务服务（含 client 0k0.3） |
-| kylin-ai-recollect-service | 1.0.0.0-0k1.0 | 用户活动回溯，独立成服务 |
+| kylin-ai-recollect-service | 1.0.0.0-0k1.0 | **已定案（06 报告 §2.4）**：memorymap 记忆内核（截图+OCR+CLIP+Milvus+SQLite） |
 
-> **关键（引用 05 §2.4）**：上述组件目前仅 ABI/包级确认存在，功能边界未知，**必须列为 P0 重新调查项**，
-> 不能继续按「官方无记忆能力，全部自研」的前提开发。MEM-001 / MEM-002 由 NOT_FOUND 改为「待重新调查」。
+> **关键（引用 05 §2.4 + 06 报告 §3.2，2026-08-17 定案）**：memorymap + recollect-service 已定案为「屏幕视觉记忆」
+> （纯 UI 前端 + 后台记忆内核），MEM-001 / MEM-002 **维持 NOT_FOUND**，新增 MEM-003（官方视觉记忆组件，
+> ABI_VERIFIED，条件数据源）；知识库 / 文档 / 数据管理服务功能边界仍未知，**继续列为 P0 重新调查项**（R-NEW-1）。
 
 ### 业务框架配置（`/usr/share/kylin-ai/kyai-business-framework/`）
 

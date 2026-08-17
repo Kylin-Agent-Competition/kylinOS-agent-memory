@@ -593,3 +593,20 @@ entries:
       新增 MEM-003（官方视觉记忆组件）ABI_VERIFIED/E3，定位条件数据源（只读复用，D-Bus com.kylin.Recollect）。
       可复用/重叠/互补（§3.2）：memorymap 不可复用；recollect-service 只读可复用；与自研仅共享基础设施（embedding/vision/vector-engine-client SDK），功能互补，自研范围不收缩。
       证据包 phase1~phase10 原始日志 + MANIFEST.sha256（10 文件）见 source 目录。
+
+  - id: "GATE0-ENV-002"
+    task_id: "D4-Gate0-补充审查"
+    description: "环境基线 v2 调查 — 麒灵 AI 助手 5.0.3 环境采集 + SDK/ABI/能力边界重评（01/02/03/05 四份文档）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E3"
+    source: "docs/baseline/v2-20260816/02_kylin_vm_environment_baseline_20260816.md"
+    date: "2026-08-16"
+    reviewer: "pending"
+    limitations: "证据等级 E3 为 ABI/包/Schema 级，运行时功能验证待复测；cmake 未安装（C++ Bridge 编译阻塞，检查 0/5 前置）；助手 3.0.67→5.0.3 版本跨越（本地源码 3.x 待重拉），Embedding 0k0.3→0k0.4、Vector 服务端 0k0.11→0k1.0 升级待复测；memorymap 定案见 MEM-BOUNDARY-001；知识库/文档/数据管理能力边界仍未知（R-NEW-1）"
+    checksum_sha256: "3d07bc15c84e5bbbfbc9fcd607991dfde1addcf8344a8488235b2ece40301536"
+    details: |
+      环境基线 v2 调查（docs/baseline/v2-20260816/01~05，VirtualBox guestcontrol，VM Kylin-desktop-neo）：
+      - 关键版本变化：助手 3.0.67→5.0.3（智能体模式+工具调用）；Embedding 0k0.3→0k0.4（新增图像嵌入符号）；Vector 服务端 0k0.11→0k1.0；cmake 缺失；模型仓库 15→30 目录（新增 CN-CLIP/SAM/ASR/TTS）。
+      - 新增官方组件：memorymap 2.0.23（已定案，见 MEM-BOUNDARY-001）、知识库/文档/数据管理服务、Recollect 独立服务、kytensor-llm/llm-backend（本地 LLM）、9 厂商引擎插件。
+      - 能力边界重评（05 v1.3）：上调 EMB-002/004、REC-002、AGT-001（ABI_VERIFIED）；定案 MEM-001/002 NOT_FOUND + 新增 MEM-003；待复测 EMB-001、VEC-001~004、AGT-002/003/004/005/006、REC-001。
+      - 文档：01_sdk_model_abi_baseline_v2、02_kylin_vm_environment_baseline、03_defensive_checklist_v2、05_capability_boundary_reevaluation v1.3。
