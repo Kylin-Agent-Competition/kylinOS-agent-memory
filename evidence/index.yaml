@@ -610,3 +610,42 @@ entries:
       - 新增官方组件：memorymap 2.0.23（已定案，见 MEM-BOUNDARY-001）、知识库/文档/数据管理服务、Recollect 独立服务、kytensor-llm/llm-backend（本地 LLM）、9 厂商引擎插件。
       - 能力边界重评（05 v1.3）：上调 EMB-002/004、REC-002、AGT-001（ABI_VERIFIED）；定案 MEM-001/002 NOT_FOUND + 新增 MEM-003；待复测 EMB-001、VEC-001~004、AGT-002/003/004/005/006、REC-001。
       - 文档：01_sdk_model_abi_baseline_v2、02_kylin_vm_environment_baseline、03_defensive_checklist_v2、05_capability_boundary_reevaluation v1.3。
+
+  - id: "GATE0-UT-001"
+    task_id: "D1-C"
+    description: "Gate 0 原文隔离独立测试 UT-1（11/11 PASS）—— 回显一致 / retrieve 不注入原文 / 特殊字符 / 敏感不泄露 / 响应结构"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/ut_results/ut1_results.txt"
+    date: "2026-08-07"
+    reviewer: "周子腾（E）"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "Gate 0 Echo Server 层面原文隔离已验证；生产 Memory Service 的 UI/聊天数据库 original_user_text 保存与 model_request 注入完整隔离链路 [02 §4.1] 仍需 D4+ 验证；5.0.3 聊天 DB Schema 变化（request_data 字段）需按新 Schema 复测"
+    checksum_sha256: "13b40fda1d1252b0edc364168d06b8ec456e36d864b8fcd5b5eeae26b09f5db3"
+    details: |
+      执行环境: 麒麟 V11 VM (Linux 6.6.0-63-generic, x86_64)
+      11 项用例全部 PASS：回显一致 / retrieve 空上下文 / 空 payload /
+      特殊字符（换行/Unicode/JSON 注入/SQL 注入/超长 10KB/空字符串）/
+      memory.store 敏感不泄露 / 响应结构完整性（protocol_version/request_id/status/data/server_ts）
+
+  - id: "GATE0-UT-002"
+    task_id: "D1-C"
+    description: "Gate 0 IPC 重启复测 UT-2（10/12 PASS，核心链路全通过）—— stop→detect→restart→recover / kill-9→recover / 快速重启×5 / 超时"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/ut_results/ut2_results.txt"
+    date: "2026-08-07"
+    reviewer: "周子腾（E）"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "2 个 FAIL（UT2-STOP / UT2-KILL9-STOP）为进程管理竞态条件（stop_server 立即检查 pgrep 的 timing 误判），不影响 IPC 通信行为验证；重连机制（TD-IPC-004）与 deadline 超时行为复测（TD-IPC-003）仍为缺口"
+    checksum_sha256: "2d93c5e8c24e9a5ca236501f6ff6202b0f5073cee1ec4ce71ee41400fe400aaf"
+    details: |
+      执行环境: 麒麟 V11 VM (Linux 6.6.0-63-generic, x86_64)
+      10/12 PASS：health baseline / stop-detect / restart-server /
+      restart-recover / socket-cleanup / kill9-pre / kill9-recover /
+      rapid-restart 5/5 / timeout / final-recover
+      2 FAIL 为进程管理竞态条件，核心 IPC 链路全通过

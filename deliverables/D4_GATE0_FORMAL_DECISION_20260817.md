@@ -56,9 +56,9 @@
 
 | 编号 | 风险 | 级别 | 本次确认 | 责任轨道 | 关联证据/文档 |
 |------|------|------|---------|---------|--------------|
-| R-NEW-1 | 官方知识库/文档/数据管理能力边界未知（memorymap 已定案，见 §5.2） | 高 | ☐ 接受 ☐ 驳回 ☐ 降级 | E（P0 调查） | `06_memorymap_capability_boundary`；`05_capability_boundary_reevaluation` §2.4、§4 |
-| R-NEW-2 | request_data 字段语义未验证 | 中高 | ☐ 接受 ☐ 驳回 ☐ 降级 | C（P0 实验） | `D4_DB_SCHEMA_V53_COMPARISON` §2.2、P0-V1 |
-| R-NEW-3 | /opt/kaiming/layers 下 KYSEC/回退未验证 | 中 | ☐ 接受 ☐ 驳回 ☐ 降级 | D | `D4_DB_SCHEMA_V53_COMPARISON` §二；AGT-006 |
+| R-NEW-1 | 官方知识库/文档/数据管理能力边界未知（memorymap 已定案，见 §5.2） | 高 | ☑ 接受 ☐ 驳回 ☐ 降级 | E（P0 调查） | `06_memorymap_capability_boundary`；`05_capability_boundary_reevaluation` §2.4、§4 |
+| R-NEW-2 | request_data 字段语义未验证 | 中高 | ☑ 接受 ☐ 驳回 ☐ 降级 | C（P0 实验） | `D4_DB_SCHEMA_V53_COMPARISON` §2.2、P0-V1 |
+| R-NEW-3 | /opt/kaiming/layers 下 KYSEC/回退未验证 | 中 | ☑ 接受 ☐ 驳回 ☐ 降级 | D | `D4_DB_SCHEMA_V53_COMPARISON` §二；AGT-006 |
 
 ---
 
@@ -234,7 +234,7 @@
 
 | 角色 | 姓名 | 日期 | 结论 |
 |------|------|------|------|
-| 审查主持人 | 周子腾（E） | 2026-08-17 | PASS_WITH_DEBT（待确认） |
+| 审查主持人 | 周子腾（E） | 2026-08-17 | PASS_WITH_DEBT（已确认） |
 | Reviewer 1 | 待填写（D） | | |
 | Reviewer 2 | 待填写（E） | | |
 
