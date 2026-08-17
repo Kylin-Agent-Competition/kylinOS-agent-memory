@@ -88,4 +88,5 @@
 
 ## 技术债
 
-- 无新增 TD；沿用 TD-A-D6-EXEC-RACE（全量 -v 偶发 test_server_lifecycle 竞态，复跑即绿，非阻断）、TD-A-D7-CACHE-USER-DIMENSION（缓存键缺 user 维度，知识缓存同受约束）、TD-A-D7-LLM-HANG-DEGRADE（LLM 永久挂死 busy-skip，知识路径同受约束）
+- **沿用**：TD-A-D6-EXEC-RACE（全量 -v 偶发 test_server_lifecycle 竞态，复跑即绿，非阻断）、TD-A-D7-CACHE-USER-DIMENSION（缓存键缺 user 维度，知识缓存同受约束）、TD-A-D7-LLM-HANG-DEGRADE（LLM 永久挂死 busy-skip，知识路径同受约束）、TD-A-D6-LLM-TOOL-INPUT（Knowledge LLM 事件级门控，候选级 ToolResult provenance 绑定待真实 LLM 接入前完成，本 PR 不修改生产代码）
+- **本 PR 新增登记**：TD-A-D8-CONTRACT-CATEGORY-SYNC（Day3 Provider 文档 category 五值 vs Day8 六值实现——契约同步债，当前六类方向合理仅文档未同步，关闭条件见台账）
