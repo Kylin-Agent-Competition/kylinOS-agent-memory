@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "event_id": "event-tool-001",
+  "trace_id": "trace-001",
+  "user_id": "local-user",
+  "session_id": "session-001",
+  "turn_id": "turn-002",
+  "occurred_at": "2026-08-14T05:00:00.150Z",
+  "collected_at": "2026-08-14T05:00:00.200Z",
+  "source_reference": "ref:tool-event:001",
+  "idempotency_key": "tool-execution:tool-call-001",
+  "tool_call_id": "tool-call-001",
+  "tool_name": "calendar.lookup",
+  "arguments_ref": "ref:tool-arguments:001",
+  "started_at": "2026-08-14T05:00:00.000Z",
+  "finished_at": "2026-08-14T05:00:00.150Z",
+  "execution_status": "success",
+  "result_ref": "ref:tool-result:001",
+  "side_effect": false,
+  "rollback_required": false,
+  "rollback_status": "not_applicable"
+}

@@ -58,6 +58,7 @@ models/
 .vscode/
 .reasonix/
 reasonix.toml
+.scratch/
 .DS_Store
 Thumbs.db
 reviewDocuments/
