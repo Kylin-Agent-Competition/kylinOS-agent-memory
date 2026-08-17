@@ -63,7 +63,10 @@ MemoryClient::MemoryClient(QObject* parent)
     socket_ = new QLocalSocket(this);
     connect(socket_, &QLocalSocket::connected, this, &MemoryClient::handleSocketConnected);
     connect(socket_, &QLocalSocket::disconnected, this, &MemoryClient::handleSocketDisconnected);
-    connect(socket_, &QLocalSocket::errorOccurred, this, &MemoryClient::handleSocketErrorOccurred);
+    // 使用字符串 SIGNAL/SLOT 语法避免 Qt 5.15 中 QIODevice::errorOccurred 与
+    // QLocalSocket::errorOccurred 的重载解析歧义（两者参数枚举类型不同）。
+    connect(socket_, SIGNAL(errorOccurred(QLocalSocket::LocalSocketError)),
+            this, SLOT(handleSocketErrorOccurred(QLocalSocket::LocalSocketError)));
     connect(socket_, &QLocalSocket::readyRead, this, &MemoryClient::handleSocketReadyRead);
 }
 
@@ -199,11 +202,11 @@ void MemoryClient::handleSocketReadyRead()
             // envelope 校验：必须包含 protocol_version 与 method（不强制
             // request_id，以容忍服务端在出错时不回传）。
             const auto [parts, parseError] = parseEnvelope(*decoded.envelope);
-            if (!parseError.ok()) {
+            if (!parseError.ok() || !parts.has_value()) {
                 emit connectionError(parseError.safeMessage);
                 continue;
             }
-            const QString requestId = parts.requestId;
+            const QString requestId = parts->requestId;
             if (pendingRequests_.erase(requestId.toStdString()) == 0) {
                 // 未知 request_id：仍转发响应，便于上层诊断；不暴露原文。
                 emit responseReceived(requestId, *decoded.envelope);

@@ -1,9 +1,9 @@
 # 09 轨道 C — Day4 Memory Client 工程骨架
 
-> **状态：`L0_CODE_COMPLETE / BUILD_VERIFICATION_PENDING / PENDING_REVIEW`** — 工程
-> 骨架 + Mock 契约测试代码已实现并与 A 轨 `protocol.py` 对齐；待 D 主审与 E 补审
-> （用户交互与安全）；本机缺少 Qt5 dev 工具链（Windows 无 cmake/Qt5，WSL 有 cmake
-> 但无 qtbase5-dev 且 sudo 需密码），编译/Mock 测试运行验证待 D 审查环境补齐；L1/L2 未实现。
+> **状态：`L0_COMPLETE / PENDING_REVIEW`** — 工程骨架 + Mock 契约测试 L0 全部
+> 通过（2/2 ctest，30/30 子用例 PASS，总时长 0.08s）；协议编解码与 A 轨
+> `memory-service/embedding/protocol.py` 已逐项对齐；待 D 主审与 E 补审（用户交互与
+> 安全）；L1/L2 未实现。
 
 ## 目标（xlsx D4-C）
 
@@ -42,6 +42,45 @@
 | `memory-client/tests/test_protocol_adapter.cpp` | 协议编解码 L0 单元测试 |
 | `memory-client/tests/test_memory_client_mock.cpp` | Client ↔ Mock Gateway L0 契约测试 |
 
+## L0 验证证据（2026-08-17 WSL Ubuntu 22.04）
+
+**构建环境**：GCC 11.4.0 / Qt 5.15.3 (`qtbase5-dev`，Core+Network+Test)
+（目标声明 Qt ≥ 5.12；Ubuntu 22.04 自带 5.15 为后向兼容的更高小版本）
+
+**cmake 配置命令**：
+```bash
+cmake -S memory-client -B memory-client/build \
+    -DKYLIN_MEMORY_CLIENT_BUILD_QML_APP=OFF \
+    -DKYLIN_MEMORY_CLIENT_BUILD_TESTS=ON
+cmake --build memory-client/build --parallel
+```
+产物：`libkylin_memory_client.a`（静态库）、`test_protocol_adapter`、`test_memory_client_mock`。
+
+**ctest 结果（-V 全量子用例）**：
+
+| ctest 名 | 子用例数 | 结果 | 耗时 |
+|----------|----------|------|------|
+| protocol_adapter | 22 | PASS | 0.02 s |
+| memory_client_mock | 8 | PASS | 0.01 s |
+| **合计** | **30/30** | **100%** | **0.08 s** |
+
+`protocol_adapter` 覆盖：encode/decode round-trip、IncompletePacket、DeclaredLengthTooLarge、
+InvalidJson、EnvelopeNotObject、多包连续解码、buildEnvelope 可选字段省略与写入、
+parseEnvelope（合法含可选字段、缺 protocol_version、不兼容版本 4 行、类型错误版本、
+缺 method、method 非字符串、method 空串、payload 非对象、可选字段读取）。
+
+`memory_client_mock` 覆盖：health echo、自定义 handler、未连接即发送 → ERR_NOT_CONNECTED、
+不存在服务端 → connectionError、畸形包（超大长度头）→ connectionError + Disconnected、
+request_id 关联（并发两个 health）。
+
+**构建阶段修复的三批问题（已进入代码、不作为 L2/L1 证据，仅记录 L0 闭环完整性）**：
+1. `parseEnvelope` 返回 `std::optional<EnvelopeParts>` 的解引用错误（6 处 `.method` → `->method`），同时补上 `has_value()` 前置校验（生产代码 memory_client.cpp、测试基础设施 mock_gateway_server.cpp 也各有 1 处同类问题）。
+2. `MockGatewayServer::Handler` 引用不存在的嵌套类型 `MockGatewayServer::EnvelopeParts` → 改为 `client::v1::EnvelopeParts`（3 处 lambda 参数）。
+3. Qt 5.15 `QLocalSocket::errorOccurred` 与 `QIODevice::errorOccurred` 重载歧义：函数指针 connect 解析到 QIODevice 的版本导致 socket 错误不投递 → 改用字符串 `SIGNAL(errorOccurred(QLocalSocket::LocalSocketError))` 无歧义连接。
+4. `QSignalSpy::wait(timeout)` 只计入 wait 调用后新发出的信号：先于 wait() 发出的同步 `Connecting` 信号被忽略，导致等待下一个状态变化时永远超 → 改用 `QTRY_COMPARE_WITH_TIMEOUT` / `QTRY_VERIFY_WITH_TIMEOUT` 轮询（同时涵盖已有与新信号）。
+5. WSL 抽象命名空间 socket 可靠性低 → 改用 `/tmp/kylin-mock-<prefix>-<pid>.sock` 文件系统绝对路径 UDS。
+6. `malformedServerPacketTriggersConnectionError` 子测试名不副实（实际走 happy-path）：为 MockGatewayServer 增加 `__malformed__: true` 后门，handler 返回该标记时写回超大长度头，真实验证客户端的协议错误熔断路径。
+
 ## 设计决议
 
 ### 1. 协议候选而非冻结
@@ -79,18 +118,22 @@ Memory Service 联调（L1）或麒麟 VM 链路（L2）。`test_memory_client_m
 
 ## 测试层级
 
-| 层级 | 覆盖 | 运行环境 |
-|------|------|---------|
-| L0-1 | `test_protocol_adapter.cpp` encode/decode round-trip + 错误拒绝 | 任意（Qt5 Core+Test） |
-| L0-2 | `test_protocol_adapter.cpp` envelope 构造/解析（含可选字段） | 任意 |
-| L0-3 | `test_protocol_adapter.cpp` 多包连续解码（流式） | 任意 |
-| L0-4 | `test_memory_client_mock.cpp` 连接 + health echo 收发 | 任意（Qt5 Network+Test） |
-| L0-5 | `test_memory_client_mock.cpp` 自定义 handler 响应 | 任意 |
-| L0-6 | `test_memory_client_mock.cpp` 未连接发送 → ERR_NOT_CONNECTED | 任意 |
-| L0-7 | `test_memory_client_mock.cpp` 不存在服务端 → connectionError | 任意 |
-| L0-8 | `test_memory_client_mock.cpp` request_id 关联匹配 | 任意 |
-| L1 | QLocalSocket 连接真实 Memory Service | 待联调 |
-| L2 | 麒麟 VM 真实 QML 调用链路 | 未实现 |
+| 层级 | 覆盖 | 运行环境 | 结果 |
+|------|------|---------|------|
+| L0-1 | `test_protocol_adapter.cpp` encode/decode round-trip + 错误拒绝 | 任意（Qt5 Core+Test） | PASS |
+| L0-2 | `test_protocol_adapter.cpp` envelope 构造/解析（含可选字段） | 任意 | PASS |
+| L0-3 | `test_protocol_adapter.cpp` 多包连续解码（流式） | 任意 | PASS |
+| L0-4 | `test_memory_client_mock.cpp` 连接 + health echo 收发 | 任意（Qt5 Network+Test） | PASS |
+| L0-5 | `test_memory_client_mock.cpp` 自定义 handler 响应 | 任意 | PASS |
+| L0-6 | `test_memory_client_mock.cpp` 未连接发送 → ERR_NOT_CONNECTED | 任意 | PASS |
+| L0-7 | `test_memory_client_mock.cpp` 不存在服务端 → connectionError | 任意 | PASS |
+| L0-7b | `test_memory_client_mock.cpp` 畸形服务端包 → connectionError + Disconnected | 任意 | PASS |
+| L0-8 | `test_memory_client_mock.cpp` request_id 关联匹配（并发两请求） | 任意 | PASS |
+| L1 | QLocalSocket 连接真实 Memory Service | 待联调 | 未实现 |
+| L2 | 麒麟 VM 真实 QML 调用链路 | 未实现 | 未实现 |
+
+验证环境（2026-08-17）：WSL Ubuntu 22.04、GCC 11.4.0、Qt 5.15.3（qtbase5-dev，
+满足 Qt≥5.12 目标声明）、ctest 2/2 30/30 子用例 PASS（0.08s）。
 
 ## 构建步骤
 
@@ -120,10 +163,10 @@ cmake --build memory-client/build
 
 | 项目 | 当前状态 | 说明 |
 |------|----------|------|
-| C++ MemoryClient/QLocalSocket 骨架 | `L0_CODE_COMPLETE` | 代码实现完成，协议对齐已核对；编译/Mock 测试运行待 Qt5 dev 工具链就绪后验证 |
-| 协议编解码 envelope 候选 | `PENDING_D_CONFIRMATION` | 对齐 A 轨 Day5 落地路径，待 D 终审 |
-| QML 主框架 + 路由 | `L0_COMPLETE` | StackView + 三页面，待 E 轨业务字段 |
-| 公共 ViewModel | `L0_COMPLETE` | 不固化业务字段 |
-| Mock Gateway 契约测试 | `L0_COMPLETE` | 非生产代码，仅测试基础设施 |
+| C++ MemoryClient/QLocalSocket 骨架 | `L0_COMPLETE` | 静态库 `libkylin_memory_client.a` 编译通过；ctest 2/2 30/30 子用例 PASS（0.08s） |
+| 协议编解码 envelope 候选 | `PENDING_D_CONFIRMATION` | 对齐 A 轨 Day5 `protocol.py`，L0 encode/decode 22 子用例覆盖；待 D 终审冻结 |
+| QML 主框架 + 路由 | `L0_COMPLETE` | StackView + Drawer，三页面（Status/MemoryQuery/Preferences 占位）；Qt 5.12 语法兼容 |
+| 公共 ViewModel | `L0_COMPLETE` | Q_PROPERTY 绑定 + Q_INVOKABLE，不固化业务字段（待 E 轨 Schema） |
+| Mock Gateway 契约测试 | `L0_COMPLETE` | QLocalServer + handler 注入 infrastructure，8 子用例覆盖 echo/custom/ERR_NOT_CONNECTED/missing-server/malformed-packet/request-id 关联 |
 | 真实 Memory Service 联调 | `NOT_IMPLEMENTED / L1_PENDING` | 待 D 轨 Gateway 落地 |
 | 麒麟 VM QML 链路 | `NOT_IMPLEMENTED / L2_PENDING` | 待 D2-C 阻断关闭 |

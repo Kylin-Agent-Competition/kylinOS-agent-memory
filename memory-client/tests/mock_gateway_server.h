@@ -61,7 +61,6 @@ public:
 
 private slots:
     void handleNewConnection();
-    void handleReadyRead();
 
 private:
     struct Connection {

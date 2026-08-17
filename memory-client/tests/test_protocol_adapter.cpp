@@ -68,11 +68,12 @@ void ProtocolAdapterTest::encodeDecodeRoundTrips()
 
     const auto [parts, parseError] = client::parseEnvelope(*decoded.envelope);
     QVERIFY(parseError.ok());
-    QCOMPARE(parts.method, client::methods::kMemoryQuery);
-    QCOMPARE(parts.requestId, QStringLiteral("req-001"));
-    QCOMPARE(parts.traceId, QStringLiteral("trc-001"));
-    QVERIFY(parts.deadlineMs.has_value());
-    QCOMPARE(*parts.deadlineMs, 5000);
+    QVERIFY(parts.has_value());
+    QCOMPARE(parts->method, client::methods::kMemoryQuery);
+    QCOMPARE(parts->requestId, QStringLiteral("req-001"));
+    QCOMPARE(parts->traceId, QStringLiteral("trc-001"));
+    QVERIFY(parts->deadlineMs.has_value());
+    QCOMPARE(*parts->deadlineMs, 5000);
 }
 
 void ProtocolAdapterTest::decodeRejectsIncompletePacket()
@@ -204,12 +205,13 @@ void ProtocolAdapterTest::parseEnvelopeAcceptsValidWithOptionalFields()
 
     const auto [parts, err] = client::parseEnvelope(envelope);
     QVERIFY(err.ok());
-    QCOMPARE(parts.method, client::methods::kMemoryHealth);
-    QCOMPARE(parts.requestId, QStringLiteral("req-1"));
-    QCOMPARE(parts.traceId, QStringLiteral("trc-1"));
-    QVERIFY(parts.deadlineMs.has_value());
-    QCOMPARE(*parts.deadlineMs, 1500);
-    QCOMPARE(parts.payload.value(QStringLiteral("ok")).toBool(), true);
+    QVERIFY(parts.has_value());
+    QCOMPARE(parts->method, client::methods::kMemoryHealth);
+    QCOMPARE(parts->requestId, QStringLiteral("req-1"));
+    QCOMPARE(parts->traceId, QStringLiteral("trc-1"));
+    QVERIFY(parts->deadlineMs.has_value());
+    QCOMPARE(*parts->deadlineMs, 1500);
+    QCOMPARE(parts->payload.value(QStringLiteral("ok")).toBool(), true);
 }
 
 void ProtocolAdapterTest::parseEnvelopeRejectsMissingProtocolVersion()
