@@ -401,7 +401,7 @@ entries:
     report: "deliverables/D4_GATE0_AGENT_MODE_MANUAL_VERIFICATION_20260816.md"
     date: "2026-08-16"
     reviewer: "周子腾（E）"
-    limitations: "V4 Skill/Harness 调用未验证（日志无 skill 调用记录，无法观测）；V5 取消已验证、失败场景已观测（v5_3 补测）但端到端『失败不沉淀』仍需 Hook 集成后验证（宿主无沉淀机制，无法归因拦截）；本验证仅证明宿主具备智能体模式+工具调用能力，本项目 Hook 集成端到端链路尚未验证"
+    limitations: "V4 Skill/Harness 调用未验证（日志无 skill 调用记录，无法观测）；V5 取消已验证、失败场景已观测（V5-1/V5-3 补测：ls -la /root → 权限不够，助手如实报告失败、无成功结果；宿主日志无沉淀记录）但端到端『失败状态建模/失败不沉淀』仍需 Hook 集成后验证（宿主无沉淀机制，无法归因拦截）；本验证仅证明宿主具备智能体模式+工具调用能力，本项目 Hook 集成端到端链路尚未验证"
     checksum_sha256: "5f96f2ca09d5b4b2dc1b61f4966894d8ac719424973c1cb8255efdce67177bac"
     details: |
       V1 智能体模式入口: v1_agentmode_entry.png (411KB)
@@ -410,9 +410,10 @@ entries:
         - tool_call: shell 工具 gdbus call 查询音量 (call_00_aDWW85DqGTBse5AYgtcr9634)
         - tool_result: output "(67,)" → 助手回复“当前音量是 **67%**”
       V5 取消场景: v5_task_cancel_log.txt（User stop task mode!）
-      V5-3 失败场景补测: v5_fail_tool_log.txt + v5_3_fail_no_precipitate_evidence.md
+      V5-1/V5-3 失败场景补测: v5-1_tool_call_failed_log.txt + v5_fail_tool_log.txt + v5_3_fail_no_precipitate_evidence.md
         - 失败 tool_call: ls -la /root (call_00_DiZp24T3mkyLDs2fJrKV7174) → tool_result "权限不够"（无 is_error 字段）
+        - 助手如实报告失败（/root 无法访问 ❌ 权限不够），无成功结果
         - 失败后宿主日志无沉淀记录（沉淀/知识候选/candidate/偏好/提取/入库 全文 0 命中）
-        - 结论: 部分证据，端到端『失败不沉淀』待 Hook/Memory Service 集成后验证
+        - 结论: 部分证据，端到端『失败状态建模/失败不沉淀』待 Hook/Memory Service 集成后验证
       PID 12043; 助手二进制路径 /run/build/kylin-aiassistant/kylin-aiassistant/kylin-aiassistant
-      MANIFEST.sha256 含 6 个证据文件 SHA-256；证据目录: evidence/l2-kylin-vm/d4_agent_mode_5_0_3_20260816/
+      MANIFEST.sha256 含 7 个证据文件 SHA-256；证据目录: evidence/l2-kylin-vm/d4_agent_mode_5_0_3_20260816/
