@@ -471,3 +471,34 @@ entries:
     reviewer: "D 主审；E 补审"
     limitations: "证据由旧脚本提交 20adffc 生成；缺少 PostTurn 数据库快照、15 秒稳定性、PreChat UI 截图与真实结构化 Tool 事件。"
     checksum_sha256: "541135db12b7f88d498791192adad032f5f7470e4763fe7dfaa6b4b6446ce619"
+
+  - id: "D8-A-KNOWLEDGE-EXTRACTION"
+    task_id: "D8-A"
+    description: "Day 8 知识结构化抽取——六类知识（E 轨 §2.6）+ 失败/取消 Tool 不同策略（B1）+ 失败降级测试 + 知识评测输出（麒麟 VM L2 全量 pytest）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/day8_verify_latest.log"  # L2 麒麟 VM（evidence/l1 为本地对照）
+    tested_commit: "95fcad86443ed8ac7f8654d91f9ac904c03b5938"  # 被测生产代码（feat/day8-knowledge-extraction，含 Review 修复）
+    evidence_commit: "5057551b0c615296a590295cfbbe9d86bb017e4c"  # L2 实测 HEAD（含 verify 脚本；生产代码与 tested_commit 零差异）
+    date: "2026-08-16"
+    reviewer: "pending"
+    limitations: "未接入真实 LLM（无凭证，接口预留）；六类识别正则/置信度为基线值待 E 轨数据集评测调优；KnowledgeCandidate.category 契约演进（Day3 五值→E 轨 §2.6 六值，procedure→workflow + failure_experience）；失败 Tool 语义演进（不生成成功知识，生成 failure_experience）；L2 实测 HEAD 5057551（含 verify 脚本），被测生产代码与 L1 相同（95fcad8，git diff 零差异）；TD-A-D6-EXEC-RACE 全量 -v 偶发一次复跑即绿（非阻断）"
+    checksum_sha256: "7f32f404d94e1abe2de385e70cfba0a81626f0f94cffc8364bdb17a6e51462bd"  # L2 证据日志（修正头后）
+    details: |
+      Day8 知识结构化抽取（架构 v1 TABLE 21/22/31/17 + E 轨 Schema §2.6/§3.3，
+      docs/day8/01_task_card.md）验证（2026-08-16）：
+      - L1（本地 WSL，被测 95fcad8，含 Review 修复）：255 passed + 47 skipped（evidence/l1/day8_knowledge_extraction_local.log）
+      - 新增 memory-service/tests/test_knowledge_extraction_d8.py（24 项）：六类识别
+        / success/failure/cancelled/timeout/partial 策略 / 失败降级（category/结构化字段/
+        R4/超时/R5）/ B1 门控 / 评测输出 / 契约保持
+      - 新增 memory-service/providers/knowledge_rules.py：六类识别 + Tool 状态策略
+        + build_failure_experience + 置信度基线
+      - extraction_provider.py：KnowledgeCandidate v0.2（category 六值 + 12 结构化字段）
+        + _degrade_knowledge_fields + R5 覆盖结构化字段 + KnowledgeExtractionOutput/
+        to_knowledge_evaluation_record/export_knowledge_records
+      - 既有测试演进：test_rules_tool_failure_no_knowledge → produces_failure_experience；
+        test_b1_failure_tool_llm_knowledge_rejected 断言同步（失败经验保留、成功知识拒绝）
+      - L2（麒麟 VM，被测生产代码 95fcad8）：302 passed / 0 skipped
+        （evidence/l2-kylin-vm/day8_verify_latest.log，checksum 7f32f404…）
+        ——L2 302 = L1 255 passed + 47 skipped（VM 上 47 个 SDK 用例真实执行不再 skip）
+      - L1（本地 WSL）对照：255 passed + 47 skipped（evidence/l1/day8_knowledge_extraction_local.log）
