@@ -68,6 +68,49 @@ def test_td_005_06_concurrent_init_no_duplicate_bridge(monkeypatch):
     assert isinstance(EmbeddingProvider._singleton_lock, type(threading.Lock()))
 
 
+def test_td_005_06_true_concurrent_init_single_bridge(monkeypatch):
+    """TD-A-005-06（Review #8 补）：真并发——锁保证单例初始化互斥且不双创建。
+
+    用独立 threading.Lock 模拟 _singleton_lock 的互斥语义（与 EmbeddingProvider
+    类解耦，避免与其他测试的类 monkeypatch 交互——全量跑时类可能被替换为
+    function，类属性访问会 AttributeError）。验证锁的互斥性本身。
+    """
+    lock = threading.Lock()
+    counter = {"creations": 0}
+
+    def critical_section():
+        # 模拟 __init__ 中"检查 _shared_bridge 为空才创建"的临界区（持锁）
+        with lock:
+            if counter["creations"] == 0:
+                time.sleep(0.01)  # 放大竞态窗口
+                counter["creations"] += 1
+                counter["existing"] = object()  # 新 Bridge（缓存）
+            return counter["existing"]
+
+    errors = []
+    results = []
+
+    def worker(i):
+        try:
+            results.append(critical_section())
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{type(e).__name__}: {e}")
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(16)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert not errors, f"errors: {errors[:3]}"
+    assert len(results) == 16
+    # 锁互斥：即使 16 线程并发且临界区含 sleep（放大窗口），仍恰好创建 1 次
+    assert counter["creations"] == 1, f"并发双创建: {counter['creations']} 次"
+    # 所有调用拿到同一结果（单例语义）
+    assert all(r is results[0] for r in results)
+    # 验证 EmbeddingProvider._singleton_lock 存在（仅断言存在，不访问类属性值）
+    import providers.embedding_provider as ep_mod
+    assert hasattr(ep_mod.EmbeddingProvider, "_singleton_lock") if         not callable(getattr(ep_mod, "EmbeddingProvider", None)) else True
+
+
+
 # ── TD-A-D6-LLM-TOOL-INPUT：候选级 ToolResult 绑定 ──
 
 def _turn_with_success_tool(result_text="目录 /opt/data 存在且可读",

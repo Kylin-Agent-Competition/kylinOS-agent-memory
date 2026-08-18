@@ -333,8 +333,15 @@ BridgeResult<EmbeddingVector> EmbeddingBridge::embed_impl(const std::string& tex
 }
 
 std::string EmbeddingBridge::get_default_model_name() {
-    // [TD-A-005-04 已解决] 通过 SDK get_model_list 查询真实默认模型名。
+    // [TD-A-005-04 已解决，D 主审 R-1 后] 通过 SDK get_model_list 查询真实默认模型名。
+    // 能力认证：SOURCE_VERIFIED + ABI_VERIFIED + PARTIAL（nm 确认符号导出 +
+    // L1 FakeBridge 路径验证；L2 判别性证据待宿主补充后升级 HOST_VERIFIED）。
     // 任一符号缺失/查询失败 → 返回空串（调用方回退硬编码默认名）。
+    // [Review #5 已修复] 持 mutex_ 保护 syms_/session_ 读取（与 embed 路径一致，
+    // 避免与 close/重载并发访问）。
+    // [Review #4 说明] SDK embedding_api.h 无 EmbeddingModelList 释放 API——
+    // list 为 SDK 内部管理（进程级生命周期，随 runtime/session 释放），不手动 free。
+    std::lock_guard<std::mutex> lock(mutex_);
     if (!syms_.get_model_list || !syms_.model_list_get_count ||
         !syms_.model_list_get_model || !syms_.model_info_get_model_name) {
         return "";
@@ -351,7 +358,8 @@ std::string EmbeddingBridge::get_default_model_name() {
     if (count <= 0) {
         return "";
     }
-    // 取第一个模型名（默认模型；SDK 模型列表首项通常为默认）
+    // [Review #4 假设明确] 取第一个模型名，假定"默认模型为首项"——SDK 未文档化
+    // 排序；若实测首个非默认，需改按 name 匹配或遍历全列表（后续验证项）。
     EmbeddingModelInfo* info = syms_.model_list_get_model(list, 0);
     if (!info) {
         return "";

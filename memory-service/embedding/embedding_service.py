@@ -105,6 +105,13 @@ class EmbeddingService:
             try:
                 self._provider = EmbeddingProvider()
                 self._sdk_missing = False
+            except ProviderError as exc:
+                # [Review #6 已修复] ERR_CONFIG_CONFLICT（so_path 冲突）是配置错误，
+                # 不是 SDK 缺失——必须上抛（调用方明确知道配置冲突），不降级兜底。
+                if exc.code == ProviderErrorCode.ERR_CONFIG_CONFLICT:
+                    raise
+                self._provider = _SdkMissingProvider()
+                self._sdk_missing = True
             except Exception:  # noqa: BLE001 - SDK 缺失/初始化异常 → 降级兜底
                 self._provider = _SdkMissingProvider()
                 self._sdk_missing = True
@@ -197,7 +204,9 @@ class EmbeddingService:
                 if bridge is not None else False,
                 "bridge_has_session": bool(getattr(bridge, "has_session", False))
                 if bridge is not None else False,
-                "degraded": False,
+                # [Review #7 已修复] degraded 反映 SDK 缺失状态（不再恒 false）
+                "degraded": bool(getattr(self, "_sdk_missing", False)),
+                "sdk_missing": bool(getattr(self, "_sdk_missing", False)),
             },
         }
 

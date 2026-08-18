@@ -19,6 +19,11 @@ environment: 麒麟桌面 V11 x86_64（VirtualBox VM，Runtime 1.3.0，Embedding
 model name: ensemble-embd_gte-base_uint8-text
 dim: 768 | loaded: True
 ================================================================
-结论：model_info().name 经 Bridge get_default_model_name()（SDK text_embedding_get_model_list
-动态查询，非硬编码）返回真实模型名；dim=768、loaded=True（TD-A-005-05 精确语义同步生效）。
-TD-A-005-04 验收达成。待回填 tested_commit。
+结论（D 主审 R-1 降级，2026-08-18）：本证据为 **非判别性**——
+输出 model name: ensemble-embd_gte-base_uint8-text 与代码内硬编码回退默认名完全相同，
+无法区分走的是 dlsym 动态查询路径还是回退分支；日志中 Try to get default model /
+Get default model success 属 SDK init 内部行为，非 Bridge get_default_model_name()
+查询返回值。能力认证 = SOURCE_VERIFIED + ABI_VERIFIED + PARTIAL（不升级 HOST_VERIFIED）。
+L1 已证动态路径生效（test_td_005_04_real_model_name_from_bridge：FakeBridge 返回非空时
+name=该值）；判别性 L2 证据（打印 get_default_model_name 原始返回值）待宿主 VM 补充。
+dim=768、loaded=True（TD-A-005-05 精确语义）为本证据有效部分。待回填 tested_commit。

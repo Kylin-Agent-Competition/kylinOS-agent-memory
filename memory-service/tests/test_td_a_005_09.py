@@ -18,6 +18,10 @@ def test_td_005_09_sdk_missing_degrades(monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("kylin_embedding 模块不可用")
 
+    import providers
+    # 同时 patch providers 包导出与子模块属性——embedding_service 用
+    # from providers import EmbeddingProvider（绑定 providers.EmbeddingProvider）
+    monkeypatch.setattr(providers, "EmbeddingProvider", boom)
     monkeypatch.setattr("providers.embedding_provider.EmbeddingProvider", boom)
     s = EmbeddingService()
     s.start()
@@ -68,7 +72,9 @@ def test_td_005_09_sdk_missing_health():
         raise RuntimeError("sdk missing")
 
     import pytest
+    import providers
     monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(providers, "EmbeddingProvider", boom)
     monkeypatch.setattr("providers.embedding_provider.EmbeddingProvider", boom)
     s = EmbeddingService()
     s.start()

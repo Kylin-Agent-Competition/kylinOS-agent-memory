@@ -227,7 +227,7 @@ class ToolResult:
 class PreferenceCandidate:
     key: str
     value: str
-    scope: Literal["global", "session", "project"]  # 待架构文档确认后调整
+    scope: Literal["global", "topic", "tool", "session", "time_window"]  # E 轨 Schema §2.9 五值（Day7 契约演进同步）
     confidence: float
     evidence: str
     source_event_id: str
