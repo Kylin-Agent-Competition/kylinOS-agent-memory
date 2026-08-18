@@ -57,6 +57,8 @@
 | TD-007 | 真实 Tool Result Hook 路径未通过源码 instrument 验证 | os-agent-integration / kylin-ai-runtime | Technical Debt | High | Open | C | D 主审；E 安全关注 | D3 阶段 | 源码 instrument 输出结构化 ToolExecutionEvent（trace_id、tool_name、arguments、status、result、error、started_at、finished_at），覆盖成功、失败、取消三类 | PR #19 |
 | TD-008 | Hook 点 A 的 Memory Context 注入实现状态未确认 | os-agent-integration / PreChat | Risk | High | Open | C | D 主审；E 安全关注 | D3 阶段 | 通过源码 instrument、D-Bus 解码或真实 chatAsync 入参捕获确认 Hook 点 A 是否实现 memory_context 注入；strace 外部观察只能得出 NOT_OBSERVED | PR #19 |
 | TD-009 | 非 OpenAI 风格 Tool 执行路径尚未获得结构化事件证据 | os-agent-integration / kylin-ai-runtime | Technical Debt | High | Open | C | D 主审；E 安全关注 | D3 阶段 | 源码 instrument 确认实际 Tool 执行路径并输出结构化事件；OS Agent 设计并验证替代 Hook 方案 | PR #19 |
+| TD-A-D9-SDK-MODEL-LIST-UAF | SDK text_embedding_get_model_list 在 init_session 内部使用后释放缓冲区，外部调用导致 use-after-free 段错误 | cpp-bridge/src/embedding_bridge.cpp | Risk | Medium | Open | A 轨成员 | D 主审 | Day10 | 当前缓解：不通过 get_model_list 查询，使用麒麟 VM 实测确认的默认模型名（SDK 日志：Get default model success, model: ensemble-embd_gte-base_uint8-text）；关闭条件：SDK 官方确认修复或提供 list 释放 API 后验证无二次查询段错误 | PR #38 分支 fix/td-a-pure |
+| TD-A-D9-VOID-FN-PTR | embedding_bridge.cpp get_default_model_name() void* 函数指针显式转型属 C++ UB（经不兼容函数指针类型调用） | cpp-bridge/src/embedding_bridge.cpp | Technical Debt | Low | Open | A 轨成员 | D 主审 | Day10 | 当前缓解：void* 消除类型耦合确保调用兼容（跨 ABI 防御），VM 实测稳定；关闭条件：恢复类型化函数指针并在 VM 复验，或等待 SDK 提供稳定 ABI 头文件 | PR #38 分支 fix/td-a-pure |
 
 ## 管理规则
 

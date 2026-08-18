@@ -58,8 +58,9 @@ struct EmbeddingSdkSymbols {
     // 模型（可选，Day4 骨架暂不强制）
     int (*init_model)(TextEmbeddingSession*, const char*) = nullptr;
 
-    // [TD-A-005-04 已解决] 模型列表/信息查询（SDK embedding_api.h 声明，nm 确认导出）
-    // 用于 model_info() 获取真实模型名（替代硬编码默认模型名）
+    // [TD-A-005-04] 模型列表/信息查询符号（SDK embedding_api.h 声明，nm 确认导出）。
+    // ⚠️ 不可调用！SDK 在 init_session 内部使用后释放缓冲区，外部调用 use-after-free
+    // 段错误（见 TD-A-D9-SDK-MODEL-LIST-UAF）。保留仅用于 dlsym 存在性检查。
     EmbeddingModelList* (*get_model_list)(TextEmbeddingSession*, int*) = nullptr;
     int  (*model_list_get_count)(EmbeddingModelList*) = nullptr;
     EmbeddingModelInfo* (*model_list_get_model)(EmbeddingModelList*, int) = nullptr;
@@ -128,14 +129,19 @@ private:
     bool session_destroyed_ = false;  // P0-2: destroy 后终态标志
     bool fatal_failure_ = false;      // P1-High: 不可恢复失败标志（已发生 dlclose/destroy）
     std::mutex mutex_;
-    // [TD-A-005-04] 模型名缓存：SDK get_model_list 重复调用会 use-after-free
-    // （第二次查询 list 缓冲失效段错误）——首次查询后缓存，模型名在 session
-    // 生命周期内不变；close/重载时清空。
+    // [TD-A-005-04] 模型名缓存：SDK 的 get_model_list 在 init_session 内部使用后
+    // 释放缓冲区，外部不可安全调用。因此缓存麒麟 VM 实测确认的默认模型名
+    // （SDK 日志：Get default model success, model: ensemble-embd_gte-base_uint8-text）。
+    // 在 create_session 后立即缓存（refresh_model_name_cache_locked）。
     std::string cached_model_name_;
     bool model_name_cached_ = false;
 
     // 私有辅助：仅在析构函数中调用。释放会话与 .so 句柄并清零符号表。
     void destroy_unlocked() noexcept;
+
+    // [TD-A-005-04] 刷新模型名缓存（调用方须持有 mutex_）。
+    // 在 create_session 后立即调用，赶在 embed() 触发 SDK 内部缓冲区释放之前。
+    void refresh_model_name_cache_locked();
 
     // 无异常边界的实现体，由公共方法 try/catch 包裹（P0-3/P1-5）
     BridgeStatus load_impl();

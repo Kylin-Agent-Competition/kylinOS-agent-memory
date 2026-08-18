@@ -192,7 +192,8 @@ class EmbeddingService:
                                      "provider": "ready|stopped",
                                      "bridge_loaded": bool,
                                      "bridge_has_session": bool,
-                                     "degraded": false}}
+                                     "degraded": bool,
+                                     "sdk_missing": bool}}
         """
         bridge = getattr(self._provider, "_bridge", None)
         return {

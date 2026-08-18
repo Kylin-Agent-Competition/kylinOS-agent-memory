@@ -60,6 +60,12 @@ models/
 reasonix.toml
 .scratch/
 .DS_Store
+
+# opencode (AI agent)
+opencode.json
+opencode.jsonc
+.opencode/
+AGENTS.md
 Thumbs.db
 reviewDocuments/03_environment_setup.md
 reviewDocuments/04_agent_llm_guide.md

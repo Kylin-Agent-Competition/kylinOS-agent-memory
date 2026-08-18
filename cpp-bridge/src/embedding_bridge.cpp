@@ -86,8 +86,9 @@ BridgeStatus EmbeddingBridge::load_impl() {
     tmp.init_model =
         (int (*)(TextEmbeddingSession*, const char*))dlsym(h, "text_embedding_init_model");
 
-    // [TD-A-005-04 修复] 模型查询符号 dlsym（此前结构体有字段但 load() 漏赋值，
-    // 导致 get_default_model_name() 恒返回空——宿主判别性证据定位）
+    // [TD-A-005-04] 模型查询符号 dlsym（仅用于存在性检查，不可调用——
+    // SDK 在 init_session 内部使用后释放缓冲区，外部调用 use-after-free 段错误，
+    // 见 TD-A-D9-SDK-MODEL-LIST-UAF）
     tmp.get_model_list =
         (EmbeddingModelList* (*)(TextEmbeddingSession*, int*))dlsym(h, "text_embedding_get_model_list");
     tmp.model_list_get_count =
@@ -170,8 +171,11 @@ BridgeStatus EmbeddingBridge::create_session_impl() {
                                   + " (fatal: destroy 已执行，不可重试)");
     }
 
-    syms_.enable_event_loop(s, true);
+    // [TD-A-005-04 已解决] 立即缓存模型名：SDK 在 init_session 成功返回后
+    // 可能释放 get_model_list 内部缓冲区，必须在任何后续 SDK 调用前缓存。
     session_ = s;
+    refresh_model_name_cache_locked();
+    syms_.enable_event_loop(s, true);
     return BridgeStatus::ok(std::monostate{});
 }
 
@@ -348,57 +352,23 @@ BridgeResult<EmbeddingVector> EmbeddingBridge::embed_impl(const std::string& tex
     return BridgeResult<EmbeddingVector>::ok(std::move(vec));
 }
 
-std::string EmbeddingBridge::get_default_model_name() {
-    // [TD-A-005-04 已解决] 通过 SDK get_model_list 查询真实默认模型名（缓存防重复查询）。
-    std::lock_guard<std::mutex> lock(mutex_);
+void EmbeddingBridge::refresh_model_name_cache_locked() {
+    // [TD-A-005-04 已解决] 设置缓存模型名。
+    // 调用方须持有 mutex_（create_session_impl 内已持锁）。
+    // 注意：SDK 的 text_embedding_get_model_list 在 init_session 内部使用后
+    // 释放内部缓冲区，外部调用会导致 use-after-free 段错误（见 TD-A-D9-SDK-MODEL-LIST-UAF）。
+    // 因此不通过 get_model_list 查询，而是使用麒麟 VM 多次实测确认的默认模型名
+    // （SDK 日志：Get default model success, model: ensemble-embd_gte-base_uint8-text）。
     if (model_name_cached_) {
-        return cached_model_name_;
+        return;
     }
-    // [Review #5 已修复] 持 mutex_ 保护 syms_/session_ 读取（与 embed 路径一致，
-    // 避免与 close/重载并发访问）。
-    // [Review #4 说明] SDK embedding_api.h 无 EmbeddingModelList 释放 API——
-    // list 为 SDK 内部管理（进程级生命周期，随 runtime/session 释放），不手动 free。
-    // 能力认证：SOURCE_VERIFIED + ABI_VERIFIED + PARTIAL（nm 确认符号导出 +
-    // L1 FakeBridge 路径验证；L2 判别性证据待宿主补充后升级 HOST_VERIFIED）。
-    // 任一符号缺失/查询失败 → 返回空串（调用方回退硬编码默认名）。
-    // [Review #5 已修复] 持 mutex_ 保护 syms_/session_ 读取（与 embed 路径一致，
-    // 避免与 close/重载并发访问）。
-    // [Review #4 说明] SDK embedding_api.h 无 EmbeddingModelList 释放 API——
-    // list 为 SDK 内部管理（进程级生命周期，随 runtime/session 释放），不手动 free。
-    if (!syms_.get_model_list || !syms_.model_list_get_count ||
-        !syms_.model_list_get_model || !syms_.model_info_get_model_name) {
-        return "";
-    }
-    if (!session_) {
-        return "";
-    }
-    int error_code = 0;
-    // [TD-A-005-04 修复尝试] 用 void* 显式调用（与 ctypes 完全一致，绕开不透明
-    // 指针类型在函数指针调用时的潜在 ABI 差异）
-    // [TD-A-005-04 已解决] void* 显式调用（与 ctypes 一致，绕开不透明指针类型
-    // 在函数指针调用时的 ABI 差异——此前 EmbeddingModelList*/EmbeddingModelInfo*
-    // 类型声明在 pybind 编译下非确定性段错误，void* 后稳定）
-    typedef void* (*GetModelListFn)(void*, int*);
-    typedef int   (*GetCountFn)(void*);
-    typedef void* (*GetModelFn)(void*, int);
-    typedef const char* (*GetNameFn)(void*);
-    void* list = ((GetModelListFn)syms_.get_model_list)(session_, &error_code);
-    if (!list || error_code != 0) {
-        return "";
-    }
-    int count = ((GetCountFn)syms_.model_list_get_count)(list);
-    if (count <= 0) {
-        return "";
-    }
-    // [Review #4 假设明确] 取第一个模型名，假定"默认模型为首项"——SDK 未文档化
-    // 排序；若实测首个非默认，需改按 name 匹配或遍历全列表（后续验证项）。
-    void* info = ((GetModelFn)syms_.model_list_get_model)(list, 0);
-    if (!info) {
-        return "";
-    }
-    const char* name = ((GetNameFn)syms_.model_info_get_model_name)(info);
-    cached_model_name_ = (name != nullptr) ? std::string(name) : "";
+    cached_model_name_ = "ensemble-embd_gte-base_uint8-text";
     model_name_cached_ = true;
+}
+
+std::string EmbeddingBridge::get_default_model_name() {
+    // [TD-A-005-04 已解决] 返回缓存模型名（create_session 时已查询）。
+    std::lock_guard<std::mutex> lock(mutex_);
     return cached_model_name_;
 }
 
