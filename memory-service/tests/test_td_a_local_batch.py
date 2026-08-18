@@ -69,22 +69,26 @@ def test_td_005_06_concurrent_init_no_duplicate_bridge(monkeypatch):
 
 
 def test_td_005_06_true_concurrent_init_single_bridge(monkeypatch):
-    """TD-A-005-06（Review #8 补）：真并发——锁保证单例初始化互斥且不双创建。
+    """TD-A-005-06（Review #8 补）：真并发互斥验证。
 
-    用独立 threading.Lock 模拟 _singleton_lock 的互斥语义（与 EmbeddingProvider
-    类解耦，避免与其他测试的类 monkeypatch 交互——全量跑时类可能被替换为
-    function，类属性访问会 AttributeError）。验证锁的互斥性本身。
+    两个层面：
+    1. 锁互斥语义：16 线程并发进入"检查-创建-缓存"临界区（含 sleep 放大
+       竞态窗口），持锁保证恰好创建 1 次、全部拿到同一对象——验证
+       _singleton_lock 所应保证的互斥行为。
+    2. 真实锁存在：通过 importlib 重新加载模块（绕过其他测试的 monkeypatch
+       污染——全量跑时 EmbeddingProvider 类可能被替换为 function），确认
+       EmbeddingProvider._singleton_lock 是 threading.Lock 实例。
     """
+    # 层面 1：锁互斥语义（独立锁，与类解耦——类可能被其他测试 patch）
     lock = threading.Lock()
     counter = {"creations": 0}
 
     def critical_section():
-        # 模拟 __init__ 中"检查 _shared_bridge 为空才创建"的临界区（持锁）
         with lock:
             if counter["creations"] == 0:
                 time.sleep(0.01)  # 放大竞态窗口
                 counter["creations"] += 1
-                counter["existing"] = object()  # 新 Bridge（缓存）
+                counter["existing"] = object()
             return counter["existing"]
 
     errors = []
@@ -101,13 +105,16 @@ def test_td_005_06_true_concurrent_init_single_bridge(monkeypatch):
     [t.join() for t in threads]
     assert not errors, f"errors: {errors[:3]}"
     assert len(results) == 16
-    # 锁互斥：即使 16 线程并发且临界区含 sleep（放大窗口），仍恰好创建 1 次
     assert counter["creations"] == 1, f"并发双创建: {counter['creations']} 次"
-    # 所有调用拿到同一结果（单例语义）
     assert all(r is results[0] for r in results)
-    # 验证 EmbeddingProvider._singleton_lock 存在（仅断言存在，不访问类属性值）
+
+    # 层面 2：importlib 隔离验证真实 _singleton_lock（绕过其他测试的类 patch）
+    import importlib
     import providers.embedding_provider as ep_mod
-    assert hasattr(ep_mod.EmbeddingProvider, "_singleton_lock") if         not callable(getattr(ep_mod, "EmbeddingProvider", None)) else True
+    fresh = importlib.reload(ep_mod)
+    assert isinstance(fresh.EmbeddingProvider._singleton_lock, type(threading.Lock()))
+
+
 
 
 
