@@ -1,0 +1,14 @@
+===== TD-A-005-01: SDK 无 cancel/abort 接口探测 =====
+命令: grep -rniE 'cancel|abort|interrupt|stop' /usr/include/kylin* 2>/dev/null | head -10
+/usr/include/kylin-ai/plugins/ai-engines/ondevicenlpengine.h:54:    virtual void stopGenerateContent() {};
+/usr/include/kylin-ai/plugins/ai-engines/ondevicenlpengine.h:55:    void stopChat() override;
+/usr/include/kylin-ai/plugins/ai-engines/ondevicenlpengine.h:73:    bool chatStopped_ = false;
+/usr/include/kylin-ai/plugins/ai-engines/xunfeispeechengine.h:55:    ai_engine::result::AiEngineBaseResult stopContinuousRecognition() override;
+/usr/include/kylin-ai/plugins/ai-engines/ondevicevisioncapabilityengine.h:54:    void stopMattingProcess() override;
+/usr/include/kylin-ai/plugins/ai-engines/ondevicevisioncapabilityengine.h:67:    void stopImageBinarization() override;
+/usr/include/kylin-ai/plugins/ai-engines/baiduspeechengine.h:49:    ai_engine::result::AiEngineBaseResult stopContinuousRecognition() override;
+/usr/include/kylincameralibs/KylinCamera.h:33:    CAMERA_ENCODE_STOP,
+/usr/include/kylincameralibs/KylinCamera.h:92:    virtual int camera_stop_record() = 0;
+/usr/include/kylincameralibs/KylinCamera.h:142:    int camera_stop_record();
+--- 结论：无 text_embedding_cancel/abort（仅其他引擎 stopChat/stopRecognition 等）---
+--- 证据: /mnt/shared/evidence/l2-kylin-vm/td_a_005_01_no_cancel_api.log ---
