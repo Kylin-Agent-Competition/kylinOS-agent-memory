@@ -67,3 +67,7 @@
    - **Blocker**：阻断下一个 Gate 的障碍
    - **Risk**：已知但未发生的潜在问题
    - **Technical Debt**：有意的临时实现或设计妥协
+| TD-013 | Domain NonEmptyStr 未拒绝纯空白字符串 | memory-service/domain/common.py | Technical Debt | Low | Open | E 轨成员 | D 主审 | 2026-08-25 | 明确 NonEmptyStr 正式语义；若要求有效非空文本，则 `""`、纯空格、Tab、换行均不得通过；补充对应正反向测试，Domain 全量测试通过，文档描述与实际校验一致 | PR #39 |
+| TD-014 | Domain Optional ID/字符串字段非空约束未统一 | memory-service/domain/preference.py, memory-service/domain/knowledge.py, memory-service/domain/conflict.py, memory-service/domain/forgetting.py | Technical Debt | Low | Open | E 轨成员 | D 主审 | 2026-08-25 | 盘点所有 Optional ID/Reference/Selector；存在时必须有效的字段统一使用 `Optional[NonEmptyStr]` 或等价约束，ID 列表使用统一非空元素约束；补充空串/空白/非法列表负向测试，Domain 与跨轨兼容测试全部通过 | PR #39 |
+| TD-015 | ForgetPlan 未强制 forget_mode 与模式外 target 字段互斥 | memory-service/domain/forgetting.py | Technical Debt | Low | Open | E 轨成员 | D 主审；安全边界由 E 负责 | 2026-08-27 | 每种 forget_mode 只允许其对应 selector；所有模式外 `target_*` 必须为 None；补充各模式正向测试和跨模式 selector 负向测试；Forget Preview/Execute 使用一致 selector 语义；真实遗忘执行接入前关闭 | PR #39 |
+| TD-016 | Lifecycle 过渡布尔字段与 memory_status 缺少一致性约束 | memory-service/domain/preference.py, memory-service/domain/knowledge.py | Technical Debt | Low | Open | E 轨成员 | D 主审；生命周期由 D/E 协同 | 2026-08-27 | 冻结正式 Lifecycle 状态机；明确 `memory_status` 是否为唯一生命周期真源；`is_active`/`should_decay`/`is_outdated` 删除、派生化或明确为正交属性；补充生命周期一致性和 Candidate→Stable 状态迁移测试，Domain/Service/Repository 使用统一语义 | PR #39 |
