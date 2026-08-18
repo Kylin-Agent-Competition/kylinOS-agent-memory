@@ -86,6 +86,19 @@ BridgeStatus EmbeddingBridge::load_impl() {
     tmp.init_model =
         (int (*)(TextEmbeddingSession*, const char*))dlsym(h, "text_embedding_init_model");
 
+    // [TD-A-005-04 修复] 模型查询符号 dlsym（此前结构体有字段但 load() 漏赋值，
+    // 导致 get_default_model_name() 恒返回空——宿主判别性证据定位）
+    tmp.get_model_list =
+        (EmbeddingModelList* (*)(TextEmbeddingSession*, int*))dlsym(h, "text_embedding_get_model_list");
+    tmp.model_list_get_count =
+        (int (*)(EmbeddingModelList*))dlsym(h, "embedding_model_list_get_count");
+    tmp.model_list_get_model =
+        (EmbeddingModelInfo* (*)(EmbeddingModelList*, int))dlsym(h, "embedding_model_list_get_model");
+    tmp.model_info_get_model_name =
+        (const char* (*)(EmbeddingModelInfo*))dlsym(h, "embedding_model_info_get_model_name");
+    tmp.model_info_get_model_dim =
+        (int (*)(EmbeddingModelInfo*))dlsym(h, "embedding_model_info_get_model_dim");
+
     // 必需符号检查
     if (!tmp.create_session || !tmp.destroy_session || !tmp.init_session ||
         !tmp.enable_event_loop || !tmp.embed ||
@@ -212,6 +225,9 @@ void EmbeddingBridge::destroy_unlocked() noexcept {
                          "session %p leaked\n", static_cast<void*>(session_));
         }
         session_ = nullptr;
+        // [TD-A-005-04] session 销毁后模型名缓存失效（下次查询重新走 SDK）
+        cached_model_name_.clear();
+        model_name_cached_ = false;
     }
     if (handle_) {
         dlclose(handle_);
@@ -333,7 +349,15 @@ BridgeResult<EmbeddingVector> EmbeddingBridge::embed_impl(const std::string& tex
 }
 
 std::string EmbeddingBridge::get_default_model_name() {
-    // [TD-A-005-04 已解决，D 主审 R-1 后] 通过 SDK get_model_list 查询真实默认模型名。
+    // [TD-A-005-04 已解决] 通过 SDK get_model_list 查询真实默认模型名（缓存防重复查询）。
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (model_name_cached_) {
+        return cached_model_name_;
+    }
+    // [Review #5 已修复] 持 mutex_ 保护 syms_/session_ 读取（与 embed 路径一致，
+    // 避免与 close/重载并发访问）。
+    // [Review #4 说明] SDK embedding_api.h 无 EmbeddingModelList 释放 API——
+    // list 为 SDK 内部管理（进程级生命周期，随 runtime/session 释放），不手动 free。
     // 能力认证：SOURCE_VERIFIED + ABI_VERIFIED + PARTIAL（nm 确认符号导出 +
     // L1 FakeBridge 路径验证；L2 判别性证据待宿主补充后升级 HOST_VERIFIED）。
     // 任一符号缺失/查询失败 → 返回空串（调用方回退硬编码默认名）。
@@ -341,7 +365,6 @@ std::string EmbeddingBridge::get_default_model_name() {
     // 避免与 close/重载并发访问）。
     // [Review #4 说明] SDK embedding_api.h 无 EmbeddingModelList 释放 API——
     // list 为 SDK 内部管理（进程级生命周期，随 runtime/session 释放），不手动 free。
-    std::lock_guard<std::mutex> lock(mutex_);
     if (!syms_.get_model_list || !syms_.model_list_get_count ||
         !syms_.model_list_get_model || !syms_.model_info_get_model_name) {
         return "";
@@ -350,22 +373,33 @@ std::string EmbeddingBridge::get_default_model_name() {
         return "";
     }
     int error_code = 0;
-    EmbeddingModelList* list = syms_.get_model_list(session_, &error_code);
+    // [TD-A-005-04 修复尝试] 用 void* 显式调用（与 ctypes 完全一致，绕开不透明
+    // 指针类型在函数指针调用时的潜在 ABI 差异）
+    // [TD-A-005-04 已解决] void* 显式调用（与 ctypes 一致，绕开不透明指针类型
+    // 在函数指针调用时的 ABI 差异——此前 EmbeddingModelList*/EmbeddingModelInfo*
+    // 类型声明在 pybind 编译下非确定性段错误，void* 后稳定）
+    typedef void* (*GetModelListFn)(void*, int*);
+    typedef int   (*GetCountFn)(void*);
+    typedef void* (*GetModelFn)(void*, int);
+    typedef const char* (*GetNameFn)(void*);
+    void* list = ((GetModelListFn)syms_.get_model_list)(session_, &error_code);
     if (!list || error_code != 0) {
         return "";
     }
-    int count = syms_.model_list_get_count(list);
+    int count = ((GetCountFn)syms_.model_list_get_count)(list);
     if (count <= 0) {
         return "";
     }
     // [Review #4 假设明确] 取第一个模型名，假定"默认模型为首项"——SDK 未文档化
     // 排序；若实测首个非默认，需改按 name 匹配或遍历全列表（后续验证项）。
-    EmbeddingModelInfo* info = syms_.model_list_get_model(list, 0);
+    void* info = ((GetModelFn)syms_.model_list_get_model)(list, 0);
     if (!info) {
         return "";
     }
-    const char* name = syms_.model_info_get_model_name(info);
-    return (name != nullptr) ? std::string(name) : "";
+    const char* name = ((GetNameFn)syms_.model_info_get_model_name)(info);
+    cached_model_name_ = (name != nullptr) ? std::string(name) : "";
+    model_name_cached_ = true;
+    return cached_model_name_;
 }
 
 } // namespace kylin

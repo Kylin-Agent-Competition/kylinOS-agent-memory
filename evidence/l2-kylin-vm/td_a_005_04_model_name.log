@@ -27,3 +27,26 @@ Get default model success 属 SDK init 内部行为，非 Bridge get_default_mod
 L1 已证动态路径生效（test_td_005_04_real_model_name_from_bridge：FakeBridge 返回非空时
 name=该值）；判别性 L2 证据（打印 get_default_model_name 原始返回值）待宿主 VM 补充。
 dim=768、loaded=True（TD-A-005-05 精确语义）为本证据有效部分。待回填 tested_commit。
+
+================================================================
+[2026-08-18 修复后·判别性证据] TD-A-005-04 正式解决
+================================================================
+修复内容（cpp-bridge/src/embedding_bridge.cpp + include/embedding_bridge.h）：
+1. void* 显式调用 get_model_list/get_count/get_model/get_name（与 ctypes 一致，
+   绕开不透明指针类型 EmbeddingModelList*/EmbeddingModelInfo* 在 pybind 编译下
+   的函数指针 ABI 差异——原类型声明调用非确定性段错误）
+2. 模型名缓存（cached_model_name_ + model_name_cached_）：SDK get_model_list
+   重复调用会 use-after-free（第二次查询 list 缓冲失效段错误）——首次查询后
+   缓存，session 生命周期内不变；destroy_unlocked 清缓存
+3. 构建注意：vboxsf 共享目录"时钟错误"导致增量编译产物不可靠（行为反复），
+   必须 rm -rf build 全量重编
+
+麒麟 VM 最终验证（2026-08-18，全量重编后）：
+RAW: 'ensemble-embd_gte-base_uint8-text'
+model_info().name: ensemble-embd_gte-base_uint8-text
+完整链路 OK
+
+判别性：RAW bridge.get_default_model_name() 返回非空真实模型名（SDK
+get_model_list 动态查询，非硬编码回退）；model_info().name 二次调用走缓存
+稳定不崩。TD-A-005-04 验收达成（SOURCE_VERIFIED + ABI_VERIFIED +
+HOST_VERIFIED——L1 FakeBridge 路径 + L2 宿主判别性证据双确认）。

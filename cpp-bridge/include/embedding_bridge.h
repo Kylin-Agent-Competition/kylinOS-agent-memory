@@ -128,6 +128,11 @@ private:
     bool session_destroyed_ = false;  // P0-2: destroy 后终态标志
     bool fatal_failure_ = false;      // P1-High: 不可恢复失败标志（已发生 dlclose/destroy）
     std::mutex mutex_;
+    // [TD-A-005-04] 模型名缓存：SDK get_model_list 重复调用会 use-after-free
+    // （第二次查询 list 缓冲失效段错误）——首次查询后缓存，模型名在 session
+    // 生命周期内不变；close/重载时清空。
+    std::string cached_model_name_;
+    bool model_name_cached_ = false;
 
     // 私有辅助：仅在析构函数中调用。释放会话与 .so 句柄并清零符号表。
     void destroy_unlocked() noexcept;
