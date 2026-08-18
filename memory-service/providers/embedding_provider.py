@@ -383,9 +383,9 @@ class EmbeddingProvider:
         - ondevice 为 ASSUMED True（未经 SDK API 验证）。
         - loaded（TD-A-005-05 已解决）：基于生命周期状态精确化——仅当
           _lifecycle == READY（会话已初始化且模型就绪）时 loaded=True。
-        - 模型名（TD-A-005-04 已解决）：通过 Bridge get_default_model_name()
-          查询 SDK 真实模型名；查询失败/符号缺失时回退 Day2 运行日志确认的
-          默认模型名（ensemble-embd_gte-base_uint8-text）。
+- 模型名（TD-A-005-04 Wontfix）：SDK get_model_list 外部调用 UAF（见
+           TD-A-D9-SDK-MODEL-LIST-UAF），不通过动态查询。返回 Bridge 集中缓存值
+           （create_session 时设置，SDK 日志确认的默认模型名）。
         """
         loaded = self._lifecycle == _ProviderLifecycle.READY
         default_name = "ensemble-embd_gte-base_uint8-text"  # Day2 日志确认的默认模型
@@ -397,13 +397,13 @@ class EmbeddingProvider:
                 loaded=False,
             )
         dim = self.get_dimension()
-        # [TD-A-005-04] 真实模型名：SDK get_model_list 查询（可选符号，失败回退默认）
+        # [TD-A-005-04 Wontfix] 模型名：Bridge 缓存值（SDK 日志确认，非动态查询）
         name = default_name
         try:
-            real = self._bridge.get_default_model_name()
-            if real:
-                name = real
-        except Exception:  # noqa: BLE001 - 查询失败回退默认名，不影响主链路
+            cached = self._bridge.get_default_model_name()
+            if cached:
+                name = cached
+        except Exception:  # noqa: BLE001 - 兜底回退默认名，不影响主链路
             pass
         return ModelInfo(
             name=name,

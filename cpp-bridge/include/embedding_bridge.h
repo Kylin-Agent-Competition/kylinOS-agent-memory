@@ -106,9 +106,9 @@ public:
     // ── 模型信息（TD-A-005-04） ──
 
     /**
-     * 获取默认模型名（通过 SDK get_model_list 查询真实模型名）。
-     * 返回空串表示不可用（符号缺失 / 查询失败 / 无模型）。
-     * 不抛异常；失败返回空串（调用方回退硬编码默认名）。
+     * 获取默认模型名（返回 create_session 时缓存的 SDK 日志确认值）。
+     * 不通过 SDK get_model_list 查询（外部调用 UAF，见 TD-A-D9-SDK-MODEL-LIST-UAF）。
+     * 返回空串表示缓存未就绪（session 未创建）。
      */
     std::string get_default_model_name();
 
