@@ -45,7 +45,7 @@ class FakeBridge:
         })()
 
     def get_default_model_name(self):
-        # [TD-A-005-04] FakeBridge 模拟 SDK get_model_list 返回真实模型名
+        # [TD-A-005-04 Wontfix] FakeBridge 模拟返回模型名（SDK get_model_list 外部不可调用）
         return "fake-real-model-001"
 
     def destroy_session(self):
@@ -140,7 +140,7 @@ def test_td_005_05_loaded_true_when_ready(monkeypatch, fake_bridge):
 
 
 def test_td_005_04_real_model_name_from_bridge(monkeypatch, fake_bridge):
-    """TD-A-005-04：READY 时 model_info().name = Bridge 查询的真实模型名（非硬编码）。"""
+    """TD-A-005-04：READY 时 model_info().name = Bridge 缓存值（SDK 日志确认，非 Provider 硬编码）。"""
     from providers.embedding_provider import _ProviderLifecycle
     monkeypatch.setattr(EmbeddingProvider, "_shared_dimension", 768)
     p = EmbeddingProvider.__new__(EmbeddingProvider)

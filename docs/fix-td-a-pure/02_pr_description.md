@@ -39,7 +39,7 @@
 - **[Review #3 已修复]** Day3 契约 `PreferenceCandidate.scope` 三值→五值（global/topic/tool/session/time_window，对齐 E 轨 §2.9）
 - 台账：11 项 Resolved + 1 项 Wontfix；TD-A-005-04 能力认证降级（R-1）
 - 证据：`evidence/l2-kylin-vm/td_a_005_04_model_name.log`（**补充非判别性说明，R-1**）、`td_a_005_09_sdk_missing.log`
-- 测试：`test_td_a_005_03_05.py`（7 项）+ `test_td_a_005_09.py`（4 项）+ `test_td_a_local_batch.py`（6 项）＝ **16 项回归测试**
+- 测试：`test_td_a_005_03_05.py`（7 项）+ `test_td_a_005_09.py`（4 项）+ `test_td_a_local_batch.py`（6 项）＝ **17 项回归测试**
 
 ## 明确不修改范围
 
@@ -104,7 +104,7 @@ SYNTAX OK
 $ /home/fff/projects/kylinOS-agent-memory/.venv/bin/python -m pytest tests/ -q
 272 passed, 49 skipped
 ```
-- 新增 **16 项** TD 回归测试（7+4+6，含 Review #8 真并发互斥）全绿
+- 新增 **17 项** TD 回归测试（7+4+6，含 Review #8 真并发互斥）全绿
 - skipped 47→49：新增 2 项 `test_embedding_service_real.py` 用例（KYLIN_L2=1 门控，本地无 SDK skip，VM 上真实执行）
 
 ### 安全与假实现审查
