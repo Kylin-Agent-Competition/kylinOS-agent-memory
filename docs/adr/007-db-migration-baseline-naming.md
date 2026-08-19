@@ -1,8 +1,8 @@
 # ADR-007：迁移基线命名 = `001_initial_schema.py`，后续迁移 `YYYYMMDD_<description>.py`（R-7）
 
-- **状态**：✅ 已采纳（E 决策 2026-08-17，选方案 A；Reviewer：D）
+- **状态**：✅ 已采纳（D 决策 2026-08-17，选方案 A；Reviewer：E（谢嘉然））
 - **日期**：2026-08-17
-- **决策人**：周子腾（E）｜**Reviewer**：D（待签）
+- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
 - **责任轨道**：D（DB/迁移）为主，E 审查
 - **决策版本**：`migration-naming-v1`
 - **适用范围**：Alembic 迁移目录命名约定与版本链；关联冻结文档 §4.1、需求 v1.3 §二 FR-DB-002
@@ -104,4 +104,4 @@
 - `migrations/README.md:24-27`（当前 `.sql` 示意，待校正）
 - `deliverables/D4_DB_INITIAL_REQUIREMENTS_20260817.md` §二 FR-DB-002（v1.3 已按方案 A 写）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：E 决策选方案 A（2026-08-17）；Reviewer D 签署确认后正式生效并回写冻结 §4.1（基线例外 + 后续 YYYYMMDD）。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A（2026-08-17）；Reviewer E（谢嘉然）签署确认后正式生效并回写冻结 §4.1（基线例外 + 后续 YYYYMMDD）。

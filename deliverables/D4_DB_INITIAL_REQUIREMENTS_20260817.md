@@ -1,8 +1,8 @@
 # 初版数据库需求文档（D4-D 实施输入）
 
 - **文档版本**：v1.3（2026-08-17，按 AI Reviewer 可维护性审查整改：补 Vector 存储/并发模型/乐观锁/FTS5 软删除语义等 17 项）
-- **编制人**：周子腾（E），配合 D4-D 实施
-- **审查人**：周子腾（E）人工核对（15 项，v1.1→v1.2 整改）+ AI Reviewer 可维护性审查（17 项，本版整改）
+- **编制人**：周子腾（D），配合 D4-D 实施
+- **审查人**：周子腾（D）人工核对（15 项，v1.1→v1.2 整改）+ AI Reviewer 可维护性审查（17 项，本版整改）
 - **依据**：
   - `deliverables/D4_DEPLOYMENT_FAILURE_ROUTE_FREEZE_20260807.md`（设计冻结：FRZ-DB-001~005、Migration 策略、FRZ-CFG-001、GAP-DB-001~004）
   - `deliverables/D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（IPC 正式冻结：错误码 5 项、幂等三元组、deadline）
@@ -247,16 +247,16 @@ TurnFinalizedEvent → SQLite INSERT（同步）
 
 ## 六、裁定结论与待批项
 
-> **正文即实现依据**：R-5/R-6/R-7 已由 E 决策采纳方案 A（ADR-005/006/007，2026-08-17），冻结文档 §2.2.5/§4.1 已回写；Reviewer D 签署后完成全部生效手续，D4-D 可按正文实现。
+> **正文即实现依据**：R-5/R-6/R-7 已由 D 决策采纳方案 A（ADR-005/006/007，2026-08-17），冻结文档 §2.2.5/§4.1 已回写；Reviewer E（谢嘉然）签署后完成全部生效手续，D4-D 可按正文实现。
 
 | 编号 | 项 | 结论 | 状态 | fallback（若 ADR 否决） |
 |------|-----|------|------|------------------------|
 | R-2 | migrations/README `.sql` vs `.py` | 以冻结为准：README 改 `.py` 示意 | ✅ 已定案 | — |
 | R-3 | 配置命名 `KMA_*` vs `KYLIN_MEMORY_*` | 以冻结为准：模板改 `KYLIN_MEMORY_*` 并接线 | ✅ 已定案 | — |
 | R-4 | embedding 局部 `degraded` vs 系统级降级 | 分层命名：provider 局部 vs 系统读取侧 L0-L3；写入侧走 Outbox | ✅ 已定案 | — |
-| R-5 | **DB 对外错误码与 envelope 域** | 以 IPC 冻结契约为准（5 枚举 + `status/data/server_ts`）；映射见附录 D；`ERR_*` 按 ALIGN-002/003 冻结后对齐 | ✅ 已采纳（ADR-005，E 决策方案 A；Reviewer D 待签） | 按现代码域实现并登记技术债 ALIGN-002/003 |
-| R-6 | **idempotency_cache 主键** | 复合 PK `(user_id, session_id, idempotency_key)` | ✅ 已采纳（ADR-006，E 决策方案 A；Reviewer D 待签；冻结 §2.2.5 已回写） | 临时单列 PK，批准后 Alembic 迁移为复合 PK |
-| R-7 | **迁移基线命名** | 基线 `001_initial_schema.py`，后续 `YYYYMMDD_<desc>.py` | ✅ 已采纳（ADR-007，E 决策方案 A；Reviewer D 待签；冻结 §4.1 已回写） | 按 `YYYYMMDD_initial_schema.py` 命名（加别名） |
+| R-5 | **DB 对外错误码与 envelope 域** | 以 IPC 冻结契约为准（5 枚举 + `status/data/server_ts`）；映射见附录 D；`ERR_*` 按 ALIGN-002/003 冻结后对齐 | ✅ 已采纳（ADR-005，D 决策方案 A；Reviewer E 待签） | 按现代码域实现并登记技术债 ALIGN-002/003 |
+| R-6 | **idempotency_cache 主键** | 复合 PK `(user_id, session_id, idempotency_key)` | ✅ 已采纳（ADR-006，D 决策方案 A；Reviewer E 待签；冻结 §2.2.5 已回写） | 临时单列 PK，批准后 Alembic 迁移为复合 PK |
+| R-7 | **迁移基线命名** | 基线 `001_initial_schema.py`，后续 `YYYYMMDD_<desc>.py` | ✅ 已采纳（ADR-007，D 决策方案 A；Reviewer E 待签；冻结 §4.1 已回写） | 按 `YYYYMMDD_initial_schema.py` 命名（加别名） |
 | R-8 | WAL/busy_timeout/单写多读 | 数值不冻结；**语义边界冻结**（busy_timeout 到期必须降级） | ✅ 已定案 | — |
 | R-9 | **Vector 接入方式（审查 1.2 新增）** | 附录 C 方案：官方 Vector Engine，collection 命名 + 关联键；具体接入接口（C++ 桥/HTTP）由 D4-D 在现有 ABI 证据上确认 | ⏳ 待 D4-D 技术确认（不阻塞 SQLite 部分开工） | 初版 Vector 降级为 FTS5-only（纯关键词检索） |
 
@@ -339,6 +339,6 @@ TurnFinalizedEvent → SQLite INSERT（同步）
 
 | 角色 | 姓名 | 日期 | 结论 |
 |------|------|------|------|
-| 需求编制 | 周子腾（E） | 2026-08-17 | 待确认 |
+| 需求编制 | 周子腾（D） | 2026-08-17 | 待确认 |
 | D4-D 实施 | 待填写 | | |
 | Reviewer | 待填写 | | |

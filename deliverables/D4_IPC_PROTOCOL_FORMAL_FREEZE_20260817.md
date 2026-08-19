@@ -1,8 +1,8 @@
-# IPC 协议正式冻结声明（长度前缀 JSON / 错误码 / 幂等 / deadline / protocol_version）
+# IPC 协议冻结声明（待 D/E 签署后正式生效）（长度前缀 JSON / 错误码 / 幂等 / deadline / protocol_version）
 
 - **声明日期**：2026-08-17
-- **声明人**：周子腾（E）
-- **声明性质**：正式冻结（在 `D4_IPC_PROTOCOL_FREEZE_20260807.md` 设计冻结基础上，经 8/16 补充审查确认后转为正式冻结）
+- **声明人**：周子腾（D）
+- **声明性质**：正式冻结**（待签署生效）**——在 `D4_IPC_PROTOCOL_FREEZE_20260807.md` 设计冻结基础上，经 8/16 补充审查确认；冻结内容已定稿，但须 D/E 签署后方可正式生效。
 - **关联文档**：
   - `D4_IPC_PROTOCOL_FREEZE_20260807.md`（冻结对象与定义明细，本声明不重复，仅引用）
   - `D4_GATE0_SUPPLEMENTARY_REVIEW_20260816.md` §六.2（环境基线升级至 5.0.3 后确认「不受影响，冻结结论继续有效」）
@@ -16,13 +16,13 @@
 
 | 编号 | 冻结对象 | 冻结日期 | 本声明确认状态 |
 |------|---------|---------|--------------|
-| FRZ-IPC-001 | 长度前缀 JSON 线协议（4 字节 BE uint32 + UTF-8 JSON，最大 64KB） | 2026-08-07 | ✅ 正式冻结 |
-| FRZ-IPC-002 | 错误码枚举（UNSUPPORTED_METHOD / INVALID_REQUEST / PROTOCOL_ERROR / INTERNAL_ERROR / **TIMEOUT**） | 2026-08-07（TIMEOUT 于 2026-08-17 补充，见 §3.2） | ✅ 正式冻结 |
-| FRZ-IPC-003 | protocol_version `"1.0"`（MAJOR.MINOR，主版本变更需 ADR） | 2026-08-07 | ✅ 正式冻结 |
-| FRZ-IPC-004 | deadline_ms 字段定义与行为约定（类型/位置/超时语义/延迟预算参考） | 2026-08-07 | ✅ 正式冻结（字段与语义）；超时行为复测缺口 TD-IPC-003 保持登记 |
-| FRZ-IPC-005 | 幂等方案（idempotency_key + 三元组作用域 + 24h TTL） | 2026-08-07 | ✅ 设计层正式冻结（实现待 D4-D） |
-| FRZ-IPC-006 | JSON 请求/响应顶级字段结构（请求 7 字段 / 响应 6 字段 + 错误附加字段） | 2026-08-07 | ✅ 正式冻结（仅允许新增 optional 字段） |
-| FRZ-IPC-007 | 方法路由表（活跃 3 项：echo / health / memory.retrieve；memory.store 未实现返回 UNSUPPORTED_METHOD；evidence.record 已按 P0-4 移除） | 2026-08-07（2026-08-17 更正） | ✅ 正式冻结 |
+| FRZ-IPC-001 | 长度前缀 JSON 线协议（4 字节 BE uint32 + UTF-8 JSON，最大 64KB） | 2026-08-07 | ✅ 协议冻结（待 D/E 签署后正式生效） |
+| FRZ-IPC-002 | 错误码枚举（UNSUPPORTED_METHOD / INVALID_REQUEST / PROTOCOL_ERROR / INTERNAL_ERROR / **TIMEOUT**） | 2026-08-07（TIMEOUT 于 2026-08-17 补充，见 §3.2） | ✅ 协议冻结（待 D/E 签署后正式生效） |
+| FRZ-IPC-003 | protocol_version `"1.0"`（MAJOR.MINOR，主版本变更需 ADR） | 2026-08-07 | ✅ 协议冻结（待 D/E 签署后正式生效） |
+| FRZ-IPC-004 | deadline_ms 字段定义与行为约定（类型/位置/超时语义/延迟预算参考） | 2026-08-07 | ✅ 协议冻结（待 D/E 签署后正式生效；字段与语义）；超时行为复测缺口 TD-IPC-003 保持登记 |
+| FRZ-IPC-005 | 幂等方案（idempotency_key + 三元组作用域 + 24h TTL） | 2026-08-07 | ✅ 设计层协议冻结（待 D/E 签署后正式生效；实现待 D4-D） |
+| FRZ-IPC-006 | JSON 请求/响应顶级字段结构（请求 7 字段 / 响应 6 字段 + 错误附加字段） | 2026-08-07 | ✅ 协议冻结（待 D/E 签署后正式生效；仅允许新增 optional 字段） |
+| FRZ-IPC-007 | 方法路由表（活跃 3 项：echo / health / memory.retrieve；memory.store 未实现返回 UNSUPPORTED_METHOD；evidence.record 已按 P0-4 移除） | 2026-08-07（2026-08-17 更正） | ✅ 协议冻结（待 D/E 签署后正式生效） |
 
 **变更控制**：任何变更须走 ADR + Gate 流程；允许扩展范围（新增 optional 字段、新增错误码、次版本号兼容新增）见 `D4_IPC_PROTOCOL_FREEZE_20260807.md` §1.3 / §2.4 / §3。
 
@@ -71,8 +71,8 @@
 
 | 角色 | 姓名 | 日期 | 结论 |
 |------|------|------|------|
-| 冻结声明人 | 周子腾（E） | 2026-08-17 | 待确认 |
-| Reviewer 1 | 待填写 | | |
+| 冻结声明人 | 周子腾（D） | 2026-08-17 | 待确认 |
+| Reviewer 1 | E（谢嘉然，待签） | | |
 | Reviewer 2 | 待填写 | | |
 
 > 注：本声明由 D4 阶段人工审查召集时一并裁决确认；确认后登记 `evidence/index.yaml`（如新增 IPC-FREEZE-001 条目）并关联冻结 Commit。

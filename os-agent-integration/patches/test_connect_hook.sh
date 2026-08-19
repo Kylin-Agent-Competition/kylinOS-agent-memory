@@ -100,7 +100,7 @@ compile_hook() {
     fi
     record_result "hook_source_exists" "PASS" "${src}"
 
-    if gcc -shared -fPIC -O2 -ldl -Wall -Wextra \
+    if gcc -shared -fPIC -O2 -pthread -ldl -Wall -Wextra \
         -o "${HOOK_SO}" "$src" 2>>"${TEST_LOG}"; then
         record_result "hook_compile" "PASS" "compiled to ${HOOK_SO}"
     else
@@ -531,14 +531,14 @@ test_no_hook_fails() {
     return 0
 }
 
-# ---- Test 8: abstract socket pass-through ----
-test_hook_abstract_socket() {
+# ---- Test 8: non-matching filesystem socket pass-through ----
+test_hook_non_matching_passthrough() {
     log_test ""
-    log_test "========== [TEST 8] Abstract socket pass-through =========="
+    log_test "========== [TEST 8] Non-matching filesystem socket pass-through =========="
 
-    # Abstract sockets start with '\0' in sun_path — hook should pass them through.
-    # We can't easily create one from bash, but we can check that ANY connect()
-    # to a non-matching path is pass-through.
+    # 真实 Linux Abstract UNIX Socket（sun_path[0]=='\0'）无法从 bash 构造，
+    # 此处仅验证「普通文件系统 socket 且路径不匹配」时的 pass-through 行为。
+    # （Abstract socket 专项测试留待 D4+ 独立补充，见 PR #42 Review 结论）
 
     # Use a path that definitely doesn't match
     local output
@@ -640,7 +640,7 @@ main() {
     sleep 0.5
     test_no_hook_fails
     sleep 0.5
-    test_hook_abstract_socket
+    test_hook_non_matching_passthrough
 
     # Cleanup
     cleanup_server

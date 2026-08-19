@@ -510,7 +510,7 @@ entries:
     source: "evidence/l2-kylin-vm/d4_agent_mode_5_0_3_20260816/"
     report: "deliverables/D4_GATE0_AGENT_MODE_MANUAL_VERIFICATION_20260816.md"
     date: "2026-08-16"
-    reviewer: "周子腾（E）"
+    reviewer: "谢嘉然（E）"
     limitations: "V4 Skill/Harness 调用未验证（日志无 skill 调用记录，无法观测）；V5 取消已验证、失败场景已观测（V5-1/V5-3 补测：ls -la /root → 权限不够，助手如实报告失败、无成功结果；宿主日志无沉淀记录）但端到端『失败状态建模/失败不沉淀』仍需 Hook 集成后验证（宿主无沉淀机制，无法归因拦截）；本验证仅证明宿主具备智能体模式+工具调用能力，本项目 Hook 集成端到端链路尚未验证"
     checksum_sha256: "5f96f2ca09d5b4b2dc1b61f4966894d8ac719424973c1cb8255efdce67177bac"
     details: |
@@ -618,7 +618,7 @@ entries:
     evidence_level: "E4"
     source: "evidence/gate0_echo/ut_results/ut1_results.txt"
     date: "2026-08-07"
-    reviewer: "周子腾（E）"
+    reviewer: "谢嘉然（E）"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
@@ -632,16 +632,16 @@ entries:
 
   - id: "GATE0-UT-002"
     task_id: "D1-C"
-    description: "Gate 0 IPC 重启复测 UT-2（10/12 PASS，核心链路全通过）—— stop→detect→restart→recover / kill-9→recover / 快速重启×5 / 超时"
-    status: "HOST_VERIFIED"
+    description: "Gate 0 IPC 重启复测 UT-2（overall 10/12 PASS，核心 IPC 通信/恢复链路 PASS）—— stop→detect→restart→recover / kill-9→recover / 快速重启×5 / 超时"
+    status: "PARTIAL"
     evidence_level: "E4"
     source: "evidence/gate0_echo/ut_results/ut2_results.txt"
     date: "2026-08-07"
-    reviewer: "周子腾（E）"
-    runtime_result: "PASS"
+    reviewer: "谢嘉然（E）"
+    runtime_result: "PARTIAL"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "2 个 FAIL（UT2-STOP / UT2-KILL9-STOP）为进程管理竞态条件（stop_server 立即检查 pgrep 的 timing 误判），不影响 IPC 通信行为验证；重连机制（TD-IPC-004）与 deadline 超时行为复测（TD-IPC-003）仍为缺口"
+    limitations: "overall 10/12：核心 IPC 通信/恢复链路（health baseline / stop-detect / restart-server / restart-recover / socket-cleanup / kill9-pre / kill9-recover / rapid-restart 5/5 / timeout / final-recover）PASS；2 个 FAIL（UT2-STOP / UT2-KILL9-STOP）为进程管理竞态条件（stop_server 立即检查 pgrep 的 timing 误判），不影响 IPC 通信行为验证；重连机制（TD-IPC-004）与 deadline 超时行为复测（TD-IPC-003）仍为缺口"
     checksum_sha256: "2d93c5e8c24e9a5ca236501f6ff6202b0f5073cee1ec4ce71ee41400fe400aaf"
     details: |
       执行环境: 麒麟 V11 VM (Linux 6.6.0-63-generic, x86_64)

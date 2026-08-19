@@ -30,6 +30,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dlfcn.h>
+#include <pthread.h>
+#include <stddef.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <stdarg.h>
@@ -43,7 +45,7 @@ static int (*real_connect)(int sockfd, const struct sockaddr *addr, socklen_t ad
 static const char *g_match_substring = NULL;
 static const char *g_redirect_path = NULL;
 static int g_debug = 0;
-static int g_initialized = 0;
+static pthread_once_t init_once = PTHREAD_ONCE_INIT;
 
 /* ---- 工具函数 ---- */
 static void hook_debug(const char *fmt, ...) {
@@ -67,11 +69,8 @@ static void hook_error(const char *fmt, ...) {
     va_end(ap);
 }
 
-/* ---- 一次性初始化 ---- */
-static void ensure_initialized(void) {
-    if (g_initialized) return;
-    g_initialized = 1;
-
+/* ---- 一次性线程安全初始化 ---- */
+static void init_hook(void) {
     /* 获取真实 connect() */
     if (!real_connect) {
         real_connect = dlsym(RTLD_NEXT, "connect");
@@ -105,7 +104,12 @@ static void ensure_initialized(void) {
 
 /* ---- 被拦截的 connect() ---- */
 int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
-    ensure_initialized();
+    pthread_once(&init_once, init_hook);
+
+    /* 前置边界检查: NULL 地址或过短 addrlen 直接透传, 避免无符号下溢与越界读取 */
+    if (addr == NULL || addrlen < offsetof(struct sockaddr_un, sun_path)) {
+        return real_connect(sockfd, addr, addrlen);
+    }
 
     /* 只处理 AF_UNIX (本地 socket) */
     if (addr->sa_family != AF_UNIX) {

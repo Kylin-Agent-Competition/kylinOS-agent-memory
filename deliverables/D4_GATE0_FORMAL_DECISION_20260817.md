@@ -16,7 +16,7 @@
   - `docs/baseline/v2-20260816/05_capability_boundary_reevaluation_20260816.md`（能力边界重评 v1.3）
   - `docs/baseline/v2-20260816/06_memorymap_capability_boundary_20260817.md`（memorymap 能力边界调查）
   - `evidence/index.yaml`（证据索引 Schema 1.1）
-- **审查人**：周子腾（E，主持人）；Reviewer 1（D）；Reviewer 2（E）
+- **审查人**：周子腾（D，主持人）；Reviewer 1（E，谢嘉然）；Reviewer 2（待定）
 
 > 本文档同时回答三个问题：① 每项裁决关联的证据索引；② 该结论是否需在新环境基线（5.0.3）复测；③ 复测应关注哪些项。
 
@@ -37,7 +37,7 @@
 |---|--------|-----------|-------------|-------------|----------------|
 | 1 | 部署 ECHO-009（构建顺序） | PASS_WITH_DEBT (TD-DEPLOY-001) | **维持** PASS_WITH_DEBT | `D2-3-DEPLOY-STARTUP`（HOST_VERIFIED/E4）；`D2-7-ROLLBACK-BASELINE`（回退对照） | **是**（部署布局 /opt/apps→/opt/kaiming/layers，见 AGT-006） |
 | 2 | KYSEC | PASS_WITH_DEBT (TD-KYSEC-001) | **维持** PASS_WITH_DEBT（镜像无 kysec 内核） | `D2-6-KYSEC-SCOPE`（UNVERIFIED/E4，仅 ACL 模拟）；`ECHO-005`（ACL_SPIKE=VERIFIED, KYSEC_REAL_RULE=UNVERIFIED） | 否（内核能力与助手版本无关），但新部署路径下 ACL 有效性需确认 |
-| 3 | 原文隔离 | PASS（UT-1 11/11） | **维持** PASS（UDS Echo 层） | `evidence/gate0_echo/ut_results/ut1_results.txt`（⚠️ 未登记 index.yaml，见 §七）；`ECHO-005` | **是**（5.0.3 聊天 DB Schema 变化，request_data 字段） |
+| 3 | 原文隔离 | PASS（UT-1 11/11） | **维持** PASS（UDS Echo 层） | `evidence/gate0_echo/ut_results/ut1_results.txt`（已登记 `GATE0-UT-001`）；`ECHO-005` | **是**（5.0.3 聊天 DB Schema 变化，request_data 字段） |
 | 4 | 真实 Tool Result (AGT-004) | 批准替代路线 B (ADR-004) | **上调为 PARTIAL**（见 §2.2） | `AGT-004-5.0.3-001`（HOST_VERIFIED/E4）；`D2-1-KAIMING-HOOK`（UNBLOCKED）；`D4-OPENKYLIN-HOOK`（PARTIAL/E3） | **是**（本项目 Hook 端到端三场景） |
 | 5 | UDS IPC | PASS_WITH_DEBT (TD-IPC-002~004) | **维持** PASS_WITH_DEBT | `ECHO-005`；`D4-R3-VERIFY`（HOST_VERIFIED/E4）；`D2-4-SOCKET-AUDIT` | 否（自研协议与宿主版本无关），但 deadline 超时行为待补齐 |
 
@@ -46,7 +46,7 @@
 | 字段 | 内容 |
 |------|------|
 | 提议 | AGT-004 由「PARTIAL(模拟)+BLOCKED(真实)」上调为「**PARTIAL（宿主能力已证 E4 + 本项目集成待验证）**」 |
-| 关联证据 | `AGT-004-5.0.3-001`（evidence/index.yaml，HOST_VERIFIED/E4，reviewer=周子腾 E）；证据文件 `evidence/l2-kylin-vm/d4_agent_mode_5_0_3_20260816/`（7 文件 + MANIFEST.sha256）；报告 `deliverables/D4_GATE0_AGENT_MODE_MANUAL_VERIFICATION_20260816.md` |
+| 关联证据 | `AGT-004-5.0.3-001`（evidence/index.yaml，HOST_VERIFIED/E4，reviewer=谢嘉然（E））；证据文件 `evidence/l2-kylin-vm/d4_agent_mode_5_0_3_20260816/`（7 文件 + MANIFEST.sha256）；报告 `deliverables/D4_GATE0_AGENT_MODE_MANUAL_VERIFICATION_20260816.md` |
 | 依据 | ① 5.0.3 智能体模式 + 工具调用人工验证通过（V1/V2/V3/V5-2 ✅，shell tool_call → tool_result 音量 67% → 回复闭环）；② 失败场景已观测（V5-1/V5-3：`ls -la /root` → 权限不够，宿主如实报告失败，日志无沉淀） |
 | 待验证边界 | 本项目 Hook（事件捕获 → Memory Service 落库）端到端**未**在 5.0.3 验证；不得将「宿主能调工具」等同「本项目 Hook 已验证」 |
 | **人工裁决结果** | ☑ 接受上调（与 08-16 补充审查一致）　☐ 否决维持 BLOCKED　☐ 有条件接受（条件：______） |
@@ -84,7 +84,7 @@
 | `MEM-BOUNDARY-001` | 官方记忆地图 memorymap 能力边界调查（纯 UI + recollect 记忆内核，phase1~10） | HOST_VERIFIED | E3 | MEM-001/002 定案（§5.2） |
 | `GATE0-ENV-002` | 环境基线 v2 调查（01 SDK/ABI 基线、02 环境采集、03 防御清单、05 能力边界 v1.3） | HOST_VERIFIED | E3 | Gate 0「VM 环境」认证支撑（§5.0） |
 
-> 注：UT-1/UT-2 结果尚未登记 index.yaml，见 §七「登记缺口」。
+> 注：UT-1/UT-2 结果已登记 index.yaml（`GATE0-UT-001`/`GATE0-UT-002`）。
 
 ---
 
@@ -206,7 +206,7 @@
 
 | 缺口 | 说明 | 处置 |
 |------|------|------|
-| UT-1/UT-2 证据未登记 index.yaml | `evidence/gate0_echo/ut_results/ut1_results.txt`（原文隔离 11/11）、`ut2_results.txt`（IPC 重启 10/12）存在但无索引条目 | 审查后补登记 |
+| UT-1/UT-2 证据已登记 index.yaml | `evidence/gate0_echo/ut_results/ut1_results.txt`（原文隔离 11/11）、`ut2_results.txt`（IPC 重启 10/12） | ✅ 已补登记 `GATE0-UT-001`（11/11）/`GATE0-UT-002`（10/12 PARTIAL） |
 | 环境基线 v2 调查本体未登记 index.yaml | ~~`docs/baseline/v2-20260816/01~06` 五份文档~~ | ✅ 已补 `GATE0-ENV-002`（HOST_VERIFIED/E3，覆盖 01/02/03/05） |
 | TD-DEPLOY-001/TD-KYSEC-001/TD-IPC-002~004 未入 TECHNICAL_DEBT_REGISTER.md | 08-07 结论引用这些编号，但登记表中仅有 TD-007/008/009、R-ARCH-05 | 补登记至技术债登记表 |
 | ADR-004 无正式 ADR 文件 | 08-07 结论以正文形式记录 ADR-004，docs/adr/ 目录仅有 ADR-001 | 补写 `docs/adr/004-*` 正式文件 |
@@ -234,8 +234,8 @@
 
 | 角色 | 姓名 | 日期 | 结论 |
 |------|------|------|------|
-| 审查主持人 | 周子腾（E） | 2026-08-17 | PASS_WITH_DEBT（已确认） |
-| Reviewer 1 | 待填写（D） | | |
-| Reviewer 2 | 待填写（E） | | |
+| 审查主持人 | 周子腾（D） | 2026-08-17 | PASS_WITH_DEBT（已确认） |
+| Reviewer 1 | E（谢嘉然，待签） | | |
+| Reviewer 2 | 待填写 | | |
 
 > 依据 AGENTS.md：D 与 E 为指定 Reviewer，自审无效。

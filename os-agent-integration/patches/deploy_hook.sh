@@ -92,7 +92,7 @@ ssh $SSH_OPTS "$KYLIN_USER@$KYLIN_HOST" "
 
     echo '=== 编译 libconnect_hook.so ==='
     cd $REMOTE_BASE/src/hook
-    gcc -shared -fPIC -O2 -ldl -Wall -Wextra \
+    gcc -shared -fPIC -O2 -pthread -ldl -Wall -Wextra \
         -o $REMOTE_BASE/lib/libconnect_hook.so \
         libconnect_hook.c
 
@@ -123,12 +123,12 @@ echo "     python3 $REMOTE_BASE/bin/kylin-memory-echo-server --dev &"
 echo "     # 编译测试客户端"
 echo "     echo '#include ...' | gcc -std=c11 -x c - -o /tmp/test_hook"
 echo "     # 测试 hook"
-echo "     CONNECT_HOOK_DEBUG=1 LD_PRELOAD=$REMOTE_BASE/lib/libconnect_hook.so \\
+echo "     CONNECT_HOOK_DEBUG=1 LD_PRELOAD=$REMOTE_BASE/lib/libconnect_hook.so \\"
 echo "       $REMOTE_BASE/bin/echo_client --method health"
 echo ""
 echo "  3. 针对真实 kylin-aiassistant 测试 (需先编译/安装):"
-echo "     CONNECT_HOOK_DEBUG=1 \\
-echo "     LD_PRELOAD=$REMOTE_BASE/lib/libconnect_hook.so \\
+echo "     CONNECT_HOOK_DEBUG=1 \\"
+echo "     LD_PRELOAD=$REMOTE_BASE/lib/libconnect_hook.so \\"
 echo "       /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-aiassistant/.../files/bin/kylin-aiassistant"
 echo ""
 echo "  4. 环境变量参考:"
