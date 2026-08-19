@@ -63,6 +63,29 @@ _METHODS = {
 }
 
 
+class _SdkMissingProvider:
+    """[TD-A-005-09 已解决] SDK 缺失降级 provider（EmbeddingProvider 构造失败的兜底）。
+
+    - start/close: no-op（不尝试加载 SDK）
+    - embed: 抛 ERR_SDK_NOT_LOADED → EmbeddingService 层转为真实降级（空向量+degraded）
+    - get_dimension: 返回 0（无缓存键命中；D9 缓存 getattr 探测兼容）
+    - _bridge: None → health() 的 bridge_loaded=false
+    """
+
+    def start(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+    def get_dimension(self) -> int:
+        return 0
+
+    def embed(self, text: str, *, timeout_ms: int = 5000) -> EmbeddingResult:
+        raise ProviderError(ProviderErrorCode.ERR_SDK_NOT_LOADED,
+                            "Embedding SDK 缺失（kylin_embedding 模块不可用）")
+
+
 class EmbeddingService:
     """Embedding 最小垂直链路 Service。
 
@@ -72,16 +95,49 @@ class EmbeddingService:
 
     def __init__(self, provider: Optional[EmbeddingProvider] = None) -> None:
         # Day4 Provider 是进程级单例：不传则内部创建（共享 Bridge/session）
-        self._provider = provider if provider is not None else EmbeddingProvider()
+        # [TD-A-005-09 已解决] 构造失败（SDK 缺失/损坏）→ 兜底降级 provider：
+        # 无 SDK 时 UDS server 可启动，embed → ok+degraded 空向量，
+        # health → bridge_loaded=false（不再构造即抛 RuntimeError 崩溃）
+        if provider is not None:
+            self._provider = provider
+            self._sdk_missing = False
+        else:
+            try:
+                self._provider = EmbeddingProvider()
+                self._sdk_missing = False
+            except ProviderError as exc:
+                # [Review #6 已修复] ERR_CONFIG_CONFLICT（so_path 冲突）是配置错误，
+                # 不是 SDK 缺失——必须上抛（调用方明确知道配置冲突），不降级兜底。
+                if exc.code == ProviderErrorCode.ERR_CONFIG_CONFLICT:
+                    raise
+                self._provider = _SdkMissingProvider()
+                self._sdk_missing = True
+            except Exception:  # noqa: BLE001 - SDK 缺失/初始化异常 → 降级兜底
+                self._provider = _SdkMissingProvider()
+                self._sdk_missing = True
         self._started = False
 
     # ── 生命周期 ──
 
     def start(self) -> None:
-        """启动 Service：确保 Provider 就绪。幂等。"""
+        """启动 Service：确保 Provider 就绪。幂等。
+
+        [TD-A-005-09 已解决] 真实"so 缺失"场景（kylin_embedding 模块在但
+        .so 动态库被移走）：EmbeddingProvider.start() 抛 ERR_SDK_NOT_LOADED
+        （BridgeSoNotFoundError）——捕获并切换降级 provider，server 仍可启动
+        （embed → ok+degraded 空向量；health → bridge_loaded=false）。
+        """
         if self._started:
             return
-        self._provider.start()
+        try:
+            self._provider.start()
+        except ProviderError as exc:
+            if exc.code == ProviderErrorCode.ERR_SDK_NOT_LOADED:
+                # .so 缺失/不可加载：降级兜底（服务可启动，返回结构化降级）
+                self._provider = _SdkMissingProvider()
+                self._sdk_missing = True
+            else:
+                raise
         self._started = True
 
     def close(self) -> None:
@@ -136,7 +192,8 @@ class EmbeddingService:
                                      "provider": "ready|stopped",
                                      "bridge_loaded": bool,
                                      "bridge_has_session": bool,
-                                     "degraded": false}}
+                                     "degraded": bool,
+                                     "sdk_missing": bool}}
         """
         bridge = getattr(self._provider, "_bridge", None)
         return {
@@ -148,7 +205,9 @@ class EmbeddingService:
                 if bridge is not None else False,
                 "bridge_has_session": bool(getattr(bridge, "has_session", False))
                 if bridge is not None else False,
-                "degraded": False,
+                # [Review #7 已修复] degraded 反映 SDK 缺失状态（不再恒 false）
+                "degraded": bool(getattr(self, "_sdk_missing", False)),
+                "sdk_missing": bool(getattr(self, "_sdk_missing", False)),
             },
         }
 

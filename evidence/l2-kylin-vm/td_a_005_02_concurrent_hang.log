@@ -1,0 +1,16 @@
+===== TD-A-005-02: 并发 embed 挂起探测 =====
+命令: 4 线程 × 100 次 embed, timeout 30
+start...
+[1787025873519] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1787025873525] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
+[1787025873567] [32minfo [0m Proxy init success,sessionId is: 1676263852 
+[1787025873575] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
+[1787025873579] [32minfo [0m Try to get default model 
+[1787025873603] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
+[1787025873610] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
+[1787025873616] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 1676263852 
+[1787025873621] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
+provider ready
+elapsed=28.80s errors=[] total=0
+--- 结论: 若卡在 provider ready 后直到 timeout 30 被杀（无 elapsed 输出）=> 并发挂起确认，顺序调用正确 ---
+--- 证据: /mnt/shared/evidence/l2-kylin-vm/td_a_005_02_concurrent_hang.log ---

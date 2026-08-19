@@ -147,3 +147,51 @@ def test_degraded_when_so_missing():
     assert resp["result"]["dimension"] == 0
     assert resp["degraded_reason"]["code"] == "ERR_SDK_NOT_LOADED"
     svc.close()
+
+
+# ── TD-A-005-09：SDK 缺失降级（2026-08-16） ──
+
+def test_td_005_09_sdk_missing_degrades(monkeypatch):
+    """TD-A-005-09：EmbeddingProvider 构造失败（SDK 缺失）→ 降级 provider 兜底。
+
+    验证：
+    1. EmbeddingService() 不再构造即抛（可启动）
+    2. embed → ok+degraded 空向量（ERR_SDK_NOT_LOADED）
+    3. health → bridge_loaded=false
+    """
+    from embedding.embedding_service import EmbeddingService
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("kylin_embedding 模块不可用")
+
+    monkeypatch.setattr("providers.embedding_provider.EmbeddingProvider", boom)
+    s = EmbeddingService()
+    s.start()
+    r = s.embed("测试文本")
+    assert r["ok"] is True
+    assert r["degraded"] is True
+    assert r["result"]["vector"] == []
+    assert r["result"]["dimension"] == 0
+    assert r["degraded_reason"]["code"] == "ERR_SDK_NOT_LOADED"
+    h = s.health()["result"]
+    assert h["bridge_loaded"] is False
+    s.close()
+
+
+def test_td_005_09_sdk_missing_no_crash_on_server(monkeypatch):
+    """TD-A-005-09：UDS server 注入降级 provider 可启动（不崩溃）。"""
+    from embedding.embedding_service import EmbeddingService
+
+    class FakeSdkMissing:
+        def start(self): pass
+        def close(self): pass
+        def get_dimension(self): return 0
+        def embed(self, text, *, timeout_ms=5000):
+            from providers import ProviderError, ProviderErrorCode
+            raise ProviderError(ProviderErrorCode.ERR_SDK_NOT_LOADED, "so missing")
+
+    s = EmbeddingService(provider=FakeSdkMissing())
+    s.start()
+    r = s.embed("测试")
+    assert r["degraded"] is True
+    s.close()

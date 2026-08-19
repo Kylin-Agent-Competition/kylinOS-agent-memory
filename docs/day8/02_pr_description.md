@@ -54,7 +54,9 @@ Day7（PR #36 已合并）交付偏好抽取深化（规则/Provider 协同 + �
 ## 关联任务与技术债
 
 - 关联：B 轨 D8（知识 FTS/Vector 索引字段）、D 轨 D8（memory_relation/memory_conflict 持久化）、E 轨 D8（六类知识/证据关系/冲突优先级业务规则）
-- 无新增 TD；沿用 TD-A-D6-EXEC-RACE（全量 -v 偶发 test_server_lifecycle 竞态，复跑即绿，非阻断）、TD-A-D7-CACHE-USER-DIMENSION、TD-A-D7-LLM-HANG-DEGRADE（知识路径同受约束）
+- 沿用 TD：TD-A-D6-EXEC-RACE（全量 -v 偶发 test_server_lifecycle 竞态，复跑即绿，非阻断）、TD-A-D7-CACHE-USER-DIMENSION、TD-A-D7-LLM-HANG-DEGRADE（知识路径同受约束）
+- **TD-A-D6-LLM-TOOL-INPUT（Reviewer TD-01，已登记于台账）**：Knowledge LLM 目前为事件级门控（存在 ≥1 真实 success ToolResult 即允许 LLM 路径），尚未建立"每条 LLM KnowledgeCandidate → 具体 success ToolResult.result"的候选级 provenance 绑定；实现剥离 LLM 提供的 evidence 防止伪造来源。当前无真实 LLM、无 success Tool 不进入 LLM 路径、规则路径独立工作、输出仅 candidate——按已有技术债处理，**不阻断本 PR，无需修改生产代码**；关闭条件见台账（真实 LLM 接入前完成候选级绑定 + provenance 关联 + 正/负向测试）
+- **TD-A-D8-CONTRACT-CATEGORY-SYNC（Reviewer TD-02，本 PR 新增登记）**：Day3 Provider 文档（docs/day3/06_provider_contract_v1.md）category 仍为五值，Day8 实现已按 E 轨业务 Schema 用六值（fact/workflow/case/template/constraint/failure_experience）——当前六类实现方向合理（非生产代码错误），仅旧文档未同步；关闭条件见台账（同步文档或 B/C/D 消费前关闭），**不阻断本 PR**
 
 ## L0-L3 命令与证据
 
