@@ -1,14 +1,19 @@
 """
-candidate_governance.py — Day5 E 轨最小 Candidate 业务准入与 Domain 转换服务
+candidate_governance.py — Day5 E 轨 Candidate 业务准入与 Domain 转换服务
 
 标记：D5E_CANDIDATE_GOVERNANCE / NOT_PERSISTENCE / NOT_EXTRACTION
 
-职责（任务 day5-e-01-candidate-domain-governance-v1，方案 PLAN_READY）：
+职责（任务 day5-e-01-candidate-domain-governance-v1 与
+day5-e-02-event-candidate-admission-gate-v1，方案 PLAN_READY）：
 - 复用 A 轨 providers.extraction_provider.PreferenceCandidate / KnowledgeCandidate
   （只读消费，不复制、不重定义任何 Candidate 模型）；
 - 通过单一准入入口 admit() 对 Candidate 执行最小业务准入校验；
+- 通过 admit_with_event() 在 Candidate 进入正式 E 轨 Domain 前，基于
+  pipeline.schemas.MemorySourceEvent / SourceBusinessStatus / SensitivityLevel
+  实施事件级 fail-closed 准入（provenance 一致性、用户归属一致性、
+  安全标记与业务状态），拒绝后返回结构化可测试 reason；
 - 构造 E 轨正式业务 Domain（domain.Preference / domain.Knowledge），
-  不建立平行业务 Schema。
+  不建立平行业务 Schema、不新建平行 Event Schema。
 
 本服务明确不做（NOT_EXTRACTION / NOT_PERSISTENCE）：
 - 不实现抽取算法（抽取属 A 轨 providers）；
@@ -36,7 +41,12 @@ from pydantic import ValidationError
 
 from domain import Knowledge, Preference
 from domain.enums import ExpressionType, KnowledgeType, MemoryStatus, PreferenceScope
-from pipeline.schemas import MemoryType
+from pipeline.schemas import (
+    MemorySourceEvent,
+    MemoryType,
+    SensitivityLevel,
+    SourceBusinessStatus,
+)
 from providers.extraction_provider import KnowledgeCandidate, PreferenceCandidate
 from service.contracts import ServiceRequestContext
 
@@ -50,6 +60,16 @@ class CandidateAdmissionError(Exception):
     - empty_entity_id             entity_id 缺失/非 str/纯空白
     - candidate_status_violation  memory_status 非 candidate（B2 防御）
     - domain_construction_failed  Domain 构造校验失败（保留 __cause__）
+    - invalid_event               event 不是 MemorySourceEvent（fail-closed 前置）
+    - source_event_id_mismatch    candidate.source_event_id 与 event.event_id 不一致
+    - user_id_mismatch            ctx.user_id 与 event.user_id 不一致（跨用户）
+    - event_should_ignore         event.should_ignore=true（D3 安全契约拒绝）
+    - event_status_ignored        source_business_status=ignored（防御纵深）
+    - event_sensitive_blocked     event.sensitivity=high/critical（上游安全标记拒绝）
+    - event_status_cancelled      source_business_status=cancelled（未完成事件）
+    - event_status_timeout        source_business_status=timeout（未完成事件）
+    - failed_event_success_knowledge_forbidden  failed 事件不得形成成功知识
+    - failed_event_preference_blocked          failed 事件不得形成稳定偏好记忆
     """
 
     def __init__(
@@ -135,6 +155,138 @@ class CandidateGovernanceService:
                 "candidate failed Domain construction validation",
                 cause=exc,
             ) from exc
+
+    def admit_with_event(
+        self,
+        candidate: Union[PreferenceCandidate, KnowledgeCandidate],
+        event: MemorySourceEvent,
+        ctx: ServiceRequestContext,
+        *,
+        entity_id: str,
+        now: Optional[datetime] = None,
+        memory_type: MemoryType = MemoryType.SHORT_TERM,
+    ) -> Union[Preference, Knowledge]:
+        """事件级 fail-closed 准入门禁 + Domain 构造（Day5-e-02）。
+
+        在 Candidate 进入正式 E 轨 Domain 前，基于 MemorySourceEvent、
+        Candidate provenance、安全标记和业务状态实施 fail-closed 准入校验。
+        所有检查通过后委托 admit() 完成 Domain 构造。
+
+        治理层只读消费 event.source_business_status / event.should_ignore /
+        event.sensitivity 作为真实状态来源，不依据 candidate 正文 / evidence /
+        fact / assistant_text / LLM 声明覆盖真实 Tool/Event 状态。
+
+        Args:
+            candidate: A 轨抽取候选（PreferenceCandidate / KnowledgeCandidate）。
+            event: 来源 MemorySourceEvent（真实状态与安全标记的唯一来源；
+                禁止以 LLM 声明或候选正文覆盖）。
+            ctx: 可信业务上下文；user_id 只能来自此上下文，且须与 event.user_id
+                一致（跨用户候选 fail-closed 拒绝）。
+            entity_id: 新 Domain 的实体 ID（调用方提供；治理层不生成、不写库）。
+            now: 构造时间戳；None → datetime.now(timezone.utc)，结果 aware UTC。
+            memory_type: Knowledge 的记忆分层（业务分类，非用户身份；默认
+                SHORT_TERM 为"不无依据提升"的最保守选择，可由调用方覆盖）。
+
+        Raises:
+            CandidateAdmissionError: 准入失败（code 见类 docstring）。
+        """
+        # 1. event 类型准入（fail-closed 前置：真实状态来源必须可信）
+        if not isinstance(event, MemorySourceEvent):
+            raise CandidateAdmissionError(
+                "invalid_event",
+                "event must be a MemorySourceEvent",
+            )
+        # 2. Candidate 类型准入（复用 admit() 防御语义；前置避免后续属性访问异常）
+        if not isinstance(candidate, (PreferenceCandidate, KnowledgeCandidate)):
+            raise CandidateAdmissionError(
+                "invalid_candidate_type",
+                "candidate must be a PreferenceCandidate or KnowledgeCandidate",
+            )
+        # 3. 可信上下文准入（复用 admit() 防御语义）
+        if not isinstance(ctx, ServiceRequestContext):
+            raise CandidateAdmissionError(
+                "invalid_context",
+                "ctx must be a trusted ServiceRequestContext",
+            )
+        # 4-11. 事件级真实性/安全/业务状态校验（首个失败即拒绝，fail-closed）
+        self._validate_event_admission(candidate, event, ctx)
+        # 门禁通过：委托 admit() 复用 entity_id 校验 + candidate 状态防御 + Domain 构造
+        return self.admit(
+            candidate, ctx, entity_id=entity_id, now=now, memory_type=memory_type
+        )
+
+    def _validate_event_admission(
+        self,
+        candidate: Union[PreferenceCandidate, KnowledgeCandidate],
+        event: MemorySourceEvent,
+        ctx: ServiceRequestContext,
+    ) -> None:
+        """事件级 fail-closed 准入检查（前置：candidate/event/ctx 类型已校验）。
+
+        检查顺序（首个失败即拒绝）：
+        1. candidate.source_event_id 与 event.event_id 一致性（来源证据一致）；
+        2. ctx.user_id 与 event.user_id 一致性（用户归属一致）；
+        3. event.should_ignore=true 拒绝（D3 安全契约标记）；
+        4. source_business_status=ignored 拒绝（防御纵深：即便 Schema 条件校验
+           被 model_construct/DB 载入绕过，状态本身仍拦截）；
+        5. sensitivity=high/critical 拒绝（上游安全 Gate 标记，治理层不得重新放行）；
+        6. source_business_status=cancelled 拒绝（未完成事件，无结论）；
+        7. source_business_status=timeout 拒绝（未完成事件）。
+        8. source_business_status=failed：仅允许 KnowledgeCandidate 且
+           category=failure_experience 按真实失败语义保留；其余 Knowledge（成功
+           知识语义）与 Preference 一律拒绝（failed 事件不得形成稳定成功知识）。
+        """
+        if candidate.source_event_id != event.event_id:
+            raise CandidateAdmissionError(
+                "source_event_id_mismatch",
+                "candidate.source_event_id must equal event.event_id",
+            )
+        if ctx.user_id != event.user_id:
+            raise CandidateAdmissionError(
+                "user_id_mismatch",
+                "ctx.user_id must equal event.user_id",
+            )
+        if event.should_ignore:
+            raise CandidateAdmissionError(
+                "event_should_ignore",
+                "event.should_ignore=true rejected by admission gate",
+            )
+        if event.source_business_status == SourceBusinessStatus.IGNORED:
+            raise CandidateAdmissionError(
+                "event_status_ignored",
+                "source_business_status=ignored rejected by admission gate",
+            )
+        if event.sensitivity in (SensitivityLevel.HIGH, SensitivityLevel.CRITICAL):
+            raise CandidateAdmissionError(
+                "event_sensitive_blocked",
+                "event.sensitivity high/critical rejected by admission gate",
+            )
+        if event.source_business_status == SourceBusinessStatus.CANCELLED:
+            raise CandidateAdmissionError(
+                "event_status_cancelled",
+                "source_business_status=cancelled rejected by admission gate",
+            )
+        if event.source_business_status == SourceBusinessStatus.TIMEOUT:
+            raise CandidateAdmissionError(
+                "event_status_timeout",
+                "source_business_status=timeout rejected by admission gate",
+            )
+        if event.source_business_status == SourceBusinessStatus.FAILED:
+            # failed 事件不得形成成功知识；A 轨已明确形成的 failure_experience
+            # 候选按其真实失败语义保留（不改写为成功知识）。
+            if isinstance(candidate, KnowledgeCandidate):
+                if candidate.category != "failure_experience":
+                    raise CandidateAdmissionError(
+                        "failed_event_success_knowledge_forbidden",
+                        "failed event cannot form success knowledge "
+                        "(only failure_experience allowed)",
+                    )
+                return
+            # fail-closed：failed 事件不得形成稳定偏好记忆（任务约束，不放宽）
+            raise CandidateAdmissionError(
+                "failed_event_preference_blocked",
+                "failed event cannot form stable preference memory",
+            )
 
     def _build_preference(
         self,
