@@ -6,9 +6,10 @@
 from datetime import datetime, timedelta, timezone
 
 from retrieval import contracts as c
-from fakes import FakeGenerationBuild, FakeVectorProvider
+from fakes import FakeGenerationBuild, FakeVectorProvider, sign_request_payload
 
 DIG = "hmac-sha256:k1:" + "2" * 64
+KEY1 = b"review-key-1"
 NOW = datetime(2026, 8, 17, 10, 0, 0, tzinfo=timezone.utc)
 
 
@@ -43,7 +44,7 @@ def make_auth(p, scope_id="s1", operations=("rebuild",)):
 def make_rebuild(p, *, target="g2", scope_id="s1", scope=None, auth=None, reason="bootstrap"):
     scope = scope or make_scope(scope_id)
     auth = auth or make_auth(p, scope_id)
-    return c.VectorRebuildRequest(
+    request = c.VectorRebuildRequest(
         request_id="r1",
         trace_id="t1",
         user_id="alpha",
@@ -58,6 +59,11 @@ def make_rebuild(p, *, target="g2", scope_id="s1", scope=None, auth=None, reason
         scope=scope,
         scope_authorization=auth,
     )
+    return sign_request_payload(request)
+
+
+def sign_request(request: c.VectorRebuildRequest, *, key_id: str = "k1", key: bytes = KEY1):
+    return sign_request_payload(request, key_id=key_id, key=key)
 
 
 # T020 新代次激活；目标不得覆盖 serving
@@ -68,11 +74,69 @@ def test_rebuild_activates_new_generation():
     assert p.serving["s1"] == "g2"
 
 
-def test_rebuild_target_equals_serving_rejected():
+def test_rebuild_exact_replay_returns_first_result_without_second_effect():
     p = FakeVectorProvider()
-    assert p.rebuild(make_rebuild(p, target="g2")).ok
+    first = p.rebuild(make_rebuild(p, target="g2"))
+    second = p.rebuild(make_rebuild(p, target="g2"))
+
+    assert first.ok and second.ok
+    assert second.value == first.value
+    assert p.rebuild_effect_count == 1
+
+
+def test_rebuild_outcome_unknown_replays_first_result_without_second_effect():
+    p = FakeVectorProvider(backend_failure=RuntimeError("sdk disconnected"))
+    first = p.rebuild(make_rebuild(p, target="g2"))
+    second = p.rebuild(make_rebuild(p, target="g2"))
+
+    assert first.ok and second.ok
+    assert first.value.outcome == "outcome_unknown"
+    assert second.value == first.value
+    assert p.rebuild_effect_count == 1
+
+
+def test_rebuild_rejects_payload_hash_not_derived_from_semantics_before_effect():
+    p = FakeVectorProvider(digest_keys={"k1": KEY1})
+
     res = p.rebuild(make_rebuild(p, target="g2"))
+
     assert not res.ok and res.error.code is c.RetrievalErrorCode.CONFLICT
+    assert p.rebuild_effect_count == 0
+    assert p.generation_states == {} and p.serving == {}
+
+
+def test_rebuild_same_domain_different_semantics_conflicts_without_second_effect():
+    p = FakeVectorProvider(digest_keys={"k1": KEY1})
+    first = sign_request(make_rebuild(p, target="g2", reason="bootstrap"))
+    changed = sign_request(make_rebuild(p, target="g2", reason="repair"))
+
+    assert p.rebuild(first).ok
+    res = p.rebuild(changed)
+
+    assert not res.ok and res.error.code is c.RetrievalErrorCode.CONFLICT
+    assert p.rebuild_effect_count == 1
+
+
+def test_rebuild_same_bare_key_is_independent_across_target_generations():
+    p = FakeVectorProvider(digest_keys={"k1": KEY1})
+    first = sign_request(make_rebuild(p, target="g2"))
+    next_generation = sign_request(make_rebuild(p, target="g3"))
+
+    assert p.rebuild(first).ok
+    assert p.rebuild(next_generation).ok
+    assert p.rebuild_effect_count == 2
+    assert p.serving["s1"] == "g3"
+
+
+def test_rebuild_same_bare_key_is_independent_across_scopes():
+    p = FakeVectorProvider(digest_keys={"k1": KEY1})
+    scope_one = sign_request(make_rebuild(p, scope_id="s1", target="g2"))
+    scope_two = sign_request(make_rebuild(p, scope_id="s2", target="g2"))
+
+    assert p.rebuild(scope_one).ok
+    assert p.rebuild(scope_two).ok
+    assert p.rebuild_effect_count == 2
+    assert p.serving == {"s1": "g2", "s2": "g2"}
 
 
 # T021 构建失败保留旧 serving generation

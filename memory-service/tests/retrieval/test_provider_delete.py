@@ -6,9 +6,11 @@
 from datetime import datetime, timedelta, timezone
 
 from retrieval import contracts as c
-from fakes import FakeVectorProvider
+from fakes import DEFAULT_DIGEST_KEY, FakeVectorProvider, sign_request_payload
 
 DIG = "hmac-sha256:k1:" + "1" * 64
+KEY1 = b"review-key-1"
+KEY2 = b"review-key-2"
 NOW = datetime(2026, 8, 17, 10, 0, 0, tzinfo=timezone.utc)
 
 
@@ -27,13 +29,19 @@ def make_record(memory_id: str, user_id: str = "alpha", version_id: str = "v1") 
     )
 
 
-def seed(p: FakeVectorProvider, user_id: str = "alpha", memory_id: str = "m1") -> None:
+def seed(
+    p: FakeVectorProvider,
+    user_id: str = "alpha",
+    memory_id: str = "m1",
+    *,
+    key: bytes = DEFAULT_DIGEST_KEY,
+) -> None:
     p.upsert(
-        c.VectorUpsertRequest(
+        sign_request_payload(c.VectorUpsertRequest(
             request_id="u1", trace_id="t1", user_id=user_id, deadline_at=NOW + timedelta(minutes=5),
             idempotency_key="seed", payload_hash=DIG, index_generation="g1", source_watermark=make_wm(user_id, 1),
             records=[make_record(memory_id, user_id)],
-        )
+        ), key=key)
     )
 
 
@@ -55,12 +63,13 @@ def make_selector(user_id="alpha", memory_ids=None, selection_mode="single_item"
 
 
 def make_delete(p, *, user_id="alpha", selector=None, idem="ik1", index_generation="g1", authorization_ref=None):
-    return c.VectorDeleteRequest(
+    request = c.VectorDeleteRequest(
         request_id="r1", trace_id="t1", user_id=user_id, deadline_at=p.clock.now + timedelta(minutes=5),
         idempotency_key=idem, payload_hash=DIG, index_generation=index_generation,
         source_watermark=make_wm(user_id, 2), selector=selector or make_selector(user_id),
         authorization_ref=authorization_ref,
     )
+    return sign_request_payload(request)
 
 
 # T016 单条幂等删除；空/通配拒绝
@@ -71,6 +80,32 @@ def test_delete_single_item_idempotent():
     assert first.ok and first.value.deleted_count == 1
     second = p.delete(make_delete(p))
     assert second.ok and second.value.deleted_count == 1  # 幂等重放返回记录结果
+
+
+def test_delete_rejects_payload_hash_not_derived_from_semantics_before_effect():
+    p = FakeVectorProvider(digest_keys={"k1": KEY1})
+    seed(p, key=KEY1)
+    effects_before = p.write_effect_count
+
+    tampered = make_delete(p).model_copy(update={"payload_hash": DIG})
+    res = p.delete(tampered)
+
+    assert not res.ok and res.error.code is c.RetrievalErrorCode.CONFLICT
+    assert p.write_effect_count == effects_before
+    assert ("alpha", "m1") in p.index
+
+
+def test_delete_key_rotation_replays_historical_result_without_second_effect():
+    p = FakeVectorProvider(digest_keys={"k1": KEY1, "k2": KEY2})
+    seed(p, key=KEY1)
+    first_request = sign_request_payload(make_delete(p), key_id="k1", key=KEY1)
+    replay_request = sign_request_payload(make_delete(p), key_id="k2", key=KEY2)
+
+    first = p.delete(first_request)
+    replay = p.delete(replay_request)
+
+    assert first.ok and replay.ok and replay.value == first.value
+    assert p.write_effect_count == 2  # seed + first delete only
 
 
 def test_delete_wildcard_rejected():
@@ -87,13 +122,13 @@ def test_delete_cross_user_selector_rejected():
     assert not res.ok and res.error.code is c.RetrievalErrorCode.USER_SCOPE_VIOLATION
 
 
-def test_delete_cross_user_id_not_deleted():
-    p = FakeVectorProvider(truth_owners={"m2": "beta"})
+def test_delete_unknown_resolved_id_is_not_matched_without_service_truth_source():
+    p = FakeVectorProvider()
     seed(p, user_id="beta", memory_id="m2")
     res = p.delete(make_delete(p, user_id="alpha", selector=make_selector(user_id="alpha", memory_ids=["m2"], version_ids=["v1"])))
     assert res.ok
-    assert res.value.not_matched_ids == []
-    assert [(item.memory_id, item.reason) for item in res.value.rejected] == [("m2", "user_scope_violation")]
+    assert res.value.not_matched_ids == ["m2"]
+    assert res.value.rejected == []
     assert ("beta", "m2") in p.index
 
 

@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from retrieval import contracts as c
-from fakes import FakeGenerationBuild, FakeVectorProvider
+from fakes import FakeGenerationBuild, FakeVectorProvider, sign_request_payload
 
 DIG = "hmac-sha256:k1:" + "6" * 64
 DIG2 = "hmac-sha256:k2:" + "7" * 64
@@ -64,12 +64,12 @@ def test_scope_id_mismatch_denied():
 def test_get_index_state_auth_cannot_rebuild():
     p = FakeVectorProvider()
     auth = make_auth(p, operations=["get_index_state"])
-    rebuild = c.VectorRebuildRequest(
+    rebuild = sign_request_payload(c.VectorRebuildRequest(
         request_id="r1", trace_id="t1", user_id="alpha", deadline_at=p.clock.now + timedelta(minutes=5),
         idempotency_key="ik", payload_hash=DIG, source_snapshot_id="snap", source_watermark=make_wm("s1", 1),
         target_generation="g2", schema_version="v1", reason=c.RebuildReason.BOOTSTRAP,
         scope=make_scope("s1"), scope_authorization=auth,
-    )
+    ))
     res = p.rebuild(rebuild)
     assert not res.ok and res.error.code is c.RetrievalErrorCode.AUTHORIZATION_DENIED
 
@@ -108,13 +108,13 @@ def test_scope_rotation_preserves_generation_watermark_and_count():
         }
     )
     original_scope = make_scope("s1", fingerprint=DIG)
-    rebuild = c.VectorRebuildRequest(
+    rebuild = sign_request_payload(c.VectorRebuildRequest(
         request_id="r1", trace_id="t1", user_id="alpha", deadline_at=p.clock.now + timedelta(minutes=5),
         idempotency_key="ik", payload_hash=DIG, source_snapshot_id="snap",
         source_watermark=make_wm("s1", 5), target_generation="g2", schema_version="v1",
         reason=c.RebuildReason.SCHEMA_CHANGE, scope=original_scope,
         scope_authorization=make_auth(p, operations=["rebuild"]),
-    )
+    ))
     assert p.rebuild(rebuild).ok
 
     rotated_scope = make_scope("s1", fingerprint=DIG2)
@@ -124,6 +124,41 @@ def test_scope_rotation_preserves_generation_watermark_and_count():
     assert state.value.serving_generation == "g2"
     assert state.value.applied_watermark == make_wm("s1", 5)
     assert state.value.record_count == 2
+
+
+def make_rebuild_for_scope_rotation(p, *, key_id, key, fingerprint):
+    request = c.VectorRebuildRequest(
+        request_id="r1",
+        trace_id="t1",
+        user_id="alpha",
+        deadline_at=p.clock.now + timedelta(minutes=5),
+        idempotency_key="ik-rebuild",
+        payload_hash=f"hmac-sha256:{key_id}:" + "0" * 64,
+        source_snapshot_id="snap",
+        source_watermark=make_wm("s1", 5),
+        target_generation="g2",
+        schema_version="v1",
+        reason=c.RebuildReason.SCHEMA_CHANGE,
+        scope=make_scope("s1", fingerprint=fingerprint),
+        scope_authorization=make_auth(p, operations=["rebuild"]),
+    )
+    return sign_request_payload(request, key_id=key_id, key=key)
+
+
+def test_scope_rotation_preserves_rebuild_idempotency_replay():
+    p = FakeVectorProvider(digest_keys={"k1": KEY1, "k2": KEY2})
+    first_request = make_rebuild_for_scope_rotation(
+        p, key_id="k1", key=KEY1, fingerprint=DIG
+    )
+    replay_request = make_rebuild_for_scope_rotation(
+        p, key_id="k2", key=KEY2, fingerprint=DIG2
+    )
+
+    first = p.rebuild(first_request)
+    replay = p.rebuild(replay_request)
+
+    assert first.ok and replay.ok and replay.value == first.value
+    assert p.rebuild_effect_count == 1
 
 
 # T047 历史验证 key 支持轮换后的幂等重放
@@ -196,7 +231,7 @@ def test_rebuild_mixed_key_generation_rejected():
         target_generation="g2", schema_version="v1", reason=c.RebuildReason.SCHEMA_CHANGE,
         scope=make_scope("s1"), scope_authorization=auth,
     )
-    res = p.rebuild(rebuild)
+    res = p.rebuild(sign_request_payload(rebuild, key_id="k2", key=KEY2))
     assert not res.ok and res.error.code is c.RetrievalErrorCode.CONFLICT
     assert "s1" not in p.serving
 
@@ -222,7 +257,7 @@ def test_rebuild_new_key_generation_activates_only_after_complete_verification()
         target_generation="g2", schema_version="v1", reason=c.RebuildReason.SCHEMA_CHANGE,
         scope=make_scope("s1"), scope_authorization=auth,
     )
-    result = p.rebuild(rebuild)
+    result = p.rebuild(sign_request_payload(rebuild, key_id="k2", key=KEY2))
     assert result.ok and result.value.verified and result.value.activated
 
     state = p.get_index_state(make_state_request(p))
@@ -251,7 +286,7 @@ def test_rebuild_tampered_record_digest_is_not_activated():
         target_generation="g2", schema_version="v1", reason=c.RebuildReason.SCHEMA_CHANGE,
         scope=make_scope("s1"), scope_authorization=make_auth(p, operations=["rebuild"]),
     )
-    result = p.rebuild(rebuild)
+    result = p.rebuild(sign_request_payload(rebuild, key_id="k2", key=KEY2))
     assert not result.ok and result.error.code is c.RetrievalErrorCode.CONFLICT
     assert "s1" not in p.serving
 
@@ -274,7 +309,7 @@ def test_rebuild_without_record_semantics_is_not_activated():
         target_generation="g2", schema_version="v1", reason=c.RebuildReason.SCHEMA_CHANGE,
         scope=make_scope("s1"), scope_authorization=make_auth(p, operations=["rebuild"]),
     )
-    result = p.rebuild(rebuild)
+    result = p.rebuild(sign_request_payload(rebuild, key_id="k2", key=KEY2))
     assert not result.ok and result.error.code is c.RetrievalErrorCode.STALE_INDEX
     assert "s1" not in p.serving
 

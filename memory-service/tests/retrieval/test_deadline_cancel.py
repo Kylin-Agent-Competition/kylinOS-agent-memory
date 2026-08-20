@@ -6,7 +6,7 @@
 from datetime import datetime, timedelta, timezone
 
 from retrieval import contracts as c
-from fakes import FakeVectorProvider
+from fakes import FakeVectorProvider, sign_request_payload
 
 DIG = "hmac-sha256:k1:" + "3" * 64
 NOW = datetime(2026, 8, 17, 10, 0, 0, tzinfo=timezone.utc)
@@ -76,11 +76,11 @@ def test_upsert_deadline_expired_before_write_side_effect():
 
 def test_delete_deadline_expired_before_write_side_effect():
     p = FakeVectorProvider()
-    seed = c.VectorUpsertRequest(
+    seed = sign_request_payload(c.VectorUpsertRequest(
         request_id="u1", trace_id="t1", user_id="alpha", deadline_at=p.clock.now + timedelta(minutes=5),
         idempotency_key="seed", payload_hash=DIG, index_generation="g1",
         source_watermark=make_wm(), records=[make_record()],
-    )
+    ))
     assert p.upsert(seed).ok
     effects_before = p.write_effect_count
     selector = c.ResolvedDeleteSelector(

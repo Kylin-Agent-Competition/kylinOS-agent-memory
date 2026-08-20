@@ -6,7 +6,7 @@
 from datetime import timedelta
 
 from retrieval import contracts as c
-from fakes import FakeVectorProvider
+from fakes import FakeVectorProvider, sign_request_payload
 
 DIG = "hmac-sha256:k1:" + "e" * 64
 
@@ -33,7 +33,7 @@ def make_record(memory_id: str, user_id: str = "alpha", version_id: str = "v1") 
 
 def make_upsert(provider, *, user_id="alpha", idem="ik1", records=None, index_generation="g1", watermark=None):
     records = records if records is not None else [make_record("m1", user_id)]
-    return c.VectorUpsertRequest(
+    request = c.VectorUpsertRequest(
         request_id="r1",
         trace_id="tr1",
         user_id=user_id,
@@ -44,6 +44,7 @@ def make_upsert(provider, *, user_id="alpha", idem="ik1", records=None, index_ge
         source_watermark=watermark or make_wm(user_id, 1),
         records=records,
     )
+    return sign_request_payload(request)
 
 
 def test_upsert_idempotent_replay_same_result():

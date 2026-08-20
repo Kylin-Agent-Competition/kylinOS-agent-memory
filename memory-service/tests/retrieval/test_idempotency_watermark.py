@@ -63,13 +63,27 @@ def test_canonical_keeps_integer_and_float_kinds_without_precision_collapse():
         '{"float":1.5,"integer":9007199254740991}'
     )
 
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (1.0, '{"value":1}'),
+        (1e-6, '{"value":0.000001}'),
+        (1e-7, '{"value":1e-7}'),
+        (1e20, '{"value":100000000000000000000}'),
+        (1e21, '{"value":1e+21}'),
+    ],
+)
+def test_canonical_uses_rfc8785_number_serialization(value, expected):
+    assert c.canonical_json_v1({"value": value}) == expected
+
+
 # ── L1_FAKE：T038 幂等复合域 ──
 
 from retrieval import contracts as c2
-from fakes import FakeVectorProvider
+from fakes import FakeVectorProvider, sign_request_payload
 
 DIG2 = "hmac-sha256:k1:" + "4" * 64
-DIG3 = "hmac-sha256:k1:" + "5" * 64
 NOW = datetime(2026, 8, 17, 10, 0, 0, tzinfo=timezone.utc)
 
 
@@ -88,18 +102,20 @@ def make_record(memory_id: str, user_id: str = "alpha") -> c2.VectorRecord:
     )
 
 
-def make_upsert(p, *, user_id="alpha", idem="ik1", payload_hash=DIG2, index_generation="g1", records=None):
-    return c2.VectorUpsertRequest(
+def make_upsert(p, *, user_id="alpha", idem="ik1", index_generation="g1", records=None):
+    request = c2.VectorUpsertRequest(
         request_id="r1", trace_id="t1", user_id=user_id, deadline_at=p.clock.now + timedelta(minutes=5),
-        idempotency_key=idem, payload_hash=payload_hash, index_generation=index_generation,
+        idempotency_key=idem, payload_hash=DIG2, index_generation=index_generation,
         source_watermark=make_wm(user_id, 1), records=records or [make_record("m1", user_id)],
     )
+    return sign_request_payload(request)
 
 
 def test_idempotency_same_domain_replay():
     p = FakeVectorProvider()
     r1 = p.upsert(make_upsert(p))
     r2 = p.upsert(make_upsert(p))
+    assert r1.ok and r2.ok
     assert r1.value == r2.value
 
 
@@ -109,10 +125,10 @@ def test_idempotency_cross_user_same_key_independent():
     assert p.upsert(make_upsert(p, user_id="beta", idem="ik")).ok
 
 
-def test_idempotency_same_domain_different_hash_conflict():
+def test_idempotency_same_domain_different_semantics_conflict():
     p = FakeVectorProvider()
-    assert p.upsert(make_upsert(p, idem="ik", payload_hash=DIG2)).ok
-    res = p.upsert(make_upsert(p, idem="ik", payload_hash=DIG3))
+    assert p.upsert(make_upsert(p, idem="ik", records=[make_record("m1")])).ok
+    res = p.upsert(make_upsert(p, idem="ik", records=[make_record("m2")]))
     assert not res.ok and res.error.code is c2.RetrievalErrorCode.CONFLICT
 
 

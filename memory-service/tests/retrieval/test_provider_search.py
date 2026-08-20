@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from retrieval import contracts as c
 from retrieval.rrf import dedupe_exact_version
-from fakes import FakeVectorProvider, TruthRecord, resolve_candidates
+from fakes import FakeVectorProvider, TruthRecord, resolve_candidates, sign_request_payload
 
 DIG = "hmac-sha256:k1:" + "f" * 64
 NOW = datetime(2026, 8, 17, 10, 0, 0, tzinfo=timezone.utc)
@@ -82,11 +82,11 @@ def test_search_no_hits_is_success_empty():
 def test_search_rank_starts_at_one():
     p = FakeVectorProvider()
     p.upsert(
-        c.VectorUpsertRequest(
+        sign_request_payload(c.VectorUpsertRequest(
             request_id="u1", trace_id="t1", user_id="alpha", deadline_at=NOW + timedelta(minutes=5),
             idempotency_key="ik1", payload_hash=DIG, index_generation="g1", source_watermark=make_wm("alpha", 1),
             records=[make_record("m1"), make_record("m2")],
-        )
+        ))
     )
     res = p.search(make_search(p))
     assert [h.rank for h in res.value.hits] == [1, 2]
@@ -103,18 +103,18 @@ def test_search_exact_version_dedupe_best_rank():
 def test_search_user_isolation():
     p = FakeVectorProvider()
     p.upsert(
-        c.VectorUpsertRequest(
+        sign_request_payload(c.VectorUpsertRequest(
             request_id="u1", trace_id="t1", user_id="alpha", deadline_at=NOW + timedelta(minutes=5),
             idempotency_key="ik1", payload_hash=DIG, index_generation="g1", source_watermark=make_wm("alpha", 1),
             records=[make_record("m1", "alpha")],
-        )
+        ))
     )
     p.upsert(
-        c.VectorUpsertRequest(
+        sign_request_payload(c.VectorUpsertRequest(
             request_id="u2", trace_id="t2", user_id="beta", deadline_at=NOW + timedelta(minutes=5),
             idempotency_key="ik1", payload_hash=DIG, index_generation="g1", source_watermark=make_wm("beta", 1),
             records=[make_record("m2", "beta")],
-        )
+        ))
     )
     res = p.search(make_search(p, user_id="alpha"))
     assert [h.memory_id for h in res.value.hits] == ["m1"]

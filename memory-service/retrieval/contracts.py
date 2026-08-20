@@ -191,37 +191,89 @@ def _assert_json_number(value: float) -> float:
     return value
 
 
+def _jcs_float(value: float) -> str:
+    """按 RFC 8785 引用的 ECMAScript 数字格式序列化有限浮点数。"""
+
+    _assert_json_number(value)
+    negative = value < 0
+    text = repr(abs(value)).lower()
+
+    if "e" not in text:
+        if text.endswith(".0"):
+            text = text[:-2]
+        return f"-{text}" if negative else text
+
+    mantissa, exponent_text = text.split("e", 1)
+    exponent = int(exponent_text)
+    absolute = abs(value)
+    if 1e-6 <= absolute < 1e21:
+        integer, dot, fraction = mantissa.partition(".")
+        digits = integer + (fraction if dot else "")
+        decimal_index = len(integer) + exponent
+        if decimal_index <= 0:
+            text = "0." + ("0" * -decimal_index) + digits
+        elif decimal_index >= len(digits):
+            text = digits + ("0" * (decimal_index - len(digits)))
+        else:
+            text = digits[:decimal_index] + "." + digits[decimal_index:]
+    else:
+        if mantissa.endswith(".0"):
+            mantissa = mantissa[:-2]
+        exponent_sign = "+" if exponent >= 0 else "-"
+        text = f"{mantissa}e{exponent_sign}{abs(exponent)}"
+
+    return f"-{text}" if negative else text
+
+
+def _json_string(value: str) -> str:
+    normalized = _nfc(value)
+    if any(0xD800 <= ord(char) <= 0xDFFF for char in normalized):
+        raise ValueError("canonical-json 禁止孤立 UTF-16 surrogate")
+    return json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))
+
+
 def canonical_json_v1(value: Any, set_paths: tuple[str, ...] = ()) -> str:
-    """按 RFC 8785 风格生成规范 JSON。
+    """按 RFC 8785/JCS 生成规范 JSON。
 
     `set_paths` 用点分路径指定“集合语义数组”，命中的数组先去重再按规范
     JSON 字节序排序；其余数组保持业务顺序。字符串统一 NFC。
     """
 
-    def walk(node: Any, path: str = "") -> Any:
+    def serialize(node: Any, path: str = "") -> str:
         if isinstance(node, str):
-            return _nfc(node)
+            return _json_string(node)
         if isinstance(node, bool):
-            return node
+            return "true" if node else "false"
         if node is None:
-            return None
+            return "null"
         if isinstance(node, int):
-            return node
+            return str(node)
         if isinstance(node, float):
-            return _assert_json_number(node)
+            return _jcs_float(node)
         if isinstance(node, list):
             is_set = path in set_paths
-            items = [walk(item, path) for item in node]
+            items = [serialize(item, path) for item in node]
             if is_set:
-                items = sorted({json.dumps(item, ensure_ascii=False, separators=(",", ":")): item for item in items}.values(),
-                               key=lambda x: json.dumps(x, ensure_ascii=False, separators=(",", ":")))
-            return items
+                items = sorted(set(items), key=lambda item: item.encode("utf-8"))
+            return "[" + ",".join(items) + "]"
         if isinstance(node, dict):
-            return {key: walk(val, path=f"{path}.{key}" if path else key) for key, val in sorted(node.items())}
+            normalized: dict[str, Any] = {}
+            for key, item in node.items():
+                if not isinstance(key, str):
+                    raise ValueError("canonical-json 对象键必须是字符串")
+                normalized_key = _nfc(key)
+                if normalized_key in normalized:
+                    raise ValueError("canonical-json 对象键 NFC 规范化后冲突")
+                normalized[normalized_key] = item
+            ordered_keys = sorted(normalized, key=lambda key: key.encode("utf-16-be"))
+            pairs = []
+            for key in ordered_keys:
+                child_path = f"{path}.{key}" if path else key
+                pairs.append(f"{_json_string(key)}:{serialize(normalized[key], child_path)}")
+            return "{" + ",".join(pairs) + "}"
         raise ValueError(f"canonical-json 不支持类型: {type(node)!r}")
 
-    canonical = walk(value)
-    return json.dumps(canonical, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return serialize(value)
 
 
 def digest_from_canonical(key_id: str, key: bytes, canonical_value: Any, set_paths: tuple[str, ...] = ()) -> str:

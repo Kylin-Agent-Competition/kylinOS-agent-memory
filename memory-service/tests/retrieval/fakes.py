@@ -44,6 +44,28 @@ from retrieval.provider import VectorProvider
 from retrieval.rrf import dedupe_exact_version
 
 DEFAULT_NOW = datetime(2026, 8, 17, 10, 0, 0, tzinfo=timezone.utc)
+DEFAULT_DIGEST_KEY_ID = "k1"
+DEFAULT_DIGEST_KEY = b"fake-vector-provider-contract-key"
+
+
+def semantic_payload(request: Any) -> dict[str, Any]:
+    payload = request.model_dump(
+        mode="json",
+        exclude={"request_id", "trace_id", "deadline_at", "payload_hash"},
+    )
+    if isinstance(request, VectorRebuildRequest):
+        payload["scope"].pop("scope_fingerprint", None)
+    return payload
+
+
+def sign_request_payload(
+    request: Any,
+    *,
+    key_id: str = DEFAULT_DIGEST_KEY_ID,
+    key: bytes = DEFAULT_DIGEST_KEY,
+) -> Any:
+    payload_hash = digest_from_canonical(key_id, key, semantic_payload(request))
+    return request.model_copy(update={"payload_hash": payload_hash})
 
 
 class FakeClock:
@@ -85,16 +107,21 @@ class FakeVectorProvider(VectorProvider):
         backend_failure: Optional[Exception] = None,
         digest_keys: Optional[dict[str, bytes]] = None,
         generation_builds: Optional[dict[str | tuple[str, str], FakeGenerationBuild]] = None,
-        truth_owners: Optional[dict[str, str]] = None,
     ) -> None:
         self.dimension = dimension
         self.clock = clock or FakeClock()
         self.supports_atomic = supports_atomic
         self.cancel_check = cancel_check
         self.backend_failure = backend_failure
-        self.digest_keys = digest_keys
+        # 请求摘要始终启用：未注入 keyring 时使用测试专用默认 key。
+        # generation 内记录摘要仅在显式注入 keyring 时校验，便于非摘要测试构造计数快照。
+        if digest_keys is None:
+            self.request_digest_keys = {DEFAULT_DIGEST_KEY_ID: DEFAULT_DIGEST_KEY}
+            self.digest_keys = None
+        else:
+            self.digest_keys = dict(digest_keys)
+            self.request_digest_keys = self.digest_keys
         self.generation_builds = generation_builds or {}
-        self.truth_owners = truth_owners or {}
 
         self.index: Dict[tuple[str, str], dict] = {}  # (user_id, memory_id) -> {record, rank}
         self.idempotency: Dict[tuple, Dict[str, Any]] = {}
@@ -106,6 +133,7 @@ class FakeVectorProvider(VectorProvider):
         self.generation_states: Dict[tuple[str, str], dict[str, Any]] = {}
         self._order: list[tuple[str, str]] = []
         self.write_effect_count = 0
+        self.rebuild_effect_count = 0
 
     # ── helpers ──
     def _ok(self, value: Any, request_id: str, *, partial: bool = False) -> ProviderResult:
@@ -139,12 +167,44 @@ class FakeVectorProvider(VectorProvider):
     def _digest_key_id(digest: str) -> str:
         return digest.split(":", 2)[1]
 
-    @staticmethod
-    def _semantic_payload(request: Any) -> dict[str, Any]:
-        return request.model_dump(
-            mode="json",
-            exclude={"request_id", "trace_id", "deadline_at", "payload_hash"},
-        )
+    def _validate_payload_and_replay(
+        self,
+        request: Any,
+        composite: tuple,
+    ) -> Optional[ProviderResult]:
+        request_payload = semantic_payload(request)
+        if self.request_digest_keys is not None:
+            request_key_id = self._digest_key_id(request.payload_hash)
+            request_key = self.request_digest_keys.get(request_key_id)
+            if request_key is None:
+                return self._fail(
+                    RetrievalErrorCode.DIGEST_KEY_UNAVAILABLE,
+                    request.request_id,
+                    "request digest key unavailable",
+                )
+            if digest_from_canonical(request_key_id, request_key, request_payload) != request.payload_hash:
+                return self._fail(RetrievalErrorCode.CONFLICT, request.request_id, "payload digest mismatch")
+
+        existing = self.idempotency.get(composite)
+        if existing is None:
+            return None
+        if existing["payload_hash"] == request.payload_hash:
+            return self._ok(existing["result"], request.request_id)
+
+        old_key_id = self._digest_key_id(existing["payload_hash"])
+        new_key_id = self._digest_key_id(request.payload_hash)
+        if old_key_id != new_key_id and self.request_digest_keys is not None:
+            old_key = self.request_digest_keys.get(old_key_id)
+            if old_key is None:
+                return self._fail(
+                    RetrievalErrorCode.DIGEST_KEY_UNAVAILABLE,
+                    request.request_id,
+                    "historical digest key unavailable",
+                )
+            historical_digest = digest_from_canonical(old_key_id, old_key, request_payload)
+            if existing["payload_hash"] == historical_digest:
+                return self._ok(existing["result"], request.request_id)
+        return self._fail(RetrievalErrorCode.CONFLICT, request.request_id, "payload conflict")
 
     def capabilities(self) -> VectorCapabilities:
         return VectorCapabilities(
@@ -186,37 +246,9 @@ class FakeVectorProvider(VectorProvider):
             return self._fail(RetrievalErrorCode.CANCELLED, request.request_id, "cancelled")
 
         composite = (request.user_id, "upsert", "fake_vector", request.index_generation, request.idempotency_key)
-        semantic_payload = self._semantic_payload(request)
-        if self.digest_keys is not None:
-            request_key_id = self._digest_key_id(request.payload_hash)
-            request_key = self.digest_keys.get(request_key_id)
-            if request_key is None:
-                return self._fail(
-                    RetrievalErrorCode.DIGEST_KEY_UNAVAILABLE,
-                    request.request_id,
-                    "request digest key unavailable",
-                )
-            if digest_from_canonical(request_key_id, request_key, semantic_payload) != request.payload_hash:
-                return self._fail(RetrievalErrorCode.CONFLICT, request.request_id, "payload digest mismatch")
-
-        existing = self.idempotency.get(composite)
-        if existing is not None:
-            if existing["payload_hash"] == request.payload_hash:
-                return self._ok(existing["result"], request.request_id)
-            old_key_id = self._digest_key_id(existing["payload_hash"])
-            new_key_id = self._digest_key_id(request.payload_hash)
-            if old_key_id != new_key_id and self.digest_keys is not None:
-                old_key = self.digest_keys.get(old_key_id)
-                if old_key is None:
-                    return self._fail(
-                        RetrievalErrorCode.DIGEST_KEY_UNAVAILABLE,
-                        request.request_id,
-                        "historical digest key unavailable",
-                    )
-                historical_digest = digest_from_canonical(old_key_id, old_key, semantic_payload)
-                if existing["payload_hash"] == historical_digest:
-                    return self._ok(existing["result"], request.request_id)
-            return self._fail(RetrievalErrorCode.CONFLICT, request.request_id, "payload conflict")
+        prior_result = self._validate_payload_and_replay(request, composite)
+        if prior_result is not None:
+            return prior_result
 
         wm = self._check_watermark(request.request_id, request.source_watermark, request.user_id)
         if wm is not None:
@@ -322,20 +354,14 @@ class FakeVectorProvider(VectorProvider):
                 return self._fail(RetrievalErrorCode.INVALID_ARGUMENT, request.request_id, "wildcard/empty selector")
 
         composite = (request.user_id, "delete", "fake_vector", request.index_generation, request.idempotency_key)
-        existing = self.idempotency.get(composite)
-        if existing is not None:
-            if existing["payload_hash"] == request.payload_hash:
-                return self._ok(existing["result"], request.request_id)
-            return self._fail(RetrievalErrorCode.CONFLICT, request.request_id, "payload conflict")
+        prior_result = self._validate_payload_and_replay(request, composite)
+        if prior_result is not None:
+            return prior_result
 
         matched: list[str] = []
         not_matched: list[str] = []
         rejected: list[VectorDeleteRejection] = []
         for memory_id in request.selector.memory_ids:
-            truth_owner = self.truth_owners.get(memory_id)
-            if truth_owner is not None and truth_owner != request.user_id:
-                rejected.append(VectorDeleteRejection(memory_id=memory_id, reason="user_scope_violation"))
-                continue
             if memory_id == "*" or memory_id == "":
                 not_matched.append(memory_id)
                 continue
@@ -371,6 +397,18 @@ class FakeVectorProvider(VectorProvider):
             return self._fail(RetrievalErrorCode.AUTHORIZATION_DENIED, request.request_id, "op denied")
         if self.clock.now >= auth.expires_at:
             return self._fail(RetrievalErrorCode.AUTHORIZATION_EXPIRED, request.request_id, "expired")
+
+        composite = (
+            request.scope.scope_id,
+            "rebuild",
+            "fake_vector",
+            request.target_generation,
+            request.idempotency_key,
+        )
+        prior_result = self._validate_payload_and_replay(request, composite)
+        if prior_result is not None:
+            return prior_result
+
         if request.target_generation == self.serving.get(request.scope.scope_id):
             return self._fail(RetrievalErrorCode.CONFLICT, request.request_id, "target equals serving")
         old = self.serving.get(request.scope.scope_id)
@@ -392,23 +430,23 @@ class FakeVectorProvider(VectorProvider):
 
         # 模拟构建失败由 backend_failure 注入
         if self.backend_failure is not None:
-            return self._ok(
-                VectorRebuildResult(
-                    scope=request.scope,
-                    target_generation=request.target_generation,
-                    source_snapshot_id=request.source_snapshot_id,
-                    source_watermark=request.source_watermark,
-                    read_count=0,
-                    indexed_count=0,
-                    rejected_count=0,
-                    verified=False,
-                    activated=False,
-                    activation_mode=ActivationMode.ROUTING_SWITCH,
-                    previous_generation=old,
-                    outcome="outcome_unknown",
-                ),
-                request.request_id,
+            result = VectorRebuildResult(
+                scope=request.scope,
+                target_generation=request.target_generation,
+                source_snapshot_id=request.source_snapshot_id,
+                source_watermark=request.source_watermark,
+                read_count=0,
+                indexed_count=0,
+                rejected_count=0,
+                verified=False,
+                activated=False,
+                activation_mode=ActivationMode.ROUTING_SWITCH,
+                previous_generation=old,
+                outcome="outcome_unknown",
             )
+            self.rebuild_effect_count += 1
+            self.idempotency[composite] = {"payload_hash": request.payload_hash, "result": result}
+            return self._ok(result, request.request_id)
 
         try:
             watermark_matches = build.source_watermark.compare(request.source_watermark) == 0
@@ -451,24 +489,24 @@ class FakeVectorProvider(VectorProvider):
         self.last_success[request.scope.scope_id] = self.clock.now
         generation_state["verified"] = True
         generation_state["activated"] = True
-        return self._ok(
-            VectorRebuildResult(
-                scope=request.scope,
-                target_generation=request.target_generation,
-                source_snapshot_id=request.source_snapshot_id,
-                source_watermark=request.source_watermark,
-                read_count=build.read_count,
-                indexed_count=len(build.record_digests),
-                rejected_count=build.rejected_count,
-                rejection_reasons=list(build.rejection_reasons),
-                verified=True,
-                activated=True,
-                activation_mode=ActivationMode.ROUTING_SWITCH,
-                previous_generation=old,
-                outcome="applied",
-            ),
-            request.request_id,
+        result = VectorRebuildResult(
+            scope=request.scope,
+            target_generation=request.target_generation,
+            source_snapshot_id=request.source_snapshot_id,
+            source_watermark=request.source_watermark,
+            read_count=build.read_count,
+            indexed_count=len(build.record_digests),
+            rejected_count=build.rejected_count,
+            rejection_reasons=list(build.rejection_reasons),
+            verified=True,
+            activated=True,
+            activation_mode=ActivationMode.ROUTING_SWITCH,
+            previous_generation=old,
+            outcome="applied",
         )
+        self.rebuild_effect_count += 1
+        self.idempotency[composite] = {"payload_hash": request.payload_hash, "result": result}
+        return self._ok(result, request.request_id)
 
     # ── get_index_state ──
     def get_index_state(self, request: IndexStateRequest) -> ProviderResult[IndexState]:

@@ -9,7 +9,7 @@ import pytest
 
 from retrieval import contracts as c
 from retrieval import validation as v
-from fakes import FakeGenerationBuild, FakeVectorProvider
+from fakes import FakeGenerationBuild, FakeVectorProvider, sign_request_payload
 
 T = datetime(2026, 8, 17, 10, 0, 0, tzinfo=timezone.utc)
 DIG = "hmac-sha256:k1:" + "b" * 64
@@ -42,14 +42,14 @@ def make_auth(scope_id, operation):
 
 def rebuild_scope(p, scope, *, target="shared-generation", watermark_value=1):
     return p.rebuild(
-        c.VectorRebuildRequest(
+        sign_request_payload(c.VectorRebuildRequest(
             request_id=f"rebuild-{scope.scope_id}", trace_id="t1",
             user_id=scope.user_id or "system", deadline_at=datetime(2026, 8, 17, 11, 0, 0, tzinfo=timezone.utc),
             idempotency_key="ik", payload_hash=DIG, source_snapshot_id=f"snap-{scope.scope_id}",
             source_watermark=make_wm(watermark_value, scope.scope_id), target_generation=target,
             schema_version="v1", reason=c.RebuildReason.BOOTSTRAP, scope=scope,
             scope_authorization=make_auth(scope.scope_id, "rebuild"),
-        )
+        ))
     )
 
 
