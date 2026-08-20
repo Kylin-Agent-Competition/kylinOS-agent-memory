@@ -130,6 +130,10 @@ class EmbeddingService:
         self._cache = EmbeddingQueryCache()
         self._backlog = EmbeddingBacklogTracker()
         self._coalescer = EmbeddingCoalescer()
+        # [TABLE 29 降级策略] 短文本阈值：积压告警时超过此长度的文本跳过
+        # embed，直接返回结构化降级（避免长文本拖慢整个队列）。
+        # 默认 256 字符：覆盖绝大部分短查询场景。
+        self._max_short_text_length = 256
 
     # ── 生命周期 ──
 
@@ -321,6 +325,17 @@ class EmbeddingService:
                 return {"ok": True, "result": result_dict, "coalesced": True}
             finally:
                 self._backlog.leave(seq)
+
+        # [TABLE 29 降级策略] 短文本保护：积压告警时超过阈值的文本跳过
+        # embed，直接返回结构化降级（避免长文本耗时拖慢队列）。
+        backlog_snap = self._backlog.snapshot()
+        if (backlog_snap.get("backlog_alert") or backlog_snap.get("oldest_alert")):
+            if len(text) > self._max_short_text_length:
+                return self._degrade(
+                    ProviderErrorCode.ERR_TIMEOUT.name,
+                    f"text too long ({len(text)} > {self._max_short_text_length}) "
+                    f"in degraded mode (backlog={backlog_snap['backlog']}, "
+                    f"oldest={backlog_snap['oldest_pending_age_seconds']:.2f}s)")
 
         # Day9 积压追踪：进入队列（处理完成/失败/超时后 leave）
         seq = self._backlog.enter()

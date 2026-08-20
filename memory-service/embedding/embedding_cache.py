@@ -15,8 +15,10 @@ oldest_pending_age 告警阈值。
    - 深拷贝返回：调用方修改 vector 不影响缓存（防污染，同 D7）。
    - TTL/容量可配；空结果（降级空向量）不缓存（避免缓存降级态）。
 2. 命中/未命中统计：hits/misses/size/evictions，供可观测性（TABLE 36）与评测。
-3. 后台批量合并候选：服务端合并"相同原文文本的并发请求"（request coalescing）——
-   同一原文的并发 embed 共享一次 Provider 调用，降低重复 SDK 调用。
+3. 请求合并（request coalescing）：相同原文文本的并发请求共享一次 Provider 调用，
+   降低重复 SDK 调用。当前 SDK 单会话 embed 无批量 API，故"后台批量合并"
+   （background batch merge——后台线程收集不同文本后批量调用）为候选设计，
+   待 SDK 提供批量 embed 接口后实现。
 
 确定性：同一输入 → 同一缓存键；同一 Provider 输出 → 同一缓存结果。
 """

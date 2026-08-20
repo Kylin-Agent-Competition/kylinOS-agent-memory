@@ -18,9 +18,9 @@
 #   - VM 内 python3 可用；venv 缺失时自动重建到 /tmp/day8-venv
 #   - LD_LIBRARY_PATH 需含 /usr/lib/kylin-ai/depends（SDK 依赖）
 #
-# 注意（Day9 未提交状态）：被测代码 = HEAD（main d37fb95）+ 工作区未提交改动；
-#   证据头会记录 git diff --stat（Step1 原始输出），tested_commit 语义 = HEAD
-#   + 工作区 diff（与 Day8 已提交的 tested_commit 绑定不同，如实记录）。
+# 注意：被测代码 = HEAD（当前分支最新提交）；工作区应干净。
+#   证据头会记录 git diff --stat（Step1 原始输出），tested_commit 语义 = HEAD。
+#   若工作区有未提交改动，tested_commit 注释会如实标注。
 
 # 自清理：vboxsf/autocrlf 可能给脚本注入 CRLF，先移除行尾 \r 再执行
 if head -1 "$0" | grep -q $'\r'; then
