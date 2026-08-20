@@ -1,0 +1,74 @@
+
+================================================================================
+# 任务: phase5_recollect_service  @ 2026-08-17T21:39:16.501275
+================================================================================
+
+----- CMD: echo '=== recollect service unit ==='; cat /usr/lib/systemd/user/kylin-ai-recollect-service.service 2>&1  -----
+# exit=0
+=== recollect service unit ===
+[Unit]
+Description=Kylin AI Recollect Service
+
+[Service]
+ExecStart=/usr/bin/kylin-ai-recollect-service
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+
+----- CMD:  echo '=== recollect service binary ==='; file /usr/bin/kylin-ai-recollect-service 2>&1; readelf -n /usr/bin/kylin-ai-recollect-service 2>/dev/null | grep -A1 'Build ID'  -----
+# exit=0
+=== recollect service binary ===
+/usr/bin/kylin-ai-recollect-service: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=dbb79394d82e722f230bc2f3e57510a98e5d2cf6, for GNU/Linux 3.2.0, stripped
+    Build ID: dbb79394d82e722f230bc2f3e57510a98e5d2cf6
+
+
+----- CMD:  echo '=== recollect service deps ==='; ldd /usr/bin/kylin-ai-recollect-service 2>&1 | grep -iE 'sqlite|vector|vision|embedding|clip|opencv|avcodec|chroma|milvus|onnx|Qt|dbus'  -----
+# exit=0
+=== recollect service deps ===
+	libQt5DBus.so.5 => /lib/x86_64-linux-gnu/libQt5DBus.so.5 (0x000073085304d000)
+	libopencv_features2d.so.406 => /lib/x86_64-linux-gnu/libopencv_features2d.so.406 (0x0000730852f99000)
+	libsqlite3.so.0 => /lib/x86_64-linux-gnu/libsqlite3.so.0 (0x0000730852abb000)
+	libukui-log4qt.so.1 => /usr/lib/libukui-log4qt.so.1 (0x0000730852a37000)
+	libkysdk-coreai-vision.so.1 => /lib/x86_64-linux-gnu/libkysdk-coreai-vision.so.1 (0x0000730852a08000)
+	libQt5Network.so.5 => /lib/x86_64-linux-gnu/libQt5Network.so.5 (0x0000730852818000)
+	libQt5Widgets.so.5 => /lib/x86_64-linux-gnu/libQt5Widgets.so.5 (0x000073085202d000)
+	libQt5Gui.so.5 => /lib/x86_64-linux-gnu/libQt5Gui.so.5 (0x0000730851958000)
+	libavcodec.so.60 => /lib/x86_64-linux-gnu/libavcodec.so.60 (0x0000730850474000)
+	libopencv_imgproc.so.406 => /lib/x86_64-linux-gnu/libopencv_imgproc.so.406 (0x000073084eac9000)
+	libopencv_core.so.406 => /lib/x86_64-linux-gnu/libopencv_core.so.406 (0x000073084e766000)
+	libQt5Core.so.5 => /lib/x86_64-linux-gnu/libQt5Core.so.5 (0x000073084e20f000)
+	libgsettings-qt.so.1 => /lib/x86_64-linux-gnu/libgsettings-qt.so.1 (0x000073084e203000)
+	libkysdk-coreai-embedding.so.1 => /lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1 (0x000073084e1a6000)
+	libkysdk-vector-engine-client.so.1 => /lib/x86_64-linux-gnu/libkysdk-vector-engine-client.so.1 (0x000073084dde8000)
+	libdbus-1.so.3 => /lib/x86_64-linux-gnu/libdbus-1.so.3 (0x000073084d918000)
+	libopencv_flann.so.406 => /lib/x86_64-linux-gnu/libopencv_flann.so.406 (0x000073084d8af000)
+	libQt5X11Extras.so.5 => /lib/x86_64-linux-gnu/libQt5X11Extras.so.5 (0x000073084c507000)
+	libchromaprint.so.1 => /lib/x86_64-linux-gnu/libchromaprint.so.1 (0x00007308480be000)
+
+----- CMD:  echo '=== recollect data dirs ==='; find ~/.local/share ~/.config ~/.cache -maxdepth 3 -iname '*recollect*' 2>/dev/null; find ~/.local/share -maxdepth 2 -iname '*.db' 2>/dev/null | grep -iE 'recollect|memory'  -----
+# exit=1
+=== recollect data dirs ===
+
+----- CMD:  echo '=== dbus services containing recollect ==='; grep -rl recollect /usr/share/dbus-1/services/ 2>/dev/null; ls /usr/share/dbus-1/services/ | grep -iE 'recollect|memorymap'  -----
+# exit=1
+=== dbus services containing recollect ===
+
+----- CMD:  echo '=== dpkg files recollect-service ==='; dpkg -L kylin-ai-recollect-service 2>/dev/null | head -60 -----
+# exit=0
+=== dpkg files recollect-service ===
+/.
+/usr
+/usr/bin
+/usr/bin/kylin-ai-recollect-service
+/usr/lib
+/usr/lib/systemd
+/usr/lib/systemd/user
+/usr/lib/systemd/user/kylin-ai-recollect-service.service
+/usr/share
+/usr/share/doc
+/usr/share/doc/kylin-ai-recollect-service
+/usr/share/doc/kylin-ai-recollect-service/changelog.Debian.gz
+/usr/share/doc/kylin-ai-recollect-service/copyright
+/usr/share/glib-2.0
+/usr/share/glib-2.0/schemas
+/usr/share/glib-2.0/schemas/com.kylin.recollect.service.gschema.xml

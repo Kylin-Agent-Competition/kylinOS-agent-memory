@@ -1,0 +1,41 @@
+[2026-08-07T17:33:39.898Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=49657)
+[2026-08-07T17:33:40.926Z] [INFO] Client connected
+[2026-08-07T17:33:40.926Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:33:40.926Z] [INFO] Response sent: status=ok
+[2026-08-07T17:33:40.982Z] [INFO] Client connected
+[2026-08-07T17:33:40.982Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:33:40.982Z] [INFO] Response sent: status=ok
+[2026-08-07T17:33:41.042Z] [INFO] Client connected
+[2026-08-07T17:33:41.042Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:33:41.042Z] [INFO] Response sent: status=ok
+[2026-08-07T17:33:41.097Z] [INFO] Client connected
+[2026-08-07T17:33:41.098Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:33:41.098Z] [INFO] Response sent: status=ok
+[2026-08-07T17:33:41.157Z] [INFO] Client connected
+[2026-08-07T17:33:41.157Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:33:41.157Z] [INFO] Response sent: status=ok
+[2026-08-07T17:33:41.216Z] [INFO] Client connected
+[2026-08-07T17:33:41.216Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:33:41.216Z] [INFO] Response sent: status=ok
+[2026-08-07T17:33:41.281Z] [INFO] Client connected
+[2026-08-07T17:33:41.281Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:33:41.281Z] [INFO] Response sent: status=ok
+[2026-08-07T17:33:41.340Z] [INFO] Client connected
+[2026-08-07T17:33:41.340Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:33:41.340Z] [INFO] Response sent: status=ok
+[2026-08-07T17:33:41.416Z] [INFO] Client connected
+[2026-08-07T17:33:41.416Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:33:41.416Z] [INFO] Response sent: status=ok
+[2026-08-07T17:33:41.473Z] [INFO] Client connected
+[2026-08-07T17:33:41.473Z] [INFO] Request method=health request_id=?
+[2026-08-07T17:33:41.473Z] [INFO] Response sent: status=ok
+[2026-08-07T17:33:41.486Z] [INFO] Client connected
+[2026-08-07T17:33:41.489Z] [ERROR] Client handler error: Invalid message length: 2065853797
+Traceback (most recent call last):
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 160, in handle_client
+    request = recv_message(sock)
+              ^^^^^^^^^^^^^^^^^^
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 94, in recv_message
+    raise ValueError(f"Invalid message length: {msg_len}")
+ValueError: Invalid message length: 2065853797
+

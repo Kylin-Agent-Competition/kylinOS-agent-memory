@@ -1,0 +1,247 @@
+
+================================================================================
+# 任务: phase2_binary  @ 2026-08-17T21:37:59.836132
+================================================================================
+
+----- CMD: APP=/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23; echo '--- desktop ---'; cat \$APP/files/share/applications/kylin-ai-memorymap.desktop  -----
+# exit=1
+--- desktop ---
+# STDERR:
+cat: '$APP/files/share/applications/kylin-ai-memorymap.desktop': 没有那个文件或目录
+
+----- CMD:  echo '--- gschema ---'; cat \$APP/files/share/glib-2.0/schemas/com.kylin.memorymap.gschema.xml  -----
+# exit=1
+--- gschema ---
+# STDERR:
+cat: '$APP/files/share/glib-2.0/schemas/com.kylin.memorymap.gschema.xml': 没有那个文件或目录
+
+----- CMD:  echo '--- file ---'; file \$APP/files/bin/kylin-ai-memorymap  -----
+# exit=0
+--- file ---
+$APP/files/bin/kylin-ai-memorymap: cannot open `$APP/files/bin/kylin-ai-memorymap' (No such file or directory)
+
+----- CMD:  echo '--- size ---'; ls -la \$APP/files/bin/kylin-ai-memorymap  -----
+# exit=2
+--- size ---
+# STDERR:
+ls: 无法访问 '$APP/files/bin/kylin-ai-memorymap': 没有那个文件或目录
+
+----- CMD:  echo '--- readelf buildid ---'; readelf -n \$APP/files/bin/kylin-ai-memorymap 2>/dev/null | grep -A2 'Build ID'  -----
+# exit=1
+--- readelf buildid ---
+
+----- CMD:  echo '--- ldd ---'; ldd \$APP/files/bin/kylin-ai-memorymap 2>&1 | head -80 -----
+# exit=0
+--- ldd ---
+ldd: $APP/files/bin/kylin-ai-memorymap: 没有那个文件或目录
+
+================================================================================
+# 任务: phase2_binary  @ 2026-08-17T21:38:16.765010
+================================================================================
+
+----- CMD: cat /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/applications/kylin-ai-memorymap.desktop  -----
+# exit=0
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Memory Map
+Name[zh_CN]=记忆地图
+Name[mn_MN]=ᠴᠡᠭᠡᠵᠢᠯᠡᠯ ᠤ᠋ᠨ ᠭᠠᠵᠠᠷ ᠤ᠋ᠨ ᠵᠢᠷᠤᠭ
+Name[zh_HK]=記憶地圖
+Name[bo_CN]=དྲན་རྟགས་ཀྱི་ས་ཁྲ།
+Name[ug_CN]=يېڭگىلىك خەرىتىسى
+Name[kk_KZ]=اِس كِسْكِين كَارْتَاسِي
+Name[ky_KG]=اِس تَاقْتَاسِي كَارْتَاسِي
+Name[vi_VN]=Bản đồ bộ nhớ
+Name[ms_MY]=Peta Memori
+Name[th_TH]=แผนที่ความทรงจำ
+Comment=Quickly retrieve anything on your computer with a photo-like memory experience
+Comment[zh_CN]=以照片记忆般的体验，快速找回电脑中的一切
+Comment[mn_MN]=ᠭᠡᠷᠡᠯ ᠵᠢᠷᠤᠭ ᠤᠨ ᠴᠡᠭᠡᠵᠢᠯᠡᠬᠦ ᠮᠡᠲᠦ ᠶᠢᠨ ᠣᠶᠢᠯᠠᠭᠠᠯᠲᠠ ᠪᠠᠷ ᠺᠣᠮᠫᠢᠶᠦ᠋ᠲ᠋ᠧᠷ ᠦᠨ ᠳᠣᠲᠣᠷᠠᠬᠢ ᠪᠦᠬᠦᠳᠡ ᠶᠢ ᠣᠯᠵᠤ ᠠᠪᠤᠨᠠ ᠃
+Comment[bo_CN]=པར་རིས་ཀྱི་དྲན་སྣང་ལྟ་བའི་ཉམས་མྱོང་ཐོག་ གློག་ཀླད་ནང་གི་དངོས་རྣམས་མགྱོགས་པོར་ཕྱིར་ཐོན་བྱེད་
+Comment[zh_HK]=以照片記憶般的體驗，快速找回電腦中的一切
+Comment[ug_CN]=رەسىملەرگە ئوخشاش يادلاش تەجرىبىسى بىلەن، كومپيۇتېرىڭىزدىكى بارلىق نەرسىنى تېزلا تاپسىڭىز بولىدۇ
+Comment[kk_KZ]=سۈرەتلەرگە ئوخشاش ئەستەلىكىڭىز بىلەن، كومپيۇتېرىڭىزدەكى بارلىق نەرسىلەرنى تېز تاپسىڭىز بولىدۇ
+Comment[ky_KG]=رەسىملەرگە ئوخشاش يادىكارلىق تەجرىبەسى بىلەن، كومپيۇتېرىڭىزدىكى بارلىق نەرسىلەرنى تېز تاپسىڭىز بولىدۇ
+Exec=/usr/bin/kylin-ai-memorymap
+Terminal=false
+Icon=kylin-ai-memorymap
+Categories=AI;
+StartupNotify=true
+
+----- CMD:  cat /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/glib-2.0/schemas/com.kylin.memorymap.gschema.xml  -----
+# exit=0
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+    <schema id="com.kylin.memorymap" path="/com/kylin/memorymap/">
+        <key name="enabled" type="b">
+            <default>false</default>
+            <summary>Enable or disable memory map.</summary>
+            <description>This key determines whether memory map is enabled or disabled by default.</description>
+        </key>
+
+        <key name="screenshot-interval" type="u">
+            <default>5</default>
+            <range min="2" max="60"/>
+            <summary>Screenshot interval in seconds.</summary>
+            <description>Specifies how often a screenshot should be taken, in seconds.</description>
+        </key>
+
+        <key name="max-result-number" type="u">
+            <default>18</default>
+            <summary>Maximum number of results.</summary>
+            <description>Defines the maximum number of results that can be searched.</description>
+        </key>
+
+        <key name="max-storage-size-gb" type="u">
+            <default>5</default>
+            <range min="5" max="20"/>
+            <summary>Maximum storage size in megabytes.</summary>
+            <description>Sets the maximum amount of disk space, in megabytes, that can be used for storing data.</description>
+        </key>
+
+        <key name="exclude-apps" type="as">
+            <default>['']</default>
+            <summary>List of excluded applications.</summary>
+            <description>A list of application identifiers that should be excluded from the feature.</description>
+        </key>
+
+        <key name="close-window-option" type="s">
+            <default>"minimize"</default>
+            <summary>minimize or exit.</summary>
+            <description>Set default app shutdown options.</description>
+        </key>
+
+        <key name="no-remind" type="b">
+            <default>false</default>
+            <summary>No reminder or reminder to close option.</summary>
+            <description>This key describes whether to prompt and pop up a close option when closing the application</description>
+        </key>
+
+       <key name="recording-memory" type="b">
+            <default>false</default>
+            <summary>Is it currently being recorded.</summary>
+            <description>Set whether to start recording.</description>
+        </key>
+    </schema>
+</schemalist>
+
+----- CMD:  file /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap  -----
+# exit=0
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap: ELF 64-bit LSB pie executable, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=9f0b1cb72c6a1b90b57d8d039f1367f3d4875b5d, for GNU/Linux 3.2.0, not stripped
+
+----- CMD:  ls -la /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/  -----
+# exit=0
+总计 752
+drwxr-xr-x 2 root root   4096 2026年 2月12日 .
+drwxr-xr-x 6 root root   4096 2026年 2月12日 ..
+-rwxr-xr-x 1 root root 746216 2026年 2月12日 kylin-ai-memorymap
+
+----- CMD:  readelf -n /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap 2>/dev/null | grep -A2 'Build ID'  -----
+# exit=0
+    Build ID: 9f0b1cb72c6a1b90b57d8d039f1367f3d4875b5d
+
+Displaying notes found in: .note.ABI-tag
+
+----- CMD:  ldd /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap 2>&1 | head -100 -----
+# exit=0
+	linux-vdso.so.1 (0x00007ffd8e150000)
+	libQt5Quick.so.5 => /lib/x86_64-linux-gnu/libQt5Quick.so.5 (0x00007291e28e3000)
+	libQt5DBus.so.5 => /lib/x86_64-linux-gnu/libQt5DBus.so.5 (0x00007291e2854000)
+	libKF5WindowSystem.so.5 => /lib/x86_64-linux-gnu/libKF5WindowSystem.so.5 (0x00007291e2806000)
+	libukui-log4qt.so.1 => /usr/lib/libukui-log4qt.so.1 (0x00007291e2782000)
+	libkysdk-coreai-vision.so.1 => /lib/x86_64-linux-gnu/libkysdk-coreai-vision.so.1 (0x00007291e2753000)
+	libQt5Qml.so.5 => /lib/x86_64-linux-gnu/libQt5Qml.so.5 (0x00007291e22d1000)
+	libQt5Network.so.5 => /lib/x86_64-linux-gnu/libQt5Network.so.5 (0x00007291e2125000)
+	libQt5Widgets.so.5 => /lib/x86_64-linux-gnu/libQt5Widgets.so.5 (0x00007291e1a77000)
+	libQt5Gui.so.5 => /lib/x86_64-linux-gnu/libQt5Gui.so.5 (0x00007291e13a2000)
+	libkysdk-waylandhelper.so.1 => /lib/x86_64-linux-gnu/libkysdk-waylandhelper.so.1 (0x00007291e1343000)
+	libkylin-ai-recollect-client.so.1 => /lib/x86_64-linux-gnu/libkylin-ai-recollect-client.so.1 (0x00007291e1309000)
+	libQt5Core.so.5 => /lib/x86_64-linux-gnu/libQt5Core.so.5 (0x00007291e0db0000)
+	libgsettings-qt.so.1 => /lib/x86_64-linux-gnu/libgsettings-qt.so.1 (0x00007291e0da4000)
+	libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007291e0b4a000)
+	libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007291e0b26000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007291e0921000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007291e2f03000)
+	libQt5QmlModels.so.5 => /lib/x86_64-linux-gnu/libQt5QmlModels.so.5 (0x00007291e0899000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007291e07ae000)
+	libdbus-1.so.3 => /lib/x86_64-linux-gnu/libdbus-1.so.3 (0x00007291e0761000)
+	libX11.so.6 => /lib/x86_64-linux-gnu/libX11.so.6 (0x00007291e0624000)
+	libxcb.so.1 => /lib/x86_64-linux-gnu/libxcb.so.1 (0x00007291e05fa000)
+	libxcb-keysyms.so.1 => /lib/x86_64-linux-gnu/libxcb-keysyms.so.1 (0x00007291e05f5000)
+	libQt5X11Extras.so.5 => /lib/x86_64-linux-gnu/libQt5X11Extras.so.5 (0x00007291e05ee000)
+	libjsoncpp.so.25 => /lib/x86_64-linux-gnu/libjsoncpp.so.25 (0x00007291e05b4000)
+	libgio-2.0.so.0 => /lib/x86_64-linux-gnu/libgio-2.0.so.0 (0x00007291e03e7000)
+	libglib-2.0.so.0 => /lib/x86_64-linux-gnu/libglib-2.0.so.0 (0x00007291e02a0000)
+	libgobject-2.0.so.0 => /lib/x86_64-linux-gnu/libgobject-2.0.so.0 (0x00007291e023f000)
+	libcrypto.so.3 => /lib/x86_64-linux-gnu/libcrypto.so.3 (0x00007291dfcf5000)
+	libz.so.1 => /lib/x86_64-linux-gnu/libz.so.1 (0x00007291dfcd5000)
+	libgssapi_krb5.so.2 => /lib/x86_64-linux-gnu/libgssapi_krb5.so.2 (0x00007291dfc83000)
+	libGL.so.1 => /lib/x86_64-linux-gnu/libGL.so.1 (0x00007291dfbfc000)
+	libpng16.so.16 => /lib/x86_64-linux-gnu/libpng16.so.16 (0x00007291dfbc4000)
+	libharfbuzz.so.0 => /lib/x86_64-linux-gnu/libharfbuzz.so.0 (0x00007291dfab4000)
+	libmd4c.so.0 => /lib/x86_64-linux-gnu/libmd4c.so.0 (0x00007291dfaa2000)
+	libwayland-client.so.0 => /lib/x86_64-linux-gnu/libwayland-client.so.0 (0x00007291dfa8e000)
+	libKF5WaylandClient.so.5 => /lib/x86_64-linux-gnu/libKF5WaylandClient.so.5 (0x00007291df9a1000)
+	libavcodec.so.60 => /lib/x86_64-linux-gnu/libavcodec.so.60 (0x00007291de4bd000)
+	libavformat.so.60 => /lib/x86_64-linux-gnu/libavformat.so.60 (0x00007291de20d000)
+	libavutil.so.58 => /lib/x86_64-linux-gnu/libavutil.so.58 (0x00007291dd0f5000)
+	libswscale.so.7 => /lib/x86_64-linux-gnu/libswscale.so.7 (0x00007291dd04f000)
+	libkysysinfo.so.1 => /lib/x86_64-linux-gnu/libkysysinfo.so.1 (0x00007291dd035000)
+	libsystemd.so.0 => /lib/x86_64-linux-gnu/libsystemd.so.0 (0x00007291dcf59000)
+	libdouble-conversion.so.3 => /lib/x86_64-linux-gnu/libdouble-conversion.so.3 (0x00007291dcf44000)
+	libicui18n.so.74 => /lib/x86_64-linux-gnu/libicui18n.so.74 (0x00007291dcc0f000)
+	libicuuc.so.74 => /lib/x86_64-linux-gnu/libicuuc.so.74 (0x00007291dca08000)
+	libpcre2-16.so.0 => /lib/x86_64-linux-gnu/libpcre2-16.so.0 (0x00007291dc97a000)
+	libzstd.so.1 => /lib/x86_64-linux-gnu/libzstd.so.1 (0x00007291dc8c2000)
+	libXau.so.6 => /lib/x86_64-linux-gnu/libXau.so.6 (0x00007291dc8bd000)
+	libXdmcp.so.6 => /lib/x86_64-linux-gnu/libXdmcp.so.6 (0x00007291dc8b5000)
+	libgmodule-2.0.so.0 => /lib/x86_64-linux-gnu/libgmodule-2.0.so.0 (0x00007291dc8ae000)
+	libmount.so.1 => /lib/x86_64-linux-gnu/libmount.so.1 (0x00007291dc825000)
+	libselinux.so.1 => /lib/x86_64-linux-gnu/libselinux.so.1 (0x00007291dc7f9000)
+	libpcre2-8.so.0 => /lib/x86_64-linux-gnu/libpcre2-8.so.0 (0x00007291dc75f000)
+	libffi.so.8 => /lib/x86_64-linux-gnu/libffi.so.8 (0x00007291dc754000)
+	libkrb5.so.3 => /lib/x86_64-linux-gnu/libkrb5.so.3 (0x00007291dc688000)
+	libk5crypto.so.3 => /lib/x86_64-linux-gnu/libk5crypto.so.3 (0x00007291dc659000)
+	libcom_err.so.2 => /lib/x86_64-linux-gnu/libcom_err.so.2 (0x00007291dc653000)
+	libkrb5support.so.0 => /lib/x86_64-linux-gnu/libkrb5support.so.0 (0x00007291dc646000)
+	libGLdispatch.so.0 => /lib/x86_64-linux-gnu/libGLdispatch.so.0 (0x00007291dc58e000)
+	libGLX.so.0 => /lib/x86_64-linux-gnu/libGLX.so.0 (0x00007291dc55c000)
+	libfreetype.so.6 => /lib/x86_64-linux-gnu/libfreetype.so.6 (0x00007291dc48e000)
+	libgraphite2.so.3 => /lib/x86_64-linux-gnu/libgraphite2.so.3 (0x00007291dc467000)
+	libswresample.so.4 => /lib/x86_64-linux-gnu/libswresample.so.4 (0x00007291dc446000)
+	libvpx.so.7 => /lib/x86_64-linux-gnu/libvpx.so.7 (0x00007291dc14a000)
+	libwebpmux.so.3 => /lib/x86_64-linux-gnu/libwebpmux.so.3 (0x00007291dc13d000)
+	liblzma.so.5 => /lib/x86_64-linux-gnu/liblzma.so.5 (0x00007291dc10b000)
+	libdav1d.so.7 => /lib/x86_64-linux-gnu/libdav1d.so.7 (0x00007291dbf2f000)
+	librsvg-2.so.2 => /lib/x86_64-linux-gnu/librsvg-2.so.2 (0x00007291db8b8000)
+	libcairo.so.2 => /lib/x86_64-linux-gnu/libcairo.so.2 (0x00007291db775000)
+	libzvbi.so.0 => /lib/x86_64-linux-gnu/libzvbi.so.0 (0x00007291db6e6000)
+	libsnappy.so.1 => /lib/x86_64-linux-gnu/libsnappy.so.1 (0x00007291db6da000)
+	libaom.so.3 => /lib/x86_64-linux-gnu/libaom.so.3 (0x00007291db154000)
+	libgsm.so.1 => /lib/x86_64-linux-gnu/libgsm.so.1 (0x00007291db143000)
+	libjxl.so.0.7 => /lib/x86_64-linux-gnu/libjxl.so.0.7 (0x00007291dadb9000)
+	libjxl_threads.so.0.7 => /lib/x86_64-linux-gnu/libjxl_threads.so.0.7 (0x00007291dadb3000)
+	libmp3lame.so.0 => /lib/x86_64-linux-gnu/libmp3lame.so.0 (0x00007291dad3d000)
+	libopenjp2.so.7 => /lib/x86_64-linux-gnu/libopenjp2.so.7 (0x00007291dacdd000)
+	libopus.so.0 => /lib/x86_64-linux-gnu/libopus.so.0 (0x00007291dac7f000)
+	librav1e.so.0 => /lib/x86_64-linux-gnu/librav1e.so.0 (0x00007291da582000)
+	libshine.so.3 => /lib/x86_64-linux-gnu/libshine.so.3 (0x00007291da576000)
+	libspeex.so.1 => /lib/x86_64-linux-gnu/libspeex.so.1 (0x00007291da55b000)
+	libSvtAv1Enc.so.1 => /lib/x86_64-linux-gnu/libSvtAv1Enc.so.1 (0x00007291d9d4e000)
+	libtheoraenc.so.1 => /lib/x86_64-linux-gnu/libtheoraenc.so.1 (0x00007291d9d17000)
+	libtheoradec.so.1 => /lib/x86_64-linux-gnu/libtheoradec.so.1 (0x00007291d9cf8000)
+	libtwolame.so.0 => /lib/x86_64-linux-gnu/libtwolame.so.0 (0x00007291d9cd3000)
+	libvorbis.so.0 => /lib/x86_64-linux-gnu/libvorbis.so.0 (0x00007291d9ca7000)
+	libvorbisenc.so.2 => /lib/x86_64-linux-gnu/libvorbisenc.so.2 (0x00007291d9bfc000)
+	libwebp.so.7 => /lib/x86_64-linux-gnu/libwebp.so.7 (0x00007291d9b81000)
+	libx264.so.164 => /lib/x86_64-linux-gnu/libx264.so.164 (0x00007291d98bd000)
+	libx265.so.199 => /lib/x86_64-linux-gnu/libx265.so.199 (0x00007291d8920000)
+	libxvidcore.so.4 => /lib/x86_64-linux-gnu/libxvidcore.so.4 (0x00007291d8812000)
+	libva.so.2 => /lib/x86_64-linux-gnu/libva.so.2 (0x00007291d87e1000)
+	libvpl.so.2 => /lib/x86_64-linux-gnu/libvpl.so.2 (0x00007291d87ab000)
+	libxml2.so.2 => /lib/x86_64-linux-gnu/libxml2.so.2 (0x00007291d85c4000)
+	libbz2.so.1.0 => /lib/x86_64-linux-gnu/libbz2.so.1.0 (0x00007291d85af000)
+	libgme.so.0 => /lib/x86_64-linux-gnu/libgme.so.0 (0x00007291d8565000)
+	libopenmpt.so.0 => /lib/x86_64-linux-gnu/libopenmpt.so.0 (0x00007291d8396000)
+	libchromaprint.so.1 => /lib/x86_64-linux-gnu/libchromaprint.so.1 (0x00007291d8386000)

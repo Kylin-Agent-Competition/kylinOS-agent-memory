@@ -1,0 +1,220 @@
+{
+  "stage": "phase3_retest",
+  "started_at": "2026-08-08T22:28:42.041056+08:00",
+  "blockers_addressed": [
+    "S3-BLOCK-001: copy .so to /dev/shm/ before LD_PRELOAD",
+    "S3-BLOCK-003: use C ptest instead of socat for protocol framing",
+    "S3-BLOCK-004: direct exit-code testing, no timeout wrapper",
+    "S3-BLOCK-005: pre-check kylin-aiassistant binary existence"
+  ],
+  "diagnostics": {
+    "system": "Linux ZhouYifan-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux\n[dist]\nname=Kylin-Desktop\nmilestone=V11",
+    "toolchain": "gcc (openKylin 12.3.0-1ok3k0.1) 12.3.0\nPython 3.12.3\nldd (Ubuntu GLIBC 2.38-1ok6.9k0.11) 2.38",
+    "disk": "/dev/sda3        40G   31G  6.6G   83% /var\ntmpfs           3.9G   30M  3.9G    1% /dev/shm",
+    "strace": "AVAIL",
+    "kylin_aiassistant": "MISSING (S3-BLOCK-005)",
+    "ki_search_results": "/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/kylin-aiassistant",
+    "hook_so_exists": true,
+    "ld_preload_direct": "PASS",
+    "ld_preload_shm": "PASS",
+    "hook_so_used": "/dev/shm/libconnect_hook.so (fresh compile)",
+    "hook_recompile": "OK",
+    "ctest_compile": "FAIL: ",
+    "ptest_compile": "FAIL: ",
+    "ltest_compile": "OK"
+  },
+  "echo_server": {
+    "status": "OK"
+  },
+  "hook_tests": [
+    {
+      "name": "H1_direct_echo",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "OK:{\"protocol_version\": \"1.0\", \"request_id\": \"\", \"trace_id\": \"\", \"status\": \"ok\", \"data\": {\"status\": \"healthy\", \"uptime_seconds\": 1.4303557872772217, \"socket_path\": \"/tmp/kylin-memory-echo/echo.sock\", \"pid\": 83828}, \"server_ts\": \"2026-08-08T14:28:45.4"
+    },
+    {
+      "name": "H2_hook_redirect",
+      "exit": 1,
+      "status": "FAIL",
+      "detail": "ERROR: ld.so: object '/dev/shm/libconnect_hook.so' from LD_PRELOAD cannot be preloaded (failed to map segment from shared object): ignored. | connect: Connection refused | "
+    },
+    {
+      "name": "H3_bad_path_nohook",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "connect: No such file or directory | BAD_PATH_CORRECTLY_FAILED | "
+    },
+    {
+      "name": "H4_bare_passthrough",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "OK:{\"protocol_version\": \"1.0\", \"request_id\": \"\", \"trace_id\": \"\", \"status\": \"ok\", \"data\": {\"status\": \"healthy\", \"uptime_seconds\": 63.121490716934204, \"socket_path\": \"/tmp/kylin-memory-echo/echo.sock\", \"pid\": 83828}, \"server_ts\": \"2026-08-08T14:29:47.1"
+    },
+    {
+      "name": "H5_custom_match",
+      "exit": 1,
+      "status": "FAIL",
+      "detail": "ERROR: ld.so: object '/dev/shm/libconnect_hook.so' from LD_PRELOAD cannot be preloaded (failed to map segment from shared object): ignored. | connect: No such file or directory | "
+    },
+    {
+      "name": "H6_no_match_passthrough",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "OK:{\"protocol_version\": \"1.0\", \"request_id\": \"\", \"trace_id\": \"\", \"status\": \"ok\", \"data\": {\"status\": \"healthy\", \"uptime_seconds\": 125.13411688804626, \"socket_path\": \"/tmp/kylin-memory-echo/echo.sock\", \"pid\": 83828}, \"server_ts\": \"2026-08-08T14:30:49.1"
+    },
+    {
+      "name": "H7_rapid_1",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "[connect_hook] initialized: match='kylin-ai-runtime-unix' redirect='/tmp/kylin-memory-echo/echo.sock' debug=1 | [connect_hook] connect() called: path='/tmp/.kylin-ai-runtime-unix/99999/assistant.sock' addrlen=110 | [connect_hook] MATCH! Redirecting '/tmp"
+    },
+    {
+      "name": "H8_rapid_2",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "[connect_hook] initialized: match='kylin-ai-runtime-unix' redirect='/tmp/kylin-memory-echo/echo.sock' debug=1 | [connect_hook] connect() called: path='/tmp/.kylin-ai-runtime-unix/99999/assistant.sock' addrlen=110 | [connect_hook] MATCH! Redirecting '/tmp"
+    },
+    {
+      "name": "H9_rapid_3",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "[connect_hook] initialized: match='kylin-ai-runtime-unix' redirect='/tmp/kylin-memory-echo/echo.sock' debug=1 | [connect_hook] connect() called: path='/tmp/.kylin-ai-runtime-unix/99999/assistant.sock' addrlen=110 | [connect_hook] MATCH! Redirecting '/tmp"
+    }
+  ],
+  "protocol_tests": [
+    {
+      "name": "P1-P4_protocol_direct",
+      "exit": 127,
+      "status": "FAIL",
+      "detail": "bash: 行 1: /home/kylin-agent/kylin-memory-echo/bin/ptest: 没有那个文件或目录\n"
+    },
+    {
+      "name": "P1-P4_protocol_via_hook",
+      "exit": 127,
+      "status": "FAIL",
+      "detail": "bash: 行 1: /home/kylin-agent/kylin-memory-echo/bin/ptest: 没有那个文件或目录\n"
+    },
+    {
+      "name": "P5_large_payload",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "OK:239 bytes echo\n"
+    },
+    {
+      "name": "P6_malformed_json",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "{\"protocol_version\": \"1.0\", \"request_id\": \"\", \"trace_id\": \"\", \"status\": \"error\", \"data\": {\"error_code\": \"INTERNAL_ERROR\", \"message\": \"Protocol error occurred while processing request\"}, \"server_ts\": \"2026-08-08T14:30:50.954042+00:00\"}\n"
+    }
+  ],
+  "error_path_tests": [
+    {
+      "name": "E1a_direct_connect_server_down",
+      "exit": 0,
+      "status": "FAIL",
+      "detail": "Connect to dead server: exit=0, expect non-zero"
+    },
+    {
+      "name": "E1b_hook_redirect_server_down",
+      "exit": 0,
+      "status": "FAIL"
+    },
+    {
+      "name": "E2_rapid_reconnect_10x",
+      "status": "PASS",
+      "details": [
+        {
+          "iter": 0,
+          "exit": 0
+        },
+        {
+          "iter": 1,
+          "exit": 0
+        },
+        {
+          "iter": 2,
+          "exit": 0
+        },
+        {
+          "iter": 3,
+          "exit": 0
+        },
+        {
+          "iter": 4,
+          "exit": 0
+        },
+        {
+          "iter": 5,
+          "exit": 0
+        },
+        {
+          "iter": 6,
+          "exit": 0
+        },
+        {
+          "iter": 7,
+          "exit": 0
+        },
+        {
+          "iter": 8,
+          "exit": 0
+        },
+        {
+          "iter": 9,
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "name": "E3_large_payload_12KB",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "OK:239 bytes echo"
+    }
+  ],
+  "strace_test": {
+    "status": "SKIP_NO_BINARY"
+  },
+  "evidence_downloaded": [
+    "libconnect_hook.so",
+    "libconnect_hook.so.sha256",
+    "echo_phase3.log",
+    "echo_phase3b.log",
+    "echo_server.log",
+    "echo_server2.log"
+  ],
+  "errors": [
+    {
+      "code": "S3-BLOCK-001-INTERMITTENT",
+      "test": "H2_hook_redirect",
+      "detail": "LD_PRELOAD failed to map segment (intermittent)",
+      "frequency": "1/2"
+    },
+    {
+      "code": "S3-BLOCK-001-INTERMITTENT",
+      "test": "H5_custom_match",
+      "detail": "LD_PRELOAD failed to map segment (intermittent)",
+      "frequency": "2/5"
+    }
+  ],
+  "status": "PARTIAL",
+  "hook_summary": "7/9 PASS",
+  "finished_at": "2026-08-08T22:30:53.795962+08:00",
+  "summary": {
+    "hook_tests": "7/9 PASS",
+    "protocol_tests": "2/4 PASS",
+    "error_path_tests": "2/4 PASS",
+    "strace": "SKIP_NO_BINARY",
+    "blockers_addressed": [
+      "S3-BLOCK-001: copy .so to /dev/shm/ before LD_PRELOAD",
+      "S3-BLOCK-003: use C ptest instead of socat for protocol framing",
+      "S3-BLOCK-004: direct exit-code testing, no timeout wrapper",
+      "S3-BLOCK-005: pre-check kylin-aiassistant binary existence"
+    ],
+    "remaining_issues": [
+      "S3-BLOCK-001-INTERMITTENT",
+      "S3-BLOCK-001-INTERMITTENT"
+    ]
+  }
+}

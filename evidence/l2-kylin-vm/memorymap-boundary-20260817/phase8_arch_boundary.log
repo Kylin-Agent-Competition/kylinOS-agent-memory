@@ -1,0 +1,78 @@
+
+================================================================================
+# 任务: phase8_arch_boundary  @ 2026-08-17T21:57:11.653138
+================================================================================
+
+----- CMD: echo '=== memorymap files tree (qml/assets) ==='; find /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files -maxdepth 3 -type d 2>/dev/null | sort  -----
+# exit=0
+=== memorymap files tree (qml/assets) ===
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/include
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/include/KF5
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/include/KF5/KWindowSystem
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/lib
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/lib/x86_64-linux-gnu
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/lib/x86_64-linux-gnu/cmake
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/lib/x86_64-linux-gnu/qt5
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/applications
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/doc
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/doc/libkf5windowsystem-dev
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/doc/libkf5windowsystem-doc
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/glib-2.0
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/glib-2.0/schemas
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-user-guide
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-user-guide/data
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/qt5
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/qt5/doc
+
+----- CMD:  echo '=== memorymap UND symbols: embedding/vector/sqlite/vision/recollect ==='; objdump -T /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap 2>/dev/null | grep 'UND' | grep -iE 'embedding|vector|milvus|sqlite|vision|ocr|recollect' | sort -u  -----
+# exit=0
+=== memorymap UND symbols: embedding/vector/sqlite/vision/recollect ===
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_create_session
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_delete_user_data
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_destroy_session
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_get_app_list_of_day
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_get_first_and_last_day
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_get_maximum_storage_gb
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_get_ocr_screenshot_data
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_get_recording_memory
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_get_screenshot_data_of_day
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_get_screenshot_image_of_video_by_index
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_get_screenshot_interval
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_get_visual_screenshot_data
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_image_free
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_init_session
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_result_free
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_set_active_app_changed_callback
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_set_back_in_time_detected_callback
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_set_frame_deleted_callback
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_set_maximum_storage_gb
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_set_recording_changed_callback
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_set_recording_memory
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_set_screenshot_interval
+0000000000000000      DF *UND*	0000000000000000  Base        recollect_set_today_frame_number_changed_callback
+0000000000000000      DF *UND*	0000000000000000 (Qt_5)       _ZN18QAbstractItemModel11dataChangedERK11QModelIndexS2_RK7QVectorIiE
+
+----- CMD:  echo '=== memorymap exports (nm -D) ==='; nm -D /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap 2>/dev/null | grep -iE ' T | W ' | head -60 -----
+# exit=0
+=== memorymap exports (nm -D) ===
+                 w __cxa_finalize@GLIBC_2.2.5
+                 w __gmon_start__
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+000000000001e1c0 W _ZN10QByteArrayD1Ev
+000000000001e1c0 W _ZN10QByteArrayD2Ev
+000000000001e8e0 W _ZN5QListI7QStringE18detach_helper_growEii
+000000000001ea80 W _ZN5QListI7QStringE6appendERKS0_
+000000000003dcf0 W _ZN5QListI7QStringE7reserveEi
+000000000001e2d0 W _ZN5QListI7QStringEC1ERKS1_
+000000000001e2d0 W _ZN5QListI7QStringEC2ERKS1_
+000000000001e220 W _ZN5QListI7QStringED1Ev
+000000000001e220 W _ZN5QListI7QStringED2Ev
+000000000003d070 W _ZN6QDebuglsEPKc
+000000000001e1f0 W _ZN7QStringD1Ev
+000000000001e1f0 W _ZN7QStringD2Ev

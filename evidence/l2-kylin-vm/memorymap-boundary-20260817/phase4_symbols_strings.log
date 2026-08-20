@@ -1,0 +1,332 @@
+
+================================================================================
+# 任务: phase4_symbols_strings  @ 2026-08-17T21:38:54.737860
+================================================================================
+
+----- CMD: echo '=== recollect-client exports ==='; nm -D /lib/x86_64-linux-gnu/libkylin-ai-recollect-client.so.1 2>&1 | grep ' T ' | head -120  -----
+# exit=0
+=== recollect-client exports ===
+00000000000119e0 T recollect_call_delete_user_data
+0000000000011a30 T recollect_call_delete_user_data_finish
+0000000000011a80 T recollect_call_delete_user_data_sync
+00000000000118c0 T recollect_call_get_app_list_of_day
+0000000000011910 T recollect_call_get_app_list_of_day_finish
+0000000000011960 T recollect_call_get_app_list_of_day_sync
+00000000000117a0 T recollect_call_get_first_and_last_day
+00000000000117f0 T recollect_call_get_first_and_last_day_finish
+0000000000011840 T recollect_call_get_first_and_last_day_sync
+0000000000011440 T recollect_call_get_ocr_screen_shot_data
+0000000000011490 T recollect_call_get_ocr_screen_shot_data_finish
+00000000000114e0 T recollect_call_get_ocr_screen_shot_data_sync
+0000000000011c00 T recollect_call_get_recording_memory
+0000000000011c50 T recollect_call_get_recording_memory_finish
+0000000000011ca0 T recollect_call_get_recording_memory_sync
+0000000000011680 T recollect_call_get_screenshot_data_of_day
+00000000000116d0 T recollect_call_get_screenshot_data_of_day_finish
+0000000000011720 T recollect_call_get_screenshot_data_of_day_sync
+0000000000011560 T recollect_call_get_visual_screen_shot_data
+00000000000115b0 T recollect_call_get_visual_screen_shot_data_finish
+0000000000011600 T recollect_call_get_visual_screen_shot_data_sync
+0000000000011b00 T recollect_call_set_recording_memory
+0000000000011b50 T recollect_call_set_recording_memory_finish
+0000000000011b90 T recollect_call_set_recording_memory_sync
+0000000000011e10 T recollect_complete_delete_user_data
+0000000000011de0 T recollect_complete_get_app_list_of_day
+0000000000011db0 T recollect_complete_get_first_and_last_day
+0000000000011d20 T recollect_complete_get_ocr_screen_shot_data
+0000000000011e60 T recollect_complete_get_recording_memory
+0000000000011d80 T recollect_complete_get_screenshot_data_of_day
+0000000000011d50 T recollect_complete_get_visual_screen_shot_data
+0000000000011e40 T recollect_complete_set_recording_memory
+0000000000024650 T recollect_create_session
+0000000000023e00 T recollect_delete_user_data
+0000000000024680 T recollect_destroy_session
+00000000000113d0 T recollect_emit_active_app_changed
+0000000000011410 T recollect_emit_back_in_time_detected
+0000000000011420 T recollect_emit_frame_deleted
+00000000000113f0 T recollect_emit_recording_memory_changed
+00000000000113b0 T recollect_emit_today_frame_number_changed
+0000000000023b50 T recollect_get_app_list_of_day
+00000000000239b0 T recollect_get_first_and_last_day
+00000000000241b0 T recollect_get_maximum_storage_gb
+0000000000022df0 T recollect_get_ocr_screenshot_data
+00000000000240a0 T recollect_get_recording_memory
+0000000000023470 T recollect_get_screenshot_data_of_day
+00000000000237b0 T recollect_get_screenshot_image_of_video_by_index
+0000000000024130 T recollect_get_screenshot_interval
+0000000000010d20 T recollect_get_type
+0000000000023130 T recollect_get_visual_screenshot_data
+0000000000021480 T recollect_image_free
+0000000000022d60 T recollect_init_session
+0000000000010cc0 T recollect_interface_info
+0000000000010d10 T recollect_override_properties
+0000000000011e80 T recollect_proxy_get_type
+0000000000011ee0 T recollect_proxy_new
+0000000000011f70 T recollect_proxy_new_finish
+0000000000012030 T recollect_proxy_new_for_bus
+00000000000120c0 T recollect_proxy_new_for_bus_finish
+0000000000012100 T recollect_proxy_new_for_bus_sync
+0000000000011fb0 T recollect_proxy_new_sync
+0000000000021460 T recollect_result_free
+0000000000024030 T recollect_set_active_app_changed_callback
+0000000000024040 T recollect_set_back_in_time_detected_callback
+0000000000024050 T recollect_set_frame_deleted_callback
+0000000000024170 T recollect_set_maximum_storage_gb
+00000000000240e0 T recollect_set_recording_changed_callback
+0000000000024060 T recollect_set_recording_memory
+00000000000240f0 T recollect_set_screenshot_interval
+0000000000024020 T recollect_set_today_frame_number_changed_callback
+0000000000012180 T recollect_skeleton_get_type
+00000000000121e0 T recollect_skeleton_new
+0000000000022530 T _Z14escapeUnitNameRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+0000000000012430 T _Z18toThreeDigitStringB5cxx11i
+00000000000210d0 T _Z23makeEmptyScreenshotDataB5cxx11v
+00000000000211d0 T _Z27makeEmptyScreenshotDataListB5cxx11v
+0000000000020b30 T _ZN14FrameExtractor12setVideoFileERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+0000000000020290 T _ZN14FrameExtractor13checkHWConfigEv
+0000000000020bb0 T _ZN14FrameExtractor13frameToQImageEP7AVFrame
+00000000000207c0 T _ZN14FrameExtractor13getSwsContextEv
+00000000000204f0 T _ZN14FrameExtractor13hwDecoderInitEP14AVCodecContext14AVHWDeviceType
+0000000000020890 T _ZN14FrameExtractor13loadResourcesEv
+00000000000209f0 T _ZN14FrameExtractor14freeSwsContextEv
+0000000000020e10 T _ZN14FrameExtractor15requestGetFrameEi
+0000000000020a50 T _ZN14FrameExtractor15unloadResourcesEv
+000000000001fcf0 T _ZN14FrameExtractor16findHWDeciveTypeEv
+0000000000020a10 T _ZN14FrameExtractor16freeCodecContextEv
+00000000000205c0 T _ZN14FrameExtractor16initCodecContextEv
+0000000000020a40 T _ZN14FrameExtractor18closeFormatContextEv
+0000000000020010 T _ZN14FrameExtractor19findVideoStreamInfoEv
+0000000000020a30 T _ZN14FrameExtractor20clearVideoStreamInfoEv
+0000000000020a20 T _ZN14FrameExtractor20unrefHWDeviceContextEv
+000000000001ff50 T _ZN14FrameExtractor9openVideoERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+000000000001fbe0 T _ZN14FrameExtractorC1Ev
+000000000001fbe0 T _ZN14FrameExtractorC2Ev
+0000000000020ad0 T _ZN14FrameExtractorD1Ev
+0000000000020ad0 T _ZN14FrameExtractorD2Ev
+00000000000226b0 T _ZN14ServiceManager10acquireBusEv
+0000000000022790 T _ZN14ServiceManager10releaseBusEv
+0000000000022c90 T _ZN14ServiceManager11stopServiceERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+0000000000022c50 T _ZN14ServiceManager12startServiceERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+0000000000022a50 T _ZN14ServiceManager14callSystemdBusEPKcS1_
+00000000000227a0 T _ZN14ServiceManager15isServiceActiveERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+0000000000022690 T _ZN14ServiceManagerC1Ev
+0000000000022690 T _ZN14ServiceManagerC2Ev
+00000000000226a0 T _ZN14ServiceManagerD1Ev
+00000000000226a0 T _ZN14ServiceManagerD2Ev
+0000000000013630 T _ZN15RecollectClient14connectSignalsEv
+0000000000019410 T _ZN15RecollectClient14deleteUserDataERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERS5_
+0000000000010bb0 T _ZN15RecollectClient14onFrameDeletedEP16_GDBusConnectionPKcS3_S3_S3_P9_GVariantPv
+00000000000192e0 T _ZN15RecollectClient15getAppListOfDayERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERS5_
+0000000000013240 T _ZN15RecollectClient17qimageToImageDataER6QImage
+00000000000190d0 T _ZN15RecollectClient18getFirstAndLastDayERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+0000000000012790 T _ZN15RecollectClient18getImageSourcePathERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEi
+00000000000134f0 T _ZN15RecollectClient18getRecordingMemoryEPb
+0000000000015470 T _ZN15RecollectClient18getScreenshotImageERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+00000000000108f0 T _ZN15RecollectClient18onActiveAppChangedEP16_GDBusConnectionPKcS3_S3_S3_P9_GVariantPv
+0000000000013330 T _ZN15RecollectClient18setRecordingMemoryEb
+0000000000018d40 T _ZN15RecollectClient20getOcrScreenShotDataERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERS5_
+0000000000010b00 T _ZN15RecollectClient20onBackInTimeDetectedEP16_GDBusConnectionPKcS3_S3_S3_P9_GVariantPv
+
+----- CMD:  echo '=== memorymap binary: interesting strings ==='; strings -n 6 /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap 2>/dev/null | grep -iE 'sqlite|\.db|vector|embedding|ocr|clip|screenshot|recollect|knowledge|memory|chroma|milvus|clip' | sort -u | head -200 -----
+# exit=0
+=== memorymap binary: interesting strings ===
+13MemorymapView
+15RecollectConfig
+16MemoryMapBackend
+1exitMemoryMap()
+1restartMemoryMap()
+27RecollectServiceErrorWindow
+9OcrModule
+            Accessible.name: "kylin-ai-memorymap_Button_close"
+        Accessible.name: "kylin-ai-memorymap_Button_close"
+            Accessible.name: "kylin-ai-memorymap_Button_confirm"
+        Accessible.name: "kylin-ai-memorymap_Button_menu"
+        Accessible.name: "kylin-ai-memorymap_Button_minimize"
+    Accessible.name: "kylin-ai-memorymap_ComboBox_occupiedSpace"
+    Accessible.name: "kylin-ai-memorymap_Flickable_searchResult"
+        Accessible.name: "kylin-ai-memorymap_ScrollBar_searchResult"
+                Accessible.name: "kylin-ai-memorymap_Text_confirm"
+        Accessible.name: "kylin-ai-memorymap_Text_memoryMap"
+        Accessible.name: "kylin-ai-memorymap_Text_title"
+activateMemoryMap
+    clip: true
+com.kylin.memorymap
+current kylin-ai-memorymap restart failed.
+deleteHistoryAndReMemory
+exitMemoryMap
+Failed to create Memory Map GSettings
+Failed to get screenshot data
+Failed to initialize recollect session.
+getMemorymapVersion
+        id: startMemoryBtn
+isRecordingMemory
+kylin-ai-memorymap
+kylin-ai-memorymap_QAction_exit
+kylin-ai-memorymap_QAction_open
+kylin-ai-memorymap_QAction_pause
+kylin-ai-memorymap_QAction_settings
+kylin-ai-memorymap_QMenu_trayIcon
+kylin-ai-memorymap_QPushButton_goNow
+libkylin-ai-recollect-client.so.1
+MemoryMapBackend
+memorymapbackend.cpp
+Memory Map failed to launch. Please try restarting the application, or exit and try again later
+Memory Map-Memorizing...
+Memory Map Schema not installed
+MemorymapView
+NSt6thread11_State_implINS_8_InvokerISt5tupleIJM9OcrModuleFvvEPS3_EEEEEE
+OcrModule
+ocrmodule.cpp
+ocrResultReady
+            ocrResultReturned = true
+ocrTaskCancelled
+ocrtext
+ocrTextDatas
+        onQuitMemoryMap: {
+        onScreenshotOCRTextDataReady: {
+        onStartMemory: {
+Open Memory Map
+<path fill-rule="evenodd" clip-rule="evenodd" d="M11.4991 2.00093C10.671 2.00145 10 2.67287 10 3.50093V12.4991C10 13.3279 10.6721 13.9996 11.5009 13.9991C12.329 13.9985 13 13.3271 13 12.4991V3.50093C13 2.67214 12.3279 2.00042 11.4991 2.00093Z" fill="#262626"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M12.544 13H3.45776C3.08373 13 2.86478 12.4979 3.09285 12.1453L4.89914 9.33553C5.09072 9.03638 5.46475 9.05775 5.6472 9.35689L7.10684 11.9316L9.48786 8.21375C9.67031 7.93598 10.0261 7.92529 10.2086 8.20306L12.8997 12.1346C13.1369 12.4872 12.9271 13 12.544 13Z" fill="#262626"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M4 2.97202V13.028C4 13.7948 4.85757 14.2607 5.51799 13.8433L13.5416 8.81535C14.1528 8.43679 14.1528 7.56321 13.5416 7.17494L5.51799 2.15667C4.85757 1.73929 4 2.2052 4 2.97202Z" fill="white"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M4.49907 2.00093C3.671 2.00145 3 2.67287 3 3.50093V12.4991C3 13.3279 3.67214 13.9996 4.50093 13.9991C5.329 13.9985 6 13.3271 6 12.4991V3.50093C6 2.67214 5.32786 2.00042 4.49907 2.00093Z" fill="#262626"/>
+pauseMemory
+Pause Memory
+    property bool ocrResultReturned: false
+    property int ocrImageType
+    property string darkBackSource: "qrc:/image/memorymapdarkbackground.svg"
+    property string lightBackSource: "qrc:/image/memorymapbackground.svg"
+    property string ocrImageId
+quitMemoryMap
+QVector<OCRTextData>
+QVector<OCRTextData>&
+RecollectConfig
+recollectconfig.cpp
+recollect_create_session
+recollect_delete_user_data
+recollect_destroy_session
+recollect_get_app_list_of_day
+recollect_get_first_and_last_day
+recollect_get_maximum_storage_gb
+recollect_get_ocr_screenshot_data
+recollect_get_recording_memory
+recollect_get_screenshot_data_of_day
+recollect_get_screenshot_image_of_video_by_index
+recollect_get_screenshot_interval
+recollect_get_visual_screenshot_data
+recollect_image_free
+recollect_init_session
+recollect_result_free
+RecollectServiceErrorWindow
+recollectserviceerrorwindow.cpp
+recollect_set_active_app_changed_callback
+recollect_set_back_in_time_detected_callback
+recollect_set_frame_deleted_callback
+recollect_set_maximum_storage_gb
+recollect_set_recording_changed_callback
+recollect_set_recording_memory
+recollect_set_screenshot_interval
+recollect_set_today_frame_number_changed_callback
+recording-memory
+recordingMemory
+recordingMemoryChanged
+RECORDING_MEMORY_KEY_QT
+requestMinimizeMemorymap
+restartMemoryMap
+/run/build/kylin-ai-memorymap/main.cpp
+/run/build/kylin-ai-memorymap/memorymapbackend.cpp
+/run/build/kylin-ai-memorymap/memorymapui/recollectserviceerrorwindow.cpp
+ScreenShotData
+ScreenShotData&
+screenshot-interval
+screenshotInterval
+screenshotIntervalChanged
+SCREENSHOT_INTERVAL_KEY_QT
+screenshotOCRTextDataReady
+setClipBoardSelectionText
+setClipBoardText
+startMemory
+    StartMemoryBtn {
+            startMemoryBtn.visible = false
+startMemoryScreen
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="none" version="1.1" width="16" height="16" viewBox="0 0 16 16"><defs><clipPath id="master_svg0_1_29448"><rect x="0" y="0" width="16" height="16" rx="0"/></clipPath></defs><g clip-path="url(#master_svg0_1_29448)"><g></g><g><path d="M4,9.49967L4,12.88033Q4,13.8725,4.16549,14.19381Q4.383098,14.6163,4.80562,14.8339Q5.126917,14.9994,6.11912,14.9995L9.50005,14.9997L12.88098,14.9999Q13.87321,15,14.19451,14.8345Q14.6171,14.617,14.8347,14.19447Q15.0002,13.87318,15.0002,12.88098L15.0002,6.11967Q15.0002,5.127495,14.8347,4.806188Q14.6171,4.383688,14.19454,4.166084Q13.87325,4.000611,12.88105,4.000546L9.50011,4.000326L6.11918,4.000105Q5.126958,4.000041,4.805656,4.165461Q4.383091,4.383016,4.165479,4.805531Q4,5.126825,4,6.11902L4,9.49967ZM5.054502,13.73593Q5,13.63011,5,12.88033L5,9.49967L5,6.11902Q5,5.369215,5.054494,5.263409Q5.125502,5.125541,5.263397,5.054547Q5.369235,5.000057,6.11912,5.000105L9.50005,5.000326L12.88098,5.000546Q13.63084,5.000595,13.73668,5.055107Q13.87462,5.126149,13.94566,5.2640709999999995Q14.00016,5.369891,14.00016,6.11967L14.00016,12.88098Q14.00016,13.63078,13.94567,13.73659Q13.87466,13.87446,13.73677,13.94545Q13.63093,13.99994,12.88105,13.99989L9.50011,13.99967L6.11918,13.99945Q5.369328,13.9994,5.263478,13.94489Q5.125539,13.87385,5.054502,13.73593Z" fill-rule="evenodd" fill="#262626" fill-opacity="1"/></g><g><path d="M11,2.499702L11,2.5Q11,2.54925,11.00961,2.59755Q11.01921,2.6458399999999997,11.03806,2.6913400000000003Q11.0569,2.73684,11.08426,2.77779Q11.11162,2.81873,11.14645,2.8535500000000003Q11.18127,2.8883799999999997,11.22221,2.91573Q11.26316,2.9430899999999998,11.30866,2.9619400000000002Q11.35415,2.98079,11.40245,2.99039Q11.45075,3,11.5,3Q11.5492,3,11.5975,2.99039Q11.6458,2.98079,11.6913,2.9619400000000002Q11.7368,2.9430899999999998,11.7778,2.91573Q11.8187,2.8883799999999997,11.8536,2.8535500000000003Q11.8884,2.81873,11.9157,2.77779Q11.9431,2.73684,11.9619,2.6913400000000003Q11.9808,2.6458399999999997,11.9904,2.59755Q12,2.54925,12,2.5L12,2.499702Q12,1.879156,11.5662,1.4409755Q11.12965,1,10.50755,1L6.5,1L2.492452,1Q1.868671,1,1.4300987,1.4524614Q1,1.896181,1,2.5151399999999997L1,7L1,12.5Q1,12.5492,1.009607,12.5975Q1.019215,12.6458,1.03806,12.6913Q1.0569060000000001,12.7368,1.084265,12.7778Q1.111625,12.8187,1.146447,12.8536Q1.181269,12.8884,1.222215,12.9157Q1.263161,12.9431,1.3086579999999999,12.9619Q1.354155,12.9808,1.4024549,12.9904Q1.4507543,13,1.5,13L2.5,13Q2.54925,13,2.59755,12.9904Q2.6458399999999997,12.9808,2.6913400000000003,12.9619Q2.73684,12.9431,2.77779,12.9157Q2.81873,12.8884,2.8535500000000003,12.8536Q2.8883799999999997,12.8187,2.91573,12.7778Q2.9430899999999998,12.7368,2.9619400000000002,12.6913Q2.98079,12.6458,2.99039,12.5975Q3,12.5492,3,12.5Q3,12.4508,2.99039,12.4025Q2.98079,12.3542,2.9619400000000002,12.3087Q2.9430899999999998,12.2632,2.91573,12.2222Q2.8883799999999997,12.1813,2.8535500000000003,12.1464Q2.81873,12.1116,2.77779,12.0843Q2.73684,12.0569,2.6913400000000003,12.0381Q2.6458399999999997,12.0192,2.59755,12.0096Q2.54925,12,2.5,12L2.499023,12L2,12L2,7L2,2.5151399999999997Q2,2.3012930000000003,2.14814,2.148462Q2.292045,2,2.492452,2L6.5,2L10.50755,2Q10.71249,2,10.85555,2.144513Q11,2.290423,11,2.499702Z" fill-rule="evenodd" fill="#262626" fill-opacity="1"/></g></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="none" version="1.1" width="16" height="16" viewBox="0 0 16 16"><defs><clipPath id="master_svg0_596_037666"><rect x="0" y="0" width="16" height="16" rx="0"/></clipPath></defs><g clip-path="url(#master_svg0_596_037666)"><g><path d="M2,9L2,12.52733Q2,13.5629,2.71857,14.2814Q3.437139,15,4.47267,15L11.52733,15Q12.5629,15,13.2814,14.2814Q14,13.5629,14,12.52733L14,3.5Q14,3.4507543,13.9904,3.4024549Q13.9808,3.354155,13.9619,3.308658Q13.9431,3.263161,13.9157,3.222215Q13.8884,3.181269,13.8536,3.146447Q13.8187,3.111625,13.7778,3.084265Q13.7368,3.056906,13.6913,3.0380599999999998Q13.6458,3.019215,13.5975,3.009607Q13.5492,3,13.5,3L2.5,3Q2.4507543,3,2.4024549,3.009607Q2.354155,3.019215,2.308658,3.0380599999999998Q2.263161,3.056906,2.222215,3.084265Q2.181269,3.111625,2.146447,3.146447Q2.111625,3.181269,2.084265,3.222215Q2.056906,3.263161,2.0380599999999998,3.308658Q2.019215,3.354155,2.009607,3.4024549Q2,3.4507543,2,3.5L2,9ZM3.425676,13.5743Q3,13.14865,3,12.52733L3,4L13,4L13,12.52733Q13,13.14865,12.5743,13.5743Q12.14865,14,11.52733,14L4.47267,14Q3.85135,14,3.425676,13.5743Z" fill-rule="evenodd" fill="#E41A2B" fill-opacity="1"/></g><g><path d="M5.5,6Q5.5,5.9507543,5.509607,5.9024549Q5.519215,5.854155,5.53806,5.808658Q5.556906,5.763161,5.584265,5.722215Q5.611625,5.681269,5.646447,5.646447Q5.681269,5.611625,5.722215,5.584265Q5.763161,5.556906,5.808658,5.53806Q5.854155,5.519215,5.9024549,5.509607Q5.9507543,5.5,6,5.5Q6.0492457,5.5,6.0975451,5.509607Q6.145845,5.519215,6.191342,5.53806Q6.236839,5.556906,6.277785,5.584265Q6.318731,5.611625,6.353553,5.646447Q6.388375,5.681269,6.415735,5.722215Q6.443094,5.763161,6.46194,5.808658Q6.480785,5.854155,6.490393,5.9024549Q6.5,5.9507543,6.5,6L6.5,12Q6.5,12.04925,6.490393,12.09755Q6.480785,12.14584,6.46194,12.19134Q6.443094,12.23684,6.415735,12.27778Q6.388375,12.31873,6.353553,12.35355Q6.318731,12.38837,6.277785,12.41573Q6.236839,12.44309,6.191342,12.46194Q6.145845,12.48078,6.0975451,12.49039Q6.0492457,12.5,6,12.5Q5.9507543,12.5,5.9024549,12.49039Q5.854155,12.48078,5.808658,12.46194Q5.763161,12.44309,5.722215,12.41573Q5.681269,12.38837,5.646447,12.35355Q5.611625,12.31873,5.584265,12.27778Q5.556906,12.23684,5.53806,12.19134Q5.519215,12.14584,5.509607,12.09755Q5.5,12.04925,5.5,12L5.5,6Z" fill-rule="evenodd" fill="#E41A2B" fill-opacity="1"/></g><g><path d="M9.5,6Q9.5,5.9507543,9.509607,5.9024549Q9.519214999999999,5.854155,9.53806,5.808658Q9.556906,5.763161,9.584265,5.722215Q9.611625,5.681269,9.646447,5.646447Q9.681269,5.611625,9.722215,5.584265Q9.763161,5.556906,9.808658,5.53806Q9.854155,5.519215,9.9024549,5.509607Q9.9507543,5.5,10,5.5Q10.0492457,5.5,10.0975451,5.509607Q10.145845,5.519215,10.191342,5.53806Q10.236839,5.556906,10.277785,5.584265Q10.318731,5.611625,10.353553,5.646447Q10.388375,5.681269,10.415735,5.722215Q10.443094,5.763161,10.46194,5.808658Q10.480785000000001,5.854155,10.490393,5.9024549Q10.5,5.9507543,10.5,6L10.5,12Q10.5,12.04925,10.490393,12.09755Q10.480785000000001,12.14584,10.46194,12.19134Q10.443094,12.23684,10.415735,12.27778Q10.388375,12.31873,10.353553,12.35355Q10.318731,12.38837,10.277785,12.41573Q10.236839,12.44309,10.191342,12.46194Q10.145845,12.48078,10.0975451,12.49039Q10.0492457,12.5,10,12.5Q9.9507543,12.5,9.9024549,12.49039Q9.854155,12.48078,9.808658,12.46194Q9.763161,12.44309,9.722215,12.41573Q9.681269,12.38837,9.646447,12.35355Q9.611625,12.31873,9.584265,12.27778Q9.556906,12.23684,9.53806,12.19134Q9.519214999999999,12.14584,9.509607,12.09755Q9.5,12.04925,9.5,12L9.5,6Z" fill-rule="evenodd" fill="#E41A2B" fill-opacity="1"/></g><g transform="matrix(1,0,0,-1,0,7)"><path d="M4.5,4.5L4.5,4.53Q4.5,5.1573,4.964267,5.58847Q5.407377,6,6.0232600000000005,6L9.97674,6Q10.59262,6,11.035730000000001,5.58847Q11.5,5.1573,11.5,4.53L11.5,3.5Q11.5,3.4507543,11.49039,3.4024549Q11.48078,3.354155,11.46194,3.308658Q11.44309,3.263161,11.41573,3.222215Q11.38837,3.181269,11.35355,3.146447Q11.31873,3.111625,11.27778,3.084265Q11.23684,3.056906,11.19134,3.0380599999999998Q11.14584,3.019215,11.09755,3.009607Q11.04925,3,11,3L5,3Q4.9507543,3,4.9024549,3.009607Q4.854155,3.019215,4.808658,3.0380599999999998Q4.763161,3.056906,4.722215,3.084265Q4.681269,3.111625,4.646447,3.146447Q4.611625,3.181269,4.584265,3.222215Q4.556906,3.263161,4.53806,3.308658Q4.519215,3.354155,4.509607,3.4024549Q4.5,3.4507543,4.5,3.5L4.5,4.5ZM5.644777,4.85574Q5.5,4.72128,5.5,4.53L5.5,4L10.5,4L10.5,4.53Q10.5,4.72128,10.35522,4.85574Q10.19989,5,9.97674,5L6.0232600000000005,5Q5.800114,5,5.644777,4.85574Z" fill-rule="evenodd" fill="#E41A2B" fill-opacity="1"/></g><g><path d="M1.5,3L14.5,3Q14.5492,3,14.5975,3.009607Q14.6458,3.019215,14.6913,3.0380599999999998Q14.7368,3.056906,14.7778,3.084265Q14.8187,3.111625,14.8536,3.146447Q14.8884,3.181269,14.9157,3.222215Q14.9431,3.263161,14.9619,3.308658Q14.9808,3.354155,14.9904,3.4024549Q15,3.4507543,15,3.5Q15,3.5492457,14.9904,3.5975451Q14.9808,3.645845,14.9619,3.691342Q14.9431,3.736839,14.9157,3.777785Q14.8884,3.818731,14.8536,3.853553Q14.8187,3.888375,14.7778,3.915735Q14.7368,3.943094,14.6913,3.9619400000000002Q14.6458,3.980785,14.5975,3.990393Q14.5492,4,14.5,4L1.5,4Q1.4507543,4,1.4024549,3.990393Q1.354155,3.980785,1.3086579999999999,3.9619400000000002Q1.263161,3.943094,1.222215,3.915735Q1.181269,3.888375,1.146447,3.853553Q1.111625,3.818731,1.084265,3.777785Q1.0569060000000001,3.736839,1.03806,3.691342Q1.019215,3.645845,1.009607,3.5975451Q1,3.5492457,1,3.5Q1,3.4507543,1.009607,3.4024549Q1.019215,3.354155,1.03806,3.308658Q1.0569060000000001,3.263161,1.084265,3.222215Q1.111625,3.181269,1.146447,3.146447Q1.181269,3.111625,1.222215,3.084265Q1.263161,3.056906,1.3086579999999999,3.0380599999999998Q1.354155,3.019215,1.4024549,3.009607Q1.4507543,3,1.5,3Z" fill-rule="evenodd" fill="#E41A2B" fill-opacity="1"/></g></g></svg>
+        text: qsTr("Memory Map")
+trayiconRequestToStartMemory
+uiClickStartMemoryBtn
+/usr/share/kylin-ai-memorymap/translations/
+vector<bool>::_M_insert_aux
+vector::_M_realloc_insert
+vector::reserve
+            VideoInfo.startMemory()
+void nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::assert_invariant(bool) const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]
+_Z17qRegisterMetaTypeI14ScreenShotDataEiPKcPT_N9QtPrivate21MetaTypeDefinedHelperIS3_Xaasr12QMetaTypeId2IS3_E7DefinedntsrS8_9IsBuiltInEE11DefinedTypeE
+_ZL22qt_meta_data_OcrModule
+_ZL26qt_meta_data_MemorymapView
+_ZL28qt_meta_data_RecollectConfig
+_ZL28qt_meta_stringdata_OcrModule
+_ZL29qt_meta_data_MemoryMapBackend
+_ZL32qt_meta_stringdata_MemorymapView
+_ZL34qt_meta_stringdata_RecollectConfig
+_ZL35qt_meta_stringdata_MemoryMapBackend
+_ZL40qt_meta_data_RecollectServiceErrorWindow
+_ZL46qt_meta_stringdata_RecollectServiceErrorWindow
+_ZN10QClipboard7setTextERK7QStringNS_4ModeE
+_ZN10QClipboard7setTextERK7QStringNS_4ModeE@Qt_5
+_ZN11OCRTextDataC1ERKS_
+_ZN11OCRTextDataC2ERKS_
+_ZN11VideoReader16requestOcrResultERK7OCRTask
+_ZN11VideoReader16requestOcrResultERK7OCRTask.cold
+_ZN11VideoReader17getScreenshotDataB5cxx11ERK7QStringi
+_ZN11VideoReader17getScreenshotDataB5cxx11ERK7QStringi.cold
+_ZN11VideoReader19clearScreenshotDataEv
+_ZN11VideoReader26screenshotOCRTextDataReadyERK7QVectorI11OCRTextDataE
+_ZN11VideoReaderC1EP15RecollectClientP7QObject
+_ZN11VideoReaderC2EP15RecollectClientP7QObject
+_ZN11VideoReaderC2EP15RecollectClientP7QObject.cold
+_ZN13ConfigManager16MEMORYMAP_SCHEMAE
+_ZN13ConfigManager18setRecordingMemoryEb
+_ZN13ConfigManager20RECORDING_MEMORY_KEYE
+_ZN13ConfigManager21setScreenshotIntervalEj
+_ZN13ConfigManager23SCREENSHOT_INTERVAL_KEYE
+_ZN13ConfigManagerC1EP15RecollectClientP7QObject
+_ZN13ConfigManagerC2EP15RecollectClientP7QObject
+_ZN13ConfigManagerC2EP15RecollectClientP7QObject.cold
+_ZN13MemorymapView11confirmQuitEv
+_ZN13MemorymapView11qt_metacallEN11QMetaObject4CallEiPPv
+_ZN13MemorymapView11qt_metacastEPKc
+_ZN13MemorymapView12keyF1PressedEv
+_ZN13MemorymapView13keyPressEventEP9QKeyEvent
+_ZN13MemorymapView16staticMetaObjectE
+_ZN13MemorymapView18qt_static_metacallEP7QObjectN11QMetaObject4CallEiPPv
+_ZN13MemorymapView5eventEP6QEvent
+_ZN13MemorymapViewD0Ev
+_ZN13MemorymapViewD1Ev
+_ZN13MemorymapViewD2Ev
+_ZN14ScreenShotDataD1Ev
+_ZN14ScreenShotDataD2Ev
+_ZN15QGuiApplication9clipboardEv
+_ZN15QGuiApplication9clipboardEv@Qt_5
+_ZN15RecollectConfig11qt_metacallEN11QMetaObject4CallEiPPv
+_ZN15RecollectConfig11qt_metacastEPKc
+_ZN15RecollectConfig16staticMetaObjectE
+_ZN15RecollectConfig17setMaxStorageSizeEj
+_ZN15RecollectConfig18qt_static_metacallEP7QObjectN11QMetaObject4CallEiPPv
+_ZN15RecollectConfig18setRecordingMemoryEb
+_ZN15RecollectConfig21setScreenshotIntervalEj
+_ZN15RecollectConfigC1EP15RecollectClientP7QObject
+_ZN15RecollectConfigC2EP15RecollectClientP7QObject
+_ZN15RecollectConfigC2EP15RecollectClientP7QObject.cold
+_ZN15RecollectConfigD0Ev
+_ZN15RecollectConfigD1Ev
+_ZN15RecollectConfigD2Ev
+_ZN16MemoryMapBackend11loadSessionEP15RecollectClient
+_ZN16MemoryMapBackend11loadSessionEP15RecollectClient.cold
+_ZN16MemoryMapBackend11programExitEv
+_ZN16MemoryMapBackend11qt_metacallEN11QMetaObject4CallEiPPv
+_ZN16MemoryMapBackend11qt_metacastEPKc
+_ZN16MemoryMapBackend13exitMemoryMapEv
+_ZN16MemoryMapBackend13showMemoryMapEv
+_ZN16MemoryMapBackend16restartMemoryMapEv
+_ZN16MemoryMapBackend16restartMemoryMapEv.cold
+_ZN16MemoryMapBackend16showReloadMsgBoxEv

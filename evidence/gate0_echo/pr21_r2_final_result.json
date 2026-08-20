@@ -1,0 +1,44 @@
+{
+  "timestamp": "2026-08-07T01:21:59Z",
+  "commit": "c9c8143",
+  "socket": "/home/kylin-agent/.echo/echo.sock",
+  "results": [
+    {
+      "name": "T1_health",
+      "status": "PASS",
+      "detail": "{'protocol_version': '1.0', 'request_id': 'x', 'trace_id': 'x', 'status': 'ok', 'data': {'status': 'healthy', 'uptime_seconds': 143.66765522956848, 'socket_path': '/home/kylin-agent/.echo/echo.sock', 'pid': 388049}, 'server_ts': '2026-08-06T17:21:58."
+    },
+    {
+      "name": "T2_echo",
+      "status": "PASS",
+      "detail": "{'protocol_version': '1.0', 'request_id': 'x', 'trace_id': 'x', 'status': 'ok', 'data': {'echo': 'PR21-R2', 'received_at': '2026-08-06T17:21:58.978589+00:00'}, 'server_ts': '2026-08-06T17:21:58.978604+00:00'}"
+    },
+    {
+      "name": "T3_memret",
+      "status": "PASS",
+      "detail": "{'protocol_version': '1.0', 'request_id': 'x', 'trace_id': 'x', 'status': 'ok', 'data': {'contexts': [], 'total_found': 0, 'elapsed_ms': 0.0, 'fallback': False}, 'server_ts': '2026-08-06T17:21:59.051762+00:00'}"
+    },
+    {
+      "name": "T4_evid_pass",
+      "status": "PASS",
+      "detail": "{'protocol_version': '1.0', 'request_id': 'x', 'trace_id': 'x', 'status': 'ok', 'data': {'recorded': True, 'test_id': 't1', 'server_ts': '2026-08-06T17:21:59.141806+00:00'}, 'server_ts': '2026-08-06T17:21:59.141823+00:00'}"
+    },
+    {
+      "name": "T5_evid_skip",
+      "status": "PASS",
+      "detail": "{'protocol_version': '1.0', 'request_id': 'x', 'trace_id': 'x', 'status': 'ok', 'data': {'recorded': False, 'reason': 'non_pass_skipped', 'server_ts': '2026-08-06T17:21:59.215851+00:00'}, 'server_ts': '2026-08-06T17:21:59.215862+00:00'}"
+    },
+    {
+      "name": "T6_evidence_disk",
+      "status": "PASS",
+      "detail": "{\"test_id\": \"t1\", \"tested_commit\": \"c9c8143\", \"command\": \"x\", \"exit_code\": 0, \"status\": \"PASS\", \"timestamp\": \"2026-08-06T17:20:52Z\", \"environment\": \"\", \"source_log\": \"\", \"sha256\": \"\"}\n{\"test_id\": \"t1\", \"tested_commit\": \"c9c8143\", \"command\": \"x\", \"exit_code\": 0, \"status\": \"PASS\", \"timestamp\": \"2026-0"
+    },
+    {
+      "name": "T7_cpp_build",
+      "status": "PASS",
+      "detail": "ok"
+    }
+  ],
+  "pass": 7,
+  "fail": 0
+}

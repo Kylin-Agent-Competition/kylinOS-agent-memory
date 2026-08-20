@@ -14,11 +14,7 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-try:
-    PW = os.environ["KYLIN_VM_PASSWORD"]
-except KeyError:
-    print("FATAL: KYLIN_VM_PASSWORD environment variable is required but not set.", file=sys.stderr)
-    sys.exit(1)
+PW = os.environ.get("KYLIN_VM_PASSWORD", "")
 USER = 'kylin-agent'
 HOST = '127.0.0.1'
 PORT = 2222

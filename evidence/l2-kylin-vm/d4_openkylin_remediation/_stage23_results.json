@@ -1,0 +1,98 @@
+{
+  "stage": "2+3",
+  "started_at": "2026-08-08T01:17:09.288530+08:00",
+  "steps": {
+    "echo_server": "OK",
+    "strace": "SKIP"
+  },
+  "tests": [
+    {
+      "name": "T1_direct_echo",
+      "exit": 0,
+      "status": "PASS",
+      "expect_pass": true
+    },
+    {
+      "name": "T2_hook_redirect",
+      "exit": 1,
+      "status": "FAIL",
+      "expect_pass": true
+    },
+    {
+      "name": "T3_passthrough_no_match",
+      "exit": 0,
+      "status": "PASS",
+      "expect_pass": true
+    },
+    {
+      "name": "T4_custom_match",
+      "exit": 1,
+      "status": "FAIL",
+      "expect_pass": true
+    },
+    {
+      "name": "T5_no_hook_bad_path",
+      "exit": 0,
+      "status": "FAIL",
+      "expect_pass": false
+    },
+    {
+      "name": "T6_passthrough_bare",
+      "exit": 0,
+      "status": "PASS",
+      "expect_pass": true
+    },
+    {
+      "name": "T7_rapid_1",
+      "exit": 0,
+      "status": "PASS",
+      "expect_pass": true
+    },
+    {
+      "name": "T7_rapid_2",
+      "exit": 0,
+      "status": "PASS",
+      "expect_pass": true
+    },
+    {
+      "name": "T7_rapid_3",
+      "exit": 0,
+      "status": "PASS",
+      "expect_pass": true
+    },
+    {
+      "name": "P1_memory_retrieve",
+      "exit": 1,
+      "status": "SKIP"
+    },
+    {
+      "name": "P2_memory_store",
+      "exit": 1,
+      "status": "SKIP"
+    },
+    {
+      "name": "P3_memory_forget",
+      "exit": 1,
+      "status": "SKIP"
+    },
+    {
+      "name": "P4_health",
+      "exit": 1,
+      "status": "SKIP"
+    },
+    {
+      "name": "P5_large_request",
+      "exit": 1,
+      "status": "SKIP"
+    },
+    {
+      "name": "P6_malformed_json",
+      "exit": 1,
+      "status": "SKIP"
+    }
+  ],
+  "test_summary": "6/9 PASS",
+  "proto_test_summary": "0/6 PASS",
+  "finished_at": "2026-08-08T01:19:22.165481+08:00",
+  "status": "PARTIAL"
+}

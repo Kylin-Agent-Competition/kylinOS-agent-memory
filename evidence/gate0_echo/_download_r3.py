@@ -4,7 +4,7 @@ import paramiko, os
 
 c = paramiko.SSHClient()
 c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-c.connect('127.0.0.1', port=2222, username='kylin-agent', password='***REMOVED_PASSWORD***', timeout=10)
+c.connect('127.0.0.1', port=2222, username='kylin-agent', password=os.environ.get("KYLIN_VM_PASSWORD", ""), timeout=10)
 s = c.open_sftp()
 
 local_dir = os.path.join(os.path.dirname(__file__), 'day2_results')

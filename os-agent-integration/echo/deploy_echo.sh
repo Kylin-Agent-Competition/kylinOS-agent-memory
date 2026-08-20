@@ -134,6 +134,29 @@ if [ -f "$SCRIPT_DIR/install_systemd.sh" ]; then
     echo "[--systemd] install_systemd.sh 已传输"
 fi
 
+# ---- 传输 LD_PRELOAD connect() Hook ----
+HOOK_DIR="$PROJECT_DIR/os-agent-integration/patches"
+if [ -f "$HOOK_DIR/libconnect_hook.c" ]; then
+    echo ""
+    echo "[--hook] 传输 connect() hook 文件..."
+    ssh $SSH_OPTS "$KYLIN_USER@$KYLIN_HOST" "
+        mkdir -p $REMOTE_BASE/src/hook
+        mkdir -p $REMOTE_BASE/lib
+        mkdir -p $REMOTE_BASE/logs/hook_tests
+    "
+    scp $SCP_OPTS "$HOOK_DIR/libconnect_hook.c" \
+        "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/src/hook/"
+    scp $SCP_OPTS "$HOOK_DIR/CMakeLists.txt" \
+        "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/src/hook/"
+    scp $SCP_OPTS "$HOOK_DIR/test_connect_hook.sh" \
+        "$KYLIN_USER@$KYLIN_HOST:$REMOTE_BASE/share/test_connect_hook.sh"
+    ssh $SSH_OPTS "$KYLIN_USER@$KYLIN_HOST" "
+        chmod +x $REMOTE_BASE/share/test_connect_hook.sh
+        echo 'Hook 文件已传输'
+    "
+    echo "[--hook] libconnect_hook.c + test_connect_hook.sh 已传输"
+fi
+
 echo ""
 echo "=========================================="
 echo " 部署完成!"

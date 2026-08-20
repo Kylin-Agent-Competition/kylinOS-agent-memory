@@ -1,0 +1,48 @@
+[2026-08-08T14:28:44.038Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=83828)
+[2026-08-08T14:28:45.468Z] [INFO] Client connected
+[2026-08-08T14:28:45.468Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:28:45.468Z] [INFO] Response sent: status=ok
+[2026-08-08T14:29:47.159Z] [INFO] Client connected
+[2026-08-08T14:29:47.159Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:29:47.163Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:49.172Z] [INFO] Client connected
+[2026-08-08T14:30:49.172Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:49.172Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:49.282Z] [INFO] Client connected
+[2026-08-08T14:30:49.283Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:49.283Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:50.805Z] [INFO] Client connected
+[2026-08-08T14:30:50.805Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:50.806Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:50.866Z] [INFO] Client connected
+[2026-08-08T14:30:50.866Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:50.866Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:50.916Z] [INFO] Client connected
+[2026-08-08T14:30:50.916Z] [INFO] Request method=memory.store request_id=?
+[2026-08-08T14:30:50.916Z] [WARN] Unknown method: memory.store
+[2026-08-08T14:30:50.916Z] [INFO] Response sent: status=error
+[2026-08-08T14:30:50.941Z] [INFO] Client connected
+[2026-08-08T14:30:50.953Z] [ERROR] Client handler error: Expecting value: line 1 column 1 (char 0)
+Traceback (most recent call last):
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 160, in handle_client
+    request = recv_message(sock)
+              ^^^^^^^^^^^^^^^^^^
+  File "/home/kylin-agent/kylin-memory-echo/bin/kylin-memory-echo-server", line 96, in recv_message
+    body = json.loads(raw_body.decode("utf-8"))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-08-08T14:30:53.022Z] [INFO] Client connected
+[2026-08-08T14:30:53.022Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:53.022Z] [INFO] Response sent: status=ok
+[2026-08-08T14:30:53.081Z] [INFO] Client connected
+[2026-08-08T14:30:53.082Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:30:53.082Z] [INFO] Response sent: status=ok

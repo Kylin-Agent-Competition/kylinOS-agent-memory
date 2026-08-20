@@ -1,0 +1,16 @@
+# UT-1 原文隔离独立测试结果
+# Timestamp: 2026-08-07T09:48:05
+# Socket: /home/kylin-agent/.echo_run/echo.sock
+# Passed: 11 / Failed: 0 / Total: 11
+
+PASS UT1-ECHO-CONSISTENCY: 回显与原文完全一致 (len=19)
+PASS UT1-RETRIEVE-EMPTY: memory.retrieve 返回空 contexts (total_found=0) — 未注入用户原文
+PASS UT1-EMPTY-PAYLOAD: 空 payload 正确处理: echo='(empty)'
+PASS UT1-SPECIAL-换行符: 特殊字符 [换行符] 回显一致 (len=11)
+PASS UT1-SPECIAL-Unicode: 特殊字符 [Unicode] 回显一致 (len=12)
+PASS UT1-SPECIAL-JSON 注入: 特殊字符 [JSON 注入] 回显一致 (len=39)
+PASS UT1-SPECIAL-SQL 注入模拟: 特殊字符 [SQL 注入模拟] 回显一致 (len=23)
+PASS UT1-SPECIAL-超长消息: 特殊字符 [超长消息] 回显一致 (len=10000)
+PASS UT1-SPECIAL-空字符串: 特殊字符 [空字符串] 回显一致 (len=0)
+PASS UT1-STORE-LEAK: memory.store 响应不包含用户敏感信息
+PASS UT1-STRUCTURE: protocol_version=True request_id=True status=True data=True server_ts=True

@@ -3,7 +3,7 @@
 import paramiko, os, sys, json, time, hashlib
 from io import BytesIO
 
-PW = '***REMOVED_PASSWORD***'; USER = 'kylin-agent'
+PW = os.environ.get("KYLIN_VM_PASSWORD", ""); USER = 'kylin-agent'
 REPO = '/home/kylin-agent/kylin-memory-echo'
 OUT = os.path.join(os.path.dirname(__file__), 'final')
 os.makedirs(OUT, exist_ok=True)

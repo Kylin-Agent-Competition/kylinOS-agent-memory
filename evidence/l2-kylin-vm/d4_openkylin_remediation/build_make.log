@@ -1,0 +1,276 @@
+cd kylin-aiassistant/ && ( test -e Makefile || /usr/lib/qt5/bin/qmake -o Makefile /home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/kylin-aiassistant.pro ) && make -f Makefile 
+cd peony-menu-plugin-kylin-aiassistant/ && ( test -e Makefile || /usr/lib/qt5/bin/qmake -o Makefile /home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/peony-menu-plugin-kylin-aiassistant.pro ) && make -f Makefile 
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_zh_CN.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_zh_CN.qm'...
+生成 2 条翻译（2 条已经完成和 0 条未完成）
+忽略 1 条未翻译源文本
+Warning: dropping duplicate messages in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_zh_CN.qm':
+
+* Context: KnowledgeWindowTitleArea
+* Source: Personal Knowledge Base
+
+* Context: Chat
+* Source: Delete
+
+* Context: SettingChatCommandPage
+* Source: Add
+
+* Context: SettingChatCommandPage
+* Source: Command Template
+
+* Context: KnowledgePromptWindow
+* Source: This location already contains a file named "
+
+* Context: KnowledgePromptWindow
+* Source: ". Are you sure you want to replace it?
+
+* Context: KnowledgeOperatePopup
+* Source: Delete
+
+* Context: KnowledgePromptWindow
+* Source: Replace
+
+* Context: KnowledgeRenameWindow
+* Source: Cancel
+
+* Context: KnowledgePromptWindow
+* Source: Cancel
+
+* Context: KnowledgeFileUploadArea
+* Source: Current folder is empty
+
+* Context: KnowledgeItemDelegate
+* Source: Delete
+
+* Context: KnowledgeOperateArea
+* Source: Delete
+
+* Context: KnowledgeTitleArea
+* Source: Personal Knowledge Base
+
+* Context: KnowledgeNewFileFolderWindow
+* Source: Rename File
+
+* Context: KnowledgeUploadPage
+* Source: Space capacity: no more than 2 GB;
+
+* Context: KnowledgeNewFileFolderWindow
+* Source: Required
+
+* Context: KnowledgeUploadPage
+* Source: Click or drag files here to upload
+
+* Context: KnowledgeNewFileFolderWindow
+* Source: Enter folder name
+
+* Context: KnowledgeUploadPage
+* Source: Supported formats (plain text): txt, doc, docx, pdf, wps, pptx, ppt, ofd;
+
+* Context: KnowledgeNewFileFolderWindow
+* Source: Cancel
+
+* Context: KnowledgeNewFileFolderWindow
+* Source: Length cannot exceed: 85 Chinese characters or 255 English characters
+
+* Context: KnowledgeOperatePopup
+* Source: Copy
+
+* Context: KnowledgeOperatePopup
+* Source: Rename
+
+* Context: KnowledgeOperatePopup
+* Source: Move
+
+* Context: KnowledgeBreadcrumbOperatePopup
+* Source: Delete
+
+* Context: SettingChatCommandPage
+* Source: Delete
+
+* Context: KnowledgeBreadcrumbOperatePopup
+* Source: New Folder
+
+* Context: KnowledgeBreadcrumbOperatePopup
+* Source: Move
+
+* Context: SettingChatCommandPage
+* Source: Cancel
+
+* Context: KnowledgeBreadcrumbOperatePopup
+* Source: Copy
+
+* Context: KnowledgeBreadcrumbPopup
+* Source: All Files
+
+* Context: KnowledgeBreadcrumbOperatePopup
+* Source: Add File
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source: No search results
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source: File Name
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source: No content in current directory
+
+* Context: QObject
+* Source: Todo Generation
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source:  items)
+
+* Context: KnowledgeNewFileFolderWindow
+* Source: Confirm
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source: (Selected 
+
+* Context: KnowledgeNewFileFolderWindow
+* Source: File name cannot contain the following characters: \/:*?"<>|
+
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_zh_CN.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_zh_CN.qm'...
+生成 1071 条翻译（1071 条已经完成和 0 条未完成）
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_zh_HK.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_zh_HK.qm'...
+生成 2 条翻译（2 条已经完成和 0 条未完成）
+忽略 1 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_bo_CN.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_bo_CN.qm'...
+生成 1 条翻译（1 条已经完成和 0 条未完成）
+忽略 2 条未翻译源文本
+Warning: dropping duplicate messages in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_zh_HK.qm':
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source:  items)
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source: (Selected 
+
+* Context: KnowledgeNewFileFolderWindow
+* Source: close
+
+* Context: KnowledgeItemArea
+* Source: Cancel
+
+* Context: KnowledgeShowPage
+* Source: Insufficient knowledge base space, please delete some files and try again
+
+* Context: KnowledgeItemArea
+* Source: Delete
+
+* Context: KnowledgeShowPage
+* Source: File count cannot exceed 100
+
+* Context: KnowledgeItemArea
+* Source: After deletion, this operation cannot be undone, and you will not be able to perform knowledge Q&A on the file content.
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source: Confirm
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source: File Name
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source: No search results
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source: No content in current directory
+
+* Context: KnowledgeItemArea
+* Source: Are you sure you want to delete the file?
+
+* Context: KnowledgePromptWindow
+* Source: close
+
+* Context: KnowledgeOperateArea
+* Source: Delete
+
+* Context: KnowledgeNewFileFolderWindow
+* Source: Confirm
+
+* Context: KnowledgeNewFileFolderWindow
+* Source: File name cannot contain the following characters: \/:*?"<>|
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source: Cancel
+
+* Context: KnowledgeFileSelectMoreWindow
+* Source: Knowledge Base Management
+
+* Context: Chat
+* Source: Delete
+
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_zh_HK.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_zh_HK.qm'...
+生成 1155 条翻译（1154 条已经完成和 1 条未完成）
+忽略 2 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_kk.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_kk.qm'...
+生成 1 条翻译（1 条已经完成和 0 条未完成）
+忽略 2 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_ky.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_ky.qm'...
+生成 1 条翻译（1 条已经完成和 0 条未完成）
+忽略 2 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_bo_CN.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_bo_CN.qm'...
+生成 351 条翻译（266 条已经完成和 85 条未完成）
+忽略 468 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_mn.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_mn.qm'...
+生成 1 条翻译（1 条已经完成和 0 条未完成）
+忽略 2 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_ug.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_ug.qm'...
+生成 1 条翻译（1 条已经完成和 0 条未完成）
+忽略 2 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_mn.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_mn.qm'...
+生成 343 条翻译（266 条已经完成和 77 条未完成）
+忽略 476 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_vi.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_vi.qm'...
+生成 1 条翻译（1 条已经完成和 0 条未完成）
+忽略 2 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_ug.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_ug.qm'...
+生成 354 条翻译（268 条已经完成和 86 条未完成）
+忽略 465 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_th.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_th.qm'...
+生成 1 条翻译（1 条已经完成和 0 条未完成）
+忽略 2 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_ms.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/peony-menu-plugin-kylin-aiassistant/translations/peony-menu-plugin-kylin-aiassistant_ms.qm'...
+生成 1 条翻译（1 条已经完成和 0 条未完成）
+忽略 2 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_ky.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_ky.qm'...
+生成 344 条翻译（260 条已经完成和 84 条未完成）
+忽略 480 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_kk.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_kk.qm'...
+生成 344 条翻译（260 条已经完成和 84 条未完成）
+忽略 480 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_ms.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_ms.qm'...
+生成 332 条翻译（332 条已经完成和 0 条未完成）
+忽略 1 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_th.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_th.qm'...
+生成 334 条翻译（334 条已经完成和 0 条未完成）
+忽略 1 条未翻译源文本
+Updating '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_vi.qm'...
+Removing translations equal to source text in '/home/kylin-agent/openkylin-build/kylin-aiassistant/kylin-aiassistant/translations/Internationalization_vi.qm'...
+生成 334 条翻译（334 条已经完成和 0 条未完成）
+忽略 1 条未翻译源文本
+Project MESSAGE: PDF_SUPPORT_ENABLED is defined for architecture: x86_64, using pdftotext
+Project MESSAGE: LOCAL_MODEL_SUPPORT_ENABLED is defined for architecture: x86_64
+Project MESSAGE: KB_SUPPORT_ENABLED is defined for architecture: x86_64
+Project ERROR: peony development package not found
+Project ERROR: gsettings-qt development package not found
+make: *** [Makefile:48：sub-kylin-aiassistant-make_first] 错误 3
+make: *** 正在等待未完成的任务....
+make: *** [Makefile:73：sub-peony-menu-plugin-kylin-aiassistant-make_first] 错误 3

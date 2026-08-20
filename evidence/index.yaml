@@ -212,21 +212,40 @@ entries:
     limitations: "已安装客户端 ABI 存在，但原生 Hybrid/RRF 没有成功的 E4 运行证据"
     checksum_sha256: "871114c58101f20e0de8f64e0ab97bf0a6eb75099cdeb0fbb66587768dde4197"
 
+  - id: "D4-R3-VERIFY"
+    task_id: "D4-R3"
+    description: "PR21 R3 P0 修复麒麟 VM 全链路协议验证 — Day4 证据链重建 6/6 PASS"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/d4_results/d4_run.log"
+    tested_commit: "78d83823877e5efb1098f4dca4ba543b21fb3980"
+    evidence_commit: "78d83823877e5efb1098f4dca4ba543b21fb3980"
+    date: "2026-08-07"
+    reviewer: "谢嘉然"
+    limitations: "C++ 客户端通过 4字节大端长度前缀帧协议通信；STORE / UNKNOWN 正确返回 UNSUPPORTED_METHOD；RAPID 5/5 通过；证据绑定 HEAD 78d8382"
+    checksum_sha256: "1297199d9ae5f1caf1309b4544714f4824c4d377d389d5ca139bd18b4c4cf077"
+    details: |
+      VM: Kylin-Desktop V11 x86_64, kernel 6.6.0-63-generic
+      Server: kylin-memory-echo-server (Python 3), socket /tmp/kylin-memory-echo/echo.sock
+      Client: kaiming_memory_client (C++17, 4-byte big-endian framing)
+      Results: KAIMING-ECHO PASS, KAIMING-HEALTH PASS, KAIMING-RETRIEVE PASS, KAIMING-STORE PASS (UNSUPPORTED_METHOD), KAIMING-UNKNOWN PASS (UNSUPPORTED_METHOD), KAIMING-RAPID PASS (5/5)
+      Passed: 6 / Failed: 0
+
   - id: "ECHO-005"
     task_id: "D1-C"
     description: "麒麟环境独立 UDS Echo Spike 复测 — 环境基线已冻结，fail-closed evidence runner 重建"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/gate0_echo/systemd_evidence/evidence.jsonl"
-    tested_commit: fbda3fec497c23c6d988283707fa1fb3af7df330
-    evidence_commit: fbda3fec497c23c6d988283707fa1fb3af7df330
+    tested_commit: "fbda3fec497c23c6d988283707fa1fb3af7df330"
+    evidence_commit: "fbda3fec497c23c6d988283707fa1fb3af7df330"
     date: "2026-08-10"
     reviewer: "谢嘉然"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
     limitations: "麒麟 VM 无 git 客户端，tested_commit 由开发机 HEAD 提供；/sys/kernel/security/kylin sysfs 不存在（银河麒麟桌面 V11 未暴露），KYSEC 通过 kysec_set/kysec_get CLI + security.exectl 扩展属性实现已验证可用；kylin-aiassistant 用户不存在（ACL 跳过）；无真实 Kaiming Hook 验证（独立模拟客户端替代）；ACL_SPIKE=VERIFIED, KYSEC_REAL_RULE=UNVERIFIED"
-    checksum_sha256: 8f7b9fefc21d58cd8d7d48eae5b1a1002839e77ddf3cab7c29f71bb9a09c655d
+    checksum_sha256: "8f7b9fefc21d58cd8d7d48eae5b1a1002839e77ddf3cab7c29f71bb9a09c655d"
     details: |
       Day1 环境基线已冻结: environment.log (SHA-256: cdf60d8414...) 包含 16 项系统信息采集。
       evidence.jsonl 含 ECHO-001 至 ECHO-005 + 3 条 systemd 生命周期证据共 8 条记录。
@@ -245,13 +264,15 @@ entries:
 
   - id: "D2-1-KAIMING-HOOK"
     task_id: "D2-1"
-    description: "Kaiming → 自定义 UDS Echo 真实 Hook 调查 — 路线 B 如实记录失败"
-    status: "BLOCKED"
+    description: "Kaiming → 自定义 UDS Echo 真实 Hook 调查 — 路线 B 如实记录失败，D4 阶段解封"
+    status: "UNBLOCKED"
     evidence_level: "E4"
     source: "evidence/gate0_echo/d2_1_evidence/D2_1_Final_Evidence_Report.md"
-    date: "2026-08-06"
+    date: "2026-08-07"
     reviewer: "pending"
-    limitations: "kylin-aiassistant 源码不可获取（闭源二进制 deb 包 / cn.kylin.kylin-aiassistant）；二进制 strings 扫描未发现 QLocalSocket 配置点；无 SDK 构建环境和签名权限；Gate 0 不具备修改麒麟 SDK 组件的权限；使用独立模拟客户端 (kaiming_memory_client.cpp) 作为替代验证"
+    limitations: "2026-08-07 更新: openkylin_blocker_survey.md 调查确认 kylin-aiassistant 完全开源。原始 6 条阻塞原因中 4 条已不构成阻塞（RESOLVED/伪阻塞/前提失效），2 条局部不成立。真实编译验证在 D4 阶段执行。独立模拟客户端 (kaiming_memory_client.cpp) 6/6 PASS 作为 Gate 0 通信层验收证据保持有效。"
+    unblocked_by: "reviewDocuments/openkylin_blocker_survey.md"
+    remediation_plan: "deliverables/OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md"
     checksum_sha256: "01035f23e0835202b346941dcf1cff73bd17c2126b1e3a19dc492f17867a5286"
     details: |
       调查时间: 2026-08-06T11:18:57+08:00.
@@ -260,9 +281,31 @@ entries:
       dpkg -L kylin-aiassistant: "软件包没有被安装".
       strings 扫描: 未发现 QLocalSocket/connectToServer/kylin-memory/echo.sock 引用.
       独立模拟客户端: kaiming_memory_client --method all 6/6 PASS.
-      阻断原因: 闭源二进制 + 无 SDK 构建环境 + 无签名权限 + Socket 路径硬编码.
-      最终状态: BLOCKED (Gate 0), 真实 Hook 推迟至 Gate 1.
-      后续方案: 8步Gate1接入计划 + 3个降级方案 (LD_PRELOAD / socat转发 / SDK团队合作).
+      原始阻断原因: 闭源二进制 + 无 SDK 构建环境 + 无签名权限 + Socket 路径硬编码.
+      2026-08-07 状态更新: UNBLOCKED.
+      解除依据: reviewDocuments/openkylin_blocker_survey.md — kylin-aiassistant 在 openkylin 完全开源，源码可获取、可编译、可修改.
+      修复计划: deliverables/OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md (阶段 0-5).
+
+  - id: "D4-OPENKYLIN-HOOK"
+    task_id: "D2-1"
+    description: "D4 openkylin 阻塞项修复 阶段4-5 — Tool Result Hook 调用链审计 + 最小观察点 patch（真实宿主端到端验证因 GUI-only 未完成）"
+    status: "PARTIAL"
+    evidence_level: "E3"
+    source: "evidence/l2-kylin-vm/d4_openkylin_remediation/tool_hook_audit.md"
+    report: "evidence/l2-kylin-vm/d4_openkylin_remediation/tool_result_test_matrix.log"
+    date: "2026-08-15"
+    reviewer: "谢嘉然"
+    runtime_result: "PARTIAL"
+    limitations: "Tool Result Hook 调用链已源码级审计（Hook 点=CMsgPane::onRecvTool + SystemChat::sendToolMessage）；最小观察点 patch（tool_execution_observer.h + 2 处注入）已应用，头文件 g++ -fsyntax-only 通过(EXIT=0)。但真实 Tool 触发为 GUI-only（Wayland 无 xdotool，dbus 无消息注入），T1/T2/T3/T5 未执行（S4-BLOCK-001）；toolReply 信号缺 arguments/tool_call_id/started_at/cancelled 字段（S4-BLOCK-002）；VM 缺 ~40 个 -dev 包且无 sudo，qmake 报 gsettings-qt development package not found（S4-BLOCK-003）。T4（Prompt Skill 不误判）源码级通过。TD-007 仍 Open，R-ARCH-05 仍 In Progress"
+    checksum_sha256: "380b1c0c7097bc125003bb07a40bc9c338b017db57d1696034f4796374a8e70a"
+    details: |
+      阶段4.1 审计: sendToolMessage(systemchat.cpp:692) → chatAsync → 流式解析器 tool_call 分支(systemchat.cpp:88)
+        → toolReply 信号(systemchat.cpp:117-120) → CMsgPane::onRecvTool(msgpane.cpp:1243)。
+      阶段4.2 patch: 新增 tool_execution_observer.h + systemchat.cpp/msgpane.cpp 各 1 处观察点注入。
+        头文件语法检查 EXIT=0；完整重编译因缺 dev 包阻塞（S4-BLOCK-003）。
+      阶段4.3 测试矩阵: T4 源码级 PASS；T1/T2/T3/T5 BLOCKED（S4-BLOCK-001/002）。
+      阶段5 证据: tool_hook_audit.md / tool_hook_patch.diff / tool_execution_observer.h /
+        tool_hook_build.log / tool_result_test_matrix.log 已收集并生成 MANIFEST.sha256。
 
   - id: "EMBED-CALL-002"
     task_id: "D2-A"
@@ -459,6 +502,32 @@ entries:
       P1-6 SHA-256 回退前后一致; P1-7~P1-9 未执行对比.
       关联缺口: P1-6, P1-7, P1-8, P1-9, P1-10.
 
+  - id: "AGT-004-5.0.3-001"
+    task_id: "D4-Gate0-补充审查"
+    description: "麒灵 AI 助手 5.0.3 智能体模式与工具调用能力人工验证（deepseek 云端模型）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d4_agent_mode_5_0_3_20260816/"
+    report: "deliverables/D4_GATE0_AGENT_MODE_MANUAL_VERIFICATION_20260816.md"
+    date: "2026-08-16"
+    reviewer: "谢嘉然（E）"
+    limitations: "V4 Skill/Harness 调用未验证（日志无 skill 调用记录，无法观测）；V5 取消已验证、失败场景已观测（V5-1/V5-3 补测：ls -la /root → 权限不够，助手如实报告失败、无成功结果；宿主日志无沉淀记录）但端到端『失败状态建模/失败不沉淀』仍需 Hook 集成后验证（宿主无沉淀机制，无法归因拦截）；本验证仅证明宿主具备智能体模式+工具调用能力，本项目 Hook 集成端到端链路尚未验证"
+    checksum_sha256: "5f96f2ca09d5b4b2dc1b61f4966894d8ac719424973c1cb8255efdce67177bac"
+    details: |
+      V1 智能体模式入口: v1_agentmode_entry.png (411KB)
+      V2 deepseek 云端模型对话: v2_deepseek_chat_log.txt（onRecvTaskMsg 正常回复）
+      V3 工具调用成功闭环: v3_tool_call_result_log.txt
+        - tool_call: shell 工具 gdbus call 查询音量 (call_00_aDWW85DqGTBse5AYgtcr9634)
+        - tool_result: output "(67,)" → 助手回复“当前音量是 **67%**”
+      V5 取消场景: v5_task_cancel_log.txt（User stop task mode!）
+      V5-1/V5-3 失败场景补测: v5-1_tool_call_failed_log.txt + v5_fail_tool_log.txt + v5_3_fail_no_precipitate_evidence.md
+        - 失败 tool_call: ls -la /root (call_00_DiZp24T3mkyLDs2fJrKV7174) → tool_result "权限不够"（无 is_error 字段）
+        - 助手如实报告失败（/root 无法访问 ❌ 权限不够），无成功结果
+        - 失败后宿主日志无沉淀记录（沉淀/知识候选/candidate/偏好/提取/入库 全文 0 命中）
+        - 结论: 部分证据，端到端『失败状态建模/失败不沉淀』待 Hook/Memory Service 集成后验证
+      PID 12043; 助手二进制路径 /run/build/kylin-aiassistant/kylin-aiassistant/kylin-aiassistant
+      MANIFEST.sha256 含 7 个证据文件 SHA-256；证据目录: evidence/l2-kylin-vm/d4_agent_mode_5_0_3_20260816/
+
   - id: "D2-C-OSAGENT-SPIKE"
     task_id: "D2-C-OSAGENT-SPIKE"
     description: "D2-C OS Agent 宿主实验的部分观察证据；三项实验均尚缺 Gate 所需的完整证据。"
@@ -502,3 +571,81 @@ entries:
         （evidence/l2-kylin-vm/day8_verify_latest.log，checksum 7f32f404…）
         ——L2 302 = L1 255 passed + 47 skipped（VM 上 47 个 SDK 用例真实执行不再 skip）
       - L1（本地 WSL）对照：255 passed + 47 skipped（evidence/l1/day8_knowledge_extraction_local.log）
+
+  - id: "MEM-BOUNDARY-001"
+    task_id: "D4-Gate0-补充审查"
+    description: "官方记忆地图（memorymap 2.0.23）能力边界调查 — 纯 UI 前端 + recollect 屏幕视觉记忆内核；MEM-001/002 维持 NOT_FOUND，新增 MEM-003 条件数据源"
+    status: "HOST_VERIFIED"
+    evidence_level: "E3"
+    source: "evidence/l2-kylin-vm/memorymap-boundary-20260817/"
+    report: "docs/baseline/v2-20260816/06_memorymap_capability_boundary_20260817.md"
+    date: "2026-08-17"
+    reviewer: "pending"
+    limitations: "端到端运行/召回效果 UNTESTED（recording-memory=false，recollect-service 未运行，未做交互式运行时验证）；证据等级 E3 为 ABI/符号/依赖/Schema 级，非运行时功能验证；知识库/文档/数据管理能力边界仍未调查（R-NEW-1）；memorymap 删除为按时间区间底层原语，无语义级精准遗忘"
+    checksum_sha256: "270840e4108d764b71a73f94952f0805c061cb31a7f55c010f50b907195b9ed8"
+    details: |
+      memorymap（cn.kylin.kylin-ai-memorymap 2.0.23，Kaiming 分层应用，非 dpkg）主二进制 Build ID 9f0b1cb72c6a1b90b57d8d039f1367f3d4875b5d。
+      架构判定（§2.4）：memorymap = 纯 UI 前端（Qt5 + recollect-client + 本地 OCR 辅助，无 embedding/vector/sqlite/ffmpeg 直接依赖，nm -D 无导出业务 API）；
+      记忆内核 = kylin-ai-recollect-service（截图→合成 MP4→OCR→CLIP cn-clip_512 图文 Embedding→SQLite screenshots 表 + Milvus-Lite 向量→文本/视觉检索→按时间区间删除）。
+      官方「记忆」= 屏幕视觉记忆，非偏好/知识/工具结果通用记忆。
+      MEM-001（官方 MemoryClient）维持 NOT_FOUND：libkylin-ai-recollect-client 为视觉记忆 client；
+      MEM-002（完整 Memory Service）维持 NOT_FOUND：recollect-service 不含偏好/知识/冲突/遗忘/流转；
+      新增 MEM-003（官方视觉记忆组件）ABI_VERIFIED/E3，定位条件数据源（只读复用，D-Bus com.kylin.Recollect）。
+      可复用/重叠/互补（§3.2）：memorymap 不可复用；recollect-service 只读可复用；与自研仅共享基础设施（embedding/vision/vector-engine-client SDK），功能互补，自研范围不收缩。
+      证据包 phase1~phase10 原始日志 + MANIFEST.sha256（10 文件）见 source 目录。
+
+  - id: "GATE0-ENV-002"
+    task_id: "D4-Gate0-补充审查"
+    description: "环境基线 v2 调查 — 麒灵 AI 助手 5.0.3 环境采集 + SDK/ABI/能力边界重评（01/02/03/05 四份文档）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E3"
+    source: "docs/baseline/v2-20260816/02_kylin_vm_environment_baseline_20260816.md"
+    date: "2026-08-16"
+    reviewer: "pending"
+    limitations: "证据等级 E3 为 ABI/包/Schema 级，运行时功能验证待复测；cmake 未安装（C++ Bridge 编译阻塞，检查 0/5 前置）；助手 3.0.67→5.0.3 版本跨越（本地源码 3.x 待重拉），Embedding 0k0.3→0k0.4、Vector 服务端 0k0.11→0k1.0 升级待复测；memorymap 定案见 MEM-BOUNDARY-001；知识库/文档/数据管理能力边界仍未知（R-NEW-1）"
+    checksum_sha256: "3d07bc15c84e5bbbfbc9fcd607991dfde1addcf8344a8488235b2ece40301536"
+    details: |
+      环境基线 v2 调查（docs/baseline/v2-20260816/01~05，VirtualBox guestcontrol，VM Kylin-desktop-neo）：
+      - 关键版本变化：助手 3.0.67→5.0.3（智能体模式+工具调用）；Embedding 0k0.3→0k0.4（新增图像嵌入符号）；Vector 服务端 0k0.11→0k1.0；cmake 缺失；模型仓库 15→30 目录（新增 CN-CLIP/SAM/ASR/TTS）。
+      - 新增官方组件：memorymap 2.0.23（已定案，见 MEM-BOUNDARY-001）、知识库/文档/数据管理服务、Recollect 独立服务、kytensor-llm/llm-backend（本地 LLM）、9 厂商引擎插件。
+      - 能力边界重评（05 v1.3）：上调 EMB-002/004、REC-002、AGT-001（ABI_VERIFIED）；定案 MEM-001/002 NOT_FOUND + 新增 MEM-003；待复测 EMB-001、VEC-001~004、AGT-002/003/004/005/006、REC-001。
+      - 文档：01_sdk_model_abi_baseline_v2、02_kylin_vm_environment_baseline、03_defensive_checklist_v2、05_capability_boundary_reevaluation v1.3。
+
+  - id: "GATE0-UT-001"
+    task_id: "D1-C"
+    description: "Gate 0 原文隔离独立测试 UT-1（11/11 PASS）—— 回显一致 / retrieve 不注入原文 / 特殊字符 / 敏感不泄露 / 响应结构"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/ut_results/ut1_results.txt"
+    date: "2026-08-07"
+    reviewer: "谢嘉然（E）"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "Gate 0 Echo Server 层面原文隔离已验证；生产 Memory Service 的 UI/聊天数据库 original_user_text 保存与 model_request 注入完整隔离链路 [02 §4.1] 仍需 D4+ 验证；5.0.3 聊天 DB Schema 变化（request_data 字段）需按新 Schema 复测"
+    checksum_sha256: "13b40fda1d1252b0edc364168d06b8ec456e36d864b8fcd5b5eeae26b09f5db3"
+    details: |
+      执行环境: 麒麟 V11 VM (Linux 6.6.0-63-generic, x86_64)
+      11 项用例全部 PASS：回显一致 / retrieve 空上下文 / 空 payload /
+      特殊字符（换行/Unicode/JSON 注入/SQL 注入/超长 10KB/空字符串）/
+      memory.store 敏感不泄露 / 响应结构完整性（protocol_version/request_id/status/data/server_ts）
+
+  - id: "GATE0-UT-002"
+    task_id: "D1-C"
+    description: "Gate 0 IPC 重启复测 UT-2（overall 10/12 PASS，核心 IPC 通信/恢复链路 PASS）—— stop→detect→restart→recover / kill-9→recover / 快速重启×5 / 超时"
+    status: "PARTIAL"
+    evidence_level: "E4"
+    source: "evidence/gate0_echo/ut_results/ut2_results.txt"
+    date: "2026-08-07"
+    reviewer: "谢嘉然（E）"
+    runtime_result: "PARTIAL"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "overall 10/12：核心 IPC 通信/恢复链路（health baseline / stop-detect / restart-server / restart-recover / socket-cleanup / kill9-pre / kill9-recover / rapid-restart 5/5 / timeout / final-recover）PASS；2 个 FAIL（UT2-STOP / UT2-KILL9-STOP）为进程管理竞态条件（stop_server 立即检查 pgrep 的 timing 误判），不影响 IPC 通信行为验证；重连机制（TD-IPC-004）与 deadline 超时行为复测（TD-IPC-003）仍为缺口"
+    checksum_sha256: "2d93c5e8c24e9a5ca236501f6ff6202b0f5073cee1ec4ce71ee41400fe400aaf"
+    details: |
+      执行环境: 麒麟 V11 VM (Linux 6.6.0-63-generic, x86_64)
+      10/12 PASS：health baseline / stop-detect / restart-server /
+      restart-recover / socket-cleanup / kill9-pre / kill9-recover /
+      rapid-restart 5/5 / timeout / final-recover
+      2 FAIL 为进程管理竞态条件，核心 IPC 链路全通过

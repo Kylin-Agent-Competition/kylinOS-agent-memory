@@ -21,8 +21,9 @@ KMA_MAX_CONTEXT_TOKENS=800
 
 # ======== UDS Echo 组件路径 (os-agent-integration/echo) ========
 # 注意: 以下路径区分 dev 模式与 systemd/prod 模式
+# 统一部署布局 (Gate 0): /home/<user>/kylin-memory-echo/
 #
-# ---- 统一部署布局 (Gate 0 dev) ----
+# ---- 统一部署布局 (Gate 0) ----
 # /home/<user>/kylin-memory-echo/
 # ├── bin/
 # │   ├── kylin-memory-echo-server    (服务端脚本)

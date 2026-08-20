@@ -1,0 +1,30 @@
+=== 已连接 kylin-agent@127.0.0.1:2222 ===
+Linux kylin-agent-pc 6.6.0-76-generic #86r2-KYLINOS SMP PREEMPT_DYNAMIC Tue Aug  4 06:44:37 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+[dist]
+gcc (openKylin 12.3.0-1ok3k0.1) 12.3.0
+GNU bash，版本 5.2.21(1)-release (x86_64-pc-linux-gnu)
+
+[SHA256 MATCH] libconnect_hook.c
+    local : c6031528fc52b670affab922ab6872f5a8bf52831aeb159b99c1bb5fbecdbe8f
+    remote: c6031528fc52b670affab922ab6872f5a8bf52831aeb159b99c1bb5fbecdbe8f
+[SHA256 MATCH] deploy_hook.sh
+    local : a188817ead69b6da3c1ea14600ba7a547ae0a59a0cbd0f173fed4f625f234737
+    remote: a188817ead69b6da3c1ea14600ba7a547ae0a59a0cbd0f173fed4f625f234737
+[SHA256 MATCH] test_connect_hook.sh
+    local : 41310f6cca998c49499284e2baa3d8e26de9cea0d6d460c603d1ac47e778b900
+    remote: 41310f6cca998c49499284e2baa3d8e26de9cea0d6d460c603d1ac47e778b900
+
+=== bash -n deploy_hook.sh === (exit=0)
+
+=== bash -n test_connect_hook.sh === (exit=0)
+
+=== gcc -fsyntax-only libconnect_hook.c === (exit=0)
+
+=== gcc -shared 完整编译 libconnect_hook.so ===
+compile exit=0
+libconnect_hook.so: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked, BuildID[sha1]=363ca55ea423a818365f0eb365d7c63a33eef283, not stripped
+00000000000014f0 T connect
+                 U pthread_once@GLIBC_2.34
+
+==================================================
+RESULT: ALL PASS

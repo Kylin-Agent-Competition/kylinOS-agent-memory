@@ -1,0 +1,80 @@
+{
+  "stage": "3_comprehensive",
+  "started_at": "2026-08-08T01:31:29.429462+08:00",
+  "steps": {
+    "hook_recompile": "OK",
+    "echo_server": "OK",
+    "c_client": "FAIL: ",
+    "strace": "NO_BINARY"
+  },
+  "diagnostics": {
+    "gcc": "/usr/bin/gcc\ngcc (openKylin 12.3.0-1ok3k0.1) 12.3.0\nCopyright (C) 2022 Free Software Foundation, Inc.",
+    "python3": "/usr/bin/python3\nPython 3.12.3",
+    "strace": "available",
+    "socat": "available",
+    "ldd": "ldd (Ubuntu GLIBC 2.38-1ok6.9k0.11) 2.38",
+    "hook_so_file": "/home/kylin-agent/kylin-memory-echo/lib/libconnect_hook.so: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked, BuildID[sha1]=c4c1db9fa7a90b22946d15bdf58c6c8ad8f92119, not stripped\n\tlinux-vdso.so.1 (0x00007fff819f3000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x0000748a84a84000)\n\t/lib64/ld-linux-x86-64.so.2 (0x0000748a84caa000)",
+    "socat_installed": true
+  },
+  "hook_tests": [
+    {
+      "name": "H1_direct_echo",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "OK:{\"protocol_version\": \"1.0\", \"request_id\": \"\", \"trace_id\": \"\", \"status\": \"ok\", \"data\": {\"status\": \"healthy\", \"uptime_seconds\": 1.063232183456421, \"socket_path\": \"/tmp/kylin-memory-echo/echo.sock\", \""
+    },
+    {
+      "name": "H2_hook_redirect",
+      "exit": 1,
+      "status": "FAIL",
+      "detail": "ERROR: ld.so: object '/home/kylin-agent/kylin-memory-echo/lib/libconnect_hook.so' from LD_PRELOAD cannot be preloaded (failed to map segment from shared object): ignored. | connect: Connection refused | "
+    },
+    {
+      "name": "H3_no_hook_bad_path",
+      "exit": 0,
+      "status": "FAIL",
+      "detail": "connect: No such file or directory | EXPECTED_FAIL | "
+    },
+    {
+      "name": "H4_bare_passthrough",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "OK:{\"protocol_version\": \"1.0\", \"request_id\": \"\", \"trace_id\": \"\", \"status\": \"ok\", \"data\": {\"status\": \"healthy\", \"uptime_seconds\": 62.64796996116638, \"socket_path\": \"/tmp/kylin-memory-echo/echo.sock\", \""
+    },
+    {
+      "name": "H5_custom_match",
+      "exit": 1,
+      "status": "FAIL",
+      "detail": "ERROR: ld.so: object '/home/kylin-agent/kylin-memory-echo/lib/libconnect_hook.so' from LD_PRELOAD cannot be preloaded (failed to map segment from shared object): ignored. | connect: No such file or dire"
+    },
+    {
+      "name": "H6_no_match_passthrough",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "OK:{\"protocol_version\": \"1.0\", \"request_id\": \"\", \"trace_id\": \"\", \"status\": \"ok\", \"data\": {\"status\": \"healthy\", \"uptime_seconds\": 124.6609947681427, \"socket_path\": \"/tmp/kylin-memory-echo/echo.sock\", \""
+    },
+    {
+      "name": "H7_rapid_1",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "[connect_hook] initialized: match='kylin-ai-runtime-unix' redirect='/tmp/kylin-memory-echo/echo.sock' debug=1 | [connect_hook] connect() called: path='/tmp/.kylin-ai-runtime-unix/99999/assistant.sock' a"
+    },
+    {
+      "name": "H8_rapid_2",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "[connect_hook] initialized: match='kylin-ai-runtime-unix' redirect='/tmp/kylin-memory-echo/echo.sock' debug=1 | [connect_hook] connect() called: path='/tmp/.kylin-ai-runtime-unix/99999/assistant.sock' a"
+    },
+    {
+      "name": "H9_rapid_3",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "[connect_hook] initialized: match='kylin-ai-runtime-unix' redirect='/tmp/kylin-memory-echo/echo.sock' debug=1 | [connect_hook] connect() called: path='/tmp/.kylin-ai-runtime-unix/99999/assistant.sock' a"
+    }
+  ],
+  "protocol_tests": [
+    {
+      "name": "P1_retrieve",
+      "exit": 1,
+      "status": "FAIL",
+      "output": 

@@ -55,7 +55,7 @@ models/
 *.mkv
 
 .idea/
-.vscode/settings.json
+.vscode/
 .reasonix/
 reasonix.toml
 .scratch/
@@ -67,10 +67,10 @@ opencode.jsonc
 .opencode/
 AGENTS.md
 Thumbs.db
-reviewDocuments/03_environment_setup.md
-reviewDocuments/04_agent_llm_guide.md
-reviewDocuments/01_sdk_capability_boundary.md
-reviewDocuments/02_architecture_sop.md
+reviewDocuments/
+evidence/_*.py
 evidence/ssh_transfer_diagnosis/kylin_transfer.py
 deliverables/PR18_ROUND2_REMEDIATION_CHECKLIST.md
 packaging/deploy-package/
+Kylin-runtime-knowledge/
+AGENTS.md

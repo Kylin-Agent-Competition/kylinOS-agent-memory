@@ -1,0 +1,45 @@
+{
+  "evidence": {
+    "test_id": "D4-R3-VERIFY",
+    "timestamp": "20260807T162842+08",
+    "tested_commit": "78d83823877e5efb1098f4dca4ba543b21fb3980",
+    "evidence_commit": "78d83823877e5efb1098f4dca4ba543b21fb3980",
+    "vm_host": "kylin-agent@127.0.0.1:2222",
+    "vm_kylin": "Kylin-Desktop V11 x86_64",
+    "test_method": "C++ kaiming_memory_client --method all",
+    "results": {
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "all_pass": true,
+      "pass_fail_map": {
+        "KAIMING-ECHO": true,
+        "HEALTH": true,
+        "RETRIEVE": true,
+        "STORE": true,
+        "UNKNOWN": true,
+        "RAPID": true
+      },
+      "raw_cpp_results": {
+        "KAIMING-ECHO": true,
+        "KAIMING-HEALTH": true,
+        "KAIMING-RETRIEVE": true,
+        "KAIMING-STORE": true,
+        "KAIMING-UNKNOWN": true,
+        "KAIMING-RAPID": true
+      },
+      "cpp_exit_code": 0
+    },
+    "test_duration": "2026-08-07T16:28:47.944610+08:00 -> 2026-08-07T16:28:48.020878+08:00"
+  },
+  "pass_fail": {
+    "KAIMING-ECHO": true,
+    "HEALTH": true,
+    "RETRIEVE": true,
+    "STORE": true,
+    "UNKNOWN": true,
+    "RAPID": true
+  },
+  "raw_cpp_output": "============================================\n Kaiming Memory Client - v1.3 (value-aware)\n Socket: /tmp/kylin-memory-echo/echo.sock\n Method: all\n User: kylin-agent\n============================================\n[2026-08-07T08:28:48Z] [INFO] TEST: echo method\n[2026-08-07T08:28:48Z] [INFO] Response: {\"protocol_version\": \"1.0\", \"request_id\": \"kaiming_req_001\", \"trace_id\": \"kaiming_trc_001\", \"status\": \"ok\", \"data\": {\"echo\": \"Hello from Kaiming AI Assistant\", \"received_at\": \"2026-08-07T08:28:48.647336+00:00\"}, \"server_ts\": \"2026-08-07T08:28:48.647353+00:00\"}\nRESULT KAIMING-ECHO PASS\n[2026-08-07T08:28:48Z] [INFO] KAIMING-ECHO PASS: echo roundtrip payload=Hello from Kaiming AI Assistant\n[2026-08-07T08:28:48Z] [INFO] TEST: health method\n[2026-08-07T08:28:48Z] [INFO] Response: {\"protocol_version\": \"1.0\", \"request_id\": \"kaiming_req_001\", \"trace_id\": \"kaiming_trc_001\", \"status\": \"ok\", \"data\": {\"status\": \"healthy\", \"uptime_seconds\": 4.881114959716797, \"socket_path\": \"/tmp/kylin-memory-echo/echo.sock\", \"pid\": 110309}, \"server_ts\": \"2026-08-07T08:28:48.648082+00:00\"}\nRESULT KAIMING-HEALTH PASS\n[2026-08-07T08:28:48Z] [INFO] KAIMING-HEALTH PASS: health query returned healthy\n[2026-08-07T08:28:48Z] [INFO] TEST: memory.retrieve method\n[2026-08-07T08:28:48Z] [INFO] Response: {\"protocol_version\": \"1.0\", \"request_id\": \"kaiming_req_001\", \"trace_id\": \"kaiming_trc_001\", \"status\": \"ok\", \"data\": {\"contexts\": [], \"total_found\": 0, \"elapsed_ms\": 0.0, \"fallback\": false}, \"server_ts\": \"2026-08-07T08:28:48.648782+00:00\"}\nRESULT KAIMING-RETRIEVE PASS\n[2026-08-07T08:28:48Z] [INFO] KAIMING-RETRIEVE PASS: memory.retrieve returned empty context (Echo simulation)\n[2026-08-07T08:28:48Z] [INFO] TEST: memory.store method (verify protocol compatibility)\n[2026-08-07T08:28:48Z] [INFO] Response: {\"protocol_version\": \"1.0\", \"request_id\": \"kaiming_store_001\", \"trace_id\": \"kaiming_trc_store\", \"status\": \"error\", \"data\": {\"error_code\": \"UNSUPPORTED_METHOD\", \"message\": \"Requested method is not supported by this service\"}, \"server_ts\": \"2026-08-07T08:28:48.649776+00:00\"}\nRESULT KAIMING-STORE PASS\n[2026-08-07T08:28:48Z] [INFO] KAIMING-STORE PASS: memory.store correctly returned status=error with error_code=UNSUPPORTED_METHOD (Echo not implemented)\n[2026-08-07T08:28:48Z] [INFO] TEST: unknown method degradation\n[2026-08-07T08:28:48Z] [INFO] Response: {\"protocol_version\": \"1.0\", \"request_id\": \"kaiming_req_001\", \"trace_id\": \"kaiming_trc_001\", \"status\": \"error\", \"data\": {\"error_code\": \"UNSUPPORTED_METHOD\", \"message\": \"Requested method is not supported by this service\"}, \"server_ts\": \"2026-08-07T08:28:48.651095+00:00\"}\nRESULT KAIMING-UNKNOWN PASS\n[2026-08-07T08:28:48Z] [INFO] KAIMING-UNKNOWN PASS: unknown method correctly returned status=error with error_code=UNSUPPORTED_METHOD (degradation normal)\n[2026-08-07T08:28:48Z] [INFO] TEST: 5 consecutive rapid requests (simulating high-frequency calls)\nRESULT KAIMING-RAPID PASS\n[2026-08-07T08:28:48Z] [INFO] KAIMING-RAPID PASS: 5/5 rapid requests succeeded\n\n============================================\n Passed: 6 / Failed: 0\n============================================",
+  "raw_cpp_stderr": ""
+}

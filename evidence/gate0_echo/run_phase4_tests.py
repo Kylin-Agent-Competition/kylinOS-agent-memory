@@ -3,7 +3,7 @@
 import paramiko
 import sys, os, time, json
 
-PW = '***REMOVED_PASSWORD***'
+PW = os.environ.get("KYLIN_VM_PASSWORD", "")
 REPO = '/home/kylin-agent/kylin-memory-echo'
 SOCK = '/run/kylin-memory-echo/echo.sock'
 OUT_DIR = os.path.join(os.path.dirname(__file__), 'final')

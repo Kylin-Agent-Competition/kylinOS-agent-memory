@@ -1,0 +1,50 @@
+[2026-08-08T14:38:26.755Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=84807)
+[2026-08-08T14:38:27.837Z] [INFO] Client connected
+[2026-08-08T14:38:27.837Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:27.837Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:27.919Z] [INFO] Client connected
+[2026-08-08T14:38:27.920Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:27.920Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:28.011Z] [INFO] Client connected
+[2026-08-08T14:38:28.012Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:28.012Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:28.099Z] [INFO] Client connected
+[2026-08-08T14:38:28.100Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:28.100Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:28.197Z] [INFO] Client connected
+[2026-08-08T14:38:28.197Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:28.197Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:28.247Z] [INFO] Client connected
+[2026-08-08T14:38:28.247Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:28.247Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:28.247Z] [INFO] Client connected
+[2026-08-08T14:38:28.247Z] [INFO] Request method=memory.retrieve request_id=?
+[2026-08-08T14:38:28.248Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:28.248Z] [INFO] Client connected
+[2026-08-08T14:38:28.248Z] [INFO] Request method=memory.store request_id=?
+[2026-08-08T14:38:28.248Z] [WARN] Unknown method: memory.store
+[2026-08-08T14:38:28.248Z] [INFO] Response sent: status=error
+[2026-08-08T14:38:28.249Z] [INFO] Client connected
+[2026-08-08T14:38:28.249Z] [INFO] Request method=memory.forget request_id=?
+[2026-08-08T14:38:28.249Z] [WARN] Unknown method: memory.forget
+[2026-08-08T14:38:28.249Z] [INFO] Response sent: status=error
+[2026-08-08T14:38:28.339Z] [INFO] Client connected
+[2026-08-08T14:38:28.339Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:28.339Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:28.340Z] [INFO] Client connected
+[2026-08-08T14:38:28.340Z] [INFO] Request method=memory.retrieve request_id=?
+[2026-08-08T14:38:28.340Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:28.341Z] [INFO] Client connected
+[2026-08-08T14:38:28.341Z] [INFO] Request method=memory.store request_id=?
+[2026-08-08T14:38:28.341Z] [WARN] Unknown method: memory.store
+[2026-08-08T14:38:28.341Z] [INFO] Response sent: status=error
+[2026-08-08T14:38:28.343Z] [INFO] Client connected
+[2026-08-08T14:38:28.343Z] [INFO] Request method=memory.forget request_id=?
+[2026-08-08T14:38:28.343Z] [WARN] Unknown method: memory.forget
+[2026-08-08T14:38:28.343Z] [INFO] Response sent: status=error
+[2026-08-08T14:38:30.463Z] [INFO] Client connected
+[2026-08-08T14:38:30.463Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:30.463Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:30.545Z] [INFO] Client connected
+[2026-08-08T14:38:30.545Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:30.545Z] [INFO] Response sent: status=ok

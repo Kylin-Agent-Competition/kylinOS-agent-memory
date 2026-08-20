@@ -57,8 +57,12 @@
 | TD-007 | 真实 Tool Result Hook 路径未通过源码 instrument 验证 | os-agent-integration / kylin-ai-runtime | Technical Debt | High | Open | C | D 主审；E 安全关注 | D3 阶段 | 源码 instrument 输出结构化 ToolExecutionEvent（trace_id、tool_name、arguments、status、result、error、started_at、finished_at），覆盖成功、失败、取消三类 | PR #19 |
 | TD-008 | Hook 点 A 的 Memory Context 注入实现状态未确认 | os-agent-integration / PreChat | Risk | High | Open | C | D 主审；E 安全关注 | D3 阶段 | 通过源码 instrument、D-Bus 解码或真实 chatAsync 入参捕获确认 Hook 点 A 是否实现 memory_context 注入；strace 外部观察只能得出 NOT_OBSERVED | PR #19 |
 | TD-009 | 非 OpenAI 风格 Tool 执行路径尚未获得结构化事件证据 | os-agent-integration / kylin-ai-runtime | Technical Debt | High | Open | C | D 主审；E 安全关注 | D3 阶段 | 源码 instrument 确认实际 Tool 执行路径并输出结构化事件；OS Agent 设计并验证替代 Hook 方案 | PR #19 |
-| TD-A-D9-SDK-MODEL-LIST-UAF | SDK text_embedding_get_model_list 在 init_session 内部使用后释放缓冲区，外部调用导致 use-after-free 段错误 | cpp-bridge/src/embedding_bridge.cpp | Risk | Medium | Open | A 轨成员 | D 主审 | Day10 | 当前缓解：不通过 get_model_list 查询，使用麒麟 VM 实测确认的默认模型名（SDK 日志：Get default model success, model: ensemble-embd_gte-base_uint8-text）；关闭条件：SDK 官方确认修复或提供 list 释放 API 后验证无二次查询段错误 | PR #38 分支 fix/td-a-pure |
-
+| R-ARCH-05 | 真实 Kaiming Hook 未验证 — openkylin 源码已开源可获取 | os-agent-integration / Kaiming Hook | Risk | High | In Progress | 刘承恩 (C) / 周子腾 (D) | 谢嘉然 (E) | 2026-08-07 | VM 内编译通过并修改 Socket 路径指向 Memory Service，完整 ToolResultEvent 链路在麒麟 VM 跑通；参考 `reviewDocuments/openkylin_blocker_survey.md` 调查结论和 `deliverables/OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md` 修复计划。2026-08-15 进展：Socket 重定向（LD_PRELOAD connect hook）已在 VM 验证 3/3 PASS；Tool Result Hook 调用链审计完成（Hook 点=CMsgPane::onRecvTool / SystemChat::sendToolMessage），最小观察点 patch 已实现且头文件语法通过，但真实 Tool 触发为 GUI-only 无法自动化（S4-BLOCK-001）、构建环境缺 ~40 个 -dev 包无 sudo（S4-BLOCK-003），ToolResultEvent 端到端仍未跑通 | |
+| TD-DEPLOY-001 | 部署顺序修复（build 先于 install） | packaging/systemd | Technical Debt | High | Open | D 轨成员 | D 主审 | D4 阶段 | CMake build → install.sh → binary exists 三者顺序验证通过，二进制在麒麟 VM 部署成功；5.0.3 新部署布局（/opt/kaiming/layers）下构建基线、备份、回退复验（关联 AGT-006） | Gate 0 审查 08-07/08-17 |
+| TD-KYSEC-001 | KYSEC 真实规则验证不可用（镜像无 kysec 内核） | os-agent-integration / packaging | Technical Debt | High | Open | D 轨成员 | D 主审；E 安全关注 | L2/L3 阶段 | 麒麟成品环境 KYSEC 规则写入并验证通过；最低标准为 kysec 登记表正确显示权限；新部署路径下 ACL 有效性纳入 AGT-006 复验 | Gate 0 审查 08-07/08-17 |
+| TD-IPC-002 | UDS 权限（systemd RuntimeDirectory 不可确认） | memory-client / packaging/systemd | Technical Debt | Medium | Open | D 轨成员 | D 主审 | D4 阶段 | systemd unit 中 RuntimeDirectory 配置可确认并在麒麟 VM 验证 | Gate 0 审查 08-07/08-17 |
+| TD-IPC-003 | deadline_ms 超时后服务端行为复测不完整 | memory-service / cpp-bridge | Technical Debt | Medium | Open | D 轨成员 | D 主审 | D4 阶段 | deadline 超时后客户端正确截断，服务端不保持僵尸连接并返回 TIMEOUT 错误码 | Gate 0 审查 08-07/08-17 |
+| TD-IPC-004 | 重连机制未实现（单连接阻塞式） | memory-client | Technical Debt | Medium | Open | C 轨成员 | D 主审 | D4-D 阶段 | 客户端支持 3 次指数退避重连，有 Evidence L2 日志 | Gate 0 审查 08-07/08-17 |
 
 ## 管理规则
 

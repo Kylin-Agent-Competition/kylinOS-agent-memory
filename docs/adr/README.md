@@ -26,6 +26,7 @@
 | ADR | 状态 | 说明 |
 |---|---|---|
 | [ADR-001：默认使用 Memory Service 应用层 RRF](001-application-layer-rrf.md) | 提议，PR #20 Review 返工中 | `rrf-v1` 默认 `k=60`、等权、硬过滤先于融合；一名独立非作者 Reviewer 的 `APPROVED` 满足人工审批门槛，D/E 为专业关注点 |
+| [ADR-004：Gate 0 真实 Tool Result 路线 B 替代架构批准](004-gate0-tool-result-route-b.md) | 已采纳（2026-08-17 起保留为备份路线） | 独立 Qt 演示壳 + 执行日志 Adapter 作为 Gate 0 Tool Result 验证路径；真实 Hook 端到端未通前不撤销、不降级 |
 
 **ADR-001 已形成 D3-B 冻结候选；独立审查前不得将状态改为“已采纳”。**
 

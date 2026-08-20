@@ -1,0 +1,97 @@
+
+================================================================================
+# 任务: phase1_package  @ 2026-08-17T21:37:33.708162
+================================================================================
+
+----- CMD: dpkg -l 2>/dev/null | grep -iE 'memory|kylin-ai'  -----
+# exit=0
+ii  kylin-ai-abstract-models                             1.2.0.1-0k1.0                           amd64        Kylin AI Abstract Models
+ii  kylin-ai-document-qa-service                         1.2.0.0-0k1.0                           amd64        kylin ai document qa service.
+ii  kylin-ai-document-service:amd64                      1.2.0.0-0k0.6                           amd64        Document Service Server
+ii  kylin-ai-engine-plugins:amd64                        1.1.0.1-0k2.1                           amd64        Kylin ai engine plugins for ai runtime.
+ii  kylin-ai-knowledge-base-service                      1.2.0.0-0k1.0                           amd64        kylin ai knowledge base service.
+ii  kylin-ai-parser-extension:amd64                      1.2.0.0-0k0.4                           amd64        AI Parser Extension
+ii  kylin-ai-python-env                                  1.2.0.3-0k0.2                           amd64        Python multi architecture deployment.
+ii  kylin-ai-recollect-service                           1.0.0.0-0k1.0                           amd64        recollect service - background daemon for tracking user activity
+ii  kylin-ai-runtime                                     1.2.0.4-0k0.1                           amd64        Kylin AI SDK Runtime
+ii  kylin-ai-subsystem:amd64                             1.3.0.1-0k0.1                           amd64        Kylin AI Subsystem (metapackage)
+ii  kylin-ai-subsystem-modelconfig                       1.2.0.1-0k1.1                           amd64        The aiassistant subsystem modelconfig.
+ii  kylin-ai-subsystem-plugin                            1.1.0.1-0k1.0                           amd64        Kylin ai subsystem plugin.
+ii  kylin-ai-vector-engine                               1.2.0.1-0k1.0                           amd64        A lightweight vector database fork from Milvus Lite
+ii  libargon2-1:amd64                                    0~20190702+dfsg-ok1k0.2                 amd64        memory-hard hashing function - runtime library
+ii  libasan8:amd64                                       13.2.0-4ok3.3k0.1                       amd64        AddressSanitizer -- a fast memory error detector
+ii  libitm1:amd64                                        13.2.0-4ok3.3k0.1                       amd64        GNU Transactional Memory Library
+ii  libkylin-ai-document-qa-service                      1.2.0.0-0k1.0                           amd64        kylin ai document qa service.
+ii  libkylin-ai-document-service:amd64                   1.2.0.0-0k0.6                           amd64        Kylin AI Document Service
+ii  libkylin-ai-recollect-client                         1.0.0.0-0k1.0                           amd64        recollect client - library for accessing recorded user activity
+ii  liblmdb0:amd64                                       0.9.31-ok1k0.2                          amd64        Lightning Memory-Mapped Database shared library
+ii  liblsan0:amd64                                       13.2.0-4ok3.3k0.1                       amd64        LeakSanitizer -- a memory leak detector (runtime)
+ii  libsord-0-0:amd64                                    0.16.16-ok1k0.1                         amd64        library for storing RDF data in memory
+ii  libtalloc2:amd64                                     2.4.2-ok2k0.2                           amd64        hierarchical pool based memory allocator
+ii  libxshmfence1:amd64                                  1.3-ok1k0.2                             amd64        X shared memory fences - shared library
+ii  python3-talloc:amd64                                 2.4.2-ok2k0.2                           amd64        hierarchical pool based memory allocator - Python3 bindings
+
+----- CMD:  echo '--- KAIMING APP LAYERS ---'; ls -la /opt/kaiming/layers/stable/x86_64/app/ 2>/dev/null | grep -iE 'memory|assistant|note'  -----
+# exit=0
+--- KAIMING APP LAYERS ---
+drwxr-xr-x  3 root root 4096  8月15日 22:56 cn.kylin.kylin-aiassistant
+drwxr-xr-x  3 root root 4096 2026年 2月12日 cn.kylin.kylin-ai-memorymap
+drwxr-xr-x  3 root root 4096 2026年 2月12日 cn.kylin.kylin-note
+
+----- CMD:  echo '--- FIND memorymap ---'; find /opt/kaiming -iname '*memorymap*' 2>/dev/null | head -50  -----
+# exit=0
+--- FIND memorymap ---
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/entries/share/glib-2.0/schemas/com.kylin.memorymap.gschema.xml
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/entries/share/applications/kylin-ai-memorymap.desktop
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/entries/share/kylin-user-guide/data/guide/kylin-ai-memorymap
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/entries/share/kylin-user-guide/data/guide/kylin-ai-memorymap/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/entries/share/kylin-user-guide/data/guide/kylin-ai-memorymap/zh_CN/image/trayopenmemorymap.png
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/entries/share/kylin-user-guide/data/guide/kylin-ai-memorymap/en_US/image/trayopenmemorymap.png
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/entries/bin/cn.kylin.kylin-ai-memorymap
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/glib-2.0/schemas/com.kylin.memorymap.gschema.xml
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/applications/kylin-ai-memorymap.desktop
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations/kylin-ai-memorymap_th.qm
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations/kylin-ai-memorymap_zh_Hant.qm
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations/kylin-ai-memorymap_mn.qm
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations/kylin-ai-memorymap_vi.qm
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations/kylin-ai-memorymap_ms.qm
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations/kylin-ai-memorymap_zh_CN.qm
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations/kylin-ai-memorymap_ug.qm
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations/kylin-ai-memorymap_kk.qm
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations/kylin-ai-memorymap_bo_CN.qm
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations/kylin-ai-memorymap_ky.qm
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/translations/kylin-ai-memorymap_zh_HK.qm
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-ai-memorymap/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-user-guide/data/guide/kylin-ai-memorymap
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-user-guide/data/guide/kylin-ai-memorymap/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-user-guide/data/guide/kylin-ai-memorymap/zh_CN/image/trayopenmemorymap.png
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/share/kylin-user-guide/data/guide/kylin-ai-memorymap/en_US/image/trayopenmemorymap.png
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-ai-memorymap/binary/2.0.23/files/bin/kylin-ai-memorymap
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-classical/16x16/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-classical/64x64/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-classical/128x128/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-classical/48x48/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-classical/32x32/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-classical/96x96/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-classical/scalable/apps/kylin-ai-memorymap.svg
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-classical/24x24/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-classical/256x256/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/16x16/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/96x96@2x/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/128x128@2x/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/64x64/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/128x128/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/32x32@2x/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/48x48/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/32x32/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/96x96/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/24x24@2x/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/48x48@2x/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/256x256@2x/apps/kylin-ai-memorymap.png
+/opt/kaiming/layers/stable/x86_64/runtime/top.openkylin.ukui/binary/1.1.43-aipc.7/files/usr/share/icons/ukui-icon-theme-fashion/64x64@2x/apps/kylin-ai-memorymap.png
+
+----- CMD:  echo '--- APPS ---'; ls -la /opt/apps/ 2>/dev/null | grep -iE 'memory|ai' -----
+# exit=1
+--- APPS ---

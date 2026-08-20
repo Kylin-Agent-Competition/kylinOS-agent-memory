@@ -15,7 +15,7 @@ import base64
 HOST = '127.0.0.1'
 PORT = 2222
 USER = 'kylin-agent'
-PASSWORD = '***REMOVED_PASSWORD***'
+PASSWORD = os.environ.get("KYLIN_VM_PASSWORD", "")
 DEPLOY_HOME = '/home/kylin-agent'
 REPO_PATH = f'{DEPLOY_HOME}/kylin-memory-echo'
 OUT_DIR = os.path.join(os.path.dirname(__file__), 'day2_results')

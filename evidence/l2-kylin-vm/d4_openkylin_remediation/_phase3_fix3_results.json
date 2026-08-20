@@ -1,0 +1,63 @@
+{
+  "stage": "phase3_fix3",
+  "started_at": "2026-08-08T22:38:24.928063+08:00",
+  "tests": [
+    {
+      "name": "HookR1",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "[connect_hook] initialized: match='kylin-ai-runtime-unix' redirect='/tmp/kylin-memory-echo/echo.sock' debug=1|[connect_hook] connect() called: path='/tmp/.kylin-ai-runtime-unix/99999/assistant.sock' addrlen=110|[connect_hook] MATCH! Redirecting '/tmp"
+    },
+    {
+      "name": "HookR2",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "[connect_hook] initialized: match='kylin-ai-runtime-unix' redirect='/tmp/kylin-memory-echo/echo.sock' debug=1|[connect_hook] connect() called: path='/tmp/.kylin-ai-runtime-unix/99999/assistant.sock' addrlen=110|[connect_hook] MATCH! Redirecting '/tmp"
+    },
+    {
+      "name": "HookR3",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "[connect_hook] initialized: match='kylin-ai-runtime-unix' redirect='/tmp/kylin-memory-echo/echo.sock' debug=1|[connect_hook] connect() called: path='/tmp/.kylin-ai-runtime-unix/99999/assistant.sock' addrlen=110|[connect_hook] MATCH! Redirecting '/tmp"
+    },
+    {
+      "name": "HookR4",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "[connect_hook] initialized: match='kylin-ai-runtime-unix' redirect='/tmp/kylin-memory-echo/echo.sock' debug=1|[connect_hook] connect() called: path='/tmp/.kylin-ai-runtime-unix/99999/assistant.sock' addrlen=110|[connect_hook] MATCH! Redirecting '/tmp"
+    },
+    {
+      "name": "HookR5",
+      "exit": 0,
+      "status": "PASS",
+      "detail": "[connect_hook] initialized: match='kylin-ai-runtime-unix' redirect='/tmp/kylin-memory-echo/echo.sock' debug=1|[connect_hook] connect() called: path='/tmp/.kylin-ai-runtime-unix/99999/assistant.sock' addrlen=110|[connect_hook] MATCH! Redirecting '/tmp"
+    },
+    {
+      "name": "protocol_direct",
+      "exit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "protocol_via_hook",
+      "exit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "E1a_server_down",
+      "exit": 0,
+      "status": "FAIL"
+    },
+    {
+      "name": "E1b_hook_server_down",
+      "exit": 0,
+      "status": "FAIL"
+    },
+    {
+      "name": "E2_rapid_5x",
+      "status": "PASS"
+    }
+  ],
+  "finished_at": "2026-08-08T22:38:31.060392+08:00",
+  "total": 10,
+  "passed": 8
+}

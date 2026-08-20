@@ -1,0 +1,17 @@
+# UT-2 IPC 重启复测结果
+# Timestamp: 2026-08-07T09:48:54
+# Socket: /home/kylin-agent/.echo_run/echo.sock
+# Passed: 10 / Failed: 2 / Total: 12
+
+PASS UT2-HEALTH-BASELINE: 健康检查通过 (pid=442927, uptime=2.2s)
+FAIL UT2-STOP: 服务未成功停止
+PASS UT2-STOP-DETECT: 客户端正确检测到服务不可用 (detail: SOCKET_NOT_FOUND), socket_exists=False
+PASS UT2-RESTART-SERVER: 服务已重新启动
+PASS UT2-RESTART-RECOVER: 重启后通信恢复 (新 pid=442964, 旧 pid=442927)
+PASS UT2-SOCKET-CLEANUP: 停止后 socket 文件已被清理
+PASS UT2-KILL9-PRE: Kill-9 前服务正常
+FAIL UT2-KILL9-STOP: Kill-9 后仍有残留进程
+PASS UT2-KILL9-RECOVER: Kill-9 后重启恢复 (pid=443023)
+PASS UT2-RAPID-RESTART: 5/5 快速重启全部成功, 无 socket 冲突
+PASS UT2-TIMEOUT: 服务不可用时客户端在 0.0s 内正确超时返回
+PASS UT2-FINAL-RECOVER: 所有测试后服务恢复正常 (pid=443170)

@@ -5,7 +5,7 @@ All output written to local files to avoid terminal truncation
 """
 import paramiko, os, sys, json, time, hashlib
 
-PW = '***REMOVED_PASSWORD***'
+PW = os.environ.get("KYLIN_VM_PASSWORD", "")
 USER = 'kylin-agent'
 HOST = '127.0.0.1'
 PORT = 2222

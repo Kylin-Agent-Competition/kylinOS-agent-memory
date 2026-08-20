@@ -1,0 +1,16 @@
+[2026-08-08T14:38:30.619Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=84931)
+[2026-08-08T14:38:31.652Z] [INFO] Client connected
+[2026-08-08T14:38:31.652Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:31.653Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:31.761Z] [INFO] Client connected
+[2026-08-08T14:38:31.762Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:31.762Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:31.855Z] [INFO] Client connected
+[2026-08-08T14:38:31.855Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:31.855Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:31.939Z] [INFO] Client connected
+[2026-08-08T14:38:31.939Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:31.939Z] [INFO] Response sent: status=ok
+[2026-08-08T14:38:32.036Z] [INFO] Client connected
+[2026-08-08T14:38:32.036Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:38:32.036Z] [INFO] Response sent: status=ok

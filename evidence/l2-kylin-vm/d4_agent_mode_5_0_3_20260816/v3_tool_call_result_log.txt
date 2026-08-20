@@ -1,0 +1,47 @@
+2026-08-16 22:45:16,079(44892037)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/global/kaglobal.cpp:1117(sendLog)|"onIsWaitingChanged true"
+2026-08-16 22:45:16,984(44892942)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,091(44893049)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,092(44893050)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,114(44893072)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,114(44893072)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,115(44893073)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,117(44893075)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,137(44893095)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,139(44893097)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,141(44893099)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,189(44893147)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,191(44893149)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,193(44893151)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,194(44893152)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,195(44893153)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,203(44893161)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,205(44893163)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,224(44893182)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,226(44893184)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,228(44893186)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,229(44893187)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,231(44893189)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,252(44893210)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,256(44893214)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "chat"
+2026-08-16 22:45:17,609(44893567)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "tool_call"
+2026-08-16 22:45:17,609(44893567)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1603(onRecvTaskMsg)|toolDoc.object()== QJsonObject({"args":{"command":"gdbus call --session --dest org.ukui.Framework \\\n  --object-path /org/ukui/Framework/Devices/Audio \\\n  --method org.ukui.Framework.Devices.Audio.getSinkVolume"},"id":"call_00_aDWW85DqGTBse5AYgtcr9634","name":"shell","type":"tool_call"})
+2026-08-16 22:45:17,614(44893572)[130521939731968]|WARN | - |PID:12043|qrc:/qml/qml/TaskToolCodeSection.qml:136()|qrc:/qml/qml/TaskToolCodeSection.qml:136:13: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 9. Use 'sequences: [ <key> ]' to bind to all of them.
+2026-08-16 22:45:17,614(44893572)[130521939731968]|WARN | - |PID:12043|qrc:/qml/qml/TaskToolCodeSection.qml:136()|qrc:/qml/qml/TaskToolCodeSection.qml:136:13: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 9. Use 'sequences: [ <key> ]' to bind to all of them.
+2026-08-16 22:45:17,642(44893600)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "" "tool_result"
+2026-08-16 22:45:17,642(44893600)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1603(onRecvTaskMsg)|toolDoc.object()== QJsonObject({"id":"call_00_aDWW85DqGTBse5AYgtcr9634","name":"shell","output":"(67,)\n","type":"tool_result"})
+2026-08-16 22:45:17,650(44893608)[130521939731968]|WARN | - |PID:12043|qrc:/qml/qml/TaskToolCodeSection.qml:136()|qrc:/qml/qml/TaskToolCodeSection.qml:136:13: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 9. Use 'sequences: [ <key> ]' to bind to all of them.
+2026-08-16 22:45:17,651(44893609)[130521939731968]|WARN | - |PID:12043|qrc:/qml/qml/TaskToolCodeSection.qml:136()|qrc:/qml/qml/TaskToolCodeSection.qml:136:13: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 9. Use 'sequences: [ <key> ]' to bind to all of them.
+2026-08-16 22:45:18,516(44894474)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "当前" "chat"
+2026-08-16 22:45:18,542(44894500)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "音量" "chat"
+2026-08-16 22:45:18,544(44894502)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "是" "chat"
+2026-08-16 22:45:18,545(44894503)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== " **" "chat"
+2026-08-16 22:45:18,545(44894503)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "67" "chat"
+2026-08-16 22:45:18,545(44894503)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "%" "chat"
+2026-08-16 22:45:18,563(44894521)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "**" "chat"
+2026-08-16 22:45:18,571(44894529)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:1581(onRecvTaskMsg)|onRecvTaskMsg msg=== "当前音量是 **67%** 🔊" "chat"
+2026-08-16 22:45:18,707(44894665)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/msgpane.cpp:3477(onChangedIsReplyingStatus)|update m_isReplying  false
+2026-08-16 22:45:18,708(44894666)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/global/kaglobal.cpp:1117(sendLog)|"onIsWaitingChanged false"
+2026-08-16 22:45:20,861(44896819)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/scheduled/kybotcronsyncmanager.cpp:72(syncOnce)|KybotCronSync: syncOnce triggered
+2026-08-16 22:45:20,862(44896820)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/scheduled/kybotcronclient.cpp:239(fetchRecentRuns)|KybotCronClient::fetchRecentRuns -> "/api/cron/runs/recent?job_type=agent&limit=100"
+2026-08-16 22:45:20,864(44896822)[130521939731968]|INFO | - |PID:12043|/run/build/kylin-aiassistant/kylin-aiassistant/scheduled/kybotcronclient.cpp:257(fetchRecentRuns)|KybotCronClient::fetchRecentRuns ok, count= 0
+

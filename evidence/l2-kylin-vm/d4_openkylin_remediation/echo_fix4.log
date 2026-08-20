@@ -1,0 +1,38 @@
+[2026-08-08T14:39:34.188Z] [INFO] Echo server listening on /tmp/kylin-memory-echo/echo.sock (pid=85070)
+[2026-08-08T14:39:35.253Z] [INFO] Client connected
+[2026-08-08T14:39:35.253Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:39:35.254Z] [INFO] Response sent: status=ok
+[2026-08-08T14:39:35.350Z] [INFO] Client connected
+[2026-08-08T14:39:35.350Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:39:35.350Z] [INFO] Response sent: status=ok
+[2026-08-08T14:39:35.440Z] [INFO] Client connected
+[2026-08-08T14:39:35.440Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:39:35.440Z] [INFO] Response sent: status=ok
+[2026-08-08T14:39:35.492Z] [INFO] Client connected
+[2026-08-08T14:39:35.492Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:39:35.492Z] [INFO] Response sent: status=ok
+[2026-08-08T14:39:35.493Z] [INFO] Client connected
+[2026-08-08T14:39:35.494Z] [INFO] Request method=memory.retrieve request_id=?
+[2026-08-08T14:39:35.494Z] [INFO] Response sent: status=ok
+[2026-08-08T14:39:35.495Z] [INFO] Client connected
+[2026-08-08T14:39:35.495Z] [INFO] Request method=memory.store request_id=?
+[2026-08-08T14:39:35.495Z] [WARN] Unknown method: memory.store
+[2026-08-08T14:39:35.495Z] [INFO] Response sent: status=error
+[2026-08-08T14:39:35.496Z] [INFO] Client connected
+[2026-08-08T14:39:35.496Z] [INFO] Request method=memory.forget request_id=?
+[2026-08-08T14:39:35.496Z] [WARN] Unknown method: memory.forget
+[2026-08-08T14:39:35.496Z] [INFO] Response sent: status=error
+[2026-08-08T14:39:35.598Z] [INFO] Client connected
+[2026-08-08T14:39:35.598Z] [INFO] Request method=health request_id=?
+[2026-08-08T14:39:35.598Z] [INFO] Response sent: status=ok
+[2026-08-08T14:39:35.598Z] [INFO] Client connected
+[2026-08-08T14:39:35.599Z] [INFO] Request method=memory.retrieve request_id=?
+[2026-08-08T14:39:35.599Z] [INFO] Response sent: status=ok
+[2026-08-08T14:39:35.599Z] [INFO] Client connected
+[2026-08-08T14:39:35.599Z] [INFO] Request method=memory.store request_id=?
+[2026-08-08T14:39:35.599Z] [WARN] Unknown method: memory.store
+[2026-08-08T14:39:35.599Z] [INFO] Response sent: status=error
+[2026-08-08T14:39:35.599Z] [INFO] Client connected
+[2026-08-08T14:39:35.600Z] [INFO] Request method=memory.forget request_id=?
+[2026-08-08T14:39:35.600Z] [WARN] Unknown method: memory.forget
+[2026-08-08T14:39:35.600Z] [INFO] Response sent: status=error
