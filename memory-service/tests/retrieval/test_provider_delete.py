@@ -88,10 +88,12 @@ def test_delete_cross_user_selector_rejected():
 
 
 def test_delete_cross_user_id_not_deleted():
-    p = FakeVectorProvider()
+    p = FakeVectorProvider(truth_owners={"m2": "beta"})
     seed(p, user_id="beta", memory_id="m2")
     res = p.delete(make_delete(p, user_id="alpha", selector=make_selector(user_id="alpha", memory_ids=["m2"], version_ids=["v1"])))
-    assert res.ok and res.value.not_matched_ids == ["m2"]
+    assert res.ok
+    assert res.value.not_matched_ids == []
+    assert [(item.memory_id, item.reason) for item in res.value.rejected] == [("m2", "user_scope_violation")]
     assert ("beta", "m2") in p.index
 
 

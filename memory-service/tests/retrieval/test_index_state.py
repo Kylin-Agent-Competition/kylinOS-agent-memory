@@ -9,21 +9,58 @@ import pytest
 
 from retrieval import contracts as c
 from retrieval import validation as v
+from fakes import FakeGenerationBuild, FakeVectorProvider
 
 T = datetime(2026, 8, 17, 10, 0, 0, tzinfo=timezone.utc)
 DIG = "hmac-sha256:k1:" + "b" * 64
 
 
-def make_scope():
-    return c.IndexScope(scope_id="s1", kind=c.ScopeKind.USER, user_id="alpha", scope_fingerprint=DIG)
+def make_scope(scope_id="s1", *, kind=c.ScopeKind.USER, user_id="alpha", shard_id=None, fingerprint=DIG):
+    return c.IndexScope(
+        scope_id=scope_id,
+        kind=kind,
+        user_id=user_id if kind is c.ScopeKind.USER else None,
+        shard_id=shard_id if kind is c.ScopeKind.SHARD else None,
+        scope_fingerprint=fingerprint,
+    )
 
 
-def make_wm(value: int):
+def make_wm(value: int, scope_id="s1"):
     return c.Watermark(
-        domain=c.WatermarkDomain(scope_id="s1", stream="out", partition="0", source_generation="g0"),
+        domain=c.WatermarkDomain(scope_id=scope_id, stream="out", partition="0", source_generation="g0"),
         kind=c.WatermarkKind.MONOTONIC_INT,
         value=value,
     )
+
+
+def make_auth(scope_id, operation):
+    return c.ScopeAuthorization(
+        actor_ref="a", authorization_ref="ar", scope_id=scope_id,
+        allowed_operations=[operation], expires_at=datetime(2026, 8, 17, 11, 0, 0, tzinfo=timezone.utc),
+    )
+
+
+def rebuild_scope(p, scope, *, target="shared-generation", watermark_value=1):
+    return p.rebuild(
+        c.VectorRebuildRequest(
+            request_id=f"rebuild-{scope.scope_id}", trace_id="t1",
+            user_id=scope.user_id or "system", deadline_at=datetime(2026, 8, 17, 11, 0, 0, tzinfo=timezone.utc),
+            idempotency_key="ik", payload_hash=DIG, source_snapshot_id=f"snap-{scope.scope_id}",
+            source_watermark=make_wm(watermark_value, scope.scope_id), target_generation=target,
+            schema_version="v1", reason=c.RebuildReason.BOOTSTRAP, scope=scope,
+            scope_authorization=make_auth(scope.scope_id, "rebuild"),
+        )
+    )
+
+
+def read_state(p, scope):
+    return p.get_index_state(
+        c.IndexStateRequest(
+            request_id=f"state-{scope.scope_id}", trace_id="t1", scope=scope,
+            scope_authorization=make_auth(scope.scope_id, "get_index_state"),
+            deadline_at=datetime(2026, 8, 17, 11, 0, 0, tzinfo=timezone.utc),
+        )
+    ).value
 
 
 def make_state(**overrides):
@@ -126,7 +163,6 @@ def test_evidence_availability_independent():
 # ── L1_FAKE：T026 状态查询只读 ──
 
 def test_get_index_state_is_read_only():
-    from fakes import FakeVectorProvider
     p = FakeVectorProvider()
     auth = c.ScopeAuthorization(
         actor_ref="a", authorization_ref="ar", scope_id="s1",
@@ -145,31 +181,54 @@ def test_get_index_state_is_read_only():
 # ── L1_FAKE：T036 用户级 scope 隔离 ──
 
 def test_user_scope_isolation_in_state():
-    from fakes import FakeVectorProvider
-    p = FakeVectorProvider()
-    scope_a = make_scope()
-    auth_a = c.ScopeAuthorization(
-        actor_ref="a", authorization_ref="ar", scope_id="s1",
-        allowed_operations=["get_index_state"], expires_at=datetime(2026, 8, 17, 11, 0, 0, tzinfo=timezone.utc),
+    scope_a = make_scope("user-alpha", user_id="alpha")
+    scope_b = make_scope("user-beta", user_id="beta")
+    p = FakeVectorProvider(
+        generation_builds={
+            ("user-alpha", "shared-generation"): FakeGenerationBuild(
+                source_watermark=make_wm(3, "user-alpha"), record_digests=(DIG,), expected_record_count=1,
+            ),
+            ("user-beta", "shared-generation"): FakeGenerationBuild(
+                source_watermark=make_wm(7, "user-beta"), record_digests=(DIG, DIG, DIG), expected_record_count=3,
+            ),
+        }
     )
-    req_a = c.IndexStateRequest(request_id="r1", trace_id="t1", scope=scope_a, scope_authorization=auth_a, deadline_at=datetime(2026, 8, 17, 11, 0, 0, tzinfo=timezone.utc))
-    state_a = p.get_index_state(req_a).value
-    assert state_a.scope.scope_id == "s1"
+    assert rebuild_scope(p, scope_a, watermark_value=3).ok
+    assert rebuild_scope(p, scope_b, watermark_value=7).ok
+    state_a = read_state(p, scope_a)
+    state_b = read_state(p, scope_b)
+    assert state_a.scope.scope_id == "user-alpha"
     assert state_a.scope.user_id == "alpha"
+    assert state_a.serving_generation == state_b.serving_generation == "shared-generation"
+    assert state_a.applied_watermark == make_wm(3, "user-alpha")
+    assert state_b.applied_watermark == make_wm(7, "user-beta")
+    assert state_a.record_count == 1
+    assert state_b.record_count == 3
 
 
 # ── L1_FAKE：T037 分片级 scope 独立 ──
 
 def test_shard_scope_independent():
-    from fakes import FakeVectorProvider
-    p = FakeVectorProvider()
-    scope_shard = c.IndexScope(scope_id="s2", kind=c.ScopeKind.SHARD, shard_id="shard-a", scope_fingerprint=DIG)
-    auth = c.ScopeAuthorization(
-        actor_ref="a", authorization_ref="ar", scope_id="s2",
-        allowed_operations=["get_index_state"], expires_at=datetime(2026, 8, 17, 11, 0, 0, tzinfo=timezone.utc),
+    scope_a = make_scope("scope-shard-a", kind=c.ScopeKind.SHARD, user_id=None, shard_id="shard-a")
+    scope_b = make_scope("scope-shard-b", kind=c.ScopeKind.SHARD, user_id=None, shard_id="shard-b")
+    p = FakeVectorProvider(
+        generation_builds={
+            ("scope-shard-a", "shared-generation"): FakeGenerationBuild(
+                source_watermark=make_wm(2, "scope-shard-a"), record_digests=(DIG,), expected_record_count=1,
+            ),
+            ("scope-shard-b", "shared-generation"): FakeGenerationBuild(
+                source_watermark=make_wm(4, "scope-shard-b"), record_digests=(DIG, DIG), expected_record_count=2,
+            ),
+        }
     )
-    req = c.IndexStateRequest(request_id="r1", trace_id="t1", scope=scope_shard, scope_authorization=auth, deadline_at=datetime(2026, 8, 17, 11, 0, 0, tzinfo=timezone.utc))
-    state = p.get_index_state(req).value
-    assert state.scope.scope_id == "s2"
-    assert state.scope.shard_id == "shard-a"
-
+    assert rebuild_scope(p, scope_a, watermark_value=2).ok
+    assert rebuild_scope(p, scope_b, watermark_value=4).ok
+    state_a = read_state(p, scope_a)
+    state_b = read_state(p, scope_b)
+    assert state_a.scope.shard_id == "shard-a"
+    assert state_b.scope.shard_id == "shard-b"
+    assert state_a.serving_generation == state_b.serving_generation == "shared-generation"
+    assert state_a.applied_watermark == make_wm(2, "scope-shard-a")
+    assert state_b.applied_watermark == make_wm(4, "scope-shard-b")
+    assert state_a.record_count == 1
+    assert state_b.record_count == 2

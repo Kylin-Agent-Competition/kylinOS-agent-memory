@@ -25,6 +25,7 @@ from pydantic import (
     AfterValidator,
     BaseModel,
     StrictInt,
+    StrictStr,
     ConfigDict,
     Field,
     field_validator,
@@ -204,8 +205,10 @@ def canonical_json_v1(value: Any, set_paths: tuple[str, ...] = ()) -> str:
             return node
         if node is None:
             return None
-        if isinstance(node, (int, float)):
-            return _assert_json_number(float(node))
+        if isinstance(node, int):
+            return node
+        if isinstance(node, float):
+            return _assert_json_number(node)
         if isinstance(node, list):
             is_set = path in set_paths
             items = [walk(item, path) for item in node]
@@ -278,15 +281,24 @@ class WatermarkDomain(UTCBaseModel):
 class Watermark(UTCBaseModel):
     domain: WatermarkDomain
     kind: WatermarkKind
-    value: int | str
+    value: StrictInt | StrictStr
+
+    @model_validator(mode="after")
+    def _check_value_matches_kind(self) -> "Watermark":
+        if self.kind is WatermarkKind.MONOTONIC_INT:
+            if type(self.value) is not int or self.value < 0:
+                raise ValueError("monotonic_int 水位必须是真正的非负整数")
+        elif type(self.value) is not str or not self.value.isascii():
+            raise ValueError("fixed_width_lex 水位必须是真正的 ASCII 字符串")
+        return self
 
     def compare(self, other: "Watermark") -> Literal[-1, 0, 1]:
         if self.domain != other.domain or self.kind is not other.kind:
             raise ValueError("跨 domain/kind 不得比较水位")
         if self.kind is WatermarkKind.MONOTONIC_INT:
-            left, right = int(self.value), int(other.value)
+            left, right = self.value, other.value
         else:
-            left, right = str(self.value), str(other.value)
+            left, right = self.value, other.value
             if len(left) != len(right):
                 raise ValueError("fixed_width_lex 要求同 domain 下等宽 ASCII")
             left, right = left.encode("ascii"), right.encode("ascii")

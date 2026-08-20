@@ -3,6 +3,8 @@
 对应 docs/day3/09：T039。
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from retrieval import contracts as c
@@ -32,10 +34,37 @@ def test_canonical_rejects_nan():
     with pytest.raises(ValueError):
         c.canonical_json_v1({"x": float("nan")})
 
+
+def test_canonical_preserves_integer_precision():
+    assert c.canonical_json_v1({"value": 9007199254740993}) == '{"value":9007199254740993}'
+
+
+def test_canonical_rejects_negative_zero():
+    with pytest.raises(ValueError):
+        c.canonical_json_v1({"x": -0.0})
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf")])
+def test_canonical_rejects_infinity(value):
+    with pytest.raises(ValueError):
+        c.canonical_json_v1({"x": value})
+
+
+def test_canonical_distinguishes_null_from_missing():
+    assert c.canonical_json_v1({"x": None}) != c.canonical_json_v1({})
+
+
+def test_digest_key_id_is_part_of_digest_identity():
+    assert c.digest_from_canonical("k1", b"key", {"x": 1}) != c.digest_from_canonical("k2", b"key", {"x": 1})
+
+
+def test_canonical_keeps_integer_and_float_kinds_without_precision_collapse():
+    assert c.canonical_json_v1({"integer": 9007199254740991, "float": 1.5}) == (
+        '{"float":1.5,"integer":9007199254740991}'
+    )
+
 # ── L1_FAKE：T038 幂等复合域 ──
 
-import pytest
-from datetime import datetime, timedelta, timezone
 from retrieval import contracts as c2
 from fakes import FakeVectorProvider
 
@@ -95,13 +124,57 @@ def test_watermark_same_domain_progression():
     assert a.compare(b) == -1 and b.compare(a) == 1 and a.compare(a) == 0
 
 
-def test_watermark_cross_domain_rejected():
+@pytest.mark.parametrize(
+    ("field", "different_value"),
+    [
+        ("scope_id", "s2"),
+        ("stream", "another-stream"),
+        ("partition", "1"),
+        ("source_generation", "g1"),
+    ],
+)
+def test_watermark_cross_domain_rejected(field, different_value):
     a = make_wm("s1", 1)
+    domain_data = a.domain.model_dump()
+    domain_data[field] = different_value
     b = c2.Watermark(
-        domain=c2.WatermarkDomain(scope_id="s2", stream="out", partition="0", source_generation="g0"),
+        domain=c2.WatermarkDomain(**domain_data),
         kind=c2.WatermarkKind.MONOTONIC_INT,
         value=2,
     )
     with pytest.raises(ValueError):
         a.compare(b)
 
+
+@pytest.mark.parametrize(
+    ("kind", "value"),
+    [
+        (c2.WatermarkKind.MONOTONIC_INT, "123"),
+        (c2.WatermarkKind.MONOTONIC_INT, -1),
+        (c2.WatermarkKind.FIXED_WIDTH_LEX, 123),
+        (c2.WatermarkKind.FIXED_WIDTH_LEX, "批次01"),
+    ],
+)
+def test_watermark_value_must_match_kind(kind, value):
+    with pytest.raises(ValueError):
+        c2.Watermark(
+            domain=c2.WatermarkDomain(scope_id="s1", stream="out", partition="0", source_generation="g0"),
+            kind=kind,
+            value=value,
+        )
+
+
+def test_fixed_width_watermark_requires_equal_width():
+    domain = c2.WatermarkDomain(scope_id="s1", stream="out", partition="0", source_generation="g0")
+    short = c2.Watermark(domain=domain, kind=c2.WatermarkKind.FIXED_WIDTH_LEX, value="009")
+    long = c2.Watermark(domain=domain, kind=c2.WatermarkKind.FIXED_WIDTH_LEX, value="0010")
+    with pytest.raises(ValueError):
+        short.compare(long)
+
+
+def test_watermark_cross_kind_rejected():
+    domain = c2.WatermarkDomain(scope_id="s1", stream="out", partition="0", source_generation="g0")
+    integer = c2.Watermark(domain=domain, kind=c2.WatermarkKind.MONOTONIC_INT, value=10)
+    lexical = c2.Watermark(domain=domain, kind=c2.WatermarkKind.FIXED_WIDTH_LEX, value="10")
+    with pytest.raises(ValueError):
+        integer.compare(lexical)

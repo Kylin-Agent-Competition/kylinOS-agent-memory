@@ -6,7 +6,7 @@
 from datetime import datetime, timedelta, timezone
 
 from retrieval import contracts as c
-from fakes import FakeVectorProvider
+from fakes import FakeGenerationBuild, FakeVectorProvider
 
 DIG = "hmac-sha256:k1:" + "2" * 64
 NOW = datetime(2026, 8, 17, 10, 0, 0, tzinfo=timezone.utc)
@@ -87,7 +87,30 @@ def test_rebuild_failure_keeps_old_generation():
 
 # T022 水位/计数不符不激活
 def test_rebuild_watermark_mismatch_not_activated():
-    p = FakeVectorProvider(rebuild_hook=lambda req: c.RetrievalErrorCode.STALE_INDEX)
+    p = FakeVectorProvider(
+        generation_builds={
+            "g2": FakeGenerationBuild(
+                source_watermark=make_wm("s1", 2),
+                record_digests=(DIG,),
+                expected_record_count=1,
+            )
+        }
+    )
+    res = p.rebuild(make_rebuild(p, target="g2"))
+    assert not res.ok and res.error.code is c.RetrievalErrorCode.STALE_INDEX
+    assert "s1" not in p.serving
+
+
+def test_rebuild_record_count_mismatch_not_activated():
+    p = FakeVectorProvider(
+        generation_builds={
+            "g2": FakeGenerationBuild(
+                source_watermark=make_wm("s1", 1),
+                record_digests=(DIG,),
+                expected_record_count=2,
+            )
+        }
+    )
     res = p.rebuild(make_rebuild(p, target="g2"))
     assert not res.ok and res.error.code is c.RetrievalErrorCode.STALE_INDEX
     assert "s1" not in p.serving
