@@ -2,7 +2,7 @@
 
 - **状态**：✅ 已采纳（D 决策 2026-08-17，选方案 A；Reviewer：E（谢嘉然））
 - **日期**：2026-08-17
-- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
+- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，已签）
 - **责任轨道**：D（IPC/DB）为主，E 审查
 - **决策版本**：`idem-pk-v1`
 - **适用范围**：`idempotency_cache` 表主键与幂等 DAO 实现；关联 FRZ-DB-005、FRZ-IPC-005、冻结文档 §2.2.5
@@ -114,4 +114,4 @@ CREATE INDEX idx_idempotency_expires ON idempotency_cache(expires_at);  -- 过�
 - `memory-service/pipeline/fingerprint.py:66`（`user_id:{key}` 去重键）
 - `deliverables/D4_DB_INITIAL_REQUIREMENTS_20260817.md` §二 FR-DB-001、附录 A（v1.3 已按复合 PK 写）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A（2026-08-17）；Reviewer E（谢嘉然）签署确认后正式生效并回写冻结 §2.2.5（复合主键）。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A（2026-08-17）；Reviewer E（谢嘉然）已于 2026-08-20 签署确认，正式生效并回写冻结 §2.2.5（复合主键）。

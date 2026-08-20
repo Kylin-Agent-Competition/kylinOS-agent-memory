@@ -2,14 +2,14 @@
 
 - **状态**：✅ 已采纳（D 决策 2026-08-17，选方案 A；Reviewer：E（谢嘉然））
 - **日期**：2026-08-17
-- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
+- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，已签）
 - **责任轨道**：D（IPC/DB）为主，C 会签；E 审查
 - **决策版本**：`err-envelope-v1`
 - **适用范围**：Memory Service 对外（UDS）错误码与响应 envelope；关联 FRZ-IPC-002、FRZ-IPC-006、ALIGN-002/003
 
 ## 背景
 
-IPC 协议内容已定稿，Reviewer E 待签，正式生效 = NO（`D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`）：
+IPC 协议内容已定稿，Reviewer E 已签（2026-08-20），正式生效（`D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`）：
 
 1. **FRZ-IPC-002 冻结错误码 5 项**：`UNSUPPORTED_METHOD / INVALID_REQUEST / PROTOCOL_ERROR / INTERNAL_ERROR / TIMEOUT`（TIMEOUT 于 2026-08-17 补充入枚举）；
 2. **FRZ-IPC-006 冻结响应 envelope**：`protocol_version / request_id / trace_id / status / data / server_ts`，错误附加 `error_code / message`；
@@ -119,4 +119,4 @@ Memory Service 所有对外 UDS 响应统一使用冻结 5 枚举 + `status/data
 - `memory-service/embedding/server.py:117`（`ERR_SERVICE_STOPPED`）
 - `deliverables/D4_DB_INITIAL_REQUIREMENTS_20260817.md` 附录 D（映射表）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A（2026-08-17）；Reviewer E（谢嘉然）签署确认后正式生效并回写冻结（FRZ-IPC-002/006 不变）。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A（2026-08-17）；Reviewer E（谢嘉然）已于 2026-08-20 签署确认，正式生效并回写冻结（FRZ-IPC-002/006 不变）。

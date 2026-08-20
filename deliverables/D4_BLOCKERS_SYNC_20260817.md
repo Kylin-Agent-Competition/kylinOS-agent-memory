@@ -1,9 +1,9 @@
 # 剩余阻断项目同步清单（2026-08-17 22:55）
 
-- **同步范围**：Gate 0 正式结论 / IPC 协议冻结（内容定稿待签） / 数据库初版冻结（声明 v1.3 + 需求 v1.3）/ 复测矩阵 / 登记缺口
+- **同步范围**：Gate 0 正式结论 / IPC 协议冻结（已签署生效） / 数据库初版冻结（声明 v1.3 + 需求 v1.3）/ 复测矩阵 / 登记缺口
 - **同步依据**：
   - `D4_GATE0_FORMAL_DECISION_20260817.md`（Gate 0 结论 PASS_WITH_DEBT）
-  - `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（IPC 协议冻结声明，内容定稿待签）
+  - `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（IPC 协议冻结声明，已签署生效）
   - `D4_DB_INITIAL_DESIGN_FREEZE_20260817.md`（数据库冻结声明 v1.3，草案）
   - `D4_DB_INITIAL_REQUIREMENTS_20260817.md`（数据库需求 v1.3）
   - `D4_IPC_PROTOCOL_CONSISTENCY_AUDIT_20260817.md`（ALIGN-001~005）
@@ -15,12 +15,12 @@
 
 | # | 阻断项 | 状态 | 责任人 | 说明 |
 |---|--------|------|--------|------|
-| 1 | ✅ **R-5 DB 对外错误码与 envelope 域** | 已采纳（ADR-005，D 决策方案 A；Reviewer E 待签） | 周子腾（D）决策，E 会签 | 冻结后对齐 ALIGN-002/003 |
+| 1 | ✅ **R-5 DB 对外错误码与 envelope 域** | 已采纳（ADR-005，D 决策方案 A；Reviewer E 已签） | 周子腾（D）决策，E 会签 | 冻结后对齐 ALIGN-002/003 |
 | 2 | ✅ **R-6 idempotency_cache 主键**（复合 PK） | 已采纳（ADR-006，D 决策方案 A；冻结 §2.2.5 已回写） | 周子腾（D）决策，E 确认 | Reviewer E 签署后完成 |
 | 3 | ✅ **R-7 迁移基线命名** | 已采纳（ADR-007，D 决策方案 A；冻结 §4.1 已回写） | 周子腾（D）确认 | Reviewer E 签署后完成 |
-| 4 | 🟡 **数据库冻结声明 v1.3** | 内容定稿（R-5/6/7 已采纳，冻结对象全 ✅）；正式生效 = NO | 周子腾（D）+ Reviewer E | Reviewer E 签署后正式生效 |
-| 5 | 🟡 **IPC 冻结声明** | 冻结人待确认 + Reviewer 待签 | 周子腾（D）+ Reviewer E（谢嘉然） | 含 FRZ-IPC-001~007 + TIMEOUT 纳入 |
-| 6 | 🟡 **Gate 0 正式结论（2026-08-17）** | 主持人「待确认」+ Reviewer 1（E 谢嘉然）/Reviewer 2（待定）待签 | 周子腾（D）+ E（谢嘉然） | 依据 CONTRIBUTING.md「Review 规则」：D/E 为指定 Reviewer，作者不得自审 |
+| 4 | ✅ **数据库冻结声明 v1.3** | 内容定稿（R-5/6/7 已采纳，冻结对象全 ✅）；已签署生效（Reviewer E 2026-08-20） | 周子腾（D）+ Reviewer E | 已正式生效 |
+| 5 | ✅ **IPC 冻结声明** | 已签署生效（Reviewer E 2026-08-20） | 周子腾（D）+ Reviewer E（谢嘉然） | 含 FRZ-IPC-001~007 + TIMEOUT 纳入 |
+| 6 | 🟡 **Gate 0 正式结论（2026-08-17）** | 主持人已确认（PASS_WITH_DEBT）+ Reviewer 1（E 谢嘉然）已签 2026-08-20；Reviewer 2（待定） | 周子腾（D）+ E（谢嘉然） | 依据 CONTRIBUTING.md「Review 规则」：D/E 为指定 Reviewer，作者不得自审 |
 
 ## 二、技术验证阻断（Gate 0 后 / D1+ 执行）
 
@@ -55,7 +55,7 @@
 | MEM-001/002 | 维持 NOT_FOUND；新增 MEM-003（官方视觉记忆组件，ABI_VERIFIED/E3，只读复用） |
 | R-2 / R-3 / R-4 / R-8 | 已定案（README .py / 配置 KYLIN_MEMORY_* / 降级分层 / WAL 语义边界冻结） |
 | 数据库初版 FRZ-DB-001 | 可冻结（自研库独立，不受 5.0.3 官方 Schema 影响） |
-| IPC FRZ-IPC-001~007 | 内容定稿，Reviewer E 待签（自研协议不受 5.0.3 影响） |
+| IPC FRZ-IPC-001~007 | 已签署生效（自研协议不受 5.0.3 影响） |
 
 ---
 

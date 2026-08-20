@@ -1,6 +1,6 @@
 # 数据库初版设计冻结声明
 
-> ⚠️ **本声明尚未正式生效，待 E（谢嘉然）签署**：R-5/R-6/R-7 已由 D 决策采纳（ADR-005/006/007，2026-08-17，方案 A；Reviewer 指派 E），冻结文档 §2.2.5/§4.1 已回写；冻结人（周子腾，D）签署 + Reviewer E（谢嘉然）签署后转为正式冻结。文档基线 Commit `b29c6b8`（仅指本声明关联的文档基线，**非代码基线**——自研库实现零启动，见 §二.3）。
+> ✅ **本声明已正式生效（Reviewer E 谢嘉然 2026-08-20 签署）**：R-5/R-6/R-7 已由 D 决策采纳（ADR-005/006/007，2026-08-17，方案 A；Reviewer 指派 E），冻结文档 §2.2.5/§4.1 已回写；冻结人（周子腾，D）签署 + Reviewer E（谢嘉然）签署完成，转为正式冻结。文档基线 Commit `b29c6b8`（仅指本声明关联的文档基线，**非代码基线**——自研库实现零启动，见 §二.3）。
 
 - **版本**：v1.3（2026-08-17，按 v1.2 审查报告整改 + ADR-005/006/007 采纳）
 - **冻结日期**：2026-08-17
@@ -19,7 +19,7 @@
 
 ## 一、冻结对象清单
 
-> 状态说明：✅ = 内容定稿（含已采纳 ADR 支撑项，待 Reviewer E 签署后正式生效）；⏳ = **条件冻结**（依赖项未批准，不得据此写 DDL）。
+> 状态说明：✅ = 内容定稿（含已采纳 ADR 支撑项，已签署正式生效）；⏳ = **条件冻结**（依赖项未批准，不得据此写 DDL）。
 
 | 编号 | 冻结对象 | 定义位置 | 状态 | 依赖 |
 |------|---------|---------|:---:|------|
@@ -78,9 +78,9 @@
 | R-2 | migrations/README `.sql` vs `.py` | 以冻结为准：README 改 `.py` 示意 | ✅ 已定案（D4-D 开工时校正） |
 | R-3 | 配置命名 `KMA_*` vs `KYLIN_MEMORY_*` | 以冻结为准：模板改 `KYLIN_MEMORY_*` 并接线代码 | ✅ 已定案 |
 | R-4 | embedding 局部 `degraded` vs 系统级降级 | 分层命名：provider 局部 vs 系统读取侧 L0-L3；写入侧走 Outbox | ✅ 已定案 |
-| R-5 | **DB 对外错误码与 envelope 域** | 以 IPC 冻结契约为准（5 枚举 + `status/data/server_ts`）；`ERR_*`/`ok/result/error` 按 ALIGN-002/003 冻结后对齐；错误码变更走 IPC 冻结 ADR（FRZ-IPC-002） | ✅ 已采纳（ADR-005，D 决策方案 A；Reviewer E 待签） |
-| R-6 | **idempotency_cache 主键** | 复合 PK `(user_id, session_id, idempotency_key)`；DDL 按此实现 | ✅ 已采纳（ADR-006，D 决策方案 A；Reviewer E 待签；冻结 §2.2.5 已回写） |
-| R-7 | **迁移基线命名** | 基线 `001_initial_schema.py`，后续 `YYYYMMDD_<desc>.py` | ✅ 已采纳（ADR-007，D 决策方案 A；Reviewer E 待签；冻结 §4.1 已回写） |
+| R-5 | **DB 对外错误码与 envelope 域** | 以 IPC 冻结契约为准（5 枚举 + `status/data/server_ts`）；`ERR_*`/`ok/result/error` 按 ALIGN-002/003 冻结后对齐；错误码变更走 IPC 冻结 ADR（FRZ-IPC-002） | ✅ 已采纳（ADR-005，D 决策方案 A；Reviewer E 已签） |
+| R-6 | **idempotency_cache 主键** | 复合 PK `(user_id, session_id, idempotency_key)`；DDL 按此实现 | ✅ 已采纳（ADR-006，D 决策方案 A；Reviewer E 已签；冻结 §2.2.5 已回写） |
+| R-7 | **迁移基线命名** | 基线 `001_initial_schema.py`，后续 `YYYYMMDD_<desc>.py` | ✅ 已采纳（ADR-007，D 决策方案 A；Reviewer E 已签；冻结 §4.1 已回写） |
 | R-8 | WAL/busy_timeout/单写多读 | 数值由 D4-D 定（不冻结）；**语义边界冻结**：busy_timeout 必须设置、到期必须触发降级（不无限阻塞）→ 纳入 L2 验收（需求 v1.2 §五） | ✅ 已定案（语义边界冻结） |
 
 ---
@@ -89,11 +89,11 @@
 
 | 项 | 决策 | 状态 |
 |----|------|------|
-| R-5 | ADR-005 方案 A：DB 层对外按 IPC 冻结契约（5 枚举 + status/data/server_ts） | ✅ 已采纳（D 决策 2026-08-17；Reviewer E 待签） |
-| R-6 | ADR-006 方案 A：复合 PK (user_id, session_id, idempotency_key) | ✅ 已采纳（D 决策 2026-08-17；Reviewer E 待签；冻结 §2.2.5 已回写） |
-| R-7 | ADR-007 方案 A：基线 001_initial_schema.py + 后续 YYYYMMDD_<desc>.py | ✅ 已采纳（D 决策 2026-08-17；Reviewer E 待签；冻结 §4.1 已回写） |
+| R-5 | ADR-005 方案 A：DB 层对外按 IPC 冻结契约（5 枚举 + status/data/server_ts） | ✅ 已采纳（D 决策 2026-08-17；Reviewer E 已签） |
+| R-6 | ADR-006 方案 A：复合 PK (user_id, session_id, idempotency_key) | ✅ 已采纳（D 决策 2026-08-17；Reviewer E 已签；冻结 §2.2.5 已回写） |
+| R-7 | ADR-007 方案 A：基线 001_initial_schema.py + 后续 YYYYMMDD_<desc>.py | ✅ 已采纳（D 决策 2026-08-17；Reviewer E 已签；冻结 §4.1 已回写） |
 
-> 三项阻断项已解除：D4-D 可据需求 v1.3 与 ADR-005/006/007 直接实现（migrations 基线、复合主键 DDL、错误码/envelope 映射）；Reviewer E（谢嘉然）签署为正式手续。
+> 三项阻断项已解除：D4-D 可据需求 v1.3 与 ADR-005/006/007 直接实现（migrations 基线、复合主键 DDL、错误码/envelope 映射）；Reviewer E（谢嘉然）已于 2026-08-20 签署，正式生效。
 > 不受影响、**可先行开工**：migrations 目录与 alembic.ini 骨架、配置加载器（FR-DB-006）、连接管理（FR-DB-003）、Outbox Worker 骨架（FR-DB-004）。
 
 ---
@@ -103,10 +103,10 @@
 | 角色 | 姓名 | 日期 | 结论 |
 |------|------|------|------|
 | 冻结人 | 周子腾（D） | 2026-08-17 | 确认冻结（ADR-005/006/007 已采纳） |
-| Reviewer 1 | E（谢嘉然，待签） | | 待签署 |
+| Reviewer 1 | E（谢嘉然） | 2026-08-20 | 已签署 |
 | Reviewer 2 | 待填写 | | 待签署 |
 
-> 本声明自冻结人确认 + Reviewer E（谢嘉然）签署后转为正式冻结（R-5/6/7 已采纳，阻断已解除）。
+> 本声明已由冻结人确认 + Reviewer E（谢嘉然，2026-08-20）签署，转为正式冻结（R-5/6/7 已采纳，阻断已解除）。
 
 ---
 
