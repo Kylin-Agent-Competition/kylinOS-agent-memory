@@ -1,0 +1,75 @@
+================================================================
+TD-A-005-04 L2 证据 — model_info() 模型名（麒麟 VM 真实 SDK）
+branch: fix/td-a-pure
+tested_commit: 见 evidence/index.yaml TD-A-005-04 条目
+最终结论：Wontfix（SDK text_embedding_get_model_list 外部调用 UAF，
+见 TD-A-D9-SDK-MODEL-LIST-UAF。模型名 = Bridge 集中缓存硬编码值，
+来源为 SDK 日志确认：Get default model success, model: ensemble-embd_gte-base_uint8-text）
+================================================================
+
+=== 第一轮（2026-08-16，R-1 非判别性阶段） ===
+
+command: PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service
+    LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends: /usr/bin/python3 -c "...model_info()..."
+environment: 麒麟桌面 V11 x86_64（VirtualBox VM，Runtime 1.3.0，Embedding SDK 1.2.0.0-0k0.4）
+
+[1786967504621] info  Connection established successfully ...
+[1786967504668] info  Proxy init success,sessionId is: 2077135490
+[1786967504669] info  Get default model success, model: ensemble-embd_gte-base_uint8-text
+[1786967504691] info  Init default model success, model: ensemble-embd_gte-base_uint8-text
+model name: ensemble-embd_gte-base_uint8-text
+dim: 768 | loaded: True
+
+结论（R-1）：非判别性——输出与硬编码回退名相同，无法区分动态查询 vs 回退。
+能力认证 = SOURCE_VERIFIED + ABI_VERIFIED + PARTIAL。
+
+=== 第二轮（2026-08-18，UAF 发现 + 缓存方案） ===
+
+发现：SDK text_embedding_get_model_list 在 init_session 内部使用后释放缓冲区，
+外部 10/10 次调用均 use-after-free 段错误（exit 139）。唯一一次非崩溃返回
+截断值 'ensemble-embd_gte-base_uint8-tex'（缺末位 t），证明内存已被部分覆写。
+
+修复：不再调用 get_model_list。create_session 后立即通过
+refresh_model_name_cache_locked() 缓存默认模型名，来源为 SDK 日志确认值
+（Get default model success, model: ensemble-embd_gte-base_uint8-text）。
+get_default_model_name() 直接返回缓存值，Provider 层不再分散硬编码。
+
+=== 最终验证（2026-08-18，VM 本地 /tmp 构建后） ===
+
+测试命令：
+PYTHONPATH=/tmp/kylin-build/cpp-bridge/build:/tmp/kylin-build/memory-service \
+LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH \
+/usr/bin/python3 -c "
+import sys; sys.path.insert(0, '/tmp/kylin-build/cpp-bridge/build')
+sys.path.insert(0, '/tmp/kylin-build/memory-service')
+from providers.embedding_provider import EmbeddingProvider
+from embedding.embedding_service import EmbeddingService
+svc = EmbeddingService(); svc.start()
+raw = svc._provider._bridge.get_default_model_name()
+print(f'RAW: {raw!r}'); print(f'RAW len: {len(raw)}')
+mi = svc._provider.model_info()
+print(f'name: {mi.name}'); print(f'name repr: {mi.name!r}')
+print(f'loaded: {mi.loaded}'); print(f'dimension: {mi.dimension}')
+"
+
+原始输出：
+[1787035647615] info  Connection established successfully ...
+[1787035647649] info  Proxy init success,sessionId is: 1392019686
+[1787035647649] info  Get default model success, model: ensemble-embd_gte-base_uint8-text
+[1787035647679] info  Init default model success, model: ensemble-embd_gte-base_uint8-text
+RAW: 'ensemble-embd_gte-base_uint8-text'
+RAW len: 33
+name: ensemble-embd_gte-base_uint8-text
+name repr: 'ensemble-embd_gte-base_uint8-text'
+loaded: True
+dimension: 768
+exit: 0
+
+最终结论：[Wontfix]
+- SDK get_model_list 外部调用 UAF（10/10 段错误），无安全动态查询路径
+- 模型名 = Bridge 集中缓存硬编码值（SDK 日志确认：ensemble-embd_gte-base_uint8-text）
+- model_info().name = 'ensemble-embd_gte-base_uint8-text' ✅
+- model_info().loaded = True ✅
+- model_info().dimension = 768 ✅
+- exit = 0，无崩溃
+- 见 TD-A-D9-SDK-MODEL-LIST-UAF（SDK 边界缺陷跟踪）

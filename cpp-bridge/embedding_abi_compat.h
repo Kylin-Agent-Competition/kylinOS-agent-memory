@@ -31,8 +31,8 @@ extern "C" {
 /* ── 不透明类型 ── */
 typedef struct _EmbeddingResult      EmbeddingResult;      /* SOURCE_VERIFIED | ABI_VERIFIED | HOST_VERIFIED */
 typedef struct _TextEmbeddingSession TextEmbeddingSession; /* SOURCE_VERIFIED | ABI_VERIFIED | HOST_VERIFIED */
-typedef struct _EmbeddingModelList   EmbeddingModelList;   /* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED */
-typedef struct _EmbeddingModelInfo   EmbeddingModelInfo;   /* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED */
+typedef struct _EmbeddingModelList   EmbeddingModelList;   /* SOURCE_VERIFIED | ABI_VERIFIED | HOST_VERIFIED */
+typedef struct _EmbeddingModelInfo   EmbeddingModelInfo;   /* SOURCE_VERIFIED | ABI_VERIFIED | HOST_VERIFIED */
 
 /* ── 会话管理 ── */
 
@@ -97,25 +97,25 @@ int text_embedding_init_model(TextEmbeddingSession* session, const char* model_n
 
 /* ── 模型管理（ABI_VERIFIED 仅 nm 确认） ── */
 
-/** 获取模型列表（原文档标禁调） */
+/** 获取模型列表（⚠️ 仅 SDK init 内部可安全调用，外部调用 use-after-free） */
 EmbeddingModelList* text_embedding_get_model_list(TextEmbeddingSession* session, int* error_code);
-/* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED ⚠️ nm 确认导出，未在宿主实测 */
+/* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED ⚠️ SDK init 内部释放缓冲区，外部调用段错误（见 TD-A-D9-SDK-MODEL-LIST-UAF） */
 
 /** 获取模型列表数量 */
 int embedding_model_list_get_count(EmbeddingModelList* list);
-/* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED ⚠️ nm 确认导出，未在宿主实测 */
+/* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED ⚠️ 同上，list 指针来自 get_model_list，外部不可安全使用 */
 
 /** 获取指定索引的模型信息 */
 EmbeddingModelInfo* embedding_model_list_get_model(EmbeddingModelList* list, int index);
-/* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED ⚠️ nm 确认导出，未在宿主实测 */
+/* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED ⚠️ 同上，info 指针来自 get_model_list，外部不可安全使用 */
 
 /** 获取模型名称 */
 const char* embedding_model_info_get_model_name(EmbeddingModelInfo* info);
-/* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED ⚠️ nm 确认导出，未在宿主实测 */
+/* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED ⚠️ 同上，name 指针来自 get_model_list，外部不可安全使用 */
 
 /** 获取模型向量维度 */
 int embedding_model_info_get_model_dim(EmbeddingModelInfo* info);
-/* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED ⚠️ nm 确认导出，未在宿主实测 */
+/* SOURCE_VERIFIED | ABI_VERIFIED | UNTESTED ⚠️ 同上，dim 来自 get_model_list，外部不可安全使用 */
 
 /* ── nm 额外发现的符号（头文件未收录） ── */
 

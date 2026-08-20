@@ -284,9 +284,9 @@ else
   echo "存在 $FAILURES 项失败，请检查上方 [FAIL] 与对应日志"
 fi
 
-# 证据日志合并：Step1 原始输出 + runtime 输出 → 正式路径（保留历史为 .prev）
+# 证据日志合并：Step1 原始输出 + runtime 输出 → 正式路径（历史备份改放 /tmp，见下）
 if [ -f "$EVIDENCE_LOG" ]; then
-  cp "$EVIDENCE_LOG" "$EVIDENCE_LOG.prev" 2>/dev/null || true
+  cp $EVIDENCE_LOG "/tmp/day4_verify_latest.prev.log" 2>/dev/null || true
 fi
 {
     cat "$STEP1_LOG" 2>/dev/null || true

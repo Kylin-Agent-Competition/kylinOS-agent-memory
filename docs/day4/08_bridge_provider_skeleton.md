@@ -1,6 +1,6 @@
 # 08 轨道 A — Day4 Bridge/Provider 工程骨架
 
-> **文档状态：作者自报（麒麟 VM 第七轮 L2 全绿 FAILURES=0，待 Reviewer 验证）** — 工程骨架 + 最小真实 SDK 调用已验证；构建/C++/导入/异常映射/失败恢复/冒烟/幂等测试全部通过麒麟 VM 实测。权威证据见 `evidence/l2-kylin-vm/day4_verify_latest.log`（EMBED-CALL-003，第七轮）；历史证据 `day4_bridge_smoke_run.log` 已标记 HISTORICAL / SUPERSEDED。
+> **文档状态：作者自报（麒麟 VM L2 全绿 FAILURES=0，最新轮次证据见 evidence/l2-kylin-vm/day4_verify_latest.log，待 Reviewer 验证）** — 工程骨架 + 最小真实 SDK 调用已验证；构建/C++/导入/异常映射/失败恢复/冒烟/幂等测试全部通过麒麟 VM 实测。权威证据见 `evidence/l2-kylin-vm/day4_verify_latest.log`（EMBED-CALL-003）；历史证据 `day4_bridge_smoke_run.log` 已标记 HISTORICAL / SUPERSEDED。
 
 ## 目标
 

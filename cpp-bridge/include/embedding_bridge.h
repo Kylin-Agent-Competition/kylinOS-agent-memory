@@ -57,6 +57,15 @@ struct EmbeddingSdkSymbols {
 
     // 模型（可选，Day4 骨架暂不强制）
     int (*init_model)(TextEmbeddingSession*, const char*) = nullptr;
+
+    // [TD-A-005-04] 模型列表/信息查询符号（SDK embedding_api.h 声明，nm 确认导出）。
+    // ⚠️ 不可调用！SDK 在 init_session 内部使用后释放缓冲区，外部调用 use-after-free
+    // 段错误（见 TD-A-D9-SDK-MODEL-LIST-UAF）。保留仅用于 dlsym 存在性检查。
+    EmbeddingModelList* (*get_model_list)(TextEmbeddingSession*, int*) = nullptr;
+    int  (*model_list_get_count)(EmbeddingModelList*) = nullptr;
+    EmbeddingModelInfo* (*model_list_get_model)(EmbeddingModelList*, int) = nullptr;
+    const char* (*model_info_get_model_name)(EmbeddingModelInfo*) = nullptr;
+    int  (*model_info_get_model_dim)(EmbeddingModelInfo*) = nullptr;
 };
 
 // ── EmbeddingBridge ──
@@ -94,6 +103,15 @@ public:
     /** 单条文本向量化（同步）。不抛出 C++ 异常，异常在内部捕获转为错误。 */
     BridgeResult<EmbeddingVector> embed(const std::string& text, uint32_t timeout_ms = 0);
 
+    // ── 模型信息（TD-A-005-04） ──
+
+    /**
+     * 获取默认模型名（返回 create_session 时缓存的 SDK 日志确认值）。
+     * 不通过 SDK get_model_list 查询（外部调用 UAF，见 TD-A-D9-SDK-MODEL-LIST-UAF）。
+     * 返回空串表示缓存未就绪（session 未创建）。
+     */
+    std::string get_default_model_name();
+
     // ── 状态查询 ──
 
     bool is_loaded() const { return handle_ != nullptr; }
@@ -111,9 +129,19 @@ private:
     bool session_destroyed_ = false;  // P0-2: destroy 后终态标志
     bool fatal_failure_ = false;      // P1-High: 不可恢复失败标志（已发生 dlclose/destroy）
     std::mutex mutex_;
+    // [TD-A-005-04] 模型名缓存：SDK 的 get_model_list 在 init_session 内部使用后
+    // 释放缓冲区，外部不可安全调用。因此缓存麒麟 VM 实测确认的默认模型名
+    // （SDK 日志：Get default model success, model: ensemble-embd_gte-base_uint8-text）。
+    // 在 create_session 后立即缓存（refresh_model_name_cache_locked）。
+    std::string cached_model_name_;
+    bool model_name_cached_ = false;
 
     // 私有辅助：仅在析构函数中调用。释放会话与 .so 句柄并清零符号表。
     void destroy_unlocked() noexcept;
+
+    // [TD-A-005-04] 刷新模型名缓存（调用方须持有 mutex_）。
+    // 在 create_session 后立即调用，赶在 embed() 触发 SDK 内部缓冲区释放之前。
+    void refresh_model_name_cache_locked();
 
     // 无异常边界的实现体，由公共方法 try/catch 包裹（P0-3/P1-5）
     BridgeStatus load_impl();

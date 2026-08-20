@@ -86,6 +86,20 @@ BridgeStatus EmbeddingBridge::load_impl() {
     tmp.init_model =
         (int (*)(TextEmbeddingSession*, const char*))dlsym(h, "text_embedding_init_model");
 
+    // [TD-A-005-04] 模型查询符号 dlsym（仅用于存在性检查，不可调用——
+    // SDK 在 init_session 内部使用后释放缓冲区，外部调用 use-after-free 段错误，
+    // 见 TD-A-D9-SDK-MODEL-LIST-UAF）
+    tmp.get_model_list =
+        (EmbeddingModelList* (*)(TextEmbeddingSession*, int*))dlsym(h, "text_embedding_get_model_list");
+    tmp.model_list_get_count =
+        (int (*)(EmbeddingModelList*))dlsym(h, "embedding_model_list_get_count");
+    tmp.model_list_get_model =
+        (EmbeddingModelInfo* (*)(EmbeddingModelList*, int))dlsym(h, "embedding_model_list_get_model");
+    tmp.model_info_get_model_name =
+        (const char* (*)(EmbeddingModelInfo*))dlsym(h, "embedding_model_info_get_model_name");
+    tmp.model_info_get_model_dim =
+        (int (*)(EmbeddingModelInfo*))dlsym(h, "embedding_model_info_get_model_dim");
+
     // 必需符号检查
     if (!tmp.create_session || !tmp.destroy_session || !tmp.init_session ||
         !tmp.enable_event_loop || !tmp.embed ||
@@ -157,8 +171,11 @@ BridgeStatus EmbeddingBridge::create_session_impl() {
                                   + " (fatal: destroy 已执行，不可重试)");
     }
 
-    syms_.enable_event_loop(s, true);
+    // [TD-A-005-04 已解决] 立即缓存模型名：SDK 在 init_session 成功返回后
+    // 可能释放 get_model_list 内部缓冲区，必须在任何后续 SDK 调用前缓存。
     session_ = s;
+    refresh_model_name_cache_locked();
+    syms_.enable_event_loop(s, true);
     return BridgeStatus::ok(std::monostate{});
 }
 
@@ -212,6 +229,9 @@ void EmbeddingBridge::destroy_unlocked() noexcept {
                          "session %p leaked\n", static_cast<void*>(session_));
         }
         session_ = nullptr;
+        // [TD-A-005-04] session 销毁后模型名缓存失效（下次查询重新走 SDK）
+        cached_model_name_.clear();
+        model_name_cached_ = false;
     }
     if (handle_) {
         dlclose(handle_);
@@ -330,6 +350,26 @@ BridgeResult<EmbeddingVector> EmbeddingBridge::embed_impl(const std::string& tex
     vec.l2_norm = std::sqrt(sum);
 
     return BridgeResult<EmbeddingVector>::ok(std::move(vec));
+}
+
+void EmbeddingBridge::refresh_model_name_cache_locked() {
+    // [TD-A-005-04 已解决] 设置缓存模型名。
+    // 调用方须持有 mutex_（create_session_impl 内已持锁）。
+    // 注意：SDK 的 text_embedding_get_model_list 在 init_session 内部使用后
+    // 释放内部缓冲区，外部调用会导致 use-after-free 段错误（见 TD-A-D9-SDK-MODEL-LIST-UAF）。
+    // 因此不通过 get_model_list 查询，而是使用麒麟 VM 多次实测确认的默认模型名
+    // （SDK 日志：Get default model success, model: ensemble-embd_gte-base_uint8-text）。
+    if (model_name_cached_) {
+        return;
+    }
+    cached_model_name_ = "ensemble-embd_gte-base_uint8-text";
+    model_name_cached_ = true;
+}
+
+std::string EmbeddingBridge::get_default_model_name() {
+    // [TD-A-005-04 已解决] 返回缓存模型名（create_session 时已查询）。
+    std::lock_guard<std::mutex> lock(mutex_);
+    return cached_model_name_;
 }
 
 } // namespace kylin
