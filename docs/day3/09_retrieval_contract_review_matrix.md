@@ -119,14 +119,16 @@ merge、rebase、Review 或改写其他作者分支。
 这些测试可以在普通开发环境使用明确标记的 fake/in-memory Provider 验证
 契约逻辑。它们只能证明 L0/L1 逻辑，禁止表述为真实 Vector Runtime 通过。
 
-> D4-B PR #40 第二轮返工（2026-08-20）已在最新 `origin/main@ef050b0` 上运行
-> L0/L1_FAKE 共 118 个 pytest 用例并全部通过。T001–T046、T048 为
-> `PASS_LOCAL`；T047 的幂等摘要轮换已完成真实 HMAC 历史 key 重算，但删除
-> 确认的历史 key/TTL 仍依赖尚未落地的 Service 确认记录边界，因此诚实标为
+> D4-B PR #40 第三轮返工（2026-08-21）已合入最新 `origin/main@2b8bed7`，
+> L0/L1_FAKE 共 131 个 pytest 用例并全部通过。T038 已覆盖 Rebuild `applied` / `outcome_unknown`
+> 首次结果精确重放、同域冲突及跨 generation/scope 独立，Delete / Rebuild 写请求默认
+> 从语义载荷复算摘要并 fail-closed；T039 已按 RFC 8785/JCS 数字边界输出；
+> T044 已补 scope key 轮换后的 Rebuild 幂等连续性。T017 的 Provider 自身边界
+> 已通过，但 SQLite resolved-ID ownership gate 属 Service，因此降为
+> `PARTIAL_LOCAL`；T047 继续仅因删除确认历史 key/TTL Service 边界保持
 > `PARTIAL_LOCAL`。这些结果只证明本地契约逻辑，不构成 L2 麒麟宿主证据；
-> §5 B-D3-V001–V007 继续为 `DEFERRED_VM`。第二轮 Reviewer 的
-> `CHANGES_REQUESTED` 基于旧 HEAD `855b5d7`；返工提交已推送并发布复审回复，
-> 当前结论仍待独立、非作者 Reviewer 对 PR #40 最新 HEAD 复审。
+> §5 B-D3-V001–V007 继续为 `DEFERRED_VM`。第三轮 `CHANGES_REQUESTED` 基于
+> HEAD `f9297f9`；本轮返工尚待本地双轴审查、人工提交授权、推送与复审。
 
 
 | ID | 目标 | 正向断言 | 负向/边界断言 | 层级 | 状态 |
@@ -147,7 +149,7 @@ merge、rebase、Review 或改写其他作者分支。
 | B-D3-T014 | raw score | 有限数按标签保留 | NaN/Inf 丢弃；不参与融合 | L0 | `PASS_LOCAL` |
 | B-D3-T015 | object/memory 类型 | 两字段独立序列化 | `memory_type=knowledge` 拒绝/迁移提示 | L0 | `PASS_LOCAL` |
 | B-D3-T016 | Delete 单条 | resolved single item 幂等删除 | 空、通配、自然语言拒绝 | L1_FAKE | `PASS_LOCAL` |
-| B-D3-T017 | Delete 隔离 | SQLite 归属校验后调用同用户删除 | 跨用户 resolved ID 或 request/selector 用户不一致明确拒绝 | L1_FAKE | `PASS_LOCAL` |
+| B-D3-T017 | Delete 隔离 | Provider 拒绝 request/selector 用户不一致；SQLite 归属校验后只调用同用户删除 | Provider 越界模拟 SQLite ownership 或 Service 放行已知跨用户 resolved ID 失败 | L1_FAKE | `PARTIAL_LOCAL`：Provider 边界通过；SQLite ownership gate 待 Service |
 | B-D3-T018 | Delete 重放 | Provider `not_matched` 经真源确认后归一为 already_absent | 伪造 deleted_count 或用 0 匹配掩盖越权禁止 | L1_FAKE | `PASS_LOCAL` |
 | B-D3-T019 | Full reset 门禁 | 授权+确认引用齐全才进入 | 任一缺失拒绝 | L0/L1_FAKE | `PASS_LOCAL` |
 | B-D3-T020 | Rebuild 代次 | 新代次构建验证后请求激活 | 覆盖 serving generation 拒绝 | L1_FAKE | `PASS_LOCAL` |
@@ -168,7 +170,7 @@ merge、rebase、Review 或改写其他作者分支。
 | B-D3-T035 | 旧/当前版本组合 | 旧 v1 rank 1 被过滤后当前 v2 rank 2 保留 | v1 先胜出导致整个 memory_id 丢失失败 | L1_FAKE | `PASS_LOCAL` |
 | B-D3-T036 | 用户级 IndexState | user-alpha 的代次、水位、计数只覆盖 alpha | 混入 beta 或返回 global scope 失败 | L0/L1_FAKE | `PASS_LOCAL` |
 | B-D3-T037 | 分片级 IndexState | shard-a 与 shard-b 状态独立 | 同名 generation 跨 scope 合并失败 | L0/L1_FAKE | `PASS_LOCAL` |
-| B-D3-T038 | 幂等复合域 | 同域同 hash 重放；跨用户/操作/代次复用裸 key 独立 | 同域异 hash 未 conflict 或跨域误 conflict 失败 | L0/L1_FAKE | `PASS_LOCAL` |
+| B-D3-T038 | 幂等复合域 | 同域同 hash 重放首次 `applied` / `outcome_unknown`；跨用户/操作/代次复用裸 key 独立；写请求语义摘要默认 fail-closed | 同域异 hash 未 conflict、跨域误 conflict、重放产生第二次副作用或摘要校验被旁路失败 | L0/L1_FAKE | `PASS_LOCAL` |
 | B-D3-T039 | 规范摘要 | map/集合重排与 NFC 等价输入得到同 Digest | 有序数组重排、null/缺失或不同 key-id 被判相等失败 | L0 | `PASS_LOCAL` |
 | B-D3-T040 | 水位比较域 | 同域整数/定宽串确定性推进 | 跨 scope/stream/partition/source-generation/kind 比较或数字串猜测失败 | L0/L1_FAKE | `PASS_LOCAL` |
 | B-D3-T041 | 证据/可用性双轴 | host_verified+unavailable 与 untested+available 均可表达 | 任一轴自动改写另一轴失败 | L0 | `PASS_LOCAL` |
@@ -202,10 +204,10 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
 | ADR golden score 复算 | 4 个值及排序一致 | `PASS_LOCAL` |
 | 契约 JSON 样例解析 | 5/5 可解析 | `PASS_LOCAL` |
 | 文档引用存在 | 全部目标文件存在，索引相对链接可解析 | `PASS_LOCAL` |
-| GitHub Review 获取 | PR #40 当前 Review 与被审提交可追踪 | 第二轮 `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；被审 head `855b5d7`；返工已推送并请求对最新 HEAD 复审 |
+| GitHub Review 获取 | PR #40 当前 Review 与被审提交可追踪 | 第三轮 `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；被审 head `f9297f9`；T038/T039 为核心返工 Gate |
 | GitHub 跨分支兼容核对 | 历史 SHA 仅作为有日期的只读快照，不作为实现基线 | `AUDIT_SNAPSHOT_2026-08-04`；后续判断须重新同步默认分支 |
 | `git diff --check` | 无 whitespace error | `PASS_LOCAL` |
-| D4-B retrieval pytest | T001–T048 的 L0/L1_FAKE 当前实现 | `118 passed`；T047 删除确认 key/TTL 仍为 `PARTIAL_LOCAL` |
+| D4-B retrieval pytest | T001–T048 的 L0/L1_FAKE 当前实现 | `131 passed`；T017 Service ownership、T047 删除确认 key/TTL 为 `PARTIAL_LOCAL` |
 | 仓库基线脚本 | 7/7，0 错误 | `BLOCKED_ENVIRONMENT`；2026-08-05 尝试未运行，宿主 WSL2 缺少 Hyper-V（`HCS_E_HYPERV_NOT_INSTALLED`），未启动 VM；历史 `PASS_LOCAL` 不作为本轮验证结果 |
 | 工作区范围 | 只修改 B 轨契约、Fake、契约测试与状态矩阵 | `PASS_LOCAL`；PR #40 未扩展到 A/C/D/E 轨实现，最终 Review 状态以 PR 最新 HEAD 为准 |
 
