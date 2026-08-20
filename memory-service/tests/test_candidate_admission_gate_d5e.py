@@ -28,7 +28,17 @@ test_candidate_admission_gate_d5e.py — Day5 E 轨事件与 Candidate 真实性
     （验收⑧：真实 Event/Tool 状态优先于 LLM/正文声明）
 - 边界：错误 __str__ 格式与不泄露候选正文原文；failure_experience 不被改写；
   admit_with_event 不进入 service.__all__；门禁消费 pipeline.schemas 内对象
-  （identity，不新建平行类型）；既有 admit()（不带 event）仍可正常调用（向后兼容）。
+  （identity，不新建平行类型）。
+
+PR #47 High 旁路关闭（本文件与 candidate_governance.py 同步收敛）：
+- 治理服务不再提供可绕过事件 Gate 的公开 admit() 生产入口（已私有化为
+  _admit()，仅在事件门禁成功后由 admit_with_event() 内部调用）；
+  test_no_public_admit_without_event_entry 守护该门禁。
+- 本文件删除 test_existing_admit_without_event_still_works（禁止把无事件转换
+  固化为兼容契约）。
+- Knowledge 转换不再隐式默认 SHORT_TERM：Knowledge 正向/失败语义保留用例
+  均显式提供 memory_type；缺失时拒绝（结构化错误码 missing_knowledge_memory_type，
+  在 test_candidate_governance_d5e.py 覆盖）。
 
 测试纪律：
 - 不使用 Mock、skip、xfail 或固定 PASS 结果。
@@ -167,13 +177,16 @@ def test_admit_with_event_knowledge_valid():
     cand = make_know_candidate(
         source_event_id="evt_d5e_kn_ev_01", category="fact"
     )
-    result = gov.admit_with_event(cand, event, make_ctx(), entity_id="kn_d5e_ev_01")
+    result = gov.admit_with_event(
+        cand, event, make_ctx(), entity_id="kn_d5e_ev_01",
+        memory_type=MemoryType.SHORT_TERM,  # 显式提供（PR #47：不再隐式默认）
+    )
     assert isinstance(result, domain.Knowledge)
     assert result.source_event_id == "evt_d5e_kn_ev_01"
 
 
 def test_admit_with_event_delegates_domain_construction():
-    """门禁通过后委托 admit 构造的 Domain 字段正确（user_id/source_event_id/memory_status）。"""
+    """门禁通过后委托内部 _admit 构造的 Domain 字段正确（user_id/source_event_id/memory_status）。"""
     gov = CandidateGovernanceService()
     event = make_event(
         event_id="evt_d5e_del_01",
@@ -203,7 +216,10 @@ def test_admit_with_event_failure_experience_preserved():
         category="failure_experience",
         fact="演示失败经验：磁盘满导致备份失败（脱敏）",
     )
-    result = gov.admit_with_event(cand, event, make_ctx(), entity_id="kn_d5e_fail_01")
+    result = gov.admit_with_event(
+        cand, event, make_ctx(), entity_id="kn_d5e_fail_01",
+        memory_type=MemoryType.SHORT_TERM,  # 显式提供（失败语义保持不依赖默认值）
+    )
     assert isinstance(result, domain.Knowledge)
     # 失败语义保留：不被改写成成功知识
     assert result.knowledge_type is KnowledgeType.FAILURE_EXPERIENCE
@@ -478,7 +494,10 @@ def test_failure_experience_not_rewritten_to_success():
         category="failure_experience",
         fact="演示失败经验：连接超时导致同步失败（脱敏）",
     )
-    result = gov.admit_with_event(cand, event, make_ctx(), entity_id="kn_d5e_fe_02")
+    result = gov.admit_with_event(
+        cand, event, make_ctx(), entity_id="kn_d5e_fe_02",
+        memory_type=MemoryType.SHORT_TERM,  # 显式提供（失败语义保持不依赖默认值）
+    )
     # 未被改写为成功知识语义（如 FACT/WORKFLOW）
     assert result.knowledge_type is KnowledgeType.FAILURE_EXPERIENCE
     assert result.knowledge_type.value == "failure_experience"
@@ -501,13 +520,15 @@ def test_gate_consumes_pipeline_schema_types():
     assert cg.SensitivityLevel is pipeline_schemas.SensitivityLevel
 
 
-def test_existing_admit_without_event_still_works():
-    """既有 admit()（不带 event）仍可正常调用（向后兼容冒烟）。"""
-    gov = CandidateGovernanceService()
-    result = gov.admit(
-        make_pref_candidate(source_event_id="evt_d5e_pref_01"),
-        make_ctx(),
-        entity_id="pref_d5e_legacy",
+def test_no_public_admit_without_event_entry():
+    """PR #47 High 旁路关闭：治理服务不提供无事件 public admit() 生产入口。
+
+    公开 Candidate→Domain 转换必须经过 admit_with_event()（带 MemorySourceEvent
+    的强制事件门禁路径）；内部 _admit() 不得作为公开兼容 API 继续测试。
+    """
+    assert not hasattr(CandidateGovernanceService, "admit"), (
+        "public admit() must not exist (PR #47 bypass closed)"
     )
-    assert isinstance(result, domain.Preference)
-    assert result.user_id == USER
+    assert hasattr(CandidateGovernanceService, "admit_with_event"), (
+        "admit_with_event() must be the sole public governance entry"
+    )

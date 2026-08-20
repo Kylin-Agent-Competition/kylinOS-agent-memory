@@ -7,11 +7,12 @@ candidate_governance.py — Day5 E 轨 Candidate 业务准入与 Domain 转换�
 day5-e-02-event-candidate-admission-gate-v1，方案 PLAN_READY）：
 - 复用 A 轨 providers.extraction_provider.PreferenceCandidate / KnowledgeCandidate
   （只读消费，不复制、不重定义任何 Candidate 模型）；
-- 通过单一准入入口 admit() 对 Candidate 执行最小业务准入校验；
-- 通过 admit_with_event() 在 Candidate 进入正式 E 轨 Domain 前，基于
-  pipeline.schemas.MemorySourceEvent / SourceBusinessStatus / SensitivityLevel
+- 通过唯一公开准入入口 admit_with_event() 在 Candidate 进入正式 E 轨 Domain 前，
+  基于 pipeline.schemas.MemorySourceEvent / SourceBusinessStatus / SensitivityLevel
   实施事件级 fail-closed 准入（provenance 一致性、用户归属一致性、
   安全标记与业务状态），拒绝后返回结构化可测试 reason；
+- 内部 _admit() 仅在事件门禁成功后由本服务调用，不作为公开兼容 API
+  （PR #47 High 旁路关闭：不再提供可绕过事件 Gate 的 public admit() 生产入口）；
 - 构造 E 轨正式业务 Domain（domain.Preference / domain.Knowledge），
   不建立平行业务 Schema、不新建平行 Event Schema。
 
@@ -70,6 +71,8 @@ class CandidateAdmissionError(Exception):
     - event_status_timeout        source_business_status=timeout（未完成事件）
     - failed_event_success_knowledge_forbidden  failed 事件不得形成成功知识
     - failed_event_preference_blocked          failed 事件不得形成稳定偏好记忆
+    - missing_knowledge_memory_type  Knowledge 转换未显式提供 memory_type
+                                       （不再隐式默认 SHORT_TERM，PR #47）
     """
 
     def __init__(
@@ -95,24 +98,29 @@ class CandidateGovernanceService:
     不持有状态（stateless）；不实现抽取、存储、冲突、遗忘或检索逻辑。
     """
 
-    def admit(
+    def _admit(
         self,
         candidate: Union[PreferenceCandidate, KnowledgeCandidate],
         ctx: ServiceRequestContext,
         *,
         entity_id: str,
         now: Optional[datetime] = None,
-        memory_type: MemoryType = MemoryType.SHORT_TERM,
+        memory_type: Optional[MemoryType] = None,
     ) -> Union[Preference, Knowledge]:
-        """准入校验并按 Candidate 类型分派构造正式 Domain。
+        """内部准入校验并按 Candidate 类型分派构造正式 Domain。
+
+        仅由 admit_with_event() 在事件级 fail-closed 门禁成功后调用，
+        不作为公开兼容 API（PR #47 High 旁路关闭：无事件转换必须不可达）。
 
         Args:
             candidate: A 轨抽取候选（PreferenceCandidate / KnowledgeCandidate）。
             ctx: 可信业务上下文；user_id 只能来自此上下文，禁止从候选正文推导。
             entity_id: 新 Domain 的实体 ID（调用方提供；治理层不生成、不写库）。
             now: 构造时间戳；None → datetime.now(timezone.utc)，结果 aware UTC。
-            memory_type: Knowledge 的记忆分层（业务分类，非用户身份；默认
-                SHORT_TERM 为"不无依据提升"的最保守选择，可由调用方覆盖）。
+            memory_type: Knowledge 的记忆分层（业务分类，非用户身份）。不再
+                隐式默认 SHORT_TERM：KnowledgeCandidate 路径必须由调用方显式
+                提供，缺失时拒绝（missing_knowledge_memory_type）；Preference
+                路径不使用该参数，None 无影响。
 
         Raises:
             CandidateAdmissionError: 准入失败（code 见类 docstring）。
@@ -144,12 +152,20 @@ class CandidateGovernanceService:
             )
 
         ts = now if now is not None else datetime.now(timezone.utc)
+        # 5. Knowledge memory_type 必须显式提供（不隐式默认 SHORT_TERM，PR #47）。
+        #    结构化准入要求，非 Domain 构造错误，置于 try 块之外，不被
+        #    except ValidationError 捕获。
+        if isinstance(candidate, KnowledgeCandidate) and memory_type is None:
+            raise CandidateAdmissionError(
+                "missing_knowledge_memory_type",
+                "Knowledge conversion requires explicit memory_type",
+            )
         try:
             if isinstance(candidate, PreferenceCandidate):
                 return self._build_preference(candidate, ctx, entity_id, ts)
             return self._build_knowledge(candidate, ctx, entity_id, ts, memory_type)
         except ValidationError as exc:
-            # 5. Domain 构造校验失败 → 包装为 domain_construction_failed（保留原因）
+            # 6. Domain 构造校验失败 → 包装为 domain_construction_failed（保留原因）
             raise CandidateAdmissionError(
                 "domain_construction_failed",
                 "candidate failed Domain construction validation",
@@ -164,13 +180,14 @@ class CandidateGovernanceService:
         *,
         entity_id: str,
         now: Optional[datetime] = None,
-        memory_type: MemoryType = MemoryType.SHORT_TERM,
+        memory_type: Optional[MemoryType] = None,
     ) -> Union[Preference, Knowledge]:
         """事件级 fail-closed 准入门禁 + Domain 构造（Day5-e-02）。
 
         在 Candidate 进入正式 E 轨 Domain 前，基于 MemorySourceEvent、
         Candidate provenance、安全标记和业务状态实施 fail-closed 准入校验。
-        所有检查通过后委托 admit() 完成 Domain 构造。
+        所有检查通过后委托内部 _admit() 完成 Domain 构造（不提供可绕过
+        事件 Gate 的公开 admit() 入口——PR #47 High 旁路关闭）。
 
         治理层只读消费 event.source_business_status / event.should_ignore /
         event.sensitivity 作为真实状态来源，不依据 candidate 正文 / evidence /
@@ -184,8 +201,10 @@ class CandidateGovernanceService:
                 一致（跨用户候选 fail-closed 拒绝）。
             entity_id: 新 Domain 的实体 ID（调用方提供；治理层不生成、不写库）。
             now: 构造时间戳；None → datetime.now(timezone.utc)，结果 aware UTC。
-            memory_type: Knowledge 的记忆分层（业务分类，非用户身份；默认
-                SHORT_TERM 为"不无依据提升"的最保守选择，可由调用方覆盖）。
+            memory_type: Knowledge 的记忆分层（业务分类，非用户身份）。不再
+                隐式默认 SHORT_TERM：KnowledgeCandidate 路径必须显式提供，
+                缺失时拒绝（missing_knowledge_memory_type）；Preference 路径
+                不使用该参数，None 无影响。
 
         Raises:
             CandidateAdmissionError: 准入失败（code 见类 docstring）。
@@ -196,13 +215,13 @@ class CandidateGovernanceService:
                 "invalid_event",
                 "event must be a MemorySourceEvent",
             )
-        # 2. Candidate 类型准入（复用 admit() 防御语义；前置避免后续属性访问异常）
+        # 2. Candidate 类型准入（复用 _admit() 防御语义；前置避免后续属性访问异常）
         if not isinstance(candidate, (PreferenceCandidate, KnowledgeCandidate)):
             raise CandidateAdmissionError(
                 "invalid_candidate_type",
                 "candidate must be a PreferenceCandidate or KnowledgeCandidate",
             )
-        # 3. 可信上下文准入（复用 admit() 防御语义）
+        # 3. 可信上下文准入（复用 _admit() 防御语义）
         if not isinstance(ctx, ServiceRequestContext):
             raise CandidateAdmissionError(
                 "invalid_context",
@@ -210,8 +229,9 @@ class CandidateGovernanceService:
             )
         # 4-11. 事件级真实性/安全/业务状态校验（首个失败即拒绝，fail-closed）
         self._validate_event_admission(candidate, event, ctx)
-        # 门禁通过：委托 admit() 复用 entity_id 校验 + candidate 状态防御 + Domain 构造
-        return self.admit(
+        # 门禁通过：委托内部 _admit() 复用 entity_id 校验 + candidate 状态防御
+        # + Knowledge memory_type 显式要求 + Domain 构造
+        return self._admit(
             candidate, ctx, entity_id=entity_id, now=now, memory_type=memory_type
         )
 
@@ -339,14 +359,20 @@ class CandidateGovernanceService:
         - source_event_id 直接相等，不重新生成/覆盖（R3）；
         - user_id 来自 ctx（可信归属）；
         - memory_status 恒 candidate，requires_embedding=True（候选将来需嵌入）；
-        - candidate.conditions / evidence(文本) / 六类结构化字段为抽取侧细节，
-          不映射进 Domain（Domain content_ref 待 D 设计存储）。
+        - 结构化承载缺口（TD-017，Medium/Open）如实声明：KnowledgeCandidate 六类
+          扩展结构字段（conditions / evidence / steps / expected_result / problem /
+          outcome / reproducible / template_body / parameters / priority /
+          failure_reason / avoid_condition / alternative，共 13 个 Optional[str]）
+          当前尚未无损进入 Domain——content_summary 仅承载 fact 文本、
+          primary_category 为开放分类标签，不得宣称已完整保留结构化语义；
+          正式结构化承载契约（字段级映射或 content_ref 存储形态）待 D 设计
+          （Domain content_ref DEFERRED）。
         """
         return Knowledge(
             knowledge_id=entity_id,
             user_id=ctx.user_id,
             knowledge_type=KnowledgeType(candidate.category),  # 六值同源
-            memory_type=memory_type,  # 业务分类；默认 SHORT_TERM（不无依据提升）
+            memory_type=memory_type,  # 业务分类；由调用方显式提供（PR #47 不再隐式默认）
             memory_status=MemoryStatus.CANDIDATE,  # 恒 candidate
             source_event_id=candidate.source_event_id,  # 直接相等（R3）
             content_summary=candidate.fact,  # 可检索摘要
