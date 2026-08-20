@@ -28,14 +28,17 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 - L0 Mock 契约测试 `tests/test_protocol_adapter.cpp` 与 `tests/test_memory_client_mock.cpp`
   （QLocalServer Mock Gateway）
 
-状态语义：D 轨 IPC envelope 未最终冻结（`docs/day3/11_os_agent_event_contract_v1.md`
-§10 标注 `PENDING_D_CONFIRMATION`）；本骨架不得表述为最终 FROZEN。真实 MemoryContext
+状态语义：D 轨 IPC envelope 已于 2026-08-17 正式冻结签署
+（`deliverables/D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`，FRZ-IPC-001~007）。
+C 轨客户端协议编解码已对齐冻结协议帧结构与字段（FROZEN_ALIGNED），但
+FRZ-IPC-004 客户端超时行为（deadline_ms + 100ms 未响应视为超时）尚未实现（骨架期可接受），
+FROZEN_ALIGNED 仅覆盖帧/字段层对齐，不等于全部冻结行为已实现。真实 MemoryContext
 注入受 `BLOCKED / TD-008` 阻断；偏好/知识业务 Schema 受 E 轨终审阻断。
 
 ## 明确不负责的内容
 
 - 不实现 Python 侧服务逻辑
-- 不包含官方 AI 助手 UI 源码
+- 本 QML 应用为独立 Qt 演示壳（旁路演示），非官方 AI 助手集成；不包含官方 AI 助手 UI 源码
 - 不直接操作 SQLite/Vector
 - 不固化偏好/知识业务字段（待 E 轨 Schema 终审）
 - 不冒充 L2 麒麟 VM Runtime 证据

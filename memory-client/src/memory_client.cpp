@@ -59,6 +59,12 @@ QString protocolErrorKindToString(ProtocolErrorKind kind)
         return QStringLiteral("ERR_MISSING_STATUS");
     case ProtocolErrorKind::InvalidStatus:
         return QStringLiteral("ERR_INVALID_STATUS");
+    case ProtocolErrorKind::MissingRequestId:
+        return QStringLiteral("ERR_MISSING_REQUEST_ID");
+    case ProtocolErrorKind::MissingTraceId:
+        return QStringLiteral("ERR_MISSING_TRACE_ID");
+    case ProtocolErrorKind::MissingData:
+        return QStringLiteral("ERR_MISSING_DATA");
     case ProtocolErrorKind::MissingServerTs:
         return QStringLiteral("ERR_MISSING_SERVER_TS");
     }
@@ -226,12 +232,9 @@ void MemoryClient::handleSocketReadyRead()
             const QString requestId = requestIdValue.isString()
                 ? requestIdValue.toString() : QString{};
 
-            if (pendingRequests_.erase(requestId.toStdString()) == 0) {
-                // 未知 request_id：仍转发响应，便于上层诊断；不暴露原文。
-                emit responseReceived(requestId, *decoded.envelope);
-            } else {
-                emit responseReceived(requestId, *decoded.envelope);
-            }
+            // 从 pending 集合中移除（无论是否命中，都转发响应给上层）。
+            pendingRequests_.erase(requestId.toStdString());
+            emit responseReceived(requestId, *decoded.envelope);
         }
     }
 }

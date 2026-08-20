@@ -28,8 +28,7 @@ namespace methods {
 const QString kEcho = QStringLiteral("echo");
 const QString kHealth = QStringLiteral("health");
 const QString kMemoryRetrieve = QStringLiteral("memory.retrieve");
-const QString kMemoryStore = QStringLiteral("memory.store");
-const QString kEvidenceRecord = QStringLiteral("evidence.record");
+const QString kMemoryStore = QStringLiteral("memory.store");  // 未实现
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）
@@ -75,6 +74,12 @@ ProtocolError errorFromKind(ProtocolErrorKind kind)
         return makeError(kind, QStringLiteral("Response is missing status field."));
     case ProtocolErrorKind::InvalidStatus:
         return makeError(kind, QStringLiteral("Response status must be 'ok' or 'error'."));
+    case ProtocolErrorKind::MissingRequestId:
+        return makeError(kind, QStringLiteral("Response is missing request_id echo."));
+    case ProtocolErrorKind::MissingTraceId:
+        return makeError(kind, QStringLiteral("Response is missing trace_id echo."));
+    case ProtocolErrorKind::MissingData:
+        return makeError(kind, QStringLiteral("Response with status 'ok' is missing data field."));
     case ProtocolErrorKind::MissingServerTs:
         return makeError(kind, QStringLiteral("Response is missing server_ts field."));
     }
@@ -253,17 +258,19 @@ std::pair<std::optional<ResponseParts>, ProtocolError> parseResponse(
     }
     parts.status = status;
 
-    // request_id（回显，字符串）
+    // request_id（回显，必填，非空字符串——FRZ-IPC-006 §6.2）
     const QJsonValue requestIdValue = envelope.value(kRequestIdKey);
-    if (requestIdValue.isString()) {
-        parts.requestId = requestIdValue.toString();
+    if (!requestIdValue.isString() || requestIdValue.toString().isEmpty()) {
+        return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingRequestId)};
     }
+    parts.requestId = requestIdValue.toString();
 
-    // trace_id（回显，字符串）
+    // trace_id（回显，必填，非空字符串——FRZ-IPC-006 §6.2）
     const QJsonValue traceIdValue = envelope.value(kTraceIdKey);
-    if (traceIdValue.isString()) {
-        parts.traceId = traceIdValue.toString();
+    if (!traceIdValue.isString() || traceIdValue.toString().isEmpty()) {
+        return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingTraceId)};
     }
+    parts.traceId = traceIdValue.toString();
 
     // server_ts（必填，ISO 8601 UTC 字符串）
     const QJsonValue serverTsValue = envelope.value(kServerTsKey);
@@ -272,9 +279,14 @@ std::pair<std::optional<ResponseParts>, ProtocolError> parseResponse(
     }
     parts.serverTs = serverTsValue.toString();
 
-    // data（成功时必填，对象）
+    // data（status=ok 时必填，对象——FRZ-IPC-006 §6.2）
     const QJsonValue dataValue = envelope.value(kDataKey);
-    if (dataValue.isObject()) {
+    if (status == QStringLiteral("ok")) {
+        if (!dataValue.isObject()) {
+            return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingData)};
+        }
+        parts.data = dataValue.toObject();
+    } else if (dataValue.isObject()) {
         parts.data = dataValue.toObject();
     }
 

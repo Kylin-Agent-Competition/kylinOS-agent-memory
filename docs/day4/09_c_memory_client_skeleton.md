@@ -90,8 +90,8 @@ D4 Gate 0 合入 main 后（`ef050b0`），D 冻结 IPC 协议 FRZ-IPC-001~007 �
 | 编号 | 冻结目标 | 偏离（对齐前） | 对齐动作 | 结果 |
 |------|---------|--------------|---------|------|
 | ALIGN-001 | kMaxMessageLen = 65536 B (64KB)（FRZ-IPC-001） | 4 MiB（对齐 A 轨 embedding `protocol.py`） | `protocol_adapter.h` 改为 65536 | ✅ PASS |
-| ALIGN-003 | 响应结构 status/data/server_ts + error_code/message（FRZ-IPC-006 §6.2） | 仅解析请求结构（method/payload） | 新增 `ResponseParts` + `parseResponse()` + 3 个 ProtocolErrorKind | ✅ PASS |
-| ALIGN-004 | 方法路由 echo/health/memory.retrieve/memory.store/evidence.record（FRZ-IPC-007） | `kMemoryQuery`("memory.query") + `kMemoryHealth`("memory.health") | 删除 kMemoryQuery；kMemoryHealth→kHealth；新增 kEcho/kMemoryStore/kEvidenceRecord | ✅ PASS |
+| ALIGN-003 | 响应结构 status/data/server_ts + error_code/message（FRZ-IPC-006 §6.2） | 仅解析请求结构（method/payload） | 新增 `ResponseParts` + `parseResponse()` + 6 个 ProtocolErrorKind（MissingStatus/InvalidStatus/MissingRequestId/MissingTraceId/MissingData/MissingServerTs）；ok 时强制 data 存在、request_id/trace_id 非空 | ✅ PASS |
+| ALIGN-004 | 方法路由 echo/health/memory.retrieve（FRZ-IPC-007，2026-08-17 已签署更正版：3 项活跃） | `kMemoryQuery`("memory.query") + `kMemoryHealth`("memory.health") | 删除 kMemoryQuery；kMemoryHealth→kHealth；新增 kEcho/kMemoryRetrieve；kMemoryStore 保留并标注"未实现"；kEvidenceRecord 已按 P0-4 删除 | ✅ PASS |
 | ALIGN-005 | UDS 路径 `$XDG_RUNTIME_DIR/kylin-memory/memory.sock`（FRZ-IPC-005） | 无默认路径（由调用方设置） | 构造函数自动从 `$XDG_RUNTIME_DIR` 推导默认路径 | ✅ PASS |
 | ALIGN-006 | 请求字段 request_id/trace_id/deadline_ms 必填（FRZ-IPC-006 §6.1） | buildEnvelope 中三者可选 | sendRequest 始终填充三字段（trace_id 复用 request_id，deadline_ms=5000） | ✅ PASS |
 
@@ -104,7 +104,9 @@ D4 Gate 0 合入 main 后（`ef050b0`），D 冻结 IPC 协议 FRZ-IPC-001~007 �
 D 轨 IPC envelope 已于 2026-08-17 正式冻结（`D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`，
 D/E 已签署）。C 轨客户端协议编解码已对齐 FRZ-IPC-001~007 冻结契约（见上方 ALIGN 表）。
 所有协议常量集中在 `protocol_adapter.h`，`protocol_adapter.h` 头部状态已升级为
-`FROZEN_ALIGNED`。
+`FROZEN_ALIGNED`。FROZEN_ALIGNED 语义边界：仅覆盖协议帧结构与字段层对齐，不含
+FRZ-IPC-004 客户端超时行为（deadline_ms + 100ms 未响应视为超时，骨架期未实现，
+记为 TD）。
 
 ### 2. 错误模型不回显原文
 

@@ -21,9 +21,9 @@ ApplicationWindow {
     title: qsTr("Kylin Memory Client — D4 Skeleton")
 
     // 公共 ViewModel（C++ 注册，全页面共享）
-    property MemoryViewModel viewModel: MemoryViewModel {
-        socketPath: "/tmp/kylin-memory-gateway.sock"
-    }
+    // socketPath 不在此覆盖——走 C++ 构造函数默认值（$XDG_RUNTIME_DIR/kylin-memory/memory.sock，
+    // FRZ-IPC-005 冻结路径）。如需测试 Mock Gateway，通过 ViewModel.setSocketPath() 设置。
+    property MemoryViewModel viewModel: MemoryViewModel {}
 
     header: ToolBar {
         RowLayout {
