@@ -1,5 +1,5 @@
 """
-embedding_service.py — 轨道 A Day5 最小垂直链路 Service 层
+embedding_service.py — 轨道 A Day5 最小垂直链路 Service 层（Day9 增强）
 
 将 Day4 的真实 EmbeddingProvider 接入最小链路：
 - 接收 UDS + 长度前缀 JSON 协议请求（embed）
@@ -12,6 +12,14 @@ embedding_service.py — 轨道 A Day5 最小垂直链路 Service 层
 3. 降级：Provider 可用但调用失败时，返回明确空向量 + degraded 标记
    （区别于"无固定样例假实现"——空向量是明确语义，不是假数据）。
 4. Bridge 调用在独立线程池执行（Day5 第 3 条：不阻塞聊天线程）。
+
+Day9 增强（台账 R47）：
+5. 查询缓存：EmbeddingQueryCache（LRU，键=模型维度+内容指纹，深拷贝，
+   空向量不缓存），架构 TABLE 29 "Embedding（查询）≤180ms：缓存"。
+6. 积压指标：EmbeddingBacklogTracker（backlog / oldest_pending_age /
+   告警阈值），health 分项返回，供诊断页与评测。
+7. 请求合并：EmbeddingCoalescer（相同文本并发请求共享一次 Provider 调用，
+   后台批量合并候选）。
 """
 
 from __future__ import annotations
@@ -26,6 +34,8 @@ from providers import (
     ProviderError,
     ProviderErrorCode,
 )
+from embedding.embedding_cache import EmbeddingCoalescer, EmbeddingQueryCache
+from embedding.embedding_metrics import EmbeddingBacklogTracker
 from embedding.protocol import PROTOCOL_VERSION, ProtocolError, parse_envelope
 
 # Bridge 调用统一放线程池：SDK embed 可能耗时（IPC），不阻塞聊天线程（Day5-3）
@@ -116,6 +126,14 @@ class EmbeddingService:
                 self._provider = _SdkMissingProvider()
                 self._sdk_missing = True
         self._started = False
+        # Day9：查询缓存 / 积压追踪 / 请求合并（可注入以便测试）
+        self._cache = EmbeddingQueryCache()
+        self._backlog = EmbeddingBacklogTracker()
+        self._coalescer = EmbeddingCoalescer()
+        # [TABLE 29 降级策略] 短文本阈值：积压告警时超过此长度的文本跳过
+        # embed，直接返回结构化降级（避免长文本拖慢整个队列）。
+        # 默认 256 字符：覆盖绝大部分短查询场景。
+        self._max_short_text_length = 256
 
     # ── 生命周期 ──
 
@@ -144,6 +162,20 @@ class EmbeddingService:
         """释放引用。幂等。"""
         self._provider.close()
         self._started = False
+
+    # ── 对外暴露（D9：评测/诊断页使用） ──
+
+    @property
+    def cache(self) -> EmbeddingQueryCache:
+        return self._cache
+
+    @property
+    def backlog(self) -> EmbeddingBacklogTracker:
+        return self._backlog
+
+    @property
+    def coalescer(self) -> EmbeddingCoalescer:
+        return self._coalescer
 
     # ── 对外接口（UDS 协议处理入口，架构 4.4 envelope） ──
 
@@ -187,15 +219,26 @@ class EmbeddingService:
     def health(self) -> Dict[str, Any]:
         """返回服务分项健康状态（不触发 SDK 调用，只读状态）。
 
+        Day9 增强：新增 backlog / oldest_pending_age / 告警状态 + 缓存统计
+        （架构 TABLE 36 可观测性 + 台账 D9 backlog 告警阈值）。
+
         Returns:
             {"ok": true, "result": {"service": "ok|stopped",
                                      "provider": "ready|stopped",
                                      "bridge_loaded": bool,
                                      "bridge_has_session": bool,
-                                     "degraded": bool,
-                                     "sdk_missing": bool}}
+"backlog": {"backlog": int,
+                                                   "oldest_pending_age_seconds": float,
+                                                   "backlog_alert": bool,
+                                                   "oldest_alert": bool,
+                                                   "thresholds": {...}},
+                                      "cache": {"size": int, "hits": int,
+                                                 "misses": int, "evictions": int},
+                                      "degraded": bool,
+                                      "sdk_missing": bool}}
         """
         bridge = getattr(self._provider, "_bridge", None)
+        backlog = self._backlog.snapshot()
         return {
             "ok": True,
             "result": {
@@ -205,6 +248,11 @@ class EmbeddingService:
                 if bridge is not None else False,
                 "bridge_has_session": bool(getattr(bridge, "has_session", False))
                 if bridge is not None else False,
+"backlog": {
+                    **backlog,
+                    "thresholds": self._backlog.thresholds,
+                },
+                "cache": self._cache.stats,
                 # [Review #7 已修复] degraded 反映 SDK 缺失状态（不再恒 false）
                 "degraded": bool(getattr(self, "_sdk_missing", False)),
                 "sdk_missing": bool(getattr(self, "_sdk_missing", False)),
@@ -226,9 +274,86 @@ class EmbeddingService:
             return self._error(ProviderErrorCode.ERR_INVALID_TEXT.name,
                                f"text must be str, got {type(text).__name__}")
 
+        # Day9 查询缓存：键 = 模型维度 + 原文确定性哈希（维度变化自动失效）
+        # 维度获取：真实 EmbeddingProvider 有 get_dimension()；D5 既有测试的
+        # FakeProvider 无该方法 → 用 getattr 探测，缺省 0（维度 0 的缓存键与
+        # 真实维度不同，天然隔离，不影响旧测试路径）。
+        # Review 修复：get_dimension() 首次调用可能触发 embed("")（IPC 副作用）
+        # 且 Provider 未就绪/已关闭时抛 ProviderError——必须包在 try 内，
+        # 不得穿透 D5 "所有方法返回 dict 永不抛异常" 契约。
+        try:
+            get_dim = getattr(self._provider, "get_dimension", None)
+            dimension = get_dim() if callable(get_dim) else 0
+        except ProviderError as exc:
+            # Provider 未就绪/已关闭：不查缓存，走 Provider 调用（由其降级保护）
+            dimension = 0
+        except Exception:  # noqa: BLE001 - 维度探测失败不阻断 embed
+            dimension = 0
+        cache_key = self._cache.make_key(text, dimension)
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return {"ok": True, "result": cached, "cache_hit": True}
+
+        # Day9 请求合并：相同原文的并发请求共享一次 Provider 调用
+        # （后台批量合并候选；等待已有 in-flight Future 的结果）
+        coalesce_key = cache_key[2]  # 原文确定性哈希（与缓存键同源）
+        existing, was_merged = self._coalescer.get_or_create(coalesce_key)
+        if was_merged and existing is not None:
+            # Review 修复：合并等待请求同样进入积压队列（enter/leave）——
+            # 合并突发时 backlog/oldest_pending_age 必须反映全部排队请求，
+            # 否则恰在需要观测吞吐压力时指标失灵。
+            seq = self._backlog.enter()
+            try:
+                try:
+                    result = existing.result(timeout=timeout_ms / 1000.0 + 1.0)
+                except FutureTimeout:
+                    return self._error(ProviderErrorCode.ERR_TIMEOUT.name,
+                                       "embed coalesced wait timed out")
+                except ProviderError as exc:
+                    # Review 修复：合并等待者保留原始错误码（与发起者一致）
+                    return self._degrade(exc.code, f"coalesced embed failed: {exc}")
+                except Exception as exc:  # noqa: BLE001
+                    # 合并的 Provider 调用失败：传播结构化降级（不重复调用）
+                    return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
+                                         f"coalesced embed failed: {type(exc).__name__}: {exc}")
+                result_dict = {
+                    "vector": result.vector,
+                    "dimension": result.dimension,
+                    "l2_norm": result.l2_norm,
+                }
+                self._cache.set(cache_key, result_dict)
+                return {"ok": True, "result": result_dict, "coalesced": True}
+            finally:
+                self._backlog.leave(seq)
+
+        # [TABLE 29 降级策略] 短文本保护：积压告警时超过阈值的文本跳过
+        # embed，直接返回结构化降级（避免长文本耗时拖慢队列）。
+        backlog_snap = self._backlog.snapshot()
+        if (backlog_snap.get("backlog_alert") or backlog_snap.get("oldest_alert")):
+            if len(text) > self._max_short_text_length:
+                return self._degrade(
+                    ProviderErrorCode.ERR_TIMEOUT.name,
+                    f"text too long ({len(text)} > {self._max_short_text_length}) "
+                    f"in degraded mode (backlog={backlog_snap['backlog']}, "
+                    f"oldest={backlog_snap['oldest_pending_age_seconds']:.2f}s)")
+
+        # Day9 积压追踪：进入队列（处理完成/失败/超时后 leave）
+        seq = self._backlog.enter()
+        try:
+            return self._embed_uncached(text, timeout_ms, cache_key,
+                                        coalesce_key=coalesce_key)
+        finally:
+            self._backlog.leave(seq)
+
+    def _embed_uncached(self, text: str, timeout_ms: int,
+                        cache_key, *, coalesce_key: str) -> Dict[str, Any]:
+        """未命中缓存的 embed：实际 Provider 调用（D5 原逻辑 + D9 写缓存 + 合并注册）。"""
+        fut = None  # Review 修复：_submit_bridge 自身抛异常时 finally 不 NameError
         try:
             # Day5-3: Bridge 调用放线程池，不阻塞聊天线程
             fut = _submit_bridge(self._provider.embed, text, timeout_ms=timeout_ms)
+            # Day9 合并注册：在途 Future 供后续同文本并发请求共享
+            self._coalescer.register(coalesce_key, fut)
             try:
                 result = fut.result(timeout=timeout_ms / 1000.0 + 1.0)
             except FutureTimeout:
@@ -245,15 +370,18 @@ class EmbeddingService:
         except Exception as exc:  # noqa: BLE001 - 任何异常都结构化返回
             return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
                                  f"unexpected error: {type(exc).__name__}: {exc}")
+        finally:
+            if fut is not None:
+                self._coalescer.release(coalesce_key, fut)
 
-        return {
-            "ok": True,
-            "result": {
-                "vector": result.vector,
-                "dimension": result.dimension,
-                "l2_norm": result.l2_norm,
-            },
+        result_dict = {
+            "vector": result.vector,
+            "dimension": result.dimension,
+            "l2_norm": result.l2_norm,
         }
+        # Day9 写缓存（空向量/degraded 不缓存，见 EmbeddingQueryCache.set）
+        self._cache.set(cache_key, result_dict)
+        return {"ok": True, "result": result_dict}
 
     def embed_batch(self, texts: List[str], *, timeout_ms: int = 30000) -> Dict[str, Any]:
         """批量文本向量化（顺序调用）。"""
