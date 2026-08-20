@@ -1,0 +1,39 @@
+=== connected kylin-agent@127.0.0.1:2222 ===
+cmake: cmake version 4.4.2
+x86_64
+gcc (openKylin 12.3.0-1ok3k0.1) 12.3.0
+
+[SHA256 MATCH] libconnect_hook.c
+[SHA256 MATCH] CMakeLists.txt
+
+=== cmake configure === exit=0
+-- The C compiler identification is GNU 12.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Configuring done (0.4s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/pr42_cmake_verify/build
+
+=== cmake build === exit=0
+[ 50%] Building C object CMakeFiles/connect_hook.dir/libconnect_hook.c.o
+[100%] Linking C shared library libconnect_hook.so
+[100%] Built target connect_hook
+
+=== file === exit=0
+build/libconnect_hook.so: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked, BuildID[sha1]=d0b5784e2d20ccd5bc8a3f3db33a424cb61f0b5a, not stripped
+
+=== nm -D connect === exit=0
+00000000000014f0 T connect
+
+=== readelf -Ws connect === exit=0
+21: 00000000000014f0   697 FUNC    GLOBAL DEFAULT   13 connect
+    42: 00000000000014f0   697 FUNC    GLOBAL DEFAULT   13 connect
+
+==================================================
+RESULT: ALL PASS

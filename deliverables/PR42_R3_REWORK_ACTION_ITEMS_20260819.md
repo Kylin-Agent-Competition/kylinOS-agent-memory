@@ -217,9 +217,10 @@ gcc -std=c11 -Wall -Wextra -fsyntax-only os-agent-integration/patches/libconnect
 | HIGH-01 C 静态编译 | `gcc -std=c11 -Wall -Wextra -fsyntax-only libconnect_hook.c` | PASS（exit=0） |
 | HIGH-02 完整编译 | `gcc -shared -fPIC -O2 -pthread -ldl -Wall -Wextra -o libconnect_hook.so libconnect_hook.c` | PASS（exit=0） |
 | HIGH-02 符号导出 | `nm -D libconnect_hook.so | grep -w connect` | `T connect`（默认可见性导出成功） |
-| HIGH-02 CMake 构建 | `cmake -S . -B build` | **未执行**（VM 无 cmake，`which cmake` → 127；见 `D4_BLOCKERS_SYNC_20260817.md` #10 cmake 重装） |
+| HIGH-02 CMake 构建 | `cmake -S . -B build && cmake --build build` | **PASS（exit=0）**，cmake 4.4.2（用户侧安装 tarball） |
+| HIGH-02 CMake 产物导出 | `nm -D build/libconnect_hook.so | grep -w connect` | `T connect`（`GLOBAL DEFAULT` 可见性） |
 
-> 说明：HIGH-02 采用方案 A（删除 `-fvisibility=hidden`）。CMake 构建路径与手工 gcc 路径现使用等价编译选项（`-Wall -Wextra -O2`，无 visibility 隐藏标志），`nm -D` 已确认 `connect` 以默认可见性导出为 `T connect`。VM 缺 cmake（无 sudo 无法安装），CMake 产物级验证待 cmake 重装后补跑（`cmake -S . -B build && cmake --build build && nm -D build/libconnect_hook.so | grep ' connect$'`）。
+> 说明：HIGH-02 采用方案 A（删除 `-fvisibility=hidden`）。CMake 构建（`cmake -S . -B build && cmake --build build`，exit=0）与手工 gcc 路径均确认 `connect` 以 `GLOBAL DEFAULT` 可见性导出为 `T connect`（`nm -D` 与 `readelf -Ws` 双重确认），LD_PRELOAD interpose 所需动态符号导出验证通过。cmake 4.4.2 位于 `/home/kylin-agent/下载/cmake-4.4.2-linux-x86_64/bin/cmake`（tarball 安装，未入 PATH）。
 
 ---
 
