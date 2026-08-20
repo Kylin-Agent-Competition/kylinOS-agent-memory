@@ -39,6 +39,16 @@ private slots:
     void parseEnvelopeRejectsEmptyMethod();
     void parseEnvelopeRejectsNonObjectPayload();
     void parseEnvelopeReadsOptionalFields();
+    // parseResponse 测试（FRZ-IPC-006 §6.2 响应结构）
+    void parseResponseAcceptsValidOk();
+    void parseResponseAcceptsValidError();
+    void parseResponseRejectsMissingStatus();
+    void parseResponseRejectsInvalidStatus();
+    void parseResponseRejectsMissingRequestId();
+    void parseResponseRejectsMissingTraceId();
+    void parseResponseRejectsMissingServerTs();
+    void parseResponseRejectsOkWithoutData();
+    void parseResponseRejectsMissingProtocolVersion();
 };
 
 void ProtocolAdapterTest::encodeDecodeRoundTrips()
@@ -324,6 +334,147 @@ void ProtocolAdapterTest::parseEnvelopeReadsOptionalFields()
     QCOMPARE(parts->requestId, QStringLiteral("req-only"));
     QVERIFY(parts->traceId.isEmpty());
     QVERIFY(!parts->deadlineMs.has_value());
+}
+
+// ── parseResponse 测试（FRZ-IPC-006 §6.2）──────────────────────────────────
+
+void ProtocolAdapterTest::parseResponseAcceptsValidOk()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-001")},
+        {client::kTraceIdKey, QStringLiteral("trc-001")},
+        {client::kStatusKey, QStringLiteral("ok")},
+        {client::kDataKey, QJsonObject{{QStringLiteral("status"), QStringLiteral("healthy")}}},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:00:00Z")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(err.ok());
+    QVERIFY(parts.has_value());
+    QCOMPARE(parts->status, QStringLiteral("ok"));
+    QCOMPARE(parts->requestId, QStringLiteral("req-001"));
+    QCOMPARE(parts->traceId, QStringLiteral("trc-001"));
+    QCOMPARE(parts->serverTs, QStringLiteral("2026-08-20T12:00:00Z"));
+    QCOMPARE(parts->data.value(QStringLiteral("status")).toString(), QStringLiteral("healthy"));
+    QVERIFY(parts->errorCode.isEmpty());
+    QVERIFY(parts->message.isEmpty());
+}
+
+void ProtocolAdapterTest::parseResponseAcceptsValidError()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-002")},
+        {client::kTraceIdKey, QStringLiteral("trc-002")},
+        {client::kStatusKey, QStringLiteral("error")},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:01:00Z")},
+        {client::kErrorCodeKey, QStringLiteral("UNSUPPORTED_METHOD")},
+        {client::kMessageKey, QStringLiteral("Method not supported")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(err.ok());
+    QVERIFY(parts.has_value());
+    QCOMPARE(parts->status, QStringLiteral("error"));
+    QCOMPARE(parts->errorCode, QStringLiteral("UNSUPPORTED_METHOD"));
+    QCOMPARE(parts->message, QStringLiteral("Method not supported"));
+}
+
+void ProtocolAdapterTest::parseResponseRejectsMissingStatus()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-003")},
+        {client::kTraceIdKey, QStringLiteral("trc-003")},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:02:00Z")},
+        {client::kDataKey, QJsonObject{}},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingStatus);
+}
+
+void ProtocolAdapterTest::parseResponseRejectsInvalidStatus()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-004")},
+        {client::kTraceIdKey, QStringLiteral("trc-004")},
+        {client::kStatusKey, QStringLiteral("warning")},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:03:00Z")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::InvalidStatus);
+}
+
+void ProtocolAdapterTest::parseResponseRejectsMissingRequestId()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kTraceIdKey, QStringLiteral("trc-005")},
+        {client::kStatusKey, QStringLiteral("ok")},
+        {client::kDataKey, QJsonObject{}},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:04:00Z")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingRequestId);
+}
+
+void ProtocolAdapterTest::parseResponseRejectsMissingTraceId()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-006")},
+        {client::kStatusKey, QStringLiteral("ok")},
+        {client::kDataKey, QJsonObject{}},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:05:00Z")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingTraceId);
+}
+
+void ProtocolAdapterTest::parseResponseRejectsMissingServerTs()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-007")},
+        {client::kTraceIdKey, QStringLiteral("trc-007")},
+        {client::kStatusKey, QStringLiteral("ok")},
+        {client::kDataKey, QJsonObject{}},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingServerTs);
+}
+
+void ProtocolAdapterTest::parseResponseRejectsOkWithoutData()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-008")},
+        {client::kTraceIdKey, QStringLiteral("trc-008")},
+        {client::kStatusKey, QStringLiteral("ok")},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:06:00Z")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingData);
+}
+
+void ProtocolAdapterTest::parseResponseRejectsMissingProtocolVersion()
+{
+    QJsonObject response{
+        {client::kRequestIdKey, QStringLiteral("req-009")},
+        {client::kTraceIdKey, QStringLiteral("trc-009")},
+        {client::kStatusKey, QStringLiteral("ok")},
+        {client::kDataKey, QJsonObject{}},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:07:00Z")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingProtocolVersion);
 }
 
 QTEST_APPLESS_MAIN(ProtocolAdapterTest)

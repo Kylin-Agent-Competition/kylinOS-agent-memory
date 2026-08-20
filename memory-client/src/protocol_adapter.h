@@ -63,7 +63,10 @@ enum class ProtocolErrorKind {
     // 响应解析错误
     MissingStatus,           // 响应缺少 status 字段
     InvalidStatus,           // status 值不是 "ok"/"error"
-    MissingServerTs,         // 响应缺少 server_ts
+    MissingRequestId,        // 响应缺少 request_id（回显）
+    MissingTraceId,          // 响应缺少 trace_id（回显）
+    MissingData,            // status=ok 时缺少 data 字段
+    MissingServerTs,        // 响应缺少 server_ts
 };
 
 struct ProtocolError {
@@ -92,13 +95,15 @@ extern const QString kServerTsKey;
 extern const QString kErrorCodeKey;
 extern const QString kMessageKey;
 
-// D 冻结方法路由表（FRZ-IPC-007）。
+// D 冻结方法路由表（FRZ-IPC-007，2026-08-17 已签署更正版）。
+// 活跃方法仅 3 项：echo / health / memory.retrieve。
+// evidence.record 已按 P0-4 移除（PR21_R3），memory.store 尚未实现（服务端返回
+// UNSUPPORTED_METHOD）；保留常量供客户端侧类型引用，但标注未实现。
 namespace methods {
 extern const QString kEcho;              // "echo"
 extern const QString kHealth;            // "health"
 extern const QString kMemoryRetrieve;   // "memory.retrieve"
-extern const QString kMemoryStore;      // "memory.store"
-extern const QString kEvidenceRecord;  // "evidence.record"
+extern const QString kMemoryStore;      // "memory.store"（未实现，服务端返回 UNSUPPORTED_METHOD）
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）。
