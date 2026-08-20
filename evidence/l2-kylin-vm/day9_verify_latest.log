@@ -1,17 +1,21 @@
 ================================================================
 Day9 A 轨 L2 证据 — Embedding 吞吐/查询缓存/积压指标（麒麟 VM 真实 SDK）
 branch: feat/day9-embedding-throughput
-tested_commit: 687c5b8f3fb3d718192c88d342dd911807d8a2e2（工作区干净，仅含本证据临时文件）
+tested_commit: 5214cfa42563c73cb0d12faeb870ab02249ad310（+ 工作区未提交改动，见下方 git diff --stat）
 command: PYTHONPATH=/mnt/shared/cpp-bridge/build:/mnt/shared/memory-service LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH KYLIN_L2=1 /tmp/day8-venv/bin/python -m pytest memory-service/tests/ -v
 benchmark: /tmp/day8-venv/bin/python scripts/benchmark_embedding.py --texts 100 --concurrency 1 4 8
 environment: 麒麟桌面 V11 x86_64（VirtualBox VM，Runtime 1.3.0，Embedding SDK 1.2.0.0-0k0.4）
 ================================================================
-[Step1] 2026-08-20T09:41:08+08:00
+[Step1] 2026-08-20T09:55:42+08:00
 feat/day9-embedding-throughput
-687c5b8f3fb3d718192c88d342dd911807d8a2e2
+5214cfa42563c73cb0d12faeb870ab02249ad310
 --- git status --short ---
-?? evidence/l2-kylin-vm/.day9_verify_tmp.log
---- git diff --stat (工作区干净，仅临时文件) ---
+?? "02_\351\272\222\351\272\237OS_Agent\350\256\260\345\277\206\347\263\273\347\273\237_\346\200\273\344\275\223\346\236\266\346\236\204_\345\233\242\351\230\237\345\210\206\345\267\245\344\270\216\346\240\207\345\207\206\345\274\200\345\217\221SOP_v1.0_20260726.docx"
+?? "04_\351\272\222\351\272\237OS_Agent\350\256\260\345\277\206\347\263\273\347\273\237_Agent_LLM\344\270\216CodeAgent\344\275\277\347\224\250\346\214\207\345\215\227_v1.0_20260726.docx"
+?? 256
+?? "\351\272\222\351\272\237OS_Agent\350\256\260\345\277\206\347\263\273\347\273\237_15\345\244\25175\351\241\271\344\270\252\344\272\272\346\226\275\345\267\245\345\217\260\350\264\246_\344\277\256\346\255\243\347\211\210.xlsx"
+?? "\351\272\222\351\272\237OS_Agent\350\256\260\345\277\206\347\263\273\347\273\237_15\345\244\25175\351\241\271\344\270\252\344\272\272\346\226\275\345\267\245\345\217\260\350\264\246_\344\277\256\346\255\243\347\211\210.xlsx\357\200\272Zone.Identifier"
+--- git diff --stat (未提交改动) ---
 
 ================================================================
 ============================= test session starts ==============================
@@ -358,45 +362,45 @@ collecting ... collected 337 items
 ../../../mnt/shared/memory-service/tests/test_td_a_local_batch.py::test_td_d7_llm_hang_rebuilds_executor PASSED [ 99%]
 ../../../mnt/shared/memory-service/tests/test_td_a_local_batch.py::test_td_d7_llm_hang_below_threshold_still_busy_skip PASSED [100%]
 
-============================= 337 passed in 12.65s =============================
-[1787190092101] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
-[1787190092101] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
-[1787190092133] [32minfo [0m Proxy init success,sessionId is: 1066661329 
-[1787190092133] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
-[1787190092133] [32minfo [0m Try to get default model 
-[1787190092144] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
-[1787190092144] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
-[1787190092147] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 1066661329 
-[1787190092147] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
+============================= 337 passed in 12.85s =============================
+[1787190966569] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1787190966569] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
+[1787190966605] [32minfo [0m Proxy init success,sessionId is: 182954587 
+[1787190966605] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
+[1787190966605] [32minfo [0m Try to get default model 
+[1787190966620] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
+[1787190966620] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
+[1787190966621] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 182954587 
+[1787190966621] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
 {
   "texts": 100,
   "rounds": {
     "1": {
       "concurrency": 1,
       "requests": 100,
-      "total_seconds": 10.1259,
-      "throughput_req_s": 9.88,
-      "p50_ms": 97.71,
-      "p95_ms": 144.59,
-      "p99_ms": 163.54
+      "total_seconds": 9.5021,
+      "throughput_req_s": 10.52,
+      "p50_ms": 90.31,
+      "p95_ms": 135.11,
+      "p99_ms": 154.73
     },
     "4": {
       "concurrency": 4,
       "requests": 100,
-      "total_seconds": 10.4283,
-      "throughput_req_s": 9.59,
-      "p50_ms": 366.02,
-      "p95_ms": 876.79,
-      "p99_ms": 974.37
+      "total_seconds": 10.4211,
+      "throughput_req_s": 9.6,
+      "p50_ms": 377.58,
+      "p95_ms": 875.27,
+      "p99_ms": 1146.19
     },
     "8": {
       "concurrency": 8,
       "requests": 100,
-      "total_seconds": 10.3937,
-      "throughput_req_s": 9.62,
-      "p50_ms": 738.04,
-      "p95_ms": 1486.6,
-      "p99_ms": 1685.55
+      "total_seconds": 10.0503,
+      "throughput_req_s": 9.95,
+      "p50_ms": 734.75,
+      "p95_ms": 1397.82,
+      "p99_ms": 1857.12
     }
   }
 }
