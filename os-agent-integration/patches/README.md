@@ -1,14 +1,14 @@
 # Patches / LD_PRELOAD Hooks
 
-本目录存放对上游闭源组件（libkyai-assistant.so）的运行时拦截方案。
+本目录存放对上游组件（libkyai-assistant.so）的低侵入运行时拦截 / 验证方案。
 
 ---
 
 ## 背景
 
-`libkyai-assistant.so.1.0.0` 是麒麟 AI 助手的核心运行时库，**闭源分发**（无 openkylin 源码）。
-该库硬编码了 Socket 路径 `/tmp/.kylin-ai-runtime-unix/<PID>/assistant.sock`，
-无法在源码层修改。详见 `reviewDocuments/openkylin_blocker_survey.md` 和
+`libkyai-assistant.so.1.0.0` 是麒麟 AI 助手的核心运行时库，源码可在 openkylin 获取（见 `reviewDocuments/openkylin_blocker_survey.md`）。
+该库硬编码了 Socket 路径 `/tmp/.kylin-ai-runtime-unix/<PID>/assistant.sock`。
+LD_PRELOAD 定位为**低侵入验证 / 备用路线**：不修改当前宿主安装包即可快速验证；正式源码 instrument / 重编译链路闭环前的备用方案。详见 `reviewDocuments/openkylin_blocker_survey.md` 和
 `deliverables/OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md` 第 8 章。
 
 ## P0 方案：LD_PRELOAD connect() 劫持
@@ -16,7 +16,7 @@
 **原理**: 拦截 libc `connect()` 系统调用，检测目标路径是否包含 `kylin-ai-runtime-unix`，
 若匹配则透明替换为 `/tmp/kylin-memory-echo/echo.sock`。
 
-**优势**: 无需修改闭源 .so 或重签名，纯运行时方案。
+**优势**: 无需修改当前已安装的 .so 或重签名，纯运行时方案。
 
 ### 文件清单
 
@@ -82,7 +82,7 @@ LD_PRELOAD=/path/to/libconnect_hook.so \
 
 ### 关联文档
 
-- `reviewDocuments/openkylin_blocker_survey.md` — 闭源 .so 五维信息调查
+- `reviewDocuments/openkylin_blocker_survey.md` — openkylin 源码可获得性调查
 - `deliverables/OPENKYLIN_BLOCKER_REMEDIATION_PLAN.md` — 修复计划（第 8 章：风险与回退）
 - `os-agent-integration/D1_OS_Agent_调用链与Hook_Spike_任务卡.md` — Hook 点定义
 - `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` — R-ARCH-05 真实 Kaiming Hook 未验证

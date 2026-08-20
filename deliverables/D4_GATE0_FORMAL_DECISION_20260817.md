@@ -7,7 +7,7 @@
   - `D4_GATE0_FORMAL_DECISION_20260807.md`（原结论，基线 3.0.67）
   - `D4_GATE0_SUPPLEMENTARY_REVIEW_20260816.md`（补充审查，基线 5.0.3）
   - `D4_GATE0_AGENT_MODE_MANUAL_VERIFICATION_20260816.md`（5.0.3 人工验证 V1-V5）
-  - `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（IPC 正式冻结声明）
+  - `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（IPC 协议冻结声明，内容定稿待签）
   - `D4_IPC_PROTOCOL_CONSISTENCY_AUDIT_20260817.md`（冻结 vs 代码偏离核对）
   - `D4_DB_SCHEMA_V53_COMPARISON_20260817.md`（数据库初版冻结对照）
   - `docs/baseline/v2-20260816/01_sdk_model_abi_baseline_v2_20260816.md`（SDK/模型/ABI 基线 v2）
@@ -92,7 +92,7 @@
 
 | 冻结对象 | 结论 | 说明 |
 |---------|------|------|
-| IPC 协议 FRZ-IPC-001~007 | ☑ 正式冻结　☐ 暂缓 | 依据 `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`；自研协议不受 5.0.3 影响 |
+| IPC 协议 FRZ-IPC-001~007 | ☑ 内容定稿，Reviewer E 待签，正式生效 = NO　☐ 暂缓 | 依据 `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`；自研协议不受 5.0.3 影响 |
 | IPC 一致性对齐（ALIGN-001~005） | ☑ 冻结优先、冻结后对齐　☐ 反向修改冻结 | 核对报告发现 5 处偏离（消息上限 4MiB≠64KB、错误码枚举、envelope、方法路由、UDS 路径），先冻结、后按 ADR 对齐 |
 | 数据库初版 FRZ-DB-001 | ☑ 可冻结　☐ 有条件　☐ 暂缓 | 自研库独立，不受 5.0.3 官方 Schema 影响（`D4_DB_SCHEMA_V53_COMPARISON` §三） |
 | 部署路径 / 失败路由 | ☐ 可冻结　☑ **有条件冻结**　☐ 暂缓 | 前置：5.0.3 新部署布局（/opt/kaiming/layers）下的构建基线、备份、回退复验（AGT-006） |
@@ -220,7 +220,7 @@
 - [x] 书面 Gate 0 结论（本文档）
 - [x] 逐项裁决 + 证据索引关联（§二、§三）
 - [x] 新基线复测矩阵（§五）
-- [x] 冻结确认（§四：IPC 正式冻结 + 数据库初版可冻结 + 部署/失败路由有条件冻结）
+- [x] 冻结确认（§四：IPC 内容定稿待签 + 数据库初版可冻结 + 部署/失败路由有条件冻结）
 - [x] 技术债状态变更（§六.1）
 - [ ] 技术债登记缺口补齐（§六.2，审查后执行）
 - [x] 能力矩阵同步（05 文档 v1.2→v1.3，含 MEM-001/002 定案 + 新增 MEM-003）
@@ -234,7 +234,7 @@
 
 | 角色 | 姓名 | 日期 | 结论 |
 |------|------|------|------|
-| 审查主持人 | 周子腾（D） | 2026-08-17 | PASS_WITH_DEBT（已确认） |
+| 审查主持人 | 周子腾（D） | 2026-08-17 | PASS_WITH_DEBT（D 决策完成，待 Reviewer E 签署） |
 | Reviewer 1 | E（谢嘉然，待签） | | |
 | Reviewer 2 | 待填写 | | |
 

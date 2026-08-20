@@ -8,7 +8,7 @@ find_package(Threads REQUIRED)
 
 # ---- LD_PRELOAD connect() hook shared library ----
 add_library(connect_hook SHARED libconnect_hook.c)
-target_compile_options(connect_hook PRIVATE -Wall -Wextra -O2 -fvisibility=hidden)
+target_compile_options(connect_hook PRIVATE -Wall -Wextra -O2)
 target_link_libraries(connect_hook PRIVATE dl Threads::Threads)
 
 # Strip symbols for smaller .so (optional, comment out if debugging needed)

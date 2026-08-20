@@ -46,7 +46,9 @@ echo "=========================================="
 echo ""
 echo "[1/4] 创建远程目录..."
 ssh $SSH_OPTS "$KYLIN_USER@$KYLIN_HOST" "
+    mkdir -p $REMOTE_BASE/bin
     mkdir -p $REMOTE_BASE/lib
+    mkdir -p $REMOTE_BASE/share
     mkdir -p $REMOTE_BASE/src/hook
     mkdir -p $REMOTE_BASE/logs/hook_tests
     echo '目录已创建'

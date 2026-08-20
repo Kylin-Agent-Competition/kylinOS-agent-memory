@@ -5,7 +5,7 @@
  * 当检测到目标 AF_UNIX socket 路径包含 "kylin-ai-runtime-unix" 时，
  * 透明替换为 Memory Echo Service 路径。
  *
- * 用途: 无需修改闭源 libkyai-assistant.so，即可将 kylin-aiassistant
+ * 用途: 无需修改当前已安装的 libkyai-assistant.so，即可将 kylin-aiassistant
  *       的 Socket 连接重定向到自定义 Memory Service。
  *
  * 环境变量:

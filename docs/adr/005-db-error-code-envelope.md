@@ -9,7 +9,7 @@
 
 ## 背景
 
-IPC 已正式冻结（`D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`）：
+IPC 协议内容已定稿，Reviewer E 待签，正式生效 = NO（`D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`）：
 
 1. **FRZ-IPC-002 冻结错误码 5 项**：`UNSUPPORTED_METHOD / INVALID_REQUEST / PROTOCOL_ERROR / INTERNAL_ERROR / TIMEOUT`（TIMEOUT 于 2026-08-17 补充入枚举）；
 2. **FRZ-IPC-006 冻结响应 envelope**：`protocol_version / request_id / trace_id / status / data / server_ts`，错误附加 `error_code / message`；
@@ -27,7 +27,7 @@ Memory Service 所有对外 UDS 响应统一使用冻结 5 枚举 + `status/data
 
 优点：
 
-- 与已冻结 IPC 契约一致，单一错误码域，无映射维护负担之外的额外转换；
+- 与 IPC 定稿契约一致，单一错误码域，无映射维护负担之外的额外转换；
 - 客户端只需实现一套错误处理；
 - 满足冻结声明「不得以任何形式偏离」的效力条款。
 
