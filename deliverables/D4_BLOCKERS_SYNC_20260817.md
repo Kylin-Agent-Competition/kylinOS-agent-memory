@@ -20,7 +20,7 @@
 | 3 | ✅ **R-7 迁移基线命名** | 已采纳（ADR-007，D 决策方案 A；冻结 §4.1 已回写） | 周子腾（D）确认 | Reviewer E 签署后完成 |
 | 4 | 🟡 **数据库冻结声明 v1.3** | 内容定稿（R-5/6/7 已采纳，冻结对象全 ✅）；正式生效 = NO | 周子腾（D）+ Reviewer E | Reviewer E 签署后正式生效 |
 | 5 | 🟡 **IPC 冻结声明** | 冻结人待确认 + Reviewer 待签 | 周子腾（D）+ Reviewer E（谢嘉然） | 含 FRZ-IPC-001~007 + TIMEOUT 纳入 |
-| 6 | 🟡 **Gate 0 正式结论（2026-08-17）** | 主持人「待确认」+ Reviewer 1（E 谢嘉然）/Reviewer 2（待定）待签 | 周子腾（D）+ E（谢嘉然） | 依据 AGENTS.md：D/E 为指定 Reviewer，自审无效 |
+| 6 | 🟡 **Gate 0 正式结论（2026-08-17）** | 主持人「待确认」+ Reviewer 1（E 谢嘉然）/Reviewer 2（待定）待签 | 周子腾（D）+ E（谢嘉然） | 依据 CONTRIBUTING.md「Review 规则」：D/E 为指定 Reviewer，作者不得自审 |
 
 ## 二、技术验证阻断（Gate 0 后 / D1+ 执行）
 
@@ -41,9 +41,9 @@
 | # | 缺口 | 状态 | 处置 |
 |---|------|------|------|
 | 16 | ✅ UT-1/UT-2 证据已登记 index.yaml | 已登记 | 已补登记 `GATE0-UT-001`（11/11）/`GATE0-UT-002`（10/12 PARTIAL） |
-| 17 | 🟡 TD-DEPLOY-001 / TD-KYSEC-001 / TD-IPC-002~004 未入 TECHNICAL_DEBT_REGISTER.md | 未登记 | 补登记至技术债登记表 |
-| 18 | 🟡 ADR-004 无正式 ADR 文件（docs/adr/ 仅 ADR-001） | 未写 | 补写 `docs/adr/004-*` 正式文件 |
-| 19 | 🟡 AGT-004 能力矩阵未更新（05 文档 §2.3 仍标「待重新调查」） | 未更新 | 上调确认后更新为 PARTIAL |
+| 17 | ✅ TD-DEPLOY-001 / TD-KYSEC-001 / TD-IPC-002~004 已入 TECHNICAL_DEBT_REGISTER.md | CLOSED | 已登记（`TECHNICAL_DEBT_REGISTER.md` L61-65） |
+| 18 | ✅ ADR-004 已建立正式 ADR 文件 | CLOSED | `docs/adr/004-gate0-tool-result-route-b.md`（已采纳，保留为备份路线） |
+| 19 | ✅ AGT-004 能力矩阵已更新为 PARTIAL | CLOSED | 05 文档 §2.3 已更新（PARTIAL，宿主能力已证 E4） |
 | 20 | 🟡 IPC 一致性对齐 ALIGN-001~005（4MiB 上限/错误码/envelope/方法路由/UDS 路径） | 冻结后对齐 | 按冻结优先原则，代码对齐待 D4 执行 |
 | 21 | 🟡 部署路径/失败路由冻结（前置 AGT-006 复验） | 有条件冻结 | 复验通过后转正式冻结 |
 
@@ -61,7 +61,7 @@
 
 ## 五、建议执行顺序（下周开工线）
 
-1. **本周收尾（签署/登记线）**：Reviewer E（谢嘉然）签署 ADR-005/006/007 → 冻结声明/结论签署 → #16~#19（登记缺口补齐，可并行）
+1. **本周收尾（签署线）**：Reviewer E（谢嘉然）签署 ADR-005/006/007 → 冻结声明/结论签署（#16~#19 登记缺口已 CLOSED）
 2. **D1+ 开工线**：#10（cmake 重装）→ #7/#8（AGT-004/005，C 轨道）→ #9（AGT-006 部署复验，D 轨道）→ #11（Vector 接入确认）→ #12~#15（P0 调查与复测矩阵）
 3. **每项完成标准**：ADR 批准后回写冻结文档；复测证据登记 index.yaml（E4/L2）；技术债编号关联
 

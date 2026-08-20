@@ -112,7 +112,7 @@
 | Reviewer 1 | E（谢嘉然，待签） | | |
 | Reviewer 2 | 待填写 | | |
 
-> 依据 AGENTS.md：D 与 E 为指定 Reviewer，自审无效。
+> 依据 CONTRIBUTING.md「Review 规则」：D 与 E 为指定 Reviewer，作者不得自审。
 
 ---
 

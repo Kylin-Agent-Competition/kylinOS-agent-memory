@@ -21,9 +21,9 @@
 | HIGH-02 | CMake `-fvisibility=hidden` 导致 `connect` 符号无法动态导出 | 是 | ✅ 已修复 |
 | HIGH-03 | `deploy_hook.sh` clean-host 部署缺 `$REMOTE_BASE/share` | 是 | ✅ 已修复 |
 | HIGH-04 | Freeze/Gate「待签署」与「正式生效」状态并存 | 是 | ✅ 已修复 |
-| MEDIUM-01 | `D4_BLOCKERS_SYNC` #17/#18/#19 过期 OPEN 状态 | 否 | ⬜ 建议本轮处理 |
-| MEDIUM-02 | Gate 规则引用未入库的 AGENTS.md 作为唯一依据 | 否 | ⬜ 建议本轮处理 |
-| LOW-01 | 性能表述「热路径影响可忽略」无 benchmark | 否 | ⬜ 建议改措辞 |
+| MEDIUM-01 | `D4_BLOCKERS_SYNC` #17/#18/#19 过期 OPEN 状态 | 否 | ✅ 已处理 |
+| MEDIUM-02 | Gate 规则引用未入库的 AGENTS.md 作为唯一依据 | 否 | ✅ 已处理 |
+| LOW-01 | 性能表述「热路径影响可忽略」无 benchmark | 否 | ✅ 已处理（PR 描述需手动更新） |
 
 ---
 
@@ -145,6 +145,8 @@ Reviewer E 待签
 
 **建议**：将这些规则引用到真正入库的项目治理文档（如 `CONTRIBUTING.md` 或 `docs/project-management/` 下的治理文档），`AGENTS.md` 仅作为本地 Agent 说明，不作正式 Gate 唯一权限依据。
 
+**处置**：✅ 已处理 —— `CONTRIBUTING.md`「Review 规则」已补充 D/E 身份映射（D=周子腾，E=谢嘉然）与「作者不得自审」；三处正式文档引用已由「依据 AGENTS.md」改为「依据 CONTRIBUTING.md「Review 规则」」：`D4_BLOCKERS_SYNC:23`、`D4_GATE0_FORMAL_DECISION:241`、`D4_GATE0_MANUAL_REVIEW_CONCLUSION_FORM:115`。
+
 ---
 
 ## 三、LOW（不阻断）
@@ -156,6 +158,10 @@ Reviewer E 待签
 **现状**：`热路径影响可忽略` 无 benchmark 支撑。
 
 **改法**：改为——「从静态实现看，首次调用增加 `pthread_once` 初始化，后续主要为地址类型与路径匹配判断，预计额外开销较小；当前尚未完成定量性能验证。」
+
+**处置**：✅ 采用上述措辞；PR #42 描述需在 GitHub 手动更新为：
+
+> 从静态实现看，首次调用增加 `pthread_once` 初始化，后续主要为地址类型与路径匹配判断，预计额外开销较小；当前尚未完成定量性能验证。
 
 ---
 
