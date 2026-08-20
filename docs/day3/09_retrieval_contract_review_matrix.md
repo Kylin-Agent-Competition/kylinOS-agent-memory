@@ -119,11 +119,13 @@ merge、rebase、Review 或改写其他作者分支。
 这些测试可以在普通开发环境使用明确标记的 fake/in-memory Provider 验证
 契约逻辑。它们只能证明 L0/L1 逻辑，禁止表述为真实 Vector Runtime 通过。
 
-> D4-B 本批次（2026-08-17）已实现并运行 T001–T048：L0 与 L1_FAKE 共 92 个
-> pytest 用例全部通过（memory-service/tests/retrieval/）。状态由
-> PLANNED_D4 更新为 PASS_LOCAL；仅证明 L0/L1 本地契约逻辑，不构成
-> L2 麒麟宿主证据。L2 VM 验证对应 §5 B-D3-V001–V007，仍为
-> DEFERRED_VM。Reviewer 结论待独立非作者 Reviewer（E）填写。
+> D4-B PR #40 第二轮返工（2026-08-20）已在最新 `origin/main@ef050b0` 上运行
+> L0/L1_FAKE 共 118 个 pytest 用例并全部通过。T001–T046、T048 为
+> `PASS_LOCAL`；T047 的幂等摘要轮换已完成真实 HMAC 历史 key 重算，但删除
+> 确认的历史 key/TTL 仍依赖尚未落地的 Service 确认记录边界，因此诚实标为
+> `PARTIAL_LOCAL`。这些结果只证明本地契约逻辑，不构成 L2 麒麟宿主证据；
+> §5 B-D3-V001–V007 继续为 `DEFERRED_VM`。第二轮 Reviewer 结论为
+> `CHANGES_REQUESTED`（基于旧 HEAD `855b5d7`）；本地返工尚未提交、推送或复审。
 
 
 | ID | 目标 | 正向断言 | 负向/边界断言 | 层级 | 状态 |
@@ -174,7 +176,7 @@ merge、rebase、Review 或改写其他作者分支。
 | B-D3-T044 | Scope 密钥轮换 | k1→k2 后稳定 scope_id 的状态、水位与幂等记录仍连续 | HMAC 改变导致重试、比较或 generation 隔离断裂 | L0/L1_FAKE | `PASS_LOCAL` |
 | B-D3-T045 | Scope 操作隔离 | 匹配操作的未过期授权可执行对应请求 | `get_index_state` 授权调用 Rebuild，或 Rebuild 授权调用状态查询时 Provider 不执行 | L0/L1_FAKE | `PASS_LOCAL` |
 | B-D3-T046 | Scope 授权过期 | 当前时间严格早于 `expires_at` 的授权可执行 | `expires_at` 相等或已过期时返回 `authorization_expired` 且 Provider 不执行 | L0/L1_FAKE | `PASS_LOCAL` |
-| B-D3-T047 | 幂等/确认摘要轮换 | 历史仅验证密钥下的同域同语义重放返回记录结果，未过期确认可验证 | key-id 改变导致重复副作用，密钥不可用或确认过期仍执行 Delete 失败 | L0/L1_FAKE | `PASS_LOCAL` |
+| B-D3-T047 | 幂等/确认摘要轮换 | 历史仅验证密钥下的同域同语义重放返回记录结果，未过期确认可验证 | key-id 改变导致重复副作用，密钥不可用或确认过期仍执行 Delete 失败 | L0/L1_FAKE | `PARTIAL_LOCAL`：幂等轮换通过；删除确认 key/TTL 待 Service 边界 |
 | B-D3-T048 | 索引文本摘要轮换 | SQLite 真源重算后仅完整校验的新 key generation 激活 | serving generation 混用 key-id 或未重建即激活失败 | L1_FAKE | `PASS_LOCAL` |
 
 ## 5. 目标麒麟 VM 验证队列（本轮跳过）
@@ -202,6 +204,7 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
 | GitHub Review 获取 | PR #20 当前 Review 与被审提交可追踪 | 第三轮 `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；head `9c808cd`；已形成 B-D3-039～040 返工 Gate |
 | GitHub 跨分支兼容核对 | 历史 SHA 仅作为有日期的只读快照，不作为实现基线 | `AUDIT_SNAPSHOT_2026-08-04`；后续判断须重新同步默认分支 |
 | `git diff --check` | 无 whitespace error | `PASS_LOCAL` |
+| D4-B retrieval pytest | T001–T048 的 L0/L1_FAKE 当前实现 | `118 passed`；T047 删除确认 key/TTL 仍为 `PARTIAL_LOCAL` |
 | 仓库基线脚本 | 7/7，0 错误 | `BLOCKED_ENVIRONMENT`；2026-08-05 尝试未运行，宿主 WSL2 缺少 Hyper-V（`HCS_E_HYPERV_NOT_INSTALLED`），未启动 VM；历史 `PASS_LOCAL` 不作为本轮验证结果 |
 | 工作区范围 | 只修改 B 轨契约、ADR、矩阵、索引和对应技术债行 | `9c808cd` 已推送；第三轮返工改动待验证、未暂存、未提交 |
 
