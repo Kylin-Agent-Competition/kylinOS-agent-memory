@@ -124,8 +124,9 @@ merge、rebase、Review 或改写其他作者分支。
 > `PASS_LOCAL`；T047 的幂等摘要轮换已完成真实 HMAC 历史 key 重算，但删除
 > 确认的历史 key/TTL 仍依赖尚未落地的 Service 确认记录边界，因此诚实标为
 > `PARTIAL_LOCAL`。这些结果只证明本地契约逻辑，不构成 L2 麒麟宿主证据；
-> §5 B-D3-V001–V007 继续为 `DEFERRED_VM`。第二轮 Reviewer 结论为
-> `CHANGES_REQUESTED`（基于旧 HEAD `855b5d7`）；本地返工尚未提交、推送或复审。
+> §5 B-D3-V001–V007 继续为 `DEFERRED_VM`。第二轮 Reviewer 的
+> `CHANGES_REQUESTED` 基于旧 HEAD `855b5d7`；返工提交已推送并发布复审回复，
+> 当前结论仍待独立、非作者 Reviewer 对 PR #40 最新 HEAD 复审。
 
 
 | ID | 目标 | 正向断言 | 负向/边界断言 | 层级 | 状态 |
@@ -201,12 +202,12 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
 | ADR golden score 复算 | 4 个值及排序一致 | `PASS_LOCAL` |
 | 契约 JSON 样例解析 | 5/5 可解析 | `PASS_LOCAL` |
 | 文档引用存在 | 全部目标文件存在，索引相对链接可解析 | `PASS_LOCAL` |
-| GitHub Review 获取 | PR #20 当前 Review 与被审提交可追踪 | 第三轮 `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；head `9c808cd`；已形成 B-D3-039～040 返工 Gate |
+| GitHub Review 获取 | PR #40 当前 Review 与被审提交可追踪 | 第二轮 `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；被审 head `855b5d7`；返工已推送并请求对最新 HEAD 复审 |
 | GitHub 跨分支兼容核对 | 历史 SHA 仅作为有日期的只读快照，不作为实现基线 | `AUDIT_SNAPSHOT_2026-08-04`；后续判断须重新同步默认分支 |
 | `git diff --check` | 无 whitespace error | `PASS_LOCAL` |
 | D4-B retrieval pytest | T001–T048 的 L0/L1_FAKE 当前实现 | `118 passed`；T047 删除确认 key/TTL 仍为 `PARTIAL_LOCAL` |
 | 仓库基线脚本 | 7/7，0 错误 | `BLOCKED_ENVIRONMENT`；2026-08-05 尝试未运行，宿主 WSL2 缺少 Hyper-V（`HCS_E_HYPERV_NOT_INSTALLED`），未启动 VM；历史 `PASS_LOCAL` 不作为本轮验证结果 |
-| 工作区范围 | 只修改 B 轨契约、ADR、矩阵、索引和对应技术债行 | `9c808cd` 已推送；第三轮返工改动待验证、未暂存、未提交 |
+| 工作区范围 | 只修改 B 轨契约、Fake、契约测试与状态矩阵 | `PASS_LOCAL`；PR #40 未扩展到 A/C/D/E 轨实现，最终 Review 状态以 PR 最新 HEAD 为准 |
 
 ## 7. Reviewer 记录
 
