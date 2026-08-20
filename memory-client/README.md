@@ -16,12 +16,12 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 
 ## 当前状态
 
-**D4 骨架 L0 完成（L0_COMPLETE；ctest 2/2 30/30 子用例 PASS，总耗时 0.08s，
-WSL Ubuntu 22.04 GCC 11.4.0 Qt 5.15.3；协议编解码与 A 轨 `protocol.py` 对齐；
-L1/L2 待联调）。**
+**D4 骨架 L0 完成 + D4 冻结协议对齐完成（L0_COMPLETE / FROZEN_ALIGNED；ctest 2/2
+30/30 子用例 PASS，总耗时 0.09s，WSL Ubuntu 22.04 GCC 11.4.0 Qt 5.15.3；协议编解码
+已对齐 D4 冻结 FRZ-IPC-001~007（ALIGN-001~006 全部完成）；L1/L2 待联调）。**
 
 - 协议编解码 `protocol_adapter.{h,cpp}`：4 字节大端长度前缀 + UTF-8 JSON envelope
-  （D 轨 IPC 候选，对齐 `memory-service/embedding/protocol.py`）
+  （对齐 D4 冻结 FRZ-IPC-001~007，`deliverables/D4_IPC_PROTOCOL_FREEZE_20260807.md`）
 - MemoryClient `memory_client.{h,cpp}`：QLocalSocket 异步收发，信号驱动，不暴露原文
 - 公共 ViewModel `view_models/memory_view_model.{h,cpp}`：Q_PROPERTY 绑定 + Q_INVOKABLE 触发
 - QML 主窗口 `qml/main.qml` + StackView 路由 + 三页面（Status / MemoryQuery / Preferences 占位）

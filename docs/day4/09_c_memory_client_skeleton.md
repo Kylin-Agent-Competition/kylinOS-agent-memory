@@ -1,9 +1,9 @@
 # 09 轨道 C — Day4 Memory Client 工程骨架
 
-> **状态：`L0_COMPLETE / PENDING_REVIEW`** — 工程骨架 + Mock 契约测试 L0 全部
-> 通过（2/2 ctest，30/30 子用例 PASS，总时长 0.08s）；协议编解码与 A 轨
-> `memory-service/embedding/protocol.py` 已逐项对齐；待 D 主审与 E 补审（用户交互与
-> 安全）；L1/L2 未实现。
+> **状态：`L0_COMPLETE / FROZEN_ALIGNED / PENDING_REVIEW`** — 工程骨架 + Mock
+> 契约测试 L0 全部通过（2/2 ctest，30/30 子用例 PASS，总时长 0.09s）；协议编解码
+> 已对齐 D4 冻结契约 FRZ-IPC-001~007（ALIGN-001~006 全部完成）；待 E 补审
+> （用户交互与安全）；L1/L2 未实现。
 
 ## 目标（xlsx D4-C）
 
@@ -81,14 +81,30 @@ request_id 关联（并发两个 health）。
 5. WSL 抽象命名空间 socket 可靠性低 → 改用 `/tmp/kylin-mock-<prefix>-<pid>.sock` 文件系统绝对路径 UDS。
 6. `malformedServerPacketTriggersConnectionError` 子测试名不副实（实际走 happy-path）：为 MockGatewayServer 增加 `__malformed__: true` 后门，handler 返回该标记时写回超大长度头，真实验证客户端的协议错误熔断路径。
 
+## D4 冻结协议对齐（2026-08-20，ALIGN-001~006 全部完成）
+
+D4 Gate 0 合入 main 后（`ef050b0`），D 冻结 IPC 协议 FRZ-IPC-001~007 正式生效。
+依据 `deliverables/D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md` 与
+`deliverables/D4_IPC_PROTOCOL_FREEZE_20260807.md`，对 C 轨客户端代码执行 ALIGN 对齐：
+
+| 编号 | 冻结目标 | 偏离（对齐前） | 对齐动作 | 结果 |
+|------|---------|--------------|---------|------|
+| ALIGN-001 | kMaxMessageLen = 65536 B (64KB)（FRZ-IPC-001） | 4 MiB（对齐 A 轨 embedding `protocol.py`） | `protocol_adapter.h` 改为 65536 | ✅ PASS |
+| ALIGN-003 | 响应结构 status/data/server_ts + error_code/message（FRZ-IPC-006 §6.2） | 仅解析请求结构（method/payload） | 新增 `ResponseParts` + `parseResponse()` + 3 个 ProtocolErrorKind | ✅ PASS |
+| ALIGN-004 | 方法路由 echo/health/memory.retrieve/memory.store/evidence.record（FRZ-IPC-007） | `kMemoryQuery`("memory.query") + `kMemoryHealth`("memory.health") | 删除 kMemoryQuery；kMemoryHealth→kHealth；新增 kEcho/kMemoryStore/kEvidenceRecord | ✅ PASS |
+| ALIGN-005 | UDS 路径 `$XDG_RUNTIME_DIR/kylin-memory/memory.sock`（FRZ-IPC-005） | 无默认路径（由调用方设置） | 构造函数自动从 `$XDG_RUNTIME_DIR` 推导默认路径 | ✅ PASS |
+| ALIGN-006 | 请求字段 request_id/trace_id/deadline_ms 必填（FRZ-IPC-006 §6.1） | buildEnvelope 中三者可选 | sendRequest 始终填充三字段（trace_id 复用 request_id，deadline_ms=5000） | ✅ PASS |
+
+**对齐后验证**：ctest 2/2 30/30 子用例 PASS（0.09s），编译 0 error、0 -Wswitch warning。
+
 ## 设计决议
 
-### 1. 协议候选而非冻结
+### 1. 协议已冻结对齐
 
-D 轨 IPC envelope 在 `docs/day3/11_os_agent_event_contract_v1.md` §10 标注
-`PENDING_D_CONFIRMATION`。本骨架对齐 `memory-service/embedding/protocol.py`（A 轨
-Day5 已落地路径），但不声明 FROZEN。所有协议常量集中在 `protocol_adapter.h`，
-便于 D 主审关闭阻断后整体替换。
+D 轨 IPC envelope 已于 2026-08-17 正式冻结（`D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`，
+D/E 已签署）。C 轨客户端协议编解码已对齐 FRZ-IPC-001~007 冻结契约（见上方 ALIGN 表）。
+所有协议常量集中在 `protocol_adapter.h`，`protocol_adapter.h` 头部状态已升级为
+`FROZEN_ALIGNED`。
 
 ### 2. 错误模型不回显原文
 
@@ -152,7 +168,7 @@ cmake --build memory-client/build
 
 ## 已知限制（关联阻断）
 
-- D 轨 IPC envelope 未最终冻结 → `PENDING_D_CONFIRMATION`
+- D 轨 IPC envelope 已冻结（FRZ-IPC-001~007），C 轨已对齐 → `FROZEN_ALIGNED`
 - `MemoryContext` 真实注入未实现 → `BLOCKED / TD-008`
 - `ToolExecutionEvent` 真实宿主映射未实现 → `BLOCKED / TD-007/009`
 - 偏好/知识业务 Schema 未冻结 → `PENDING_E_REVIEW`
@@ -164,7 +180,7 @@ cmake --build memory-client/build
 | 项目 | 当前状态 | 说明 |
 |------|----------|------|
 | C++ MemoryClient/QLocalSocket 骨架 | `L0_COMPLETE` | 静态库 `libkylin_memory_client.a` 编译通过；ctest 2/2 30/30 子用例 PASS（0.08s） |
-| 协议编解码 envelope 候选 | `PENDING_D_CONFIRMATION` | 对齐 A 轨 Day5 `protocol.py`，L0 encode/decode 22 子用例覆盖；待 D 终审冻结 |
+| 协议编解码 envelope 候选 | `FROZEN_ALIGNED` | 对齐 D4 冻结 FRZ-IPC-001~007（ALIGN-001~006 全部完成）；L0 30/30 子用例 PASS |
 | QML 主框架 + 路由 | `L0_COMPLETE` | StackView + Drawer，三页面（Status/MemoryQuery/Preferences 占位）；Qt 5.12 语法兼容 |
 | 公共 ViewModel | `L0_COMPLETE` | Q_PROPERTY 绑定 + Q_INVOKABLE，不固化业务字段（待 E 轨 Schema） |
 | Mock Gateway 契约测试 | `L0_COMPLETE` | QLocalServer + handler 注入 infrastructure，8 子用例覆盖 echo/custom/ERR_NOT_CONNECTED/missing-server/malformed-packet/request-id 关联 |

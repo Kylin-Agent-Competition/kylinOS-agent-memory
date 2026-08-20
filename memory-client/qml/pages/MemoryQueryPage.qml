@@ -1,4 +1,4 @@
-// MemoryQueryPage.qml — memory.query 请求构造（D4 骨架）
+// MemoryQueryPage.qml — memory.retrieve 请求构造（D4 骨架）
 //
 // 注意：payload 仅构造 MemoryQuery 契约的最小字段；真实业务校验在
 // os-agent-integration/contracts 实现。本页面不固化未来未冻结字段。
@@ -22,7 +22,7 @@ Page {
             font.pointSize: 16
         }
         Label {
-            text: qsTr("Sends a memory.query request envelope to the Gateway.")
+            text: qsTr("Sends a memory.retrieve request envelope to the Gateway.")
             color: palette.placeholderText
             wrapMode: Text.WordWrap
             Layout.fillWidth: true

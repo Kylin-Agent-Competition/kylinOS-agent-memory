@@ -10,33 +10,45 @@
 namespace kylin::memory::client::v1 {
 
 // ============================================================================
-// 协议编解码（D 轨 IPC envelope 候选实现）
+// 协议编解码（D 轨 IPC envelope — 已冻结 FRZ-IPC-001~007）
 // ============================================================================
 //
-// 状态：PENDING_D_CONFIRMATION
+// 状态：FROZEN_ALIGNED（2026-08-20 对齐 D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817）
 //
-// 本头实现 D 轨 UDS 长度前缀 JSON envelope 的客户端侧编解码候选。
-// 协议格式对齐 memory-service/embedding/protocol.py（A 轨 Day5 已落地路径）：
+// 本头实现 D 轨 UDS 长度前缀 JSON envelope 的客户端侧编解码。
+// 协议格式对齐 D 冻结契约（deliverables/D4_IPC_PROTOCOL_FREEZE_20260807.md）：
 //   每个消息 = 4 字节大端长度前缀 + UTF-8 JSON body
-//   envelope = {
-//     "protocol_version": "1.0",
-//     "method": "memory.query" | "memory.health" | ...,
-//     "payload": {...},
-//     "request_id": "req_...",   // 可选
-//     "trace_id": "trc_...",     // 可选
-//     "deadline_ms": 5000        // 可选
+//   最大消息 = 65536 字节 (64KB)（FRZ-IPC-001）
+//
+// 请求 envelope（FRZ-IPC-006 §6.1）：
+//   {
+//     "protocol_version": "1.0",          // 必填
+//     "request_id": "req_...",             // 必填
+//     "trace_id": "trc_...",               // 必填
+//     "method": "echo"|"health"|"memory.retrieve"|...,  // 必填
+//     "deadline_ms": 5000,                 // 必填
+//     "idempotency_key": "...",            // 可选（写操作建议）
+//     "payload": {...}                      // 必填
 //   }
 //
-// 注意：D 轨 envelope 未最终冻结（docs/day3/11_os_agent_event_contract_v1.md §10
-// 标注 PENDING_D_CONFIRMATION）。本候选不得表述为最终 FROZEN；待 D 主审与
-// E 补审关闭阻断后方可升级状态。
+// 响应 envelope（FRZ-IPC-006 §6.2）：
+//   {
+//     "protocol_version": "1.0",          // 必填
+//     "request_id": "req_...",             // 必填（回显）
+//     "trace_id": "trc_...",               // 必填（回显）
+//     "status": "ok"|"error",              // 必填
+//     "data": {...},                        // 必填（成功时）
+//     "server_ts": "2026-08-20T...",       // 必填（ISO 8601 UTC）
+//     "error_code": "...",                 // 仅 error 时
+//     "message": "..."                     // 仅 error 时
+//   }
 // ============================================================================
 
 constexpr const char* kProtocolVersion = "1.0";
 constexpr int kHeaderLen = 4;
-constexpr int kMaxMessageLen = 4 * 1024 * 1024;  // 4 MiB 上限（防恶意超大包）
+constexpr int kMaxMessageLen = 65536;  // 64KB（FRZ-IPC-001 冻结值）
 
-// 编解码错误码（不回显输入原文，固定安全消息）。
+// 编解码错误码（客户端侧协议层错误，不回显输入原文，固定安全消息）。
 enum class ProtocolErrorKind {
     None,
     IncompletePacket,        // 缓冲区数据不足一个完整包（应继续收数据）
@@ -48,6 +60,10 @@ enum class ProtocolErrorKind {
     UnsupportedProtocolVersion,  // protocol_version 不兼容
     MissingOrInvalidMethod,  // method 缺失或类型错误
     PayloadNotObject,        // payload 不是 JSON 对象
+    // 响应解析错误
+    MissingStatus,           // 响应缺少 status 字段
+    InvalidStatus,           // status 值不是 "ok"/"error"
+    MissingServerTs,         // 响应缺少 server_ts
 };
 
 struct ProtocolError {
@@ -68,13 +84,31 @@ extern const QString kProtocolVersionKey;
 extern const QString kRequestIdKey;
 extern const QString kTraceIdKey;
 extern const QString kDeadlineMsKey;
+extern const QString kIdempotencyKeyKey;
+// 响应字段名（FRZ-IPC-006 §6.2）
+extern const QString kStatusKey;
+extern const QString kDataKey;
+extern const QString kServerTsKey;
+extern const QString kErrorCodeKey;
+extern const QString kMessageKey;
 
-// 已知的客户端方法名（候选，不冻结）。
+// D 冻结方法路由表（FRZ-IPC-007）。
 namespace methods {
-extern const QString kMemoryQuery;
-extern const QString kMemoryHealth;
-extern const QString kMemoryRetrieve;
+extern const QString kEcho;              // "echo"
+extern const QString kHealth;            // "health"
+extern const QString kMemoryRetrieve;   // "memory.retrieve"
+extern const QString kMemoryStore;      // "memory.store"
+extern const QString kEvidenceRecord;  // "evidence.record"
 }  // namespace methods
+
+// D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）。
+namespace error_codes {
+extern const QString kUnsupportedMethod;  // "UNSUPPORTED_METHOD"
+extern const QString kInvalidRequest;    // "INVALID_REQUEST"
+extern const QString kProtocolError;     // "PROTOCOL_ERROR"
+extern const QString kInternalError;     // "INTERNAL_ERROR"
+extern const QString kTimeout;            // "TIMEOUT"
+}  // namespace error_codes
 
 // ── 字节流编解码 ──────────────────────────────────────────────────────────
 
@@ -96,10 +130,11 @@ struct DecodeResult {
 // IncompletePacket 时 consumed=0，调用方应继续接收数据后重试。
 [[nodiscard]] DecodeResult decodePacket(const QByteArray& buffer);
 
-// ── envelope 构造与解析 ────────────────────────────────────────────────────
+// ── 请求 envelope 构造与解析 ──────────────────────────────────────────────
 
-// 构造请求 envelope（D 轨 IPC 候选）。
-// method 必填；payload 为空时写入空对象 {}；可选字段仅在非空/有值时写入。
+// 构造请求 envelope（FRZ-IPC-006 §6.1）。
+// method/payload 必填；requestId/traceId/deadlineMs 在 D 冻结中为必填，
+// 但本函数保留可选参数以兼容测试——sendRequest 会始终填充这三个字段。
 [[nodiscard]] QJsonObject buildEnvelope(
     const QString& method,
     const QJsonObject& payload,
@@ -107,7 +142,7 @@ struct DecodeResult {
     const QString& traceId = {},
     std::optional<int> deadlineMs = std::nullopt);
 
-// 解析请求/响应 envelope。
+// 解析请求 envelope。
 // 失败返回非 None 的 ProtocolError；成功时 method/payload 必有值，
 // 可选字段无值时为空字符串 / nullopt。
 struct EnvelopeParts {
@@ -119,6 +154,23 @@ struct EnvelopeParts {
 };
 
 [[nodiscard]] std::pair<std::optional<EnvelopeParts>, ProtocolError> parseEnvelope(
+    const QJsonObject& envelope);
+
+// ── 响应 envelope 解析（FRZ-IPC-006 §6.2）─────────────────────────────────
+
+// 解析响应 envelope。
+// 成功时 status/data/serverTs 必有值；status=="error" 时 errorCode/message 有值。
+struct ResponseParts {
+    QString status;       // "ok" 或 "error"
+    QJsonObject data;     // 成功时的方法返回值
+    QString serverTs;     // ISO 8601 UTC 时间戳
+    QString requestId;    // 回显的请求 ID
+    QString traceId;      // 回显的追踪 ID
+    QString errorCode;    // 仅 status=="error" 时有值
+    QString message;      // 仅 status=="error" 时有值
+};
+
+[[nodiscard]] std::pair<std::optional<ResponseParts>, ProtocolError> parseResponse(
     const QJsonObject& envelope);
 
 }  // namespace kylin::memory::client::v1

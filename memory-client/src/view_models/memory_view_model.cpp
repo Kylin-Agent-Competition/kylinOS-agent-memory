@@ -88,7 +88,7 @@ void MemoryViewModel::sendHealth()
 void MemoryViewModel::sendMemoryQuery(const QJsonObject& payload)
 {
     setBusy(true);
-    const QString id = client_.sendRequest(methods::kMemoryQuery, payload);
+    const QString id = client_.sendRequest(methods::kMemoryRetrieve, payload);
     if (id.isEmpty()) {
         setBusy(false);
         return;

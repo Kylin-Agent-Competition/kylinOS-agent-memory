@@ -13,6 +13,10 @@ constexpr const char* kErrEncodeFailed = "ERR_ENCODE_FAILED";
 constexpr const char* kErrConnectionClosing = "ERR_CONNECTION_CLOSING";
 constexpr const char* kErrProtocol = "ERR_PROTOCOL";
 
+// FRZ-IPC-006 §6.1: 请求中 request_id/trace_id/deadline_ms 为必填字段。
+// sendRequest 始终填充这三个字段；默认超时 5000ms（延迟预算参考值）。
+constexpr int kDefaultDeadlineMs = 5000;
+
 QString connectionStateToString(MemoryClient::ConnectionState state)
 {
     switch (state) {
@@ -51,6 +55,12 @@ QString protocolErrorKindToString(ProtocolErrorKind kind)
         return QStringLiteral("ERR_INVALID_METHOD");
     case ProtocolErrorKind::PayloadNotObject:
         return QStringLiteral("ERR_INVALID_PAYLOAD");
+    case ProtocolErrorKind::MissingStatus:
+        return QStringLiteral("ERR_MISSING_STATUS");
+    case ProtocolErrorKind::InvalidStatus:
+        return QStringLiteral("ERR_INVALID_STATUS");
+    case ProtocolErrorKind::MissingServerTs:
+        return QStringLiteral("ERR_MISSING_SERVER_TS");
     }
     return QStringLiteral("ERR_UNKNOWN");
 }
@@ -60,6 +70,13 @@ QString protocolErrorKindToString(ProtocolErrorKind kind)
 MemoryClient::MemoryClient(QObject* parent)
     : QObject(parent)
 {
+    // FRZ-IPC-005 / ALIGN-005: 默认 UDS 路径 $XDG_RUNTIME_DIR/kylin-memory/memory.sock
+    const QByteArray xdgRuntime = qgetenv("XDG_RUNTIME_DIR");
+    if (!xdgRuntime.isEmpty()) {
+        socketPath_ = QString::fromUtf8(xdgRuntime)
+                      + QStringLiteral("/kylin-memory/memory.sock");
+    }
+
     socket_ = new QLocalSocket(this);
     connect(socket_, &QLocalSocket::connected, this, &MemoryClient::handleSocketConnected);
     connect(socket_, &QLocalSocket::disconnected, this, &MemoryClient::handleSocketDisconnected);
@@ -125,7 +142,10 @@ QString MemoryClient::sendRequest(const QString& method, const QJsonObject& payl
     }
 
     const QString requestId = generateRequestId();
-    const QJsonObject envelope = buildEnvelope(method, payload, requestId);
+    // FRZ-IPC-006 §6.1: request_id/trace_id/deadline_ms 为必填字段。
+    // trace_id 复用 request_id（单客户端场景下两者相同不影响链路追踪）。
+    const QJsonObject envelope = buildEnvelope(
+        method, payload, requestId, requestId, kDefaultDeadlineMs);
     const auto packet = encodeEnvelope(envelope);
     if (!packet.has_value()) {
         emit requestFailed(requestId, kErrEncodeFailed,
@@ -147,7 +167,7 @@ QString MemoryClient::sendRequest(const QString& method, const QJsonObject& payl
 
 QString MemoryClient::sendHealthRequest()
 {
-    return sendRequest(methods::kMemoryHealth, QJsonObject{});
+    return sendRequest(methods::kHealth, QJsonObject{});
 }
 
 void MemoryClient::handleSocketConnected()
@@ -199,14 +219,13 @@ void MemoryClient::handleSocketReadyRead()
         receiveBuffer_ = receiveBuffer_.mid(decoded.consumed);
 
         if (decoded.envelope.has_value()) {
-            // envelope 校验：必须包含 protocol_version 与 method（不强制
-            // request_id，以容忍服务端在出错时不回传）。
-            const auto [parts, parseError] = parseEnvelope(*decoded.envelope);
-            if (!parseError.ok() || !parts.has_value()) {
-                emit connectionError(parseError.safeMessage);
-                continue;
-            }
-            const QString requestId = parts->requestId;
+            // 响应路由：从 envelope 中提取 request_id 进行关联匹配。
+            // 不使用 parseEnvelope（要求 method 字段）或 parseResponse（要求
+            // status 字段）——客户端只需 request_id 路由响应，完整解析由上层负责。
+            const QJsonValue requestIdValue = decoded.envelope->value(kRequestIdKey);
+            const QString requestId = requestIdValue.isString()
+                ? requestIdValue.toString() : QString{};
+
             if (pendingRequests_.erase(requestId.toStdString()) == 0) {
                 // 未知 request_id：仍转发响应，便于上层诊断；不暴露原文。
                 emit responseReceived(requestId, *decoded.envelope);

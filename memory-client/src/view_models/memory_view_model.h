@@ -57,7 +57,7 @@ public:
     Q_INVOKABLE void connectToService();
     Q_INVOKABLE void disconnectFromService();
     Q_INVOKABLE void sendHealth();
-    // 发送 memory.query 请求。payload 由调用方构造，本骨架不做业务校验。
+    // 发送 memory.retrieve 请求。payload 由调用方构造，本骨架不做业务校验。
     Q_INVOKABLE void sendMemoryQuery(const QJsonObject& payload);
 
 signals:

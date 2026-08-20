@@ -44,7 +44,7 @@ private slots:
 void ProtocolAdapterTest::encodeDecodeRoundTrips()
 {
     QJsonObject envelope = client::buildEnvelope(
-        client::methods::kMemoryQuery,
+        client::methods::kMemoryRetrieve,
         QJsonObject{
             {QStringLiteral("schema_version"), QStringLiteral("1.0")},
             {QStringLiteral("user_id"), QStringLiteral("local-user")},
@@ -69,7 +69,7 @@ void ProtocolAdapterTest::encodeDecodeRoundTrips()
     const auto [parts, parseError] = client::parseEnvelope(*decoded.envelope);
     QVERIFY(parseError.ok());
     QVERIFY(parts.has_value());
-    QCOMPARE(parts->method, client::methods::kMemoryQuery);
+    QCOMPARE(parts->method, client::methods::kMemoryRetrieve);
     QCOMPARE(parts->requestId, QStringLiteral("req-001"));
     QCOMPARE(parts->traceId, QStringLiteral("trc-001"));
     QVERIFY(parts->deadlineMs.has_value());
@@ -79,7 +79,7 @@ void ProtocolAdapterTest::encodeDecodeRoundTrips()
 void ProtocolAdapterTest::decodeRejectsIncompletePacket()
 {
     const auto packet = client::encodeEnvelope(
-        client::buildEnvelope(client::methods::kMemoryHealth, QJsonObject{}));
+        client::buildEnvelope(client::methods::kHealth, QJsonObject{}));
     QVERIFY(packet.has_value());
 
     // 仅发 2 字节 → 缺包头
@@ -112,7 +112,7 @@ void ProtocolAdapterTest::decodeRejectsOversizedPacket()
 void ProtocolAdapterTest::decodeRejectsInvalidJson()
 {
     QByteArray buffer;
-    const QByteArray body = "{\"method\":\"memory.health\", broken";
+    const QByteArray body = "{\"method\":\"health\", broken";
     const quint32 length = static_cast<quint32>(body.size());
     buffer.append(static_cast<char>((length >> 24) & 0xFF));
     buffer.append(static_cast<char>((length >> 16) & 0xFF));
@@ -143,9 +143,9 @@ void ProtocolAdapterTest::decodeRejectsNonObjectJson()
 void ProtocolAdapterTest::decodeConsumesMultiplePacketsInOneBuffer()
 {
     const auto p1 = client::encodeEnvelope(client::buildEnvelope(
-        client::methods::kMemoryHealth, QJsonObject{}, QStringLiteral("req-1")));
+        client::methods::kHealth, QJsonObject{}, QStringLiteral("req-1")));
     const auto p2 = client::encodeEnvelope(client::buildEnvelope(
-        client::methods::kMemoryQuery, QJsonObject{}, QStringLiteral("req-2")));
+        client::methods::kMemoryRetrieve, QJsonObject{}, QStringLiteral("req-2")));
     QVERIFY(p1.has_value());
     QVERIFY(p2.has_value());
 
@@ -168,7 +168,7 @@ void ProtocolAdapterTest::decodeConsumesMultiplePacketsInOneBuffer()
 void ProtocolAdapterTest::buildEnvelopeOmitsEmptyOptionalFields()
 {
     const QJsonObject envelope = client::buildEnvelope(
-        client::methods::kMemoryHealth, QJsonObject{});
+        client::methods::kHealth, QJsonObject{});
 
     QVERIFY(!envelope.contains(client::kRequestIdKey));
     QVERIFY(!envelope.contains(client::kTraceIdKey));
@@ -176,14 +176,14 @@ void ProtocolAdapterTest::buildEnvelopeOmitsEmptyOptionalFields()
     QCOMPARE(envelope.value(client::kProtocolVersionKey).toString(),
              QStringLiteral("1.0"));
     QCOMPARE(envelope.value(client::kMethodKey).toString(),
-             client::methods::kMemoryHealth);
+             client::methods::kHealth);
     QVERIFY(envelope.value(client::kPayloadKey).isObject());
 }
 
 void ProtocolAdapterTest::buildEnvelopeIncludesOptionalFieldsWhenProvided()
 {
     const QJsonObject envelope = client::buildEnvelope(
-        client::methods::kMemoryQuery,
+        client::methods::kMemoryRetrieve,
         QJsonObject{{QStringLiteral("k"), 1}},
         QStringLiteral("req-1"),
         QStringLiteral("trc-1"),
@@ -197,7 +197,7 @@ void ProtocolAdapterTest::buildEnvelopeIncludesOptionalFieldsWhenProvided()
 void ProtocolAdapterTest::parseEnvelopeAcceptsValidWithOptionalFields()
 {
     QJsonObject envelope = client::buildEnvelope(
-        client::methods::kMemoryHealth,
+        client::methods::kHealth,
         QJsonObject{{QStringLiteral("ok"), true}},
         QStringLiteral("req-1"),
         QStringLiteral("trc-1"),
@@ -206,7 +206,7 @@ void ProtocolAdapterTest::parseEnvelopeAcceptsValidWithOptionalFields()
     const auto [parts, err] = client::parseEnvelope(envelope);
     QVERIFY(err.ok());
     QVERIFY(parts.has_value());
-    QCOMPARE(parts->method, client::methods::kMemoryHealth);
+    QCOMPARE(parts->method, client::methods::kHealth);
     QCOMPARE(parts->requestId, QStringLiteral("req-1"));
     QCOMPARE(parts->traceId, QStringLiteral("trc-1"));
     QVERIFY(parts->deadlineMs.has_value());
@@ -217,7 +217,7 @@ void ProtocolAdapterTest::parseEnvelopeAcceptsValidWithOptionalFields()
 void ProtocolAdapterTest::parseEnvelopeRejectsMissingProtocolVersion()
 {
     QJsonObject envelope{
-        {client::kMethodKey, client::methods::kMemoryHealth},
+        {client::kMethodKey, client::methods::kHealth},
         {client::kPayloadKey, QJsonObject{}},
     };
     const auto [parts, err] = client::parseEnvelope(envelope);
@@ -241,7 +241,7 @@ void ProtocolAdapterTest::parseEnvelopeRejectsUnsupportedProtocolVersion()
     QFETCH(QString, version);
     QJsonObject envelope{
         {client::kProtocolVersionKey, version},
-        {client::kMethodKey, client::methods::kMemoryHealth},
+        {client::kMethodKey, client::methods::kHealth},
         {client::kPayloadKey, QJsonObject{}},
     };
     const auto [parts, err] = client::parseEnvelope(envelope);
@@ -254,7 +254,7 @@ void ProtocolAdapterTest::parseEnvelopeRejectsNonStringProtocolVersion()
 {
     QJsonObject envelope{
         {client::kProtocolVersionKey, 1},
-        {client::kMethodKey, client::methods::kMemoryHealth},
+        {client::kMethodKey, client::methods::kHealth},
         {client::kPayloadKey, QJsonObject{}},
     };
     const auto [parts, err] = client::parseEnvelope(envelope);
@@ -303,7 +303,7 @@ void ProtocolAdapterTest::parseEnvelopeRejectsNonObjectPayload()
 {
     QJsonObject envelope{
         {client::kProtocolVersionKey, QStringLiteral("1.0")},
-        {client::kMethodKey, client::methods::kMemoryHealth},
+        {client::kMethodKey, client::methods::kHealth},
         {client::kPayloadKey, QStringLiteral("not-an-object")},
     };
     const auto [parts, err] = client::parseEnvelope(envelope);
@@ -315,7 +315,7 @@ void ProtocolAdapterTest::parseEnvelopeReadsOptionalFields()
 {
     QJsonObject envelope{
         {client::kProtocolVersionKey, QStringLiteral("1.0")},
-        {client::kMethodKey, client::methods::kMemoryHealth},
+        {client::kMethodKey, client::methods::kHealth},
         {client::kPayloadKey, QJsonObject{}},
         {client::kRequestIdKey, QStringLiteral("req-only")},
     };
