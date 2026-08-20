@@ -82,12 +82,12 @@ void MemoryClientMockTest::connectAndSendHealthReceivesEcho()
     const auto [parts, err] = client::parseEnvelope(envelope);
     QVERIFY(err.ok());
     QVERIFY(parts.has_value());
-    QCOMPARE(parts->method, client::methods::kMemoryHealth);
+    QCOMPARE(parts->method, client::methods::kHealth);
     QCOMPARE(parts->requestId, requestId);
 
     QCOMPARE(mock.receivedRequests().size(), static_cast<std::size_t>(1));
     QCOMPARE(mock.receivedRequests().front().method,
-             client::methods::kMemoryHealth);
+             client::methods::kHealth);
 }
 
 void MemoryClientMockTest::customHandlerReturnsDifferentResponse()
@@ -126,7 +126,7 @@ void MemoryClientMockTest::customHandlerReturnsDifferentResponse()
     const auto [parts, err] = client::parseEnvelope(envelope);
     QVERIFY(err.ok());
     QVERIFY(parts.has_value());
-    QCOMPARE(parts->method, client::methods::kMemoryHealth);
+    QCOMPARE(parts->method, client::methods::kHealth);
     QCOMPARE(parts->requestId, requestId);
     QCOMPARE(parts->payload.value(QStringLiteral("status")).toString(),
              QStringLiteral("ok"));
