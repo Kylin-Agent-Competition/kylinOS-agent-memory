@@ -390,6 +390,8 @@ class FakeVectorProvider(VectorProvider):
     def rebuild(self, request: VectorRebuildRequest) -> ProviderResult[VectorRebuildResult]:
         if self._deadline_expired(request.deadline_at):
             return self._fail(RetrievalErrorCode.DEADLINE_EXCEEDED, request.request_id, "deadline")
+        if self._cancelled():
+            return self._fail(RetrievalErrorCode.CANCELLED, request.request_id, "cancelled")
         auth = request.scope_authorization
         if auth.scope_id != request.scope.scope_id:
             return self._fail(RetrievalErrorCode.AUTHORIZATION_DENIED, request.request_id, "scope mismatch")

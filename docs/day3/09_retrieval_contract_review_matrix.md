@@ -119,16 +119,21 @@ merge、rebase、Review 或改写其他作者分支。
 这些测试可以在普通开发环境使用明确标记的 fake/in-memory Provider 验证
 契约逻辑。它们只能证明 L0/L1 逻辑，禁止表述为真实 Vector Runtime 通过。
 
-> D4-B PR #40 第三轮返工（2026-08-21）已合入最新 `origin/main@2b8bed7`，
-> L0/L1_FAKE 共 131 个 pytest 用例并全部通过。T038 已覆盖 Rebuild `applied` / `outcome_unknown`
+> D4-B PR #40 第四轮返工（2026-08-21）基于 `origin/main@2b8bed7` 与
+> 被审 HEAD `7d7b62c`。`eb14ca9` 的 A 轨 Day4–Day5 麒麟 VM 验证基础设施及
+> `7d7b62c` 对历史 B 轨分支 `feature/d4-b-vector-provider-contract-tests` 的 merge
+> 关系已经用户明确确认为有意保留，不属于误合入，不执行 revert、rebase 或分支改名。
+> L0/L1_FAKE 共 132 个 pytest 用例并全部通过。T031 已覆盖 Rebuild 在 generation
+> 创建、构建或激活副作用前协作取消；T038 已覆盖 Rebuild `applied` / `outcome_unknown`
 > 首次结果精确重放、同域冲突及跨 generation/scope 独立，Delete / Rebuild 写请求默认
 > 从语义载荷复算摘要并 fail-closed；T039 已按 RFC 8785/JCS 数字边界输出；
 > T044 已补 scope key 轮换后的 Rebuild 幂等连续性。T017 的 Provider 自身边界
-> 已通过，但 SQLite resolved-ID ownership gate 属 Service，因此降为
-> `PARTIAL_LOCAL`；T047 继续仅因删除确认历史 key/TTL Service 边界保持
+> 已通过，但 SQLite resolved-ID ownership gate 属 Service；T018 的 `already_absent`
+> 归一化及 T042 的确认记录/preview/TTL 同属 Service 边界，因此 T017/T018/T042
+> 均为 `PARTIAL_LOCAL`；T047 继续仅因删除确认历史 key/TTL Service 边界保持
 > `PARTIAL_LOCAL`。这些结果只证明本地契约逻辑，不构成 L2 麒麟宿主证据；
-> §5 B-D3-V001–V007 继续为 `DEFERRED_VM`。第三轮 `CHANGES_REQUESTED` 基于
-> HEAD `f9297f9`；本轮返工尚待本地双轴审查、人工提交授权、推送与复审。
+> §5 B-D3-V001–V007 在本 PR 中继续为 `DEFERRED_VM`。第四轮
+> `CHANGES_REQUESTED` 基于 HEAD `7d7b62c`；本轮返工尚待人工提交授权、推送与复审。
 
 
 | ID | 目标 | 正向断言 | 负向/边界断言 | 层级 | 状态 |
@@ -150,7 +155,7 @@ merge、rebase、Review 或改写其他作者分支。
 | B-D3-T015 | object/memory 类型 | 两字段独立序列化 | `memory_type=knowledge` 拒绝/迁移提示 | L0 | `PASS_LOCAL` |
 | B-D3-T016 | Delete 单条 | resolved single item 幂等删除 | 空、通配、自然语言拒绝 | L1_FAKE | `PASS_LOCAL` |
 | B-D3-T017 | Delete 隔离 | Provider 拒绝 request/selector 用户不一致；SQLite 归属校验后只调用同用户删除 | Provider 越界模拟 SQLite ownership 或 Service 放行已知跨用户 resolved ID 失败 | L1_FAKE | `PARTIAL_LOCAL`：Provider 边界通过；SQLite ownership gate 待 Service |
-| B-D3-T018 | Delete 重放 | Provider `not_matched` 经真源确认后归一为 already_absent | 伪造 deleted_count 或用 0 匹配掩盖越权禁止 | L1_FAKE | `PASS_LOCAL` |
+| B-D3-T018 | Delete 重放 | Provider `not_matched` 经真源确认后归一为 already_absent | 伪造 deleted_count 或用 0 匹配掩盖越权禁止 | L1_FAKE | `PARTIAL_LOCAL`：Provider not_matched/replay 通过；SQLite/Outbox `already_absent` 归一化待 Service |
 | B-D3-T019 | Full reset 门禁 | 授权+确认引用齐全才进入 | 任一缺失拒绝 | L0/L1_FAKE | `PASS_LOCAL` |
 | B-D3-T020 | Rebuild 代次 | 新代次构建验证后请求激活 | 覆盖 serving generation 拒绝 | L1_FAKE | `PASS_LOCAL` |
 | B-D3-T021 | Rebuild 失败 | 保留旧 serving generation | 失败代次标 ready 禁止 | L1_FAKE | `PASS_LOCAL` |
@@ -163,7 +168,7 @@ merge、rebase、Review 或改写其他作者分支。
 | B-D3-T028 | RRF 稳定性 | 输入打乱输出不变 | 容器顺序影响结果失败 | L0 | `PASS_LOCAL` |
 | B-D3-T029 | RRF 降级 | FTS5-only/Vector-only 有确定输出 | 双路失败伪造候选失败 | L0 | `PASS_LOCAL` |
 | B-D3-T030 | Deadline | 同一绝对 deadline 派生逐层递减的剩余 timeout；已完成安全结果可 partial | 每层重置预算、忽略过期 deadline 或到期后启动新副作用失败 | L1_FAKE | `PASS_LOCAL` |
-| B-D3-T031 | 取消 | 协作取消返回明确 `cancelled`；不可中断副作用使用 `outcome_unknown` 协调 | 把取消折叠为超时，或把 outcome_unknown 当未执行失败 | L1_FAKE | `PASS_LOCAL` |
+| B-D3-T031 | 取消 | 协作取消返回明确 `cancelled`；Rebuild 在 generation 副作用前取消不创建状态；不可中断副作用使用 `outcome_unknown` 协调 | 把取消折叠为超时、取消后创建 generation/serving/idempotency 状态，或把 outcome_unknown 当未执行失败 | L1_FAKE | `PASS_LOCAL` |
 | B-D3-T032 | 错误映射 | A/Bridge 异常归一后每个 B 字符串码语义稳定，取消与超时可区分 | SDK 私有异常穿透或 `BridgeCancelledError→deadline_exceeded` 失败 | L0/L1_FAKE | `PASS_LOCAL` |
 | B-D3-T033 | 日志安全 | 仅 ID/hash/rank/计数/耗时 | 正文、凭据、跨用户数据出现失败 | L0 | `PASS_LOCAL` |
 | B-D3-T034 | 兼容性 | 可选响应字段兼容 | 同 v1 改字段语义失败 | L0 | `PASS_LOCAL` |
@@ -174,7 +179,7 @@ merge、rebase、Review 或改写其他作者分支。
 | B-D3-T039 | 规范摘要 | map/集合重排与 NFC 等价输入得到同 Digest | 有序数组重排、null/缺失或不同 key-id 被判相等失败 | L0 | `PASS_LOCAL` |
 | B-D3-T040 | 水位比较域 | 同域整数/定宽串确定性推进 | 跨 scope/stream/partition/source-generation/kind 比较或数字串猜测失败 | L0/L1_FAKE | `PASS_LOCAL` |
 | B-D3-T041 | 证据/可用性双轴 | host_verified+unavailable 与 untested+available 均可表达 | 任一轴自动改写另一轴失败 | L0 | `PASS_LOCAL` |
-| B-D3-T042 | 删除确认/豁免 | 单项显式确认与合规 committed-forget 豁免通过 | batch/full reset 豁免、过期/错 preview 确认拒绝 | L0/L1_FAKE | `PASS_LOCAL` |
+| B-D3-T042 | 删除确认/豁免 | 单项显式确认与合规 committed-forget 豁免通过 | batch/full reset 豁免、过期/错 preview 确认拒绝 | L0/L1_FAKE | `PARTIAL_LOCAL`：Selector confirmation/exemption 结构门禁通过；confirmation record、preview binding、TTL 待 Service |
 | B-D3-T043 | Scope 授权边界 | Service 传入绑定 actor_ref/authorization_ref/scope_id 的内部上下文 | 缺失、越权或 scope_id 不匹配时 Provider 不执行 | L0/L1_FAKE | `PASS_LOCAL` |
 | B-D3-T044 | Scope 密钥轮换 | k1→k2 后稳定 scope_id 的状态、水位与幂等记录仍连续 | HMAC 改变导致重试、比较或 generation 隔离断裂 | L0/L1_FAKE | `PASS_LOCAL` |
 | B-D3-T045 | Scope 操作隔离 | 匹配操作的未过期授权可执行对应请求 | `get_index_state` 授权调用 Rebuild，或 Rebuild 授权调用状态查询时 Provider 不执行 | L0/L1_FAKE | `PASS_LOCAL` |
@@ -204,12 +209,12 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
 | ADR golden score 复算 | 4 个值及排序一致 | `PASS_LOCAL` |
 | 契约 JSON 样例解析 | 5/5 可解析 | `PASS_LOCAL` |
 | 文档引用存在 | 全部目标文件存在，索引相对链接可解析 | `PASS_LOCAL` |
-| GitHub Review 获取 | PR #40 当前 Review 与被审提交可追踪 | 第三轮 `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；被审 head `f9297f9`；T038/T039 为核心返工 Gate |
+| GitHub Review 获取 | PR #40 当前 Review 与被审提交可追踪 | 第四轮 `CHANGES_REQUESTED`；Reviewer `lovezy0730-create`；被审 head `7d7b62c`；代码级 Gate 收敛为 T031 Rebuild cancellation |
 | GitHub 跨分支兼容核对 | 历史 SHA 仅作为有日期的只读快照，不作为实现基线 | `AUDIT_SNAPSHOT_2026-08-04`；后续判断须重新同步默认分支 |
 | `git diff --check` | 无 whitespace error | `PASS_LOCAL` |
-| D4-B retrieval pytest | T001–T048 的 L0/L1_FAKE 当前实现 | `131 passed`；T017 Service ownership、T047 删除确认 key/TTL 为 `PARTIAL_LOCAL` |
+| D4-B retrieval pytest | T001–T048 的 L0/L1_FAKE 当前实现 | `132 passed`；T017/T018/T042/T047 的 Service 边界为 `PARTIAL_LOCAL` |
 | 仓库基线脚本 | 7/7，0 错误 | `BLOCKED_ENVIRONMENT`；2026-08-05 尝试未运行，宿主 WSL2 缺少 Hyper-V（`HCS_E_HYPERV_NOT_INSTALLED`），未启动 VM；历史 `PASS_LOCAL` 不作为本轮验证结果 |
-| 工作区范围 | 只修改 B 轨契约、Fake、契约测试与状态矩阵 | `PASS_LOCAL`；PR #40 未扩展到 A/C/D/E 轨实现，最终 Review 状态以 PR 最新 HEAD 为准 |
+| 工作区范围 | B 轨契约、Fake、契约测试与状态矩阵；另有用户明确授权保留的 A 轨 Day4–Day5 VM 验证基础设施 | `PASS_LOCAL`；`eb14ca9` / `7d7b62c` 及历史 B 轨分支关联为有意保留，不表述为误合入；最终 Review 状态以 PR 最新 HEAD 为准 |
 
 ## 7. Reviewer 记录
 
@@ -243,6 +248,18 @@ Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT �
   有效期绑定）、R3-P1-02（摘要密钥轮换闭环）。PR 正文和修复报告在本轮经用户
   授权提交、推送后更新；不以“一名 approval”替代任务卡要求记录的 D/E 专业
   关注覆盖。
+
+### PR #40 第四轮 Review（当前）
+
+- Reviewer：`lovezy0730-create`
+- 审查提交：`7d7b62c`
+- 提交时间：`2026-08-21T04:17:23Z`
+- GitHub 结论：`CHANGES_REQUESTED`
+- 矩阵结论：`REWORK`
+- 代码级返工：T031 Rebuild 必须在 generation/build/activation 副作用前检查取消状态
+- 状态收口：T018、T042 诚实降为 `PARTIAL_LOCAL`
+- 明确保留：`eb14ca9` A 轨 VM 验证基础设施、`7d7b62c` 与历史 B 轨分支的
+  merge/命名关系均经用户确认，不执行回滚或历史改写
 
 ### 复审模板
 

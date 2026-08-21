@@ -121,6 +121,33 @@ def test_rebuild_deadline_expired_before_generation_side_effect():
 
 
 # T031 协作取消返回 cancelled，且与超时可区分
+def test_rebuild_cancelled_before_side_effect():
+    p = FakeVectorProvider(cancel_check=lambda: True)
+    scope = c.IndexScope(
+        scope_id="s1", kind=c.ScopeKind.USER, user_id="alpha", scope_fingerprint=DIG,
+    )
+    auth = c.ScopeAuthorization(
+        actor_ref="a", authorization_ref="ar", scope_id="s1", allowed_operations=["rebuild"],
+        expires_at=p.clock.now + timedelta(minutes=5),
+    )
+    request = sign_request_payload(c.VectorRebuildRequest(
+        request_id="b1", trace_id="t1", user_id="alpha",
+        deadline_at=p.clock.now + timedelta(minutes=5),
+        idempotency_key="ik", payload_hash=DIG, source_snapshot_id="snap",
+        source_watermark=make_wm("s1"), target_generation="g2", schema_version="v1",
+        reason=c.RebuildReason.BOOTSTRAP, scope=scope, scope_authorization=auth,
+    ))
+
+    result = p.rebuild(request)
+
+    assert result.ok is False
+    assert result.error.code is c.RetrievalErrorCode.CANCELLED
+    assert p.rebuild_effect_count == 0
+    assert p.generation_states == {}
+    assert p.serving == {}
+    assert p.idempotency == {}
+
+
 def test_cancel_returns_cancelled():
     p = FakeVectorProvider(cancel_check=lambda: True)
     res = p.search(make_search(p))
