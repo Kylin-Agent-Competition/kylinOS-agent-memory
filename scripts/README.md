@@ -8,10 +8,18 @@
 |------|------|
 | `check_kylin_environment.sh` | 麒麟虚拟机只读环境信息采集 |
 | `verify_repository_baseline.sh` | 仓库基线结构验证 |
+| `verify_a_day4_day5_vm.sh` | A 轨 Day4–Day5 麒麟 VM 统一构建与真实宿主验证；含依赖/SDK 符号 fail-closed 门禁及 49 项零跳过检查 |
+| `check_junit_totals.py` | 按 JUnit `testcase` 节点汇总实际结果，避免依赖 pytest 版本特定的 suite 属性 |
 | `run_d1_vector_baseline.sh` | D1 Vector 基线构建与分阶段探针运行；服务重启由操作者执行 |
 | `run_d2_vector_smoke.sh` | D2 旧客户端固定哈希构建、KySec/服务/DB/Socket 门禁、一次性 cleanup 授权和分阶段真实数据面验证 |
 
 ## 当前状态
+
+`verify_a_day4_day5_vm.sh` 默认从自身位置推导源码根，并允许通过
+`A_VM_*` 环境变量隔离 venv、CMake build 和证据目录。它不会安装系统包，
+会先核对实际 Python 开发头文件、固定 SDK 包版本和必需动态符号；环境不完整
+时在构建前失败。Day4/Day5 的四组真实宿主 JUnit 必须精确得到
+`49 passed, 0 skipped`。
 
 `run_d1_vector_baseline.sh` 与 `run_d2_vector_smoke.sh` 会按显式参数
 构建或运行测试探针。它们不安装依赖，不自动修改 KySec 信任，不自动
