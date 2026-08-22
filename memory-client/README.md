@@ -17,7 +17,8 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 ## 当前状态
 
 **D4 骨架 L0 完成 + D4 冻结协议对齐完成（L0_COMPLETE / FROZEN_ALIGNED；ctest 2/2
-30/30 子用例 PASS，总耗时 0.09s，WSL Ubuntu 22.04 GCC 11.4.0 Qt 5.15.3；协议编解码
+47/47 子用例 PASS，含 QML_APP=ON 构建闭环，总耗时 0.60s，WSL Ubuntu 22.04
+GCC 11.4.0 Qt 5.15.3；协议编解码
 已对齐 D4 冻结 FRZ-IPC-001~007（ALIGN-001~006 全部完成）；L1/L2 待联调）。**
 
 - 协议编解码 `protocol_adapter.{h,cpp}`：4 字节大端长度前缀 + UTF-8 JSON envelope
@@ -31,7 +32,8 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 状态语义：D 轨 IPC envelope 已于 2026-08-17 正式冻结签署
 （`deliverables/D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`，FRZ-IPC-001~007）。
 C 轨客户端协议编解码已对齐冻结协议帧结构与字段（FROZEN_ALIGNED），但
-FRZ-IPC-004 客户端超时行为（deadline_ms + 100ms 未响应视为超时）尚未实现（骨架期可接受），
+FRZ-IPC-004 客户端超时行为（deadline_ms + 100ms 未响应视为超时）尚未实现（已正式
+登记为 TD-018，计划 D5 阶段关闭），
 FROZEN_ALIGNED 仅覆盖帧/字段层对齐，不等于全部冻结行为已实现。真实 MemoryContext
 注入受 `BLOCKED / TD-008` 阻断；偏好/知识业务 Schema 受 E 轨终审阻断。
 
@@ -88,6 +90,6 @@ cmake --build memory-client/build
 
 | 层级 | 要求 | 状态 |
 |------|------|------|
-| **L0** | 编译通过、Mock 协议测试 | **L0_COMPLETE** — ctest 2/2 30/30 PASS（0.08s，WSL Ubuntu 22.04 GCC 11.4.0 Qt 5.15.3） |
+| **L0** | 编译通过、Mock 协议测试 | **L0_COMPLETE** — ctest 2/2 47/47 PASS（0.60s，WSL Ubuntu 22.04 GCC 11.4.0 Qt 5.15.3，含 QML_APP=ON 构建闭环） |
 | **L1** | QLocalSocket 连接 Memory Service 正常 | 待联调 |
 | **L2** | 麒麟 VM 中 QML 界面调用链路完整 | 未实现 |

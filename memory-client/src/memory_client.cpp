@@ -67,6 +67,10 @@ QString protocolErrorKindToString(ProtocolErrorKind kind)
         return QStringLiteral("ERR_MISSING_DATA");
     case ProtocolErrorKind::MissingServerTs:
         return QStringLiteral("ERR_MISSING_SERVER_TS");
+    case ProtocolErrorKind::MissingErrorCode:
+        return QStringLiteral("ERR_MISSING_ERROR_CODE");
+    case ProtocolErrorKind::MissingErrorMessage:
+        return QStringLiteral("ERR_MISSING_ERROR_MESSAGE");
     }
     return QStringLiteral("ERR_UNKNOWN");
 }
@@ -225,15 +229,39 @@ void MemoryClient::handleSocketReadyRead()
         receiveBuffer_ = receiveBuffer_.mid(decoded.consumed);
 
         if (decoded.envelope.has_value()) {
-            // 响应路由：从 envelope 中提取 request_id 进行关联匹配。
-            // 不使用 parseEnvelope（要求 method 字段）或 parseResponse（要求
-            // status 字段）——客户端只需 request_id 路由响应，完整解析由上层负责。
-            const QJsonValue requestIdValue = decoded.envelope->value(kRequestIdKey);
-            const QString requestId = requestIdValue.isString()
-                ? requestIdValue.toString() : QString{};
+            // FRZ-IPC-006 §6.2: 使用 parseResponse 严格校验响应结构。
+            const auto [responseParts, parseError] = parseResponse(*decoded.envelope);
+            if (!parseError.ok() || !responseParts.has_value()) {
+                // 非法响应：不上抛给上层，报 connectionError 并断连。
+                setLastError(parseError.safeMessage);
+                emit connectionError(parseError.safeMessage);
+                receiveBuffer_.clear();
+                socket_->abort();
+                setConnectionState(ConnectionState::Disconnected);
+                failInFlightRequests(kErrProtocol, parseError.safeMessage);
+                return;
+            }
 
-            // 从 pending 集合中移除（无论是否命中，都转发响应给上层）。
-            pendingRequests_.erase(requestId.toStdString());
+            const QString& requestId = responseParts->requestId;
+
+            // pending request 门禁：未知 request_id 不作为正常响应上抛。
+            auto it = pendingRequests_.find(requestId.toStdString());
+            if (it == pendingRequests_.end()) {
+                // 未知/重复/迟到响应：丢弃，不转发。
+                continue;
+            }
+
+            // trace_id 关联校验：客户端发送时 trace_id 复用 request_id，
+            // 响应应回显相同的 trace_id。
+            if (responseParts->traceId != requestId) {
+                // trace_id 不匹配：可能是伪造响应，丢弃。
+                pendingRequests_.erase(it);
+                emit requestFailed(requestId, kErrProtocol,
+                    QStringLiteral("Response trace_id mismatch."));
+                continue;
+            }
+
+            pendingRequests_.erase(it);
             emit responseReceived(requestId, *decoded.envelope);
         }
     }

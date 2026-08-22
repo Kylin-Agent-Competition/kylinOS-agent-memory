@@ -82,21 +82,25 @@ ProtocolError errorFromKind(ProtocolErrorKind kind)
         return makeError(kind, QStringLiteral("Response with status 'ok' is missing data field."));
     case ProtocolErrorKind::MissingServerTs:
         return makeError(kind, QStringLiteral("Response is missing server_ts field."));
+    case ProtocolErrorKind::MissingErrorCode:
+        return makeError(kind, QStringLiteral("Error response is missing error_code field."));
+    case ProtocolErrorKind::MissingErrorMessage:
+        return makeError(kind, QStringLiteral("Error response is missing message field."));
     }
     return {ProtocolErrorKind::None, {}};
 }
 
-// 读取 4 字节大端长度前缀。返回 -1 表示缓冲不足。
-qint32 readHeader(const QByteArray& buffer)
+// 读取 4 字节大端长度前缀。返回 nullopt 表示缓冲不足。
+// 使用 quint32（无符号），避免 0x80000000+ 高位为 1 时被错误判为负数。
+std::optional<quint32> readHeader(const QByteArray& buffer)
 {
     if (buffer.size() < kHeaderLen) {
-        return -1;
+        return std::nullopt;
     }
-    return static_cast<qint32>(
-        (static_cast<unsigned char>(buffer[0]) << 24)
-        | (static_cast<unsigned char>(buffer[1]) << 16)
-        | (static_cast<unsigned char>(buffer[2]) << 8)
-        | static_cast<unsigned char>(buffer[3]));
+    return (static_cast<quint32>(static_cast<unsigned char>(buffer[0])) << 24)
+         | (static_cast<quint32>(static_cast<unsigned char>(buffer[1])) << 16)
+         | (static_cast<quint32>(static_cast<unsigned char>(buffer[2])) << 8)
+         | static_cast<quint32>(static_cast<unsigned char>(buffer[3]));
 }
 
 }  // namespace
@@ -123,23 +127,24 @@ std::optional<QByteArray> encodeEnvelope(const QJsonObject& envelope)
 DecodeResult decodePacket(const QByteArray& buffer)
 {
     DecodeResult result;
-    const qint32 declared = readHeader(buffer);
-    if (declared < 0) {
+    const auto header = readHeader(buffer);
+    if (!header.has_value()) {
         result.error = errorFromKind(ProtocolErrorKind::IncompletePacket);
         return result;
     }
 
-    if (declared > kMaxMessageLen) {
+    const quint32 declared = *header;
+    if (declared > static_cast<quint32>(kMaxMessageLen)) {
         result.error = errorFromKind(ProtocolErrorKind::DeclaredLengthTooLarge);
         return result;
     }
 
-    if (buffer.size() < kHeaderLen + declared) {
+    if (buffer.size() < kHeaderLen + static_cast<int>(declared)) {
         result.error = errorFromKind(ProtocolErrorKind::IncompletePacket);
         return result;
     }
 
-    const QByteArray body = buffer.mid(kHeaderLen, declared);
+    const QByteArray body = buffer.mid(kHeaderLen, static_cast<int>(declared));
     QJsonParseError parseError{};
     const QJsonDocument document = QJsonDocument::fromJson(body, &parseError);
     if (parseError.error != QJsonParseError::NoError) {
@@ -290,19 +295,65 @@ std::pair<std::optional<ResponseParts>, ProtocolError> parseResponse(
         parts.data = dataValue.toObject();
     }
 
-    // 错误时额外字段
+    // 错误时额外字段（FRZ-IPC-006 §6.2: error_code/message 必填）
     if (status == QStringLiteral("error")) {
         const QJsonValue errorCodeValue = envelope.value(kErrorCodeKey);
-        if (errorCodeValue.isString()) {
-            parts.errorCode = errorCodeValue.toString();
+        if (!errorCodeValue.isString() || errorCodeValue.toString().isEmpty()) {
+            return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingErrorCode)};
         }
+        parts.errorCode = errorCodeValue.toString();
+
         const QJsonValue messageValue = envelope.value(kMessageKey);
-        if (messageValue.isString()) {
-            parts.message = messageValue.toString();
+        if (!messageValue.isString()) {
+            return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingErrorMessage)};
         }
+        parts.message = messageValue.toString();
     }
 
     return {parts, {}};
+}
+
+QJsonObject buildSuccessResponse(
+    const QString& requestId,
+    const QString& traceId,
+    const QJsonObject& data,
+    const QString& serverTs)
+{
+    return QJsonObject{
+        {kProtocolVersionKey, kProtocolVersionQString},
+        {kRequestIdKey, requestId},
+        {kTraceIdKey, traceId},
+        {kStatusKey, QStringLiteral("ok")},
+        {kDataKey, data},
+        {kServerTsKey, serverTs},
+    };
+}
+
+QJsonObject buildErrorResponse(
+    const QString& requestId,
+    const QString& traceId,
+    const QString& errorCode,
+    const QString& message,
+    const QString& serverTs)
+{
+    return QJsonObject{
+        {kProtocolVersionKey, kProtocolVersionQString},
+        {kRequestIdKey, requestId},
+        {kTraceIdKey, traceId},
+        {kStatusKey, QStringLiteral("error")},
+        {kServerTsKey, serverTs},
+        {kErrorCodeKey, errorCode},
+        {kMessageKey, message},
+    };
+}
+
+bool isValidErrorCode(const QString& code)
+{
+    return code == error_codes::kUnsupportedMethod
+        || code == error_codes::kInvalidRequest
+        || code == error_codes::kProtocolError
+        || code == error_codes::kInternalError
+        || code == error_codes::kTimeout;
 }
 
 }  // namespace kylin::memory::client::v1

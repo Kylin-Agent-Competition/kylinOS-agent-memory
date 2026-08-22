@@ -1,13 +1,13 @@
 // test_memory_client_mock.cpp — MemoryClient ↔ MockGateway 契约测试（L0）
 //
 // 覆盖：
-//   - 客户端连接 Mock Gateway 并发出 health 请求，收到回包
-//   - 自定义 handler 决定响应（验证客户端解析正确）
+//   - 客户端连接 Mock Gateway 并发出 health 请求，收到 FRZ-IPC-006 响应
+//   - 自定义 handler 决定响应（验证客户端 parseResponse 路径）
 //   - request_id 关联：响应带 request_id 时正确匹配
 //   - 未连接时发送请求：requestFailed 报 ERR_NOT_CONNECTED
 //   - 服务端不存在时连接失败：connectionError 信号
-//   - 服务端 echo 响应（原样回传 envelope）
 //   - 协议错误（服务端发送畸形包）触发 connectionError 并断连
+//   - 未知 request_id 响应被丢弃（不转发给上层）
 //
 // 注意：本测试为 L0 Mock 契约测试，非 L2 麒麟 VM Runtime 证据。
 // 不冒充真实 Memory Service 联调（L1）或麒麟 VM 链路（L2）。
@@ -26,12 +26,13 @@ class MemoryClientMockTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void connectAndSendHealthReceivesEcho();
+    void connectAndSendHealthReceivesResponse();
     void customHandlerReturnsDifferentResponse();
     void sendRequestWhileDisconnectedFails();
     void connectToMissingServerEmitsConnectionError();
     void malformedServerPacketTriggersConnectionError();
     void healthResponseCarriesRequestIdForMatching();
+    void unknownRequestIdResponseIsDropped();
 
 private:
     QString uniqueSocketName(const QString& prefix);
@@ -46,7 +47,7 @@ QString MemoryClientMockTest::uniqueSocketName(const QString& prefix)
         .arg(QCoreApplication::applicationPid());
 }
 
-void MemoryClientMockTest::connectAndSendHealthReceivesEcho()
+void MemoryClientMockTest::connectAndSendHealthReceivesResponse()
 {
     test_support::MockGatewayServer mock;
     const QString socket = mock.listen(uniqueSocketName("echo"));
@@ -61,12 +62,11 @@ void MemoryClientMockTest::connectAndSendHealthReceivesEcho()
 
     client.connectToService();
 
-    // 轮询等待连接成功（最多 5 秒）。避免依赖 QSignalSpy::wait 仅数新信号的语义。
     QTRY_COMPARE_WITH_TIMEOUT(
         client.connectionState(),
         client::MemoryClient::ConnectionState::Connected,
         5000);
-    QVERIFY(connectedSpy.count() >= 2);  // Disconnected→Connecting→Connected
+    QVERIFY(connectedSpy.count() >= 2);
 
     const QString requestId = client.sendHealthRequest();
     QVERIFY(!requestId.isEmpty());
@@ -77,13 +77,16 @@ void MemoryClientMockTest::connectAndSendHealthReceivesEcho()
     const auto args = responseSpy.takeFirst();
     QCOMPARE(args.at(0).toString(), requestId);
     const QJsonObject envelope = args.at(1).value<QJsonObject>();
-    QVERIFY(envelope.contains(client::kProtocolVersionKey));
 
-    const auto [parts, err] = client::parseEnvelope(envelope);
+    // 使用 parseResponse 校验响应结构（FRZ-IPC-006 §6.2）
+    const auto [parts, err] = client::parseResponse(envelope);
     QVERIFY(err.ok());
     QVERIFY(parts.has_value());
-    QCOMPARE(parts->method, client::methods::kHealth);
+    QCOMPARE(parts->status, QStringLiteral("ok"));
     QCOMPARE(parts->requestId, requestId);
+    QCOMPARE(parts->traceId, requestId);
+    QVERIFY(!parts->serverTs.isEmpty());
+    QVERIFY(parts->data.contains(QStringLiteral("echo")));
 
     QCOMPARE(mock.receivedRequests().size(), static_cast<std::size_t>(1));
     QCOMPARE(mock.receivedRequests().front().method,
@@ -95,11 +98,11 @@ void MemoryClientMockTest::customHandlerReturnsDifferentResponse()
     test_support::MockGatewayServer mock;
     mock.setHandler([](const client::EnvelopeParts& parts)
                         -> QJsonObject {
-        // 服务端：原样回传 method 与 request_id，但 payload 替换为固定响应。
-        return client::buildEnvelope(
-            parts.method,
-            QJsonObject{{QStringLiteral("status"), QStringLiteral("ok")}},
-            parts.requestId);
+        // 服务端：生成 FRZ-IPC-006 标准成功响应。
+        return client::buildSuccessResponse(
+            parts.requestId,
+            parts.traceId,
+            QJsonObject{{QStringLiteral("status"), QStringLiteral("ok")}});
     });
     const QString socket = mock.listen(uniqueSocketName("custom"));
     QVERIFY(!socket.isEmpty());
@@ -123,12 +126,13 @@ void MemoryClientMockTest::customHandlerReturnsDifferentResponse()
     const auto args = responseSpy.takeFirst();
     QCOMPARE(args.at(0).toString(), requestId);
     const QJsonObject envelope = args.at(1).value<QJsonObject>();
-    const auto [parts, err] = client::parseEnvelope(envelope);
+
+    const auto [parts, err] = client::parseResponse(envelope);
     QVERIFY(err.ok());
     QVERIFY(parts.has_value());
-    QCOMPARE(parts->method, client::methods::kHealth);
+    QCOMPARE(parts->status, QStringLiteral("ok"));
     QCOMPARE(parts->requestId, requestId);
-    QCOMPARE(parts->payload.value(QStringLiteral("status")).toString(),
+    QCOMPARE(parts->data.value(QStringLiteral("status")).toString(),
              QStringLiteral("ok"));
 }
 
@@ -148,14 +152,12 @@ void MemoryClientMockTest::sendRequestWhileDisconnectedFails()
 void MemoryClientMockTest::connectToMissingServerEmitsConnectionError()
 {
     client::MemoryClient client;
-    // 故意使用一个不存在的 socket 路径
     client.setSocketPath(QStringLiteral("/tmp/kylin-mock-missing-"
                                         "d4-test-not-a-socket.sock"));
     QSignalSpy errorSpy(&client, &client::MemoryClient::connectionError);
     QSignalSpy stateSpy(&client, &client::MemoryClient::connectionStateChanged);
 
     client.connectToService();
-    // 连接错误通常会立刻 emit 或在事件循环首圈 emit
     QTRY_VERIFY_WITH_TIMEOUT(errorSpy.count() >= 1, 5000);
     QCOMPARE(client.connectionState(),
              client::MemoryClient::ConnectionState::Disconnected);
@@ -164,9 +166,6 @@ void MemoryClientMockTest::connectToMissingServerEmitsConnectionError()
 void MemoryClientMockTest::malformedServerPacketTriggersConnectionError()
 {
     test_support::MockGatewayServer mock;
-    // 服务端：通过 MockGatewayServer 的 __malformed__ 后门向客户端写入超大长度头，
-    // 触发 DeclaredLengthTooLarge。MemoryClient 必须将不可恢复协议错误上报为
-    // connectionError 并切换到 Disconnected（避免半包污染后续请求）。
     mock.setHandler([](const client::EnvelopeParts&)
                         -> QJsonObject {
         return QJsonObject{{QStringLiteral("__malformed__"), true}};
@@ -189,7 +188,6 @@ void MemoryClientMockTest::malformedServerPacketTriggersConnectionError()
     const QString id = client.sendHealthRequest();
     QVERIFY(!id.isEmpty());
 
-    // 畸形包到达后，connectionError 必须上报，且状态被强制回到 Disconnected。
     QTRY_VERIFY_WITH_TIMEOUT(errorSpy.count() >= 1, 5000);
     QTRY_COMPARE_WITH_TIMEOUT(
         client.connectionState(),
@@ -203,10 +201,10 @@ void MemoryClientMockTest::healthResponseCarriesRequestIdForMatching()
     test_support::MockGatewayServer mock;
     mock.setHandler([](const client::EnvelopeParts& parts)
                         -> QJsonObject {
-        return client::buildEnvelope(
-            parts.method,
-            QJsonObject{{QStringLiteral("status"), QStringLiteral("ok")}},
-            parts.requestId);
+        return client::buildSuccessResponse(
+            parts.requestId,
+            parts.traceId,
+            QJsonObject{{QStringLiteral("status"), QStringLiteral("ok")}});
     });
     const QString socket = mock.listen(uniqueSocketName("match"));
     QVERIFY(!socket.isEmpty());
@@ -230,10 +228,43 @@ void MemoryClientMockTest::healthResponseCarriesRequestIdForMatching()
     QVERIFY(!second.isEmpty());
     QVERIFY(first != second);
 
-    QTRY_VERIFY_WITH_TIMEOUT(responseSpy.count() >= 1, 5000);
-
-    // 第一响应应匹配 first 或 second；最终两个响应都收到
     QTRY_COMPARE_WITH_TIMEOUT(responseSpy.count(), 2, 5000);
+}
+
+void MemoryClientMockTest::unknownRequestIdResponseIsDropped()
+{
+    test_support::MockGatewayServer mock;
+    // 服务端：返回一个 request_id 不匹配的响应（伪造 ID）。
+    mock.setHandler([](const client::EnvelopeParts&)
+                        -> QJsonObject {
+        return client::buildSuccessResponse(
+            QStringLiteral("req_forged_unknown_id"),
+            QStringLiteral("req_forged_unknown_id"),
+            QJsonObject{});
+    });
+    const QString socket = mock.listen(uniqueSocketName("unknown"));
+    QVERIFY(!socket.isEmpty());
+
+    client::MemoryClient client;
+    client.setSocketPath(socket);
+
+    QSignalSpy responseSpy(&client, &client::MemoryClient::responseReceived);
+    QSignalSpy failedSpy(&client, &client::MemoryClient::requestFailed);
+
+    client.connectToService();
+    QTRY_COMPARE_WITH_TIMEOUT(
+        client.connectionState(),
+        client::MemoryClient::ConnectionState::Connected,
+        5000);
+
+    const QString requestId = client.sendHealthRequest();
+    QVERIFY(!requestId.isEmpty());
+
+    // 未知 request_id 的响应应被丢弃，responseReceived 不应触发。
+    // 等待一段足够时间确保服务端已响应。
+    QTest::qWait(500);
+    QCOMPARE(responseSpy.count(), 0);
+    QCOMPARE(failedSpy.count(), 0);
 }
 
 QTEST_MAIN(MemoryClientMockTest)

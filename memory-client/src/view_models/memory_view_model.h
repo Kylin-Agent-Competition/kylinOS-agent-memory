@@ -71,6 +71,9 @@ signals:
     // 请求失败时向 QML 报告固定安全消息（不含原文）。
     void requestFailed(const QString& requestId, const QString& errorCode, const QString& safeMessage);
 
+    // 连接级错误（转发 MemoryClient::connectionError，供 QML 绑定）。
+    void connectionError(const QString& safeMessage);
+
 private slots:
     void onConnectionStateChanged();
     void onLastErrorChanged();

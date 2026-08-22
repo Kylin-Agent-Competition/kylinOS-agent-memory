@@ -49,6 +49,15 @@ private slots:
     void parseResponseRejectsMissingServerTs();
     void parseResponseRejectsOkWithoutData();
     void parseResponseRejectsMissingProtocolVersion();
+    // error response 校验（MEDIUM-01）
+    void parseResponseRejectsErrorWithoutErrorCode();
+    void parseResponseRejectsErrorWithoutMessage();
+    void parseResponseRejectsErrorWithNonStringErrorCode();
+    void parseResponseRejectsErrorWithNonStringMessage();
+    // uint32 高位长度头边界测试（HIGH-03）
+    void decodeRejectsHighBitSetLength();
+    void decodeRejectsMaxUint32Length();
+    void decodeRejectsJustOverLimit();
 };
 
 void ProtocolAdapterTest::encodeDecodeRoundTrips()
@@ -475,6 +484,112 @@ void ProtocolAdapterTest::parseResponseRejectsMissingProtocolVersion()
     const auto [parts, err] = client::parseResponse(response);
     QVERIFY(!err.ok());
     QCOMPARE(err.kind, client::ProtocolErrorKind::MissingProtocolVersion);
+}
+
+// ── error response 校验测试（MEDIUM-01）───────────────────────────────
+
+void ProtocolAdapterTest::parseResponseRejectsErrorWithoutErrorCode()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-err-1")},
+        {client::kTraceIdKey, QStringLiteral("trc-err-1")},
+        {client::kStatusKey, QStringLiteral("error")},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:10:00Z")},
+        {client::kMessageKey, QStringLiteral("Something went wrong")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingErrorCode);
+}
+
+void ProtocolAdapterTest::parseResponseRejectsErrorWithoutMessage()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-err-2")},
+        {client::kTraceIdKey, QStringLiteral("trc-err-2")},
+        {client::kStatusKey, QStringLiteral("error")},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:11:00Z")},
+        {client::kErrorCodeKey, QStringLiteral("INTERNAL_ERROR")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingErrorMessage);
+}
+
+void ProtocolAdapterTest::parseResponseRejectsErrorWithNonStringErrorCode()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-err-3")},
+        {client::kTraceIdKey, QStringLiteral("trc-err-3")},
+        {client::kStatusKey, QStringLiteral("error")},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:12:00Z")},
+        {client::kErrorCodeKey, 42},
+        {client::kMessageKey, QStringLiteral("Bad")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingErrorCode);
+}
+
+void ProtocolAdapterTest::parseResponseRejectsErrorWithNonStringMessage()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-err-4")},
+        {client::kTraceIdKey, QStringLiteral("trc-err-4")},
+        {client::kStatusKey, QStringLiteral("error")},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:13:00Z")},
+        {client::kErrorCodeKey, QStringLiteral("TIMEOUT")},
+        {client::kMessageKey, 42},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingErrorMessage);
+}
+
+// ── uint32 高位长度头边界测试（HIGH-03）───────────────────────────────
+
+void ProtocolAdapterTest::decodeRejectsHighBitSetLength()
+{
+    // 0x80000000 — 高位为 1，声明长度 2147483648，远超 64KB 上限。
+    // 旧代码用 qint32 会解析为 -2147483648，误判为 IncompletePacket。
+    QByteArray packet;
+    packet.append(static_cast<char>(0x80));
+    packet.append(static_cast<char>(0x00));
+    packet.append(static_cast<char>(0x00));
+    packet.append(static_cast<char>(0x00));
+    packet.append("{}");  // body（不会被读取，但确保缓冲区有数据）
+    const auto result = client::decodePacket(packet);
+    QCOMPARE(result.error.kind, client::ProtocolErrorKind::DeclaredLengthTooLarge);
+}
+
+void ProtocolAdapterTest::decodeRejectsMaxUint32Length()
+{
+    // 0xFFFFFFFF — 最大 uint32，声明长度 4294967295。
+    QByteArray packet;
+    packet.append(static_cast<char>(0xFF));
+    packet.append(static_cast<char>(0xFF));
+    packet.append(static_cast<char>(0xFF));
+    packet.append(static_cast<char>(0xFF));
+    packet.append("{}");
+    const auto result = client::decodePacket(packet);
+    QCOMPARE(result.error.kind, client::ProtocolErrorKind::DeclaredLengthTooLarge);
+}
+
+void ProtocolAdapterTest::decodeRejectsJustOverLimit()
+{
+    // 0x00010001 = 65537，刚好超过 kMaxMessageLen=65536 一个字节。
+    QByteArray packet;
+    packet.append(static_cast<char>(0x00));
+    packet.append(static_cast<char>(0x01));
+    packet.append(static_cast<char>(0x00));
+    packet.append(static_cast<char>(0x01));
+    packet.append("{}");
+    const auto result = client::decodePacket(packet);
+    QCOMPARE(result.error.kind, client::ProtocolErrorKind::DeclaredLengthTooLarge);
 }
 
 QTEST_APPLESS_MAIN(ProtocolAdapterTest)
