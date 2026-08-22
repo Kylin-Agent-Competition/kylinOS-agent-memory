@@ -7,7 +7,8 @@
 - 人工审批门槛：一名独立、非作者 Reviewer 的 `APPROVED`
 - 专业关注点：D 关注 Provider/SQLite/Outbox/IPC 可实现性；E 关注用户隔离、
   遗忘、安全与评测；项目任务卡指定的关注项须在 Review 记录中明确覆盖
-- Runtime：本轮未启动虚拟机；所有 L2 条目为 `DEFERRED_VM`
+- Runtime：2026-08-03 原轮次未启动虚拟机；2026-08-21 后续已闭合
+  `B-D3-V001`，其余 L2 条目仍为 `DEFERRED_VM`
 
 ## 1. 使用规则
 
@@ -21,6 +22,7 @@
 | `DEFERRED_CROSS_TRACK` | 由 C/D/E 冻结，B 已明确自身边界 |
 | `PLANNED_D4` | D4 必须实现的非 VM 契约测试 |
 | `DEFERRED_VM` | 需要目标麒麟宿主，按本轮用户指令暂不执行 |
+| `PASS_VM` | 已在目标麒麟 VM 完成受控验证，且证据绑定被测版本/候选哈希 |
 | `PASS_LOCAL` | 本轮可在本地完成的静态/纯函数检查已通过 |
 | `PENDING_REVIEW` | 等待独立 Reviewer 给出结论 |
 
@@ -187,14 +189,14 @@ merge、rebase、Review 或改写其他作者分支。
 | B-D3-T047 | 幂等/确认摘要轮换 | 历史仅验证密钥下的同域同语义重放返回记录结果，未过期确认可验证 | key-id 改变导致重复副作用，密钥不可用或确认过期仍执行 Delete 失败 | L0/L1_FAKE | `PARTIAL_LOCAL`：幂等轮换通过；删除确认 key/TTL 待 Service 边界 |
 | B-D3-T048 | 索引文本摘要轮换 | SQLite 真源重算后仅完整校验的新 key generation 激活 | serving generation 混用 key-id 或未重建即激活失败 | L1_FAKE | `PASS_LOCAL` |
 
-## 5. 目标麒麟 VM 验证队列（本轮跳过）
+## 5. 目标麒麟 VM 验证队列（V001 后续已执行）
 
-以下条目需要启动目标麒麟虚拟机或改变隔离测试环境。本轮不执行、不创建新
-Runtime 日志，也不更改 KySec、systemd、数据库、Socket、SSH、NAT 或 VM 状态。
+以下条目在 2026-08-03 原轮次未执行。2026-08-21 后续仅执行 V001；V002–V007
+继续等待各自解除条件，不因 V001 通过而改变状态。
 
 | ID | 目标 Runtime 事实 | 解除条件 | 状态 |
 |---|---|---|---|
-| B-D3-V001 | 当前固定 SDK raw score 的方向、范围和稳定语义 | 受控 identical/orthogonal/opposite 向量实验；证据绑定 commit/版本 | `DEFERRED_VM / TD-003` |
+| B-D3-V001 | 当前固定 SDK raw score 的方向、范围和稳定语义 | 受控 identical/orthogonal/opposite 向量实验；证据绑定 commit/版本 | [`PASS_VM / TD-003 Resolved`](15_vector_score_semantics_kylin_vm_report_20260821.md) |
 | B-D3-V002 | Provider v1 真实 upsert/search/delete 错误映射 | D4 Provider 实现与隔离环境就绪 | `DEFERRED_VM` |
 | B-D3-V003 | deadline/取消在不可中断 SDK 调用下的真实行为 | D4 调度实现和故障注入方案就绪 | `DEFERRED_VM` |
 | B-D3-V004 | 索引新代次构建、失败保旧与恢复 | D4 Collection Schema/重建器就绪 | `DEFERRED_VM` |
