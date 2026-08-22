@@ -34,7 +34,7 @@ def _hit(memory_id, version_id, channel, rank, user_id="alice", raw_score=0.0):
     )
 
 
-def _truth(memory_id, version_id="v1", user_id="alice", status="active", sensitivity="internal", content="x", object_type=ObjectType.KNOWLEDGE):
+def _truth(memory_id, version_id="v1", user_id="alice", status="active", sensitivity="internal", content="x", object_type=ObjectType.KNOWLEDGE, conflict_state="resolved"):
     return TruthRecord(
         memory_id=memory_id,
         version_id=version_id,
@@ -44,7 +44,7 @@ def _truth(memory_id, version_id="v1", user_id="alice", status="active", sensiti
         memory_status=status,
         content=content,
         sensitivity=sensitivity,
-        conflict_state="resolved",
+        conflict_state=conflict_state,
     )
 
 
@@ -103,6 +103,22 @@ def test_forgotten_status_dropped():
     truth = {("alice", "mem-a", "v1"): _truth("mem-a", status="forgotten")}
     out = fuse_retrieval(fts5_hits=hits, vector_hits=[], truth=truth, flt=_flt())
     assert out == []
+
+
+def test_unresolved_conflict_dropped():
+    # 未解决冲突命中必须在融合前消失（ADR-001 输入边界第 5 步）。
+    hits = [_hit("mem-a", "v1", Channel.FTS5, 1)]
+    truth = {("alice", "mem-a", "v1"): _truth("mem-a", conflict_state="unresolved")}
+    out = fuse_retrieval(fts5_hits=hits, vector_hits=[], truth=truth, flt=_flt())
+    assert out == []
+
+
+def test_resolved_conflict_kept():
+    # 已解决冲突命中可以保留。
+    hits = [_hit("mem-a", "v1", Channel.FTS5, 1)]
+    truth = {("alice", "mem-a", "v1"): _truth("mem-a", conflict_state="resolved")}
+    out = fuse_retrieval(fts5_hits=hits, vector_hits=[], truth=truth, flt=_flt())
+    assert [c.memory_id for c in out] == ["mem-a"]
 
 
 def test_empty_result():

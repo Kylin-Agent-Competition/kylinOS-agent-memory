@@ -1,8 +1,7 @@
 """V006/D5-B：FTS5 + Vector 融合编排（回源硬过滤 + rrf-v1 + 统一候选）。
 
 只做编排，不依赖 SDK；输入是已结构化的 RetrievalHit 与回源真值表。
-复用 
-etrieval.rrf 的纯函数完成去重、按 memory 聚合与确定性排序。
+复用 retrieval.rrf 的纯函数完成去重、按 memory 聚合与确定性排序。
 """
 
 from __future__ import annotations
@@ -44,7 +43,7 @@ def _hard_filter(
     rec: Optional[TruthRecord],
     flt: RetrievalFilter,
 ) -> bool:
-    """融合前硬过滤：回源缺失/跨用户/状态/敏感度/对象类型不符均丢弃。"""
+    """融合前硬过滤：回源缺失/跨用户/状态/敏感度/对象类型/未解决冲突均丢弃。"""
     if rec is None:
         return False
     if rec.user_id != flt.user_id:
@@ -56,6 +55,10 @@ def _hard_filter(
     if flt.allowed_sensitivity and rec.sensitivity not in flt.allowed_sensitivity:
         return False
     if flt.memory_types and rec.memory_type not in flt.memory_types:
+        return False
+    # 未解决冲突硬过滤：不注入上下文（ADR-001 输入边界第 5 步）。
+    # conflict_policy 当前默认 exclude_unresolved；其他策略需新增 ADR 后才可放宽。
+    if rec.conflict_state == "unresolved":
         return False
     return True
 
@@ -72,10 +75,9 @@ def fuse_retrieval(
     """融合 FTS5 与 Vector 命中，回源硬过滤，rrf-v1 融合，返回统一候选。
 
     - 同一通道按精确 (memory_id, version_id) 去重后取最佳 rank；
-    - 回源 	ruth[(user_id, memory_id, version_id)] 并做硬过滤；
+    - 回源 truth[(user_id, memory_id, version_id)] 并做硬过滤；
     - 过滤后的合法命中按 memory_id 聚合、RRF 排序；
-    - 输出 RetrievalCandidate，
-rf_score == final_score（v1 不做业务重排）。
+    - 输出 RetrievalCandidate，rrf_score == final_score（v1 不做业务重排）。
     """
     deduped = dedupe_exact_version(list(fts5_hits) + list(vector_hits))
     legal: list[RetrievalHit] = []
@@ -160,7 +162,7 @@ def retrieve_graceful(
 ) -> RetrievalOutcome:
     """执行两路召回并融合；单路故障时降级为空命中的该路，不抛未捕获异常。
 
-    - ts5_search / ector_search 均为无参可调用对象，返回 list[RetrievalHit]。
+    - fts5_search / vector_search 均为无参可调用对象，返回 list[RetrievalHit]。
     - 某路抛出异常时，该路命中记为空，并把错误登记到 degraded_channels。
     - 正常那路命中仍参与融合，保证服务故障时可解释降级而非整体崩溃。
     """
