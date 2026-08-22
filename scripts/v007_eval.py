@@ -87,6 +87,7 @@ def _config(raw: dict, mode: ChannelMode) -> EvalConfig:
         warmup_count=int(raw.get("warmup_count", 0)),
         repeat_count=int(raw.get("repeat_count", 1)),
         concurrency=int(raw.get("concurrency", 1)),
+        target_threshold=float(raw.get("target_threshold", 0.85)),
     )
 
 

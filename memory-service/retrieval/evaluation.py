@@ -40,6 +40,7 @@ class EvalConfig:
     warmup_count: int = 0  # TEAM_DEFINED
     repeat_count: int = 1  # TEAM_DEFINED
     concurrency: int = 1  # TEAM_DEFINED：默认单并发
+    target_threshold: float = 0.85  # M2 知识检索召回率 OFFICIAL_REQUIREMENT >=85%；E 轨 Gold Label 落地后按配置版本传入
 
     def __post_init__(self) -> None:
         if self.k <= 0:
@@ -50,6 +51,8 @@ class EvalConfig:
             raise ValueError("rrf_k 必须为正整数")
         if self.warmup_count < 0 or self.repeat_count < 1:
             raise ValueError("warmup_count >= 0 且 repeat_count >= 1")
+        if not 0.0 <= self.target_threshold <= 1.0:
+            raise ValueError("target_threshold 必须在 [0,1]")
 
 
 @dataclass(frozen=True)
@@ -224,7 +227,7 @@ def evaluate_queries(
         mrr=mean_mrr,
         ndcg_at_k=mean_ndcg,
         hit_count=hit_count,
-        target_threshold=0.85,
+        target_threshold=config.target_threshold,
         k_value=config.k,
         p50_ms=percentile(latencies, 50.0) if latencies else None,
         p95_ms=percentile(latencies, 95.0) if latencies else None,
