@@ -102,10 +102,22 @@ class UDSGatewayServer:
             self._close_server_sock()
 
     def stop(self) -> None:
-        """停止服务器（拒绝新请求 + join 连接线程）。"""
+        """停止服务器（拒绝新请求 + join 连接线程 + unlink socket 文件）。
+
+        unlink 语义（修复 TD-IPC 技术债）：Linux/麒麟下已关闭 listening socket
+        的 socket 文件若未删除，停后 connect() 仍成功、请求在收发阶段被 ECONNRESET
+        拒绝——对外表现为"文件在但服务已停"。stop() 统一在关闭 server sock 后
+        unlink，使停后 connect() 立即失败，与 embedding/server.py 行为对齐。
+        容错：文件不存在/已由 start() 清理时静默通过（需幂等）。
+        """
         self._running = False
         self._stopped = True
         self._close_server_sock()
+        if os.path.exists(self._socket_path):
+            try:
+                os.unlink(self._socket_path)
+            except OSError as exc:
+                logger.warning("unlink socket 失败(继续 stop): %s", exc)
         with self._conn_lock:
             threads = list(self._conn_threads)
         for t in threads:

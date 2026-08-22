@@ -122,17 +122,20 @@ FTS5_DDL = (
 # 说明：SQLite 触发器内 FTS5 'delete' 命令与 JSON 中文内容不兼容（实测 SQL logic
 # error，SQLite 3.37），统一改用 `DELETE FROM memory_fts WHERE rowid = old.id`
 # （实验验证方式 B/C 可用）。UPDATE 场景拆分为两个 WHEN 子句触发器。
+# 幂等契约（TD 关联：init_schema() 二次调用）：全部使用 `IF NOT EXISTS`，
+# 保证同一触发器在重复调用 init_schema()/create_all 时不冲突（SQLite 原生支持，
+# 不改变冻结语义）。engine.py::init_schema() 依赖此契约。
 FTS_TRIGGERS_DDL = [
     # INSERT：新记录入 FTS
     """
-    CREATE TRIGGER memory_fts_ai AFTER INSERT ON memory_entries BEGIN
+    CREATE TRIGGER IF NOT EXISTS memory_fts_ai AFTER INSERT ON memory_entries BEGIN
         INSERT INTO memory_fts(rowid, content, entry_type, user_id)
         VALUES (new.id, new.content, new.entry_type, new.user_id);
     END
     """,
     # UPDATE（内容变化，非软删除）：先删旧再插新
     """
-    CREATE TRIGGER memory_fts_au_content AFTER UPDATE ON memory_entries
+    CREATE TRIGGER IF NOT EXISTS memory_fts_au_content AFTER UPDATE ON memory_entries
     WHEN old.is_deleted = 0 AND new.is_deleted = 0 AND old.content IS NOT new.content
     BEGIN
         DELETE FROM memory_fts WHERE rowid = old.id;
@@ -142,7 +145,7 @@ FTS_TRIGGERS_DDL = [
     """,
     # UPDATE（软删除 0→1）：只删 FTS，不插回（MATCH 不再命中，冻结文档 §2.4）
     """
-    CREATE TRIGGER memory_fts_au_deleted AFTER UPDATE ON memory_entries
+    CREATE TRIGGER IF NOT EXISTS memory_fts_au_deleted AFTER UPDATE ON memory_entries
     WHEN old.is_deleted = 0 AND new.is_deleted = 1
     BEGIN
         DELETE FROM memory_fts WHERE rowid = old.id;
@@ -150,7 +153,7 @@ FTS_TRIGGERS_DDL = [
     """,
     # DELETE：物理删除同步删 FTS
     """
-    CREATE TRIGGER memory_fts_ad AFTER DELETE ON memory_entries BEGIN
+    CREATE TRIGGER IF NOT EXISTS memory_fts_ad AFTER DELETE ON memory_entries BEGIN
         DELETE FROM memory_fts WHERE rowid = old.id;
     END
     """,

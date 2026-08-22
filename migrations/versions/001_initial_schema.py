@@ -102,9 +102,12 @@ def upgrade() -> None:
         "CREATE VIRTUAL TABLE memory_fts USING fts5("
         "content, entry_type, user_id UNINDEXED, tokenize='unicode61')"
     )
+    # 幂等契约（与 db/schema.py FTS_TRIGGERS_DDL 单一真相一致，详见 TD 关联）：
+    # `IF NOT EXISTS` 保证重复执行建库/迁移脚本时不冲突（alembic 按 revision id
+    # 记录，不校验内容，修改安全且不改变冻结语义）。
     op.execute(
         """
-        CREATE TRIGGER memory_fts_ai AFTER INSERT ON memory_entries BEGIN
+        CREATE TRIGGER IF NOT EXISTS memory_fts_ai AFTER INSERT ON memory_entries BEGIN
             INSERT INTO memory_fts(rowid, content, entry_type, user_id)
             VALUES (new.id, new.content, new.entry_type, new.user_id);
         END
@@ -112,7 +115,7 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        CREATE TRIGGER memory_fts_au_content AFTER UPDATE ON memory_entries
+        CREATE TRIGGER IF NOT EXISTS memory_fts_au_content AFTER UPDATE ON memory_entries
         WHEN old.is_deleted = 0 AND new.is_deleted = 0 AND old.content IS NOT new.content
         BEGIN
             DELETE FROM memory_fts WHERE rowid = old.id;
@@ -123,7 +126,7 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        CREATE TRIGGER memory_fts_au_deleted AFTER UPDATE ON memory_entries
+        CREATE TRIGGER IF NOT EXISTS memory_fts_au_deleted AFTER UPDATE ON memory_entries
         WHEN old.is_deleted = 0 AND new.is_deleted = 1
         BEGIN
             DELETE FROM memory_fts WHERE rowid = old.id;
@@ -132,7 +135,7 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        CREATE TRIGGER memory_fts_ad AFTER DELETE ON memory_entries BEGIN
+        CREATE TRIGGER IF NOT EXISTS memory_fts_ad AFTER DELETE ON memory_entries BEGIN
             DELETE FROM memory_fts WHERE rowid = old.id;
         END
         """

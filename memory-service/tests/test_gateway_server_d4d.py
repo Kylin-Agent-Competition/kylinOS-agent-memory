@@ -191,3 +191,32 @@ def test_stop_rejects_after_shutdown(tmp_path):
     time.sleep(0.2)
     with pytest.raises(OSError):
         _request(sock, _base("echo"), timeout=2.0)
+
+
+def test_stop_unlinks_socket(tmp_path):
+    """stop() 必须 unlink socket 文件（TD-IPC-001 回归）。
+
+    修复前：stop() 只 close server sock，socket 文件残留；麒麟/Linux 下
+    停后 connect() 仍成功、请求被 ECONNRESET 拒绝（vfy_uds.py 6.7 观测）。
+    修复后：stop() unlink socket 文件 → 停后文件不存在、connect() 立即失败。
+    """
+    eng = create_db_engine(str(tmp_path / "gw_unlink.db"))
+    init_schema(eng)
+    registry = HandlerRegistry()
+    register_default_handlers(registry)
+    sock = str(tmp_path / "unlink.sock")
+    server = UDSGatewayServer(sock, registry, engine=eng)
+    t = threading.Thread(target=server.start, daemon=True)
+    t.start()
+    _wait_socket(sock)
+    assert os.path.exists(sock)
+    server.stop()
+    # socket 文件已删除（修复点）
+    assert not os.path.exists(sock)
+    # 停后 connect 立即失败（无残留文件可连）
+    with pytest.raises(OSError):
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(2.0)
+            s.connect(sock)
+    # stop 幂等：再次调用不抛错（文件已不存在）
+    server.stop()
