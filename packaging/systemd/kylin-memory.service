@@ -1,0 +1,24 @@
+[Unit]
+Description=Kylin Memory Service
+Documentation=https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+After=network.target
+
+[Service]
+Type=simple
+# 部署冻结 §1.2：%h = $HOME，%t = $XDG_RUNTIME_DIR
+ExecStart=%h/.local/bin/kylin-memory-server --socket %t/kylin-memory/memory.sock
+RuntimeDirectory=kylin-memory
+Restart=on-failure
+RestartSec=5s
+
+# 按用户隔离，不要求 root；最小安全加固
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX
+
+# 说明：正式发行环境（麒麟生产系统）systemd 测试未执行前不得写"成品通过"；
+#       本 unit 为设计冻结骨架，需在麒麟 VM 完成 L2 验证（安装/重启/回退）。
+# 安装：cp packaging/systemd/kylin-memory.service ~/.config/systemd/user/
+#       systemctl --user daemon-reload && systemctl --user enable --now kylin-memory
+
+[Install]
+WantedBy=default.target

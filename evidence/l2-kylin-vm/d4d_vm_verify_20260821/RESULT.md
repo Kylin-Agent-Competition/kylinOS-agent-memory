@@ -1,0 +1,13 @@
+# D4D VM L2 验证结果（2026-08-21 补录 2026-08-22）
+- commit: ed9949c feat(D4D): IPC Gateway + 数据库层（SQLAlchemy/Alembic/UoW）+ Outbox/配置/日志/systemd 骨架
+- 迁移验收（2.1 upgrade / 2.2 schema / 2.3 往返）: PASS / PASS / PASS
+- systemd 部署（启动/重启/回退/日志/socket）: PASS / PASS / PASS / PASS / PASS
+- FTS5 中文+软删除: PASS
+- busy_timeout 降级: PASS
+- UDS 断开/超时: PASS
+- 幂等自检（init_schema 二次调用）: PASS（IDEMPOTENT_OK）
+- socket 权限位: srw------- / 0600 / kylin-agent:kylin-agent
+- 执行人: kylin-agent（手动执行，SSH 自动化辅助）
+- 补录说明: 2026-08-22 修复 init_schema() 触发器幂等 + UDS stop unlink（TD-IPC-001）后重跑第 4/5/6 步；归档重跑不再报 trigger already exists
+- 缺陷注记1: alembic.ini script_location=migrations，须在仓库根以 -c migrations/alembic.ini 执行
+- 缺陷注记2: UDSGatewayServer.stop() 已修复 unlink socket 文件（TD-IPC-001 Resolved）

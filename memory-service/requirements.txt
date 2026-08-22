@@ -1,8 +1,11 @@
-# memory-service 运行时依赖（H4：正式依赖声明，2026-08-13）
+# memory-service 运行时依赖（D4D：数据库层 + IPC Gateway + Outbox）
 # 安装：pip install -r memory-service/requirements.txt
-# 对齐：总体架构 v1 技术栈（Pydantic v2）+ Day3 契约
+# 对齐：总体架构 v1 技术栈（Pydantic v2 / SQLAlchemy 2.0 Core / Alembic）+ Day3 契约
 
 pydantic>=2,<3        # 事件模型/候选模型校验（架构批准 Pydantic v2）
+sqlalchemy>=2.0,<2.1  # SQLite 结构化存储（架构批准 SQLAlchemy 2.0 Core）
+alembic>=1.13         # 数据库迁移（FR-DB-002，ADR-007 基线命名）
+tomli>=2.0; python_version < "3.11"  # config.toml 解析（Python 3.10 兼容）
 
 # ── 测试依赖（开发环境） ──
 pytest>=8              # 全量 pytest（L0/L1）
