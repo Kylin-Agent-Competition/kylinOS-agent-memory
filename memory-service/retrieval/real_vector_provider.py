@@ -38,12 +38,30 @@ class VectorCliClient:
             capture_output=True,
             timeout=60,
         )
-        if proc.returncode != 0:
-            raise VectorCliError(-1, proc.stderr.strip() or "exit " + str(proc.returncode))
         text = (proc.stdout or "").strip()
-        if not text:
+        # SDK 连接重试日志会污染 stdout；vector_cli 的协议 JSON 是最后一行。
+        # 从最后一行往前找第一个能解析为 dict 的行，忽略 SDK 的 WARN/ERROR 噪音。
+        result: Optional[dict] = None
+        for line in reversed(text.splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                candidate = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(candidate, dict):
+                result = candidate
+                break
+        if proc.returncode != 0:
+            # 非零退出时优先保留 stdout 中的结构化错误（如连接失败 code=3），
+            # 否则回退到 stderr。
+            if result is not None and result.get("ok") is False:
+                raise VectorCliError(int(result.get("code", -1)), result.get("message", ""))
+            raise VectorCliError(-1, proc.stderr.strip() or "exit " + str(proc.returncode))
+        if result is None:
             return {}
-        return json.loads(text)
+        return result
 
     def _require_ok(self, result: dict) -> None:
         if not result.get("ok"):
