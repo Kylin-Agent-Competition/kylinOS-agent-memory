@@ -3,7 +3,7 @@
 > 提请方：B 轨（D5B）
 > 提请对象：D 轨主审（Provider/SQLite/Outbox/IPC 关注方）
 > 提请性质：按 `TECHNICAL_DEBT_REGISTER.md` TD-004 关闭条件「由 D/B 冻结并验证 maintenance-window/routing-switch 等价方案」，正式提请 D 轨对 **routing-switch 等价方案**作冻结确认，作为 TD-004 的关闭路径。
-> 关联 PR：#51（`feature/d5-b-retrieval-vertical-slice`，head `146c359`）
+> 关联 PR：#51（`feature/d5-b-retrieval-vertical-slice`）；本提请基于证据归档 commit `146c359`，提请文档自身提交于 commit `5cefde0`
 
 ---
 
@@ -19,7 +19,7 @@ D 轨确认冻结以下等价方案，作为未取得"原子 Collection swap"宿
 ## 2. 提请依据
 
 ### 2.1 契约层面已冻结，本方案不越界
-- `docs/day3/08_vector_retrieval_contract_v1.md` §6.6（L533–542）已冻结 `activation_mode ∈ {atomic_switch, maintenance_window, routing_switch}`，并明确：
+- `docs/day3/08_vector_retrieval_contract_v1.md` §6.6已冻结 `activation_mode ∈ {atomic_switch, maintenance_window, routing_switch}`，并明确：
   - 当前无原子 Collection swap 宿主证据时，Provider 必须显式返回 activation_mode；
   - `atomic_switch` 仅当 capabilities 明确支持且取得目标宿主证据时允许；
   - 失败重建不得替换旧 serving generation，恢复路径须可审计。
