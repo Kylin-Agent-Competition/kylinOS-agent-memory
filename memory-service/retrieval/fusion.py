@@ -7,7 +7,7 @@ etrieval.rrf 的纯函数完成去重、按 memory 聚合与确定性排序。
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from retrieval.contracts import (
@@ -134,3 +134,54 @@ rf_score == final_score（v1 不做业务重排）。
             )
         )
     return out
+
+
+
+@dataclass
+class RetrievalOutcome:
+    """检索结果 + 降级通道说明（服务故障时单路降级不中断整体）。"""
+
+    candidates: list[RetrievalCandidate]
+    degraded_channels: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def degraded(self) -> bool:
+        return bool(self.degraded_channels)
+
+
+def retrieve_graceful(
+    *,
+    fts5_search,
+    vector_search,
+    truth: dict[tuple[str, str, str], TruthRecord],
+    flt: RetrievalFilter,
+    k: int = RRF_DEFAULT_K,
+    top_k: Optional[int] = None,
+) -> RetrievalOutcome:
+    """执行两路召回并融合；单路故障时降级为空命中的该路，不抛未捕获异常。
+
+    - ts5_search / ector_search 均为无参可调用对象，返回 list[RetrievalHit]。
+    - 某路抛出异常时，该路命中记为空，并把错误登记到 degraded_channels。
+    - 正常那路命中仍参与融合，保证服务故障时可解释降级而非整体崩溃。
+    """
+    degraded: dict[str, str] = {}
+    try:
+        fts5_hits = list(fts5_search())
+    except Exception as exc:  # noqa: BLE001 - 编排层统一捕获单路故障
+        fts5_hits = []
+        degraded["fts5"] = f"{type(exc).__name__}: {exc}"
+    try:
+        vector_hits = list(vector_search())
+    except Exception as exc:  # noqa: BLE001
+        vector_hits = []
+        degraded["vector"] = f"{type(exc).__name__}: {exc}"
+
+    candidates = fuse_retrieval(
+        fts5_hits=fts5_hits,
+        vector_hits=vector_hits,
+        truth=truth,
+        flt=flt,
+        k=k,
+        top_k=top_k,
+    )
+    return RetrievalOutcome(candidates=candidates, degraded_channels=degraded)
