@@ -649,3 +649,56 @@ entries:
       restart-recover / socket-cleanup / kill9-pre / kill9-recover /
       rapid-restart 5/5 / timeout / final-recover
       2 FAIL 为进程管理竞态条件，核心 IPC 链路全通过
+
+  - id: "C-D4-MEMORY-CLIENT-L0"
+    task_id: "D4-C"
+    description: "Day4 C 轨 Memory Client 工程骨架 L0 验证 — QML_APP=ON 构建闭环 + 47/47 子用例 PASS（含 parseResponse 生产门禁、FRZ-IPC-006 真实 Mock response、uint32 高位长度头边界）"
+    status: "L0_VERIFIED"
+    evidence_level: "L0"
+    source: "evidence/memory-client/ctest_qml_on_20260822.txt"
+    date: "2026-08-22"
+    reviewer: "D 主审"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "FROZEN_ALIGNED 仅覆盖协议帧结构与字段对齐；FRZ-IPC-004 客户端 deadline_ms + 100ms 超时行为未实现（已登记 TD-018，计划 D5 阶段关闭）；L1/L2 未实现（待 D 轨 Gateway 落地联调）；2 个 -Wunused-function warning（protocolErrorKindToString / connectionStateToString，非阻断，预存工具函数）；MemoryContext 真实注入受 TD-008 阻断；偏好/知识业务 Schema 受 E 轨终审阻断"
+    checksum_sha256: "41ff3c482ded8fcfaee918dbbd5a44dd5b5f1a05a64cdb1fb2dd8ec5f04ed1f4"
+    details: |
+      执行环境: WSL Ubuntu 22.04 (Linux 5.15.0, x86_64)
+      编译器: GCC 11.4.0
+      Qt: 5.15.3 (qtbase5-dev + qtdeclarative5-dev + qtquickcontrols2-5-dev,
+        满足 Qt >= 5.12 目标声明)
+      构建命令:
+        cmake -S memory-client -B memory-client/build \
+          -DKYLIN_MEMORY_CLIENT_BUILD_QML_APP=ON \
+          -DKYLIN_MEMORY_CLIENT_BUILD_TESTS=ON
+        cmake --build memory-client/build --parallel
+      产物:
+        - libkylin_memory_client.a (静态库)
+        - kylin-memory-client (QML 可执行文件, QML_APP=ON 构建闭环)
+        - test_protocol_adapter (单元测试)
+        - test_memory_client_mock (Mock 契约测试)
+      ctest 结果 (2/2 tests, 47/47 子用例 PASS, 0.60s):
+        - protocol_adapter: 38 PASS (0.02s)
+          覆盖: encode/decode round-trip, IncompletePacket, DeclaredLengthTooLarge,
+          InvalidJson, EnvelopeNotObject, 多包连续解码, buildEnvelope 可选字段,
+          parseEnvelope (合法/缺 protocol_version/版本 4 行/类型错误/缺 method/
+          method 空串/payload 非对象/可选字段), parseResponse (合法 ok/error/
+          缺 status/非法 status/缺 request_id/缺 trace_id/缺 server_ts/ok 缺 data/
+          缺 protocol_version/error 缺 error_code/error 缺 message/error_code 非字符串/
+          message 非字符串), uint32 高位长度头边界 (0x80000000/0xFFFFFFFF/65537 超限)
+        - memory_client_mock: 9 PASS (0.52s)
+          覆盖: health 响应收发 (FRZ-IPC-006 真实 response), 自定义 handler 响应,
+          未连接即发送 -> ERR_NOT_CONNECTED, 不存在服务端 -> connectionError,
+          畸形包 (超大长度头) -> connectionError + Disconnected,
+          request_id 关联匹配 (并发两请求), 未知 request_id 响应被丢弃
+      生产接收链: decodePacket -> parseResponse -> pending request 门禁 ->
+        trace_id 关联校验 -> 合法后 responseReceived;
+        非法/未知/重复/迟到响应不作为正常 response 上抛
+      Mock Gateway: 使用 buildSuccessResponse()/buildErrorResponse() 生成
+        FRZ-IPC-006 真实 response, 不再原样回传 request envelope
+      readHeader: 返回 std::optional<quint32> (unsigned), 正确处理高位为 1 的长度字段
+      证据文件:
+        - evidence/memory-client/build_qml_on_20260822.log (QML_APP=ON 构建日志, SHA256: 4dc40dfd8d6246ae9df40c469a8497b950418a75aabdda7827bdeed2819c5c97)
+        - evidence/memory-client/ctest_qml_on_20260822.txt (ctest -V 输出, SHA256: 41ff3c482ded8fcfaee918dbbd5a44dd5b5f1a05a64cdb1fb2dd8ec5f04ed1f4)
+        - evidence/memory-client/ctest_l0_20260820.txt (历史 39 PASS 证据, SHA256: eee881d158240e8cb4e339fd9896acb631e950bb3e909dc808b715b6b6c6efe6)
