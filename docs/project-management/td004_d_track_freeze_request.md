@@ -40,9 +40,9 @@ D 轨确认冻结以下等价方案，作为未取得"原子 Collection swap"宿
 
 请 D 轨主审确认以下一项或多项，并回复批准记录：
 
-- [ ] **冻结 routing-switch 等价方案**为 TD-004 的关闭路径（认可 V005 能力否定实证 + V004 多代次模式验证）。
-- [ ] 确认关闭后不放松能力矩阵：`supports_atomic_generation_switch=false/UNTESTED`，激活仅走 `routing_switch`/`maintenance_window`，禁止 `atomic_switch`。
-- [ ] 确认 TD-004 由 `Open` → `Resolved`（或登记为「已接受等价方案」），并同意 B 轨同步回写 `TECHNICAL_DEBT_REGISTER.md` 与能力矩阵。
+- [x] **冻结 routing-switch 等价方案**为 TD-004 的关闭路径（认可 V005 能力否定实证 + V004 多代次模式验证）。
+- [x] 确认关闭后不放松能力矩阵：`supports_atomic_generation_switch=false/UNTESTED`，激活仅走 `routing_switch`/`maintenance_window`，禁止 `atomic_switch`。
+- [x] 确认 TD-004 由 `Open` → `Resolved`（或登记为「已接受等价方案」），并同意 B 轨同步回写 `TECHNICAL_DEBT_REGISTER.md` 与能力矩阵。
 
 ## 4. 批准后 B 轨将执行
 
@@ -57,6 +57,19 @@ D 轨确认冻结以下等价方案，作为未取得"原子 Collection swap"宿
 - 若 D 轨要求补充故障注入/恢复路径证据，B 轨按 D 轨意见补充后再行关闭。
 
 ---
+
+## 6. D 轨批准记录（APPROVED）
+
+- **结论**：`APPROVED` —— 冻结 routing-switch 等价方案为 TD-004 的关闭路径。
+- **批准人**：周子腾（D 轨）
+- **批准日期**：2026-08-23
+- **接受的边界条件**：
+  1. 认可 V005 能力否定实证（SDK 无 rename/swap/replace 原子切换 API）+ V004 多代次模式验证（新代次构建不干扰 serving / 失败不替换旧代次 / drop-old 切换）。
+  2. 关闭后不放松能力矩阵：`supports_atomic_generation_switch` 保持 `false/UNTESTED`，激活仅走 `routing_switch`（或经授权的 `maintenance_window`），禁止 `atomic_switch`。
+  3. TD-004 状态由 `Open` → `Resolved`，并同意 B 轨同步回写 `TECHNICAL_DEBT_REGISTER.md`、`09_retrieval_contract_review_matrix.md`、`16_d5b_retrieval_vertical_slice_host_report_20260823.md` 与 `evidence/index.yaml`（`B-D3-V005`）。
+  4. 本冻结仅约束"索引代次切换"激活方式；不替代 PR#51 自身独立 Reviewer 的 `APPROVED`；V007 正式量化评测仍待 E 轨 Gold Label/封存集。
+
+---
 **提请人**：B 轨（gaoyizhe934）
 **日期**：2026-08-23
-**请 D 轨主审在本文件/对应 PR 评论中回复：`APPROVED`（附批准人、日期、接受的边界条件）或所需补充项。**
+**批准人**：周子腾（D 轨）　**结论**：`APPROVED`（2026-08-23）

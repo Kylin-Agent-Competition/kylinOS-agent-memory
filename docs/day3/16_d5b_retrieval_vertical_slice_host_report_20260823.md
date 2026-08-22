@@ -2,7 +2,7 @@
 
 > 结论：`B-D3-V002`–`V006` 及 D5B 边界验证（空库/服务故障/Top-K）取得麒麟 VM 宿主证据；
 > `V007` 评测脚本/配置版本绑定为 `PASS_VM`，其正式量化评测仍 `DEFERRED_VM`（依赖 E 轨 Gold Label/封存集）。
-> `TD-004` 保持 `Open`：V005 已实证 SDK 无原子切换 API，但 routing-switch 等价方案需 D 轨冻结后方可关闭。
+> `TD-004` 已 `Resolved`：V005 已实证 SDK 无原子切换 API，routing-switch 等价方案经 D 轨（周子腾，2026-08-23）冻结为关闭路径。
 
 - 日期：2026-08-23
 - 系统：Kylin V11 x86_64，内核 `6.6.0-63-generic`
@@ -18,7 +18,7 @@
 | V002 | Provider v1 真实 upsert/search/delete 错误映射 | `PASS_VM`：校验类错误统一 `SERVER_FAILED(1002)`，原因在 `Message()`，未使用头文件细分码 | `v002_error_mapping_20260823.log` |
 | V003 | deadline/取消在不可中断 SDK 下的真实行为 | `PASS_VM`：无 cancel/abort API；Search/Query 有 timeout（粗粒度），Insert/Upsert/Delete 无；服务停止 code=3 | `v003_deadline_cancel_20260823.log` |
 | V004 | 索引新代次构建、失败保旧与恢复 | `PASS_VM`：多集合代次模式；新代次构建不干扰 serving，失败不替换旧代次，drop-old 切换 | `v004_generation_rebuild_20260823.log` |
-| V005 | 原子 generation/Collection 切换能力 | `PASS_VM`（能力否定）：SDK 无 rename/swap/replace 原子 API，等价方案 routing-switch；TD-004 待 D 轨冻结 | `v005_atomic_switch_20260823.log` |
+| V005 | 原子 generation/Collection 切换能力 | `PASS_VM`（能力否定）：SDK 无 rename/swap/replace 原子 API，等价方案 routing-switch；TD-004 已 D 轨冻结 Resolved | `v005_atomic_switch_20260823.log` |
 | V006 | FTS5 + Vector + rrf-v1 端到端 | `PASS_VM`：FTS5 BM25 + 真实 Vector + 应用层 RRF 在 VM 跑通 | `v006_e2e_fts5_vector_rrf_20260823.log` |
 | V007 | Recall@K/MRR/nDCG/P95 | `PASS_VM`（脚本/配置就绪）：评测脚本输出三通道指标；正式量化评测仍 `DEFERRED_VM` | `v007_eval_20260823.log` |
 
@@ -64,5 +64,5 @@
 ## 5. 状态边界（如实，不虚标）
 
 - `V007` 正式量化评测（Recall@K 达标等）依赖 E 轨 Gold Label/封存集，`datasets/` 当前尚未封存；本报告只证明评测脚本与配置版本绑定就绪。
-- `TD-004` 保持 `Open`：V005 已实证「无原子切换 API」，但「routing-switch 等价方案」需 D 轨确认冻结后方可关闭。
+- `TD-004` 已 `Resolved`：V005 已实证「无原子切换 API」，「routing-switch 等价方案」经 D 轨（周子腾，2026-08-23）冻结为关闭路径；`supports_atomic_generation_switch` 保持 `false/UNTESTED`，激活仅走 `routing_switch`/`maintenance_window`，禁止 `atomic_switch`。
 - 本报告不替代一名独立、非作者 Reviewer 的 `APPROVED`，也不自动构成 D5B Gate 通过。

@@ -58,7 +58,7 @@ Gate PASS；Gate 0 仍要求 P0 全部关闭、适用的静态/契约验证通�
 | B-D3-016 | Delete 隔离 | Service 先以 SQLite 校验归属；请求用户与 selector 用户不一致时明确拒绝 | alpha resolved IDs 进入 Provider | 越权 resolved ID 或用户不一致被“0 匹配”掩盖 | D2 E4；08 §6.5 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-017 | Full reset | 必须有独立授权、预览和显式确认引用 | 已授权且确认的 resolved selector | 模型/自然语言直接全量删除或豁免 | 业务 Schema；08 §6.5 | `DEFERRED_CROSS_TRACK` | `PENDING_REVIEW` |
 | B-D3-018 | Rebuild | 只从 SQLite 确定性快照/水位构建新代次 | 新代次校验后激活 | 从旧 Vector 正文反向恢复 | 08 §6.6 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
-| B-D3-019 | 激活 | 未验证原子切换前 capability=false | maintenance/routing 模式显式 | 假定 Collection rename 原子 | `TD-004`；08 §6.6 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
+| B-D3-019 | 激活 | 未验证原子切换前 capability=false | maintenance/routing 模式显式 | 假定 Collection rename 原子 | `TD-004`（Resolved，D 轨冻结 routing-switch 等价方案）；08 §6.6 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-020 | IndexState | `ready` 必须有 serving generation、Schema 和水位 | 三项完整且已验证 | Socket/进程存在即 ready | 08 §10 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-021 | 状态只读 | `get_index_state` 不创建/启动/修复/重建 | 查询前后状态不变 | 健康检查隐式创建 Collection | 08 §6.7 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
 | B-D3-022 | Hit/Candidate | Hit 无正文，Candidate 正文来自 SQLite | `content_source=sqlite_safe_summary` | Vector content 直接进入 Context | 08 §8–9 | `FROZEN_CANDIDATE` | `PENDING_REVIEW` |
@@ -200,7 +200,7 @@ merge、rebase、Review 或改写其他作者分支。
 | B-D3-V002 | Provider v1 真实 upsert/search/delete 错误映射 | D4 Provider 实现与隔离环境就绪 | [`PASS_VM`](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
 | B-D3-V003 | deadline/取消在不可中断 SDK 调用下的真实行为 | D4 调度实现和故障注入方案就绪 | [`PASS_VM`](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
 | B-D3-V004 | 索引新代次构建、失败保旧与恢复 | D4 Collection Schema/重建器就绪 | [`PASS_VM`](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
-| B-D3-V005 | 原子 generation/Collection 切换能力 | 官方接口或宿主故障注入证据 | [`PASS_VM / TD-004 Open`](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
+| B-D3-V005 | 原子 generation/Collection 切换能力 | 官方接口或宿主故障注入证据 | [`PASS_VM / TD-004 Resolved`](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
 | B-D3-V006 | FTS5 + Vector + rrf-v1 端到端 | FTS5、Provider、SQLite 回源、RRF 均实现 | [`PASS_VM`](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
 | B-D3-V007 | Recall@K/MRR/nDCG/P95 | Gold Label、封存集、配置版本和评测脚本就绪 | [`PASS_VM`（脚本/配置）/ `DEFERRED_VM`（正式评测）](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
 

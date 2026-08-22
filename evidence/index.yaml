@@ -737,7 +737,7 @@ entries:
     merge_qualified: false
     date: "2026-08-23"
     reviewer: "pending"
-    limitations: "SDK 无 rename/swap/replace 原子切换 API，等价方案为 routing-switch(drop-old + keep-new)；TD-004 保持 Open，待 D 轨确认冻结等价方案"
+    limitations: "SDK 无 rename/swap/replace 原子切换 API，等价方案为 routing-switch(drop-old + keep-new)；TD-004 已 Resolved（D 轨周子腾 2026-08-23 冻结 routing-switch 等价方案为关闭路径）"
     checksum_sha256: "a12243c17de66eafd6bd0710a1ed7b8fae21eabd3b1b665d38f9421973aeb78d"
 
   - id: "B-D3-V006"
