@@ -1,0 +1,17 @@
+=== 正在运行: V003 deadline/timeout probe (21:25:34) ===
+V003_DEADLINE step=baseline_connect detail="ok=true; code=0; message=OK"
+V003_DEADLINE step=baseline_insert_2000_rows detail="ok=true; code=0; message="
+V003_DEADLINE step=search_timeout_1ms detail="elapsed_ms=4; ok=true; code=0; message="
+V003_DEADLINE step=search_timeout_1000ms detail="elapsed_ms=4; ok=true; code=0; message="
+V003_DEADLINE step=query_timeout_1ms detail="elapsed_ms=2; ok=true; code=0; message="
+V003_DEADLINE step=probe_complete detail="deadline/timeout scenarios recorded"
+=== 服务停止场景: 记录断连错误码 (21:26:09) ===
+WARN connect milvus failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock, retry: 0
+WARN connect milvus failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock, retry: 1
+WARN connect milvus failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock, retry: 2
+WARN connect milvus failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock, retry: 3
+WARN connect milvus failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock, retry: 4
+ERROR connect milvus retry failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock
+V003_DEADLINE step=baseline_connect detail="ok=false; code=3; message=Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock"
+V003_DEADLINE step=baseline_connect detail="FAIL: connection failed"
+=== 服务已重启 ===

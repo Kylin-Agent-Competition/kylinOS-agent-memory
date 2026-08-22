@@ -1,0 +1,152 @@
+{
+  "status": "SCRIPT_OUTPUT",
+  "channels": {
+    "fts5": {
+      "metric_name": "knowledge_retrieval_recall_fts5",
+      "channel_mode": "fts5",
+      "query_count": 2,
+      "recall_at_k": 0.25,
+      "mean_recall_at_k": 0.25,
+      "mrr": 0.5,
+      "ndcg_at_k": 0.3065735963827292,
+      "hit_count": 1,
+      "target_threshold": 0.85,
+      "k_value": 3,
+      "p50_ms": 150.0,
+      "p95_ms": 177.0,
+      "mean_ms": 150.0,
+      "max_ms": 180.0,
+      "sample_count": 2,
+      "rrf_k": 60,
+      "statistics_method": "p95",
+      "warmup_count": 0,
+      "repeat_count": 1,
+      "concurrency": 1,
+      "gold_label_version": "dev-synthetic-1",
+      "dataset_version": "dev-synthetic-1",
+      "implementation_commit": "LOCAL_UNCOMMITTED",
+      "environment": "windows-local",
+      "evidence_reference": "",
+      "per_query_detail": [
+        {
+          "query_id": "q1",
+          "recall_at_k": 0.5,
+          "reciprocal_rank": 1.0,
+          "ndcg_at_k": 0.6131471927654584,
+          "hit": true,
+          "hit_rank": 1,
+          "relevant_count": 2,
+          "latency_ms": 120.0
+        },
+        {
+          "query_id": "q2",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "ndcg_at_k": 0.0,
+          "hit": false,
+          "hit_rank": null,
+          "relevant_count": 1,
+          "latency_ms": 180.0
+        }
+      ]
+    },
+    "vector": {
+      "metric_name": "knowledge_retrieval_recall_vector",
+      "channel_mode": "vector",
+      "query_count": 2,
+      "recall_at_k": 1.0,
+      "mean_recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_count": 2,
+      "target_threshold": 0.85,
+      "k_value": 3,
+      "p50_ms": 150.0,
+      "p95_ms": 177.0,
+      "mean_ms": 150.0,
+      "max_ms": 180.0,
+      "sample_count": 2,
+      "rrf_k": 60,
+      "statistics_method": "p95",
+      "warmup_count": 0,
+      "repeat_count": 1,
+      "concurrency": 1,
+      "gold_label_version": "dev-synthetic-1",
+      "dataset_version": "dev-synthetic-1",
+      "implementation_commit": "LOCAL_UNCOMMITTED",
+      "environment": "windows-local",
+      "evidence_reference": "",
+      "per_query_detail": [
+        {
+          "query_id": "q1",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "ndcg_at_k": 1.0,
+          "hit": true,
+          "hit_rank": 1,
+          "relevant_count": 2,
+          "latency_ms": 120.0
+        },
+        {
+          "query_id": "q2",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "ndcg_at_k": 1.0,
+          "hit": true,
+          "hit_rank": 1,
+          "relevant_count": 1,
+          "latency_ms": 180.0
+        }
+      ]
+    },
+    "rrf_v1": {
+      "metric_name": "knowledge_retrieval_recall_rrf_v1",
+      "channel_mode": "rrf_v1",
+      "query_count": 2,
+      "recall_at_k": 1.0,
+      "mean_recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_count": 2,
+      "target_threshold": 0.85,
+      "k_value": 3,
+      "p50_ms": 150.0,
+      "p95_ms": 177.0,
+      "mean_ms": 150.0,
+      "max_ms": 180.0,
+      "sample_count": 2,
+      "rrf_k": 60,
+      "statistics_method": "p95",
+      "warmup_count": 0,
+      "repeat_count": 1,
+      "concurrency": 1,
+      "gold_label_version": "dev-synthetic-1",
+      "dataset_version": "dev-synthetic-1",
+      "implementation_commit": "LOCAL_UNCOMMITTED",
+      "environment": "windows-local",
+      "evidence_reference": "",
+      "per_query_detail": [
+        {
+          "query_id": "q1",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "ndcg_at_k": 1.0,
+          "hit": true,
+          "hit_rank": 1,
+          "relevant_count": 2,
+          "latency_ms": 120.0
+        },
+        {
+          "query_id": "q2",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "ndcg_at_k": 1.0,
+          "hit": true,
+          "hit_rank": 1,
+          "relevant_count": 1,
+          "latency_ms": 180.0
+        }
+      ]
+    }
+  }
+}
