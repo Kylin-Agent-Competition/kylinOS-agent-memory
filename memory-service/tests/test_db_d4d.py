@@ -37,6 +37,27 @@ def test_foreign_keys_on(engine):
     assert fk == 1
 
 
+def test_init_schema_idempotent(tmp_path):
+    """init_schema() 二次调用不得崩溃（触发器幂等，修复 L2 补录根因）。
+
+    修复前：FTS_TRIGGERS_DDL 四条 CREATE TRIGGER 无条件执行，二次调用即
+    `sqlite3.OperationalError: trigger memory_fts_ai already exists`。
+    修复后：DDL 使用 `CREATE TRIGGER IF NOT EXISTS`，重复调用静默通过。
+    """
+    eng = create_db_engine(str(tmp_path / "idem.db"))
+    init_schema(eng)  # 第一次
+    init_schema(eng)  # 第二次：修复前崩溃，修复后应无异常
+    # 触发器仍只有一个实例（未重复创建）
+    with eng.connect() as conn:
+        rows = conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master "
+            "WHERE type='trigger' AND name LIKE 'memory_fts_%'"
+        ).all()
+    names = sorted(r[0] for r in rows)
+    assert names == ["memory_fts_ad", "memory_fts_ai", "memory_fts_au_content", "memory_fts_au_deleted"]
+    eng.dispose()
+
+
 def test_tables_exist(engine):
     with engine.connect() as conn:
         tables = {

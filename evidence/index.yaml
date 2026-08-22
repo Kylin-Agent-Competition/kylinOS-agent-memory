@@ -231,6 +231,32 @@ entries:
       Results: KAIMING-ECHO PASS, KAIMING-HEALTH PASS, KAIMING-RETRIEVE PASS, KAIMING-STORE PASS (UNSUPPORTED_METHOD), KAIMING-UNKNOWN PASS (UNSUPPORTED_METHOD), KAIMING-RAPID PASS (5/5)
       Passed: 6 / Failed: 0
 
+  - id: "D4D-L2-VERIFY"
+    task_id: "D4-D"
+    description: "D4D 麒麟 VM L2 验证补录（2026-08-22）—— FTS5 中文+软删除同步 / busy_timeout 持锁降级 / UDS 断开-超时-停止 / socket 权限位 / alembic -c 正确调用 / init_schema 幂等，重跑全 PASS"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d4d_vm_verify_20260821/verify_run.log"
+    report: "evidence/l2-kylin-vm/d4d_vm_verify_20260821/RESULT.md"
+    tested_commit: "ed9949c feat(D4D): IPC Gateway + 数据库层（SQLAlchemy/Alembic/UoW）+ Outbox/配置/日志/systemd 骨架"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    date: "2026-08-22"
+    reviewer: "kylin-agent（手动执行，SSH 自动化辅助）"
+    limitations: "init_schema() 触发器非幂等（trigger already exists）已用 CREATE TRIGGER IF NOT EXISTS 修复并在 VM 幂等自检 IDEMPOTENT_OK；UDS stop unlink（TD-IPC-001）已修复并补回归；alembic 须在仓库根以 -c migrations/alembic.ini 执行；systemd socket 权限位 srw-------/0600/kylin-agent:kylin-agent；证据绑定 HEAD ed9949c，Review 未完成不代表允许合并"
+    checksum_sha256: "dca7f33c2f849fee467a4ac6365365f8a641f6dd3883400e112547d8991eb119"
+    details: |
+      执行环境: 银河麒麟桌面 V11 x86_64，VM 用户 kylin-agent，venv sqlalchemy 2.0.52 / alembic 1.19.1。
+      FTS5 中文检索 + 软删除同步: PASS（MATCH '咖啡'/'我喜欢喝咖啡' -> 1，软删除后 -> 0，主表软删除记录保留 2）
+      busy_timeout 持锁降级语义: PASS（OperationalError 识别为锁定降级 True，耗时 2.1s，非无限阻塞）
+      UDS 断开/超时/停止语义: PASS（6.1 health / 6.2 retrieve 空上下文 / 6.3-6.4 UNSUPPORTED_METHOD / 6.5 提前断开存活 / 6.6 TIMEOUT / 6.7 停止后拒绝，全 PASS）
+      socket 权限位: srw------- / 600 / kylin-agent:kylin-agent
+      alembic -c migrations/alembic.ini upgrade head: EXIT=0，schema 完整
+      init_schema() 二次调用幂等: IDEMPOTENT_OK；UDS stop unlink: SOCK_UNLINKED_OK
+      归档自校验: 无 Traceback，三脚本 PASS 标识齐全；verify_run.log 与 RESULT.md 一致。
+
+
   - id: "ECHO-005"
     task_id: "D1-C"
     description: "麒麟环境独立 UDS Echo Spike 复测 — 环境基线已冻结，fail-closed evidence runner 重建"

@@ -1,8 +1,18 @@
+=== 补录时间 ===
+2026-08-22T11:28:59Z
 === commit ===
 ed9949c feat(D4D): IPC Gateway + 数据库层（SQLAlchemy/Alembic/UoW）+ Outbox/配置/日志/systemd 骨架
 === venv 版本 ===
-2.0.52 1.19.1
-=== 迁移 schema ===
+sqlalchemy 2.0.52
+alembic 1.19.1
+=== idempotent ===
+IDEMPOTENT_OK
+=== alembic upgrade ===
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 001_initial_schema, 001_initial_schema — D4D 基线迁移（ADR-007 命名：001_initial_schema.py）
+EXIT=0
+=== schema ===
 CREATE TABLE alembic_version (
 	version_num VARCHAR(32) NOT NULL, 
 	CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
@@ -83,36 +93,16 @@ CREATE TRIGGER memory_fts_ai AFTER INSERT ON memory_entries BEGIN
             VALUES (new.id, new.content, new.entry_type, new.user_id);
         END;
 CREATE TRIGGER memory_fts_au_content AFTER UPDATE ON memory_entries
-        WHEN old.is_deleted = 0 AND new.is_deleted = 0 AND old.content IS NOT new.content
-        BEGIN
-            DELETE FROM memory_fts WHERE rowid = old.id;
-            INSERT INTO memory_fts(rowid, content, entry_type, user_id)
-            VALUES (new.id, new.content, new.entry_type, new.user_id);
-        END;
-CREATE TRIGGER memory_fts_au_deleted AFTER UPDATE ON memory_entries
-        WHEN old.is_deleted = 0 AND new.is_deleted = 1
-        BEGIN
-            DELETE FROM memory_fts WHERE rowid = old.id;
-        END;
-CREATE TRIGGER memory_fts_ad AFTER DELETE ON memory_entries BEGIN
-            DELETE FROM memory_fts WHERE rowid = old.id;
-        END;
 === systemd ===
-○ kylin-memory.service - Kylin Memory Service
+● kylin-memory.service - Kylin Memory Service
      Loaded: loaded (/home/kylin-agent/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
-     Active: inactive (dead) since Sat 2026-08-22 00:41:00 CST; 6s ago
-   Duration: 50ms
+     Active: active (running) since Sat 2026-08-22 18:50:39 CST; 38min ago
        Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
-    Process: 502983 ExecStart=/home/kylin-agent/.local/bin/kylin-memory-server --socket /run/user/1000/kylin-memory/memory.sock (code=killed, signal=TERM)
-   Main PID: 502983 (code=killed, signal=TERM)
-        CPU: 48ms
+   Main PID: 3107 (python)
+      Tasks: 3 (limit: 9405)
+     Memory: 20.1M (peak: 52.3M swap: 12.7M swap peak: 12.7M)
+        CPU: 3.424s
 === journal ===
-8月 22 00:37:33 kylin-agent-pc systemd[2721]: Started kylin-memory.service - Kylin Memory Service.
-8月 22 00:37:33 kylin-agent-pc systemd[2721]: Stopping kylin-memory.service - Kylin Memory Service...
-8月 22 00:37:33 kylin-agent-pc systemd[2721]: Stopped kylin-memory.service - Kylin Memory Service.
-8月 22 00:38:36 kylin-agent-pc systemd[2721]: Started kylin-memory.service - Kylin Memory Service.
-8月 22 00:38:37 kylin-agent-pc systemd[2721]: Stopping kylin-memory.service - Kylin Memory Service...
-8月 22 00:38:37 kylin-agent-pc systemd[2721]: Stopped kylin-memory.service - Kylin Memory Service.
 8月 22 00:38:37 kylin-agent-pc systemd[2721]: Started kylin-memory.service - Kylin Memory Service.
 8月 22 00:38:37 kylin-agent-pc systemd[2721]: Stopping kylin-memory.service - Kylin Memory Service...
 8月 22 00:38:37 kylin-agent-pc systemd[2721]: Stopped kylin-memory.service - Kylin Memory Service.
@@ -127,114 +117,35 @@ CREATE TRIGGER memory_fts_ad AFTER DELETE ON memory_entries BEGIN
 8月 22 00:41:00 kylin-agent-pc systemd[2721]: Started kylin-memory.service - Kylin Memory Service.
 8月 22 00:41:00 kylin-agent-pc systemd[2721]: Stopping kylin-memory.service - Kylin Memory Service...
 8月 22 00:41:00 kylin-agent-pc systemd[2721]: Stopped kylin-memory.service - Kylin Memory Service.
+8月 22 17:30:27 kylin-agent-pc systemd[2721]: Started kylin-memory.service - Kylin Memory Service.
+8月 22 17:30:28 kylin-agent-pc kylin-memory-server[759793]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+8月 22 17:30:28 kylin-agent-pc kylin-memory-server[759793]: 2026-08-22T17:30:28+0800 INFO __main__ [MainThread] schema 就绪: /home/kylin-agent/.local/share/kylin-memory/kylin_memory.db
+8月 22 17:30:28 kylin-agent-pc kylin-memory-server[759793]: 2026-08-22T17:30:28+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+8月 22 17:30:28 kylin-agent-pc kylin-memory-server[759793]: 2026-08-22T17:30:28+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+8月 22 17:30:28 kylin-agent-pc kylin-memory-server[759793]: 2026-08-22T17:30:28+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+=== socket 权限位 ===
+srw------- 1 kylin-agent kylin-agent 0  8月22日 18:50 /run/user/1000/kylin-memory/memory.sock
+600 srw------- kylin-agent:kylin-agent /run/user/1000/kylin-memory/memory.sock
 === FTS5 ===
-Traceback (most recent call last):
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
-    self.dialect.do_execute(
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
-    cursor.execute(statement, parameters)
-sqlite3.OperationalError: trigger memory_fts_ai already exists
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/tmp/kylin-memory-vfy/vfy_fts5.py", line 9, in <module>
-    init_schema(engine)
-  File "/home/kylin-agent/kylinOS-agent-memory/memory-service/db/engine.py", line 117, in init_schema
-    conn.exec_driver_sql(trigger_ddl)
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1781, in exec_driver_sql
-    ret = self._execute_context(
-          ^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1848, in _execute_context
-    return self._exec_single_context(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1988, in _exec_single_context
-    self._handle_dbapi_exception(
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2365, in _handle_dbapi_exception
-    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
-    self.dialect.do_execute(
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
-    cursor.execute(statement, parameters)
-sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) trigger memory_fts_ai already exists
-[SQL: 
-    CREATE TRIGGER memory_fts_ai AFTER INSERT ON memory_entries BEGIN
-        INSERT INTO memory_fts(rowid, content, entry_type, user_id)
-        VALUES (new.id, new.content, new.entry_type, new.user_id);
-    END
-    ]
-(Background on this error at: https://sqlalche.me/e/20/e3q8)
+MATCH '咖啡' -> 1（期望 >=1）
+MATCH '我喜欢喝咖啡' -> 1（期望 >=1）
+软删除后 MATCH '咖啡' -> 0（期望 0）
+软删除后 MATCH '我喜欢喝咖啡' -> 0（期望 0）
+主表软删除记录保留 -> 2（期望 2）
+FTS5 中文检索 + 软删除同步: PASS
 === busy ===
-Traceback (most recent call last):
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
-    self.dialect.do_execute(
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
-    cursor.execute(statement, parameters)
-sqlite3.OperationalError: trigger memory_fts_ai already exists
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/tmp/kylin-memory-vfy/vfy_busy.py", line 10, in <module>
-    init_schema(engine)
-  File "/home/kylin-agent/kylinOS-agent-memory/memory-service/db/engine.py", line 117, in init_schema
-    conn.exec_driver_sql(trigger_ddl)
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1781, in exec_driver_sql
-    ret = self._execute_context(
-          ^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1848, in _execute_context
-    return self._exec_single_context(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1988, in _exec_single_context
-    self._handle_dbapi_exception(
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2365, in _handle_dbapi_exception
-    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
-    self.dialect.do_execute(
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
-    cursor.execute(statement, parameters)
-sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) trigger memory_fts_ai already exists
-[SQL: 
-    CREATE TRIGGER memory_fts_ai AFTER INSERT ON memory_entries BEGIN
-        INSERT INTO memory_fts(rowid, content, entry_type, user_id)
-        VALUES (new.id, new.content, new.entry_type, new.user_id);
-    END
-    ]
-(Background on this error at: https://sqlalche.me/e/20/e3q8)
+异常类型: OperationalError
+识别为锁定降级: True
+耗时: 2.1s（busy_timeout=2s，期望约 2~4s 返回，非无限阻塞）
+busy_timeout 持锁降级语义: PASS
 === UDS ===
-Traceback (most recent call last):
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
-    self.dialect.do_execute(
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
-    cursor.execute(statement, parameters)
-sqlite3.OperationalError: trigger memory_fts_ai already exists
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/tmp/kylin-memory-vfy/vfy_uds.py", line 15, in <module>
-    init_schema(engine)
-  File "/home/kylin-agent/kylinOS-agent-memory/memory-service/db/engine.py", line 117, in init_schema
-    conn.exec_driver_sql(trigger_ddl)
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1781, in exec_driver_sql
-    ret = self._execute_context(
-          ^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1848, in _execute_context
-    return self._exec_single_context(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1988, in _exec_single_context
-    self._handle_dbapi_exception(
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2365, in _handle_dbapi_exception
-    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
-    self.dialect.do_execute(
-  File "/home/kylin-agent/d4d-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
-    cursor.execute(statement, parameters)
-sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) trigger memory_fts_ai already exists
-[SQL: 
-    CREATE TRIGGER memory_fts_ai AFTER INSERT ON memory_entries BEGIN
-        INSERT INTO memory_fts(rowid, content, entry_type, user_id)
-        VALUES (new.id, new.content, new.entry_type, new.user_id);
-    END
-    ]
-(Background on this error at: https://sqlalche.me/e/20/e3q8)
+6.1 health: PASS (db=ok, methods=['echo', 'health', 'memory.retrieve', 'memory.store'])
+6.2 memory.retrieve 空上下文: PASS
+6.3 memory.store UNSUPPORTED_METHOD: PASS
+6.4 未知方法 UNSUPPORTED_METHOD: PASS
+6.5 客户端提前断开后服务器仍存活: PASS
+6.6 TIMEOUT 语义: PASS
+6.7 停止后拒绝新请求（连接被重置/无响应）: PASS
+UDS 断开/超时/停止语义: PASS
+=== UDS unlink 证据 ===
+SOCK_UNLINKED_OK
