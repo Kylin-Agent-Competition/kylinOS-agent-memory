@@ -1,7 +1,8 @@
 # 09 轨道 C — Day4 Memory Client 工程骨架
 
 > **状态：`L0_COMPLETE / FROZEN_ALIGNED / PENDING_REVIEW`** — 工程骨架 + Mock
-> 契约测试 L0 全部通过（2/2 ctest，30/30 子用例 PASS，总时长 0.09s）；协议编解码
+> 契约测试 L0 全部通过（2/2 ctest，47/47 子用例 PASS，含 QML_APP=ON 构建闭环，
+> 总时长 0.60s）；协议编解码
 > 已对齐 D4 冻结契约 FRZ-IPC-001~007（ALIGN-001~006 全部完成）；待 E 补审
 > （用户交互与安全）；L1/L2 未实现。
 
@@ -42,36 +43,43 @@
 | `memory-client/tests/test_protocol_adapter.cpp` | 协议编解码 L0 单元测试 |
 | `memory-client/tests/test_memory_client_mock.cpp` | Client ↔ Mock Gateway L0 契约测试 |
 
-## L0 验证证据（2026-08-17 WSL Ubuntu 22.04）
+## L0 验证证据（2026-08-22 WSL Ubuntu 22.04，QML_APP=ON clean build）
 
-**构建环境**：GCC 11.4.0 / Qt 5.15.3 (`qtbase5-dev`，Core+Network+Test)
+**构建环境**：GCC 11.4.0 / Qt 5.15.3 (`qtbase5-dev` + `qtdeclarative5-dev`
++ `qtquickcontrols2-5-dev`，Core+Network+Test+Quick+QuickControls2)
 （目标声明 Qt ≥ 5.12；Ubuntu 22.04 自带 5.15 为后向兼容的更高小版本）
 
 **cmake 配置命令**：
 ```bash
 cmake -S memory-client -B memory-client/build \
-    -DKYLIN_MEMORY_CLIENT_BUILD_QML_APP=OFF \
+    -DKYLIN_MEMORY_CLIENT_BUILD_QML_APP=ON \
     -DKYLIN_MEMORY_CLIENT_BUILD_TESTS=ON
 cmake --build memory-client/build --parallel
 ```
-产物：`libkylin_memory_client.a`（静态库）、`test_protocol_adapter`、`test_memory_client_mock`。
+产物：`libkylin_memory_client.a`（静态库）、`kylin-memory-client`（QML 可执行文件）、
+`test_protocol_adapter`、`test_memory_client_mock`。
 
 **ctest 结果（-V 全量子用例）**：
 
 | ctest 名 | 子用例数 | 结果 | 耗时 |
 |----------|----------|------|------|
-| protocol_adapter | 22 | PASS | 0.02 s |
-| memory_client_mock | 8 | PASS | 0.01 s |
-| **合计** | **30/30** | **100%** | **0.08 s** |
+| protocol_adapter | 38 | PASS | 0.02 s |
+| memory_client_mock | 9 | PASS | 0.52 s |
+| **合计** | **47/47** | **100%** | **0.60 s** |
 
 `protocol_adapter` 覆盖：encode/decode round-trip、IncompletePacket、DeclaredLengthTooLarge、
 InvalidJson、EnvelopeNotObject、多包连续解码、buildEnvelope 可选字段省略与写入、
 parseEnvelope（合法含可选字段、缺 protocol_version、不兼容版本 4 行、类型错误版本、
-缺 method、method 非字符串、method 空串、payload 非对象、可选字段读取）。
+缺 method、method 非字符串、method 空串、payload 非对象、可选字段读取）、
+parseResponse（合法 ok/error、缺 status、非法 status、缺 request_id、缺 trace_id、
+缺 server_ts、ok 缺 data、缺 protocol_version、error 缺 error_code、error 缺 message、
+error_code 非字符串、message 非字符串）、uint32 高位长度头边界
+（0x80000000、0xFFFFFFFF、65537 刚超限）。
 
-`memory_client_mock` 覆盖：health echo、自定义 handler、未连接即发送 → ERR_NOT_CONNECTED、
+`memory_client_mock` 覆盖：health 响应收发（FRZ-IPC-006 真实 response）、
+自定义 handler 响应、未连接即发送 → ERR_NOT_CONNECTED、
 不存在服务端 → connectionError、畸形包（超大长度头）→ connectionError + Disconnected、
-request_id 关联（并发两个 health）。
+request_id 关联匹配（并发两请求）、未知 request_id 响应被丢弃。
 
 **构建阶段修复的三批问题（已进入代码、不作为 L2/L1 证据，仅记录 L0 闭环完整性）**：
 1. `parseEnvelope` 返回 `std::optional<EnvelopeParts>` 的解引用错误（6 处 `.method` → `->method`），同时补上 `has_value()` 前置校验（生产代码 memory_client.cpp、测试基础设施 mock_gateway_server.cpp 也各有 1 处同类问题）。
@@ -95,7 +103,7 @@ D4 Gate 0 合入 main 后（`ef050b0`），D 冻结 IPC 协议 FRZ-IPC-001~007 �
 | ALIGN-005 | UDS 路径 `$XDG_RUNTIME_DIR/kylin-memory/memory.sock`（FRZ-IPC-005） | 无默认路径（由调用方设置） | 构造函数自动从 `$XDG_RUNTIME_DIR` 推导默认路径 | ✅ PASS |
 | ALIGN-006 | 请求字段 request_id/trace_id/deadline_ms 必填（FRZ-IPC-006 §6.1） | buildEnvelope 中三者可选 | sendRequest 始终填充三字段（trace_id 复用 request_id，deadline_ms=5000） | ✅ PASS |
 
-**对齐后验证**：ctest 2/2 30/30 子用例 PASS（0.09s），编译 0 error、0 -Wswitch warning。
+**对齐后验证**：ctest 2/2 47/47 子用例 PASS（0.60s，含 QML_APP=ON 构建闭环），编译 0 error。
 
 ## 设计决议
 
@@ -106,7 +114,7 @@ D/E 已签署）。C 轨客户端协议编解码已对齐 FRZ-IPC-001~007 冻结
 所有协议常量集中在 `protocol_adapter.h`，`protocol_adapter.h` 头部状态已升级为
 `FROZEN_ALIGNED`。FROZEN_ALIGNED 语义边界：仅覆盖协议帧结构与字段层对齐，不含
 FRZ-IPC-004 客户端超时行为（deadline_ms + 100ms 未响应视为超时，骨架期未实现，
-记为 TD）。
+已正式登记为 TD-022，计划 D5 阶段关闭）。
 
 ### 2. 错误模型不回显原文
 
@@ -150,8 +158,9 @@ Memory Service 联调（L1）或麒麟 VM 链路（L2）。`test_memory_client_m
 | L1 | QLocalSocket 连接真实 Memory Service | 待联调 | 未实现 |
 | L2 | 麒麟 VM 真实 QML 调用链路 | 未实现 | 未实现 |
 
-验证环境（2026-08-17）：WSL Ubuntu 22.04、GCC 11.4.0、Qt 5.15.3（qtbase5-dev，
-满足 Qt≥5.12 目标声明）、ctest 2/2 30/30 子用例 PASS（0.08s）。
+验证环境（2026-08-22）：WSL Ubuntu 22.04、GCC 11.4.0、Qt 5.15.3（qtbase5-dev
++ qtdeclarative5-dev + qtquickcontrols2-5-dev，满足 Qt≥5.12 目标声明）、
+ctest 2/2 47/47 子用例 PASS（0.60s），QML_APP=ON 构建闭环。
 
 ## 构建步骤
 
@@ -181,10 +190,10 @@ cmake --build memory-client/build
 
 | 项目 | 当前状态 | 说明 |
 |------|----------|------|
-| C++ MemoryClient/QLocalSocket 骨架 | `L0_COMPLETE` | 静态库 `libkylin_memory_client.a` 编译通过；ctest 2/2 30/30 子用例 PASS（0.08s） |
-| 协议编解码 envelope 候选 | `FROZEN_ALIGNED` | 对齐 D4 冻结 FRZ-IPC-001~007（ALIGN-001~006 全部完成）；L0 30/30 子用例 PASS |
-| QML 主框架 + 路由 | `L0_COMPLETE` | StackView + Drawer，三页面（Status/MemoryQuery/Preferences 占位）；Qt 5.12 语法兼容 |
-| 公共 ViewModel | `L0_COMPLETE` | Q_PROPERTY 绑定 + Q_INVOKABLE，不固化业务字段（待 E 轨 Schema） |
-| Mock Gateway 契约测试 | `L0_COMPLETE` | QLocalServer + handler 注入 infrastructure，8 子用例覆盖 echo/custom/ERR_NOT_CONNECTED/missing-server/malformed-packet/request-id 关联 |
+| C++ MemoryClient/QLocalSocket 骨架 | `L0_COMPLETE` | 静态库 `libkylin_memory_client.a` 编译通过；ctest 2/2 47/47 子用例 PASS（0.60s），生产接收链已接入 parseResponse + pending/trace_id 门禁 |
+| 协议编解码 envelope 候选 | `FROZEN_ALIGNED` | 对齐 D4 冻结 FRZ-IPC-001~007（ALIGN-001~006 全部完成）；L0 47/47 子用例 PASS |
+| QML 主框架 + 路由 | `L0_COMPLETE` | StackView + Drawer，三页面（Status/MemoryQuery/Preferences 占位）；Qt 5.12 语法兼容；QML_APP=ON clean build 通过（`kylin-memory-client` 可执行文件生成）；connectionError signal 闭环 |
+| 公共 ViewModel | `L0_COMPLETE` | Q_PROPERTY 绑定 + Q_INVOKABLE，不固化业务字段（待 E 轨 Schema）；connectionError signal 转发 MemoryClient |
+| Mock Gateway 契约测试 | `L0_COMPLETE` | QLocalServer + handler 注入 infrastructure，使用 FRZ-IPC-006 真实 response（buildSuccessResponse/buildErrorResponse）；9 子用例覆盖 health-response/custom/ERR_NOT_CONNECTED/missing-server/malformed-packet/request-id 关联/unknown-request-id-dropped |
 | 真实 Memory Service 联调 | `NOT_IMPLEMENTED / L1_PENDING` | 待 D 轨 Gateway 落地 |
 | 麒麟 VM QML 链路 | `NOT_IMPLEMENTED / L2_PENDING` | 待 D2-C 阻断关闭 |

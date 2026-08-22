@@ -130,8 +130,7 @@ void MemoryViewModel::onRequestFailed(
 
 void MemoryViewModel::onConnectionError(const QString& safeMessage)
 {
-    Q_UNUSED(safeMessage)
-    // 已通过 lastErrorChanged 与 connectionStateChanged 暴露，此处保持简单。
+    emit connectionError(safeMessage);
 }
 
 void MemoryViewModel::setBusy(bool value)

@@ -67,6 +67,8 @@ enum class ProtocolErrorKind {
     MissingTraceId,          // 响应缺少 trace_id（回显）
     MissingData,            // status=ok 时缺少 data 字段
     MissingServerTs,        // 响应缺少 server_ts
+    MissingErrorCode,      // status=error 时缺少 error_code
+    MissingErrorMessage,   // status=error 时缺少 message
 };
 
 struct ProtocolError {
@@ -177,5 +179,25 @@ struct ResponseParts {
 
 [[nodiscard]] std::pair<std::optional<ResponseParts>, ProtocolError> parseResponse(
     const QJsonObject& envelope);
+
+// ── 响应 envelope 构造（FRZ-IPC-006 §6.2，供 Mock Gateway 与测试使用）─────
+
+// 构造成功响应 envelope。
+[[nodiscard]] QJsonObject buildSuccessResponse(
+    const QString& requestId,
+    const QString& traceId,
+    const QJsonObject& data,
+    const QString& serverTs = QStringLiteral("2026-08-20T00:00:00Z"));
+
+// 构造错误响应 envelope。errorCode 必须为 error_codes 中的已知值。
+[[nodiscard]] QJsonObject buildErrorResponse(
+    const QString& requestId,
+    const QString& traceId,
+    const QString& errorCode,
+    const QString& message,
+    const QString& serverTs = QStringLiteral("2026-08-20T00:00:00Z"));
+
+// 校验 error_code 是否为 FRZ-IPC-002 冻结的 5 项之一。
+[[nodiscard]] bool isValidErrorCode(const QString& code);
 
 }  // namespace kylin::memory::client::v1

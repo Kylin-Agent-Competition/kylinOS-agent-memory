@@ -91,7 +91,11 @@ void MockGatewayServer::handleNewConnection()
 
                     QJsonObject response = handler_
                                                ? handler_(*parts)
-                                               : *decoded.envelope;
+                                               : buildSuccessResponse(
+                                                   parts->requestId,
+                                                   parts->traceId,
+                                                   QJsonObject{{QStringLiteral("echo"),
+                                                                parts->method}});
 
                     // 测试后门：若 handler 返回的 envelope 含 "__malformed__": true，
                     // 则跳过正常编码，向客户端写入畸形字节流，用于验证客户端协议错误

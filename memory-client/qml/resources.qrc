@@ -1,8 +1,8 @@
 <RCC>
     <qresource prefix="/qt/qml/memory_client">
-        <file>qml/main.qml</file>
-        <file>qml/pages/StatusPage.qml</file>
-        <file>qml/pages/MemoryQueryPage.qml</file>
-        <file>qml/pages/PreferenceEditorPage.qml</file>
+        <file>main.qml</file>
+        <file>pages/StatusPage.qml</file>
+        <file>pages/MemoryQueryPage.qml</file>
+        <file>pages/PreferenceEditorPage.qml</file>
     </qresource>
 </RCC>
