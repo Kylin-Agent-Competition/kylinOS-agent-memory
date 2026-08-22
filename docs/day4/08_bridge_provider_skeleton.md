@@ -55,12 +55,27 @@
 | L1-3 | `test_interpreter_exit.py` 解释器退出析构（pytest） | 麒麟 VM |
 | L2 | `run_smoke.py` 真实 SDK 调用 | 麒麟 VM |
 
-## 构建步骤（麒麟 VM）
+## 构建与验证步骤（麒麟 VM）
 
 ```bash
-# 标准入口（P1-8：唯一标准复现命令，内部含构建/CTest/pytest/冒烟/生命周期）
-bash scripts/verify_day4_vm.sh
+# Day4 + Day5 当前标准入口：构建、CTest、pytest、真实 SDK 冒烟及 49 项宿主门禁
+bash scripts/verify_a_day4_day5_vm.sh
 ```
+
+该入口默认从脚本位置推导仓库根目录，不再要求源码固定挂载到
+`/mnt/shared`。长期 VM、快照克隆或解压后的固定源码可通过
+`A_VM_REPO_ROOT`、`A_VM_VENV`、`A_VM_BUILD_DIR` 和
+`A_VM_EVIDENCE_DIR` 指定隔离路径。运行器不会安装系统包或修改
+OSTree/KySec 状态；它会在构建前核对实际 `Python.h`、
+`libkylin-coreai-embedding 1.2.0.0-0k0.4` 及十个必需 SDK 符号，
+任一缺失时 fail closed，不再把真实麒麟环境误报成 49 项 skip。
+
+若 Python 开发包已解压到隔离目录而未写入系统层，可通过
+`A_VM_PYTHON_HEADER_ROOT` 指定包含 `usr/include` 的解包根。仅需检查
+环境而不构建时使用 `--preflight-only`；`--print-config` 可用于审计
+最终解析出的路径。历史 Day4 单独证据仍可用
+`scripts/verify_day4_vm.sh` 复现，但该旧入口保留 `/mnt/shared` 布局，
+不作为长期 VM 的当前标准入口。
 
 > 说明：手动执行 pytest 时必须拆成独立进程（脚本 Step 4 的做法）：
 > `test_embedding_provider_import.py` + `test_exception_mapping.py` + `test_provider_failure_recovery.py`
