@@ -649,6 +649,25 @@ entries:
       restart-recover / socket-cleanup / kill9-pre / kill9-recover /
       rapid-restart 5/5 / timeout / final-recover
       2 FAIL 为进程管理竞态条件，核心 IPC 链路全通过
+  - id: "B-D3-V001"
+    task_id: "D4"
+    description: "V001 固定 SDK raw score 方向/范围/稳定语义宿主验证（cosine similarity）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "docs/day3/15_vector_score_semantics_kylin_vm_report_20260821.md"
+    tested_commit: "26682ebdd57e2ef1e2c68240d00e3d3a8e2314f5"
+    sdk_source_commit: "2213447ef765e709e93f94d4177f4417478fe8ea"
+    probe_source_sha256: "fc263166b0872b2e6936dac18c45709879409d642b1cdb93b782ac8ae999366f"
+    runner_source_sha256: "ed4c13259edbff5ed5f25aae7ad7585b342d0ccff4d1bfe891ff06f6c167daed"
+    report: "docs/day3/15_vector_score_semantics_kylin_vm_report_20260821.md"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    date: "2026-08-21"
+    reviewer: "pending"
+    limitations: "仅同一固定组合（libkysdk-vector-engine-client 1.2.0.0-0k0.7 / SDK commit 2213447e / 服务端 1.2.0.1-0k0.11）内解释为 cosine similarity（identical=1/orthogonal=0/opposite=-1）；不得跨版本、模型或检索通道直接比较 raw score；混合检索仍按 rrf-v1 使用名次融合"
+    checksum_sha256: "3dc7ab1f512e1f3f131f3b1192b17ab6ef79c2d6714185dd3de643bfdc8ca45d"
+
   - id: "B-D3-V002"
     task_id: "D5B"
     description: "V002 Provider v1 真实 upsert/search/delete 错误映射宿主验证"
