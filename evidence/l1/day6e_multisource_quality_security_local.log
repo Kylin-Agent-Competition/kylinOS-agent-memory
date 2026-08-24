@@ -1,0 +1,27 @@
+# ============================================================
+# Day6E WSL L0/L1 evidence
+# branch: feat/e-d6-multisource-quality-security-gate
+# tested_commit: 782038adb7e9d02e3dd69972e0249e2a85b2dd6f
+# timestamp: 2026-08-24T10:17:52+08:00
+# environment: WSL / local
+# runtime_required: false
+# capability_note: NOT_HOST_VERIFIED
+# ============================================================
+
+=== TASK 1: source admission ===
+COMMAND: python3 -m pytest memory-service/tests/test_source_admission_d6e.py -q
+................................                                         [100%]
+32 passed in 0.12s
+EXIT_CODE=0
+
+=== TASK 2: security adversarial ===
+COMMAND: python3 -m pytest memory-service/tests/test_multisource_security_adversarial_d6e.py -q
+..............................................                           [100%]
+46 passed in 0.13s
+EXIT_CODE=0
+
+=== TASK 3: multisource devset ===
+COMMAND: python3 -m pytest evaluation/test_d6_multisource_devset.py -q
+................................                                         [100%]
+32 passed in 0.04s
+EXIT_CODE=0
