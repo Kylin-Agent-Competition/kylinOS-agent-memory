@@ -1,8 +1,8 @@
 # 09 轨道 C — Day4 Memory Client 工程骨架
 
 > **状态：`L0_COMPLETE / FROZEN_ALIGNED / PENDING_REVIEW`** — 工程骨架 + Mock
-> 契约测试 L0 全部通过（2/2 ctest，47/47 子用例 PASS，含 QML_APP=ON 构建闭环，
-> 总时长 0.60s）；协议编解码
+> 契约测试 L0 全部通过（2/2 ctest，52/52 子用例 PASS，含 QML_APP=ON 构建闭环 +
+> QML startup smoke，总时长 0.60s）；协议编解码
 > 已对齐 D4 冻结契约 FRZ-IPC-001~007（ALIGN-001~006 全部完成）；待 E 补审
 > （用户交互与安全）；L1/L2 未实现。
 
@@ -43,10 +43,11 @@
 | `memory-client/tests/test_protocol_adapter.cpp` | 协议编解码 L0 单元测试 |
 | `memory-client/tests/test_memory_client_mock.cpp` | Client ↔ Mock Gateway L0 契约测试 |
 
-## L0 验证证据（2026-08-22 WSL Ubuntu 22.04，QML_APP=ON clean build）
+## L0 验证证据（2026-08-24 WSL Ubuntu 22.04，QML_APP=ON clean build + QML startup smoke）
 
 **构建环境**：GCC 11.4.0 / Qt 5.15.3 (`qtbase5-dev` + `qtdeclarative5-dev`
-+ `qtquickcontrols2-5-dev`，Core+Network+Test+Quick+QuickControls2)
++ `qtquickcontrols2-5-dev` + `qml-module-qtquick2` + `qml-module-qtquick-controls2`
++ `qml-module-qtquick-layouts`，Core+Network+Test+Quick+QuickControls2)
 （目标声明 Qt ≥ 5.12；Ubuntu 22.04 自带 5.15 为后向兼容的更高小版本）
 
 **cmake 配置命令**：
@@ -59,13 +60,21 @@ cmake --build memory-client/build --parallel
 产物：`libkylin_memory_client.a`（静态库）、`kylin-memory-client`（QML 可执行文件）、
 `test_protocol_adapter`、`test_memory_client_mock`。
 
+**QML startup smoke**（offscreen 模式）：
+```bash
+QT_QPA_PLATFORM=offscreen timeout 3 ./memory-client/build/kylin-memory-client
+```
+结果：无 `failed to load component`、无 `X is not a type`、rootObjects 非空；
+main.qml / StatusPage / MemoryQueryPage / PreferenceEditorPage / MemoryViewModel
+全部成功加载；仅 Qt 5.15 Connections deprecation warning（非错误，Qt 5.12 兼容）。
+
 **ctest 结果（-V 全量子用例）**：
 
 | ctest 名 | 子用例数 | 结果 | 耗时 |
 |----------|----------|------|------|
-| protocol_adapter | 38 | PASS | 0.02 s |
+| protocol_adapter | 43 | PASS | 0.01 s |
 | memory_client_mock | 9 | PASS | 0.52 s |
-| **合计** | **47/47** | **100%** | **0.60 s** |
+| **合计** | **52/52** | **100%** | **0.60 s** |
 
 `protocol_adapter` 覆盖：encode/decode round-trip、IncompletePacket、DeclaredLengthTooLarge、
 InvalidJson、EnvelopeNotObject、多包连续解码、buildEnvelope 可选字段省略与写入、
@@ -103,7 +112,7 @@ D4 Gate 0 合入 main 后（`ef050b0`），D 冻结 IPC 协议 FRZ-IPC-001~007 �
 | ALIGN-005 | UDS 路径 `$XDG_RUNTIME_DIR/kylin-memory/memory.sock`（FRZ-IPC-005） | 无默认路径（由调用方设置） | 构造函数自动从 `$XDG_RUNTIME_DIR` 推导默认路径 | ✅ PASS |
 | ALIGN-006 | 请求字段 request_id/trace_id/deadline_ms 必填（FRZ-IPC-006 §6.1） | buildEnvelope 中三者可选 | sendRequest 始终填充三字段（trace_id 复用 request_id，deadline_ms=5000） | ✅ PASS |
 
-**对齐后验证**：ctest 2/2 47/47 子用例 PASS（0.60s，含 QML_APP=ON 构建闭环），编译 0 error。
+**对齐后验证**：ctest 2/2 52/52 子用例 PASS（0.60s，含 QML_APP=ON 构建闭环 + QML startup smoke），编译 0 error。
 
 ## 设计决议
 
@@ -158,9 +167,10 @@ Memory Service 联调（L1）或麒麟 VM 链路（L2）。`test_memory_client_m
 | L1 | QLocalSocket 连接真实 Memory Service | 待联调 | 未实现 |
 | L2 | 麒麟 VM 真实 QML 调用链路 | 未实现 | 未实现 |
 
-验证环境（2026-08-22）：WSL Ubuntu 22.04、GCC 11.4.0、Qt 5.15.3（qtbase5-dev
-+ qtdeclarative5-dev + qtquickcontrols2-5-dev，满足 Qt≥5.12 目标声明）、
-ctest 2/2 47/47 子用例 PASS（0.60s），QML_APP=ON 构建闭环。
+验证环境（2026-08-24）：WSL Ubuntu 22.04、GCC 11.4.0、Qt 5.15.3（qtbase5-dev
++ qtdeclarative5-dev + qtquickcontrols2-5-dev + qml-module-qtquick2
++ qml-module-qtquick-controls2 + qml-module-qtquick-layouts，满足 Qt≥5.12 目标声明）、
+ctest 2/2 52/52 子用例 PASS（0.60s），QML_APP=ON 构建闭环 + QML startup smoke。
 
 ## 构建步骤
 

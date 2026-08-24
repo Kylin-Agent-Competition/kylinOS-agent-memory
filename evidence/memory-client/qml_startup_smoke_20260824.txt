@@ -1,0 +1,1 @@
+qrc:/qt/qml/memory_client/main.qml:123:5: QML Connections: Implicitly defined onFoo properties in Connections are deprecated. Use this syntax instead: function onFoo(<arguments>) { ... }

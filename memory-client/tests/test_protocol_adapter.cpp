@@ -54,6 +54,13 @@ private slots:
     void parseResponseRejectsErrorWithoutMessage();
     void parseResponseRejectsErrorWithNonStringErrorCode();
     void parseResponseRejectsErrorWithNonStringMessage();
+    // error_code 冻结枚举校验（HIGH-01: isValidErrorCode 接入生产 parser）
+    void parseResponseRejectsUnknownErrorCode();
+    void parseResponseAcceptsAllFrozenErrorCodes();
+    // server_ts ISO 8601 UTC 校验（MEDIUM-01）
+    void parseResponseRejectsInvalidServerTs();
+    void parseResponseRejectsEmptyServerTs();
+    void parseResponseRejectsDateOnlyServerTs();
     // uint32 高位长度头边界测试（HIGH-03）
     void decodeRejectsHighBitSetLength();
     void decodeRejectsMaxUint32Length();
@@ -590,6 +597,83 @@ void ProtocolAdapterTest::decodeRejectsJustOverLimit()
     packet.append("{}");
     const auto result = client::decodePacket(packet);
     QCOMPARE(result.error.kind, client::ProtocolErrorKind::DeclaredLengthTooLarge);
+}
+
+// HIGH-01: isValidErrorCode 接入生产 parseResponse — 未知 error_code 被 reject
+void ProtocolAdapterTest::parseResponseRejectsUnknownErrorCode()
+{
+    QJsonObject response = client::buildErrorResponse(
+        QStringLiteral("req-001"),
+        QStringLiteral("req-001"),
+        QStringLiteral("UNKNOWN_CODE"),
+        QStringLiteral("some message"),
+        QStringLiteral("2026-08-24T12:00:00Z"));
+    const auto [parts, error] = client::parseResponse(response);
+    QCOMPARE(error.kind, client::ProtocolErrorKind::InvalidErrorCode);
+    QVERIFY(!parts.has_value());
+}
+
+// HIGH-01: 冻结 5 项 error_code 全部通过
+void ProtocolAdapterTest::parseResponseAcceptsAllFrozenErrorCodes()
+{
+    const QStringList codes = {
+        client::error_codes::kUnsupportedMethod,
+        client::error_codes::kInvalidRequest,
+        client::error_codes::kProtocolError,
+        client::error_codes::kInternalError,
+        client::error_codes::kTimeout,
+    };
+    for (const QString& code : codes) {
+        QJsonObject response = client::buildErrorResponse(
+            QStringLiteral("req-001"),
+            QStringLiteral("req-001"),
+            code,
+            QStringLiteral("error detail"),
+            QStringLiteral("2026-08-24T12:00:00Z"));
+        const auto [parts, error] = client::parseResponse(response);
+        QVERIFY2(error.ok(), qPrintable(QStringLiteral("Failed for code: ") + code));
+        QVERIFY(parts.has_value());
+        QCOMPARE(parts->errorCode, code);
+    }
+}
+
+// MEDIUM-01: server_ts 非法 ISO 8601 UTC 被 reject
+void ProtocolAdapterTest::parseResponseRejectsInvalidServerTs()
+{
+    QJsonObject response = client::buildSuccessResponse(
+        QStringLiteral("req-001"),
+        QStringLiteral("req-001"),
+        QJsonObject{},
+        QStringLiteral("abc"));
+    const auto [parts, error] = client::parseResponse(response);
+    QCOMPARE(error.kind, client::ProtocolErrorKind::InvalidServerTs);
+    QVERIFY(!parts.has_value());
+}
+
+// MEDIUM-01: server_ts 空字符串被 reject
+void ProtocolAdapterTest::parseResponseRejectsEmptyServerTs()
+{
+    QJsonObject response = client::buildSuccessResponse(
+        QStringLiteral("req-001"),
+        QStringLiteral("req-001"),
+        QJsonObject{},
+        QStringLiteral(""));
+    const auto [parts, error] = client::parseResponse(response);
+    QCOMPARE(error.kind, client::ProtocolErrorKind::InvalidServerTs);
+    QVERIFY(!parts.has_value());
+}
+
+// MEDIUM-01: server_ts 仅日期（无时间部分）被 reject
+void ProtocolAdapterTest::parseResponseRejectsDateOnlyServerTs()
+{
+    QJsonObject response = client::buildSuccessResponse(
+        QStringLiteral("req-001"),
+        QStringLiteral("req-001"),
+        QJsonObject{},
+        QStringLiteral("2026-08-24"));
+    const auto [parts, error] = client::parseResponse(response);
+    QCOMPARE(error.kind, client::ProtocolErrorKind::InvalidServerTs);
+    QVERIFY(!parts.has_value());
 }
 
 QTEST_APPLESS_MAIN(ProtocolAdapterTest)

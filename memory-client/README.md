@@ -17,8 +17,8 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 ## 当前状态
 
 **D4 骨架 L0 完成 + D4 冻结协议对齐完成（L0_COMPLETE / FROZEN_ALIGNED；ctest 2/2
-47/47 子用例 PASS，含 QML_APP=ON 构建闭环，总耗时 0.60s，WSL Ubuntu 22.04
-GCC 11.4.0 Qt 5.15.3；协议编解码
+52/52 子用例 PASS，含 QML_APP=ON 构建闭环 + QML startup smoke，总耗时 0.60s，
+WSL Ubuntu 22.04 GCC 11.4.0 Qt 5.15.3；协议编解码
 已对齐 D4 冻结 FRZ-IPC-001~007（ALIGN-001~006 全部完成）；L1/L2 待联调）。**
 
 - 协议编解码 `protocol_adapter.{h,cpp}`：4 字节大端长度前缀 + UTF-8 JSON envelope
@@ -90,6 +90,6 @@ cmake --build memory-client/build
 
 | 层级 | 要求 | 状态 |
 |------|------|------|
-| **L0** | 编译通过、Mock 协议测试 | **L0_COMPLETE** — ctest 2/2 47/47 PASS（0.60s，WSL Ubuntu 22.04 GCC 11.4.0 Qt 5.15.3，含 QML_APP=ON 构建闭环） |
+| **L0** | 编译通过、Mock 协议测试 | **L0_COMPLETE** — ctest 2/2 52/52 PASS（0.60s，WSL Ubuntu 22.04 GCC 11.4.0 Qt 5.15.3，含 QML_APP=ON 构建闭环 + QML startup smoke） |
 | **L1** | QLocalSocket 连接 Memory Service 正常 | 待联调 |
 | **L2** | 麒麟 VM 中 QML 界面调用链路完整 | 未实现 |

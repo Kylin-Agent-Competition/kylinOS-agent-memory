@@ -69,6 +69,8 @@ enum class ProtocolErrorKind {
     MissingServerTs,        // 响应缺少 server_ts
     MissingErrorCode,      // status=error 时缺少 error_code
     MissingErrorMessage,   // status=error 时缺少 message
+    InvalidErrorCode,      // error_code 不是 FRZ-IPC-002 冻结的 5 项之一
+    InvalidServerTs,       // server_ts 不是合法 ISO 8601 UTC
 };
 
 struct ProtocolError {

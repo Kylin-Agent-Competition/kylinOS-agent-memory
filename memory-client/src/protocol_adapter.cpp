@@ -1,6 +1,7 @@
 #include "protocol_adapter.h"
 
 #include <QDataStream>
+#include <QDateTime>
 #include <QJsonDocument>
 #include <QJsonValue>
 
@@ -86,6 +87,10 @@ ProtocolError errorFromKind(ProtocolErrorKind kind)
         return makeError(kind, QStringLiteral("Error response is missing error_code field."));
     case ProtocolErrorKind::MissingErrorMessage:
         return makeError(kind, QStringLiteral("Error response is missing message field."));
+    case ProtocolErrorKind::InvalidErrorCode:
+        return makeError(kind, QStringLiteral("Error response has an unknown error_code not in the frozen enum."));
+    case ProtocolErrorKind::InvalidServerTs:
+        return makeError(kind, QStringLiteral("Response server_ts is not a valid ISO 8601 UTC timestamp."));
     }
     return {ProtocolErrorKind::None, {}};
 }
@@ -101,6 +106,24 @@ std::optional<quint32> readHeader(const QByteArray& buffer)
          | (static_cast<quint32>(static_cast<unsigned char>(buffer[1])) << 16)
          | (static_cast<quint32>(static_cast<unsigned char>(buffer[2])) << 8)
          | static_cast<quint32>(static_cast<unsigned char>(buffer[3]));
+}
+
+// 校验 server_ts 是否为合法 ISO 8601 UTC 字符串。
+// Qt 5.12 兼容：使用 QDateTime::fromString(str, Qt::ISODate)。
+// 合法示例：2026-08-24T12:00:00Z / 2026-08-24T12:00:00+00:00
+// 非法示例：abc / "" / 2026-99-99T99:99:99Z / 2026-08-24（无时间）
+bool isValidIso8601Utc(const QString& ts)
+{
+    if (ts.isEmpty()) {
+        return false;
+    }
+    const QDateTime dt = QDateTime::fromString(ts, Qt::ISODate);
+    if (!dt.isValid()) {
+        return false;
+    }
+    // 必须包含时区信息（UTC 或偏移），否则不视为 UTC 时间戳。
+    // ISODate 解析后若无时区，specification = LocalUnknown。
+    return dt.timeSpec() == Qt::UTC || dt.offsetFromUtc() == 0;
 }
 
 }  // namespace
@@ -277,12 +300,16 @@ std::pair<std::optional<ResponseParts>, ProtocolError> parseResponse(
     }
     parts.traceId = traceIdValue.toString();
 
-    // server_ts（必填，ISO 8601 UTC 字符串）
+    // server_ts（必填，ISO 8601 UTC 字符串——FRZ-IPC-006 §6.2）
     const QJsonValue serverTsValue = envelope.value(kServerTsKey);
     if (serverTsValue.isUndefined() || serverTsValue.isNull() || !serverTsValue.isString()) {
         return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingServerTs)};
     }
-    parts.serverTs = serverTsValue.toString();
+    const QString serverTs = serverTsValue.toString();
+    if (!isValidIso8601Utc(serverTs)) {
+        return {std::nullopt, errorFromKind(ProtocolErrorKind::InvalidServerTs)};
+    }
+    parts.serverTs = serverTs;
 
     // data（status=ok 时必填，对象——FRZ-IPC-006 §6.2）
     const QJsonValue dataValue = envelope.value(kDataKey);
@@ -301,7 +328,11 @@ std::pair<std::optional<ResponseParts>, ProtocolError> parseResponse(
         if (!errorCodeValue.isString() || errorCodeValue.toString().isEmpty()) {
             return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingErrorCode)};
         }
-        parts.errorCode = errorCodeValue.toString();
+        const QString errorCode = errorCodeValue.toString();
+        if (!isValidErrorCode(errorCode)) {
+            return {std::nullopt, errorFromKind(ProtocolErrorKind::InvalidErrorCode)};
+        }
+        parts.errorCode = errorCode;
 
         const QJsonValue messageValue = envelope.value(kMessageKey);
         if (!messageValue.isString()) {

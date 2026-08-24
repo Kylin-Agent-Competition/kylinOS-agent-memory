@@ -24,7 +24,7 @@ int main(int argc, char* argv[])
         QStringLiteral("MemoryClient is created by MemoryViewModel internally."));
 
     QQmlApplicationEngine engine;
-    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/memory_client/qml/main.qml")));
+    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/memory_client/main.qml")));
     if (engine.rootObjects().isEmpty()) {
         return -1;
     }
