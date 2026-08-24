@@ -53,6 +53,13 @@ def _default_socket_path() -> str:
     return "/tmp/kylin-memory/embedding.sock"
 
 
+# L2-A3：对已存在目录收敛 0700 时，跳过系统/共享目录（避免 chmod 破坏 /tmp、/run 等）
+_EXCLUDED_CHMOD_DIRS = frozenset({
+    "/", "/tmp", "/var", "/var/tmp", "/run", "/run/user", "/dev",
+    "/etc", "/opt", "/usr", "/home", "/root", "/mnt", "/media", "/srv",
+})
+
+
 class EmbeddingUDSServer:
     """UDS + 长度前缀 JSON 最小链路服务器。"""
 
@@ -68,10 +75,30 @@ class EmbeddingUDSServer:
         self._conn_lock = threading.Lock()
 
     def _ensure_socket_dir(self) -> None:
-        """安全创建 socket 父目录（per-user 隔离，0700）。"""
+        """安全创建 socket 父目录（per-user 隔离，0700，对已存在目录幂等收敛）。
+
+        L2-A3 修复：`os.makedirs(mode=0700)` 只对**新建**目录生效；对已存在的
+        父目录，仅当其为**当前用户私有且非系统/共享/家目录**时才幂等收敛为 0700，
+        避免 chmod 破坏共享目录（如 /tmp、/run 等）或用户家目录。
+        """
         parent = os.path.dirname(self._socket_path)
-        if parent:
-            os.makedirs(parent, mode=0o700, exist_ok=True)
+        if not parent:
+            return
+        os.makedirs(parent, mode=0o700, exist_ok=True)
+        try:
+            st = os.stat(parent)
+        except OSError:
+            return
+        if not (os.path.isdir(parent) and st.st_uid == os.getuid()):
+            return  # 非当前用户所有（如 /tmp 归 root）→ 不 chmod
+        normalized = os.path.normpath(parent)
+        if normalized in _EXCLUDED_CHMOD_DIRS or normalized == os.path.normpath(
+                os.path.expanduser("~")):
+            return  # 系统/共享目录或用户家目录 → 不 chmod
+        try:
+            os.chmod(parent, 0o700)
+        except OSError:
+            pass  # 权限受限/目录消失时忽略；祖先目录本身 0700 仍可隔离
 
     def _remove_stale_socket(self) -> None:
         """仅清理 stale socket；active socket（有监听进程）拒绝 unlink。

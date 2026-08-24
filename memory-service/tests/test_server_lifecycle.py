@@ -243,3 +243,40 @@ def test_start_cleans_stale_socket(tmp_path):
     c.close()
     srv.stop()
     shutdown_executor()
+
+
+# ── L2-A3 修复：现存目录 0755 → 0700 幂等收敛（受保护，PR#57 R1 遗留债务） ──
+
+def test_ensure_socket_dir_converges_existing_0755(tmp_path):
+    """L2-A3: 对已存在的当前用户私有 0755 目录幂等收敛为 0700。"""
+    from embedding.server import EmbeddingUDSServer
+    parent = tmp_path / "kylin-memory"
+    parent.mkdir(mode=0o755)
+    os.chmod(parent, 0o755)
+    assert (parent.stat().st_mode & 0o777) == 0o755
+    srv = EmbeddingUDSServer(str(parent / "embedding.sock"), provider=FakeProvider())
+    srv._ensure_socket_dir()
+    assert (parent.stat().st_mode & 0o777) == 0o700
+
+
+def test_ensure_socket_dir_skips_shared_tmp():
+    """L2-A3: socket 直接在 /tmp 下时，父目录 /tmp（系统共享）不被 chmod。"""
+    from embedding.server import EmbeddingUDSServer
+    before = os.stat("/tmp").st_mode & 0o777
+    srv = EmbeddingUDSServer("/tmp/pr57-l2a3-skip-marker.sock", provider=FakeProvider())
+    srv._ensure_socket_dir()  # /tmp 在 _EXCLUDED_CHMOD_DIRS 内 → 不应被 chmod
+    after = os.stat("/tmp").st_mode & 0o777
+    assert after == before
+
+
+def test_ensure_socket_dir_skips_home_dir(tmp_path, monkeypatch):
+    """L2-A3: 用户家目录本身不被 chmod 收紧。"""
+    from embedding.server import EmbeddingUDSServer
+    home = tmp_path / "fake-home"
+    home.mkdir(mode=0o755)
+    os.chmod(home, 0o755)
+    monkeypatch.setattr("os.path.expanduser", lambda _x="~": str(home))
+    srv = EmbeddingUDSServer(str(home / "embedding.sock"), provider=FakeProvider())
+    srv._ensure_socket_dir()
+    # 家目录被排除 → 保持 0755
+    assert (home.stat().st_mode & 0o777) == 0o755

@@ -18,7 +18,7 @@
 |------|--------|--------------|:---:|:---:|:---:|:---:|:---:|
 | L2-A1 | ALIGN-005：active socket 拒绝 unlink | ALIGN-005 / FRZ-IPC-006 | P0 | UNTESTED | | | |
 | L2-A2 | ALIGN-005：stale socket 清理后正常 bind | ALIGN-005 | P0 | UNTESTED | | | |
-| L2-A3 | ALIGN-005：socket 父目录 per-user 隔离（0700） | ALIGN-005 | P0 | UNTESTED | | | |
+| L2-A3 | ALIGN-005：socket 父目录 per-user 隔离（0700） | ALIGN-005 | P0 | **已代码修复（受保护 chmod），待宿主重采证** | | | |
 | L2-B1 | 真实 SDK 下新 envelope 断言（`data` 恒 object / 错误 `data:{}` / `degraded_reason` 并入） | FRZ-IPC-006 / ADR-005 | P0 | UNTESTED | | | |
 | L2-B2 | 错误码语义分类端到端（unknown method / 缺字段 / 帧错误） | FRZ-IPC-002 | P0 | UNTESTED | | | |
 | L2-B3 | 真实客户端字段兼容性（新必填校验不误拒） | FRZ-IPC-006 | P0 | UNTESTED | | | |
@@ -58,6 +58,8 @@
 - **操作步骤**：`ls -ld $XDG_RUNTIME_DIR/kylin-memory`。
 - **通过标准**：目录 `0700`、owner=kylin-agent，无 group/other 写权限。
 - **证据要求**：`ls -ld` 输出 raw log。
+- **代码修复（2026-08-24 第二轮）**：`embedding/server.py::_ensure_socket_dir` 增加**受保护**的幂等 `os.chmod(parent, 0700)` —— 仅当父目录为当前用户私有、且非系统/共享目录（`_EXCLUDED_CHMOD_DIRS`）、非用户家目录时才收敛，避免 chmod 破坏 `/tmp`、`/run` 等。配套单测：`test_ensure_socket_dir_converges_existing_0755` / `_skips_shared_tmp` / `_skips_home_dir`（WSL 602 passed）。
+- **宿主重采证**：在真实 VM 对现存 `/run/user/1000/kylin-memory`（0755）以新 HEAD 启动 embedding server，确认该目录被幂等收敛为 `0700`，且 `/tmp`、家目录不被改动；回填本项结果为 PASS。
 
 ### L2-B1：真实 SDK 下新 envelope 断言
 
