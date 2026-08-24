@@ -84,8 +84,8 @@ def test_server_serves_request(server):
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.connect(sock_path)
     resp = _send(s, "memory.embed", {"text": "hello"})
-    assert resp["ok"] is True
-    assert resp["result"]["dimension"] == 768
+    assert resp["status"] == "ok"
+    assert resp["data"]["dimension"] == 768
     s.close()
 
 
@@ -117,8 +117,8 @@ def test_stopped_conn_thread_rejects(server):
     # 再发请求 → 必须不被业务处理（ERR_SERVICE_STOPPED 或连接关闭/超时）
     try:
         resp = _send(s, "memory.embed", {"text": "after-stop"})
-        assert resp["ok"] is False
-        assert resp["error"]["code"] == "ERR_SERVICE_STOPPED"
+        assert resp["status"] == "error"
+        assert resp["error_code"] == "INTERNAL_ERROR"
     except ConnectionError:
         pass  # 连接关闭/超时 = 线程已退出，业务未处理（同样正确）
     s.close()
@@ -134,8 +134,8 @@ def test_executor_not_recreated_by_stale_conn(server):
     # 旧连接发请求 → 必须不被业务处理（不触发 handle_request/_submit_bridge）
     try:
         resp = _send(s, "memory.embed", {"text": "after"})
-        assert resp["ok"] is False
-        assert resp["error"]["code"] == "ERR_SERVICE_STOPPED"
+        assert resp["status"] == "error"
+        assert resp["error_code"] == "INTERNAL_ERROR"
     except ConnectionError:
         pass  # 连接关闭/超时 = 未处理（executor 未被重建）
     assert srv._stopped is True
@@ -156,8 +156,8 @@ def test_restart_reinitializes(server):
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.connect(sock_path)
     resp = _send(s, "memory.embed", {"text": "restarted"})
-    assert resp["ok"] is True
-    assert resp["result"]["dimension"] == 768
+    assert resp["status"] == "ok"
+    assert resp["data"]["dimension"] == 768
     s.close()
     srv.stop()
 

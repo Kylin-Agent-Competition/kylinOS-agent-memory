@@ -19,15 +19,38 @@ import argparse
 import os
 import socket
 import threading
+from datetime import datetime, timezone
 from typing import Optional
 
-from embedding.embedding_service import EmbeddingService, shutdown_executor
+from embedding.embedding_service import EmbeddingService, map_error_code, shutdown_executor
 from embedding.protocol import (
+    PROTOCOL_VERSION,
     IncompletePacket,
     ProtocolError,
     decode_packet,
     encode,
 )
+
+
+def _error_response(code: str, message: str) -> dict:
+    """协议层错误响应（FRZ-IPC-006 冻结 envelope + FRZ-IPC-002 冻结错误码）。"""
+    return {
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": "",
+        "trace_id": "",
+        "status": "error",
+        "error_code": map_error_code(code),
+        "message": message,
+        "server_ts": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _default_socket_path() -> str:
+    """默认 socket 路径（ALIGN-005）：$XDG_RUNTIME_DIR/kylin-memory/memory.sock。"""
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir:
+        return os.path.join(runtime_dir, "kylin-memory", "memory.sock")
+    return "/tmp/kylin-memory/memory.sock"
 
 
 class EmbeddingUDSServer:
@@ -112,9 +135,8 @@ class EmbeddingUDSServer:
                     # 旧连接不得继续提交任务（防 executor 被旧连接重建）
                     if self._stopped:
                         try:
-                            conn.sendall(encode({"ok": False,
-                                                 "error": {"code": "ERR_SERVICE_STOPPED",
-                                                           "message": "server is stopped"}}))
+                            conn.sendall(encode(_error_response(
+                                "ERR_SERVICE_STOPPED", "server is stopped")))
                         except OSError:
                             pass
                         break
@@ -124,9 +146,7 @@ class EmbeddingUDSServer:
                     except IncompletePacket:
                         continue
                     except ProtocolError as exc:
-                        conn.sendall(encode({"ok": False,
-                                             "error": {"code": "ERR_PROTOCOL",
-                                                       "message": str(exc)}}))
+                        conn.sendall(encode(_error_response("ERR_PROTOCOL", str(exc))))
                         break
                     resp = self._service.handle_request(msg)
                     conn.sendall(encode(resp))
@@ -143,8 +163,8 @@ class EmbeddingUDSServer:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Day5 最小垂直链路 UDS 服务器")
-    parser.add_argument("--socket", default="/tmp/kylin-memory-embed.sock",
-                        help="UDS socket path")
+    parser.add_argument("--socket", default=_default_socket_path(),
+                        help="UDS socket path（默认 ALIGN-005 标准路径）")
     args = parser.parse_args()
 
     server = EmbeddingUDSServer(args.socket)

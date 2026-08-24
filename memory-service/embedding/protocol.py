@@ -29,7 +29,7 @@ import struct
 from typing import Any, Dict, Optional, Tuple
 
 HEADER_LEN = 4
-MAX_MSG_LEN = 4 * 1024 * 1024  # 4 MiB 上限（防恶意超大包）
+MAX_MSG_LEN = 65536  # 64KB 上限（FRZ-IPC-001 冻结；防恶意超大包）
 
 # 架构 4.4 IPC 契约：协议版本（冻结，TABLE 12/48）
 PROTOCOL_VERSION = "1.0"

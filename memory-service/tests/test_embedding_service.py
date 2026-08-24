@@ -158,24 +158,24 @@ def test_handle_request_dispatch():
     svc.start()
     # memory.ping
     assert svc.handle_request(
-        {"protocol_version": "1.0", "method": "memory.ping"})["result"] == "pong"
+        {"protocol_version": "1.0", "method": "memory.ping"})["data"] == "pong"
     # memory.embed（envelope + request_id/trace_id 回显）
     env = build_envelope("memory.embed", {"text": "hi"},
                          request_id="req-1", trace_id="trc-1")
     resp = svc.handle_request(env)
-    assert resp["ok"] is True
+    assert resp["status"] == "ok"
     assert resp["request_id"] == "req-1"
     assert resp["trace_id"] == "trc-1"
-    assert resp["method"] == "memory.embed"
     assert resp["protocol_version"] == "1.0"
+    assert resp["data"]["dimension"] == 768
     # 未知 method → ERR_PROTOCOL
     bad = svc.handle_request(
         {"protocol_version": "1.0", "method": "memory.unknown", "payload": {}})
-    assert bad["ok"] is False and bad["error"]["code"] == "ERR_PROTOCOL"
+    assert bad["status"] == "error" and bad["error_code"] == "PROTOCOL_ERROR"
     # 缺 protocol_version → ERR_PROTOCOL（含 request_id 回显）
     bad2 = svc.handle_request(
         {"method": "memory.embed", "payload": {"text": "x"}, "request_id": "req-9"})
-    assert bad2["ok"] is False and bad2["error"]["code"] == "ERR_PROTOCOL"
+    assert bad2["status"] == "error" and bad2["error_code"] == "PROTOCOL_ERROR"
     assert bad2["request_id"] == "req-9"
     svc.close()
 
@@ -186,9 +186,9 @@ def test_handle_request_embed_batch_envelope():
     svc.start()
     resp = svc.handle_request(build_envelope(
         "memory.embed_batch", {"texts": ["a", "b"]}))
-    assert resp["ok"] is True
-    assert len(resp["result"]) == 2
-    assert resp["result"][0]["dimension"] == 768
+    assert resp["status"] == "ok"
+    assert len(resp["data"]) == 2
+    assert resp["data"][0]["dimension"] == 768
     svc.close()
 
 
@@ -212,8 +212,8 @@ def test_embed_batch_partial_failure_via_handle_request():
     resp = svc.handle_request(build_envelope(
         "memory.embed_batch", {"texts": ["a", "bad"]},
         request_id="req-batch-fail", trace_id="trc-batch-fail"))
-    assert resp["ok"] is False
-    assert resp["error"]["code"] == "ERR_EMBED_FAILED"
+    assert resp["status"] == "error"
+    assert resp["error_code"] == "INTERNAL_ERROR"
     assert resp["request_id"] == "req-batch-fail"
     assert resp["trace_id"] == "trc-batch-fail"
     svc.close()
@@ -225,12 +225,12 @@ def test_health_reports_status():
     svc.start()
     resp = svc.handle_request(
         {"protocol_version": "1.0", "method": "memory.health"})
-    assert resp["ok"] is True
-    assert resp["result"]["service"] == "ok"
-    assert resp["result"]["provider"] == "ready"
-    assert resp["result"]["degraded"] is False
-    assert "bridge_loaded" in resp["result"]
-    assert "bridge_has_session" in resp["result"]
+    assert resp["status"] == "ok"
+    assert resp["data"]["service"] == "ok"
+    assert resp["data"]["provider"] == "ready"
+    assert resp["data"]["degraded"] is False
+    assert "bridge_loaded" in resp["data"]
+    assert "bridge_has_session" in resp["data"]
     svc.close()
 
 
@@ -239,9 +239,9 @@ def test_health_stopped_state():
     svc = EmbeddingService(provider=FakeProvider())
     resp = svc.handle_request(
         {"protocol_version": "1.0", "method": "memory.health"})
-    assert resp["ok"] is True
-    assert resp["result"]["service"] == "stopped"
-    assert resp["result"]["provider"] == "stopped"
+    assert resp["status"] == "ok"
+    assert resp["data"]["service"] == "stopped"
+    assert resp["data"]["provider"] == "stopped"
     svc.close()
 
 
