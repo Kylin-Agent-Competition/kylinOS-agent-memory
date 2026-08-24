@@ -58,7 +58,7 @@
 | `memory-service/retrieval/real_vector_provider.py` | `bfc5a9113b675f89c789b00c3962e549250734b4d9e9d109a9ab4a5b0275b381` |
 | `memory-service/retrieval/vector_sdk_errors.py` | `18103e61f5ec0ce823d6d5dff5017c788191173613629834caf8bea6ad48ce1c` |
 | `memory-service/retrieval/evaluation.py` | `9943ad6376e30cd0146ed93ebc3a6783c1d7adcf8ff5bea1e079ee54cc51a907` |
-| `scripts/v006_e2e_demo.py` | `3e21678632bf45835813114ea351ef427be041cbf1a6f93e29651debe7d89e83` |
+| `scripts/v006_e2e_demo.py` | `d16043a0b011abc54936a9769b8df1430f1d2f0cc4abf6edf31ecf2a164a088a` |
 | `scripts/v007_eval.py` | `dc59486cdc4bd1fb808e21f98c963d407c6223c5dfd1c6d91ed201ef67ff1342` |
 
 ## 5. 状态边界（如实，不虚标）
