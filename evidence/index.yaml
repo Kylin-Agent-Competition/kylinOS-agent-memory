@@ -649,6 +649,7 @@ entries:
       restart-recover / socket-cleanup / kill9-pre / kill9-recover /
       rapid-restart 5/5 / timeout / final-recover
       2 FAIL 为进程管理竞态条件，核心 IPC 链路全通过
+
   - id: "B-D3-V001"
     task_id: "D4"
     description: "V001 固定 SDK raw score 方向/范围/稳定语义宿主验证（cosine similarity）"
@@ -825,3 +826,44 @@ entries:
     reviewer: "pending"
     limitations: "top_n=1 返回 1 条、top_n 大于命中数返回实际命中数、超大 top_n 不崩、空库返回空"
     checksum_sha256: "41b6784ffbe903f0324d3ccd087f059088b20c180323a04a63d894facdef83eb"
+
+
+  - id: "D6-E-01-SOURCE-ADMISSION-L1"
+    task_id: "day6-e-01-source-quality-admission-policy-v1"
+    description: "Day6E 多源质量与事件级业务准入策略 WSL L0/L1 验证"
+    status: "PASS"
+    evidence_level: "E2"
+    source: "evidence/l1/day6e_multisource_quality_security_local.log"
+    tested_commit: "782038adb7e9d02e3dd69972e0249e2a85b2dd6f"
+    date: "2026-08-24"
+    reviewer: "D 主审"
+    limitations: "仅证明 WSL L0/L1 代码与契约测试结果；runtime_required=false；不构成银河麒麟宿主 HOST_VERIFIED，也不单独证明 Day6 全轨 Gate 完成。"
+    checksum_sha256: "f21bdc7e403871ebfdf86c43421b4395d7b3e3f7ddd82fec2cd92dc8c88ad570"
+    details: "覆盖 source admission 三态决策、用户隔离、敏感 fail-closed、Tool payload 安全前置检查、质量 AUDIT_ONLY 与失败 Tool failure_experience-only 语义。"
+
+  - id: "D6-E-02-SECURITY-ADVERSARIAL-L1"
+    task_id: "day6-e-02-multisource-security-adversarial-gate-v1"
+    description: "Day6E 多源安全对抗门禁 WSL L0/L1 验证"
+    status: "PASS"
+    evidence_level: "E2"
+    source: "evidence/l1/day6e_multisource_quality_security_local.log"
+    tested_commit: "782038adb7e9d02e3dd69972e0249e2a85b2dd6f"
+    date: "2026-08-24"
+    reviewer: "D 主审"
+    limitations: "仅证明 WSL L0/L1 对抗与契约测试；不代表真实麒麟宿主 Tool/Hook/KYSEC 攻击面已验证，不声明 HOST_VERIFIED。"
+    checksum_sha256: "f21bdc7e403871ebfdf86c43421b4395d7b3e3f7ddd82fec2cd92dc8c88ad570"
+    details: "覆盖敏感信息、Prompt/Provenance/Identity/Tool 状态伪造、跨用户、ignored/raw payload bypass 与临时到持久化等攻击族。"
+
+  - id: "D6-E-03-MULTISOURCE-DEVSET-L1"
+    task_id: "day6-e-03-multisource-devset-error-taxonomy-v1"
+    description: "Day6E 多源开发集与错误分类 WSL L0/L1 验证"
+    status: "PASS"
+    evidence_level: "E2"
+    source: "evidence/l1/day6e_multisource_quality_security_local.log"
+    tested_commit: "782038adb7e9d02e3dd69972e0249e2a85b2dd6f"
+    date: "2026-08-24"
+    reviewer: "D 主审"
+    limitations: "DEVSET_V1 仅为开发集，不是最终 Gold 或 sealed test set；Behavior 到公共 SourceType 的正式映射仍以 C 轨冻结契约为准。"
+    checksum_sha256: "f21bdc7e403871ebfdf86c43421b4395d7b3e3f7ddd82fec2cd92dc8c88ad570"
+    details: "验证 Tool Result、Behavior Candidate、Manual Config 三类开发样本、错误码引用、字段完整性、唯一 sample_id 与开发集约束。"
+
