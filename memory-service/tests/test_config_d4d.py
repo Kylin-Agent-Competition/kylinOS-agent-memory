@@ -49,7 +49,7 @@ def test_toml_values_loaded(clear_env, tmp_path):
         "[database]\npath = '/tmp/kylin-memory/test.db'\n"
         "[deadline]\ndefault_ms = 3000\n"
         "[retrieve]\ndeadline_ms = 200\n"
-        "[outbox]\npoll_interval_s = 2\nmax_retries = 5\n"
+        "[outbox]\npoll_interval_s = 2\nmax_retries = 3\n"
         "[embedding]\nmodel = 'gte'\n"
         "[log]\nlevel = 'DEBUG'\n",
         encoding="utf-8",
@@ -60,7 +60,7 @@ def test_toml_values_loaded(clear_env, tmp_path):
     assert cfg.deadline_default_ms == 3000
     assert cfg.retrieve_deadline_ms == 200
     assert cfg.outbox_poll_interval_s == 2
-    assert cfg.outbox_max_retries == 5
+    assert cfg.outbox_max_retries == 3
     assert cfg.embedding_model == "gte"
     assert cfg.log_level == "DEBUG"
 
@@ -122,3 +122,11 @@ def test_parent_dir_created(clear_env, tmp_path):
 def test_memory_config_model_extra_forbidden():
     with pytest.raises(Exception):
         MemoryConfig(socket_path="a", unknown_key=1)
+
+
+def test_unknown_toml_key_warns(clear_env, tmp_path):
+    """PR#52 Issue 10：配置文件未知键（如 socket.pathh 拼写错误）应发 WARN，而非静默忽略。"""
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("[socket]\npathh = '/tmp/x.sock'\n", encoding="utf-8")
+    _, warnings = load_config(config_file=str(cfg_file))
+    assert any("未知键" in w and "socket.pathh" in w for w in warnings)

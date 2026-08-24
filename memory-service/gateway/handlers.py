@@ -36,9 +36,12 @@ def memory_retrieve_handler(payload: Dict[str, Any], ctx: RequestContext) -> Dic
     """memory.retrieve：返回真实空上下文（检索主链后续接入，禁止假数据）。"""
     # 契约：FR-FB-001 降级路径（L2 连接失败 / L1 超时）均返回空 context；
     # 主链未接入前返回真实空结果，不构造虚假记忆。
+    # PR#52 Issue 1：日志禁止记录用户正文/PII（query 为用户对话正文）。
+    # 只记 method/request_id，不落 query 内容（与 logging_setup 安全声明一致）。
     logger.info(
-        "memory.retrieve query=%s（主链未接入，返回空上下文）",
-        str(payload.get("query"))[:200],
+        "memory.retrieve method=%s request_id=%s（主链未接入，返回空上下文）",
+        ctx.method,
+        ctx.request_id,
     )
     return {"context": [], "degraded": False, "reason": "retrieval main chain pending"}
 

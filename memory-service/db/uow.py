@@ -9,8 +9,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import AbstractContextManager
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from sqlalchemy import Engine
@@ -100,11 +102,7 @@ class UnitOfWork(AbstractContextManager["UnitOfWork"]):
                 session_id=session_id,
                 idempotency_key=idempotency_key,
             )
-            if cached is not None and cached["expires_at"] > __import__(
-                "datetime"
-            ).datetime.now(__import__("datetime").timezone.utc).isoformat():
-                import json
-
+            if cached is not None and cached["expires_at"] > datetime.now(timezone.utc).isoformat():
                 return json.loads(cached["response"]), True
             raise
         except OperationalError as exc:

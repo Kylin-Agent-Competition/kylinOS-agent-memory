@@ -116,7 +116,10 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE TRIGGER IF NOT EXISTS memory_fts_au_content AFTER UPDATE ON memory_entries
-        WHEN old.is_deleted = 0 AND new.is_deleted = 0 AND old.content IS NOT new.content
+        WHEN old.is_deleted = 0 AND new.is_deleted = 0
+             AND (old.content IS NOT new.content
+                  OR old.entry_type IS NOT new.entry_type
+                  OR old.user_id IS NOT new.user_id)
         BEGIN
             DELETE FROM memory_fts WHERE rowid = old.id;
             INSERT INTO memory_fts(rowid, content, entry_type, user_id)

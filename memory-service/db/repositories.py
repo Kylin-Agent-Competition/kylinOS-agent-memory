@@ -6,6 +6,8 @@
     同事务写缓存；并发冲突（复合 PK 唯一约束）→ 回查返回首次缓存，不视为错误
   - SQLITE_BUSY（busy_timeout 到期）→ 抛 DatabaseLockedError，由调用方降级，
     不向聊天链路上抛（FR-DB-003）
+  - 写操作（INSERT/UPDATE/DELETE）统一经 _wrap_locked 转 DatabaseLockedError
+    （PR#52 Issue 9）；只读查询（WAL 快照读）不产生 SQLITE_BUSY，无需包装
   - 跨用户隔离：所有查询强制 user_id 过滤（Repository 层约束，[02 §16.6]）
 """
 
@@ -64,16 +66,22 @@ def upsert_conversation(
     ).first()
     if existing is not None:
         return int(existing[0])
-    res = conn.execute(
-        insert(conversations)
-        .values(user_id=user_id, session_id=session_id, started_at=started_at)
-    )
+    try:
+        res = conn.execute(
+            insert(conversations)
+            .values(user_id=user_id, session_id=session_id, started_at=started_at)
+        )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
     return int(res.lastrowid)
 
 
-def get_conversation(conn, *, session_id: str) -> Optional[Dict[str, Any]]:
+def get_conversation(conn, *, session_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    """按 session_id + user_id 查询（跨用户隔离，Repository 层强制过滤）。"""
     row = conn.execute(
-        select(conversations).where(conversations.c.session_id == session_id)
+        select(conversations).where(
+            and_(conversations.c.session_id == session_id, conversations.c.user_id == user_id)
+        )
     ).mappings().first()
     return dict(row) if row else None
 
@@ -93,23 +101,33 @@ def insert_turn(
     created_at: Optional[str] = None,
 ) -> int:
     """插入 turn，返回 id。original_user_text 保存用户原文（隔离语义）。"""
-    res = conn.execute(
-        insert(turns).values(
-            session_id=session_id,
-            turn_index=turn_index,
-            original_user_text=original_user_text,
-            model_request=model_request,
-            model_response=model_response,
-            is_end=is_end,
-            created_at=created_at or _now_iso(),
+    try:
+        res = conn.execute(
+            insert(turns).values(
+                session_id=session_id,
+                turn_index=turn_index,
+                original_user_text=original_user_text,
+                model_request=model_request,
+                model_response=model_response,
+                is_end=is_end,
+                created_at=created_at or _now_iso(),
+            )
         )
-    )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
     return int(res.lastrowid)
 
 
-def get_turn(conn, *, turn_id: int) -> Optional[Dict[str, Any]]:
+def get_turn(conn, *, turn_id: int, user_id: str) -> Optional[Dict[str, Any]]:
+    """按 turn_id + user_id 查询（跨用户隔离，Repository 层强制过滤）。
+
+    turns 表无 user_id 列，经 conversations.session_id JOIN 强制隔离，
+    防止 turn_id 可枚举时跨用户读取 original_user_text（PII）[02 §16.6]。
+    """
     row = conn.execute(
-        select(turns).where(turns.c.id == turn_id)
+        select(turns)
+        .join(conversations, conversations.c.session_id == turns.c.session_id)
+        .where(and_(turns.c.id == turn_id, conversations.c.user_id == user_id))
     ).mappings().first()
     return dict(row) if row else None
 
@@ -128,19 +146,22 @@ def insert_memory_entry(
 ) -> int:
     """插入 memory_entry（content 序列化为 JSON 文本），返回 id。"""
     now = _now_iso()
-    res = conn.execute(
-        insert(memory_entries).values(
-            user_id=user_id,
-            entry_type=entry_type,
-            content=json.dumps(content, ensure_ascii=False),
-            source_turn_id=source_turn_id,
-            confidence=confidence,
-            version=1,
-            is_deleted=0,
-            created_at=now,
-            updated_at=now,
+    try:
+        res = conn.execute(
+            insert(memory_entries).values(
+                user_id=user_id,
+                entry_type=entry_type,
+                content=json.dumps(content, ensure_ascii=False),
+                source_turn_id=source_turn_id,
+                confidence=confidence,
+                version=1,
+                is_deleted=0,
+                created_at=now,
+                updated_at=now,
+            )
         )
-    )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
     return int(res.lastrowid)
 
 
@@ -205,18 +226,21 @@ def enqueue_outbox(
     next_retry_at: Optional[str] = None,
 ) -> int:
     """Outbox 入队（必须在业务写同一事务内调用，UoW 保证原子性）。"""
-    res = conn.execute(
-        insert(outbox).values(
-            aggregate_type=aggregate_type,
-            aggregate_id=aggregate_id,
-            event_type=event_type,
-            payload=json.dumps(payload, ensure_ascii=False),
-            attempts=0,
-            next_retry_at=next_retry_at or _now_iso(),
-            last_error=None,
-            created_at=_now_iso(),
+    try:
+        res = conn.execute(
+            insert(outbox).values(
+                aggregate_type=aggregate_type,
+                aggregate_id=aggregate_id,
+                event_type=event_type,
+                payload=json.dumps(payload, ensure_ascii=False),
+                attempts=0,
+                next_retry_at=next_retry_at or _now_iso(),
+                last_error=None,
+                created_at=_now_iso(),
+            )
         )
-    )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
     return int(res.lastrowid)
 
 
@@ -241,27 +265,36 @@ def claim_pending_outbox(conn, *, now_iso: str, max_retries: int, limit: int = 1
 
 def mark_outbox_success(conn, *, outbox_id: int) -> None:
     """处理成功：删除事件（附录 B 步骤 4a）。"""
-    conn.execute(delete(outbox).where(outbox.c.id == outbox_id))
+    try:
+        conn.execute(delete(outbox).where(outbox.c.id == outbox_id))
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
 
 
 def mark_outbox_failure(
     conn, *, outbox_id: int, attempts: int, next_retry_at: str, last_error: str
 ) -> None:
     """处理失败：attempts++ / 退避 / last_error（附录 B 步骤 4b）。"""
-    conn.execute(
-        update(outbox)
-        .where(outbox.c.id == outbox_id)
-        .values(attempts=attempts, next_retry_at=next_retry_at, last_error=last_error)
-    )
+    try:
+        conn.execute(
+            update(outbox)
+            .where(outbox.c.id == outbox_id)
+            .values(attempts=attempts, next_retry_at=next_retry_at, last_error=last_error)
+        )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
 
 
 def mark_outbox_dead_letter(conn, *, outbox_id: int, attempts: int, last_error: str) -> None:
     """Dead Letter：保留记录，attempts 记录最终次数，next_retry_at=NULL，不丢事件（附录 B 4c）。"""
-    conn.execute(
-        update(outbox)
-        .where(outbox.c.id == outbox_id)
-        .values(attempts=attempts, next_retry_at=None, last_error=last_error)
-    )
+    try:
+        conn.execute(
+            update(outbox)
+            .where(outbox.c.id == outbox_id)
+            .values(attempts=attempts, next_retry_at=None, last_error=last_error)
+        )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
 
 
 def cleanup_expired_idempotency(conn, *, now_iso: str, limit: int = 100) -> int:
@@ -309,15 +342,19 @@ def get_idempotency_cache(
 def delete_idempotency_cache(
     conn, *, user_id: str, session_id: str, idempotency_key: str
 ) -> None:
-    conn.execute(
-        delete(idempotency_cache).where(
-            and_(
-                idempotency_cache.c.user_id == user_id,
-                idempotency_cache.c.session_id == session_id,
-                idempotency_cache.c.idempotency_key == idempotency_key,
+    """删除幂等缓存行（命中但过期后由调用方删除）。"""
+    try:
+        conn.execute(
+            delete(idempotency_cache).where(
+                and_(
+                    idempotency_cache.c.user_id == user_id,
+                    idempotency_cache.c.session_id == session_id,
+                    idempotency_cache.c.idempotency_key == idempotency_key,
+                )
             )
         )
-    )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
 
 
 def write_idempotency_cache(

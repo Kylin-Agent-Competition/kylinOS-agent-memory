@@ -6,6 +6,8 @@
   - Handler Registry 路由分发；未注册方法 → UNSUPPORTED_METHOD
   - 内部异常统一经 safe_error_code 映射（禁止泄漏 traceback）
   - deadline 语义：server_processing_time > deadline_ms → TIMEOUT
+    （PR#52 Issue 3：本实现为事后判定，非抢占式——handler 跑完才检查，
+    不打断执行中 handler；抢占式重构登记 TD-D4D-002，慢 handler 接线前必须处理）
   - 停止后拒绝新连接请求（H3 模式，与 embedding/server.py 对齐）
 """
 
@@ -96,6 +98,8 @@ class UDSGatewayServer:
                     target=self._handle_connection, args=(conn,), daemon=True
                 )
                 with self._conn_lock:
+                    # PR#52 Issue 7：清理已结束线程，避免长驻服务引用累积无法 GC
+                    self._conn_threads = [x for x in self._conn_threads if x.is_alive()]
                     self._conn_threads.append(t)
                 t.start()
         finally:

@@ -111,7 +111,7 @@ def test_turn_with_outbox_same_transaction_commit(engine):
         turn_id = result["turn_id"]
     assert turn_id > 0
     with engine.connect() as conn:
-        turn = repo.get_turn(conn, turn_id=turn_id)
+        turn = repo.get_turn(conn, turn_id=turn_id, user_id="u1")
         assert turn["original_user_text"] == "你好"
         assert turn["is_end"] == 1
         pending = repo.claim_pending_outbox(conn, now_iso=datetime.now(timezone.utc).isoformat(), max_retries=3)
@@ -129,7 +129,7 @@ def test_uow_rollback_atomic(engine):
             )
             raise RuntimeError("boom")
     with engine.connect() as conn:
-        assert repo.get_conversation(conn, session_id="s2") is None
+        assert repo.get_conversation(conn, session_id="s2", user_id="u1") is None
         pending = repo.claim_pending_outbox(conn, now_iso=datetime.now(timezone.utc).isoformat(), max_retries=3)
         assert len(pending) == 0
 
@@ -333,3 +333,40 @@ def test_is_locked_error_recognizes_operational():
     exc = OperationalError("stmt", {}, Exception("database is locked"))
     assert is_locked_error(exc)
     assert not is_locked_error(ValueError("x"))
+
+
+# ── PR#52 审查修复回归 ──
+
+
+def test_get_turn_user_isolation(engine):
+    """PR#52 Issue 2：get_turn/get_conversation 必须强制 user_id 过滤（跨用户隔离）。"""
+    with UnitOfWork(engine) as uow:
+        result = uow.save_turn_with_outbox(
+            user_id="u1", session_id="iso-s1", turn_index=1, original_user_text="秘密原文"
+        )
+        turn_id = result["turn_id"]
+    with engine.connect() as conn:
+        assert repo.get_turn(conn, turn_id=turn_id, user_id="u1") is not None
+        assert repo.get_turn(conn, turn_id=turn_id, user_id="u2") is None
+        assert repo.get_conversation(conn, session_id="iso-s1", user_id="u1") is not None
+        assert repo.get_conversation(conn, session_id="iso-s1", user_id="u2") is None
+
+
+def test_fts_update_syncs_entry_type_and_user_id(engine):
+    """PR#52 Issue 11：UPDATE entry_type/user_id（content 不变）也应刷新 FTS 索引。"""
+    with engine.begin() as conn:
+        eid = repo.insert_memory_entry(
+            conn, user_id="u1", entry_type="preference", content={"text": "偏好A"}
+        )
+        conn.execute(
+            memory_entries.update()
+            .where(memory_entries.c.id == eid)
+            .values(entry_type="knowledge", user_id="u2")
+        )
+    with engine.connect() as conn:
+        row = conn.exec_driver_sql(
+            "SELECT entry_type, user_id FROM memory_fts WHERE rowid = ?", (eid,)
+        ).first()
+    assert row is not None
+    assert row[0] == "knowledge"
+    assert row[1] == "u2"

@@ -48,6 +48,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         # 开发/验证快速建库；生产迁移走 `alembic upgrade head`（FR-DB-002）
         init_schema(engine)
         logger.info("schema 就绪: %s", cfg.database_path)
+        logger.warning(
+            "开发模式建库（init_schema=create_all，绕过 Alembic）。"
+            "生产环境必须先 `alembic upgrade head`，再以 `--no-migrate` 启动，"
+            "避免两套建表路径 default 语义分叉（PR#52 Issue 6）。"
+        )
 
     registry = HandlerRegistry()
     register_default_handlers(registry)

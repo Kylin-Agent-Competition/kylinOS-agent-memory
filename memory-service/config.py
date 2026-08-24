@@ -68,7 +68,10 @@ class MemoryConfig(BaseModel):
     deadline_default_ms: int = Field(ge=1, le=60000)
     retrieve_deadline_ms: int = Field(ge=1, le=5000)
     outbox_poll_interval_s: int = Field(ge=1, le=60)
-    outbox_max_retries: int = Field(ge=1, le=10)
+    # PR#52 Issue 5：max_retries 必须与冻结 partial index idx_outbox_pending
+    # 的 `attempts <= 3` 及 outbox_backlog 的 `attempts <= 3` 保持一致，上限收敛为 3；
+    # 若需 >3 重试，须同步重建索引并改 backlog 统计（partial index 无法参数化）。
+    outbox_max_retries: int = Field(ge=1, le=3)
     embedding_model: str = Field(min_length=1)
     log_level: str = Field(pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
 
@@ -142,6 +145,10 @@ def load_config(
         for toml_key, (field_name, _env) in KEY_MAP.items():
             if toml_key in flat:
                 values[field_name] = flat[toml_key]
+        # PR#52 Issue 10：未知 toml 键发 WARN（fail-fast 哲学——写错键名如
+        # socket.pathh 不应被静默忽略）。extra="forbid" 只看得到已知键，需在此显式提示。
+        for unknown_key in sorted(set(flat) - set(KEY_MAP)):
+            warnings.append(f"配置文件含未知键 {unknown_key!r}，已忽略（请检查拼写）")
     else:
         warnings.append(f"配置文件不存在 {file_path}，使用全部默认值启动")
 

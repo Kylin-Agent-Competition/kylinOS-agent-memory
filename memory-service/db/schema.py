@@ -49,7 +49,7 @@ turns = Table(
     Column("original_user_text", Text, nullable=False),
     Column("model_request", Text, nullable=True),
     Column("model_response", Text, nullable=True),
-    Column("is_end", Integer, nullable=False, default=0),
+    Column("is_end", Integer, nullable=False, server_default="0"),
     Column("created_at", String, nullable=False),  # ISO8601 UTC
 )
 
@@ -65,9 +65,9 @@ memory_entries = Table(
     ),
     Column("content", Text, nullable=False),  # JSON 文本
     Column("source_turn_id", Integer, ForeignKey("turns.id"), nullable=True),
-    Column("confidence", Float, nullable=False, default=0.0),  # ∈ [0,1]
-    Column("version", Integer, nullable=False, default=1),  # 乐观锁
-    Column("is_deleted", Integer, nullable=False, default=0),
+    Column("confidence", Float, nullable=False, server_default="0.0"),  # ∈ [0,1]
+    Column("version", Integer, nullable=False, server_default="1"),  # 乐观锁
+    Column("is_deleted", Integer, nullable=False, server_default="0"),
     Column("created_at", String, nullable=False),
     Column("updated_at", String, nullable=False),
     CheckConstraint("entry_type IN ('preference','knowledge','tool_result','behavior')", name="ck_memory_entries_entry_type"),
@@ -82,7 +82,7 @@ outbox = Table(
     Column("aggregate_id", String, nullable=False),
     Column("event_type", String, nullable=False),
     Column("payload", Text, nullable=False),  # JSON 文本
-    Column("attempts", Integer, nullable=False, default=0),
+    Column("attempts", Integer, nullable=False, server_default="0"),
     Column("next_retry_at", String, nullable=True),  # ISO8601 UTC
     Column("last_error", Text, nullable=True),
     Column("created_at", String, nullable=False),
@@ -133,10 +133,15 @@ FTS_TRIGGERS_DDL = [
         VALUES (new.id, new.content, new.entry_type, new.user_id);
     END
     """,
-    # UPDATE（内容变化，非软删除）：先删旧再插新
+    # UPDATE（content / entry_type / user_id 任一变化且非软删除）：先删旧再插新
+    # PR#52 Issue 11：原触发器仅在 content 变化时触发，entry_type/user_id 变更不刷新
+    # FTS 索引，与「同步 memory_entries ↔ memory_fts」声明有差距；现扩展 WHEN 子句。
     """
     CREATE TRIGGER IF NOT EXISTS memory_fts_au_content AFTER UPDATE ON memory_entries
-    WHEN old.is_deleted = 0 AND new.is_deleted = 0 AND old.content IS NOT new.content
+    WHEN old.is_deleted = 0 AND new.is_deleted = 0
+         AND (old.content IS NOT new.content
+              OR old.entry_type IS NOT new.entry_type
+              OR old.user_id IS NOT new.user_id)
     BEGIN
         DELETE FROM memory_fts WHERE rowid = old.id;
         INSERT INTO memory_fts(rowid, content, entry_type, user_id)

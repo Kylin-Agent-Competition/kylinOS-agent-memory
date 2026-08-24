@@ -64,6 +64,9 @@
 | TD-IPC-002 | UDS 权限（systemd RuntimeDirectory 不可确认） | memory-client / packaging/systemd | Technical Debt | Medium | Open | D 轨成员 | D 主审 | D4 阶段 | systemd unit 中 RuntimeDirectory 配置可确认并在麒麟 VM 验证 | Gate 0 审查 08-07/08-17 |
 | TD-IPC-003 | deadline_ms 超时后服务端行为复测不完整 | memory-service / cpp-bridge | Technical Debt | Medium | Open | D 轨成员 | D 主审 | D4 阶段 | deadline 超时后客户端正确截断，服务端不保持僵尸连接并返回 TIMEOUT 错误码 | Gate 0 审查 08-07/08-17 |
 | TD-IPC-004 | 重连机制未实现（单连接阻塞式） | memory-client | Technical Debt | Medium | Open | C 轨成员 | D 主审 | D4-D 阶段 | 客户端支持 3 次指数退避重连，有 Evidence L2 日志 | Gate 0 审查 08-07/08-17 |
+| TD-D4D-001 | Outbox consumer 未接线（Vector 接入 R-9 待确认），无 consumer 事件按真实失败退避/进 DL | memory-service/outbox/worker.py | Technical Debt | Medium | Open | D 轨成员 | D 主审 | Day5+ 接线 | 注册真实 Vector/Embedding consumer（process_event）后按 Embedding→Vector INSERT 消费；无 consumer 时保持真实失败（退避/DL）而非假成功；代码注释已引用（outbox/worker.py） | PR #52 |
+| TD-D4D-002 | IPC deadline 为事后判定非抢占式（handler 跑完才检查，不打断慢 handler） | memory-service/gateway/server.py | Technical Debt | Medium | Open | D 轨成员 | D 主审 | Day5+ 接线慢 handler 前 | 慢 handler（embedding/检索）接线前将 deadline 改为抢占式（带超时的独立执行线程或等效中断），保证超时 handler 不长期占用连接线程；当前 Gate 0 内置 handler 均快速，docstring 已如实标注「非抢占」 | PR #52 |
+| TD-D4D-003 | Outbox Worker 单事务批量处理 + consumer I/O 期间持写锁不释放（阻塞业务写） | memory-service/outbox/worker.py | Technical Debt | Medium | Open | D 轨成员 | D 主审 | Day5+ 接线真实 consumer 前 | 重构为 claim→commit→事务外 process→新事务 mark（经典 Outbox 模式），consumer 网络 I/O 期间不持写锁；当前无 consumer 时整批快速失败，不影响 Gate 0 | PR #52 |
 
 ## 管理规则
 
