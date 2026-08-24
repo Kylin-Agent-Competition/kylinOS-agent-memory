@@ -1,7 +1,15 @@
 === 补录时间 ===
 2026-08-22T11:28:59Z
 === commit ===
-ed9949c feat(D4D): IPC Gateway + 数据库层（SQLAlchemy/Alembic/UoW）+ Outbox/配置/日志/systemd 骨架
+原始验证: ed9949c（feat(D4D) IPC Gateway + 数据库层骨架；原始版 init_schema 触发器非幂等）
+补录验证: 35e8c54（init_schema 幂等 + UDS stop unlink；本 log 由该修复版重跑产生）
+收尾:     d2b7205（PR#52 审查收尾）
+最终 HEAD（rebase 后）: 9fe84c7
+=== 上传验证文件 SHA256（补录 commit 35e8c54 处文件内容） ===
+migrations/versions/001_initial_schema.py 01c3f53c63c9f9f8017b7226e043c1d91d3bd408448c7fc61f0d1fa99ea6b88a
+memory-service/db/schema.py 510aaa9a5a8c834bdae1301ddc24dfb2caacd294b4fdf236a3b91541d43f279f
+memory-service/db/engine.py 3ffdb97a607dc6c6ce4c423310bbe4ae88556f76e44bd29df0d826cd59b9e796
+memory-service/gateway/server.py 9da2ab4b07be2f49942b07391771e6ff5588131c5a712d73c2c156e2c133d2a5
 === venv 版本 ===
 sqlalchemy 2.0.52
 alembic 1.19.1

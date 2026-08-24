@@ -238,14 +238,14 @@ entries:
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d4d_vm_verify_20260821/verify_run.log"
     report: "evidence/l2-kylin-vm/d4d_vm_verify_20260821/RESULT.md"
-    tested_commit: "ed9949c feat(D4D): IPC Gateway + 数据库层（SQLAlchemy/Alembic/UoW）+ Outbox/配置/日志/systemd 骨架"
+    tested_commit: "35e8c54（补录修复版，实际产生本证据结果；原始 ed9949c 仅骨架——其 init_schema 触发器非幂等，无法通过 IDEMPOTENT_OK）→ d2b7205 收尾；rebase 后对应 2770e26 / 9fe84c7"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
     date: "2026-08-22"
     reviewer: "kylin-agent（手动执行，SSH 自动化辅助）"
-    limitations: "init_schema() 触发器非幂等（trigger already exists）已用 CREATE TRIGGER IF NOT EXISTS 修复并在 VM 幂等自检 IDEMPOTENT_OK；UDS stop unlink（TD-IPC-001）已修复并补回归；alembic 须在仓库根以 -c migrations/alembic.ini 执行；systemd socket 权限位 srw-------/0600/kylin-agent:kylin-agent；证据绑定 HEAD ed9949c，Review 未完成不代表允许合并"
-    checksum_sha256: "dca7f33c2f849fee467a4ac6365365f8a641f6dd3883400e112547d8991eb119"
+    limitations: "init_schema() 触发器非幂等（trigger already exists）已用 CREATE TRIGGER IF NOT EXISTS 修复并在 VM 幂等自检 IDEMPOTENT_OK；UDS stop unlink（TD-IPC-001）已修复并补回归；alembic 须在仓库根以 -c migrations/alembic.ini 执行；systemd socket 权限位 srw-------/0600/kylin-agent:kylin-agent；证据 commit 绑定见 RESULT.md「证据 commit 绑定」节（原始 ed9949c / 补录 35e8c54 / 最终 HEAD 9fe84c7），Review 未完成不代表允许合并"
+    checksum_sha256: "b52f8843d08e6f3c328c338e86530905daf99e260d413952fb2f68b1034fe8e2"
     details: |
       执行环境: 银河麒麟桌面 V11 x86_64，VM 用户 kylin-agent，venv sqlalchemy 2.0.52 / alembic 1.19.1。
       FTS5 中文检索 + 软删除同步: PASS（MATCH '咖啡'/'我喜欢喝咖啡' -> 1，软删除后 -> 0，主表软删除记录保留 2）
