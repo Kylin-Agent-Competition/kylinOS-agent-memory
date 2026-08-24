@@ -17,7 +17,7 @@ from retrieval.contracts import (
     RetrievalFilter,
     RetrievalHit,
 )
-from retrieval.rrf import AggregatedCandidate, aggregate_by_memory, dedupe_exact_version, rrf_rank
+from retrieval.rrf import AggregatedCandidate, aggregate_by_memory, dedupe_exact_version, rrf_rank, rrf_score
 
 RRF_DEFAULT_K = 60
 
@@ -90,7 +90,7 @@ def fuse_retrieval(
     agg_candidates = [
         AggregatedCandidate(memory_id=mid, ranks=ranks) for mid, ranks in aggregated.items()
     ]
-    ranked = rrf_rank(agg_candidates)
+    ranked = rrf_rank(agg_candidates, k)
     if top_k is not None:
         ranked = ranked[:top_k]
 
@@ -128,8 +128,8 @@ def fuse_retrieval(
                     )
                     for ch in channels
                 },
-                rrf_score=agg.final_score,
-                final_score=agg.final_score,
+                rrf_score=rrf_score(agg.ranks, k),
+                final_score=rrf_score(agg.ranks, k),
                 sensitivity=rec.sensitivity,
                 conflict_state=rec.conflict_state,
                 estimated_tokens=max(1, len(rec.content)),

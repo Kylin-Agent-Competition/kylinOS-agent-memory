@@ -1,8 +1,8 @@
-"""真实 Vector SDK 桥（V006/D5-B）：通过 ector_cli 子进程做 JSON 往返。
+"""真实 Vector SDK 桥（V006/D5-B）：通过 vector_cli 子进程做 JSON 往返。
 
 本模块只负责把 SDK 操作翻译成子进程 JSON 调用，并把命中映射为 RetrievalHit；
-SDK 错误码在此只做透传（结构化错误映射见 ector_sdk_errors.map_sdk_status）。
-不依赖 pybind11 / python3-dev，只需一个已编译的 ector_cli 可执行文件。
+SDK 错误码在此只做透传（结构化错误映射见 vector_sdk_errors.map_sdk_status）。
+不依赖 pybind11 / python3-dev，只需一个已编译的 vector_cli 可执行文件。
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ class VectorCliClient:
             input=stdin,
             text=True,
             capture_output=True,
-            timeout=60,
+            timeout=120,
         )
         text = (proc.stdout or "").strip()
         # SDK 连接重试日志会污染 stdout；vector_cli 的协议 JSON 是最后一行。
@@ -68,13 +68,22 @@ class VectorCliClient:
             raise VectorCliError(int(result.get("code", -1)), result.get("message", ""))
 
     def create_collection(self, name: str, dim: int) -> dict:
-        return self._run("create_collection", name, str(dim))
+        result = self._run("create_collection", name, str(dim))
+        self._require_ok(result)
+        return result
 
     def insert(self, name: str, ids: list[int], vectors: list[list[float]]) -> dict:
-        return self._run("insert", name, stdin=json.dumps({"ids": ids, "vectors": vectors}))
+        result = self._run("insert", name, stdin=json.dumps({"ids": ids, "vectors": vectors}))
+        self._require_ok(result)
+        return result
 
     def drop_collection(self, name: str) -> dict:
-        return self._run("drop_collection", name)
+        result = self._run("drop_collection", name)
+        # drop 已不存在的 collection 是幂等成功（已经是目标状态），不视为错误。
+        if not result.get("ok") and result.get("code") == 1002 and "not found" in result.get("message", "").lower():
+            return result
+        self._require_ok(result)
+        return result
 
     def search(
         self,

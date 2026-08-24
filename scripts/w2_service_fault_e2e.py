@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 
 from retrieval.contracts import ObjectType, RetrievalFilter
@@ -26,7 +27,7 @@ def run_svc(action: str) -> None:
 
 
 def main() -> int:
-    collection = "w2_fault"
+    collection = f"w2_fault_{int(time.time())}"
     truth = {
         (USER, "mem-a", "v1"): TruthRecord(
             memory_id="mem-a", version_id="v1", user_id=USER,
@@ -44,7 +45,7 @@ def main() -> int:
 
     fts5 = Fts5Index()
     for (_, mid, _), rec in truth.items():
-        fts5.upsert(mid, rec.version_id, rec.content)
+        fts5.upsert(mid, rec.version_id, rec.content, USER)
 
     cli = VectorCliClient(cli_path="./vector_cli")
     cli.drop_collection(collection)
@@ -88,7 +89,6 @@ def main() -> int:
     # 恢复服务 -> 自愈
     print("[W2] restarting vector service...")
     run_svc("start")
-    import time
     time.sleep(2)
     recovered = retrieve_graceful(fts5_search=fts5_search, vector_search=vector_search, truth=truth, flt=flt)
     print(f"[W2] recovered candidates: {[c.memory_id for c in recovered.candidates]} degraded={recovered.degraded}")

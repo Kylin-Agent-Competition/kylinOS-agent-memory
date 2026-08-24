@@ -6,6 +6,7 @@ top_n=1 / 大于命中数 / 超大 / 空库，验证候选数与退出码。
 from __future__ import annotations
 
 import sys
+import time
 from datetime import datetime, timezone
 
 from retrieval.real_vector_provider import VectorCliClient
@@ -15,7 +16,7 @@ USER = "alice"
 
 
 def main() -> int:
-    collection = "w3_topk"
+    collection = f"w3_topk_{int(time.time())}"
     cli = VectorCliClient(cli_path="./vector_cli")
     cli.drop_collection(collection)
     cli.create_collection(collection, 4)
@@ -37,7 +38,7 @@ def main() -> int:
     assert len(hits_huge) == 3
 
     # W3-5: 空库 + top_n>0 -> 空
-    empty_coll = "w3_empty_topk"
+    empty_coll = f"w3_empty_topk_{int(time.time())}"
     cli.drop_collection(empty_coll)
     cli.create_collection(empty_coll, 4)
     hits_empty = cli.search(empty_coll, [1.0, 0.0, 0.0, 0.0], top_n=5, user_id=USER, now=NOW)

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from datetime import datetime, timezone
 
 from retrieval.contracts import ObjectType, RetrievalFilter
@@ -18,7 +19,7 @@ USER = "alice"
 
 
 def main() -> int:
-    collection = "w1_empty"
+    collection = f"w1_empty_{int(time.time())}"
 
     # W1-1 空 FTS5
     fts5 = Fts5Index()

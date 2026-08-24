@@ -77,9 +77,14 @@ class AggregatedCandidate:
         return min(self.ranks.values())
 
 
-def rrf_rank(candidates: Iterable[AggregatedCandidate]) -> List[AggregatedCandidate]:
-    """按 `final_score` 降序、通道数降序、最佳 rank 升序、`memory_id` 升序排序。"""
+def rrf_rank(
+    candidates: Iterable[AggregatedCandidate], k: int = RRF_DEFAULT_K
+) -> List[AggregatedCandidate]:
+    """按 final_score 降序、通道数降序、最佳 rank 升序、memory_id 升序排序。
+
+    显式使用 k 计算 RRF 分数，确保调用方传入的 k 真正生效。
+    """
     return sorted(
         candidates,
-        key=lambda c: (-c.final_score, -c.channel_count, c.best_rank, c.memory_id),
+        key=lambda c: (-rrf_score(c.ranks, k), -c.channel_count, c.best_rank, c.memory_id),
     )

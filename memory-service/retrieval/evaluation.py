@@ -2,7 +2,7 @@
 
 纯函数实现，不依赖 numpy / 检索运行时 / 麒麟宿主。
 
-口径来源：valuation/D3_GOLD_LABEL_AND_METRICS_SPEC_V1.md。
+口径来源：evaluation/D3_GOLD_LABEL_AND_METRICS_SPEC_V1.md。
 注意：K 值、p95 统计口径、warmup/重复次数等均为 TEAM_DEFINED，未冻结前由
 调用方在 EvalConfig 中显式登记实际取值，本模块只计算、不把默认值写成正式契约。
 """

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from datetime import datetime, timezone
 
 from retrieval.contracts import ObjectType, RetrievalFilter
@@ -40,17 +41,18 @@ def build_truth() -> dict:
 
 
 def main() -> int:
-    collection = "v006_e2e"
+    collection = f"v006_e2e_{int(time.time())}"
     truth = build_truth()
 
     fts5 = Fts5Index()
     for (_, mid, _), rec in truth.items():
-        fts5.upsert(mid, rec.version_id, rec.content)
+        fts5.upsert(mid, rec.version_id, rec.content, USER_ID)
 
     cli = VectorCliClient(cli_path="./vector_cli")
-    cli.drop_collection(collection)
-    cli.create_collection(collection, 4)
-    cli.insert(collection, [1, 2, 3], [[1, 0, 0, 0], [0, 1, 0, 0], [-1, 0, 0, 0]])
+    print(f"[V006] collection={collection}")
+    print("[V006] drop (best-effort clean):", cli.drop_collection(collection).get("ok"))
+    print("[V006] create:", cli.create_collection(collection, 4).get("ok"))
+    print("[V006] insert:", cli.insert(collection, [1, 2, 3], [[1, 0, 0, 0], [0, 1, 0, 0], [-1, 0, 0, 0]]).get("ok"))
 
     fts5_hits = fts5.search("apple", USER_ID, top_n=5, now=NOW)
     vector_hits = cli.search(collection, [1.0, 0.0, 0.0, 0.0], top_n=5, user_id=USER_ID, now=NOW)
@@ -76,7 +78,7 @@ def main() -> int:
             f"  {c.memory_id}: rrf={c.rrf_score:.9f} channels={[ch.value for ch in c.channels]} content={c.content!r}"
         )
 
-    cli.drop_collection(collection)
+    print("[V006] final drop:", cli.drop_collection(collection).get("ok"))
     return 0
 
 

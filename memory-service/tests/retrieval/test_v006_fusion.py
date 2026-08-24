@@ -138,8 +138,32 @@ def test_top_k_truncation():
 
 def test_fts5_index_returns_ranked_hits():
     idx = Fts5Index()
-    idx.upsert("mem-a", "v1", "apple banana cherry")
-    idx.upsert("mem-b", "v1", "apple banana")
+    idx.upsert("mem-a", "v1", "apple banana cherry", "alice")
+    idx.upsert("mem-b", "v1", "apple banana", "alice")
     hits = idx.search("apple", "alice", top_n=5, now=NOW)
     assert all(h.channel is Channel.FTS5 for h in hits)
     assert [h.rank for h in hits] == [1, 2]
+
+
+
+def test_rrf_k_param_actually_changes_score():
+    # MEDIUM-4：k 必须真正传递到 RRF 评分，不同 k 得到不同分数。
+    fts5 = [_hit("mem-a", "v1", Channel.FTS5, 1)]
+    vector = [_hit("mem-a", "v1", Channel.VECTOR, 1)]
+    truth = {("alice", "mem-a", "v1"): _truth("mem-a")}
+    out10 = fuse_retrieval(fts5_hits=fts5, vector_hits=vector, truth=truth, flt=_flt(), k=10)
+    out60 = fuse_retrieval(fts5_hits=fts5, vector_hits=vector, truth=truth, flt=_flt(), k=60)
+    out100 = fuse_retrieval(fts5_hits=fts5, vector_hits=vector, truth=truth, flt=_flt(), k=100)
+    assert out10[0].rrf_score == pytest.approx(1 / 11 + 1 / 11, abs=1e-9)
+    assert out60[0].rrf_score == pytest.approx(1 / 61 + 1 / 61, abs=1e-9)
+    assert out100[0].rrf_score == pytest.approx(1 / 101 + 1 / 101, abs=1e-9)
+    assert out10[0].rrf_score > out60[0].rrf_score > out100[0].rrf_score
+
+
+def test_fts5_user_isolation_before_topn():
+    # MEDIUM-5：Bob 高分结果不能挤占 Alice 的 Top-N。
+    idx = Fts5Index()
+    idx.upsert("bob-1", "v1", "apple apple apple apple", "bob")
+    idx.upsert("alice-1", "v1", "apple", "alice")
+    hits = idx.search("apple", "alice", top_n=1, now=NOW)
+    assert [h.memory_id for h in hits] == ["alice-1"]

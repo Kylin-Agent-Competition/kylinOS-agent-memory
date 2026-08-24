@@ -20,16 +20,16 @@ class Fts5Index:
         self.conn = sqlite3.connect(db)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(content, memory_id UNINDEXED, version_id UNINDEXED)"
+            "CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(content, memory_id UNINDEXED, version_id UNINDEXED, user_id UNINDEXED)"
         )
 
-    def upsert(self, memory_id: str, version_id: str, content: str) -> None:
+    def upsert(self, memory_id: str, version_id: str, content: str, user_id: str) -> None:
         self.conn.execute(
-            "DELETE FROM memory_fts WHERE memory_id=? AND version_id=?", (memory_id, version_id)
+            "DELETE FROM memory_fts WHERE memory_id=? AND version_id=? AND user_id=?", (memory_id, version_id, user_id)
         )
         self.conn.execute(
-            "INSERT INTO memory_fts(memory_id, version_id, content) VALUES (?,?,?)",
-            (memory_id, version_id, content),
+            "INSERT INTO memory_fts(memory_id, version_id, content, user_id) VALUES (?,?,?,?)",
+            (memory_id, version_id, content, user_id),
         )
         self.conn.commit()
 
@@ -43,8 +43,8 @@ class Fts5Index:
         """BM25 排序的全文召回，rank 从 1 开始（1=最相关）。"""
         now = now or datetime.now(timezone.utc)
         rows = self.conn.execute(
-            "SELECT memory_id, version_id, bm25(memory_fts) AS score FROM memory_fts WHERE memory_fts MATCH ? ORDER BY score LIMIT ?",
-            (query, top_n),
+            "SELECT memory_id, version_id, bm25(memory_fts) AS score FROM memory_fts WHERE memory_fts MATCH ? AND user_id = ? ORDER BY score LIMIT ?",
+            (query, user_id, top_n),
         ).fetchall()
         hits: list[RetrievalHit] = []
         for rank, row in enumerate(rows, 1):

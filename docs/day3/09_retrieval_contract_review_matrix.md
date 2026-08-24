@@ -7,8 +7,7 @@
 - 人工审批门槛：一名独立、非作者 Reviewer 的 `APPROVED`
 - 专业关注点：D 关注 Provider/SQLite/Outbox/IPC 可实现性；E 关注用户隔离、
   遗忘、安全与评测；项目任务卡指定的关注项须在 Review 记录中明确覆盖
-- Runtime：2026-08-03 原轮次未启动虚拟机；2026-08-21 闭合 B-D3-V001；2026-08-23 闭合 B-D3-V002–V006（含 D5B 空库/服务故障/Top-K），V007 仅评测脚本/配置版本就绪，正式量化评测仍
-  `B-D3-V001`，其余 L2 条目仍为 `DEFERRED_VM`
+- Runtime：2026-08-03 原轮次未启动虚拟机；2026-08-21 闭合 B-D3-V001；2026-08-23 闭合 B-D3-V002–V006（含 D5B 空库/服务故障/Top-K），V007 仅评测脚本/配置版本就绪，正式量化评测 DEFERRED_VM
 
 ## 1. 使用规则
 
@@ -202,7 +201,7 @@ merge、rebase、Review 或改写其他作者分支。
 | B-D3-V004 | 索引新代次构建、失败保旧与恢复 | D4 Collection Schema/重建器就绪 | [`PASS_VM`](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
 | B-D3-V005 | 原子 generation/Collection 切换能力 | 官方接口或宿主故障注入证据 | [`PASS_VM / TD-004 Resolved`](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
 | B-D3-V006 | FTS5 + Vector + rrf-v1 端到端 | FTS5、Provider、SQLite 回源、RRF 均实现 | [`PASS_VM`](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
-| B-D3-V007 | Recall@K/MRR/nDCG/P95 | Gold Label、封存集、配置版本和评测脚本就绪 | [`PASS_VM`（脚本/配置）/ `DEFERRED_VM`（正式评测）](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
+| B-D3-V007 | Recall@K/MRR/nDCG/P95 | Gold Label、封存集、配置版本和评测脚本就绪 | [`L1_LOCAL`（脚本/配置烟测）/ `DEFERRED_VM`（正式评测）](16_d5b_retrieval_vertical_slice_host_report_20260823.md) |
 
 ## 6. 本轮本地检查
 

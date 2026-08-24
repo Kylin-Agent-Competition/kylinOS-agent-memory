@@ -63,3 +63,46 @@ def test_cli_nonzero_exit_raises(monkeypatch):
     client = VectorCliClient()
     with pytest.raises(VectorCliError):
         client.create_collection("c", 4)
+
+
+
+def test_create_fails_closed_on_ok_false(monkeypatch):
+    # HIGH-1：returncode=0 但 JSON ok=false，create 必须抛错，不能继续。
+    def fake_run(cmd, input=None, text=None, capture_output=None, timeout=None):
+        return _FakeCompleted(json.dumps({"ok": False, "code": 1002, "message": "server failed"}), returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    cli = VectorCliClient()
+    with pytest.raises(VectorCliError) as exc:
+        cli.create_collection("c", 4)
+    assert exc.value.code == 1002
+
+
+def test_insert_fails_closed_on_ok_false(monkeypatch):
+    def fake_run(cmd, input=None, text=None, capture_output=None, timeout=None):
+        return _FakeCompleted(json.dumps({"ok": False, "code": 1002, "message": "bad dim"}), returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    cli = VectorCliClient()
+    with pytest.raises(VectorCliError):
+        cli.insert("c", [1], [[1, 0, 0, 0]])
+
+
+def test_drop_fails_closed_on_ok_false(monkeypatch):
+    def fake_run(cmd, input=None, text=None, capture_output=None, timeout=None):
+        return _FakeCompleted(json.dumps({"ok": False, "code": 1002, "message": "server failed"}), returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    cli = VectorCliClient()
+    with pytest.raises(VectorCliError):
+        cli.drop_collection("c")
+
+
+def test_drop_missing_collection_is_idempotent(monkeypatch):
+    # drop 已不存在的 collection 是幂等成功，不抛。
+    def fake_run(cmd, input=None, text=None, capture_output=None, timeout=None):
+        return _FakeCompleted(json.dumps({"ok": False, "code": 1002, "message": "collection not found"}), returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    cli = VectorCliClient()
+    assert cli.drop_collection("missing")["ok"] is False
