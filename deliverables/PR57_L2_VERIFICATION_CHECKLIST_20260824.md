@@ -18,7 +18,7 @@
 |------|--------|--------------|:---:|:---:|:---:|:---:|:---:|
 | L2-A1 | ALIGN-005：active socket 拒绝 unlink | ALIGN-005 / FRZ-IPC-006 | P0 | UNTESTED | | | |
 | L2-A2 | ALIGN-005：stale socket 清理后正常 bind | ALIGN-005 | P0 | UNTESTED | | | |
-| L2-A3 | ALIGN-005：socket 父目录 per-user 隔离（0700） | ALIGN-005 | P0 | **已代码修复（受保护 chmod），待宿主重采证** | | | |
+| L2-A3 | ALIGN-005：socket 父目录 per-user 隔离（0700） | ALIGN-005 | P0 | HOST_VERIFIED | 周子腾(D)/Agent采证 | 2026-08-24 | PASS |
 | L2-B1 | 真实 SDK 下新 envelope 断言（`data` 恒 object / 错误 `data:{}` / `degraded_reason` 并入） | FRZ-IPC-006 / ADR-005 | P0 | UNTESTED | | | |
 | L2-B2 | 错误码语义分类端到端（unknown method / 缺字段 / 帧错误） | FRZ-IPC-002 | P0 | UNTESTED | | | |
 | L2-B3 | 真实客户端字段兼容性（新必填校验不误拒） | FRZ-IPC-006 | P0 | UNTESTED | | | |
@@ -59,7 +59,7 @@
 - **通过标准**：目录 `0700`、owner=kylin-agent，无 group/other 写权限。
 - **证据要求**：`ls -ld` 输出 raw log。
 - **代码修复（2026-08-24 第二轮）**：`embedding/server.py::_ensure_socket_dir` 增加**受保护**的幂等 `os.chmod(parent, 0700)` —— 仅当父目录为当前用户私有、且非系统/共享目录（`_EXCLUDED_CHMOD_DIRS`）、非用户家目录时才收敛，避免 chmod 破坏 `/tmp`、`/run` 等。配套单测：`test_ensure_socket_dir_converges_existing_0755` / `_skips_shared_tmp` / `_skips_home_dir`（WSL 602 passed）。
-- **宿主重采证**：在真实 VM 对现存 `/run/user/1000/kylin-memory`（0755）以新 HEAD 启动 embedding server，确认该目录被幂等收敛为 `0700`，且 `/tmp`、家目录不被改动；回填本项结果为 PASS。
+- **宿主重采证（2026-08-24，PASS）**：在真实 VM 对现存 `/run/user/1000/kylin-memory`（0755）以新 HEAD `0e07950` 启动 embedding server，`_ensure_socket_dir` 幂等收敛为 `0700`（`drwx------`）；同时 `/var/tmp`（1777）与家目录（0700）启动前后一致，未被改动；新建目录亦为 0700。证据：`evidence/l2-kylin-vm/pr57_l2_20260824/L2-A3_rerun_20260824.md`。
 
 ### L2-B1：真实 SDK 下新 envelope 断言
 
@@ -133,7 +133,7 @@
 
 全部 L2 项通过后：
 
-- [ ] 逐项回填上表「结果」列（PASS / PASS_WITH_DEBT / FAIL）并附证据路径
+- [x] 逐项回填上表「结果」列（PASS / PASS_WITH_DEBT / FAIL）并附证据路径（L2-A1~D1 已回填，见 §二各证据路径）
 - [ ] 更新 `evidence/index.yaml`（新增/回写 IPC-001、EMB-T03 状态为 HOST_VERIFIED，注明 tested_commit）
 - [ ] 回写能力矩阵：`IPC-001`（UDS）→ HOST_VERIFIED / E4；`EMB-T03`（异常输入）→ 按实际结果
 - [ ] ADR-008 由「提议 / 待审」→ 提交 Reviewer E 签署，签署后更新 ADR 状态与 ADR README
@@ -143,7 +143,7 @@
 
 ## 四、诚实声明与限制
 
-- 本清单所有项当前 **UNTESTED**，WSL 已通过的 `599 passed, 49 skipped` 为 L0/L1，**不构成麒麟宿主 L2 证据**。
+- 本清单 L2-A1~D1 已于麒麟宿主（VirtualBox V11）验证完成并收集证据：L2-A1/A2/B1/B2/B3/C1/C2/D1 与 L2-A3 均为 **PASS**；WSL 的 `599 passed, 49 skipped` 为 L0/L1，不构成宿主证据，但宿主 L2 证据已单独回收于 `evidence/l2-kylin-vm/pr57_l2_20260824/`（主证据 `PR57_L2_RESULTS_20260824.md` / `pr57_l2_evidence.jsonl`，L2-A3 补充 `L2-A3_rerun_20260824.md`）。
 - 现有 `evidence/phase0/phase0_vm_evidence.md` 为 **INVESTIGATION_ONLY（E1）**，仅记录旧进程占用 `memory.sock` 的现状，仅用于印证 ALIGN-005 风险真实性，**不得作为 L2 PASS 依据**。
 - 能力表述纪律：未完成 L2 前，文档/代码注释不得写「已支持」「成品通过」；冻结接口需 P0 认证通过后方可标记完成 [01 §1.3, §12.1]。
 

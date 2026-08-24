@@ -2,7 +2,7 @@
 
 - **依据清单**：`deliverables/PR57_L2_VERIFICATION_CHECKLIST_20260824.md`
 - **验证环境**：银河麒麟 V11 x86_64（`6.6.0-76-generic`）VirtualBox 虚拟机，SSH `127.0.0.1:2222`，用户 `kylin-agent`
-- **分支 / 基线 Commit**：`feat/d4-phase0-ipc-alignment` / `ec3a91e5858f1e7fe210a9850e5c9d54fdc9b109`
+- **分支 / 基线 Commit**：`feat/d4-phase0-ipc-alignment` / `ec3a91e5858f1e7fe210a9850e5c9d54fdc9b109`（主证据；L2-A3 补充重采证 HEAD=`0e07950`，见 `L2-A3_rerun_20260824.md`）
 - **被测代码**：以 HEAD 为真源的 `memory-service/`（含修复 Commit `740bb62` 全部改动），上传至 VM 干净工作区 `/home/kylin-agent/l2-verify-pr57/`
 - **真实 SDK**：`libkylin-coreai-embedding 1.2.0.0-0k0.4`（`/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0`）；kylin-ai-runtime pid=9434 正常运行
 - **执行驱动**：`evidence/l2-kylin-vm/run_l2_verify.py`（可复现）
@@ -16,7 +16,7 @@
 |------|--------|:---:|------|------|
 | L2-A1 | ALIGN-005 active socket 拒绝 unlink | **PASS** | `PR57_L2_RESULTS_20260824.md` §L2-A1 | 抛 `RuntimeError: active socket already listening: ...memory.sock; refusing to unlink`，原 socket/进程未被抢占 |
 | L2-A2 | stale socket 清理后正常 bind | **PASS** | §L2-A2 | stale 残留被清理，bind+listen 成功，`memory.embed` 返回 `status:"ok"` + `dimension:768` + `l2_norm≈1.0` |
-| L2-A3 | socket 父目录 per-user 隔离（0700） | **PASS_WITH_DEBT** | §L2-A3 | 新建目录为 `0700`；但现存 `/run/user/1000/kylin-memory` 为 `0755`（遗留进程创建），见「发现」 |
+| L2-A3 | socket 父目录 per-user 隔离（0700） | **PASS** | §L2-A3 + L2-A3_rerun | 现存 `0755` 以新 HEAD `0e07950` 启动后幂等收敛为 `0700`；`/var/tmp`（1777）与家目录（0700）未被改动；新建目录亦 0700 |
 | L2-B1 | 真实 SDK 下新 envelope 断言（pytest） | **PASS** | §L2-B1 | `KYLIN_L2=1` pytest `test_embedding_service_real.py` **10 passed in 0.92s** |
 | L2-B2 | 错误码语义分类端到端 | **PASS** | §L2-B2 | unknown→`UNSUPPORTED_METHOD`；缺字段→`INVALID_REQUEST`；超长帧→`PROTOCOL_ERROR`；版本不匹配→`PROTOCOL_ERROR` |
 | L2-B3 | 真实客户端字段兼容性 | **PASS** | §L2-B3 | 真实 C++ `echo_client`（含 request_id/trace_id/deadline_ms/payload）对 embedding server 发 `memory.ping` → `status:"ok"`，未被 INVALID_REQUEST 误拒 |
@@ -47,12 +47,15 @@ RuntimeError: active socket already listening: /run/user/1000/kylin-memory/memor
  "data": {"vector": [...768 项...], "dimension": 768, "l2_norm": 1.0000001615645466}}
 ```
 
-### L2-A3：新建目录 0700（PASS）；现存目录 0755（DEBT）
+### L2-A3：现存目录 0755 → 收敛为 0700（PASS）+ 新建目录 0700（PASS）
 ```text
-# 现存（遗留进程创建）：
-drwxr-xr-x 2 kylin-agent kylin-agent 60  /run/user/1000/kylin-memory      # 0755，非 0700
-# 新代码 _ensure_socket_dir 新建：
-drwx------ 2 kylin-agent kylin-agent 4096 /tmp/l2-a3-fresh/sub             # 0700 ✓
+# 现存（遗留进程创建，0755）：以新 HEAD 0e07950 启动 embedding server 前
+drwxr-xr-x 2 kylin-agent kylin-agent  /run/user/1000/kylin-memory
+# 启动后 _ensure_socket_dir 幂等收敛：
+drwx------ 2 kylin-agent kylin-agent  /run/user/1000/kylin-memory      # 0700 ✓
+# 未被改动：/var/tmp（drwxrwxrwt, 1777）与家目录 /home/kylin-agent（drwx------, 0700）前后一致
+# 新建目录：drwx------ /tmp/l2-a3-fresh/sub                             # 0700 ✓
+# 完整原始证据：evidence/l2-kylin-vm/pr57_l2_20260824/L2-A3_rerun_20260824.md
 ```
 
 ### L2-B1：真实 SDK pytest（PASS）
@@ -99,7 +102,7 @@ key=REDACTED        # 无明文数字
 
 ## 三、发现与建议（诚实声明）
 
-1. **L2-A3（DEBT）**：`_ensure_socket_dir` 用 `os.makedirs(mode=0o700, exist_ok=True)` 只对**新建**目录生效；现存 `/run/user/1000/kylin-memory`（由遗留 memory-service 进程以 0755 创建）不会被 chmod 为 0700。由于父目录 `/run/user/1000` 本身为 `0700`（`drwx------`），实际 per-user 隔离仍成立（其他用户不可穿越）。**建议**：`_ensure_socket_dir` 对已存在目录补 `os.chmod(parent, 0o700)`（幂等），或由正式 Memory Service/Gateway 负责目录权限收敛。
+1. **L2-A3（已解决，原 DEBT）**：`_ensure_socket_dir` 原只对**新建**目录生效；已由 Commit `0e07950`（受保护幂等 chmod 现存目录 0700，跳过 `_EXCLUDED_CHMOD_DIRS` 系统/共享目录与家目录）修复，并经麒麟宿主重采证 PASS：现存 `/run/user/1000/kylin-memory`（0755）以新 HEAD 启动后收敛为 `0700`，`/var/tmp`（1777）与家目录（0700）未被改动（证据 `L2-A3_rerun_20260824.md`）。
 2. **测试过程观察**：本次验证前 VM 上遗留的旧 memory-service（pid=3107，`feat/d4d-ipc-db-outbox` 分支的 `app.py`）监听 `/run/user/1000/kylin-memory/memory.sock`，其 socket 路径曾在并发运行中被 unlink（孤儿 inode）。这印证了 ALIGN-005 所针对的「多进程抢占 socket 路径」风险真实存在；修复后（L2-A1）`embedding.server` 对 active socket 正确拒绝 unlink，不再抢占。
 3. **限制**：L2 为宿主级功能验证；性能/并发/超时（FRZ-IPC-004 TD-IPC-003）、幂等落库（FRZ-IPC-005，待 D4-D）、真实 Kaiming Hook 端到端不在本清单范围，仍属后续 L3/实现阶段。
 

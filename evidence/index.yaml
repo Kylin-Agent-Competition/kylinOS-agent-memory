@@ -718,13 +718,13 @@ entries:
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "L2-A3 现存 /run/user/1000/kylin-memory 目录为 0755（遗留进程创建，新建目录为 0700，属 DEBT 见报告）；L2-A1 采用受控 active listener 验证拒绝 unlink；deadline 超时（FRZ-IPC-004 TD-IPC-003）、幂等落库（FRZ-IPC-005 待 D4-D）、真实 Kaiming Hook 端到端不在本清单范围。"
+    limitations: "L2-A3 现存 0755 目录已由 0e07950 收敛为 0700 并经宿主重采证 PASS（补充证据 L2-A3_rerun_20260824.md）；L2-A1 采用受控 active listener 验证拒绝 unlink；deadline 超时（FRZ-IPC-004 TD-IPC-003）、幂等落库（FRZ-IPC-005 待 D4-D）、真实 Kaiming Hook 端到端不在本清单范围。"
     checksum_sha256: "fc1de4f79b08b9e356179ee34c9dcb0e941cf32ecc5ab7f5b6ee7424ce99ec68"
     details: |
       麒麟 V11 x86_64（6.6.0-76-generic），SSH 127.0.0.1:2222，kylin-agent，真实 SDK libkylin-coreai-embedding 1.2.0.0-0k0.4。
       L2-A1 active socket 拒绝 unlink：RuntimeError 'active socket already listening ... memory.sock ... refusing to unlink'，原 socket/进程未被抢占（PASS）。
       L2-A2 stale socket 清理 + bind + memory.embed → status:"ok" + dimension:768（PASS）。
-      L2-A3 新建目录 0700（PASS）；现存目录 0755（DEBT）。
+      L2-A3 现存 0755 → 启动后收敛 0700（PASS）；新建目录 0700（PASS）；/var/tmp 与家目录未改。
       L2-B1 KYLIN_L2=1 pytest test_embedding_service_real.py 10 passed in 0.92s（PASS）。
       L2-B2 错误码语义：unknown→UNSUPPORTED_METHOD；缺字段→INVALID_REQUEST；超长帧/版本不匹配→PROTOCOL_ERROR（PASS）。
       L2-B3 真实 C++ echo_client（含全部必填字段）→ memory.ping status:"ok"，未被 INVALID_REQUEST 误拒（PASS）。
@@ -743,7 +743,7 @@ entries:
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "L2-A1 使用受控 active listener 验证主动 socket 拒绝 unlink；L2-A3 现存目录 0755（新建为 0700，DEBT 见报告）；deadline 超时（TD-IPC-003）、幂等（FRZ-IPC-005 待 D4-D）、真实 Kaiming Hook 端到端不在本清单。"
+    limitations: "L2-A1 使用受控 active listener 验证主动 socket 拒绝 unlink；L2-A3 现存目录 0755 已收敛为 0700（0e07950 修复 + 宿主重采证 PASS）；deadline 超时（TD-IPC-003）、幂等（FRZ-IPC-005 待 D4-D）、真实 Kaiming Hook 端到端不在本清单。"
     checksum_sha256: "fc1de4f79b08b9e356179ee34c9dcb0e941cf32ecc5ab7f5b6ee7424ce99ec68"
     details: |
       L2-A1 active socket 拒绝 unlink（RuntimeError 'refusing to unlink'）→ 不抢占 memory.sock。

@@ -308,22 +308,47 @@ def l2_a2(c):
     stop_server(c)
 
 
-# ── L2-A3：父目录 per-user 隔离（0700） ──
+def _perm_mode(out, needle):
+    """从 ls -ld 输出解析含 needle 行的权限位（如 drwx------）。"""
+    for line in out.splitlines():
+        if needle in line and line.strip().startswith(("d", "l", "-")):
+            return line.split()[0]
+    return "?"
+
+
+# ── L2-A3：socket 父目录 0700 收敛（现存 0755 → 启动后 0700，且不改 /tmp/家目录） ──
 
 def l2_a3(c):
-    print("\n=== L2-A3: 父目录 per-user 隔离（0700）===")
-    ec, out, err = run(c, f"ls -ld {KDIR} 2>&1")
-    first = out.strip().splitlines()[0] if out.strip() else "?"
-    verdict = "PASS" if first.startswith("drwx------") else "FAIL"
-    record("L2-A3_kdir_perm_current", f"ls -ld {KDIR}", ec, out, err, verdict)
-    # 演示 _ensure_socket_dir 新建目录为 0700
+    print("\n=== L2-A3: 父目录 0700 收敛（现存 0755 → 启动后 0700）===")
+    home = "/home/kylin-agent"
+    # 1. 基线权限（KDIR / /tmp / /var/tmp / 家目录）
+    ec, out, err = run(c, f"ls -ld {KDIR} 2>&1; echo ---TMP---; ls -ld /tmp /var/tmp 2>&1; echo ---HOME---; ls -ld {home} 2>&1")
+    base_tmp = _perm_mode(out, "/var/tmp")
+    base_home = _perm_mode(out, home)
+    record("L2-A3_baseline_perms", f"ls -ld {KDIR} /tmp /var/tmp {home}", ec, out, err)
+    # 2. 模拟遗留：确保现存目录为 0755（验证"收敛"而非"新建"）
+    ec, out, err = run(c, f"chmod 0755 {KDIR} 2>&1; ls -ld {KDIR} 2>&1")
+    record("L2-A3_force_legacy_0755", f"chmod 0755 {KDIR}", ec, out, err,
+           "PASS" if "drwxr-xr-x" in out else "FAIL")
+    # 3. 以默认路径启动 embedding server → _ensure_socket_dir 幂等收敛现存目录
+    ec, out, err = start_server(c, "a3")
+    record("L2-A3_server_start", "start embedding server（默认路径）", ec, out, err)
+    # 4. 收敛后校验：KDIR→0700，且 /tmp、家目录不变
+    ec, out, err = run(c, f"ls -ld {KDIR} 2>&1; echo ---TMP---; ls -ld /tmp /var/tmp 2>&1; echo ---HOME---; ls -ld {home} 2>&1")
+    kdir_ok = _perm_mode(out, KDIR) == "drwx------"
+    tmp_ok = _perm_mode(out, "/var/tmp") == base_tmp
+    home_ok = _perm_mode(out, home) == base_home
+    record("L2-A3_converged_0700", f"ls -ld {KDIR} /tmp /var/tmp {home}", ec, out, err,
+           "PASS" if (kdir_ok and tmp_ok and home_ok) else "FAIL")
+    stop_server(c)
+    # 5. 新建目录 0700（回归）
     run(c, "rm -rf /tmp/l2-a3-fresh")
     cmd = (f"cd {REPO}/memory-service && {ENV_PREFIX} {PY} -c "
            f"\"from embedding.server import EmbeddingUDSServer; "
            f"s=EmbeddingUDSServer('/tmp/l2-a3-fresh/sub/embed.sock'); "
            f"s._ensure_socket_dir(); print('DIR_CREATED')\"")
     ec, out, err = run(c, cmd)
-    ec2, out2, err2 = run(c, "ls -ld /tmp/l2-a3-fresh /tmp/l2-a3-fresh/sub 2>&1")
+    ec2, out2, err2 = run(c, "ls -ld /tmp/l2-a3-fresh/sub 2>&1")
     record("L2-A3_fresh_dir_0700", cmd, ec2, out + out2, err + err2,
            "PASS" if "drwx------" in out2 else "FAIL")
     run(c, "rm -rf /tmp/l2-a3-fresh")
