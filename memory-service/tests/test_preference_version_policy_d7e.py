@@ -53,6 +53,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -656,3 +657,70 @@ def test_invalid_input_rejected():
     plan_rb = POLICY.plan_rollback(None, [])
     assert plan_rb.action == PreferenceVersionAction.REJECTED
     assert plan_rb.reason_code == "rejected_invalid_input"
+
+
+# ── PR #58 审查问题 #1：非法 scope 契约校验（fail-closed） ──
+
+
+def test_invalid_scope_rejected_at_construction():
+    """非法 scope 在 PreferenceVersionIntent 构造阶段即被拒绝
+    （直接复用 PreferenceScope 枚举校验，非第二套 scope 字符串常量），
+    不会进入 CREATE/COEXIST/UPDATE/NO_OP/ROLLBACK 业务规划。"""
+    with pytest.raises(ValidationError):
+        PreferenceVersionIntent(
+            user_id=USER,
+            preference_key="demo_response_style",
+            scope="invalid_scope_not_in_enum",
+            value="concise",
+            decision=make_decision(),
+        )
+
+
+def test_empty_scope_rejected_at_construction():
+    """空字符串 scope 不在 PreferenceScope 五值内 → 构造阶段拒绝。"""
+    with pytest.raises(ValidationError):
+        PreferenceVersionIntent(
+            user_id=USER,
+            preference_key="demo_response_style",
+            scope="",
+            value="concise",
+            decision=make_decision(),
+        )
+
+
+def test_intent_scope_reuses_preference_scope_enum():
+    """PreferenceVersionIntent.scope 字段直接复用 PreferenceScope 枚举
+    （PR #58 审查问题 #1：复用现有契约，非第二套 scope 字符串常量）。
+    合法字符串经 Pydantic 转换为 PreferenceScope 枚举成员。"""
+    for scope_str in SCOPES:
+        intent = make_intent(scope=scope_str)
+        assert isinstance(intent.scope, PreferenceScope)
+        assert intent.scope == PreferenceScope(scope_str)
+        assert intent.scope.value == scope_str
+
+
+# ── PR #58 审查问题 #2：coexist_with_scopes 无共享可变默认值 ──
+
+
+def test_coexist_with_scopes_default_independent_instances():
+    """coexist_with_scopes 使用 Field(default_factory=list)，
+    两个默认实例的列表互相独立（PR #58 审查问题 #2：无共享可变默认值）。"""
+    plan1 = PreferenceVersionPlan(
+        action=PreferenceVersionAction.CREATE,
+        reason_code="create_first_version",
+        user_id=USER,
+        preference_key="demo_key",
+        scope="global",
+    )
+    plan2 = PreferenceVersionPlan(
+        action=PreferenceVersionAction.CREATE,
+        reason_code="create_first_version",
+        user_id=USER,
+        preference_key="demo_key",
+        scope="global",
+    )
+    assert plan1.coexist_with_scopes == []
+    assert plan2.coexist_with_scopes == []
+    plan1.coexist_with_scopes.append("topic")
+    assert "topic" not in plan2.coexist_with_scopes
+    assert plan2.coexist_with_scopes == []
