@@ -54,6 +54,25 @@ def test_upgrade_head_schema(db_path):
     assert {"memory_fts_ai", "memory_fts_au_content", "memory_fts_au_deleted", "memory_fts_ad"} <= triggers
 
 
+def test_alembic_version_table_present_after_upgrade(db_path):
+    """PR#52 Issue 6：`alembic upgrade head` 必须落 alembic_version 表（唯一迁移真源标记）。
+
+    生产模式（--no-migrate）启动校验 `has_alembic_version()` 依赖此表存在；
+    与 test_db_d4d.py::test_has_alembic_version_false_after_init_schema 成对，
+    证明 create_all 不产生该表、仅 Alembic 产生——消除双 schema truth source。
+    """
+    assert _run_alembic(db_path, "upgrade", "head").returncode == 0
+
+    import sqlite3
+
+    conn = sqlite3.connect(str(db_path))
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"
+    ).fetchone()
+    conn.close()
+    assert row is not None
+
+
 def test_upgrade_schema_columns(db_path):
     """列名/类型/约束与冻结文档逐列对照（FRZ-DB-001）。"""
     _run_alembic(db_path, "upgrade", "head")

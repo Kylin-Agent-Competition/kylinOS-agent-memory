@@ -117,6 +117,20 @@ def init_schema(engine: Engine, *, fts: bool = True) -> None:
             conn.exec_driver_sql(trigger_ddl)
 
 
+def has_alembic_version(engine: Engine) -> bool:
+    """判断 `alembic_version` 表是否存在（生产迁移已执行的证据，FR-DB-002）。
+
+    `init_schema()`（create_all）不会创建该表；只有 `alembic upgrade head`
+    才会写入它。生产模式（`--no-migrate`）启动时用它校验唯一迁移入口已生效，
+    消除 create_all 与 Alembic 双 schema truth source 分叉（PR#52 Issue 6）。
+    """
+    with engine.connect() as conn:
+        row = conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"
+        ).first()
+    return row is not None
+
+
 def db_health_check(engine: Engine) -> bool:
     """health handler 用：真实可达性探测（SELECT 1），失败返回 False。"""
     try:

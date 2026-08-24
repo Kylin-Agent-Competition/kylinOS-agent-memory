@@ -12,7 +12,7 @@ import threading
 from typing import Optional
 
 from config import load_config
-from db.engine import create_db_engine, init_schema
+from db.engine import create_db_engine, has_alembic_version, init_schema
 from gateway.handlers import register_default_handlers
 from gateway.registry import HandlerRegistry
 from gateway.server import UDSGatewayServer
@@ -44,7 +44,19 @@ def main(argv: Optional[list[str]] = None) -> int:
     setup_logging(level=cfg.log_level)
 
     engine = create_db_engine(cfg.database_path)
-    if not args.no_migrate:
+    if args.no_migrate:
+        # 生产模式：唯一数据库初始化/升级入口为 Alembic（FR-DB-002）。
+        # 启动校验 alembic_version 表存在——不存在则说明 operator 未先跑
+        # `alembic upgrade head`，此时以 create_all 兜底会重新引入双 schema
+        # truth source 分叉，故 fail-fast 拒绝启动（PR#52 Issue 6）。
+        if not has_alembic_version(engine):
+            logger.error(
+                "生产模式（--no-migrate）要求先执行 `alembic upgrade head`："
+                "未检测到 alembic_version 表，拒绝启动（PR#52 Issue 6）。"
+            )
+            return 2
+        logger.info("生产模式：alembic_version 校验通过，schema 由 Alembic 管理")
+    else:
         # 开发/验证快速建库；生产迁移走 `alembic upgrade head`（FR-DB-002）
         init_schema(engine)
         logger.info("schema 就绪: %s", cfg.database_path)

@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import text
 
 from db import repositories as repo
-from db.engine import create_db_engine, init_schema, is_locked_error
+from db.engine import create_db_engine, has_alembic_version, init_schema, is_locked_error
 from db.schema import FTS5_DDL, memory_entries
 from db.uow import UnitOfWork
 
@@ -67,6 +67,25 @@ def test_tables_exist(engine):
             ).all()
         }
     assert {"conversations", "turns", "memory_entries", "outbox", "idempotency_cache", "memory_fts"} <= tables
+
+
+def test_has_alembic_version_false_after_init_schema(tmp_path):
+    """PR#52 Issue 6：init_schema（create_all）不产生 alembic_version 表。
+
+    alembic_version 是 Alembic 迁移的唯一真源标记；create_all 路径不得伪装成
+    "已迁移"。生产模式启动校验依赖此区分——init_schema 后应为 False，
+    手动建表（等价 alembic upgrade head 落表）后为 True。
+    """
+    eng = create_db_engine(str(tmp_path / "av_check.db"))
+    init_schema(eng)
+    assert has_alembic_version(eng) is False
+    # 等价 alembic upgrade head 落表后的标记表
+    with eng.begin() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+        )
+    assert has_alembic_version(eng) is True
+    eng.dispose()
 
 
 def test_frozen_indexes_exist(engine):
