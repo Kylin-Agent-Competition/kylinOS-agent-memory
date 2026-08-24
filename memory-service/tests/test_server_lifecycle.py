@@ -17,7 +17,7 @@ import time
 
 import pytest
 
-from embedding.server import EmbeddingUDSServer
+from embedding.server import EmbeddingUDSServer, _default_socket_path
 from embedding.embedding_service import shutdown_executor
 
 
@@ -90,13 +90,16 @@ def test_server_serves_request(server):
 
 
 def test_stop_rejects_new_business_request(server):
-    """H3: stop 后新请求 → ERR_SERVICE_STOPPED。"""
+    """H3: stop 后新连接被拒绝（socket 已 unlink，新业务请求无法接入）。"""
     srv, sock_path = server
     srv.stop()
-    # stop 后 socket 已 unlink，无法再 connect——验证 stopped 标记生效路径：
-    # 直接构造一个"已在连接中的旧连接"场景由下一测试覆盖；此处验证 stop 幂等
-    assert srv._stopped is True
-    srv.stop()  # 幂等：不抛错
+    # stop 后 socket 已 unlink，新连接无法建立
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        with pytest.raises((FileNotFoundError, ConnectionRefusedError, OSError)):
+            s.connect(sock_path)
+    finally:
+        s.close()
 
 
 def test_stopped_conn_thread_rejects(server):
@@ -111,7 +114,7 @@ def test_stopped_conn_thread_rejects(server):
     s.connect(sock_path)
     # 先正常请求一次，确认连接建立
     resp = _send(s, "memory.embed", {"text": "before"})
-    assert resp["ok"] is True
+    assert resp["status"] == "ok"
     # stop 服务（连接线程仍在）
     srv.stop()
     # 再发请求 → 必须不被业务处理（ERR_SERVICE_STOPPED 或连接关闭/超时）
@@ -179,3 +182,64 @@ def test_stop_joins_conn_threads(server):
     with srv._conn_lock:
         assert srv._conn_threads == []
     s.close()
+
+
+# ── ALIGN-005 返工：socket ownership / stale / active（PR#57 R1） ──
+
+def test_default_socket_path_is_not_memory_sock():
+    """ALIGN-005：embedding 默认 socket 不得占用正式 memory.sock。"""
+    p = _default_socket_path()
+    assert not p.endswith("memory.sock")
+    assert p.endswith("embedding.sock")
+
+
+def test_start_refuses_active_socket(tmp_path):
+    """ALIGN-005：active socket（有监听）不得被 unlink，start 抛错。"""
+    sock_path = str(tmp_path / "active.sock")
+    active = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    active.bind(sock_path)
+    active.listen(1)
+    try:
+        srv = EmbeddingUDSServer(sock_path, provider=FakeProvider())
+        with pytest.raises(RuntimeError, match="active socket"):
+            srv.start()
+    finally:
+        active.close()
+        if os.path.exists(sock_path):
+            os.unlink(sock_path)
+
+
+def test_start_cleans_stale_socket(tmp_path):
+    """ALIGN-005：stale socket（无监听）被安全清理后正常启动并可服务。"""
+    sock_path = str(tmp_path / "stale.sock")
+    # 制造 stale socket：bind 后立即 close（socket 文件残留，无监听进程）
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.bind(sock_path)
+    s.close()
+    assert os.path.exists(sock_path)
+
+    srv = EmbeddingUDSServer(sock_path, provider=FakeProvider())
+    t = threading.Thread(target=srv.start, daemon=True)
+    t.start()
+    # 轮询直到 server 真正监听（stale socket 先被 unlink 再重新 bind，故不能用
+    # "文件存在"判断就绪，须以 connect 成功为准）
+    deadline = time.time() + 3
+    c = None
+    while time.time() < deadline:
+        try:
+            c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            c.connect(sock_path)
+            break
+        except OSError:
+            if c is not None:
+                c.close()
+            c = None
+            time.sleep(0.02)
+    assert c is not None, "server did not start listening in time"
+
+    resp = _send(c, "memory.embed", {"text": "hello"})
+    assert resp["status"] == "ok"
+    assert resp["data"]["dimension"] == 768
+    c.close()
+    srv.stop()
+    shutdown_executor()

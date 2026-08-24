@@ -14,6 +14,8 @@ import os
 import sys
 import datetime
 import json
+import re
+import subprocess
 
 import paramiko
 
@@ -25,6 +27,38 @@ PASSWORD = os.environ.get("KYLIN_VM_PASSWORD", "").strip()
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT_JSONL = os.path.join(OUT_DIR, "phase0_vm_evidence.jsonl")
 OUT_SUMMARY = os.path.join(OUT_DIR, "phase0_vm_evidence.md")
+
+# 脱敏：secret/servicekey/token/serial/password/apikey 等敏感键值 → REDACTED。
+# 防止证据中残留 servicekey（如 /etc/.kyinfo 的 [servicekey] key=...）等明文。
+_SENSITIVE_KEYS = re.compile(
+    r"(?i)\b(servicekey|secret|token|serial|password|api[_-]?key|key)\b\s*[=:]\s*\S+"
+)
+
+
+def redact(text: str) -> str:
+    """对收集到的命令输出做敏感键值脱敏。"""
+    return _SENSITIVE_KEYS.sub(r"\1=REDACTED", text)
+
+
+def git_head() -> str:
+    """当前仓库 HEAD commit（证据绑定当前 HEAD）。"""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10)
+        return out.stdout.strip() or "UNKNOWN"
+    except Exception:
+        return "UNKNOWN"
+
+
+def git_branch() -> str:
+    """当前分支名。"""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=10)
+        return out.stdout.strip() or "UNKNOWN"
+    except Exception:
+        return "UNKNOWN"
 
 
 def main():
@@ -53,8 +87,8 @@ def main():
             "name": name,
             "cmd": cmd,
             "exit": ec,
-            "out": out,
-            "err": err,
+            "out": redact(out),
+            "err": redact(err),
         }
         records.append(rec)
         print(f"  [{name}] exit={ec}")
@@ -97,8 +131,20 @@ def main():
         for rec in records:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-    # 生成 markdown 摘要
-    lines = ["# Phase 0 麒麟 VM 现状证据（2026-08-24）", ""]
+    # 生成 markdown 摘要（含正式证据 schema 字段 + HEAD 绑定 + 脱敏声明）
+    commit_sha = git_head()
+    branch = git_branch()
+    lines = [
+        "# Phase 0 麒麟 VM 现状证据（2026-08-24）",
+        "",
+        f"- **project**: kylin-os-agent-memory",
+        "- **task**: Phase 0 协议对齐 ALIGN-005 socket 现状调查",
+        f"- **branch**: {branch}",
+        f"- **commit_sha**: {commit_sha}",
+        "- **result**: INVESTIGATION_ONLY（仅环境现状调查，非当前 HEAD 的 L2 执行证据）",
+        "- **limitations**: 本次收集发生在目标 HEAD 代码执行之前，仅记录环境中已存在的 socket/进程现状，不构成 PR#57 的 L2 验证证据；servicekey 等敏感值已脱敏（REDACTED）。",
+        "",
+    ]
     for rec in records:
         lines.append(f"## {rec['name']}")
         lines.append(f"```\n# exit={rec['exit']}\n{rec['out']}".rstrip() + f"\n```")

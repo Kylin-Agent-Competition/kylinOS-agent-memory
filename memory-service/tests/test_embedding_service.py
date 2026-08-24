@@ -156,9 +156,11 @@ def test_handle_request_dispatch():
     """envelope 分发：memory.ping / memory.embed / 未知 method / 缺 protocol_version。"""
     svc = EmbeddingService(provider=FakeProvider())
     svc.start()
-    # memory.ping
+    # memory.ping（data 恒为 object，FRZ-IPC-006 §6.2）
     assert svc.handle_request(
-        {"protocol_version": "1.0", "method": "memory.ping"})["data"] == "pong"
+        {"protocol_version": "1.0", "method": "memory.ping",
+         "request_id": "req-ping", "trace_id": "trc-ping",
+         "deadline_ms": 100, "payload": {}})["data"] == {"pong": True}
     # memory.embed（envelope + request_id/trace_id 回显）
     env = build_envelope("memory.embed", {"text": "hi"},
                          request_id="req-1", trace_id="trc-1")
@@ -168,15 +170,23 @@ def test_handle_request_dispatch():
     assert resp["trace_id"] == "trc-1"
     assert resp["protocol_version"] == "1.0"
     assert resp["data"]["dimension"] == 768
-    # 未知 method → ERR_PROTOCOL
+    # 未知 method → UNSUPPORTED_METHOD（语义分类，不再 PROTOCOL_ERROR）
     bad = svc.handle_request(
-        {"protocol_version": "1.0", "method": "memory.unknown", "payload": {}})
-    assert bad["status"] == "error" and bad["error_code"] == "PROTOCOL_ERROR"
-    # 缺 protocol_version → ERR_PROTOCOL（含 request_id 回显）
+        {"protocol_version": "1.0", "method": "memory.unknown",
+         "request_id": "req-u", "trace_id": "trc-u",
+         "deadline_ms": 100, "payload": {}})
+    assert bad["status"] == "error" and bad["error_code"] == "UNSUPPORTED_METHOD"
+    # 缺 protocol_version → PROTOCOL_ERROR（含 request_id 回显）
     bad2 = svc.handle_request(
         {"method": "memory.embed", "payload": {"text": "x"}, "request_id": "req-9"})
     assert bad2["status"] == "error" and bad2["error_code"] == "PROTOCOL_ERROR"
     assert bad2["request_id"] == "req-9"
+    # 缺必填字段 deadline_ms → INVALID_REQUEST
+    bad3 = svc.handle_request(
+        {"protocol_version": "1.0", "method": "memory.embed",
+         "request_id": "req-10", "trace_id": "trc-10",
+         "payload": {"text": "x"}})
+    assert bad3["status"] == "error" and bad3["error_code"] == "INVALID_REQUEST"
     svc.close()
 
 
@@ -187,8 +197,8 @@ def test_handle_request_embed_batch_envelope():
     resp = svc.handle_request(build_envelope(
         "memory.embed_batch", {"texts": ["a", "b"]}))
     assert resp["status"] == "ok"
-    assert len(resp["data"]) == 2
-    assert resp["data"][0]["dimension"] == 768
+    assert len(resp["data"]["vectors"]) == 2
+    assert resp["data"]["vectors"][0]["dimension"] == 768
     svc.close()
 
 
@@ -224,7 +234,9 @@ def test_health_reports_status():
     svc = EmbeddingService(provider=FakeProvider())
     svc.start()
     resp = svc.handle_request(
-        {"protocol_version": "1.0", "method": "memory.health"})
+        {"protocol_version": "1.0", "method": "memory.health",
+         "request_id": "req-h", "trace_id": "trc-h",
+         "deadline_ms": 100, "payload": {}})
     assert resp["status"] == "ok"
     assert resp["data"]["service"] == "ok"
     assert resp["data"]["provider"] == "ready"
@@ -238,7 +250,9 @@ def test_health_stopped_state():
     """未 start 的 Service：health 返回 stopped 状态（不崩溃）。"""
     svc = EmbeddingService(provider=FakeProvider())
     resp = svc.handle_request(
-        {"protocol_version": "1.0", "method": "memory.health"})
+        {"protocol_version": "1.0", "method": "memory.health",
+         "request_id": "req-h", "trace_id": "trc-h",
+         "deadline_ms": 100, "payload": {}})
     assert resp["status"] == "ok"
     assert resp["data"]["service"] == "stopped"
     assert resp["data"]["provider"] == "stopped"
@@ -264,3 +278,32 @@ def test_executor_shutdown_idempotent_and_rebuild():
     assert resp["result"]["dimension"] == 768
     svc.close()
     shutdown_executor()  # 恢复：避免影响后续测试（惰性重建为干净状态）
+
+
+# ── envelope 契约（FRZ-IPC-006 §6.2，PR#57 R4） ──
+
+def test_envelope_error_has_data_field():
+    """FRZ-IPC-006 §6.2：错误响应也携带 data（恒为 object，值为 {}）。"""
+    svc = EmbeddingService(provider=FakeProvider())
+    svc.start()
+    bad = svc.handle_request(
+        {"protocol_version": "1.0", "method": "memory.unknown",
+         "request_id": "req-u", "trace_id": "trc-u",
+         "deadline_ms": 100, "payload": {}})
+    assert bad["status"] == "error"
+    assert "data" in bad and bad["data"] == {}
+    svc.close()
+
+
+def test_handle_request_degraded_preserves_reason():
+    """降级路径：degraded_reason 并入 envelope data，不被静默丢失。"""
+    svc = EmbeddingService(provider=FakeProvider(fail_with=ProviderError(
+        ProviderErrorCode.ERR_SDK_NOT_LOADED, "so not found")))
+    svc.start()
+    resp = svc.handle_request(build_envelope("memory.embed", {"text": "x"},
+                                             request_id="req-d", trace_id="trc-d"))
+    assert resp["status"] == "ok"
+    assert resp["data"]["degraded"] is True
+    assert resp["data"]["degraded_reason"]["code"] == "ERR_SDK_NOT_LOADED"
+    assert "so not found" in resp["data"]["degraded_reason"]["message"]
+    svc.close()

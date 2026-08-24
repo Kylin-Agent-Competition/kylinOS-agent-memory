@@ -37,7 +37,12 @@ from providers import (
 )
 from embedding.embedding_cache import EmbeddingCoalescer, EmbeddingQueryCache
 from embedding.embedding_metrics import EmbeddingBacklogTracker
-from embedding.protocol import PROTOCOL_VERSION, ProtocolError, parse_envelope
+from embedding.protocol import (
+    PROTOCOL_VERSION,
+    ProtocolError,
+    build_error_envelope,
+    parse_envelope,
+)
 
 # Bridge 调用统一放线程池：SDK embed 可能耗时（IPC），不阻塞聊天线程（Day5-3）
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="embed-bridge")
@@ -242,8 +247,8 @@ class EmbeddingService:
             method, payload, request_id, trace_id, _deadline = parse_envelope(
                 req, expected_methods=_METHODS)
         except ProtocolError as exc:
-            return self._envelope_error(
-                "PROTOCOL_ERROR", str(exc), req)
+            # 按语义分类映射：UNSUPPORTED_METHOD / INVALID_REQUEST / PROTOCOL_ERROR
+            return self._envelope_error(exc.code, str(exc), req)
 
         if method == "memory.embed":
             body = self.embed(payload.get("text", ""),
@@ -252,7 +257,7 @@ class EmbeddingService:
             body = self.embed_batch(payload.get("texts", []),
                                     timeout_ms=payload.get("timeout_ms", 30000))
         elif method == "memory.ping":
-            body = {"ok": True, "result": "pong"}
+            body = {"ok": True, "result": {"pong": True}}
         elif method == "memory.health":
             body = self.health()
         else:  # pragma: no cover - parse_envelope 已校验 method
@@ -447,7 +452,7 @@ class EmbeddingService:
                     r.get("degraded_reason", {}).get(
                         "message", "embed_batch degraded/failed"))
             results.append(r["result"])
-        return {"ok": True, "result": results}
+        return {"ok": True, "result": {"vectors": results}}
 
     # ── 辅助 ──
 
@@ -457,7 +462,7 @@ class EmbeddingService:
         """把内部业务响应（ok/result/error/degraded）转换为 FRZ-IPC-006 冻结 envelope。
 
         成功：{protocol_version, request_id, trace_id, status:"ok", data, server_ts}
-        失败：{protocol_version, request_id, trace_id, status:"error", error_code, message, server_ts}
+        失败：{protocol_version, request_id, trace_id, status:"error", data:{}, error_code, message, server_ts}
         内部 error.code 经 ADR-005 §错误码映射表映射到 FRZ-IPC-002 冻结枚举。
         """
         base = {
@@ -467,28 +472,38 @@ class EmbeddingService:
             "server_ts": datetime.now(timezone.utc).isoformat(),
         }
         if body.get("ok"):
-            # 成功（含 degraded：ok=true + 空向量，真实降级结果）
-            return {**base, "status": "ok", "data": body.get("result")}
+            # 成功（含 degraded：ok=true + 空向量，真实降级结果）。
+            # data 恒为 object（FRZ-IPC-006 §6.2）；降级时并入 degraded_reason，
+            # 避免 degraded_reason 在新 envelope 路径被静默丢失。
+            data = dict(body.get("result") or {})
+            if body.get("degraded"):
+                data.setdefault("degraded", True)
+                if body.get("degraded_reason"):
+                    data["degraded_reason"] = body["degraded_reason"]
+            return {**base, "status": "ok", "data": data}
         error = body.get("error") or {}
         return {
             **base,
             "status": "error",
+            "data": {},
             "error_code": map_error_code(error.get("code", "ERR_UNKNOWN")),
             "message": error.get("message", ""),
         }
 
     @staticmethod
     def _envelope_error(code: str, message: str, req: Dict[str, Any]) -> Dict[str, Any]:
-        """协议层错误响应（FRZ-IPC-006 冻结 envelope + FRZ-IPC-002 冻结错误码）。"""
-        return {
-            "protocol_version": PROTOCOL_VERSION,
-            "request_id": req.get("request_id", ""),
-            "trace_id": req.get("trace_id", ""),
-            "status": "error",
-            "error_code": map_error_code(code),
-            "message": message,
-            "server_ts": datetime.now(timezone.utc).isoformat(),
-        }
+        """协议层错误响应（FRZ-IPC-006 冻结 envelope + FRZ-IPC-002 冻结错误码）。
+
+        与 server.py 共用 build_error_envelope 单一实现，避免两套逻辑漂移。
+        """
+        if not isinstance(req, dict):
+            req = {}
+        return build_error_envelope(
+            map_error_code(code),
+            message,
+            request_id=req.get("request_id", ""),
+            trace_id=req.get("trace_id", ""),
+        )
 
     @staticmethod
     def _error(code: str, message: str) -> Dict[str, Any]:

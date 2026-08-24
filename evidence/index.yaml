@@ -689,3 +689,17 @@ entries:
     checksum_sha256: "f21bdc7e403871ebfdf86c43421b4395d7b3e3f7ddd82fec2cd92dc8c88ad570"
     details: "验证 Tool Result、Behavior Candidate、Manual Config 三类开发样本、错误码引用、字段完整性、唯一 sample_id 与开发集约束。"
 
+  - id: "PHASE0-ALIGN005-001"
+    task_id: "D4-Phase0"
+    description: "Phase 0 协议对齐 ALIGN-005 socket 现状调查（非 L2 执行证据，仅环境现状 + servicekey 已脱敏）"
+    status: "INVESTIGATION_ONLY"
+    evidence_level: "E1"
+    source: "evidence/phase0/phase0_vm_evidence.md"
+    tested_commit: "b7f7a96589109bfe6debbb3e886fb4a74db36c39"
+    date: "2026-08-24"
+    reviewer: "待审"
+    limitations: "本次收集发生在目标 HEAD 代码执行之前，仅记录环境中已存在的 socket/进程现状（memory.sock 被旧进程 python pid=3107 监听），不构成 PR#57 的 L2 验证证据；/etc/.kyinfo 的 servicekey 明文已脱敏为 REDACTED。"
+    checksum_sha256: "0ad87d9ec58b6e14b10a4f55f13f3e1030fc2bb493255d0a302486d041d3ef6a"
+    details: |
+      环境现状：/run/user/1000/kylin-memory/memory.sock 已被旧进程监听（python pid=3107，d4d-venv）。
+       此证据仅用于 ALIGN-005 socket ownership 现状核查，不作为 L2 PASS 依据。

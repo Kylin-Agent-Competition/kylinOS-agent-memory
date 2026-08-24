@@ -1,5 +1,12 @@
 # Phase 0 麒麟 VM 现状证据（2026-08-24）
 
+- **project**: kylin-os-agent-memory
+- **task**: Phase 0 协议对齐 ALIGN-005 socket 现状调查
+- **branch**: feat/d4-phase0-ipc-alignment
+- **commit_sha**: b7f7a96589109bfe6debbb3e886fb4a74db36c39
+- **result**: INVESTIGATION_ONLY（仅环境现状调查，非当前 HEAD 的 L2 执行证据）
+- **limitations**: 本次收集发生在目标 HEAD 代码执行之前，仅记录环境中已存在的 socket/进程现状，不构成 PR#57 的 L2 验证证据；servicekey 等敏感值已脱敏（REDACTED）。
+
 ## system_identity
 ```
 # exit=0
@@ -22,7 +29,7 @@ time=2026-02-12 12:04:58
 dist_id=Kylin-Desktop-V11-2603-Release-20260228-X86_64-2026-02-12 12:04:58
 
 [servicekey]
-key=0689023
+key=REDACTED
 
 [os]
 to=

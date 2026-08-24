@@ -1,6 +1,6 @@
 # ADR-008：embedding 子服务方法域独立承认（ALIGN-004）
 
-- **状态**：✅ 已采纳（D 决策 2026-08-24，选方案 A；Reviewer：E（谢嘉然）待签）
+- **状态**：🟡 提议 / 待审（D 已选方案 A；独立 Review 通过前不标记"已采纳"，Reviewer：E（谢嘉然）待签）
 - **日期**：2026-08-24
 - **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
 - **责任轨道**：D（IPC）为主，E 审查
@@ -91,3 +91,5 @@ embedding 作为 Memory Service 子服务，保留独立方法域 `memory.embed 
 - `deliverables/D4_IMPLEMENTATION_PUSH_CHECKLIST_20260824.md` Phase 0.4 / Phase 2.2
 
 本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A（2026-08-24）；Reviewer E（谢嘉然）待签署。
+
+> **范围限定（治理澄清）**：本 ADR 仅处理 **method routing**（embedding 子服务方法域与 FRZ-IPC-007 顶层路由的边界），**不得被解释为批准 ALIGN-005 的当前 socket 方案**（embedding 独立 socket 路径与正式 `memory.sock` ownership 归属另行裁决，见 `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md` ALIGN-005）。

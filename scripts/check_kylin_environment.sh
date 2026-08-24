@@ -109,7 +109,8 @@ fi
 echo ""
 
 echo "Runtime Socket 路径检查（仅报告状态）"
-SOCKET_PATH="${KMA_SOCKET_PATH:-/tmp/kylin-memory-service.sock}"
+XDG_RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+SOCKET_PATH="${KMA_SOCKET_PATH:-${XDG_RUNTIME}/kylin-memory/memory.sock}"
 if [ -S "${SOCKET_PATH}" ]; then
     echo "  ✓ Socket 存在: ${SOCKET_PATH}"
 else

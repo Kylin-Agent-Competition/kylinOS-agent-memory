@@ -10,7 +10,7 @@ server.py — 轨道 A Day5 最小垂直链路 UDS 服务器
 - 不可用时返回结构化错误/降级（见 embedding_service.py）
 
 使用（麒麟 VM 或本地）:
-  PYTHONPATH=memory-service python -m embedding.server --socket /tmp/kylin-memory-embed.sock
+  PYTHONPATH=memory-service python -m embedding.server --socket /tmp/kylin-memory/embedding.sock
 """
 
 from __future__ import annotations
@@ -19,38 +19,38 @@ import argparse
 import os
 import socket
 import threading
-from datetime import datetime, timezone
 from typing import Optional
 
 from embedding.embedding_service import EmbeddingService, map_error_code, shutdown_executor
 from embedding.protocol import (
-    PROTOCOL_VERSION,
     IncompletePacket,
     ProtocolError,
+    build_error_envelope,
     decode_packet,
     encode,
 )
 
 
 def _error_response(code: str, message: str) -> dict:
-    """协议层错误响应（FRZ-IPC-006 冻结 envelope + FRZ-IPC-002 冻结错误码）。"""
-    return {
-        "protocol_version": PROTOCOL_VERSION,
-        "request_id": "",
-        "trace_id": "",
-        "status": "error",
-        "error_code": map_error_code(code),
-        "message": message,
-        "server_ts": datetime.now(timezone.utc).isoformat(),
-    }
+    """协议层错误响应（FRZ-IPC-006 冻结 envelope + FRZ-IPC-002 冻结错误码）。
+
+    与 embedding_service._envelope_error 共用 build_error_envelope 单一实现，
+    避免 server.py 与 embedding_service.py 两套 envelope 逻辑漂移。
+    """
+    return build_error_envelope(map_error_code(code), message)
 
 
 def _default_socket_path() -> str:
-    """默认 socket 路径（ALIGN-005）：$XDG_RUNTIME_DIR/kylin-memory/memory.sock。"""
+    """默认 socket 路径（ALIGN-005 返工）：embedding 子服务独立 socket。
+
+    不得默认占用正式 Memory Service 入口 `$XDG_RUNTIME_DIR/kylin-memory/memory.sock`
+    （该 socket 归 Phase 2 统一 Gateway / Memory Service 所有）；embedding 独立
+    socket 属子服务实现细节，默认 `$XDG_RUNTIME_DIR/kylin-memory/embedding.sock`。
+    """
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
     if runtime_dir:
-        return os.path.join(runtime_dir, "kylin-memory", "memory.sock")
-    return "/tmp/kylin-memory/memory.sock"
+        return os.path.join(runtime_dir, "kylin-memory", "embedding.sock")
+    return "/tmp/kylin-memory/embedding.sock"
 
 
 class EmbeddingUDSServer:
@@ -67,10 +67,44 @@ class EmbeddingUDSServer:
         self._conn_threads: list = []  # H3: 连接线程跟踪（stop 时 join，active worker 正确退出）
         self._conn_lock = threading.Lock()
 
+    def _ensure_socket_dir(self) -> None:
+        """安全创建 socket 父目录（per-user 隔离，0700）。"""
+        parent = os.path.dirname(self._socket_path)
+        if parent:
+            os.makedirs(parent, mode=0o700, exist_ok=True)
+
+    def _remove_stale_socket(self) -> None:
+        """仅清理 stale socket；active socket（有监听进程）拒绝 unlink。
+
+        ALIGN-005 返工核心：不再无条件 `exists → unlink → bind`。若 socket 已被
+        活跃进程监听（connect 成功），直接抛错，避免独立 Embedding Server 抢占
+        正式 Memory Service 的 socket ownership。
+        """
+        if not os.path.exists(self._socket_path):
+            return
+        if self._is_socket_active(self._socket_path):
+            raise RuntimeError(
+                f"active socket already listening: {self._socket_path}; "
+                "refusing to unlink (avoid stealing socket ownership)")
+        os.unlink(self._socket_path)
+
+    @staticmethod
+    def _is_socket_active(path: str) -> bool:
+        """探测 socket 是否被活跃监听（能 connect 即 active，connect 失败即 stale）。"""
+        probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            probe.settimeout(0.2)
+            probe.connect(path)
+            return True
+        except OSError:
+            return False
+        finally:
+            probe.close()
+
     def start(self) -> None:
         """启动 UDS 服务器（阻塞式 accept 循环）。"""
-        if os.path.exists(self._socket_path):
-            os.unlink(self._socket_path)
+        self._ensure_socket_dir()
+        self._remove_stale_socket()
 
         self._service.start()
         self._server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
