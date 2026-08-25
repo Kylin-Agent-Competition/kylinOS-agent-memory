@@ -112,17 +112,25 @@ std::optional<quint32> readHeader(const QByteArray& buffer)
 // Qt 5.12 兼容：使用 QDateTime::fromString(str, Qt::ISODate)。
 // 合法示例：2026-08-24T12:00:00Z / 2026-08-24T12:00:00+00:00
 // 非法示例：abc / "" / 2026-99-99T99:99:99Z / 2026-08-24（无时间）
+// 必须显式包含时区标记（Z 或 ±hh:mm），防止宿主 TZ=UTC 时裸时间戳被放过。
 bool isValidIso8601Utc(const QString& ts)
 {
     if (ts.isEmpty()) {
+        return false;
+    }
+    // 显式要求包含时区标记：'Z'（UTC）或 '±hh:mm'（偏移）。
+    // 不含时区标记的裸时间戳（如 "2026-08-24T12:00:00"）一律拒绝。
+    const bool hasUtcZ = ts.contains('Z', Qt::CaseSensitive);
+    const int plusIdx = ts.lastIndexOf('+');
+    const int minusIdx = ts.lastIndexOf('-');
+    const bool hasOffset = (plusIdx > 8) || (minusIdx > 8);  // 排除日期中的 '-'
+    if (!hasUtcZ && !hasOffset) {
         return false;
     }
     const QDateTime dt = QDateTime::fromString(ts, Qt::ISODate);
     if (!dt.isValid()) {
         return false;
     }
-    // 必须包含时区信息（UTC 或偏移），否则不视为 UTC 时间戳。
-    // ISODate 解析后若无时区，specification = LocalUnknown。
     return dt.timeSpec() == Qt::UTC || dt.offsetFromUtc() == 0;
 }
 

@@ -61,6 +61,7 @@ private slots:
     void parseResponseRejectsInvalidServerTs();
     void parseResponseRejectsEmptyServerTs();
     void parseResponseRejectsDateOnlyServerTs();
+    void parseResponseRejectsBareTimestampServerTs();
     // uint32 高位长度头边界测试（HIGH-03）
     void decodeRejectsHighBitSetLength();
     void decodeRejectsMaxUint32Length();
@@ -671,6 +672,20 @@ void ProtocolAdapterTest::parseResponseRejectsDateOnlyServerTs()
         QStringLiteral("req-001"),
         QJsonObject{},
         QStringLiteral("2026-08-24"));
+    const auto [parts, error] = client::parseResponse(response);
+    QCOMPARE(error.kind, client::ProtocolErrorKind::InvalidServerTs);
+    QVERIFY(!parts.has_value());
+}
+
+// MEDIUM-01: server_ts 裸时间戳（无时区标记）被 reject
+// 防止宿主 TZ=UTC 时裸时间戳因 offsetFromUtc()==0 被放过
+void ProtocolAdapterTest::parseResponseRejectsBareTimestampServerTs()
+{
+    QJsonObject response = client::buildSuccessResponse(
+        QStringLiteral("req-001"),
+        QStringLiteral("req-001"),
+        QJsonObject{},
+        QStringLiteral("2026-08-24T12:00:00"));  // 无 Z 或 ±hh:mm
     const auto [parts, error] = client::parseResponse(response);
     QCOMPARE(error.kind, client::ProtocolErrorKind::InvalidServerTs);
     QVERIFY(!parts.has_value());

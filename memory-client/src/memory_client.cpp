@@ -71,6 +71,10 @@ QString protocolErrorKindToString(ProtocolErrorKind kind)
         return QStringLiteral("ERR_MISSING_ERROR_CODE");
     case ProtocolErrorKind::MissingErrorMessage:
         return QStringLiteral("ERR_MISSING_ERROR_MESSAGE");
+    case ProtocolErrorKind::InvalidErrorCode:
+        return QStringLiteral("ERR_INVALID_ERROR_CODE");
+    case ProtocolErrorKind::InvalidServerTs:
+        return QStringLiteral("ERR_INVALID_SERVER_TS");
     }
     return QStringLiteral("ERR_UNKNOWN");
 }
