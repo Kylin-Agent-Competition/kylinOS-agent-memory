@@ -54,10 +54,10 @@ from __future__ import annotations
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from domain.preference import Preference
-from domain.enums import MemoryStatus
+from domain.enums import MemoryStatus, PreferenceScope
 from service.preference_business_policy import PreferenceBusinessDecision
 
 
@@ -133,7 +133,7 @@ class PreferenceVersionIntent(BaseModel):
 
     user_id: str
     preference_key: str
-    scope: str
+    scope: PreferenceScope
     value: str
     decision: PreferenceBusinessDecision
 
@@ -166,7 +166,7 @@ class PreferenceVersionPlan(BaseModel):
     current_version: Optional[int] = None
     target_preference_id: Optional[str] = None
     target_version: Optional[int] = None
-    coexist_with_scopes: List[str] = []
+    coexist_with_scopes: List[str] = Field(default_factory=list)
 
 
 class PreferenceVersionPolicy:
