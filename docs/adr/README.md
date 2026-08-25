@@ -27,6 +27,11 @@
 |---|---|---|
 | [ADR-001：默认使用 Memory Service 应用层 RRF](001-application-layer-rrf.md) | 提议，PR #20 Review 返工中 | `rrf-v1` 默认 `k=60`、等权、硬过滤先于融合；一名独立非作者 Reviewer 的 `APPROVED` 满足人工审批门槛，D/E 为专业关注点 |
 | [ADR-004：Gate 0 真实 Tool Result 路线 B 替代架构批准](004-gate0-tool-result-route-b.md) | 已采纳（2026-08-17 起保留为备份路线） | 独立 Qt 演示壳 + 执行日志 Adapter 作为 Gate 0 Tool Result 验证路径；真实 Hook 端到端未通前不撤销、不降级 |
+| [ADR-005：DB 层对外错误码与 envelope 采用 IPC 冻结契约](005-db-error-code-envelope.md) | 已采纳（2026-08-17，Reviewer E 2026-08-20 已签） | 方案 A：对外统一冻结 5 枚举 + `status/data/server_ts` envelope |
+| [ADR-006：idempotency_cache 采用复合主键](006-db-idempotency-primary-key.md) | 已采纳（2026-08-17，Reviewer E 2026-08-20 已签） | 方案 A：复合主键 `(user_id, session_id, idempotency_key)` |
+| [ADR-007：DB 迁移基线命名](007-db-migration-baseline-naming.md) | 已采纳 | 基线迁移命名裁定 |
+| [ADR-008：embedding 子服务方法域独立承认](008-embedding-subservice-method-domain.md) | 已采纳（2026-08-25，Reviewer E 谢嘉然已签） | 方案 A：承认 embedding 子服务方法域，Phase 2 统一 Gateway 合并路由（仅 method routing，不涉 socket 方案） |
+| [ADR-009：UDS socket ownership 归属裁决](009-socket-ownership.md) | 已采纳（2026-08-25，Reviewer E 谢嘉然已签） | 方案 A：Memory Service/Gateway owns `memory.sock`；Embedding 子服务 owns 私有 `embedding.sock`；echo 属 Gate 0 验证细节（ALIGN-005） |
 
 **ADR-001 已形成 D3-B 冻结候选；独立审查前不得将状态改为“已采纳”。**
 

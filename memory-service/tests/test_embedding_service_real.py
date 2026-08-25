@@ -87,15 +87,19 @@ def test_real_embed_batch(service):
     """真实 SDK：batch 顺序调用。"""
     resp = service.embed_batch(["a", "bb", "ccc"])
     assert resp["ok"] is True
-    assert len(resp["result"]) == 3
-    for r in resp["result"]:
+    assert len(resp["result"]["vectors"]) == 3
+    for r in resp["result"]["vectors"]:
         assert r["dimension"] == 768
 
 
 def test_real_service_handle_request_ping(service):
     """协议分发（架构 4.4 envelope）：memory.ping。"""
-    resp = service.handle_request({"protocol_version": "1.0", "method": "memory.ping"})
-    assert resp["result"] == "pong"
+    resp = service.handle_request(
+        {"protocol_version": "1.0", "method": "memory.ping",
+         "request_id": "req-ping", "trace_id": "trc-ping",
+         "deadline_ms": 100, "payload": {}})
+    assert resp["status"] == "ok"
+    assert resp["data"] == {"pong": True}
 
 
 def test_real_service_handle_request_embed(service):
@@ -104,18 +108,21 @@ def test_real_service_handle_request_embed(service):
     env = build_envelope("memory.embed", {"text": "test"},
                          request_id="req-real", trace_id="trc-real")
     resp = service.handle_request(env)
-    assert resp["ok"] is True
-    assert resp["result"]["dimension"] == 768
+    assert resp["status"] == "ok"
+    assert resp["data"]["dimension"] == 768
     assert resp["request_id"] == "req-real"
     assert resp["trace_id"] == "trc-real"
 
 
 def test_real_service_health(service):
     """memory.health：真实 Provider 下返回分项状态。"""
-    resp = service.handle_request({"protocol_version": "1.0", "method": "memory.health"})
-    assert resp["ok"] is True
-    assert resp["result"]["service"] == "ok"
-    assert resp["result"]["bridge_loaded"] is True
+    resp = service.handle_request(
+        {"protocol_version": "1.0", "method": "memory.health",
+         "request_id": "req-h", "trace_id": "trc-h",
+         "deadline_ms": 100, "payload": {}})
+    assert resp["status"] == "ok"
+    assert resp["data"]["service"] == "ok"
+    assert resp["data"]["bridge_loaded"] is True
 
 
 def test_degraded_when_so_missing():
