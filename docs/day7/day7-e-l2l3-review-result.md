@@ -105,3 +105,49 @@
 | E | 收敛问题 #1（scope 枚举校验）、#2（可变默认值）；（可选）补 Day7E PR 描述 |
 
 完成 L2/L3 并回写 `evidence/index.yaml` 与能力矩阵后，验收规范方可进入冻结流程。
+
+---
+
+## 六、Post-review Closure Addendum（审查后收敛补记）
+
+> 本节为**追加的收敛补记**，属审查基准（2026-08-24，首次正式审查，L1 本地 100 passed）之后的后续事实记录。**不修改、不重写上文第一至五节原始审查正文（L1–L107）**，补记时点事实与原始审查时点并存、互不覆盖。
+
+### 6.1 问题 #1 / #2 代码收敛
+
+PR #58 正式审查问题 #1（Medium，scope fail-closed）与 #2（Low，default_factory / identity）已通过代码 + 测试收敛：
+
+| 审查问题 | 收敛提交 | 收敛方式 | 新增测试 |
+|---|---|---|---|
+| #1 scope fail-closed | `b883516` | `PreferenceVersionIntent.scope` 复用 `PreferenceScope` 枚举（`preference_version_policy.py`），非法 / 空 scope 在构造阶段即被 Pydantic 拒绝 | `test_invalid_scope_rejected_at_construction`、`test_empty_scope_rejected_at_construction`、`test_intent_scope_reuses_preference_scope_enum` |
+| #2 default_factory / identity Low | `b883516` | `PreferenceVersionPlan.coexist_with_scopes` 改为 `Field(default_factory=list)`，默认实例列表互相独立 | `test_coexist_with_scopes_default_independent_instances` |
+
+> 注：`b883516` 为本任务输入提供的收敛提交标识；如需在 Git 历史中复核该 SHA，须由具备 git 读取权限的 Agent 另行确认。此处补记的通过判定依据为 Reviewer 独立复测结论（见 6.2）。
+
+### 6.2 passed 数量时点区分
+
+首次 100 passed 与后续 Reviewer 独立复测 104 passed **属于不同时间点**，二者均保留，且后续复测结果不覆盖首次审查时点事实：
+
+| 时点 | 时间 | 内容 | 说明 |
+|---|---|---|---|
+| 首次正式审查 | 2026-08-24 | L1 本地 **100 passed** | 原始审查正文第五节之前记录的事实；此时问题 #1/#2 尚未收敛 |
+| Reviewer 独立复测 | `b883516` 收敛 #1/#2 之后 | L1 本地 **104 passed**（新增 4 个 #1/#2 测试） | 收敛补记时点的事实，由 Reviewer 独立复测得出 |
+
+- 若此后作者回归测试的 passed 数量再发生变化，**不得覆盖 Reviewer 独立复测 104 passed 这一已记录事实**，应作为新的独立时点另行记录。
+
+### 6.3 本轮 identity Low 修复状态
+
+- 本轮 `identity` 相关 Low（问题 #2，`default_factory` 可变默认值 / 实例 identity 独立性）已通过 `Field(default_factory=list)` 收敛，相关测试为 `test_coexist_with_scopes_default_independent_instances`。
+- **该修复仍待非作者 Reviewer 复核确认**，尚未标记为最终关闭。
+- 已登记 **TD-018**（Technical Debt / Low / In Progress，见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`），待非作者 Reviewer 确认后关闭。
+
+### 6.4 C/D/L2/L3 与 Acceptance Spec 状态（保持诚实）
+
+本补记仅为文档层面的收敛治理，**未改变任何真实 Runtime 验证状态**：
+
+- **C 轨 QML 偏好 UI**：`PENDING_INTEGRATION` / `RUNTIME_UNVERIFIED`（未实现，无验证对象）——保持不变。
+- **D 轨版本持久化**：`PENDING_INTEGRATION` / `RUNTIME_UNVERIFIED`（未实现，无验证对象）——保持不变。
+- **L2-C / L2-D / L3**：全部条目仍为 `RUNTIME_UNVERIFIED`（无发布候选 / 未实现）——保持不变。
+- **Acceptance Spec**（`day7-e-ui-version-acceptance-v1.md`）：仍为 `PENDING_INTEGRATION`，**不冻结**。
+- **本补记不将任何 `RUNTIME_UNVERIFIED` 改为 `HOST_VERIFIED` / `PASS`** 的表述。
+
+本补记仅追加收敛事实与 TD-018 登记，不产生任何真实宿主验证证据，不代行 Reviewer 最终批准。

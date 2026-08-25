@@ -52,11 +52,17 @@ PR #58 正式审查提出 #1、#2、#3 三个问题；#1 与 #2 已通过代码 
 - **修复**：`PreferenceVersionPlan.coexist_with_scopes` 使用 `Field(default_factory=list)`（`preference_version_policy.py:169`），两个默认实例的列表互相独立，无共享可变默认值。
 - **测试**：`test_coexist_with_scopes_default_independent_instances`（`test_preference_version_policy_d7e.py` 第 702–726 行）。
 
+### 技术债登记
+
+- **TD-018**（PR #58 审查收敛补记与审查状态同步治理）= `Technical Debt` / `Low` / **`In Progress`**，详见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`。
+- **责任人**：E 轨成员；**Reviewer**：D 主审；**关联 PR**：#58。
+- **验收标准摘要**：保留原 Reviewer 正式审查正文与时点事实（首次 100 passed），仅追加收敛补记，不篡改历史正文；补记明确 `b883516` 已收敛原审查问题 #1（scope fail-closed）/ #2（default_factory / identity Low）；区分首次 100 passed 与后续 Reviewer 独立复测 104 passed（不同时点，互不覆盖）；本轮 identity Low 已修但待非作者 Reviewer 复核；C/D/L2/L3 状态保持 `PENDING_INTEGRATION` / `RUNTIME_UNVERIFIED`，不虚报；Acceptance Spec 不冻结；最终由非作者 Reviewer 确认后标记 `Resolved`。
+- **当前状态**：`In Progress`，等待非作者 Reviewer 最终确认后关闭。
+
 ## 明确不修改范围
 
 - **不覆盖** `docs/day7/02_pr_description.md`（PR #36 D7-A 描述，保持原样）。
 - 不修改任何生产代码与测试代码。
-- 不修改技术债登记表 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`。
 - 不修改 `.local-agent-workflow/`。
 - 不执行 Push、创建 PR 或合并。
 

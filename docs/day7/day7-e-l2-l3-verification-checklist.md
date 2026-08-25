@@ -12,7 +12,7 @@
 ## 〇、定位与前提说明
 
 1. **本清单不新增验收判据**：全部条目均源自 `day7-e-ui-version-acceptance-v1.md`（下称「验收规范」）第五、六、七章已列明的 C/D 轨证据清单，此处仅做**分层（L2/L3）、编号化与可执行化**，供 C/D 轨在麒麟 VM 内逐项执行并回填证据。
-2. **E 轨纯业务策略无需 L2**：`preference_business_policy.py` / `preference_version_policy.py`（D7E-01/02/03）为纯函数/Pydantic 层，已完成 **L1**（本地 100 passed），不涉及 Embedding 维度 / UDS / QML / Hook，**不在本清单 L2 范围**。
+2. **E 轨纯业务策略无需 L2**：`preference_business_policy.py` / `preference_version_policy.py`（D7E-01/02/03）为纯函数/Pydantic 层，已完成 **L1**（退出码 0；具体 passed 数量以各次执行证据为准，不以固定数值作为当前态），不涉及 Embedding 维度 / UDS / QML / Hook，**不在本清单 L2 范围**。
 3. **证据状态口径**：本清单所有条目初始状态均为 `RUNTIME_UNVERIFIED`；须由 C/D 轨在银河麒麟 VM（VirtualBox V11 x86_64）真实执行并保留真实命令、退出码、stdout/stderr 与日志后，方可回填 `HOST_VERIFIED`。
 4. **禁止冒充**：
    - 不得以 E 轨策略的 L1 pytest 结果冒充本清单任一条目的验收通过（验收规范第九章）。
@@ -85,3 +85,4 @@
 | 版本 | 日期 | 作者 | 变更说明 | 状态 |
 |------|------|------|----------|------|
 | v1 | 2026-08-24 | E 轨道 | 初稿：将 `day7-e-ui-version-acceptance-v1.md` 第六、七章 C/D 轨证据清单可执行化为 L2/L3 分层编号清单；全部条目 `RUNTIME_UNVERIFIED` | `RUNTIME_UNVERIFIED` |
+| v2 | 2026-08-26 | E 轨道 | 将 §〇.2「L1 本地 100 passed」改为不易漂移表述（退出码 0 + passed 数量以实际执行证据为准），避免 passed 数量漂移误导；同步 PR #58 审查收敛补记状态 | `RUNTIME_UNVERIFIED` |
