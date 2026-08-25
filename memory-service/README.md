@@ -24,7 +24,7 @@ Python 记忆服务核心，以 Unix Domain Socket + 长度前缀 JSON 协议对
 }
 ```
 
-- 响应 envelope 同结构（protocol_version/method + request_id/trace_id 回显 + `ok`/`result`|`error`，降级路径含 `degraded`/`degraded_reason`）。
+- 响应 envelope（FRZ-IPC-006 冻结）：`protocol_version`/`request_id`/`trace_id`/`status`/`data`/`server_ts`，其中 `data` 恒为 object；失败响应附加 `error_code`/`message`（FRZ-IPC-002 冻结枚举）。
 - 方法（D5 最小垂直链路）：`memory.embed` / `memory.embed_batch` / `memory.ping` / `memory.health`；完整方法集见总体架构文档 4.4（TABLE 15）。
 - 实现见 `embedding/protocol.py`（build_envelope/parse_envelope）。
 

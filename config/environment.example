@@ -4,8 +4,8 @@
 # 项目根目录
 KMA_PROJECT_ROOT=
 
-# Memory Service Unix Domain Socket 路径
-KMA_SOCKET_PATH=/tmp/kylin-memory-service.sock
+# Memory Service Unix Domain Socket 路径（ALIGN-005 冻结标准路径）
+KMA_SOCKET_PATH=$XDG_RUNTIME_DIR/kylin-memory/memory.sock
 
 # SQLite 数据库路径
 KMA_DATABASE_PATH=

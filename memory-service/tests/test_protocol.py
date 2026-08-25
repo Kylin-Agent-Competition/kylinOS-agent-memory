@@ -12,10 +12,12 @@ import json
 import pytest
 
 from embedding.protocol import (
+    MAX_MSG_LEN,
     PROTOCOL_VERSION,
     IncompletePacket,
     ProtocolError,
     build_envelope,
+    build_error_envelope,
     decode_packet,
     encode,
     parse_envelope,
@@ -93,13 +95,13 @@ def test_build_envelope_fields():
 def test_parse_envelope_valid():
     """parse_envelope：合法 envelope 返回规范化字段。"""
     env = build_envelope("memory.embed", {"text": "x"},
-                         request_id="r", trace_id="t")
+                         request_id="r", trace_id="t", deadline_ms=150)
     method, payload, rid, tid, deadline = parse_envelope(
         env, expected_methods={"memory.embed"})
     assert method == "memory.embed"
     assert payload == {"text": "x"}
     assert rid == "r" and tid == "t"
-    assert deadline is None
+    assert deadline == 150
 
 
 def test_parse_envelope_missing_version():
@@ -123,7 +125,110 @@ def test_parse_envelope_unknown_method():
 
 
 def test_parse_envelope_bad_payload():
-    """payload 非 dict → ProtocolError。"""
+    """payload 非 dict → ProtocolError（INVALID_REQUEST）。"""
     with pytest.raises(ProtocolError, match="payload"):
         parse_envelope({"protocol_version": "1.0", "method": "memory.embed",
+                         "request_id": "r", "trace_id": "t", "deadline_ms": 100,
                          "payload": "not-dict"})
+
+
+# ── 错误 envelope typed-ID 收敛（FRZ-IPC-006 §6.2，PR#57 R5 / H-2） ──
+
+@pytest.mark.parametrize("field, bad", [
+    ("request_id", {"nested": 1}),
+    ("trace_id", {"nested": 1}),
+    ("request_id", 123),
+    ("trace_id", 456),
+    ("request_id", True),
+    ("trace_id", False),
+    ("request_id", []),
+    ("trace_id", None),
+])
+def test_build_error_envelope_typed_id_converged(field, bad):
+    """非法 typed request_id/trace_id（dict/int/bool/list/None）→ 收敛为空串 str。"""
+    kwargs = {"request_id": "r", "trace_id": "t"}
+    kwargs[field] = bad
+    env = build_error_envelope("INVALID_REQUEST", "boom", **kwargs)
+    assert isinstance(env["request_id"], str)
+    assert isinstance(env["trace_id"], str)
+    # 被污染字段收敛为空串；另一字段保持原字符串
+    assert env[field] == ""
+
+
+def test_build_error_envelope_empty_str_id_preserved():
+    """空串 request_id/trace_id 恒为 str（不被 or '' 之外的逻辑改动）。"""
+    env = build_error_envelope("INVALID_REQUEST", "boom",
+                               request_id="", trace_id="")
+    assert env["request_id"] == "" and isinstance(env["request_id"], str)
+    assert env["trace_id"] == "" and isinstance(env["trace_id"], str)
+
+
+# ── 错误语义分类（FRZ-IPC-002 §2.1，PR#57 R3） ──
+
+def test_parse_envelope_unknown_method_code():
+    """unknown method → code=UNSUPPORTED_METHOD（不再归 PROTOCOL_ERROR）。"""
+    with pytest.raises(ProtocolError) as exc:
+        parse_envelope(
+            {"protocol_version": "1.0", "method": "memory.nope",
+             "request_id": "r", "trace_id": "t", "deadline_ms": 100,
+             "payload": {}},
+            expected_methods={"memory.embed"})
+    assert exc.value.code == "UNSUPPORTED_METHOD"
+
+
+@pytest.mark.parametrize("field", ["request_id", "trace_id", "deadline_ms", "payload"])
+def test_parse_envelope_missing_required_field(field):
+    """缺必填字段 → code=INVALID_REQUEST。"""
+    env = {"protocol_version": "1.0", "method": "memory.embed",
+           "request_id": "r", "trace_id": "t", "deadline_ms": 100,
+           "payload": {"text": "x"}}
+    del env[field]
+    with pytest.raises(ProtocolError) as exc:
+        parse_envelope(env, expected_methods={"memory.embed"})
+    assert exc.value.code == "INVALID_REQUEST"
+
+
+@pytest.mark.parametrize("field,bad", [
+    ("request_id", ""),
+    ("trace_id", ""),
+    ("request_id", 123),
+    ("trace_id", 456),
+    ("deadline_ms", "5000"),
+    ("deadline_ms", 0),
+    ("deadline_ms", True),
+    ("deadline_ms", -1),
+])
+def test_parse_envelope_invalid_field_type(field, bad):
+    """空串 / 错误类型 / 非法值 → INVALID_REQUEST。"""
+    env = {"protocol_version": "1.0", "method": "memory.embed",
+           "request_id": "r", "trace_id": "t", "deadline_ms": 100,
+           "payload": {"text": "x"}}
+    env[field] = bad
+    with pytest.raises(ProtocolError) as exc:
+        parse_envelope(env, expected_methods={"memory.embed"})
+    assert exc.value.code == "INVALID_REQUEST"
+
+
+# ── 0 长度消息 + MAX_MSG_LEN 边界（PR#57 第 8 节） ──
+
+def test_decode_zero_length_rejected():
+    """0 长度消息 → ProtocolError（显式拒绝）。"""
+    with pytest.raises(ProtocolError):
+        decode_packet(b"\x00\x00\x00\x00")
+
+
+def test_max_msg_len_boundary():
+    """MAX_MSG_LEN 边界：65537 声明长度拒绝，65536（=上限）不因超限拒绝。"""
+    # 65537 → 超限拒绝
+    with pytest.raises(ProtocolError, match="too large"):
+        decode_packet((MAX_MSG_LEN + 1).to_bytes(4, "big") + b"x")
+    # 65536（恰好等于上限）→ 不触发"too large"，仅因缓冲不足 → IncompletePacket
+    with pytest.raises(IncompletePacket):
+        decode_packet(MAX_MSG_LEN.to_bytes(4, "big") + b"x")
+
+
+def test_encode_rejects_over_max():
+    """encode：body 超过 MAX_MSG_LEN → ProtocolError。"""
+    big = {"text": "x" * (MAX_MSG_LEN + 1)}
+    with pytest.raises(ProtocolError):
+        encode(big)
