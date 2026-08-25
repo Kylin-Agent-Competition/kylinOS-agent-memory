@@ -1,8 +1,8 @@
 # ADR-008：embedding 子服务方法域独立承认（ALIGN-004）
 
-- **状态**：🟡 提议 / 待审（D 已选方案 A；独立 Review 通过前不标记"已采纳"，Reviewer：E（谢嘉然）待签）
+- **状态**：✅ 已采纳（2026-08-25，Reviewer E 谢嘉然已签署）
 - **日期**：2026-08-24
-- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
+- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，已签 2026-08-25）
 - **责任轨道**：D（IPC）为主，E 审查
 - **决策版本**：`subsvc-method-v1`
 - **适用范围**：`memory-service/embedding` 子服务对外方法路由；关联 FRZ-IPC-007、ALIGN-004
@@ -90,6 +90,6 @@ embedding 作为 Memory Service 子服务，保留独立方法域 `memory.embed 
 - `memory-service/embedding/embedding_service.py` `_METHODS`
 - `deliverables/D4_IMPLEMENTATION_PUSH_CHECKLIST_20260824.md` Phase 0.4 / Phase 2.2
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A（2026-08-24）；Reviewer E（谢嘉然）待签署。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A（2026-08-24）；Reviewer E（谢嘉然）签署（2026-08-25），状态已更新为「已采纳」。
 
 > **范围限定（治理澄清）**：本 ADR 仅处理 **method routing**（embedding 子服务方法域与 FRZ-IPC-007 顶层路由的边界），**不得被解释为批准 ALIGN-005 的当前 socket 方案**。socket ownership 归属已由 **ADR-009** 另行裁决（Memory Service/Gateway owns `memory.sock`；Embedding 子服务 owns 私有 `embedding.sock`；echo 属 Gate 0 验证细节）。

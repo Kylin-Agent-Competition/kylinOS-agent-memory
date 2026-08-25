@@ -1,8 +1,8 @@
 # ADR-009：UDS socket ownership 归属裁决（ALIGN-005）
 
-- **状态**：🟡 提议 / 待审（D 已决策；Reviewer E（谢嘉然）待签）
+- **状态**：✅ 已采纳（2026-08-25，Reviewer E 谢嘉然已签署）
 - **日期**：2026-08-25
-- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
+- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，已签 2026-08-25）
 - **责任轨道**：D（IPC）为主，E 审查
 - **决策版本**：`socket-ownership-v1`
 - **适用范围**：Memory Service / Embedding 子服务 / echo（Gate 0）三者的 UDS socket 路径归属；关联 ALIGN-005、FRZ-IPC-007
@@ -80,4 +80,4 @@
 - `docs/adr/008-embedding-subservice-method-domain.md` 范围限定（socket 方案另行裁决）
 - `deliverables/D4_IMPLEMENTATION_PUSH_CHECKLIST_20260824.md` Phase 0.5（本 ADR 修订其口径）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A（2026-08-25）；Reviewer E（谢嘉然）待签署。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A（2026-08-25）；Reviewer E（谢嘉然）签署（2026-08-25），状态已更新为「已采纳」。
