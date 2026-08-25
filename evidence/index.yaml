@@ -695,61 +695,61 @@ entries:
     status: "INVESTIGATION_ONLY"
     evidence_level: "E1"
     source: "evidence/phase0/phase0_vm_evidence.md"
-    tested_commit: "ec3a91e5858f1e7fe210a9850e5c9d54fdc9b109"
+    tested_commit: "0af528d408636eb147ac7ea751ae36aaef7be7aa"
     date: "2026-08-24"
     reviewer: "待审"
-    limitations: "该证据仅记录环境中已存在的 socket/进程现状（memory.sock 被旧进程 python pid=3107 监听），不构成 PR#57 的 L2 PASS 依据；/etc/.kyinfo 的 servicekey 明文已脱敏为 REDACTED；已于 L2-D1（PR57_L2_VERIFICATION_CHECKLIST）重跑 collect_phase0_evidence.py，commit_sha 重新绑定 ec3a91e。"
-    checksum_sha256: "56295533edfca09d80845c232b6961a59ae41cda998345a510003e8488b16be7"
+    limitations: "该证据仅记录环境中已存在的 socket/进程现状（memory.sock 被旧进程 python pid=3107 监听），不构成 PR#57 的 L2 PASS 依据；/etc/.kyinfo 的 servicekey 明文已脱敏为 REDACTED；已于 L2-D1（PR57_L2_VERIFICATION_CHECKLIST）重跑 collect_phase0_evidence.py，commit_sha 重新绑定 0af528d。"
+    checksum_sha256: "09ead378f30021921117113dfa1a4c7ecce3f32138211e496029009a68f48ab7"
     details: |
       环境现状：/run/user/1000/kylin-memory/memory.sock 已被旧进程监听（python pid=3107，d4d-venv）。
       此证据仅用于 ALIGN-005 socket ownership 现状核查，不作为 L2 PASS 依据。
       L2-D1 重跑后：markdown 头部含 project/task/branch/commit_sha/result/limitations 正式字段，
-      commit_sha=ec3a91e，servicekey=REDACTED（无明文数字），证据治理[02 §16.12-16.15]达标。
+      commit_sha=0af528d，servicekey=REDACTED（无明文数字），证据治理[02 §16.12-16.15]达标。
 
   - id: "PR57-L2-001"
     task_id: "D4-Phase0"
-    description: "PR#57 麒麟宿主 L2 验证（综合）—— ALIGN-005 active/stale socket + FRZ-IPC-006 envelope data 契约 + FRZ-IPC-002 错误码语义 + EMB-T03 降级/异常输入 + 证据脱敏/HEAD 绑定（L2-A1~D1）"
+    description: "PR#57 麒麟宿主 L2 验证（综合）—— ALIGN-005 active/stale socket + FRZ-IPC-006 envelope data 契约 + FRZ-IPC-002 错误码语义 + typed-ID 收敛（H-2）+ EMB-T03 降级/异常输入 + 证据脱敏/HEAD 绑定（L2-A1~D1）"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/pr57_l2_20260824/PR57_L2_RESULTS_20260824.md"
-    tested_commit: "ec3a91e5858f1e7fe210a9850e5c9d54fdc9b109"
-    date: "2026-08-24"
+    tested_commit: "0af528d408636eb147ac7ea751ae36aaef7be7aa"
+    date: "2026-08-25"
     reviewer: "待审"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "L2-A3 现存 0755 目录已由 0e07950 收敛为 0700 并经宿主重采证 PASS（补充证据 L2-A3_rerun_20260824.md）；L2-A1 采用受控 active listener 验证拒绝 unlink；deadline 超时（FRZ-IPC-004 TD-IPC-003）、幂等落库（FRZ-IPC-005 待 D4-D）、真实 Kaiming Hook 端到端不在本清单范围。"
-    checksum_sha256: "fc1de4f79b08b9e356179ee34c9dcb0e941cf32ecc5ab7f5b6ee7424ce99ec68"
+    limitations: "L2-A1 以受控 A1_SOCK（l2a1-test.sock）重跑，runner 不再 rm -f 正式 memory.sock；L2-B2 补 typed-ID 收敛 case（request_id=dict/trace_id=int → \"\"）；L2-A3 现存 0755 目录已收敛为 0700；deadline 超时（FRZ-IPC-004 TD-IPC-003）、幂等落库（FRZ-IPC-005 待 D4-D）、真实 Kaiming Hook 端到端不在本清单范围。"
+    checksum_sha256: "fd2dac2dd3baf857ecb09b704aa89a25ab3c6127b076b3c5c1faa2612cfd101f"
     details: |
       麒麟 V11 x86_64（6.6.0-76-generic），SSH 127.0.0.1:2222，kylin-agent，真实 SDK libkylin-coreai-embedding 1.2.0.0-0k0.4。
-      L2-A1 active socket 拒绝 unlink：RuntimeError 'active socket already listening ... memory.sock ... refusing to unlink'，原 socket/进程未被抢占（PASS）。
+      L2-A1 active socket 拒绝 unlink（受控 A1_SOCK）：RuntimeError 'active socket already listening ... refusing to unlink'，listener 存活、socket 未被抢占（PASS）。
       L2-A2 stale socket 清理 + bind + memory.embed → status:"ok" + dimension:768（PASS）。
       L2-A3 现存 0755 → 启动后收敛 0700（PASS）；新建目录 0700（PASS）；/var/tmp 与家目录未改。
-      L2-B1 KYLIN_L2=1 pytest test_embedding_service_real.py 10 passed in 0.92s（PASS）。
-      L2-B2 错误码语义：unknown→UNSUPPORTED_METHOD；缺字段→INVALID_REQUEST；超长帧/版本不匹配→PROTOCOL_ERROR（PASS）。
+      L2-B1 KYLIN_L2=1 pytest test_embedding_service_real.py 10 passed（PASS）。
+      L2-B2 错误码语义三分类 + typed-ID 收敛：unknown→UNSUPPORTED_METHOD；缺字段→INVALID_REQUEST；typed request_id/trace_id→\"\"（str）；超长帧/版本不匹配→PROTOCOL_ERROR（PASS）。
       L2-B3 真实 C++ echo_client（含全部必填字段）→ memory.ping status:"ok"，未被 INVALID_REQUEST 误拒（PASS）。
       L2-C1/C2 / L2-D1 见 PR57-L2-EMBT03-001 与证据脱敏核验。
       报告：evidence/l2-kylin-vm/pr57_l2_20260824/L2_VERIFICATION_REPORT_20260824.md
 
   - id: "PR57-L2-IPC001-001"
     task_id: "D4-Phase0"
-    description: "PR#57 L2 麒麟宿主验证：IPC-001 UDS 协议对齐认证—— ALIGN-005 socket ownership（active/stale）+ FRZ-IPC-006 envelope data 恒 object + FRZ-IPC-002 错误码语义分类 + 真实客户端字段兼容 → HOST_VERIFIED / E4"
+    description: "PR#57 L2 麒麟宿主验证：IPC-001 UDS 协议对齐认证—— ALIGN-005 socket ownership（active/stale）+ FRZ-IPC-006 envelope data 恒 object + FRZ-IPC-002 错误码语义分类 + typed-ID 收敛 + 真实客户端字段兼容 → HOST_VERIFIED / E4"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/pr57_l2_20260824/PR57_L2_RESULTS_20260824.md"
-    tested_commit: "ec3a91e5858f1e7fe210a9850e5c9d54fdc9b109"
-    date: "2026-08-24"
+    tested_commit: "0af528d408636eb147ac7ea751ae36aaef7be7aa"
+    date: "2026-08-25"
     reviewer: "待审"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "L2-A1 使用受控 active listener 验证主动 socket 拒绝 unlink；L2-A3 现存目录 0755 已收敛为 0700（0e07950 修复 + 宿主重采证 PASS）；deadline 超时（TD-IPC-003）、幂等（FRZ-IPC-005 待 D4-D）、真实 Kaiming Hook 端到端不在本清单。"
-    checksum_sha256: "fc1de4f79b08b9e356179ee34c9dcb0e941cf32ecc5ab7f5b6ee7424ce99ec68"
+    limitations: "L2-A1 以受控 A1_SOCK 验证主动 socket 拒绝 unlink（runner 不再 rm -f 正式 memory.sock）；L2-B2 补 typed-ID 收敛 case；L2-A3 现存目录 0755 已收敛为 0700；deadline 超时（TD-IPC-003）、幂等（FRZ-IPC-005 待 D4-D）、真实 Kaiming Hook 端到端不在本清单。"
+    checksum_sha256: "fd2dac2dd3baf857ecb09b704aa89a25ab3c6127b076b3c5c1faa2612cfd101f"
     details: |
-      L2-A1 active socket 拒绝 unlink（RuntimeError 'refusing to unlink'）→ 不抢占 memory.sock。
+      L2-A1 active socket 拒绝 unlink（RuntimeError 'refusing to unlink'，受控 A1_SOCK）→ 不抢占正式 memory.sock。
       L2-A2 stale socket 清理后 bind+listen 成功，memory.embed → status:"ok" + dimension:768。
       L2-B1 KYLIN_L2=1 pytest test_embedding_service_real.py 10 passed（envelope data 恒 object / 错误 data:{} / degraded_reason 并入）。
-      L2-B2 unknown→UNSUPPORTED_METHOD；缺字段→INVALID_REQUEST；超长帧/版本不匹配→PROTOCOL_ERROR（三类语义正确分离）。
+      L2-B2 unknown→UNSUPPORTED_METHOD；缺字段→INVALID_REQUEST；typed request_id/trace_id→""；超长帧/版本不匹配→PROTOCOL_ERROR（语义正确分离）。
       L2-B3 真实 C++ echo_client 字段齐全，正常请求不被 INVALID_REQUEST 误拒。
 
   - id: "PR57-L2-EMBT03-001"
@@ -758,14 +758,14 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/pr57_l2_20260824/pr57_l2_evidence.jsonl"
-    tested_commit: "ec3a91e5858f1e7fe210a9850e5c9d54fdc9b109"
-    date: "2026-08-24"
+    tested_commit: "0af528d408636eb147ac7ea751ae36aaef7be7aa"
+    date: "2026-08-25"
     reviewer: "待审"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "L2-C1 通过 sudo mv 移走 .so 验证 SDK 缺失降级（测试后已还原 .so 366624 字节原样）；Runtime 重启恢复场景（EMB-T06）不在本清单覆盖。"
-    checksum_sha256: "2a9417d875fbfadda12c4957267888be3f43d7b7e208ed4448593cf2a0359a13"
+    limitations: "L2-C1 通过 sudo mv 移走 .so 验证 SDK 缺失降级（测试后已还原 .so 原样）；Runtime 重启恢复场景（EMB-T06）不在本清单覆盖。"
+    checksum_sha256: "dc5ee34216e1569b23d12fc51e5c7bce7a0a94a939e6a9049810016b2013aa4f"
     details: |
       L2-C1 SDK 缺失降级：memory.embed → status:"ok" + vector:[] + dimension:0 + l2_norm:0.0
       + degraded:true + degraded_reason.code="ERR_SDK_NOT_LOADED" 完整保留于 envelope data，未被静默丢失。

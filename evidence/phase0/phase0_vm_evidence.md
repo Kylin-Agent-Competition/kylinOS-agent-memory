@@ -3,7 +3,7 @@
 - **project**: kylin-os-agent-memory
 - **task**: Phase 0 协议对齐 ALIGN-005 socket 现状调查
 - **branch**: feat/d4-phase0-ipc-alignment
-- **commit_sha**: ec3a91e5858f1e7fe210a9850e5c9d54fdc9b109
+- **commit_sha**: 0af528d408636eb147ac7ea751ae36aaef7be7aa
 - **result**: INVESTIGATION_ONLY（仅环境现状调查，非当前 HEAD 的 L2 执行证据）
 - **limitations**: 本次收集发生在目标 HEAD 代码执行之前，仅记录环境中已存在的 socket/进程现状，不构成 PR#57 的 L2 验证证据；servicekey 等敏感值已脱敏（REDACTED）。
 
@@ -41,9 +41,9 @@ term=2027-05-29
 # exit=0
 XDG=/run/user/1000
 总计 0
-drwxr-xr-x  2 kylin-agent kylin-agent  60  8月24日 15:36 .
+drwx------  2 kylin-agent kylin-agent  60  8月25日 09:37 .
 drwx------ 13 kylin-agent kylin-agent 400  8月22日 18:50 ..
-srwxrwxr-x  1 kylin-agent kylin-agent   0  8月24日 15:36 embedding.sock
+srwxrwxr-x  1 kylin-agent kylin-agent   0  8月25日 09:37 embedding.sock
 ls: 无法访问 '/run/user/1000/kylin-memory/memory.sock': 没有那个文件或目录
 NO_MEMORY_SOCK
 ```
@@ -127,8 +127,8 @@ Unit kylin-memory-echo.service could not be found.
 # exit=0
    3107 /home/kylin-agent/d4d-venv/bin/python /home/kylin-agent/kylinOS-agent-memory/memory-service/app.py --socket /run/user/1000/kylin-memory/memory.sock
    5902 /usr/bin/xembed-sni-proxy
- 329274 bash -c ps -u kylin-agent -o pid,cmd --no-headers 2>/dev/null | grep -iE 'echo|embed|memory' || echo NO_RELEVANT_PROCESS
- 329276 grep -iE echo|embed|memory
+ 545961 bash -c ps -u kylin-agent -o pid,cmd --no-headers 2>/dev/null | grep -iE 'echo|embed|memory' || echo NO_RELEVANT_PROCESS
+ 545963 grep -iE echo|embed|memory
 ```
 
 ## deploy_dir
@@ -136,7 +136,7 @@ Unit kylin-memory-echo.service could not be found.
 # exit=0
 总计 44
 drwxrwxr-x  4 kylin-agent kylin-agent 4096  8月20日 22:35 .
-drwx------ 33 kylin-agent kylin-agent 4096  8月24日 15:34 ..
+drwx------ 33 kylin-agent kylin-agent 4096  8月25日 09:34 ..
 drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月20日 22:35 evaluation
 drwxrwxr-x  9 kylin-agent kylin-agent 4096  8月20日 22:32 memory-service
 -rw-rw-r--  1 kylin-agent kylin-agent 4736  8月20日 22:35 README.md
