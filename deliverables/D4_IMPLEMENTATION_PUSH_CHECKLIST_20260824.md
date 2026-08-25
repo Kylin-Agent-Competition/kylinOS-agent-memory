@@ -45,7 +45,7 @@ Phase 3/4 落库完成后 ─→ Phase 6 health + 结构化日志
 | 0.2 | 错误码映射到冻结 5 枚举 | `embedding_service.py:181,213,274,365,371`；`server.py:117` | ALIGN-002 / ADR-005 映射表 | `ERR_*` 全部按 ADR-005 §错误码映射表转为 `PROTOCOL_ERROR/INVALID_REQUEST/TIMEOUT/INTERNAL_ERROR` |
 | 0.3 | 响应 envelope 对齐 `status/data/server_ts` | `embedding_service.py:409-433` `_envelope`/`_envelope_error` | ALIGN-003 | 成功 `{status:"ok",data,server_ts}`，失败 `{status:"error",error_code,message}`；移除 `ok/result/error` 与 `error.code` |
 | 0.4 | 方法路由纳入统一路由表 | `embedding_service.py:68-73` `_METHODS` | ALIGN-004 | `memory.embed` 等子服务方法并入 FRZ-IPC-007 路由，或 ADR 承认子服务方法域 |
-| 0.5 | UDS 路径统一 | `echo/memory_echo_server.py:40-51`；`embedding/server.py:146`；`config/environment.example:8` | ALIGN-005 | 裁定唯一 socket 路径（`$XDG_RUNTIME_DIR/kylin-memory/memory.sock`），3 套路径收敛 |
+| 0.5 | UDS 路径 ownership 澄清 | `echo/memory_echo_server.py:40-51`；`embedding/server.py`（`_default_socket_path`）；`config/environment.example:8` | ALIGN-005 | Memory Service/Gateway owns `$XDG_RUNTIME_DIR/kylin-memory/memory.sock`；Embedding 子服务 owns 私有 `embedding.sock`；Echo 属 Gate 0 验证细节；**不要求所有进程绑同一 UDS**（见 ADR-009） |
 | 0.6 | 更新对齐后的测试断言 | `memory-service/tests/test_embedding_service.py`、`test_protocol.py` | ADR-005 §开发影响 | 断言改为冻结枚举/envelope，全量 pytest 通过 |
 
 **参考实现**：`memory_echo_server.py:107-115` `build_response` 已是正确冻结 envelope（`status/data/server_ts`），`ERROR_CODE_MAP:58-65` 已是正确映射——embedding 侧对齐时照此实现。

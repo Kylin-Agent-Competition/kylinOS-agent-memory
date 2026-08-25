@@ -92,4 +92,4 @@ embedding 作为 Memory Service 子服务，保留独立方法域 `memory.embed 
 
 本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A（2026-08-24）；Reviewer E（谢嘉然）待签署。
 
-> **范围限定（治理澄清）**：本 ADR 仅处理 **method routing**（embedding 子服务方法域与 FRZ-IPC-007 顶层路由的边界），**不得被解释为批准 ALIGN-005 的当前 socket 方案**（embedding 独立 socket 路径与正式 `memory.sock` ownership 归属另行裁决，见 `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md` ALIGN-005）。
+> **范围限定（治理澄清）**：本 ADR 仅处理 **method routing**（embedding 子服务方法域与 FRZ-IPC-007 顶层路由的边界），**不得被解释为批准 ALIGN-005 的当前 socket 方案**。socket ownership 归属已由 **ADR-009** 另行裁决（Memory Service/Gateway owns `memory.sock`；Embedding 子服务 owns 私有 `embedding.sock`；echo 属 Gate 0 验证细节）。

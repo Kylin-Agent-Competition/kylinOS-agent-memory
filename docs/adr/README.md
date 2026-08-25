@@ -31,6 +31,7 @@
 | [ADR-006：idempotency_cache 采用复合主键](006-db-idempotency-primary-key.md) | 已采纳（2026-08-17，Reviewer E 2026-08-20 已签） | 方案 A：复合主键 `(user_id, session_id, idempotency_key)` |
 | [ADR-007：DB 迁移基线命名](007-db-migration-baseline-naming.md) | 已采纳 | 基线迁移命名裁定 |
 | [ADR-008：embedding 子服务方法域独立承认](008-embedding-subservice-method-domain.md) | 提议 / 待审（Reviewer E 待签） | 方案 A：承认 embedding 子服务方法域，Phase 2 统一 Gateway 合并路由（仅 method routing，不涉 socket 方案） |
+| [ADR-009：UDS socket ownership 归属裁决](009-socket-ownership.md) | 提议 / 待审（Reviewer E 待签） | 方案 A：Memory Service/Gateway owns `memory.sock`；Embedding 子服务 owns 私有 `embedding.sock`；echo 属 Gate 0 验证细节（ALIGN-005） |
 
 **ADR-001 已形成 D3-B 冻结候选；独立审查前不得将状态改为“已采纳”。**
 
