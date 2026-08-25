@@ -37,6 +37,7 @@ XDG = "/run/user/1000"
 KDIR = f"{XDG}/kylin-memory"
 MEM_SOCK = f"{KDIR}/memory.sock"
 EMB_SOCK = f"{KDIR}/embedding.sock"
+A1_SOCK = f"{KDIR}/l2a1-test.sock"
 
 # ── 本地证据目录 ──
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -264,27 +265,27 @@ def embed_req(text):
 
 def l2_a1(c):
     print("\n=== L2-A1: active socket 拒绝 unlink ===")
-    # 0. 清理残留 path，准备受控 active listener
-    run(c, f"pkill -f 'active_listener' 2>/dev/null; rm -f {MEM_SOCK} 2>/dev/null", timeout=15)
-    listener = (f"nohup {PY} {REPO}/active_listener.py {MEM_SOCK} "
+    # 0. 清理残留 path，准备受控 active listener（仅清理受控 A1_SOCK，不触碰正式 MEM_SOCK）
+    run(c, f"pkill -f 'active_listener' 2>/dev/null; rm -f {A1_SOCK} 2>/dev/null", timeout=15)
+    listener = (f"nohup {PY} {REPO}/active_listener.py {A1_SOCK} "
                 f"> /tmp/l2_a1_listener.log 2>&1 < /dev/null & echo PID=$!")
     ec, out, err = run(c, listener, timeout=15)
     time.sleep(2)
-    ec, out, err = run(c, f"cat /tmp/l2_a1_listener.log 2>&1; echo '---'; ss -lnpx 2>/dev/null | grep memory.sock || echo NO_LISTEN")
-    record("L2-A1_active_listener", f"nohup python active_listener.py {MEM_SOCK}", ec, out, err)
-    # 1. 尝试以 embedding.server 绑定 active memory.sock（env 前置 + timeout 10 兜底防挂死）
-    cmd = (f"cd {REPO}/memory-service && {ENV_PREFIX} timeout 10 {PY} -m embedding.server --socket {MEM_SOCK}")
+    ec, out, err = run(c, f"cat /tmp/l2_a1_listener.log 2>&1; echo '---'; ss -lnpx 2>/dev/null | grep l2a1-test.sock || echo NO_LISTEN")
+    record("L2-A1_active_listener", f"nohup python active_listener.py {A1_SOCK}", ec, out, err)
+    # 1. 尝试以 embedding.server 绑定 active 受控 socket（env 前置 + timeout 10 兜底防挂死）
+    cmd = (f"cd {REPO}/memory-service && {ENV_PREFIX} timeout 10 {PY} -m embedding.server --socket {A1_SOCK}")
     ec, out, err = run(c, cmd, timeout=20)
     combined = out + err
     refused = ("active socket already listening" in combined and "refusing to unlink" in combined)
     record("L2-A1_attempt_unlink_active", cmd, ec, out, err, "PASS" if refused else "FAIL")
-    # 2. 验证 active listener 仍存活、socket 未被抢占
-    ec, out, err = run(c, f"ss -lnpx 2>/dev/null | grep memory.sock || echo NO_MEM_SOCK; echo '---'; ps -ef | grep 'active_listener' | grep -v grep")
-    alive = ("active_listener" in out and "NO_MEM_SOCK" not in out)
-    record("L2-A1_post_listener_alive", "ss|grep memory.sock; ps|grep active_listener", ec, out, err,
+    # 2. 验证 active listener 仍存活、受控 socket 未被抢占
+    ec, out, err = run(c, f"ss -lnpx 2>/dev/null | grep l2a1-test.sock || echo NO_A1_SOCK; echo '---'; ps -ef | grep 'active_listener' | grep -v grep")
+    alive = ("active_listener" in out and "NO_A1_SOCK" not in out)
+    record("L2-A1_post_listener_alive", "ss|grep l2a1-test.sock; ps|grep active_listener", ec, out, err,
            "PASS" if alive else "FAIL")
-    # 3. 清理受控 listener
-    run(c, f"pkill -f 'active_listener' 2>/dev/null; rm -f {MEM_SOCK} 2>/dev/null", timeout=15)
+    # 3. 清理受控 listener（仅清理受控 A1_SOCK）
+    run(c, f"pkill -f 'active_listener' 2>/dev/null; rm -f {A1_SOCK} 2>/dev/null", timeout=15)
 
 
 # ── L2-A2：stale socket 清理后正常 bind ──
@@ -384,6 +385,16 @@ def l2_b2(c):
     ec, out, err = run(c, cmd, timeout=20)
     record("L2-B2_missing_fields", cmd, ec, out, err,
            "PASS" if "INVALID_REQUEST" in out else "FAIL")
+
+    # typed-ID 收敛（H-2）：request_id(dict)/trace_id(int) 非 str → 错误 envelope 恒为 ""（str）
+    req = json.dumps({"protocol_version": "1.0", "request_id": {"nested": 1},
+                      "trace_id": 456, "method": "memory.embed",
+                      "deadline_ms": 5000, "payload": {"text": "x"}})
+    cmd = f"{PY} {REPO}/uds_client.py --socket {EMB_SOCK} --request '{req}'"
+    ec, out, err = run(c, cmd, timeout=20)
+    record("L2-B2_typed_id_converged", cmd, ec, out, err,
+           "PASS" if ('"request_id": ""' in out and '"trace_id": ""' in out
+                      and "INVALID_REQUEST" in out) else "FAIL")
 
     cmd = f"{PY} {REPO}/uds_client.py --socket {EMB_SOCK} --declared-too-large"
     ec, out, err = run(c, cmd, timeout=20)
