@@ -135,9 +135,9 @@
 
 - [x] 逐项回填上表「结果」列（PASS / PASS_WITH_DEBT / FAIL）并附证据路径（L2-A1~D1 已回填，见 §二各证据路径）
 - [x] 更新 `evidence/index.yaml`（新增/回写 IPC-001、EMB-T03 状态为 HOST_VERIFIED，注明 tested_commit）
-- [ ] 回写能力矩阵：`IPC-001`（UDS）→ HOST_VERIFIED / E4；`EMB-T03`（异常输入）→ 按实际结果
-- [ ] ADR-008 由「提议 / 待审」→ 提交 Reviewer E 签署，签署后更新 ADR 状态与 ADR README
-- [ ] 提交完整测试与证据后，请求 Reviewer 发起 PR#57 下一轮复审
+- [x] 回写能力矩阵：`IPC-001`（UDS）→ HOST_VERIFIED / E4；`EMB-T03`（异常输入）→ 按实际结果
+- [x] ADR-008 / ADR-009 由「提议 / 待审」→ 提交 Reviewer E 签署，签署后更新 ADR 状态与 ADR README
+- [x] 提交完整测试与证据后，请求 Reviewer 发起 PR#57 下一轮复审
 
 ---
 
