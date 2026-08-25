@@ -33,13 +33,13 @@ def main() -> int:
             memory_id="mem-a", version_id="v1", user_id=USER,
             object_type=ObjectType.KNOWLEDGE, memory_type="long_term",
             memory_status="active", content="apple banana cherry",
-            sensitivity="internal", conflict_state="resolved",
+            sensitivity="internal", conflict_state="resolved", is_current=True,
         ),
         (USER, "mem-b", "v1"): TruthRecord(
             memory_id="mem-b", version_id="v1", user_id=USER,
             object_type=ObjectType.KNOWLEDGE, memory_type="long_term",
             memory_status="active", content="apple banana",
-            sensitivity="internal", conflict_state="resolved",
+            sensitivity="internal", conflict_state="resolved", is_current=True,
         ),
     }
 

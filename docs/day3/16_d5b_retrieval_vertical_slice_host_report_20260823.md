@@ -6,7 +6,7 @@
 
 - 日期：2026-08-23
 - 系统：Kylin V11 x86_64，内核 `6.6.0-63-generic`
-- 项目基线：`origin/main@8bf4c9b`，本分支 head `f169291`（报告更新时）
+- 项目基线：`origin/main@8bf4c9b`，本分支 head `614d428`（EIR 重跑 tested_commit）
 - SDK 源码：`2213447ef765e709e93f94d4177f4417478fe8ea`
 - 运行库包：`libkysdk-vector-engine-client 1.2.0.0-0k0.7`
 - 运行库：`libkysdk-vector-engine-client.so.1`
@@ -19,16 +19,16 @@
 | V003 | deadline/取消在不可中断 SDK 下的真实行为 | `PASS_VM`：无 cancel/abort API；Search/Query 有 timeout（粗粒度），Insert/Upsert/Delete 无；服务停止 code=3 | `v003_deadline_cancel_20260823.log` |
 | V004 | 索引新代次构建、失败保旧与恢复 | `PASS_VM`：多集合代次模式；新代次构建不干扰 serving，失败不替换旧代次，drop-old 切换 | `v004_generation_rebuild_20260823.log` |
 | V005 | 原子 generation/Collection 切换能力 | `PASS_VM`（能力否定）：SDK 无 rename/swap/replace 原子 API，等价方案 routing-switch；TD-004 已 D 轨冻结 Resolved | `v005_atomic_switch_20260823.log` |
-| V006 | FTS5 + Vector + rrf-v1 端到端 | `PASS_VM`：FTS5 BM25 + 真实 Vector + 应用层 RRF 在 VM 跑通 | `v006_e2e_fts5_vector_rrf_20260824.log` |
+| V006 | FTS5 + Vector + rrf-v1 端到端 | `PASS_VM`：FTS5 BM25 + 真实 Vector + 应用层 RRF 在 VM 跑通 | `v006_e2e_fts5_vector_rrf_eir_20260825.log` |
 | V007 | Recall@K/MRR/nDCG/P95 | `PARTIAL / L1_LOCAL`（Windows-local 脚本烟测）：评测脚本输出三通道指标；正式量化评测仍 `DEFERRED_VM` | `v007_eval_20260823.log` |
 
 ## 2. D5B 边界验证（空库 / 服务故障 / Top-K）
 
 | 项 | 结论 | 归档日志 |
 |---|---|---|
-| W1 空库 | `PASS`：空 FTS5 + 空 Vector + 融合返回可解释空结果，退出码 0 | `d5b_w1_empty_20260824.log` |
-| W2 服务故障 | `PASS`：停服务 code=3 → `provider_unavailable`，FTS5 命中保留，恢复自愈 | `d5b_w2_service_fault_20260824.log` |
-| W3 Top-K 边界 | `PASS`：top_n=1/超命中数/超大/空库均正确 | `d5b_w3_topk_20260824.log` |
+| W1 空库 | `PASS`：空 FTS5 + 空 Vector + 融合返回可解释空结果，退出码 0 | `d5b_w1_empty_eir_20260825.log` |
+| W2 服务故障 | `PASS`：停服务 code=3 → `provider_unavailable`，FTS5 命中保留，恢复自愈 | `d5b_w2_service_fault_eir_20260825.log` |
+| W3 Top-K 边界 | `PASS`：top_n=1/超命中数/超大/空库均正确 | `d5b_w3_topk_eir_20260825.log` |
 
 ## 3. 证据归档 SHA-256
 
@@ -38,10 +38,10 @@
 | `v003_deadline_cancel_20260823.log` | `cf1175a166621e9ef8ba6655d6e1cd8b650d98ef0ba9bc4d03d3b28b62abfc3c` |
 | `v004_generation_rebuild_20260823.log` | `99707a68cda4ca9988b6b5b14b355a0806fe1ae99f724e8f18e90ac834dec0f5` |
 | `v005_atomic_switch_20260823.log` | `a12243c17de66eafd6bd0710a1ed7b8fae21eabd3b1b665d38f9421973aeb78d` |
-| `v006_e2e_fts5_vector_rrf_20260824.log` | `672d911d7ccd1c63de2739d37b0daedc9b57451fa0dae312a45fcf078029851e` |
-| `d5b_w1_empty_20260824.log` | `47e79c5073b298a45634390af8b97451c2747933a24cc51306e2e30882e13044` |
-| `d5b_w2_service_fault_20260824.log` | `c1b06b109df94176cb434922288ccb5e2890e3096bc74069ada873099be07a7e` |
-| `d5b_w3_topk_20260824.log` | `41b6784ffbe903f0324d3ccd087f059088b20c180323a04a63d894facdef83eb` |
+| `v006_e2e_fts5_vector_rrf_eir_20260825.log` | `a7fadd13049f6a765235a7985929c7200221545c79c92a3c5f087d9ef463ee3c` |
+| `d5b_w1_empty_eir_20260825.log` | `50a059e683ffb3f1f409768ddbcd004fbf53b4863c972051bdcba44a0be46cb2` |
+| `d5b_w2_service_fault_eir_20260825.log` | `8ff9932d6aeda65035e89ae4c05ccb440f8c90e9d06fe6a954bd9f0f5b0a496a` |
+| `d5b_w3_topk_eir_20260825.log` | `5ab8369ce3485941218a593e4eee8a52bad6056ab97684bdda8658bc1fa1c22c` |
 | `v007_eval_20260823.log` | `11ba6aa29768052d994c0d11e358db858e42cb9a4ac95d8cded89c1419d88591` |
 
 ## 4. 候选文件 SHA-256（完整见 index.yaml）

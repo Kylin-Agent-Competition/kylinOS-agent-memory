@@ -35,6 +35,7 @@ def build_truth() -> dict:
             content=content,
             sensitivity="internal",
             conflict_state="resolved",
+            is_current=True,
         )
         for mid, content in rows
     }
