@@ -675,7 +675,7 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/v002_error_mapping_20260823.log"
-    tested_commit: "8e9a7a861031e196f662b99a47766f82cfd7e67f"
+    tested_commit: "a5d85104a83719ca0c46518a84833da4ad7e11c1"
     sdk_source_commit: "2213447ef765e709e93f94d4177f4417478fe8ea"
     probe_source_sha256: "7bb77f6f776ad562b7a148099952ee9fb9f333bee2eca566b615ed805cba12bb"
     report: "docs/day3/16_d5b_retrieval_vertical_slice_host_report_20260823.md"
