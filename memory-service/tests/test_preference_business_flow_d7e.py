@@ -298,15 +298,27 @@ def make_decision(**overrides) -> PreferenceBusinessDecision:
 
 
 def make_intent(**overrides) -> PreferenceVersionIntent:
-    """构造 plan_preference 输入。"""
+    """构造 plan_preference 输入。
+
+    当调用方未显式提供 decision 时，默认按最终的 preference_key/scope
+    同步生成 identity 一致的 decision（保持真实业务 identity 一致）；
+    显式传入 decision 时保持原样（用于构造 fail-closed 负向用例）。
+    """
+    has_decision = "decision" in overrides
+    if has_decision:
+        decision = overrides.pop("decision")
     data = {
         "user_id": USER,
         "preference_key": "demo_response_style",
         "scope": "global",
         "value": "concise",
-        "decision": make_decision(),
     }
     data.update(overrides)
+    if has_decision:
+        data["decision"] = decision
+    else:
+        data["decision"] = make_decision(
+            candidate_key=data["preference_key"], scope=data["scope"])
     return PreferenceVersionIntent(**data)
 
 

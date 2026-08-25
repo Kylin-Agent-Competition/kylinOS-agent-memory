@@ -40,11 +40,13 @@ preference_version_policy.py — Day7E 偏好版本变更规划策略（E 轨 se
   旧 scope active 偏好不被 supersede。
 - ROLLBACK：同 user_id + 同 preference_key + 同 scope 的历史版本
   → 输出回滚计划（D 轨负责事务 / current_version 切换 / 历史持久化）。
-- fail-closed 拒绝：跨 user_id、未来版本、无关版本、不可长期化候选 → REJECTED。
+- fail-closed 拒绝：跨 user_id、未来版本、无关版本、不可长期化候选、
+  版本意图与长期化决策 key/scope 不一致 → REJECTED。
 
 判定优先级（fail-closed，首个命中即返回）：
 - plan_preference：类型准入 → 长期化门禁(should_store=False) → 跨用户 →
-  同 key+同 scope active（NO_OP / UPDATE）→ 同 key 不同 scope（COEXIST）→ CREATE。
+  版本意图与决策 key/scope 一致性 → 同 key+同 scope active（NO_OP / UPDATE）
+  → 同 key 不同 scope（COEXIST）→ CREATE。
 - plan_rollback：类型准入 → target 存在 → 跨用户 → 同 key+scope active 定位 →
   无关版本二次防御 → 未来/当前版本防御 → ROLLBACK。
 """
@@ -81,6 +83,9 @@ REASON_REJECTED_ROLLBACK_FUTURE_OR_CURRENT = (
 )
 REASON_REJECTED_NO_ACTIVE_CHAIN = "rejected_no_active_chain"
 REASON_REJECTED_INVALID_INPUT = "rejected_invalid_input"
+REASON_REJECTED_INTENT_DECISION_INCONSISTENT = (
+    "rejected_intent_decision_inconsistent"
+)
 
 REASON_CODES: frozenset = frozenset({
     REASON_CREATE_FIRST_VERSION,
@@ -95,6 +100,7 @@ REASON_CODES: frozenset = frozenset({
     REASON_REJECTED_ROLLBACK_FUTURE_OR_CURRENT,
     REASON_REJECTED_NO_ACTIVE_CHAIN,
     REASON_REJECTED_INVALID_INPUT,
+    REASON_REJECTED_INTENT_DECISION_INCONSISTENT,
 })
 
 
@@ -198,6 +204,21 @@ class PreferenceVersionPolicy:
         if any(p.user_id != intent.user_id for p in current_preferences):
             return self._reject(
                 REASON_REJECTED_CROSS_USER,
+                intent.user_id, intent.preference_key, intent.scope,
+            )
+        # 3.5 版本意图与长期化决策 key/scope 一致性（fail-closed）：
+        #     已通过 should_store=True 与同用户两道门禁后，decision 必须与
+        #     intent 的 key/scope 指向同一业务偏好，否则拒绝，不得进入
+        #     CREATE/COEXIST/UPDATE/NO_OP（防止"决策针对 A 偏好、版本写到 B"）。
+        #     只消费结构化字段 candidate_key/scope，不读 value/evidence。
+        decision = intent.decision
+        if (
+            not decision.candidate_key
+            or decision.candidate_key != intent.preference_key
+            or decision.scope != intent.scope.value
+        ):
+            return self._reject(
+                REASON_REJECTED_INTENT_DECISION_INCONSISTENT,
                 intent.user_id, intent.preference_key, intent.scope,
             )
         # 4. 查找同 key + 同 scope 的 active 当前版本

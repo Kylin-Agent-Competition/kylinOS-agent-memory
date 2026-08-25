@@ -83,7 +83,7 @@ OTHER_USER = "user_demo_d7e_other"
 T0 = datetime(2026, 8, 24, 9, 0, 0, tzinfo=timezone.utc)
 POLICY = PreferenceVersionPolicy()
 
-# 固定 reason_code 权威集合（本任务内部定义的 12 个可达判定码）
+# 固定 reason_code 权威集合（本任务内部定义的 13 个可达判定码）
 EXPECTED_REASON_CODES = {
     "create_first_version",
     "coexist_different_scope",
@@ -97,6 +97,7 @@ EXPECTED_REASON_CODES = {
     "rejected_rollback_future_or_current_version",
     "rejected_no_active_chain",
     "rejected_invalid_input",
+    "rejected_intent_decision_inconsistent",
 }
 
 SCOPES = ("global", "topic", "tool", "session", "time_window")
@@ -155,15 +156,27 @@ def make_decision(**overrides) -> PreferenceBusinessDecision:
 
 
 def make_intent(**overrides) -> PreferenceVersionIntent:
-    """构造 plan_preference 输入。"""
+    """构造 plan_preference 输入。
+
+    当调用方未显式提供 decision 时，默认按最终的 preference_key/scope
+    同步生成 identity 一致的 decision（保持真实业务 identity 一致）；
+    显式传入 decision 时保持原样（用于构造 key/scope mismatch 的负向用例）。
+    """
+    has_decision = "decision" in overrides
+    if has_decision:
+        decision = overrides.pop("decision")
     data = {
         "user_id": USER,
         "preference_key": "demo_response_style",
         "scope": "global",
         "value": "concise",
-        "decision": make_decision(),
     }
     data.update(overrides)
+    if has_decision:
+        data["decision"] = decision
+    else:
+        data["decision"] = make_decision(
+            candidate_key=data["preference_key"], scope=data["scope"])
     return PreferenceVersionIntent(**data)
 
 
@@ -238,7 +251,7 @@ def test_intent_models_forbid_extra():
 def test_reason_codes_match_authoritative_set():
     """所有可达 reason_code 集合与固定权威集合（12 个）完全一致。"""
     assert REASON_CODES == EXPECTED_REASON_CODES
-    assert len(REASON_CODES) == 12
+    assert len(REASON_CODES) == 13
 
 
 # ── CREATE ──
@@ -634,7 +647,10 @@ def test_does_not_read_body_or_leak_secrets():
     secret_like = "sk-demo-abcdefghijklmnopqrstuvwxyz123456"
     intent = make_intent(
         value=f"api_key={secret_like}（虚构）",
-        decision=make_decision(scope=f"scope-{secret_like}"),
+        decision=make_decision(
+            scope="global",
+            source_event_id=f"evt-{secret_like}",
+        ),
     )
     plan = POLICY.plan_preference(intent, [])
     # 可长期化 → 正常产出 CREATE（结构引用，不含正文/密钥）
@@ -724,3 +740,70 @@ def test_coexist_with_scopes_default_independent_instances():
     plan1.coexist_with_scopes.append("topic")
     assert "topic" not in plan2.coexist_with_scopes
     assert plan2.coexist_with_scopes == []
+
+
+# ── PR #58 第二轮 Low 问题：意图与长期化决策 key/scope 一致性（fail-closed） ──
+
+
+def test_rejected_when_decision_candidate_key_missing():
+    """decision.candidate_key 缺失（None）/空 → REJECTED
+    (rejected_intent_decision_inconsistent)，不得进入 CREATE。"""
+    decision = make_decision(candidate_key=None)
+    plan = POLICY.plan_preference(make_intent(decision=decision), [])
+    assert plan.action == PreferenceVersionAction.REJECTED
+    assert plan.reason_code == "rejected_intent_decision_inconsistent"
+    # 空字符串同样视为缺失
+    decision_empty = make_decision(candidate_key="")
+    plan_empty = POLICY.plan_preference(
+        make_intent(decision=decision_empty), [])
+    assert plan_empty.action == PreferenceVersionAction.REJECTED
+    assert plan_empty.reason_code == "rejected_intent_decision_inconsistent"
+
+
+def test_rejected_when_decision_candidate_key_mismatch():
+    """decision.candidate_key 与 intent.preference_key 不符 → REJECTED
+    (rejected_intent_decision_inconsistent)，不得进入 CREATE。"""
+    decision = make_decision(
+        candidate_key="some_other_key", scope="global")
+    intent = make_intent(decision=decision)
+    assert intent.preference_key == "demo_response_style"
+    plan = POLICY.plan_preference(intent, [])
+    assert plan.action == PreferenceVersionAction.REJECTED
+    assert plan.reason_code == "rejected_intent_decision_inconsistent"
+
+
+def test_rejected_when_decision_scope_mismatch():
+    """decision.scope 与 intent.scope.value 不符 → REJECTED
+    (rejected_intent_decision_inconsistent)，不得进入 CREATE。"""
+    decision = make_decision(
+        candidate_key="demo_response_style", scope="tool")
+    intent = make_intent(scope="global", decision=decision)
+    assert intent.scope.value == "global"
+    assert decision.scope == "tool"
+    plan = POLICY.plan_preference(intent, [])
+    assert plan.action == PreferenceVersionAction.REJECTED
+    assert plan.reason_code == "rejected_intent_decision_inconsistent"
+
+
+def test_not_persistable_priority_beats_consistency():
+    """should_store=False 且 decision 不一致 → 优先
+    rejected_not_persistable（不失守，先于一致性门禁）。"""
+    decision = make_decision(
+        should_store=False, candidate_key="other", scope="tool")
+    plan = POLICY.plan_preference(make_intent(decision=decision), [])
+    assert plan.action == PreferenceVersionAction.REJECTED
+    assert plan.reason_code == "rejected_not_persistable"
+
+
+def test_cross_user_priority_beats_consistency():
+    """跨用户且 decision 不一致 → 优先 rejected_cross_user
+    （用户隔离先行，不失守）。"""
+    decision = make_decision(
+        candidate_key="other", scope="tool")
+    other = make_preference(
+        preference_id="pref_other_user", user_id=OTHER_USER, version=1,
+    )
+    plan = POLICY.plan_preference(
+        make_intent(decision=decision), [other])
+    assert plan.action == PreferenceVersionAction.REJECTED
+    assert plan.reason_code == "rejected_cross_user"
