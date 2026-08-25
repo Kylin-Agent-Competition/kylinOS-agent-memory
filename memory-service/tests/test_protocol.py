@@ -17,6 +17,7 @@ from embedding.protocol import (
     IncompletePacket,
     ProtocolError,
     build_envelope,
+    build_error_envelope,
     decode_packet,
     encode,
     parse_envelope,
@@ -129,6 +130,37 @@ def test_parse_envelope_bad_payload():
         parse_envelope({"protocol_version": "1.0", "method": "memory.embed",
                          "request_id": "r", "trace_id": "t", "deadline_ms": 100,
                          "payload": "not-dict"})
+
+
+# ── 错误 envelope typed-ID 收敛（FRZ-IPC-006 §6.2，PR#57 R5 / H-2） ──
+
+@pytest.mark.parametrize("field, bad", [
+    ("request_id", {"nested": 1}),
+    ("trace_id", {"nested": 1}),
+    ("request_id", 123),
+    ("trace_id", 456),
+    ("request_id", True),
+    ("trace_id", False),
+    ("request_id", []),
+    ("trace_id", None),
+])
+def test_build_error_envelope_typed_id_converged(field, bad):
+    """非法 typed request_id/trace_id（dict/int/bool/list/None）→ 收敛为空串 str。"""
+    kwargs = {"request_id": "r", "trace_id": "t"}
+    kwargs[field] = bad
+    env = build_error_envelope("INVALID_REQUEST", "boom", **kwargs)
+    assert isinstance(env["request_id"], str)
+    assert isinstance(env["trace_id"], str)
+    # 被污染字段收敛为空串；另一字段保持原字符串
+    assert env[field] == ""
+
+
+def test_build_error_envelope_empty_str_id_preserved():
+    """空串 request_id/trace_id 恒为 str（不被 or '' 之外的逻辑改动）。"""
+    env = build_error_envelope("INVALID_REQUEST", "boom",
+                               request_id="", trace_id="")
+    assert env["request_id"] == "" and isinstance(env["request_id"], str)
+    assert env["trace_id"] == "" and isinstance(env["trace_id"], str)
 
 
 # ── 错误语义分类（FRZ-IPC-002 §2.1，PR#57 R3） ──

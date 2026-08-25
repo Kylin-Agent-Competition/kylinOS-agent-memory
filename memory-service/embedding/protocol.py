@@ -215,11 +215,13 @@ def build_error_envelope(
 
     `code` 须已映射到 FRZ-IPC-002 冻结枚举（调用方负责 map_error_code）。
     成功/失败均携带 `data`（§6.2 要求始终存在；错误时为 `{}`）。
+    非法 typed `request_id`/`trace_id`（dict/int/bool 等非 str）收敛为空串，
+    保证错误 envelope 自身字段恒为 str（FRZ-IPC-006 §6.2）。
     """
     return {
         "protocol_version": PROTOCOL_VERSION,
-        "request_id": request_id or "",
-        "trace_id": trace_id or "",
+        "request_id": request_id if isinstance(request_id, str) else "",
+        "trace_id": trace_id if isinstance(trace_id, str) else "",
         "status": "error",
         "data": {},
         "error_code": code,

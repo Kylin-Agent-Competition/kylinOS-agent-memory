@@ -307,3 +307,28 @@ def test_handle_request_degraded_preserves_reason():
     assert resp["data"]["degraded_reason"]["code"] == "ERR_SDK_NOT_LOADED"
     assert "so not found" in resp["data"]["degraded_reason"]["message"]
     svc.close()
+
+
+@pytest.mark.parametrize("field, bad", [
+    ("request_id", {"nested": 1}),
+    ("trace_id", {"nested": 1}),
+    ("request_id", 123),
+    ("trace_id", 456),
+    ("request_id", True),
+    ("trace_id", False),
+])
+def test_handle_request_typed_id_converged(field, bad):
+    """FRZ-IPC-006 §6.2：错误路径下非法 typed request_id/trace_id 恒收敛为 str。"""
+    svc = EmbeddingService(provider=FakeProvider())
+    svc.start()
+    req = {"protocol_version": "1.0", "method": "memory.embed",
+           "request_id": "r", "trace_id": "t",
+           "deadline_ms": 100, "payload": {"text": "x"}}
+    req[field] = bad
+    resp = svc.handle_request(req)
+    assert resp["status"] == "error"
+    assert resp["error_code"] == "INVALID_REQUEST"
+    assert isinstance(resp["request_id"], str)
+    assert isinstance(resp["trace_id"], str)
+    assert resp[field] == ""
+    svc.close()
