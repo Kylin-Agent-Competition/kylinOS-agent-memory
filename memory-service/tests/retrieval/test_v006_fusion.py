@@ -34,7 +34,7 @@ def _hit(memory_id, version_id, channel, rank, user_id="alice", raw_score=0.0):
     )
 
 
-def _truth(memory_id, version_id="v1", user_id="alice", status="active", sensitivity="internal", content="x", object_type=ObjectType.KNOWLEDGE, conflict_state="resolved"):
+def _truth(memory_id, version_id="v1", user_id="alice", status="active", sensitivity="internal", content="x", object_type=ObjectType.KNOWLEDGE, conflict_state="resolved", is_current=True):
     return TruthRecord(
         memory_id=memory_id,
         version_id=version_id,
@@ -45,6 +45,7 @@ def _truth(memory_id, version_id="v1", user_id="alice", status="active", sensiti
         content=content,
         sensitivity=sensitivity,
         conflict_state=conflict_state,
+        is_current=is_current,
     )
 
 
@@ -82,6 +83,34 @@ def test_adr001_golden_ordering():
     assert out[1].rrf_score == pytest.approx(0.0322580645, abs=1e-9)
     assert out[2].rrf_score == pytest.approx(0.0163934426, abs=1e-9)
     assert out[3].rrf_score == pytest.approx(0.0163934426, abs=1e-9)
+
+
+def test_stale_version_removed_before_aggregate():
+    # ADR-001 golden case：stale v1 rank=1，current v2 rank=2，v1 必须在聚合前移除。
+    fts5 = [_hit("mem-a", "v1", Channel.FTS5, 1), _hit("mem-a", "v2", Channel.FTS5, 2)]
+    truth = {
+        ("alice", "mem-a", "v1"): _truth("mem-a", version_id="v1", is_current=False),
+        ("alice", "mem-a", "v2"): _truth("mem-a", version_id="v2", is_current=True),
+    }
+    out = fuse_retrieval(fts5_hits=fts5, vector_hits=[], truth=truth, flt=_flt())
+    assert len(out) == 1
+    assert out[0].version_id == "v2"
+    assert out[0].rrf_score == pytest.approx(1 / 62, abs=1e-9)  # 仅 v2 rank=2
+
+
+def test_cross_channel_cross_version_not_mixed():
+    # FTS5 v1 + Vector v2，truth 有 v1/v2；current 唯一确定 v2，v1 rank 不得混入。
+    fts5 = [_hit("mem-a", "v1", Channel.FTS5, 1)]
+    vector = [_hit("mem-a", "v2", Channel.VECTOR, 1)]
+    truth = {
+        ("alice", "mem-a", "v1"): _truth("mem-a", version_id="v1", is_current=False),
+        ("alice", "mem-a", "v2"): _truth("mem-a", version_id="v2", is_current=True),
+    }
+    out = fuse_retrieval(fts5_hits=fts5, vector_hits=vector, truth=truth, flt=_flt())
+    assert len(out) == 1
+    assert out[0].version_id == "v2"
+    assert out[0].rrf_score == pytest.approx(1 / 61, abs=1e-9)  # 仅 v2 Vector rank=1
+    assert out[0].channels == [Channel.VECTOR]
 
 
 def test_stale_version_dropped():

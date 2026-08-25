@@ -47,6 +47,7 @@ def _truth(mid):
         content="content-" + mid,
         sensitivity="internal",
         conflict_state="resolved",
+        is_current=True,
     )
 
 

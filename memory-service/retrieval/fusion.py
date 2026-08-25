@@ -35,6 +35,7 @@ class TruthRecord:
     content: str
     sensitivity: str
     conflict_state: str
+    is_current: bool = False  # SQLite 当前版本标记；每个 memory_id 唯一一个 True
     scene_id: Optional[str] = None
     scope_terms: Optional[dict[str, list[str]]] = None
 
@@ -85,6 +86,17 @@ def fuse_retrieval(
         rec = truth.get((hit.user_id, hit.memory_id, hit.version_id))
         if _hard_filter(rec, flt):
             legal.append(hit)
+
+    # 唯一确定 current version（SQLite 真源）：每个 memory_id 只有 is_current=True 的一个版本。
+    # stale version 命中在聚合前移除，避免不同 version 的 rank 混入同一 memory_id（ADR-001 输入边界第 5 步）。
+    current_version: dict[tuple[str, str], str] = {}
+    for (uid, mid, vid), rec in truth.items():
+        if rec.is_current:
+            current_version[(uid, mid)] = vid
+    legal = [
+        h for h in legal
+        if current_version.get((h.user_id, h.memory_id)) == h.version_id
+    ]
 
     aggregated = aggregate_by_memory(legal)
     agg_candidates = [
