@@ -57,12 +57,13 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import threading
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -452,6 +453,7 @@ class PreferenceExtractionCache:
     - 空列表也缓存：避免同一事件重复触发 LLM 调用。
     - TTL 可选（None = 不过期）；容量满时淘汰最久未用（LRU）。
     - 统计：hits / misses / size（供评测与可观测性）。
+    - D10 REWORK：线程安全（锁）+ tombstone 防止 stale write-back。
     """
 
     _MISS = object()  # 未命中哨兵（None 返回表示未命中；[] 是合法的"缓存了空结果"）
@@ -464,76 +466,84 @@ class PreferenceExtractionCache:
         self._data: "OrderedDict[Tuple[str, str, str], Tuple[float, List[PreferenceCandidate]]]" = OrderedDict()
         self._hits = 0
         self._misses = 0
+        self._lock = threading.Lock()
+        self._tombstones: Set[str] = set()
 
     def get(self, key: Tuple[str, str, str]) -> Optional[List[Any]]:
-        """按缓存键取结果；None = 未命中（不含"缓存了空列表"）。
+        """按缓存键取结果；None = 未命中。
 
-        返回深拷贝（调用方修改不影响缓存）。偏好/知识候选均为 Pydantic
-        模型，深拷贝语义一致。
+        返回深拷贝（调用方修改不影响缓存）。
         """
-        entry = self._data.get(key, self._MISS)
-        if entry is self._MISS:
-            self._misses += 1
-            return None
-        ts, candidates = entry
-        if self._ttl is not None and (time.monotonic() - ts) > self._ttl:
-            del self._data[key]
-            self._misses += 1
-            return None
-        self._hits += 1
-        self._data.move_to_end(key)
-        return [c.model_copy(deep=True) for c in candidates]
+        with self._lock:
+            entry = self._data.get(key, self._MISS)
+            if entry is self._MISS:
+                self._misses += 1
+                return None
+            ts, candidates = entry
+            if self._ttl is not None and (time.monotonic() - ts) > self._ttl:
+                del self._data[key]
+                self._misses += 1
+                return None
+            self._hits += 1
+            self._data.move_to_end(key)
+            return [c.model_copy(deep=True) for c in candidates]
 
-    def set(self, key: Tuple[str, str, str], candidates: List[Any]) -> None:
-        """写入缓存（深拷贝存储）。"""
-        self._data[key] = (time.monotonic(),
-                           [c.model_copy(deep=True) for c in candidates])
-        self._data.move_to_end(key)
-        while len(self._data) > self._capacity:
-            self._data.popitem(last=False)
+    def set(self, key: Tuple[str, str, str], candidates: List[Any]) -> bool:
+        """写入缓存（深拷贝存储）。返回 True=成功，False=被 stale-write 防护拒绝。
+
+        D10 REWORK：tombstone 防护——失效的内容指纹加入 tombstone，
+        阻止删除前启动的旧请求写回。
+        """
+        with self._lock:
+            if key[2] in self._tombstones:
+                return False
+            self._data[key] = (time.monotonic(),
+                               [c.model_copy(deep=True) for c in candidates])
+            self._data.move_to_end(key)
+            while len(self._data) > self._capacity:
+                self._data.popitem(last=False)
+            return True
 
     def clear(self) -> None:
-        self._data.clear()
-        self._hits = 0
-        self._misses = 0
+        with self._lock:
+            self._data.clear()
+            self._tombstones.clear()
+            self._hits = 0
+            self._misses = 0
 
     def invalidate_by_event(self, event_id: str) -> int:
-        """按事件 ID 失效缓存条目（D10：精准遗忘——删除后缓存不恢复目标正文）。
+        """按事件 ID 失效缓存条目（D10）。
 
-        遍历所有缓存条目，移除匹配给定 source_event_id 的条目。
-        键为 (kind, source_event_id, content_fingerprint)。
-
-        Args:
-            event_id: 可信 source_event_id。
-
-        Returns:
-            invalided 的条目数。
+        同时将失效条目的内容指纹加入 tombstone。
         """
-        keys_to_delete = [k for k in self._data if k[1] == event_id]
-        for k in keys_to_delete:
-            del self._data[k]
-        return len(keys_to_delete)
+        removed = 0
+        with self._lock:
+            keys_to_delete = [k for k in self._data if k[1] == event_id]
+            for k in keys_to_delete:
+                self._tombstones.add(k[2])
+                del self._data[k]
+                removed += 1
+            return removed
 
     def invalidate_by_content(self, content_fingerprint: str) -> int:
         """按内容指纹失效缓存条目（D10）。
 
-        键为 (kind, source_event_id, content_fingerprint)。
-
-        Args:
-            content_fingerprint: 内容指纹（content_fingerprint 输出）。
-
-        Returns:
-            invalided 的条目数。
+        同时将内容指纹加入 tombstone。
         """
-        keys_to_delete = [k for k in self._data if k[2] == content_fingerprint]
-        for k in keys_to_delete:
-            del self._data[k]
-        return len(keys_to_delete)
+        removed = 0
+        with self._lock:
+            self._tombstones.add(content_fingerprint)
+            keys_to_delete = [k for k in self._data if k[2] == content_fingerprint]
+            for k in keys_to_delete:
+                del self._data[k]
+                removed += 1
+            return removed
 
     @property
     def stats(self) -> Dict[str, int]:
         """缓存统计（size/hits/misses）。"""
-        return {"size": len(self._data), "hits": self._hits, "misses": self._misses}
+        with self._lock:
+            return {"size": len(self._data), "hits": self._hits, "misses": self._misses}
 
 
 # ── 评测输出（D7：偏好字段级评测统一结果格式，供 E 轨偏好评测） ──

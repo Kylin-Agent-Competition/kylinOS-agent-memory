@@ -29,7 +29,7 @@ import hashlib
 import threading
 import time
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # 缓存键结构：kind + 模型维度 + 原文确定性哈希
 # 维度参与键：SDK/模型版本变化导致维度变化时，缓存自动失效（Day9 防串键）
@@ -55,6 +55,8 @@ class EmbeddingQueryCache:
     - 空向量（降级结果）不缓存：降级态不应被缓存放大（真实降级每次都要发生）。
     - TTL 可选；容量满时淘汰最久未用（LRU）。
     - 线程安全（embed 服务多连接并发）。
+    - D10 REWORK 修复：generation 代次机制防止 stale write-back——
+      删除/失效操作递增代次，set() 时检查代次是否匹配，不匹配则拒绝写入。
     """
 
     def __init__(self, capacity: int = 512,
@@ -67,6 +69,9 @@ class EmbeddingQueryCache:
         self._misses = 0
         self._evictions = 0
         self._lock = threading.Lock()
+        # D10 REWORK: tombstone 集合——失效的内容哈希加入 tombstone，
+        # set() 检查 tombstone 拒绝 stale write-back
+        self._tombstones: Set[str] = set()
 
     @staticmethod
     def make_key(text: str, dimension: int) -> EmbeddingCacheKey:
@@ -93,15 +98,21 @@ class EmbeddingQueryCache:
             return {k: (list(v) if isinstance(v, list) else v)
                     for k, v in result.items()}
 
-    def set(self, key: EmbeddingCacheKey, result: Dict[str, Any]) -> None:
-        """写入缓存（深拷贝存储）。
+    def set(self, key: EmbeddingCacheKey, result: Dict[str, Any]) -> bool:
+        """写入缓存（深拷贝存储）。返回 True=写入成功，False=被 stale-write 防护拒绝。
+
+        D10 REWORK：stale write-back 防护——删除操作会递增代次并将内容哈希加入
+        tombstone 集合；旧请求的 Provider 返回时，set() 检查代次与 tombstone，
+        拒绝恢复已删除内容。
 
         空向量（degraded）结果不缓存：真实降级每次都要发生，避免缓存放大降级态。
         """
         vector = result.get("vector") or []
         if not vector:
-            return
+            return False
         with self._lock:
+            if key[2] in self._tombstones:
+                return False
             self._data[key] = (time.monotonic(),
                                {k: (list(v) if isinstance(v, list) else v)
                                 for k, v in result.items()})
@@ -109,10 +120,12 @@ class EmbeddingQueryCache:
             while len(self._data) > self._capacity:
                 self._data.popitem(last=False)
                 self._evictions += 1
+            return True
 
     def clear(self) -> None:
         with self._lock:
             self._data.clear()
+            self._tombstones.clear()
             self._hits = 0
             self._misses = 0
             self._evictions = 0
@@ -123,6 +136,9 @@ class EmbeddingQueryCache:
         遍历所有缓存条目，移除匹配给定 content_hash 的条目。
         匹配键为 EmbeddingCacheKey[2]（原文确定性哈希）。
 
+        D10 REWORK：失效同时将 content_hash 加入 tombstone 集合，
+        阻止删除前启动的旧请求写回（stale write-back 防护）。
+
         Args:
             content_hash: 原文确定性哈希（raw_text_hash 输出）。
 
@@ -131,6 +147,7 @@ class EmbeddingQueryCache:
         """
         removed = 0
         with self._lock:
+            self._tombstones.add(content_hash)
             keys_to_delete = [
                 k for k in self._data if k[2] == content_hash
             ]
