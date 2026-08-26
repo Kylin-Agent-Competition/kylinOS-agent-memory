@@ -1,0 +1,6 @@
+=== W1 重跑 (2026-08-24_18:08:28) ===
+[W1] empty FTS5 hits: 0 -> []
+[W1] empty Vector hits: 0 -> []
+[W1] fused candidates: 0 -> EMPTY (解释为空库无匹配)
+[W1] PASS: empty library returns explainable empty result, exit 0
+=== w2_rerun.log ===

@@ -9,12 +9,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -204,11 +206,22 @@ Options ParseOptions(int argc, char** argv) {
 }
 
 void ConnectAndLoad(const std::shared_ptr<VectorDB::Database>& client, const Options& options) {
+#if defined(KYLIN_VECTOR_LEGACY_0K0_7)
+    VectorDB::ConnectParam connect_param;
+#else
     VectorDB::ConnectParam connect_param(options.app_id);
+#endif
     connect_param.SetConnectTimeout(5000);
     RequireStatus("service_connect", client->Connect(connect_param));
     Pass("service_connect", "SDK data-plane connection established");
 
+#if defined(KYLIN_VECTOR_LEGACY_0K0_7)
+    Require(options.service_managed_database, "database_mode",
+            "legacy 0k0.7 runtime requires a service-managed database");
+    Pass("database_mode", "using database preloaded by service: " + options.db_file);
+    Pass("service_ready",
+         "legacy 0k0.7 data plane is ready after successful Unix-socket connection");
+#else
     if (options.service_managed_database) {
         Pass("database_mode", "using database preloaded by service: " + options.db_file);
     } else {
@@ -221,6 +234,7 @@ void ConnectAndLoad(const std::shared_ptr<VectorDB::Database>& client, const Opt
     RequireStatus("service_ready", client->ShowCollections(collections));
     Pass("service_ready", "ShowCollections succeeded; collection_count=" +
                               std::to_string(collections.size()));
+#endif
 }
 
 bool HasCollection(const std::shared_ptr<VectorDB::Database>& client,
@@ -255,8 +269,13 @@ void CreateCollection(const std::shared_ptr<VectorDB::Database>& client,
                     .WithDimension(kDimension)),
             "schema_vector", "failed to add vector field");
 
+#if defined(KYLIN_VECTOR_LEGACY_0K0_7)
+    VectorDB::IndexDesc index(kVectorField, kIndexName, 0, VectorDB::IndexType::FLAT,
+                              VectorDB::MetricType::COSINE);
+#else
     VectorDB::IndexDesc index(kVectorField, kIndexName, VectorDB::IndexType::FLAT,
                               VectorDB::MetricType::COSINE);
+#endif
     RequireStatus("collection_create", client->CreateCollection(schema, index));
 
     Require(HasCollection(client, collection), "collection_create",
@@ -303,7 +322,7 @@ void InsertBaselineRows(const std::shared_ptr<VectorDB::Database>& client,
     const std::vector<std::vector<float>> vectors{
         {1.0F, 0.0F, 0.0F, 0.0F},
         {0.0F, 1.0F, 0.0F, 0.0F},
-        {0.0F, 0.0F, 1.0F, 0.0F},
+        {-1.0F, 0.0F, 0.0F, 0.0F},
     };
 
     std::vector<VectorDB::FieldDataPtr> fields{
@@ -319,6 +338,89 @@ void InsertBaselineRows(const std::shared_ptr<VectorDB::Database>& client,
     Require(results.IdArray().IntIDArray().size() == ids.size(), "crud_insert",
             "inserted ID count differs from input row count");
     Pass("crud_insert", "inserted 3 deterministic rows");
+}
+
+struct ScoreObservation {
+    float identical;
+    float orthogonal;
+    float opposite;
+};
+
+ScoreObservation ObserveScoreSemantics(const std::shared_ptr<VectorDB::Database>& client,
+                                       const std::string& collection) {
+    VectorDB::SearchArguments arguments(collection, 3, VectorDB::MetricType::COSINE);
+    RequireStatus("score_observation_filter", arguments.SetExpression("id in [1,2,3]"));
+    RequireStatus("score_observation_consistency",
+                  arguments.SetGuaranteeTimestamp(VectorDB::GuaranteeStrongTs()));
+    RequireStatus("score_observation_target",
+                  arguments.AddTargetVector(kVectorField,
+                                            std::vector<float>{1.0F, 0.0F, 0.0F, 0.0F}));
+
+    VectorDB::SearchResults results;
+    RequireStatus("score_observation_search", client->Search(arguments, results, 5000));
+    Require(results.Results().size() == 1, "score_observation",
+            "expected one result set for one query vector");
+
+    const auto& result = results.Results().front();
+    const auto& ids = result.Ids().IntIDArray();
+    const auto& scores = result.Scores();
+    Require(ids.size() == 3 && scores.size() == ids.size(), "score_observation",
+            "expected exactly three aligned ids and scores");
+
+    const auto score_for = [&](std::int64_t expected_id) {
+        const auto found = std::find(ids.begin(), ids.end(), expected_id);
+        Require(found != ids.end(), "score_observation", "expected score id is missing");
+        return scores[static_cast<std::size_t>(std::distance(ids.begin(), found))];
+    };
+
+    ScoreObservation observation{
+        score_for(1),
+        score_for(2),
+        score_for(3),
+    };
+    Require(std::isfinite(observation.identical) && std::isfinite(observation.orthogonal) &&
+                std::isfinite(observation.opposite),
+            "score_observation", "raw score contains a non-finite value");
+    return observation;
+}
+
+void RecordScoreObservation(const std::shared_ptr<VectorDB::Database>& client,
+                            const std::string& collection) {
+    constexpr int kRepeatCount = 5;
+    constexpr float kStableTolerance = 1.0e-6F;
+    constexpr float kExpectedTolerance = 1.0e-5F;
+    const ScoreObservation baseline = ObserveScoreSemantics(client, collection);
+    for (int repeat = 1; repeat < kRepeatCount; ++repeat) {
+        const ScoreObservation current = ObserveScoreSemantics(client, collection);
+        Require(std::fabs(current.identical - baseline.identical) <= kStableTolerance &&
+                    std::fabs(current.orthogonal - baseline.orthogonal) <= kStableTolerance &&
+                    std::fabs(current.opposite - baseline.opposite) <= kStableTolerance,
+                "score_observation", "raw scores changed across repeated identical searches");
+    }
+
+    Require(baseline.identical > baseline.orthogonal &&
+                baseline.orthogonal > baseline.opposite,
+            "score_semantics", "COSINE raw score direction is not higher-is-closer");
+    Require(baseline.identical >= -1.0F - kExpectedTolerance &&
+                baseline.identical <= 1.0F + kExpectedTolerance &&
+                baseline.orthogonal >= -1.0F - kExpectedTolerance &&
+                baseline.orthogonal <= 1.0F + kExpectedTolerance &&
+                baseline.opposite >= -1.0F - kExpectedTolerance &&
+                baseline.opposite <= 1.0F + kExpectedTolerance,
+            "score_semantics", "COSINE raw score is outside the verified [-1,1] range");
+    Require(std::fabs(baseline.identical - 1.0F) <= kExpectedTolerance &&
+                std::fabs(baseline.orthogonal) <= kExpectedTolerance &&
+                std::fabs(baseline.opposite + 1.0F) <= kExpectedTolerance,
+            "score_semantics",
+            "controlled identical/orthogonal/opposite scores differ from cosine similarity");
+
+    std::ostringstream detail;
+    detail.precision(9);
+    detail << "metric=COSINE; semantics=cosine_similarity; direction=higher_is_closer; range=[-1,1]"
+           << "; query=unit-x; identical=" << baseline.identical
+           << "; orthogonal=" << baseline.orthogonal << "; opposite=" << baseline.opposite
+           << "; repeats=" << kRepeatCount << "; tolerance=" << kStableTolerance;
+    Pass("score_semantics", detail.str());
 }
 
 void VerifyScalarFilter(const std::shared_ptr<VectorDB::Database>& client,
@@ -413,6 +515,7 @@ void RunPrepare(const std::shared_ptr<VectorDB::Database>& client, const Options
     CreateCollection(client, options.collection);
     InsertBaselineRows(client, options.collection);
     VerifyScalarFilter(client, options.collection);
+    RecordScoreObservation(client, options.collection);
     VerifyVectorSearch(client, options.collection, "vector_search");
     UpsertBaselineRow(client, options.collection);
     DeleteBaselineRow(client, options.collection);

@@ -1,0 +1,10 @@
+=== W2 服务故障降级验证 (重跑, 23:57:44) ===
+[W2] normal candidates: ['mem-b', 'mem-a'] degraded=False
+[W2] stopping vector service...
+[W2] caught VectorCliError code=3 message=Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock
+[W2] mapped -> provider_unavailable (retryable=True)
+[W2] degraded candidates: ['mem-b', 'mem-a']
+[W2] degraded_channels: {'vector': 'VectorCliError: vector_cli error code=3: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock'}
+[W2] restarting vector service...
+[W2] recovered candidates: ['mem-b', 'mem-a'] degraded=False
+[W2] PASS: service fault degrades gracefully and recovers

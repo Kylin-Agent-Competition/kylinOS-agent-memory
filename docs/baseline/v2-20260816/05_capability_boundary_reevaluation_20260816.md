@@ -1,4 +1,4 @@
-# 05 能力边界重新评估（v1.3 · 基于 2026-08-16 环境基线 v2，2026-08-17 memorymap 定案增补）
+# 05 能力边界重新评估（v1.4 · 基于 2026-08-16 环境基线 v2，2026-08-17 memorymap 定案增补，2026-08-25 PR#57 L2 回写）
 
 > **性质**：对 `reviewDocuments/01_sdk_capability_boundary.md`（v1.1）的能力边界结论，依据新环境基线
 > `docs/baseline/02_kylin_vm_environment_baseline_20260816.md`（v2）重新评估的结果。
@@ -55,7 +55,7 @@
 | EMB-002 | 模型列表/选择 | PARTIAL / E1/E3 | **ABI_VERIFIED（上调）** | `text_embedding_get_model_list`、`text_embedding_init_model` 现已在 .so 导出 |
 | EMB-003 | 异步文本向量化 | UNTESTED | UNTESTED（维持） | 符号存在，仍无运行时验证 |
 | EMB-004 | 图像/多模态 | PARTIAL（无模型） | **ABI_VERIFIED（上调，模型已就位）** | 图像嵌入符号已导出 + CN-CLIP/SAM 模型目录齐全 |
-| EMB-T03 | 空输入异常 | UNTESTED / P0 | UNTESTED / P0（维持） | 仍需运行时补测 |
+| EMB-T03 | 空输入异常 | UNTESTED / P0 | **HOST_VERIFIED / E4** | PR#57 L2-C1/C2（麒麟宿主）：SDK 缺失降级 + 空输入/非法输入行为已宿主验证 |
 | EMB-T06 | Runtime 重启恢复 | UNTESTED / P0 | UNTESTED / P0（维持） | — |
 
 **开发影响**：`cpp-bridge/embedding_abi_compat.h` 中「init_model / get_model_list 缺失」的兼容声明需修正为「已导出但待运行时验证」；可考虑将图像嵌入纳入 Provider 扩展边界（仍不阻塞主链）。
@@ -82,7 +82,7 @@
 | AGT-004 | 真实 Tool Result | PARTIAL / E2/E4 | **PARTIAL（上调，宿主能力已证 E4）** | 5.0.3 智能体模式 + 工具调用人工验证通过（V1/V2/V3/V5-2 ✅）；本项目 Hook 端到端（事件捕获→落库，成功/失败/取消三场景）待验证 |
 | AGT-005 | Memory Context 注入 | UNTESTED / E0/E2 | **方向有利但需重验** | `request_data` 字段提供潜在注入点，语义未验证 |
 | AGT-006 | 修改版构建/部署/KYSEC/回退 | UNTESTED / E1/E3 | **UNTESTED（部署布局已变）** | 应用从 `/opt/apps` 迁移到 `/opt/kaiming/layers/...` |
-| IPC-001 | Kaiming→UDS | UNTESTED / E0 | UNTESTED（维持） | 无变化证据 |
+| IPC-001 | Kaiming→UDS | UNTESTED / E0 | **HOST_VERIFIED / E4** | PR#57 L2（L2-A/B 系列，真实 C++ 客户端 UDS 协议对齐）已宿主验证；Kaiming Hook 端到端（L3）仍待后续 |
 
 **RECORD 表 Schema 变化明细**（本次 sqlite .schema 实测）：
 
@@ -145,6 +145,8 @@
 | MEM-002 | 完整 Memory Service | NOT_FOUND | NOT_FOUND（维持，屏幕视觉记忆 service） | E |
 | MEM-003 | 官方视觉记忆组件 | —（新增） | ABI_VERIFIED（条件数据源，只读复用） | E |
 | REC-002 | Recollect 读取 | SOURCE_VERIFIED | ABI_VERIFIED（D-Bus + client C API 实证） | E |
+| IPC-001 | Kaiming→UDS | UNTESTED | HOST_VERIFIED（PR#57 L2 UDS 协议对齐 + 真实 C++ 客户端） | C/D |
+| EMB-T03 | 空输入异常 | UNTESTED | HOST_VERIFIED（PR#57 L2-C1/C2 降级 + 异常输入） | A |
 
 ---
 
@@ -176,6 +178,7 @@
 | --- | --- | --- |
 | v1.2 | 2026-08-16 | 初版：基于环境基线 v2 的 ABI/包/Schema 级重评 |
 | v1.3 | 2026-08-17 | 增补：memorymap 能力边界定案（06 报告）——MEM-001/002 维持 NOT_FOUND、新增 MEM-003 ABI_VERIFIED、REC-002 上调 ABI_VERIFIED；知识库/文档/数据管理继续 P0 调查 |
+| v1.4 | 2026-08-25 | 增补：PR#57 L2 麒麟宿主验证回写——IPC-001（UDS）→ HOST_VERIFIED/E4、EMB-T03（空输入异常）→ HOST_VERIFIED/E4（`evidence/index.yaml` `PR57-L2-IPC001-001` / `PR57-L2-EMBT03-001`） |
 
 ## 签署
 
