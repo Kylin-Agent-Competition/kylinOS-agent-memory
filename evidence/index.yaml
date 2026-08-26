@@ -1000,7 +1000,7 @@ entries:
     status: "L0_VERIFIED"
     evidence_level: "L0"
     source: "evidence/memory-client/ctest_qml_on_20260824.txt"
-    tested_commit: "db3b6e41cb883b6178495652ac60875063bcbd8a"
+    tested_commit: "354704172df404323ff85ea2f55234cb97e6339c"
     date: "2026-08-24"
     reviewer: "D 主审"
     runtime_result: "PASS"
