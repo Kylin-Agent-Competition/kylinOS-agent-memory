@@ -38,7 +38,12 @@ private slots:
     void parseEnvelopeRejectsNonStringMethod();
     void parseEnvelopeRejectsEmptyMethod();
     void parseEnvelopeRejectsNonObjectPayload();
-    void parseEnvelopeReadsOptionalFields();
+    // FRZ-IPC-006 §6.1 必填字段校验（MEDIUM-01）
+    void parseEnvelopeRejectsMissingRequestId();
+    void parseEnvelopeRejectsMissingTraceId();
+    void parseEnvelopeRejectsMissingDeadlineMs();
+    void parseEnvelopeRejectsInvalidDeadlineMsType();
+    void parseEnvelopeRejectsNegativeDeadlineMs();
     // parseResponse 测试（FRZ-IPC-006 §6.2 响应结构）
     void parseResponseAcceptsValidOk();
     void parseResponseAcceptsValidError();
@@ -338,19 +343,82 @@ void ProtocolAdapterTest::parseEnvelopeRejectsNonObjectPayload()
     QCOMPARE(err.kind, client::ProtocolErrorKind::PayloadNotObject);
 }
 
-void ProtocolAdapterTest::parseEnvelopeReadsOptionalFields()
+// MEDIUM-01: parseEnvelope 严格执行 FRZ-IPC-006 §6.1 必填字段校验
+void ProtocolAdapterTest::parseEnvelopeRejectsMissingRequestId()
 {
     QJsonObject envelope{
         {client::kProtocolVersionKey, QStringLiteral("1.0")},
         {client::kMethodKey, client::methods::kHealth},
         {client::kPayloadKey, QJsonObject{}},
-        {client::kRequestIdKey, QStringLiteral("req-only")},
+        {client::kTraceIdKey, QStringLiteral("trc-1")},
+        {client::kDeadlineMsKey, 5000},
     };
     const auto [parts, err] = client::parseEnvelope(envelope);
-    QVERIFY(err.ok());
-    QCOMPARE(parts->requestId, QStringLiteral("req-only"));
-    QVERIFY(parts->traceId.isEmpty());
-    QVERIFY(!parts->deadlineMs.has_value());
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingRequestId);
+    QVERIFY(!parts.has_value());
+}
+
+void ProtocolAdapterTest::parseEnvelopeRejectsMissingTraceId()
+{
+    QJsonObject envelope{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kMethodKey, client::methods::kHealth},
+        {client::kPayloadKey, QJsonObject{}},
+        {client::kRequestIdKey, QStringLiteral("req-1")},
+        {client::kDeadlineMsKey, 5000},
+    };
+    const auto [parts, err] = client::parseEnvelope(envelope);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingTraceId);
+    QVERIFY(!parts.has_value());
+}
+
+void ProtocolAdapterTest::parseEnvelopeRejectsMissingDeadlineMs()
+{
+    QJsonObject envelope{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kMethodKey, client::methods::kHealth},
+        {client::kPayloadKey, QJsonObject{}},
+        {client::kRequestIdKey, QStringLiteral("req-1")},
+        {client::kTraceIdKey, QStringLiteral("trc-1")},
+    };
+    const auto [parts, err] = client::parseEnvelope(envelope);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingDeadlineMs);
+    QVERIFY(!parts.has_value());
+}
+
+void ProtocolAdapterTest::parseEnvelopeRejectsInvalidDeadlineMsType()
+{
+    QJsonObject envelope{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kMethodKey, client::methods::kHealth},
+        {client::kPayloadKey, QJsonObject{}},
+        {client::kRequestIdKey, QStringLiteral("req-1")},
+        {client::kTraceIdKey, QStringLiteral("trc-1")},
+        {client::kDeadlineMsKey, QStringLiteral("not-a-number")},
+    };
+    const auto [parts, err] = client::parseEnvelope(envelope);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::InvalidDeadlineMs);
+    QVERIFY(!parts.has_value());
+}
+
+void ProtocolAdapterTest::parseEnvelopeRejectsNegativeDeadlineMs()
+{
+    QJsonObject envelope{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kMethodKey, client::methods::kHealth},
+        {client::kPayloadKey, QJsonObject{}},
+        {client::kRequestIdKey, QStringLiteral("req-1")},
+        {client::kTraceIdKey, QStringLiteral("trc-1")},
+        {client::kDeadlineMsKey, -1},
+    };
+    const auto [parts, err] = client::parseEnvelope(envelope);
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::InvalidDeadlineMs);
+    QVERIFY(!parts.has_value());
 }
 
 // ── parseResponse 测试（FRZ-IPC-006 §6.2）──────────────────────────────────

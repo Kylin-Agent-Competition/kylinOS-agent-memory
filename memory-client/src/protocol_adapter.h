@@ -63,14 +63,17 @@ enum class ProtocolErrorKind {
     // 响应解析错误
     MissingStatus,           // 响应缺少 status 字段
     InvalidStatus,           // status 值不是 "ok"/"error"
-    MissingRequestId,        // 响应缺少 request_id（回显）
-    MissingTraceId,          // 响应缺少 trace_id（回显）
+    MissingRequestId,        // 响应/请求缺少 request_id（回显/必填）
+    MissingTraceId,          // 响应/请求缺少 trace_id（回显/必填）
     MissingData,            // status=ok 时缺少 data 字段
     MissingServerTs,        // 响应缺少 server_ts
     MissingErrorCode,      // status=error 时缺少 error_code
     MissingErrorMessage,   // status=error 时缺少 message
     InvalidErrorCode,      // error_code 不是 FRZ-IPC-002 冻结的 5 项之一
     InvalidServerTs,       // server_ts 不是合法 ISO 8601 UTC
+    // 请求解析错误（FRZ-IPC-006 §6.1 必填字段）
+    MissingDeadlineMs,     // 请求缺少 deadline_ms
+    InvalidDeadlineMs,      // deadline_ms 类型错误或负值
 };
 
 struct ProtocolError {
@@ -144,6 +147,7 @@ struct DecodeResult {
 // 构造请求 envelope（FRZ-IPC-006 §6.1）。
 // method/payload 必填；requestId/traceId/deadlineMs 在 D 冻结中为必填，
 // 但本函数保留可选参数以兼容测试——sendRequest 会始终填充这三个字段。
+// 注意：parseEnvelope() 会严格校验这三个字段为必填。
 [[nodiscard]] QJsonObject buildEnvelope(
     const QString& method,
     const QJsonObject& payload,
@@ -151,9 +155,9 @@ struct DecodeResult {
     const QString& traceId = {},
     std::optional<int> deadlineMs = std::nullopt);
 
-// 解析请求 envelope。
-// 失败返回非 None 的 ProtocolError；成功时 method/payload 必有值，
-// 可选字段无值时为空字符串 / nullopt。
+// 解析请求 envelope（FRZ-IPC-006 §6.1）。
+// 必填字段：protocol_version, method, payload, request_id, trace_id, deadline_ms。
+// 失败返回非 None 的 ProtocolError；成功时所有字段必有值。
 struct EnvelopeParts {
     QString method;
     QJsonObject payload;

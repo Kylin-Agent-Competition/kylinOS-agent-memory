@@ -248,22 +248,34 @@ std::pair<std::optional<EnvelopeParts>, ProtocolError> parseEnvelope(
         parts.payload = payloadValue.toObject();
     }
 
+    // request_id（FRZ-IPC-006 §6.1 必填，非空字符串）
     const QJsonValue requestIdValue = envelope.value(kRequestIdKey);
-    if (requestIdValue.isString()) {
-        parts.requestId = requestIdValue.toString();
+    if (!requestIdValue.isString() || requestIdValue.toString().isEmpty()) {
+        return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingRequestId)};
     }
+    parts.requestId = requestIdValue.toString();
 
+    // trace_id（FRZ-IPC-006 §6.1 必填，非空字符串）
     const QJsonValue traceIdValue = envelope.value(kTraceIdKey);
-    if (traceIdValue.isString()) {
-        parts.traceId = traceIdValue.toString();
+    if (!traceIdValue.isString() || traceIdValue.toString().isEmpty()) {
+        return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingTraceId)};
     }
+    parts.traceId = traceIdValue.toString();
 
+    // deadline_ms（FRZ-IPC-006 §6.1 必填，非负整数）
     const QJsonValue deadlineValue = envelope.value(kDeadlineMsKey);
-    if (deadlineValue.isDouble()) {
+    if (deadlineValue.isUndefined() || deadlineValue.isNull()) {
+        return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingDeadlineMs)};
+    }
+    if (!deadlineValue.isDouble()) {
+        return {std::nullopt, errorFromKind(ProtocolErrorKind::InvalidDeadlineMs)};
+    }
+    {
         const double raw = deadlineValue.toDouble();
-        if (raw >= 0 && raw <= static_cast<double>(INT_MAX) && raw == static_cast<int>(raw)) {
-            parts.deadlineMs = static_cast<int>(raw);
+        if (raw < 0 || raw > static_cast<double>(INT_MAX) || raw != static_cast<int>(raw)) {
+            return {std::nullopt, errorFromKind(ProtocolErrorKind::InvalidDeadlineMs)};
         }
+        parts.deadlineMs = static_cast<int>(raw);
     }
 
     return {parts, {}};

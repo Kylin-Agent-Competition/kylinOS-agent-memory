@@ -75,6 +75,10 @@ QString protocolErrorKindToString(ProtocolErrorKind kind)
         return QStringLiteral("ERR_INVALID_ERROR_CODE");
     case ProtocolErrorKind::InvalidServerTs:
         return QStringLiteral("ERR_INVALID_SERVER_TS");
+    case ProtocolErrorKind::MissingDeadlineMs:
+        return QStringLiteral("ERR_MISSING_DEADLINE_MS");
+    case ProtocolErrorKind::InvalidDeadlineMs:
+        return QStringLiteral("ERR_INVALID_DEADLINE_MS");
     }
     return QStringLiteral("ERR_UNKNOWN");
 }

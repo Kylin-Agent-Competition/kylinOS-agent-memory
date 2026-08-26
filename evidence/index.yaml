@@ -996,10 +996,11 @@ entries:
 
   - id: "C-D4-MEMORY-CLIENT-L0"
     task_id: "D4-C"
-    description: "Day4 C 轨 Memory Client 工程骨架 L0 验证 — QML_APP=ON 构建闭环 + QML startup smoke + 53/53 子用例 PASS（含 parseResponse 生产门禁、isValidErrorCode 冻结枚举校验、server_ts ISO 8601 UTC 校验、FRZ-IPC-006 真实 Mock response、uint32 高位长度头边界）"
+    description: "Day4 C 轨 Memory Client 工程骨架 L0 验证 — QML_APP=ON 构建闭环 + QML startup smoke + 57/57 子用例 PASS（含 parseEnvelope FRZ-IPC-006 §6.1 必填字段校验、parseResponse 生产门禁、isValidErrorCode 冻结枚举校验、server_ts ISO 8601 UTC 校验、FRZ-IPC-006 真实 Mock response、uint32 高位长度头边界）"
     status: "L0_VERIFIED"
     evidence_level: "L0"
     source: "evidence/memory-client/ctest_qml_on_20260824.txt"
+    tested_commit: "db3b6e41cb883b6178495652ac60875063bcbd8a"
     date: "2026-08-24"
     reviewer: "D 主审"
     runtime_result: "PASS"
@@ -1009,7 +1010,7 @@ entries:
     checksum_sha256: "42236cf546607449bd06a808624b9717003ad8db52a88b2dbd0752f1937905c9"
     details: |
       执行环境: WSL Ubuntu 22.04 (Linux 5.15.0, x86_64)
-      编译器: GCC 11.4.0
+      编译器: GCC 11.3.0
       Qt: 5.15.3 (qtbase5-dev + qtdeclarative5-dev + qtquickcontrols2-5-dev
         + qml-module-qtquick2 + qml-module-qtquick-controls2 + qml-module-qtquick-layouts,
         满足 Qt >= 5.12 目标声明)
@@ -1028,12 +1029,13 @@ entries:
         结果: 无 failed to load component, 无 X is not a type,
         rootObjects 非空, main.qml/StatusPage/MemoryQueryPage/PreferenceEditorPage
         /MemoryViewModel 全部成功加载; 仅 Qt 5.15 Connections deprecation warning
-      ctest 结果 (2/2 tests, 53/53 子用例 PASS, 0.60s):
-        - protocol_adapter: 44 PASS (0.01s)
+      ctest 结果 (2/2 tests, 57/57 子用例 PASS, 0.60s):
+        - protocol_adapter: 48 PASS (0.01s)
           覆盖: encode/decode round-trip, IncompletePacket, DeclaredLengthTooLarge,
           InvalidJson, EnvelopeNotObject, 多包连续解码, buildEnvelope 可选字段,
           parseEnvelope (合法/缺 protocol_version/版本 4 行/类型错误/缺 method/
-          method 空串/payload 非对象/可选字段), parseResponse (合法 ok/error/
+          method 空串/payload 非对象/缺 request_id/缺 trace_id/缺 deadline_ms/
+          deadline_ms 类型错误/deadline_ms 负值), parseResponse (合法 ok/error/
           缺 status/非法 status/缺 request_id/缺 trace_id/缺 server_ts/ok 缺 data/
           缺 protocol_version/error 缺 error_code/error 缺 message/error_code 非字符串/
           message 非字符串/unknown error_code rejected/5 frozen codes accepted/
@@ -1053,5 +1055,5 @@ entries:
       readHeader: 返回 std::optional<quint32> (unsigned), 正确处理高位为 1 的长度字段
       证据文件:
         - evidence/memory-client/build_qml_on_20260824.log (QML_APP=ON 构建日志, SHA256: 254939cd1819b9366dd4109ea532b62d1663c0a9b179a06b5e69a05af395d56c)
-        - evidence/memory-client/ctest_qml_on_20260824.txt (ctest -V 输出, 53/53 PASS, SHA256: 42236cf546607449bd06a808624b9717003ad8db52a88b2dbd0752f1937905c9)
+        - evidence/memory-client/ctest_qml_on_20260824.txt (ctest -V 输出, 57/57 PASS, SHA256: 42236cf546607449bd06a808624b9717003ad8db52a88b2dbd0752f1937905c9)
         - evidence/memory-client/qml_startup_smoke_20260824.txt (QML offscreen startup smoke, SHA256: 44263685660b84f541bc799792d84547cfab4c3f903f4e7b64ce474843d8f6a3)
