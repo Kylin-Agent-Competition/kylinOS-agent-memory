@@ -26,7 +26,7 @@
 | 分支 | HEAD | 状态 | 说明 |
 |------|------|------|------|
 | `main` | d12df5a | 已推送 | 含 D9 #48 + D4D #52 等 |
-| `feat/day10-forgetting-deletion` | **05ce208** | 待推送 | 2 commits vs main，待 push + 创建 PR |
+| `feat/day10-forgetting-deletion` | **6fc7bd7** | 待推送 | 4 commits vs main，待 push + 创建 PR |
 
 ### 工作区
 
@@ -34,12 +34,14 @@
 
 ## 四、D10 PR 状态
 
-### 分支 commits（vs main）
+### 分支 commits（vs main，原子化）
 
-| Commit | 说明 |
-|--------|------|
-| `3777667` | feat(day10)：精准遗忘与删除一致性——缓存失效协调器 + 删除事件集成（代码 + 测试） |
-| `05ce208` | docs(day10)：PR 描述 + L2 证据落盘 |
+| Commit | 类型 | 说明 |
+|--------|------|------|
+| `3777667` | feat(day10) | 精准遗忘与删除一致性——缓存失效协调器 + 删除事件集成（代码 + 测试） |
+| `05ce208` | docs(day10) | PR 描述 + L2 证据落盘 |
+| `1d9cda1` | docs(git-conventions) | 新增 Git 操作规范文档 |
+| `6fc7bd7` | docs(day10) | 更新 PR 描述为完整模板格式 |
 
 ### 待办
 
