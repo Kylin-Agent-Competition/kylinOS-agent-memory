@@ -807,3 +807,179 @@ def test_cross_user_priority_beats_consistency():
         make_intent(decision=decision), [other])
     assert plan.action == PreferenceVersionAction.REJECTED
     assert plan.reason_code == "rejected_cross_user"
+
+
+# ── PR #58 复审 Medium #1：跨用户 Rollback 拒绝载荷不回显目标用户 key/scope ──
+#
+# 修复 day7-e-pr58-fix-05-rollback-cross-user-redaction-v1：
+# plan_rollback 步骤 3 跨用户拒绝时，不得将 target 用户（其他用户）的
+# preference_key 与 preference_scope.value 回显到拒绝载荷；
+# fail-closed（rejected_cross_user）与 user_id 仅保留请求方不变。
+# 下列为负向安全测试与回归守卫测试，不修改任何既有测试函数。
+
+
+def test_rollback_cross_user_rejected_key_scope_empty():
+    """跨用户 rollback 拒绝（target 属其他用户）时 key/scope 为空、
+    user_id 为请求方，fail-closed 语义不变。"""
+    own_active = make_preference(
+        preference_id="pref_own", user_id=USER, version=2,
+        preference_key="demo_response_style",
+        preference_scope=PreferenceScope.GLOBAL,
+        preference_value="concise",
+    )
+    # 目标用户使用独特 key/value/scope，验证不被回显
+    other_history = make_preference(
+        preference_id="pref_other_hist", user_id=OTHER_USER, version=1,
+        preference_key="other_user_secret_key",
+        preference_scope=PreferenceScope.TIME_WINDOW,
+        preference_value="other_secret_value",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+    )
+    intent = make_rollback_intent(target_preference_id="pref_other_hist")
+    plan = POLICY.plan_rollback(intent, [own_active, other_history])
+    assert plan.action == PreferenceVersionAction.REJECTED
+    assert plan.reason_code == "rejected_cross_user"
+    # 关键修复：不回显目标用户 key/scope
+    assert plan.preference_key == ""
+    assert plan.scope == ""
+    # user_id 仅保留请求方
+    assert plan.user_id == USER
+    assert plan.user_id != OTHER_USER
+
+
+def test_rollback_cross_user_rejected_no_target_leak_in_dump():
+    """跨用户 rollback 拒绝的全量 model_dump() 不含目标用户
+    key/value/scope/user_id；target 引用字段全为 None。"""
+    own_active = make_preference(
+        preference_id="pref_own", user_id=USER, version=2,
+        preference_key="demo_response_style",
+        preference_scope=PreferenceScope.GLOBAL,
+        preference_value="concise",
+    )
+    other_secret_key = "other_user_secret_key"
+    other_secret_value = "other_secret_value"
+    other_secret_scope = "time_window"  # 目标用户 scope value
+    other_history = make_preference(
+        preference_id="pref_other_hist", user_id=OTHER_USER, version=1,
+        preference_key=other_secret_key,
+        preference_scope=PreferenceScope.TIME_WINDOW,
+        preference_value=other_secret_value,
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+    )
+    intent = make_rollback_intent(target_preference_id="pref_other_hist")
+    plan = POLICY.plan_rollback(intent, [own_active, other_history])
+    assert plan.action == PreferenceVersionAction.REJECTED
+    assert plan.reason_code == "rejected_cross_user"
+    # 全量 dump，逐一断言任何 str 值都不含目标用户敏感片段
+    dump = plan.model_dump()
+    for value in dump.values():
+        if isinstance(value, str):
+            assert other_secret_key not in value
+            assert other_secret_value not in value
+            assert other_secret_scope not in value
+            assert OTHER_USER not in value
+    # target 引用字段不泄露 target ID / version
+    assert dump["target_preference_id"] is None
+    assert dump["target_version"] is None
+    # key/scope 明确为空
+    assert dump["preference_key"] == ""
+    assert dump["scope"] == ""
+
+
+def test_rollback_cross_user_via_collection_key_scope_empty():
+    """跨用户拒绝由集合含其他用户偏好触发（target 自身同用户）时
+    key/scope 同样置空、user_id 为请求方。"""
+    # target 为请求方自己的历史，但集合混入其他用户的 active → 跨用户失败
+    own_history = make_preference(
+        preference_id="pref_own_hist", user_id=USER, version=1,
+        preference_key="demo_response_style",
+        preference_scope=PreferenceScope.GLOBAL,
+        preference_value="concise",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+    )
+    other_active = make_preference(
+        preference_id="pref_other_active", user_id=OTHER_USER, version=1,
+        preference_key="other_user_secret_key",
+        preference_scope=PreferenceScope.GLOBAL,
+        preference_value="other_secret_value",
+    )
+    intent = make_rollback_intent(target_preference_id="pref_own_hist")
+    plan = POLICY.plan_rollback(intent, [own_history, other_active])
+    assert plan.action == PreferenceVersionAction.REJECTED
+    assert plan.reason_code == "rejected_cross_user"
+    assert plan.preference_key == ""
+    assert plan.scope == ""
+    assert plan.user_id == USER
+
+
+def test_rollback_non_cross_user_rejections_still_echo_key_scope():
+    """回归守卫：非跨用户拒绝路径仍正常回显 target key/scope，
+    本修复不应改变同用户拒绝语义。"""
+    # 场景 A：unrelated_version（target 与 active 不同 scope，同用户）
+    active_global = make_preference(
+        preference_id="pref_active", user_id=USER, version=2,
+        preference_key="demo_response_style",
+        preference_scope=PreferenceScope.GLOBAL,
+        preference_value="concise",
+    )
+    history_tool = make_preference(
+        preference_id="pref_tool_hist", user_id=USER, version=1,
+        preference_key="demo_response_style",
+        preference_scope=PreferenceScope.TOOL,
+        preference_value="concise",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+    )
+    plan_a = POLICY.plan_rollback(
+        make_rollback_intent(target_preference_id="pref_tool_hist"),
+        [active_global, history_tool],
+    )
+    assert plan_a.action == PreferenceVersionAction.REJECTED
+    assert plan_a.reason_code == "rejected_rollback_unrelated_version"
+    assert plan_a.preference_key == "demo_response_style"
+    assert plan_a.scope == "tool"
+
+    # 场景 B：no_active_chain（target 链无 active 且集合无任何 active，同用户）
+    history_only = make_preference(
+        preference_id="pref_v1", user_id=USER, version=1,
+        preference_key="demo_response_style",
+        preference_scope=PreferenceScope.GLOBAL,
+        preference_value="concise",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+    )
+    plan_b = POLICY.plan_rollback(
+        make_rollback_intent(target_preference_id="pref_v1"), [history_only])
+    assert plan_b.action == PreferenceVersionAction.REJECTED
+    assert plan_b.reason_code == "rejected_no_active_chain"
+    assert plan_b.preference_key == "demo_response_style"
+    assert plan_b.scope == "global"
+
+
+def test_rollback_valid_history_unchanged_after_cross_user_fix():
+    """回归守卫：合法同用户 rollback 不因跨用户修复退化。"""
+    active_v3 = make_preference(
+        preference_id="pref_v3", user_id=USER, version=3,
+        preference_key="demo_response_style",
+        preference_scope=PreferenceScope.GLOBAL,
+        preference_value="detailed",
+    )
+    history_v1 = make_preference(
+        preference_id="pref_v1", user_id=USER, version=1,
+        preference_key="demo_response_style",
+        preference_scope=PreferenceScope.GLOBAL,
+        preference_value="concise",
+        previous_version_id=None,
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+    )
+    plan = POLICY.plan_rollback(
+        make_rollback_intent(target_preference_id="pref_v1"),
+        [active_v3, history_v1],
+    )
+    assert plan.action == PreferenceVersionAction.ROLLBACK
+    assert plan.reason_code == "rollback_to_history_version"
+    assert plan.preference_key == "demo_response_style"
+    assert plan.scope == "global"
+    assert plan.target_preference_id == "pref_v1"
+    assert plan.target_version == 1
+    assert plan.current_preference_id == "pref_v3"
+    assert plan.current_version == 3
+    assert plan.next_version is None

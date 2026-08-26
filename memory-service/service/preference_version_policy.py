@@ -276,13 +276,14 @@ class PreferenceVersionPolicy:
                 REASON_REJECTED_ROLLBACK_TARGET_NOT_FOUND,
                 intent.user_id, "", "",
             )
-        # 3. 跨用户防御
+        # 3. 跨用户防御（fail-closed + 不回显目标用户 key/scope/value）
+        #    PR #58 复审 Medium #1：跨用户拒绝载荷不得回显 target 用户数据，
+        #    key/scope 置空，user_id 仅保留请求方 intent.user_id。
         if target.user_id != intent.user_id or any(
             p.user_id != intent.user_id for p in current_preferences
         ):
             return self._reject(
-                REASON_REJECTED_CROSS_USER, intent.user_id, target.preference_key,
-                target.preference_scope.value,
+                REASON_REJECTED_CROSS_USER, intent.user_id, "", "",
             )
         # 4. 定位同 key+scope 的 active 当前版本
         current = self._find_active_same_key_scope(
