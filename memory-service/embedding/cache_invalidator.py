@@ -7,7 +7,6 @@ cache_invalidator.py — 轨道 A Day10 缓存失效协调器（精准遗忘与�
 1. 接收删除事件（DeletionEvent），按删除粒度协调 Embedding 缓存与抽取缓存失效。
 2. 维护事件→内容指纹、用户→事件的映射，支持按用户/按事件粒度失效。
 3. 删除过程中 Provider 异常（SDK 崩溃/超时）→ 删除不丢失，可重试。
-4. 并发删除与读取 → 无竞态数据恢复。
 
 使用方式：
     invalidator = CacheInvalidator(embedding_cache, extraction_cache)
@@ -18,8 +17,7 @@ cache_invalidator.py — 轨道 A Day10 缓存失效协调器（精准遗忘与�
 设计：
 - 线程安全（嵌入并发 embed 服务，多个删除事件可并发到达）。
 - 幂等：同一事件重复处理不会重复删除已失效条目。
-- 删除后新建 Provider 实例 → 已删除数据不恢复（缓存失效后，新 Provider 实例
-  走新 embed 调用，无缓存命中）。
+- 删除后新建 Provider 实例 → 已删除数据不恢复（tombstone 阻止 stale write-back）。
 - 重启后删除状态保持：持久化删除状态由上层（Outbox/DB）保证，本模块仅负责
   内存缓存失效；重启后缓存自动清空（无持久化先验状态），已删除数据不会因
   缓存恢复。
@@ -32,6 +30,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
+from domain.enums import ForgetMode, TargetType
+
 
 @dataclass
 class DeletionEvent:
@@ -40,18 +40,18 @@ class DeletionEvent:
     Attributes:
         event_id: 事件唯一标识（幂等去重）。
         user_id: 所属用户。
-        target_type: 目标类型（preference/knowledge/event/all）。
+        target_type: 目标类型（复用 TargetType 枚举）。
         content_hashes: 待删除内容的指纹列表（Embedding 原文确定性哈希）。
         content_fingerprints: 待删除内容的指纹列表（Extraction 内容指纹）。
-        forget_mode: 遗忘模式（single_item/session/topic/time_window/full_reset）。
+        forget_mode: 遗忘模式（复用 ForgetMode 枚举）。
         timestamp: 事件时间戳。
     """
     event_id: str
     user_id: str
-    target_type: str = "event"
+    target_type: TargetType = TargetType.EVENT
     content_hashes: List[str] = field(default_factory=list)
     content_fingerprints: List[str] = field(default_factory=list)
-    forget_mode: str = "single_item"
+    forget_mode: ForgetMode = ForgetMode.SINGLE_ITEM
     timestamp: float = field(default_factory=time.time)
 
 
@@ -67,13 +67,11 @@ class CacheInvalidator:
         self._embedding_cache = embedding_cache
         self._extraction_cache = extraction_cache
         self._lock = threading.Lock()
-        # 已处理事件 ID 集合（幂等去重）
+
         self._processed_events: Set[str] = set()
-        # 用户 → 事件 ID 集合（支持按用户失效）
         self._user_events: Dict[str, Set[str]] = {}
-        # 事件 ID → 内容指纹集合（事件追溯）
         self._event_hashes: Dict[str, Set[str]] = {}
-        # 统计
+
         self._embedding_invalidated = 0
         self._extraction_invalidated = 0
         self._events_processed = 0
@@ -81,45 +79,49 @@ class CacheInvalidator:
     def handle_deletion(self, event: DeletionEvent) -> Dict[str, Any]:
         """处理删除事件：失效关联缓存。
 
-        幂等：同一 event_id 重复调用无副作用。
-        线程安全：删除过程中 Provider 异常不影响其他请求。
+        D10 REWORK：先执行全部失效操作，全部成功后再登记 processed。
+        失败时不得留下错误的 completed/dedup 状态，相同 event_id 必须允许重试。
 
         Args:
             event: 删除事件。
 
         Returns:
-            {"ok": true, "embedding_invalidated": int, "extraction_invalidated": int}
+            {"ok": true/false, "embedding_invalidated": int, "extraction_invalidated": int}
         """
         with self._lock:
             if event.event_id in self._processed_events:
                 return {"ok": True, "dedup": True,
                         "embedding_invalidated": 0, "extraction_invalidated": 0}
+
+        # 先执行失效操作（在锁外执行，避免持有锁期间调用外部 cache）
+        try:
+            embedding_removed = 0
+            for ch in event.content_hashes:
+                embedding_removed += self._embedding_cache.invalidate_by_content(ch)
+
+            extraction_removed = 0
+            for fp in event.content_fingerprints:
+                extraction_removed += self._extraction_cache.invalidate_by_content(fp)
+            extraction_removed += self._extraction_cache.invalidate_by_event(event.event_id)
+        except Exception:
+            # 失效失败：不标记 processed，允许重试
+            return {"ok": False, "error": "invalidation failed",
+                    "embedding_invalidated": 0, "extraction_invalidated": 0}
+
+        # 全部成功后再登记 processed
+        with self._lock:
             self._processed_events.add(event.event_id)
             self._events_processed += 1
 
-            # 记录用户→事件映射
             if event.user_id not in self._user_events:
                 self._user_events[event.user_id] = set()
             self._user_events[event.user_id].add(event.event_id)
 
-            # 记录事件→指纹映射
             all_hashes: Set[str] = set()
             all_hashes.update(event.content_hashes)
             all_hashes.update(event.content_fingerprints)
             if all_hashes:
                 self._event_hashes[event.event_id] = all_hashes
-
-            # 失效 Embedding 缓存
-            embedding_removed = 0
-            for ch in event.content_hashes:
-                embedding_removed += self._embedding_cache.invalidate_by_content(ch)
-
-            # 失效 Extraction 缓存
-            extraction_removed = 0
-            for fp in event.content_fingerprints:
-                extraction_removed += self._extraction_cache.invalidate_by_content(fp)
-            # 也按 event_id 失效 Extraction 缓存
-            extraction_removed += self._extraction_cache.invalidate_by_event(event.event_id)
 
             self._embedding_invalidated += embedding_removed
             self._extraction_invalidated += extraction_removed
@@ -129,9 +131,11 @@ class CacheInvalidator:
                     "extraction_invalidated": extraction_removed}
 
     def invalidate_by_user(self, user_id: str) -> Dict[str, Any]:
-        """按用户失效所有关联缓存条目（D10：用户级精准遗忘）。
+        """按用户失效已登记事件的关联缓存条目。
 
-        遍历该用户关联的所有事件，失效其内容指纹对应的缓存条目。
+        注意：仅失效该用户已通过 handle_deletion() 登记过的内容哈希。
+        不覆盖未登记过的缓存条目（Embedding cache key 不含 user_id，
+        无法枚举该用户当前全部 cache entries）。
 
         Args:
             user_id: 用户 ID。
@@ -144,23 +148,27 @@ class CacheInvalidator:
             all_hashes: Set[str] = set()
             for eid in event_ids:
                 all_hashes.update(self._event_hashes.get(eid, set()))
-            embedding_removed = 0
-            extraction_removed = 0
-            for ch in all_hashes:
-                embedding_removed += self._embedding_cache.invalidate_by_content(ch)
-                extraction_removed += self._extraction_cache.invalidate_by_content(ch)
-            for eid in event_ids:
-                extraction_removed += self._extraction_cache.invalidate_by_event(eid)
+        embedding_removed = 0
+        extraction_removed = 0
+        for ch in all_hashes:
+            embedding_removed += self._embedding_cache.invalidate_by_content(ch)
+            extraction_removed += self._extraction_cache.invalidate_by_content(ch)
+        for eid in event_ids:
+            extraction_removed += self._extraction_cache.invalidate_by_event(eid)
+        with self._lock:
             self._embedding_invalidated += embedding_removed
             self._extraction_invalidated += extraction_removed
-            return {"embedding_invalidated": embedding_removed,
-                    "extraction_invalidated": extraction_removed}
+        return {"embedding_invalidated": embedding_removed,
+                "extraction_invalidated": extraction_removed}
 
     def invalidate_all(self) -> Dict[str, Any]:
-        """全量失效所有缓存。"""
+        """全量失效所有缓存，清除全部内部状态。"""
         self._embedding_cache.clear()
         self._extraction_cache.clear()
         with self._lock:
+            self._processed_events.clear()
+            self._user_events.clear()
+            self._event_hashes.clear()
             self._embedding_invalidated = 0
             self._extraction_invalidated = 0
             self._events_processed = 0
