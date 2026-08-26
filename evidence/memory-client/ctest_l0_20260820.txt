@@ -1,0 +1,73 @@
+Internal ctest changing into directory: /mnt/e/tiaozhanbei/kylinOS-agent-memory/memory-client/build
+UpdateCTestConfiguration  from :/mnt/e/tiaozhanbei/kylinOS-agent-memory/memory-client/build/DartConfiguration.tcl
+UpdateCTestConfiguration  from :/mnt/e/tiaozhanbei/kylinOS-agent-memory/memory-client/build/DartConfiguration.tcl
+Test project /mnt/e/tiaozhanbei/kylinOS-agent-memory/memory-client/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 1
+    Start 1: protocol_adapter
+
+1: Test command: /mnt/e/tiaozhanbei/kylinOS-agent-memory/memory-client/build/tests/test_protocol_adapter
+1: Test timeout computed to be: 10000000
+1: ********* Start testing of ProtocolAdapterTest *********
+1: Config: Using QtTest library 5.15.3, Qt 5.15.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 11.3.0), ubuntu 22.04
+1: PASS   : ProtocolAdapterTest::initTestCase()
+1: PASS   : ProtocolAdapterTest::encodeDecodeRoundTrips()
+1: PASS   : ProtocolAdapterTest::decodeRejectsIncompletePacket()
+1: PASS   : ProtocolAdapterTest::decodeRejectsOversizedPacket()
+1: PASS   : ProtocolAdapterTest::decodeRejectsInvalidJson()
+1: PASS   : ProtocolAdapterTest::decodeRejectsNonObjectJson()
+1: PASS   : ProtocolAdapterTest::decodeConsumesMultiplePacketsInOneBuffer()
+1: PASS   : ProtocolAdapterTest::buildEnvelopeOmitsEmptyOptionalFields()
+1: PASS   : ProtocolAdapterTest::buildEnvelopeIncludesOptionalFieldsWhenProvided()
+1: PASS   : ProtocolAdapterTest::parseEnvelopeAcceptsValidWithOptionalFields()
+1: PASS   : ProtocolAdapterTest::parseEnvelopeRejectsMissingProtocolVersion()
+1: PASS   : ProtocolAdapterTest::parseEnvelopeRejectsUnsupportedProtocolVersion(major-2)
+1: PASS   : ProtocolAdapterTest::parseEnvelopeRejectsUnsupportedProtocolVersion(major-0)
+1: PASS   : ProtocolAdapterTest::parseEnvelopeRejectsUnsupportedProtocolVersion(non-numeric)
+1: PASS   : ProtocolAdapterTest::parseEnvelopeRejectsUnsupportedProtocolVersion(empty)
+1: PASS   : ProtocolAdapterTest::parseEnvelopeRejectsNonStringProtocolVersion()
+1: PASS   : ProtocolAdapterTest::parseEnvelopeRejectsMissingMethod()
+1: PASS   : ProtocolAdapterTest::parseEnvelopeRejectsNonStringMethod()
+1: PASS   : ProtocolAdapterTest::parseEnvelopeRejectsEmptyMethod()
+1: PASS   : ProtocolAdapterTest::parseEnvelopeRejectsNonObjectPayload()
+1: PASS   : ProtocolAdapterTest::parseEnvelopeReadsOptionalFields()
+1: PASS   : ProtocolAdapterTest::parseResponseAcceptsValidOk()
+1: PASS   : ProtocolAdapterTest::parseResponseAcceptsValidError()
+1: PASS   : ProtocolAdapterTest::parseResponseRejectsMissingStatus()
+1: PASS   : ProtocolAdapterTest::parseResponseRejectsInvalidStatus()
+1: PASS   : ProtocolAdapterTest::parseResponseRejectsMissingRequestId()
+1: PASS   : ProtocolAdapterTest::parseResponseRejectsMissingTraceId()
+1: PASS   : ProtocolAdapterTest::parseResponseRejectsMissingServerTs()
+1: PASS   : ProtocolAdapterTest::parseResponseRejectsOkWithoutData()
+1: PASS   : ProtocolAdapterTest::parseResponseRejectsMissingProtocolVersion()
+1: PASS   : ProtocolAdapterTest::cleanupTestCase()
+1: Totals: 31 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
+1: ********* Finished testing of ProtocolAdapterTest *********
+1/2 Test #1: protocol_adapter .................   Passed    0.01 sec
+test 2
+    Start 2: memory_client_mock
+
+2: Test command: /mnt/e/tiaozhanbei/kylinOS-agent-memory/memory-client/build/tests/test_memory_client_mock
+2: Test timeout computed to be: 10000000
+2: ********* Start testing of MemoryClientMockTest *********
+2: Config: Using QtTest library 5.15.3, Qt 5.15.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 11.3.0), ubuntu 22.04
+2: PASS   : MemoryClientMockTest::initTestCase()
+2: PASS   : MemoryClientMockTest::connectAndSendHealthReceivesEcho()
+2: PASS   : MemoryClientMockTest::customHandlerReturnsDifferentResponse()
+2: PASS   : MemoryClientMockTest::sendRequestWhileDisconnectedFails()
+2: PASS   : MemoryClientMockTest::connectToMissingServerEmitsConnectionError()
+2: PASS   : MemoryClientMockTest::malformedServerPacketTriggersConnectionError()
+2: PASS   : MemoryClientMockTest::healthResponseCarriesRequestIdForMatching()
+2: PASS   : MemoryClientMockTest::cleanupTestCase()
+2: Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 3ms
+2: ********* Finished testing of MemoryClientMockTest *********
+2/2 Test #2: memory_client_mock ...............   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.06 sec
