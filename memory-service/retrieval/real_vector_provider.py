@@ -8,11 +8,12 @@ SDK 错误码在此只做透传（结构化错误映射见 vector_sdk_errors.map
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 from datetime import datetime, timezone
 from typing import Optional
 
-from retrieval.contracts import Channel, RetrievalHit, ScoreSemantics
+from retrieval.contracts import Channel, RetrievalFilter, RetrievalHit, ScoreSemantics
 
 
 class VectorCliError(RuntimeError):
@@ -72,8 +73,51 @@ class VectorCliClient:
         self._require_ok(result)
         return result
 
-    def insert(self, name: str, ids: list[int], vectors: list[list[float]]) -> dict:
-        result = self._run("insert", name, stdin=json.dumps({"ids": ids, "vectors": vectors}))
+    def insert(
+        self,
+        name: str,
+        ids: list[int],
+        vectors: list[list[float]],
+        *,
+        user_ids: list[str],
+        version_ids: list[str],
+        scene_ids: list[str],
+        memory_statuses: list[str],
+        deleted_flags: list[bool],
+    ) -> dict:
+        if not (
+            len(ids)
+            == len(vectors)
+            == len(user_ids)
+            == len(version_ids)
+            == len(scene_ids)
+            == len(memory_statuses)
+            == len(deleted_flags)
+        ):
+            raise ValueError("ids、vectors 和全部元数据字段必须等长")
+        for vector in vectors:
+            if not vector:
+                raise ValueError("向量不能为空")
+            if any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                for value in vector
+            ):
+                raise ValueError("向量元素必须是有限实数")
+        result = self._run(
+            "insert",
+            name,
+            stdin=json.dumps({
+                "ids": ids,
+                "vectors": vectors,
+                "user_ids": user_ids,
+                "version_ids": version_ids,
+                "scene_ids": scene_ids,
+                "memory_statuses": memory_statuses,
+                "deleted_flags": deleted_flags,
+            }),
+        )
         self._require_ok(result)
         return result
 
@@ -93,21 +137,43 @@ class VectorCliClient:
         timeout: int = 5000,
         *,
         user_id: str,
+        filter: Optional[RetrievalFilter] = None,
         now: Optional[datetime] = None,
     ) -> list[RetrievalHit]:
         """执行向量检索，返回 1 起始 rank 的 RetrievalHit。"""
         now = now or datetime.now(timezone.utc)
+        if filter is not None and filter.user_id != user_id:
+            raise ValueError("RetrievalFilter.user_id 必须与搜索 user_id 一致")
+        cli_filter = {
+            "user_id": user_id,
+            "allowed_scene_ids": sorted(set(filter.scene.allowed_scene_ids)) if filter else [],
+            "include_unscoped": filter.scene.include_unscoped if filter else False,
+            "allowed_memory_statuses": sorted(set(filter.allowed_memory_statuses)) if filter else [],
+            "exclude_deleted": True,
+        }
         result = self._run(
-            "search", name, str(top_n), str(timeout), stdin=json.dumps({"vector": vector})
+            "search",
+            name,
+            str(top_n),
+            str(timeout),
+            stdin=json.dumps({"vector": vector, "filter": cli_filter}),
         )
         self._require_ok(result)
         hits: list[RetrievalHit] = []
         for rank, item in enumerate(result.get("hits", []), 1):
+            hit_user_id = item.get("user_id")
+            version_id = item.get("version_id")
+            if not isinstance(hit_user_id, str) or not hit_user_id:
+                raise VectorCliError(-1, "search result missing user_id metadata")
+            if hit_user_id != user_id:
+                raise VectorCliError(-1, "search result violates requested user filter")
+            if not isinstance(version_id, str) or not version_id:
+                raise VectorCliError(-1, "search result missing version_id metadata")
             hits.append(
                 RetrievalHit(
                     memory_id=str(item["id"]),
-                    version_id="v1",
-                    user_id=user_id,
+                    version_id=version_id,
+                    user_id=hit_user_id,
                     channel=Channel.VECTOR,
                     rank=rank,
                     raw_score=float(item["score"]),
