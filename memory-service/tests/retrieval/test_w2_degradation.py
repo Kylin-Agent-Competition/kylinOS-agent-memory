@@ -79,7 +79,7 @@ def test_cli_error_keeps_code_from_stdout_on_nonzero_exit(monkeypatch):
         )
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    cli = VectorCliClient()
+    cli = VectorCliClient(expected_dimension=4)
     with pytest.raises(VectorCliError) as exc:
         cli.search("c", [1, 0, 0, 0], 3, user_id="alice", now=NOW)
     assert exc.value.code == 3
@@ -98,7 +98,7 @@ def test_cli_error_extracts_json_from_noisy_stdout(monkeypatch):
         return _FakeCompleted(noisy_stdout, stderr="", returncode=1)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    cli = VectorCliClient()
+    cli = VectorCliClient(expected_dimension=4)
     with pytest.raises(VectorCliError) as exc:
         cli.search("c", [1, 0, 0, 0], 3, user_id="alice", now=NOW)
     assert exc.value.code == 3

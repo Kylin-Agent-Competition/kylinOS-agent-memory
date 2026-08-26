@@ -17,10 +17,19 @@ USER = "alice"
 
 def main() -> int:
     collection = f"w3_topk_{int(time.time())}"
-    cli = VectorCliClient(cli_path="./vector_cli")
+    cli = VectorCliClient(cli_path="./vector_cli", expected_dimension=4)
     cli.drop_collection(collection)
     cli.create_collection(collection, 4)
-    cli.insert(collection, [1, 2, 3], [[1, 0, 0, 0], [0, 1, 0, 0], [-1, 0, 0, 0]])
+    cli.insert(
+        collection,
+        [1, 2, 3],
+        [[1, 0, 0, 0], [0, 1, 0, 0], [-1, 0, 0, 0]],
+        user_ids=[USER] * 3,
+        version_ids=["v1"] * 3,
+        scene_ids=[""] * 3,
+        memory_statuses=["active"] * 3,
+        deleted_flags=[False] * 3,
+    )
 
     # W3-2: top_n=1 返回恰好 1 条
     hits1 = cli.search(collection, [1.0, 0.0, 0.0, 0.0], top_n=1, user_id=USER, now=NOW)

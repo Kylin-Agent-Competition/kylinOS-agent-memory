@@ -27,7 +27,7 @@ def main() -> int:
     print(f"[W1] empty FTS5 hits: {len(fts5_hits)} -> {fts5_hits}")
 
     # W1-2 空 Vector collection（create 但不 insert）
-    cli = VectorCliClient(cli_path="./vector_cli")
+    cli = VectorCliClient(cli_path="./vector_cli", expected_dimension=4)
     cli.drop_collection(collection)
     cli.create_collection(collection, 4)
     vector_hits = cli.search(collection, [1.0, 0.0, 0.0, 0.0], top_n=5, user_id=USER, now=NOW)

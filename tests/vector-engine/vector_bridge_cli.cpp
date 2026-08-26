@@ -4,6 +4,7 @@
 // Supports create_collection, insert, search, drop_collection. Python side
 // spawns this binary per operation (no pybind11 / python3-dev required).
 
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -81,6 +82,20 @@ std::string QuotedExpressionList(const std::vector<std::string>& values) {
     return expression + "]";
 }
 
+void ValidateFilterKeys(const json& filter) {
+    if (!filter.is_object()) {
+        Fail("filter must be an object");
+    }
+    for (auto it = filter.begin(); it != filter.end(); ++it) {
+        const std::string& key = it.key();
+        if (key != "user_id" && key != "allowed_scene_ids" &&
+            key != "include_unscoped" && key != "allowed_memory_statuses" &&
+            key != "exclude_deleted") {
+            Fail("unknown filter key: " + key);
+        }
+    }
+}
+
 void CreateCollection(const std::string& name, int dim) {
     VectorDB::CollectionSchema schema(name, "vector-bridge");
     if (!schema.AddField({kIdField, VectorDB::DataType::INT64, "pk", true, false})) {
@@ -152,9 +167,22 @@ void Insert(const std::string& name, const json& ids, const json& vectors,
 
 void Search(const std::string& name, const json& query_vector, const json& filter,
             int top_n, int timeout) {
+    if (top_n <= 0) {
+        Fail("top_n must be greater than 0");
+    }
+    ValidateFilterKeys(filter);
     const std::string user_id = filter.at("user_id").get<std::string>();
     if (user_id.empty()) {
         Fail("filter.user_id must be non-empty");
+    }
+    const std::vector<float> query = query_vector.get<std::vector<float>>();
+    if (query.empty()) {
+        Fail("query vector must be non-empty");
+    }
+    for (const float value : query) {
+        if (!std::isfinite(value)) {
+            Fail("query vector values must be finite");
+        }
     }
     VectorDB::SearchArguments arguments(name, top_n, VectorDB::MetricType::COSINE);
     arguments.AddOutputField(kIdField);
@@ -191,7 +219,7 @@ void Search(const std::string& name, const json& query_vector, const json& filte
     if (!filter_status.IsOk()) {
         Fail("failed to set user_id filter: " + filter_status.Message());
     }
-    arguments.AddTargetVector(kVectorField, query_vector.get<std::vector<float>>());
+    arguments.AddTargetVector(kVectorField, query);
     VectorDB::SearchResults results;
     const VectorDB::Status st = g_client->Search(arguments, results, timeout);
     json out = StatusJson(st);
@@ -203,8 +231,9 @@ void Search(const std::string& name, const json& query_vector, const json& filte
             result.OutputField(kUserIdField));
         const auto versions = std::static_pointer_cast<VectorDB::VarCharFieldData>(
             result.OutputField(kVersionIdField));
-        if (!users || !versions || users->Data().size() != ids.size() || versions->Data().size() != ids.size()) {
-            Fail("search response missing user_id/version_id metadata");
+        if (!users || !versions || users->Data().size() != ids.size() ||
+            versions->Data().size() != ids.size() || scores.size() != ids.size()) {
+            Fail("search response has inconsistent hit metadata");
         }
         json hits = json::array();
         for (std::size_t i = 0; i < ids.size(); ++i) {

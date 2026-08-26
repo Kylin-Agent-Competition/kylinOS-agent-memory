@@ -23,6 +23,25 @@ D6B_PROVIDER_L2 name=empty_vector_fail_closed result=PASS
 D6B_PROVIDER_L2 name=mismatched_filter_user_fail_closed result=PASS
 D6B_PROVIDER_L2 result=PASS cleanup=complete
 
+[2026-08-26 repair verification — current uncommitted D6B working tree]
+BRIDGE_LEGACY_BUILD=PASS
+vector_bridge_cli_d6b_sha256=69035aa20e520889ef604ec3008229582ca31ba9aaba2c6a86d38affafa8d20d
+D6B_L2 name=create_collection result=PASS
+D6B_L2 name=insert_filterable_metadata result=PASS
+D6B_L2 name=user_scene_unscoped_status_deleted_filter result=PASS hits=['101:v1', '105:v5']
+D6B_L2 name=deleted_filter_fail_closed result=PASS hits=['101:v1', '105:v5']
+D6B_L2 name=cross_user_isolation result=PASS hits=['103:v3']
+D6B_L2 name=lifecycle_status_filter result=PASS hits=['106:v6']
+D6B_L2 name=empty_user_filter result=PASS
+D6B_L2 name=unknown_filter_key_fail_closed result=PASS
+D6B_L2 result=PASS collection=d6b_schema_filter_l2_24068_23692 cleanup=scheduled
+D6B_PROVIDER_L2 name=typed_filter_forwarding result=PASS hits=[('201', 'v1', 'user-a'), ('205', 'v5', 'user-a')]
+D6B_PROVIDER_L2 name=cross_user_isolation result=PASS hits=[('203', 'v3', 'user-b')]
+D6B_PROVIDER_L2 name=inactive_status_filter result=PASS hits=[('202', 'v2', 'user-a')]
+D6B_PROVIDER_L2 name=empty_vector_fail_closed result=PASS
+D6B_PROVIDER_L2 name=mismatched_filter_user_fail_closed result=PASS
+D6B_PROVIDER_L2 result=PASS collection=d6b_provider_l2_23822 cleanup=complete
+
 
 [final rerun after deleted-filter fail-closed hardening]
 BRIDGE_LEGACY_BUILD=PASS

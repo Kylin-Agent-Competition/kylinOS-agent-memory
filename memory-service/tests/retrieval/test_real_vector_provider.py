@@ -36,7 +36,7 @@ def test_search_maps_hits(monkeypatch):
         }))
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    client = VectorCliClient(cli_path="vector_cli")
+    client = VectorCliClient(cli_path="vector_cli", expected_dimension=4)
     hits = client.search("c", [1, 0, 0, 0], 3, now=NOW, user_id="alice")
 
     assert len(hits) == 3
@@ -65,7 +65,7 @@ def test_search_scopes_request_to_user_and_uses_returned_metadata(monkeypatch):
         }))
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    client = VectorCliClient(cli_path="vector_cli")
+    client = VectorCliClient(cli_path="vector_cli", expected_dimension=4)
 
     hits = client.search("d6_collection", [1, 0, 0, 0], 3, user_id="alice", now=NOW)
 
@@ -102,7 +102,7 @@ def test_search_forwards_typed_scene_and_status_filter(monkeypatch):
         as_of=NOW,
     )
 
-    VectorCliClient(cli_path="vector_cli").search(
+    VectorCliClient(cli_path="vector_cli", expected_dimension=4).search(
         "d6_collection",
         [1, 0, 0, 0],
         3,
@@ -188,7 +188,7 @@ def test_search_rejects_mismatched_filter_user_before_invoking_cli(monkeypatch):
     )
 
     with pytest.raises(ValueError, match="必须与搜索 user_id 一致"):
-        VectorCliClient(cli_path="vector_cli").search(
+        VectorCliClient(cli_path="vector_cli", expected_dimension=4).search(
             "d6_collection",
             [1, 0, 0, 0],
             3,
@@ -198,12 +198,66 @@ def test_search_rejects_mismatched_filter_user_before_invoking_cli(monkeypatch):
         )
 
 
+@pytest.mark.parametrize(
+    ("vector", "top_n", "message"),
+    [
+        ([], 3, "查询向量不能为空"),
+        ([float("inf")], 3, "查询向量元素必须是有限实数"),
+        ([1, 0, 0], 3, "查询向量维度必须等于 4"),
+        ([1, 0, 0, 0], 0, "top_n 必须大于 0"),
+    ],
+)
+def test_search_rejects_invalid_request_before_invoking_cli(monkeypatch, vector, top_n, message):
+    """D6-B：无效搜索输入不能抵达 Vector CLI。"""
+    def unexpected_cli(*args, **kwargs):
+        raise AssertionError("invalid search request must not reach vector_cli")
+
+    monkeypatch.setattr(subprocess, "run", unexpected_cli)
+
+    with pytest.raises(ValueError, match=message):
+        VectorCliClient(cli_path="vector_cli", expected_dimension=4).search(
+            "d6_collection",
+            vector,
+            top_n,
+            user_id="alice",
+            now=NOW,
+        )
+
+
+def test_search_drops_malformed_or_cross_user_hits(monkeypatch):
+    """D6-B：一个畸形或跨用户命中不得压制同批合法命中。"""
+    def fake_run(cmd, input=None, text=None, capture_output=None, timeout=None):
+        return _FakeCompleted(json.dumps({
+            "ok": True,
+            "code": 0,
+            "hits": [
+                {"id": 1, "score": 0.9, "user_id": "alice", "version_id": "v1"},
+                {"id": 2, "score": float("nan"), "user_id": "alice", "version_id": "v2"},
+                {"id": 3, "score": 0.8, "user_id": "bob", "version_id": "v3"},
+                {"id": 4, "score": 0.7, "user_id": "alice"},
+            ],
+        }))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    hits = VectorCliClient(cli_path="vector_cli", expected_dimension=4).search(
+        "d6_collection", [1, 0, 0, 0], 10, user_id="alice", now=NOW,
+    )
+
+    assert [(hit.memory_id, hit.version_id, hit.user_id) for hit in hits] == [("1", "v1", "alice")]
+    assert hits[0].diagnostics == {
+        "raw_hit_count": 4,
+        "valid_hit_count": 1,
+        "dropped_hit_count": 3,
+    }
+
+
 def test_search_error_raises(monkeypatch):
     def fake_run(cmd, input=None, text=None, capture_output=None, timeout=None):
         return _FakeCompleted(json.dumps({"ok": False, "code": 1002, "message": "collection not found"}))
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    client = VectorCliClient()
+    client = VectorCliClient(expected_dimension=4)
     with pytest.raises(VectorCliError) as exc:
         client.search("missing", [1, 0, 0, 0], 3, user_id="alice", now=NOW)
     assert exc.value.code == 1002

@@ -47,10 +47,19 @@ def main() -> int:
     for (_, mid, _), rec in truth.items():
         fts5.upsert(mid, rec.version_id, rec.content, USER)
 
-    cli = VectorCliClient(cli_path="./vector_cli")
+    cli = VectorCliClient(cli_path="./vector_cli", expected_dimension=4)
     cli.drop_collection(collection)
     cli.create_collection(collection, 4)
-    cli.insert(collection, [1, 2], [[1, 0, 0, 0], [0, 1, 0, 0]])
+    cli.insert(
+        collection,
+        [1, 2],
+        [[1, 0, 0, 0], [0, 1, 0, 0]],
+        user_ids=[USER] * 2,
+        version_ids=["v1"] * 2,
+        scene_ids=[""] * 2,
+        memory_statuses=["active"] * 2,
+        deleted_flags=[False] * 2,
+    )
 
     flt = RetrievalFilter(
         user_id=USER, object_types=[ObjectType.KNOWLEDGE],

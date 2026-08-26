@@ -48,7 +48,7 @@ def main() -> None:
     if not args.collection.startswith("d6b_"):
         raise ValueError("--collection must use the d6b_ prefix")
 
-    client = VectorCliClient(cli_path=args.cli)
+    client = VectorCliClient(cli_path=args.cli, expected_dimension=2)
     try:
         client.create_collection(args.collection, 2)
         client.insert(

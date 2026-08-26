@@ -124,4 +124,19 @@ if payload.get("ok") is not False or "user_id" not in payload.get("message", "")
 print("D6B_L2 name=empty_user_filter result=PASS")
 ' "$invalid_output"
 
+set +e
+unknown_filter_output="$({
+    printf '%s\n' '{"vector":[1.0,0.0],"filter":{"user_id":"user-a","unexpected_filter_key":true}}'
+} | "$binary" search "$collection" 10 5000 2>&1)"
+unknown_filter_status=$?
+set -e
+[[ "$unknown_filter_status" -ne 0 ]] || fail "unknown_filter_key_must_fail"
+python3 -c '
+import json, sys
+payload = json.loads(sys.argv[1])
+if payload.get("ok") is not False or "unknown filter" not in payload.get("message", ""):
+    raise SystemExit(f"D6B_L2 name=unknown_filter_key_fail_closed result=FAIL payload={sys.argv[1]}")
+print("D6B_L2 name=unknown_filter_key_fail_closed result=PASS")
+' "$unknown_filter_output"
+
 printf 'D6B_L2 result=PASS collection=%s cleanup=scheduled\n' "$collection"
