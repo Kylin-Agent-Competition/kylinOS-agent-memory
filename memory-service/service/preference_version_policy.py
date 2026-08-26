@@ -34,7 +34,9 @@ preference_version_policy.py — Day7E 偏好版本变更规划策略（E 轨 se
 - NO_OP：同 user_id + 同 preference_key + 同 scope 且 value 完全相同
   → 不增版本，不制造无意义版本膨胀。
 - UPDATE：同 user_id + 同 preference_key + 同 scope 且 value 变化
-  → next_version = current.version + 1，previous_version_id = current.preference_id，
+  → next_version = max(该 user_id+key+scope 链内全部现存记录 version)+1
+  （含历史 SUPERSEDED 记录，避免 rollback 后版本号复用冲突），
+  previous_version_id = current.preference_id（当前 active），
   保留历史，不原地覆盖。
 - COEXIST：同 preference_key 但 scope 不同 → 新 scope 创建独立首版，
   旧 scope active 偏好不被 supersede。
@@ -231,7 +233,7 @@ class PreferenceVersionPolicy:
                 # NO_OP：同 key+scope+value，不增版本
                 return self._no_op(intent, current)
             # UPDATE：同 key+scope 值变化，版本递增，保留历史
-            return self._update(intent, current)
+            return self._update(intent, current, current_preferences)
         # 5. 同 key 不同 scope → COEXIST；否则 CREATE
         coexist_scopes = self._find_active_same_key_diff_scope_scopes(
             current_preferences, intent.user_id, intent.preference_key,
@@ -386,6 +388,28 @@ class PreferenceVersionPolicy:
         return list(scopes)
 
     @staticmethod
+    def _find_max_version_in_chain(
+        preferences: List[Preference], user_id: str,
+        key: str, scope: str,
+    ) -> int:
+        """返回同 user_id + 同 preference_key + 同 scope 版本链内
+        全部现存记录（不限 memory_status）的最大 version。
+
+        包含 ACTIVE 与 SUPERSEDED 等所有状态记录，
+        确保 rollback 到旧 active 后再次 UPDATE 不复用历史版本号。
+        链为空时返回 0（防御性，UPDATE 路径不会命中空链）。
+        """
+        versions = [
+            p.version for p in preferences
+            if p.user_id == user_id
+            and p.preference_key == key
+            and p.preference_scope.value == scope
+        ]
+        if not versions:
+            return 0
+        return max(versions)
+
+    @staticmethod
     def _no_op(intent: PreferenceVersionIntent, current: Preference) -> PreferenceVersionPlan:
         return PreferenceVersionPlan(
             action=PreferenceVersionAction.NO_OP,
@@ -399,14 +423,22 @@ class PreferenceVersionPolicy:
         )
 
     @staticmethod
-    def _update(intent: PreferenceVersionIntent, current: Preference) -> PreferenceVersionPlan:
+    def _update(
+        intent: PreferenceVersionIntent,
+        current: Preference,
+        current_preferences: List[Preference],
+    ) -> PreferenceVersionPlan:
+        max_chain_version = PreferenceVersionPolicy._find_max_version_in_chain(
+            current_preferences, intent.user_id,
+            intent.preference_key, intent.scope.value,
+        )
         return PreferenceVersionPlan(
             action=PreferenceVersionAction.UPDATE,
             reason_code=REASON_UPDATE_VALUE_CHANGED,
             user_id=intent.user_id,
             preference_key=intent.preference_key,
             scope=intent.scope,
-            next_version=current.version + 1,
+            next_version=max_chain_version + 1,
             previous_version_id=current.preference_id,
             current_preference_id=current.preference_id,
             current_version=current.version,

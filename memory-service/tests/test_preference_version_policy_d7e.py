@@ -17,9 +17,10 @@ NO_OP / ROLLBACK 五种偏好业务行为，+ REJECTED fail-closed 防御态；
 - NO_OP：同 key+scope+value 相同 → action=NO_OP, next_version=None,
   current_version 不增（不制造版本膨胀）。
 - UPDATE：同 key+scope 不同 value → action=UPDATE,
-  next_version == current.version+1（严格 +1），previous_version_id =
-  current.preference_id（保留历史，不原地覆盖），current_preference_id/
-  current_version 填充。
+  next_version == max(同 user_id+key+scope 链内全部现存记录 version)+1
+  （含历史 SUPERSEDED，避免 rollback 后版本号冲突），previous_version_id =
+  current.preference_id（当前 active，保留历史，不原地覆盖），
+  current_preference_id/current_version 填充。
 - COEXIST：同 key 不同 scope → action=COEXIST, next_version=1,
   coexist_with_scopes 含旧 scope，旧 scope active 偏好不被 supersede。
 - 不同 key → 独立 CREATE（各自版本链）。
@@ -249,7 +250,7 @@ def test_intent_models_forbid_extra():
 
 
 def test_reason_codes_match_authoritative_set():
-    """所有可达 reason_code 集合与固定权威集合（12 个）完全一致。"""
+    """所有可达 reason_code 集合与固定权威集合（13 个）完全一致。"""
     assert REASON_CODES == EXPECTED_REASON_CODES
     assert len(REASON_CODES) == 13
 
@@ -983,3 +984,180 @@ def test_rollback_valid_history_unchanged_after_cross_user_fix():
     assert plan.current_preference_id == "pref_v3"
     assert plan.current_version == 3
     assert plan.next_version is None
+
+
+# ── PR #58 复审 Medium #2：rollback 后 UPDATE 版本号不冲突（monotonic version） ──
+#
+# 修复 day7-e-pr58-fix-06-monotonic-version-after-rollback-v1：
+# UPDATE 的 next_version 改为按同 user_id+preference_key+scope 版本链内
+# 全部现存记录（含历史 SUPERSEDED）的 max(version)+1 分配，避免 rollback
+# 到旧 active 后再次 UPDATE 复用历史版本号。
+# 下列为新增测试，不修改任何既有测试函数。
+
+
+def test_update_after_rollback_uses_chain_max_version():
+    """rollback 后（v1 active + v2/v3 SUPERSEDED 历史）UPDATE 得 next_version=4
+    （max(1,2,3)+1），不复用历史版本号。"""
+    active_v1 = make_preference(
+        preference_id="pref_rb_v1", version=1, preference_value="concise",
+        memory_status=MemoryStatus.ACTIVE, is_active=True,
+        previous_version_id=None,
+    )
+    hist_v2 = make_preference(
+        preference_id="pref_rb_v2", version=2, preference_value="detailed",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+        previous_version_id="pref_rb_v1",
+    )
+    hist_v3 = make_preference(
+        preference_id="pref_rb_v3", version=3, preference_value="detailed",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+        previous_version_id="pref_rb_v2",
+    )
+    intent = make_intent(value="concise_detail")
+    plan = POLICY.plan_preference(intent, [active_v1, hist_v2, hist_v3])
+    assert plan.action == PreferenceVersionAction.UPDATE
+    assert plan.reason_code == "update_value_changed"
+    assert plan.next_version == 4  # max(1,2,3)+1
+    # previous_version_id 仍指向当前 active，而非历史最高版本
+    assert plan.previous_version_id == "pref_rb_v1"
+    assert plan.current_preference_id == "pref_rb_v1"
+    assert plan.current_version == 1
+
+
+def test_update_version_isolated_across_keys():
+    """不同 preference_key 的高版本不影响本链 next_version。"""
+    active_v1 = make_preference(
+        preference_id="pref_style_v1", version=1, preference_value="concise",
+    )
+    hist_v2 = make_preference(
+        preference_id="pref_style_v2", version=2, preference_value="detailed",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+        previous_version_id="pref_style_v1",
+    )
+    other_v5 = make_preference(
+        preference_id="pref_theme_v5", preference_key="demo_theme", version=5,
+        preference_value="dark",
+    )
+    intent = make_intent(value="concise_detail")
+    plan = POLICY.plan_preference(intent, [active_v1, hist_v2, other_v5])
+    assert plan.action == PreferenceVersionAction.UPDATE
+    assert plan.next_version == 3  # max(1,2)+1，非 max(1,2,5)+1=6
+
+
+def test_update_version_isolated_across_scopes():
+    """不同 scope 的高版本不影响本链 next_version。"""
+    active_v1 = make_preference(
+        preference_id="pref_global_v1", version=1, preference_value="concise",
+        preference_scope=PreferenceScope.GLOBAL,
+    )
+    hist_v2 = make_preference(
+        preference_id="pref_global_v2", version=2, preference_value="detailed",
+        preference_scope=PreferenceScope.GLOBAL,
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+        previous_version_id="pref_global_v1",
+    )
+    other_v5 = make_preference(
+        preference_id="pref_tool_v5", version=5, preference_value="verbose",
+        preference_scope=PreferenceScope.TOOL,
+    )
+    intent = make_intent(scope="global", value="concise_detail")
+    plan = POLICY.plan_preference(intent, [active_v1, hist_v2, other_v5])
+    assert plan.action == PreferenceVersionAction.UPDATE
+    assert plan.next_version == 3  # max(1,2)+1，非 max(1,2,5)+1=6
+
+
+def test_update_version_isolated_across_users():
+    """跨 user 版本隔离：集合含 OTHER_USER 记录时 plan_preference 触发
+    fail-closed 跨用户拒绝（rejected_cross_user），不会把其他用户的记录
+    纳入本链 max 扫描而产出 UPDATE（用户版本链隔离由 fail-closed 硬约束保证）。
+
+    注：测试场景设计修正——plan_preference 步骤 3 存在既有 fail-closed
+    跨用户门禁，任何 OTHER_USER 记录进入 current_preferences 都会先被
+    拒绝（REJECTED_cross_user），UPDATE 路径不可达；故本测试断言的是
+    fail-closed 隔离语义而非 next_version 数值。
+    """
+    active_v1 = make_preference(
+        preference_id="pref_user_v1", user_id=USER, version=1,
+        preference_value="concise",
+    )
+    hist_v2 = make_preference(
+        preference_id="pref_user_v2", user_id=USER, version=2,
+        preference_value="detailed",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+        previous_version_id="pref_user_v1",
+    )
+    other_v5 = make_preference(
+        preference_id="pref_other_v5", user_id=OTHER_USER, version=5,
+        preference_value="detailed",
+    )
+    intent = make_intent(value="concise_detail")
+    plan = POLICY.plan_preference(intent, [active_v1, hist_v2, other_v5])
+    assert plan.action == PreferenceVersionAction.REJECTED
+    assert plan.reason_code == "rejected_cross_user"
+
+
+def test_update_chain_max_includes_all_memory_statuses():
+    """max 扫描包含所有 memory_status（证明含 SUPERSEDED v3）。"""
+    active_v1 = make_preference(
+        preference_id="pref_s_v1", version=1, preference_value="concise",
+    )
+    hist_v2 = make_preference(
+        preference_id="pref_s_v2", version=2, preference_value="detailed",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+        previous_version_id="pref_s_v1",
+    )
+    hist_v3 = make_preference(
+        preference_id="pref_s_v3", version=3, preference_value="verbose",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+        previous_version_id="pref_s_v2",
+    )
+    intent = make_intent(value="concise_detail")
+    plan = POLICY.plan_preference(intent, [active_v1, hist_v2, hist_v3])
+    assert plan.action == PreferenceVersionAction.UPDATE
+    assert plan.next_version == 4  # 证明 max 扫描包含 SUPERSEDED v3
+
+
+def test_update_after_rollback_no_side_effects():
+    """update_after_rollback 输入对象不被修改。"""
+    active_v1 = make_preference(
+        preference_id="pref_nse_v1", version=1, preference_value="concise",
+        previous_version_id=None,
+    )
+    hist_v2 = make_preference(
+        preference_id="pref_nse_v2", version=2, preference_value="detailed",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+        previous_version_id="pref_nse_v1",
+    )
+    hist_v3 = make_preference(
+        preference_id="pref_nse_v3", version=3, preference_value="verbose",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+        previous_version_id="pref_nse_v2",
+    )
+    prefs = [active_v1, hist_v2, hist_v3]
+    snapshot = [p.model_dump() for p in prefs]
+    _ = POLICY.plan_preference(make_intent(value="concise_detail"), prefs)
+    assert [p.model_dump() for p in prefs] == snapshot
+
+
+def test_update_after_rollback_deterministic():
+    """同输入两次 plan 结果完全相等。"""
+    active_v1 = make_preference(
+        preference_id="pref_det_v1", version=1, preference_value="concise",
+        previous_version_id=None,
+    )
+    hist_v2 = make_preference(
+        preference_id="pref_det_v2", version=2, preference_value="detailed",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+        previous_version_id="pref_det_v1",
+    )
+    hist_v3 = make_preference(
+        preference_id="pref_det_v3", version=3, preference_value="verbose",
+        memory_status=MemoryStatus.SUPERSEDED, is_active=False,
+        previous_version_id="pref_det_v2",
+    )
+    prefs = [active_v1, hist_v2, hist_v3]
+    intent = make_intent(value="concise_detail")
+    assert (
+        POLICY.plan_preference(intent, prefs).model_dump()
+        == POLICY.plan_preference(intent, prefs).model_dump()
+    )
