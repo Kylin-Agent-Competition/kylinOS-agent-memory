@@ -32,7 +32,7 @@
 | Outbox | `outbox/worker.py`：轮询/退避/DL/幂等缓存清理；consumer=None（无 consumer 真实失败退避，不假装成功） | consumer 未接线（TD-D4D-001，关联 R-9）；单事务批量处理持锁（TD-D4D-003） |
 
 **关键事实**：
-- 事件契约 v1（`docs/day3/11_os_agent_event_contract_v1.md`）已冻结 `TurnFinalizedEvent`（C++ 结构 + JSON 字段：`metadata.eventId/traceId/userId/sessionId/turnId/idempotencyKey/occurredAt/collectedAt/sourceReference` + `final_message_id/is_final/finalization_reason/stop_reason/retry_of_turn_id/tool_call_ids/finalized_at`），但标注「本文只冻结候选接口，不宣称事件已在宿主发布」，真实宿主映射 `BLOCKED/PARTIAL`（TD-007/008/009、R-ARCH-05 In Progress）。
+- 事件契约 v1（`docs/day3/11_os_agent_event_contract_v1.md`）已形成 **`FROZEN_CANDIDATE / BLOCKED_FOR_FINAL_FREEZE` 候选契约**（C++ 结构 + JSON 字段：`metadata.eventId/traceId/userId/sessionId/turnId/idempotencyKey/occurredAt/collectedAt/sourceReference` + `final_message_id/is_final/finalization_reason/stop_reason/retry_of_turn_id/tool_call_ids/finalized_at`），并标注「本文只冻结候选接口，不宣称事件已在宿主发布」，真实宿主映射 `BLOCKED/PARTIAL`（TD-007/008/009、R-ARCH-05 In Progress）。
 - **写链路的「事件来源」与「服务端落库」是两件事**：D5-D 打通的是服务端链路（模拟/测试客户端发事件 → Gateway → UoW → SQLite+Outbox），不依赖 C 轨真实 Hook 端到端；真实 Hook 接入（R-ARCH-05）是 C 轨范围，不阻塞 D5-D 服务端实现。
 
 ### 2.2 ID 三字段现状（任务 2）
@@ -165,7 +165,7 @@ PR-3（L2 麒麟 VM）: alembic upgrade + schema 对照 + 模拟客户端端到�
 | 2 | C 轨 client 不同步导致端到端缺客户端 | 低 | 服务端用测试/模拟客户端验证；C 轨单独 PR 跟进 |
 | 3 | 写链路 payload 校验与事件契约 v1 漂移 | 中 | handler 复用事件契约字段定义；契约测试锁定 |
 | 4 | 结构化日志 trace_id 泄漏到其他连接 | 中 | 线程局部存储 + 每连接清理；L1 并发测试覆盖 |
-| 5 | 迁移 002 与既有 001 冲突 | 低 | 独立 revision id + downgrade 测试；VM L2 验证 |
+| 5 | 迁移 `20260826_add_trace_id` 与既有 001 冲突 | 低 | 独立 revision id + downgrade 测试；VM L2 验证 |
 
 ---
 
