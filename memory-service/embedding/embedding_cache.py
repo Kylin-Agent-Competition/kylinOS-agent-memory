@@ -117,6 +117,28 @@ class EmbeddingQueryCache:
             self._misses = 0
             self._evictions = 0
 
+    def invalidate_by_content(self, content_hash: str) -> int:
+        """按内容指纹失效缓存条目（D10：精准遗忘——删除后缓存不恢复目标正文）。
+
+        遍历所有缓存条目，移除匹配给定 content_hash 的条目。
+        匹配键为 EmbeddingCacheKey[2]（原文确定性哈希）。
+
+        Args:
+            content_hash: 原文确定性哈希（raw_text_hash 输出）。
+
+        Returns:
+            invalided 的条目数（0 表示无匹配）。
+        """
+        removed = 0
+        with self._lock:
+            keys_to_delete = [
+                k for k in self._data if k[2] == content_hash
+            ]
+            for k in keys_to_delete:
+                del self._data[k]
+                removed += 1
+            return removed
+
     @property
     def stats(self) -> Dict[str, int]:
         """缓存统计（size/hits/misses/evictions）。"""

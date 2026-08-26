@@ -36,6 +36,7 @@ from providers import (
     ProviderErrorCode,
 )
 from embedding.embedding_cache import EmbeddingCoalescer, EmbeddingQueryCache
+from embedding.cache_invalidator import CacheInvalidator, DeletionEvent
 from embedding.embedding_metrics import EmbeddingBacklogTracker
 from embedding.protocol import (
     PROTOCOL_VERSION,
@@ -181,6 +182,9 @@ class EmbeddingService:
         self._cache = EmbeddingQueryCache()
         self._backlog = EmbeddingBacklogTracker()
         self._coalescer = EmbeddingCoalescer()
+        # D10：缓存失效协调器（精准遗忘与删除一致性）
+        # 注入 extraction_cache 需外部传入，默认 None 时延迟创建
+        self._invalidator: Optional[CacheInvalidator] = None
         # [TABLE 29 降级策略] 短文本阈值：积压告警时超过此长度的文本跳过
         # embed，直接返回结构化降级（避免长文本拖慢整个队列）。
         # 默认 256 字符：覆盖绝大部分短查询场景。
@@ -227,6 +231,31 @@ class EmbeddingService:
     @property
     def coalescer(self) -> EmbeddingCoalescer:
         return self._coalescer
+
+    @property
+    def invalidator(self) -> Optional[CacheInvalidator]:
+        return self._invalidator
+
+    def set_cache_invalidator(self, extraction_cache: Any) -> None:
+        """设置缓存失效协调器（D10：对接删除事件入口）。
+
+        Args:
+            extraction_cache: PreferenceExtractionCache 实例。
+        """
+        self._invalidator = CacheInvalidator(self._cache, extraction_cache)
+
+    def handle_deletion_event(self, event: DeletionEvent) -> Dict[str, Any]:
+        """处理删除事件：失效关联缓存（D10：精准遗忘入口）。
+
+        Args:
+            event: 删除事件（含待删除内容指纹）。
+
+        Returns:
+            失效结果统计。
+        """
+        if self._invalidator is None:
+            return {"ok": False, "error": "cache invalidator not initialized"}
+        return self._invalidator.handle_deletion(event)
 
     # ── 对外接口（UDS 协议处理入口，架构 4.4 envelope） ──
 
@@ -304,6 +333,8 @@ class EmbeddingService:
                     "thresholds": self._backlog.thresholds,
                 },
                 "cache": self._cache.stats,
+                "cache_invalidator": self._invalidator.stats
+                if self._invalidator is not None else {},
                 # [Review #7 已修复] degraded 反映 SDK 缺失状态（不再恒 false）
                 "degraded": bool(getattr(self, "_sdk_missing", False)),
                 "sdk_missing": bool(getattr(self, "_sdk_missing", False)),

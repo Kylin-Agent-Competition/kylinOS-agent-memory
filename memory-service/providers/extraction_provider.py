@@ -497,6 +497,39 @@ class PreferenceExtractionCache:
         self._hits = 0
         self._misses = 0
 
+    def invalidate_by_event(self, event_id: str) -> int:
+        """按事件 ID 失效缓存条目（D10：精准遗忘——删除后缓存不恢复目标正文）。
+
+        遍历所有缓存条目，移除匹配给定 source_event_id 的条目。
+        键为 (kind, source_event_id, content_fingerprint)。
+
+        Args:
+            event_id: 可信 source_event_id。
+
+        Returns:
+            invalided 的条目数。
+        """
+        keys_to_delete = [k for k in self._data if k[1] == event_id]
+        for k in keys_to_delete:
+            del self._data[k]
+        return len(keys_to_delete)
+
+    def invalidate_by_content(self, content_fingerprint: str) -> int:
+        """按内容指纹失效缓存条目（D10）。
+
+        键为 (kind, source_event_id, content_fingerprint)。
+
+        Args:
+            content_fingerprint: 内容指纹（content_fingerprint 输出）。
+
+        Returns:
+            invalided 的条目数。
+        """
+        keys_to_delete = [k for k in self._data if k[2] == content_fingerprint]
+        for k in keys_to_delete:
+            del self._data[k]
+        return len(keys_to_delete)
+
     @property
     def stats(self) -> Dict[str, int]:
         """缓存统计（size/hits/misses）。"""
