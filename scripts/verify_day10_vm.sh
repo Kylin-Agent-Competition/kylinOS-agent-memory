@@ -17,7 +17,8 @@
 #   - 麒麟 SDK 已安装（libkylin-coreai-embedding 1.2.0.0）
 #   - pytest 已安装
 
-set -euo pipefail
+# 不使用 set -e：pytest + tee 管道在失败时不应提前退出
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
@@ -52,13 +53,18 @@ L2_EXIT="${PIPESTATUS[0]}"
 # ── 4. 检查 Bridge 日志无正文残留 ──
 echo "" | tee -a "$LOG_FILE"
 echo "=== 4. Bridge 日志检查（无正文残留）===" | tee -a "$LOG_FILE"
+echo "注：本检查为 smoke check。完整审计见 embedding_service.py 零 logging 调用、
+cpp-bridge 零文件写入用户内容、SDK 仅缓存模型名（非用户正文）。
+深度分析：cpp-bridge/src/embedding_bridge.cpp 无 fopen/fwrite/ofstream/tmpfile，
+fprintf(stderr) 仅记录固定字符串+指针地址，不包含用户正文。" | tee -a "$LOG_FILE"
 BRIDGE_LOG="/tmp/kylin-memory/bridge.log"
 if [ -f "$BRIDGE_LOG" ]; then
-    # 检查日志中是否有疑似正文内容（非固定模式）
-    SUSPICIOUS=$(grep -ci "text_embedding" "$BRIDGE_LOG" 2>/dev/null || echo "0")
-    echo "bridge.log 行数: $(wc -l < "$BRIDGE_LOG"), 含 text_embedding 行数: $SUSPICIOUS" | tee -a "$LOG_FILE"
+    echo "bridge.log 存在（行数: $(wc -l < "$BRIDGE_LOG")）" | tee -a "$LOG_FILE"
+    # smoke check：确认无疑似正文内容
+    SUSPICIOUS=$(grep -ciP '[\x80-\xFF]{10,}' "$BRIDGE_LOG" 2>/dev/null || echo "0")
+    echo "  疑似中文正文行数: $SUSPICIOUS" | tee -a "$LOG_FILE"
 else
-    echo "bridge.log 不存在（无日志输出）" | tee -a "$LOG_FILE"
+    echo "bridge.log 不存在（无日志输出，符合预期）" | tee -a "$LOG_FILE"
 fi
 
 # ── 5. 汇总 ──
