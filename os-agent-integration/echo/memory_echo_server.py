@@ -34,6 +34,10 @@ parser.add_argument("--dev", action="store_true", help="Development mode: allow 
 args = parser.parse_args()
 
 # ---- Configuration ----
+# ALIGN-005：Memory Service 标准 socket 路径为 $XDG_RUNTIME_DIR/kylin-memory/memory.sock
+# （冻结声明 §二）；本 echo server 为 Gate 0 独立验证服务，其 socket 属"实现细节"，
+# 保留独立路径（systemd=/run/kylin-memory-echo/echo.sock，dev=/tmp/kylin-memory-echo/echo.sock），
+# 待 Phase 2 统一 Gateway 时合并。
 # Priority: --socket CLI arg > dev mode /tmp > RUNTIME_DIRECTORY env (systemd) > default /run
 if args.socket:
     SOCKET_PATH = args.socket

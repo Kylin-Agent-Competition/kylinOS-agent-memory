@@ -1,0 +1,13 @@
+=== V006 重跑 (最终 HEAD, 2026-08-24_18:08:12) ===
+[V006] collection=v006_e2e_1787566096
+[V006] drop (best-effort clean): False
+[V006] create: True
+[V006] insert: True
+[V006] FTS5 hits:   [('2', 1), ('1', 2)]
+[V006] Vector hits: [('1', 1, 1.0), ('2', 2, 0.0), ('3', 3, -1.0)]
+[V006] RRF fused candidates (rank order):
+  1: rrf=0.032522475 channels=['fts5', 'vector'] content='apple banana cherry'
+  2: rrf=0.032522475 channels=['fts5', 'vector'] content='apple banana'
+  3: rrf=0.015873016 channels=['vector'] content='cherry only'
+[V006] final drop: True
+=== w1_rerun.log ===

@@ -1,0 +1,12 @@
+=== 正在运行: V002 错误注入 probe (21:03:10) ===
+V002_ERROR_MAPPING step=baseline_connect detail="ok=true; code=0; message=OK"
+V002_ERROR_MAPPING step=baseline_create_collection detail="ok=true; code=0; message=OK"
+V002_ERROR_MAPPING step=scenario_search_nonexistent_collection detail="ok=false; code=1002; message=collection not found"
+V002_ERROR_MAPPING step=scenario_insert_wrong_dimension detail="ok=false; code=1002; message=the length(3) of float data should divide the dim(4): invalid parameter"
+V002_ERROR_MAPPING step=scenario_insert_empty_vector detail="ok=false; code=1002; message=the num_rows (0) of field (embedding) is not equal to passed num_rows (1): [expected=1][actual=0]: invalid parameter"
+V002_ERROR_MAPPING step=scenario_delete_empty_expression detail="ok=false; code=1002; message=expr cannot be empty: invalid parameter"
+V002_ERROR_MAPPING step=scenario_query_invalid_expression detail="ok=false; code=1002; message=Invalid expr: this is not a valid expression: invalid parameter"
+V002_ERROR_MAPPING step=scenario_search_wrong_dimension detail="ok=false; code=1002; message=vector dimension mismatch, expected vector size(byte) 16, actual 12.: segcore error"
+V002_ERROR_MAPPING step=cleanup_drop_collection detail="ok=true; code=0; message="
+V002_ERROR_MAPPING step=cleanup_disconnect detail="ok=true; code=0; message=OK"
+V002_ERROR_MAPPING step=probe_complete detail="all error scenarios recorded"

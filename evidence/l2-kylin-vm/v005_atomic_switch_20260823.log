@@ -1,0 +1,11 @@
+=== 正在运行: V005 原子切换能力 probe (21:46:52) ===
+V005_ATOMIC step=connect detail="ok=true; code=0; message=OK"
+V005_ATOMIC step=collections_after_build_both_generations detail="gen1_exists=true; gen2_exists=true"
+V005_ATOMIC step=collections_after_drop_old_generation detail="gen1_exists=false; gen2_exists=true"
+V005_ATOMIC step=atomic_switch_capability detail="absent; only drop-old + keep-new routing switch available"
+V005_ATOMIC step=probe_complete detail="no atomic switch API; routing switch is the equivalent scheme"
+=== vector_cli 冒烟测试 (22:03:17) ===
+{"code":0,"message":"OK","ok":true}
+{"code":0,"inserted_ids":[1,2,3],"message":"","ok":true}
+{"code":0,"hits":[{"id":1,"score":1.0},{"id":2,"score":0.0},{"id":3,"score":-1.0}],"message":"","ok":true}
+{"code":0,"message":"","ok":true}

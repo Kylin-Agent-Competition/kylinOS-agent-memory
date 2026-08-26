@@ -1,0 +1,7 @@
+=== RUN w1_empty_e2e ===
+command=python3 /home/yanmouren778/test-rounds/eir/py/w1_empty_e2e.py
+[W1] empty FTS5 hits: 0 -> []
+[W1] empty Vector hits: 0 -> []
+[W1] fused candidates: 0 -> EMPTY (解释为空库无匹配)
+[W1] PASS: empty library returns explainable empty result, exit 0
+exit_code=0

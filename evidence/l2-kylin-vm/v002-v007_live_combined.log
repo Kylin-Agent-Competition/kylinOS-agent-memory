@@ -1,0 +1,106 @@
+=== 正在运行: V002 错误注入 probe (21:03:10) ===
+V002_ERROR_MAPPING step=baseline_connect detail="ok=true; code=0; message=OK"
+V002_ERROR_MAPPING step=baseline_create_collection detail="ok=true; code=0; message=OK"
+V002_ERROR_MAPPING step=scenario_search_nonexistent_collection detail="ok=false; code=1002; message=collection not found"
+V002_ERROR_MAPPING step=scenario_insert_wrong_dimension detail="ok=false; code=1002; message=the length(3) of float data should divide the dim(4): invalid parameter"
+V002_ERROR_MAPPING step=scenario_insert_empty_vector detail="ok=false; code=1002; message=the num_rows (0) of field (embedding) is not equal to passed num_rows (1): [expected=1][actual=0]: invalid parameter"
+V002_ERROR_MAPPING step=scenario_delete_empty_expression detail="ok=false; code=1002; message=expr cannot be empty: invalid parameter"
+V002_ERROR_MAPPING step=scenario_query_invalid_expression detail="ok=false; code=1002; message=Invalid expr: this is not a valid expression: invalid parameter"
+V002_ERROR_MAPPING step=scenario_search_wrong_dimension detail="ok=false; code=1002; message=vector dimension mismatch, expected vector size(byte) 16, actual 12.: segcore error"
+V002_ERROR_MAPPING step=cleanup_drop_collection detail="ok=true; code=0; message="
+V002_ERROR_MAPPING step=cleanup_disconnect detail="ok=true; code=0; message=OK"
+V002_ERROR_MAPPING step=probe_complete detail="all error scenarios recorded"
+=== 正在运行: V003 deadline/timeout probe (21:25:34) ===
+V003_DEADLINE step=baseline_connect detail="ok=true; code=0; message=OK"
+V003_DEADLINE step=baseline_insert_2000_rows detail="ok=true; code=0; message="
+V003_DEADLINE step=search_timeout_1ms detail="elapsed_ms=4; ok=true; code=0; message="
+V003_DEADLINE step=search_timeout_1000ms detail="elapsed_ms=4; ok=true; code=0; message="
+V003_DEADLINE step=query_timeout_1ms detail="elapsed_ms=2; ok=true; code=0; message="
+V003_DEADLINE step=probe_complete detail="deadline/timeout scenarios recorded"
+=== 服务停止场景: 记录断连错误码 (21:26:09) ===
+WARN connect milvus failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock, retry: 0
+WARN connect milvus failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock, retry: 1
+WARN connect milvus failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock, retry: 2
+WARN connect milvus failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock, retry: 3
+WARN connect milvus failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock, retry: 4
+ERROR connect milvus retry failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock
+V003_DEADLINE step=baseline_connect detail="ok=false; code=3; message=Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock"
+V003_DEADLINE step=baseline_connect detail="FAIL: connection failed"
+=== 服务已重启 ===
+=== 正在运行: V004 索引新代次构建/失败保旧/切换 probe (21:43:44) ===
+V004_GENERATION step=connect detail="ok=true; code=0; message=OK"
+V004_GENERATION step=create_collection_v004_gen_a_serving detail="ok=true; code=0; message=OK"
+V004_GENERATION step=insert_v004_gen_a_serving detail="ok=true; code=0; message="
+V004_GENERATION step=query_v004_gen_a_serving detail="ok=true; code=0; message="
+V004_GENERATION step=serving_gen_A_rows detail="100"
+V004_GENERATION step=create_collection_v004_gen_b_building detail="ok=true; code=0; message=OK"
+V004_GENERATION step=insert_v004_gen_b_building detail="ok=true; code=0; message="
+V004_GENERATION step=query_v004_gen_b_building detail="ok=true; code=0; message="
+V004_GENERATION step=build_gen_B_rows detail="50"
+V004_GENERATION step=query_v004_gen_a_serving detail="ok=true; code=0; message="
+V004_GENERATION step=gen_A_still_queryable_during_build detail="100"
+V004_GENERATION step=create_collection_v004_gen_fail detail="ok=true; code=0; message=OK"
+V004_GENERATION step=failed_build_insert detail="ok=false; code=1002; message=the length(3) of float data should divide the dim(4): invalid parameter"
+V004_GENERATION step=query_v004_gen_a_serving detail="ok=true; code=0; message="
+V004_GENERATION step=gen_A_intact_after_failed_build detail="100"
+V004_GENERATION step=drop_old_gen_A detail="ok=true; code=0; message="
+V004_GENERATION step=gen_A_dropped detail="0"
+V004_GENERATION step=query_v004_gen_b_building detail="ok=true; code=0; message="
+V004_GENERATION step=gen_B_serving_after_switch detail="50"
+V004_GENERATION step=probe_complete detail="multi-generation build/fail-keep-old/switch verified"
+=== 正在运行: V005 原子切换能力 probe (21:46:52) ===
+V005_ATOMIC step=connect detail="ok=true; code=0; message=OK"
+V005_ATOMIC step=collections_after_build_both_generations detail="gen1_exists=true; gen2_exists=true"
+V005_ATOMIC step=collections_after_drop_old_generation detail="gen1_exists=false; gen2_exists=true"
+V005_ATOMIC step=atomic_switch_capability detail="absent; only drop-old + keep-new routing switch available"
+V005_ATOMIC step=probe_complete detail="no atomic switch API; routing switch is the equivalent scheme"
+=== vector_cli 冒烟测试 (22:03:17) ===
+{"code":0,"message":"OK","ok":true}
+{"code":0,"inserted_ids":[1,2,3],"message":"","ok":true}
+{"code":0,"hits":[{"id":1,"score":1.0},{"id":2,"score":0.0},{"id":3,"score":-1.0}],"message":"","ok":true}
+{"code":0,"message":"","ok":true}
+=== 正在运行: V006 端到端 FTS5+Vector+RRF (22:12:10) ===
+python3: can't open file '/home/yanmouren778/test-rounds/v002/v006_e2e_demo.py': [Errno 2] No such file or directory
+=== 正在运行: V006 端到端 FTS5+Vector+RRF (22:12:19) ===
+[V006] FTS5 hits:   [('2', 1), ('1', 2)]
+[V006] Vector hits: [('1', 1, 1.0), ('2', 2, 0.0), ('3', 3, -1.0)]
+[V006] RRF fused candidates (rank order):
+  1: rrf=0.032522475 channels=['fts5', 'vector'] content='apple banana cherry'
+  2: rrf=0.032522475 channels=['fts5', 'vector'] content='apple banana'
+  3: rrf=0.015873016 channels=['vector'] content='cherry only'
+=== W1 空库验证 (23:51:37) ===
+[W1] empty FTS5 hits: 0 -> []
+[W1] empty Vector hits: 0 -> []
+[W1] fused candidates: 0 -> EMPTY (解释为空库无匹配)
+[W1] PASS: empty library returns explainable empty result, exit 0
+=== W2 服务故障降级验证 (23:53:47) ===
+[W2] normal candidates: ['mem-b', 'mem-a'] degraded=False
+[W2] stopping vector service...
+[W2] caught VectorCliError code=-1 message=ERROR connect milvus retry failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock
+[W2] mapped -> internal (retryable=False)
+[W2] degraded candidates: ['mem-b', 'mem-a']
+[W2] degraded_channels: {'vector': 'VectorCliError: vector_cli error code=-1: ERROR connect milvus retry failed, code: 3, msg: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock'}
+Traceback (most recent call last):
+  File "/home/yanmouren778/test-rounds/v002/py/w2_service_fault_e2e.py", line 103, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/yanmouren778/test-rounds/v002/py/w2_service_fault_e2e.py", line 85, in main
+    assert [c.memory_id for c in degraded.candidates] == ["mem-a", "mem-b"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+=== W2 服务故障降级验证 (重跑, 23:57:44) ===
+[W2] normal candidates: ['mem-b', 'mem-a'] degraded=False
+[W2] stopping vector service...
+[W2] caught VectorCliError code=3 message=Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock
+[W2] mapped -> provider_unavailable (retryable=True)
+[W2] degraded candidates: ['mem-b', 'mem-a']
+[W2] degraded_channels: {'vector': 'VectorCliError: vector_cli error code=3: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock'}
+[W2] restarting vector service...
+[W2] recovered candidates: ['mem-b', 'mem-a'] degraded=False
+[W2] PASS: service fault degrades gracefully and recovers
+=== W3 Top-K 边界验证 (23:59:46) ===
+[W3] top_n=1 -> 1 hits: ['1']
+[W3] top_n=10(>3) -> 3 hits
+[W3] top_n=1000 -> 3 hits
+[W3] empty top_n=5 -> 0 hits
+[W3] PASS: Top-K boundary behavior verified

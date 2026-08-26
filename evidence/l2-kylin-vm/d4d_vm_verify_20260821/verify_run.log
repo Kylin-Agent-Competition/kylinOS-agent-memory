@@ -1,0 +1,159 @@
+=== 补录时间 ===
+2026-08-22T11:28:59Z
+=== commit ===
+原始验证: ed9949c（feat(D4D) IPC Gateway + 数据库层骨架；原始版 init_schema 触发器非幂等）
+补录验证: 35e8c54（init_schema 幂等 + UDS stop unlink；本 log 由该修复版重跑产生）
+收尾:     d2b7205（PR#52 审查收尾）
+最终 HEAD（rebase 后）: 9fe84c7
+=== 上传验证文件 SHA256（补录 commit 35e8c54 处文件内容） ===
+migrations/versions/001_initial_schema.py 01c3f53c63c9f9f8017b7226e043c1d91d3bd408448c7fc61f0d1fa99ea6b88a
+memory-service/db/schema.py 510aaa9a5a8c834bdae1301ddc24dfb2caacd294b4fdf236a3b91541d43f279f
+memory-service/db/engine.py 3ffdb97a607dc6c6ce4c423310bbe4ae88556f76e44bd29df0d826cd59b9e796
+memory-service/gateway/server.py 9da2ab4b07be2f49942b07391771e6ff5588131c5a712d73c2c156e2c133d2a5
+=== venv 版本 ===
+sqlalchemy 2.0.52
+alembic 1.19.1
+=== idempotent ===
+IDEMPOTENT_OK
+=== alembic upgrade ===
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 001_initial_schema, 001_initial_schema — D4D 基线迁移（ADR-007 命名：001_initial_schema.py）
+EXIT=0
+=== schema ===
+CREATE TABLE alembic_version (
+	version_num VARCHAR(32) NOT NULL, 
+	CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+);
+CREATE TABLE conversations (
+	id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, 
+	user_id VARCHAR NOT NULL, 
+	session_id VARCHAR NOT NULL, 
+	started_at VARCHAR NOT NULL, 
+	ended_at VARCHAR, 
+	UNIQUE (session_id)
+);
+CREATE TABLE sqlite_sequence(name,seq);
+CREATE TABLE turns (
+	id INTEGER NOT NULL, 
+	session_id VARCHAR NOT NULL, 
+	turn_index INTEGER NOT NULL, 
+	original_user_text TEXT NOT NULL, 
+	model_request TEXT, 
+	model_response TEXT, 
+	is_end INTEGER DEFAULT '0' NOT NULL, 
+	created_at VARCHAR NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(session_id) REFERENCES conversations (session_id)
+);
+CREATE TABLE memory_entries (
+	id INTEGER NOT NULL, 
+	user_id VARCHAR NOT NULL, 
+	entry_type VARCHAR NOT NULL, 
+	content TEXT NOT NULL, 
+	source_turn_id INTEGER, 
+	confidence FLOAT DEFAULT '0.0' NOT NULL, 
+	version INTEGER DEFAULT '1' NOT NULL, 
+	is_deleted INTEGER DEFAULT '0' NOT NULL, 
+	created_at VARCHAR NOT NULL, 
+	updated_at VARCHAR NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT ck_memory_entries_entry_type CHECK (entry_type IN ('preference','knowledge','tool_result','behavior')), 
+	CONSTRAINT ck_memory_entries_confidence CHECK (confidence >= 0 AND confidence <= 1), 
+	FOREIGN KEY(source_turn_id) REFERENCES turns (id)
+);
+CREATE TABLE outbox (
+	id INTEGER NOT NULL, 
+	aggregate_type VARCHAR NOT NULL, 
+	aggregate_id VARCHAR NOT NULL, 
+	event_type VARCHAR NOT NULL, 
+	payload TEXT NOT NULL, 
+	attempts INTEGER DEFAULT '0' NOT NULL, 
+	next_retry_at VARCHAR, 
+	last_error TEXT, 
+	created_at VARCHAR NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT ck_outbox_aggregate_type CHECK (aggregate_type IN ('turn','memory'))
+);
+CREATE TABLE idempotency_cache (
+	user_id VARCHAR NOT NULL, 
+	session_id VARCHAR NOT NULL, 
+	idempotency_key VARCHAR NOT NULL, 
+	response TEXT NOT NULL, 
+	created_at VARCHAR NOT NULL, 
+	expires_at VARCHAR NOT NULL, 
+	PRIMARY KEY (user_id, session_id, idempotency_key)
+);
+CREATE INDEX idx_turns_session ON turns (session_id, turn_index);
+CREATE INDEX idx_memory_user_type ON memory_entries (user_id, entry_type);
+CREATE INDEX idx_memory_deleted ON memory_entries (is_deleted);
+CREATE INDEX idx_outbox_pending ON outbox (next_retry_at) WHERE attempts <= 3;
+CREATE INDEX idx_idempotency_expires ON idempotency_cache (expires_at);
+CREATE VIRTUAL TABLE memory_fts USING fts5(content, entry_type, user_id UNINDEXED, tokenize='unicode61')
+/* memory_fts(content,entry_type,user_id) */;
+CREATE TABLE IF NOT EXISTS 'memory_fts_data'(id INTEGER PRIMARY KEY, block BLOB);
+CREATE TABLE IF NOT EXISTS 'memory_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS 'memory_fts_content'(id INTEGER PRIMARY KEY, c0, c1, c2);
+CREATE TABLE IF NOT EXISTS 'memory_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
+CREATE TABLE IF NOT EXISTS 'memory_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID;
+CREATE TRIGGER memory_fts_ai AFTER INSERT ON memory_entries BEGIN
+            INSERT INTO memory_fts(rowid, content, entry_type, user_id)
+            VALUES (new.id, new.content, new.entry_type, new.user_id);
+        END;
+CREATE TRIGGER memory_fts_au_content AFTER UPDATE ON memory_entries
+=== systemd ===
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/kylin-agent/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Sat 2026-08-22 18:50:39 CST; 38min ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 3107 (python)
+      Tasks: 3 (limit: 9405)
+     Memory: 20.1M (peak: 52.3M swap: 12.7M swap peak: 12.7M)
+        CPU: 3.424s
+=== journal ===
+8月 22 00:38:37 kylin-agent-pc systemd[2721]: Started kylin-memory.service - Kylin Memory Service.
+8月 22 00:38:37 kylin-agent-pc systemd[2721]: Stopping kylin-memory.service - Kylin Memory Service...
+8月 22 00:38:37 kylin-agent-pc systemd[2721]: Stopped kylin-memory.service - Kylin Memory Service.
+8月 22 00:40:57 kylin-agent-pc systemd[2721]: Started kylin-memory.service - Kylin Memory Service.
+8月 22 00:40:57 kylin-agent-pc kylin-memory-server[502955]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+8月 22 00:40:57 kylin-agent-pc kylin-memory-server[502955]: 2026-08-22T00:40:57+0800 INFO __main__ [MainThread] schema 就绪: /home/kylin-agent/.local/share/kylin-memory/kylin_memory.db
+8月 22 00:40:57 kylin-agent-pc kylin-memory-server[502955]: 2026-08-22T00:40:57+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+8月 22 00:40:57 kylin-agent-pc kylin-memory-server[502955]: 2026-08-22T00:40:57+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+8月 22 00:40:57 kylin-agent-pc kylin-memory-server[502955]: 2026-08-22T00:40:57+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+8月 22 00:41:00 kylin-agent-pc systemd[2721]: Stopping kylin-memory.service - Kylin Memory Service...
+8月 22 00:41:00 kylin-agent-pc systemd[2721]: Stopped kylin-memory.service - Kylin Memory Service.
+8月 22 00:41:00 kylin-agent-pc systemd[2721]: Started kylin-memory.service - Kylin Memory Service.
+8月 22 00:41:00 kylin-agent-pc systemd[2721]: Stopping kylin-memory.service - Kylin Memory Service...
+8月 22 00:41:00 kylin-agent-pc systemd[2721]: Stopped kylin-memory.service - Kylin Memory Service.
+8月 22 17:30:27 kylin-agent-pc systemd[2721]: Started kylin-memory.service - Kylin Memory Service.
+8月 22 17:30:28 kylin-agent-pc kylin-memory-server[759793]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+8月 22 17:30:28 kylin-agent-pc kylin-memory-server[759793]: 2026-08-22T17:30:28+0800 INFO __main__ [MainThread] schema 就绪: /home/kylin-agent/.local/share/kylin-memory/kylin_memory.db
+8月 22 17:30:28 kylin-agent-pc kylin-memory-server[759793]: 2026-08-22T17:30:28+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+8月 22 17:30:28 kylin-agent-pc kylin-memory-server[759793]: 2026-08-22T17:30:28+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+8月 22 17:30:28 kylin-agent-pc kylin-memory-server[759793]: 2026-08-22T17:30:28+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+=== socket 权限位 ===
+srw------- 1 kylin-agent kylin-agent 0  8月22日 18:50 /run/user/1000/kylin-memory/memory.sock
+600 srw------- kylin-agent:kylin-agent /run/user/1000/kylin-memory/memory.sock
+=== FTS5 ===
+MATCH '咖啡' -> 1（期望 >=1）
+MATCH '我喜欢喝咖啡' -> 1（期望 >=1）
+软删除后 MATCH '咖啡' -> 0（期望 0）
+软删除后 MATCH '我喜欢喝咖啡' -> 0（期望 0）
+主表软删除记录保留 -> 2（期望 2）
+FTS5 中文检索 + 软删除同步: PASS
+=== busy ===
+异常类型: OperationalError
+识别为锁定降级: True
+耗时: 2.1s（busy_timeout=2s，期望约 2~4s 返回，非无限阻塞）
+busy_timeout 持锁降级语义: PASS
+=== UDS ===
+6.1 health: PASS (db=ok, methods=['echo', 'health', 'memory.retrieve', 'memory.store'])
+6.2 memory.retrieve 空上下文: PASS
+6.3 memory.store UNSUPPORTED_METHOD: PASS
+6.4 未知方法 UNSUPPORTED_METHOD: PASS
+6.5 客户端提前断开后服务器仍存活: PASS
+6.6 TIMEOUT 语义: PASS
+6.7 停止后拒绝新请求（连接被重置/无响应）: PASS
+UDS 断开/超时/停止语义: PASS
+=== UDS unlink 证据 ===
+SOCK_UNLINKED_OK

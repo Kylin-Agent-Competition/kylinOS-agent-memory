@@ -102,6 +102,20 @@ scripts/verify_repository_baseline.sh
 scripts/check_kylin_environment.sh
 ```
 
+## D4D Memory Service 启动与迁移（重要）
+
+生产环境启动前**必须先执行 Alembic 迁移**，再以 `--no-migrate` 启动——否则 `init_schema`（`metadata.create_all`）与 Alembic 两套建表路径的 default 语义会分叉（`create_all` 使用 Python 侧 default，Alembic 使用 DB 侧 `server_default`），且 `create_all` 建的库后续 `alembic upgrade head` 会因表已存在而冲突：
+
+```bash
+# 1. 生产唯一建表路径：先执行迁移
+PYTHONPATH=memory-service python -m alembic -c migrations/alembic.ini upgrade head
+
+# 2. 以 --no-migrate 启动（跳过 create_all）
+PYTHONPATH=memory-service python memory-service/app.py --no-migrate
+```
+
+开发/验证可省略迁移，直接 `PYTHONPATH=memory-service python memory-service/app.py`（内部走 `init_schema` 快速建库，启动日志会提示此为开发模式）。
+
 ## 文档索引
 
 | 文档 | 位置 |

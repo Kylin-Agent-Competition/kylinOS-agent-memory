@@ -25,6 +25,7 @@ Day9 增强（台账 R47）：
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from typing import Any, Dict, List, Optional
 
@@ -36,7 +37,12 @@ from providers import (
 )
 from embedding.embedding_cache import EmbeddingCoalescer, EmbeddingQueryCache
 from embedding.embedding_metrics import EmbeddingBacklogTracker
-from embedding.protocol import PROTOCOL_VERSION, ProtocolError, parse_envelope
+from embedding.protocol import (
+    PROTOCOL_VERSION,
+    ProtocolError,
+    build_error_envelope,
+    parse_envelope,
+)
 
 # Bridge 调用统一放线程池：SDK embed 可能耗时（IPC），不阻塞聊天线程（Day5-3）
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="embed-bridge")
@@ -65,12 +71,57 @@ def _submit_bridge(fn, *args, **kwargs):
     return _executor.submit(fn, *args, **kwargs)
 
 # 架构 4.4 方法名（总体架构文档 TABLE 15 风格：memory.*）
+# ALIGN-004：embedding 子服务方法域（memory.embed/embed_batch/ping/health）与
+# FRZ-IPC-007 顶层路由（echo/health/memory.retrieve）分属不同服务边界；
+# 子服务方法域经 ADR-008 承认，Phase 2 统一 Gateway（app/api/gateway.py）时合并路由。
 _METHODS = {
     "memory.embed",
     "memory.embed_batch",
     "memory.ping",
     "memory.health",
 }
+
+# ADR-005 §错误码映射表：内部 ERR_* 码 → FRZ-IPC-002 冻结 5 枚举（对外）。
+# 内部业务方法（embed/embed_batch）可保留内部码，对外 envelope 层统一映射；
+# 未知码兜底 INTERNAL_ERROR（对外不泄露内部错误细节）。
+_ERROR_CODE_MAP = {
+    "ERR_PROTOCOL": "PROTOCOL_ERROR",
+    "ERR_INVALID_REQUEST": "INVALID_REQUEST",
+    "ERR_INVALID_TEXT": "INVALID_REQUEST",
+    "ERR_TIMEOUT": "TIMEOUT",
+    "ERR_UNKNOWN": "INTERNAL_ERROR",
+    "ERR_EMBED_FAILED": "INTERNAL_ERROR",
+    "ERR_SERVICE_STOPPED": "INTERNAL_ERROR",
+    "ERR_SDK_NOT_LOADED": "INTERNAL_ERROR",
+    "ERR_SDK_ERROR": "INTERNAL_ERROR",
+    "ERR_SESSION_FAILED": "INTERNAL_ERROR",
+    "ERR_MODEL_INVALID": "INTERNAL_ERROR",
+    "ERR_CONFIG_CONFLICT": "INTERNAL_ERROR",
+    "ERR_SESSION_DESTROYED": "INTERNAL_ERROR",
+    "ERR_FATAL_FAILURE": "INTERNAL_ERROR",
+}
+
+# FRZ-IPC-002 冻结 5 枚举（对外稳定错误码域）
+_FROZEN_ERROR_CODES = {
+    "UNSUPPORTED_METHOD",
+    "INVALID_REQUEST",
+    "PROTOCOL_ERROR",
+    "INTERNAL_ERROR",
+    "TIMEOUT",
+}
+
+
+def map_error_code(code: str) -> str:
+    """内部错误码 → FRZ-IPC-002 冻结枚举（幂等：冻结码原样返回）。
+
+    - 已是冻结 5 枚举（PROTOCOL_ERROR/INVALID_REQUEST/TIMEOUT/INTERNAL_ERROR/UNSUPPORTED_METHOD）
+      时原样返回，避免二次映射；
+    - 内部码（ERR_*）按 ADR-005 §错误码映射表转换；
+    - 未知码兜底 INTERNAL_ERROR（对外不泄露内部错误细节）。
+    """
+    if code in _FROZEN_ERROR_CODES:
+        return code
+    return _ERROR_CODE_MAP.get(code, "INTERNAL_ERROR")
 
 
 class _SdkMissingProvider:
@@ -196,8 +247,8 @@ class EmbeddingService:
             method, payload, request_id, trace_id, _deadline = parse_envelope(
                 req, expected_methods=_METHODS)
         except ProtocolError as exc:
-            return self._envelope_error(
-                "ERR_PROTOCOL", str(exc), req, method="unknown")
+            # 按语义分类映射：UNSUPPORTED_METHOD / INVALID_REQUEST / PROTOCOL_ERROR
+            return self._envelope_error(exc.code, str(exc), req)
 
         if method == "memory.embed":
             body = self.embed(payload.get("text", ""),
@@ -206,13 +257,13 @@ class EmbeddingService:
             body = self.embed_batch(payload.get("texts", []),
                                     timeout_ms=payload.get("timeout_ms", 30000))
         elif method == "memory.ping":
-            body = {"ok": True, "result": "pong"}
+            body = {"ok": True, "result": {"pong": True}}
         elif method == "memory.health":
             body = self.health()
         else:  # pragma: no cover - parse_envelope 已校验 method
             body = self._error("ERR_INVALID_REQUEST", f"unknown method: {method!r}")
 
-        return self._envelope(body, method, request_id, trace_id)
+        return self._envelope(body, request_id, trace_id)
 
     # ── 健康检查（架构 TABLE 15: memory.health） ──
 
@@ -401,36 +452,58 @@ class EmbeddingService:
                     r.get("degraded_reason", {}).get(
                         "message", "embed_batch degraded/failed"))
             results.append(r["result"])
-        return {"ok": True, "result": results}
+        return {"ok": True, "result": {"vectors": results}}
 
     # ── 辅助 ──
 
     @staticmethod
-    def _envelope(body: Dict[str, Any], method: str,
+    def _envelope(body: Dict[str, Any],
                   request_id: Optional[str], trace_id: Optional[str]) -> Dict[str, Any]:
-        """把业务响应包进架构 4.4 envelope（回显 request_id/trace_id）。"""
-        env = {"protocol_version": PROTOCOL_VERSION, "method": method, **body}
-        if request_id is not None:
-            env["request_id"] = request_id
-        if trace_id is not None:
-            env["trace_id"] = trace_id
-        return env
+        """把内部业务响应（ok/result/error/degraded）转换为 FRZ-IPC-006 冻结 envelope。
+
+        成功：{protocol_version, request_id, trace_id, status:"ok", data, server_ts}
+        失败：{protocol_version, request_id, trace_id, status:"error", data:{}, error_code, message, server_ts}
+        内部 error.code 经 ADR-005 §错误码映射表映射到 FRZ-IPC-002 冻结枚举。
+        """
+        base = {
+            "protocol_version": PROTOCOL_VERSION,
+            "request_id": request_id or "",
+            "trace_id": trace_id or "",
+            "server_ts": datetime.now(timezone.utc).isoformat(),
+        }
+        if body.get("ok"):
+            # 成功（含 degraded：ok=true + 空向量，真实降级结果）。
+            # data 恒为 object（FRZ-IPC-006 §6.2）；降级时并入 degraded_reason，
+            # 避免 degraded_reason 在新 envelope 路径被静默丢失。
+            data = dict(body.get("result") or {})
+            if body.get("degraded"):
+                data.setdefault("degraded", True)
+                if body.get("degraded_reason"):
+                    data["degraded_reason"] = body["degraded_reason"]
+            return {**base, "status": "ok", "data": data}
+        error = body.get("error") or {}
+        return {
+            **base,
+            "status": "error",
+            "data": {},
+            "error_code": map_error_code(error.get("code", "ERR_UNKNOWN")),
+            "message": error.get("message", ""),
+        }
 
     @staticmethod
-    def _envelope_error(code: str, message: str, req: Dict[str, Any],
-                        method: str) -> Dict[str, Any]:
-        """协议层错误响应（含可回显的 request_id/trace_id）。"""
-        env = {
-            "protocol_version": PROTOCOL_VERSION,
-            "method": method,
-            "ok": False,
-            "error": {"code": code, "message": message},
-        }
-        if req.get("request_id"):
-            env["request_id"] = req["request_id"]
-        if req.get("trace_id"):
-            env["trace_id"] = req["trace_id"]
-        return env
+    def _envelope_error(code: str, message: str, req: Dict[str, Any]) -> Dict[str, Any]:
+        """协议层错误响应（FRZ-IPC-006 冻结 envelope + FRZ-IPC-002 冻结错误码）。
+
+        与 server.py 共用 build_error_envelope 单一实现，避免两套逻辑漂移。
+        """
+        if not isinstance(req, dict):
+            req = {}
+        return build_error_envelope(
+            map_error_code(code),
+            message,
+            request_id=req.get("request_id", ""),
+            trace_id=req.get("trace_id", ""),
+        )
 
     @staticmethod
     def _error(code: str, message: str) -> Dict[str, Any]:
