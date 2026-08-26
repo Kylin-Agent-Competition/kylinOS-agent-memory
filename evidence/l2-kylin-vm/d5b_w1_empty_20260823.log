@@ -1,0 +1,5 @@
+=== W1 空库验证 (23:51:37) ===
+[W1] empty FTS5 hits: 0 -> []
+[W1] empty Vector hits: 0 -> []
+[W1] fused candidates: 0 -> EMPTY (解释为空库无匹配)
+[W1] PASS: empty library returns explainable empty result, exit 0

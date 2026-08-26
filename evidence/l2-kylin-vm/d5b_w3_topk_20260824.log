@@ -1,0 +1,6 @@
+=== W3 重跑 (2026-08-24_18:08:29) ===
+[W3] top_n=1 -> 1 hits: ['1']
+[W3] top_n=10(>3) -> 3 hits
+[W3] top_n=1000 -> 3 hits
+[W3] empty top_n=5 -> 0 hits
+[W3] PASS: Top-K boundary behavior verified

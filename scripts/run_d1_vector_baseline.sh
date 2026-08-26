@@ -11,10 +11,14 @@ readonly DEFAULT_SERVICE_UNIT="kylin-ai-vector-engine.service"
 readonly DEFAULT_APP_ID="d1-vector-baseline"
 readonly DEFAULT_COLLECTION="d1_vector_baseline"
 readonly PKG_CONFIG_MODULE="kysdk-vector-engine-client"
+readonly LEGACY_CLIENT_VERSION="1.2.0.0-0k0.7"
+readonly LEGACY_SDK_COMMIT="2213447ef765e709e93f94d4177f4417478fe8ea"
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly PROJECT_ROOT
 readonly PROBE_SOURCE="${PROJECT_ROOT}/tests/vector-engine/d1_vector_baseline.cpp"
+readonly LEGACY_ABI_PATCH="${PROJECT_ROOT}/tests/vector-engine/compat/kysdk-vector-engine-client-1.2.0.0-0k0.7.patch"
+readonly LEGACY_ABI_ASSERTS="${PROJECT_ROOT}/tests/vector-engine/compat/d2_legacy_abi_asserts.h"
 
 PHASE=""
 DB_FILE=""
@@ -29,6 +33,8 @@ SDK_VERSION=""
 SDK_BUILD_FLAGS=()
 BUILD_DIR=""
 SERVICE_MANAGED_DATABASE=false
+LEGACY_ABI=false
+RUNTIME_LIBRARY=""
 
 log() {
     local step="$1"
@@ -398,7 +404,6 @@ check_sdk() {
     local source_commit
     local source_status
     local ldconfig_output
-    local runtime_library
     local runtime_version="unknown"
 
     if [[ ! -d "${SDK_SOURCE}/.git" ]]; then
@@ -419,11 +424,11 @@ check_sdk() {
     fi
 
     ldconfig_output="$(ldconfig -p 2>/dev/null)"
-    runtime_library="$(
+    RUNTIME_LIBRARY="$(
         awk '$1 == "libkysdk-vector-engine-client.so.1" { print $NF; exit }' \
             <<<"${ldconfig_output}"
     )"
-    if [[ -z "${runtime_library}" || ! -f "${runtime_library}" ]]; then
+    if [[ -z "${RUNTIME_LIBRARY}" || ! -f "${RUNTIME_LIBRARY}" ]]; then
         fail "sdk_runtime_library" \
             "installed libkysdk-vector-engine-client.so.1 was not found by ldconfig"
     fi
@@ -437,17 +442,35 @@ check_sdk() {
         fi
     fi
 
-    SDK_MODE="source-headers+runtime-library"
+    if [[ "${runtime_version}" == "${LEGACY_CLIENT_VERSION}" ]]; then
+        if [[ "${source_commit}" != "${LEGACY_SDK_COMMIT}" ]]; then
+            fail "sdk_compatibility" \
+                "legacy runtime ${LEGACY_CLIENT_VERSION} requires SDK commit ${LEGACY_SDK_COMMIT}; detected ${source_commit}"
+        fi
+        if [[ ! -r "${LEGACY_ABI_PATCH}" || ! -r "${LEGACY_ABI_ASSERTS}" ]]; then
+            fail "sdk_compatibility" \
+                "legacy ABI patch or assertions are missing"
+        fi
+        if [[ "${SERVICE_MANAGED_DATABASE}" != true ]]; then
+            fail "database_mode" \
+                "legacy runtime ${LEGACY_CLIENT_VERSION} requires --service-managed-database"
+        fi
+        LEGACY_ABI=true
+        SDK_MODE="source-headers+legacy-runtime-library"
+    else
+        LEGACY_ABI=false
+        SDK_MODE="source-headers+runtime-library"
+    fi
     SDK_VERSION="${runtime_version}"
     SDK_BUILD_FLAGS=(
         "-isystem"
         "${include_dir}"
-        "${runtime_library}"
+        "${RUNTIME_LIBRARY}"
     )
     pass "sdk_source" \
         "path=${SDK_SOURCE}; branch=${source_branch}; commit=${source_commit}; clean=true"
     pass "sdk_discovery" \
-        "mode=${SDK_MODE}; runtime_version=${SDK_VERSION}; include=${include_dir}; library=${runtime_library}"
+        "mode=${SDK_MODE}; runtime_version=${SDK_VERSION}; include=${include_dir}; library=${RUNTIME_LIBRARY}"
 }
 
 build_probe() {
@@ -458,6 +481,32 @@ build_probe() {
 
     BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/d1-vector-baseline.XXXXXX")"
     local output="${BUILD_DIR}/d1_vector_baseline"
+    local -a build_flags=("${SDK_BUILD_FLAGS[@]}")
+
+    if [[ "${LEGACY_ABI}" == true ]]; then
+        require_command cp
+        require_command patch
+        local sdk_copy="${BUILD_DIR}/sdk"
+        mkdir -p "${sdk_copy}"
+        cp -a "${SDK_SOURCE%/}/." "${sdk_copy}/"
+        if ! patch --batch --forward --fuzz=0 --dry-run -p1 \
+            -d "${sdk_copy}" <"${LEGACY_ABI_PATCH}" >/dev/null; then
+            fail "sdk_compatibility" \
+                "legacy ABI patch does not apply cleanly to SDK commit ${LEGACY_SDK_COMMIT}"
+        fi
+        patch --batch --forward --fuzz=0 -p1 \
+            -d "${sdk_copy}" <"${LEGACY_ABI_PATCH}" >/dev/null
+        build_flags=(
+            "-DKYLIN_VECTOR_LEGACY_0K0_7=1"
+            "-include"
+            "${LEGACY_ABI_ASSERTS}"
+            "-isystem"
+            "${sdk_copy}/include/kysdk-vector-engine-client"
+            "${RUNTIME_LIBRARY}"
+        )
+        pass "sdk_compatibility" \
+            "temporary SDK copy patched for legacy ${LEGACY_CLIENT_VERSION}; source=${LEGACY_SDK_COMMIT}"
+    fi
 
     if ! g++ \
         -std=c++17 \
@@ -467,7 +516,7 @@ build_probe() {
         -Werror \
         "${PROBE_SOURCE}" \
         -o "${output}" \
-        "${SDK_BUILD_FLAGS[@]}"; then
+        "${build_flags[@]}"; then
         fail "probe_build" "g++ failed to build the D1 Vector Engine probe"
     fi
     pass "probe_build" \

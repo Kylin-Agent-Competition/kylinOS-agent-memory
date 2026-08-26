@@ -1,0 +1,21 @@
+project=kylinOS-agent-memory
+task=D5B-W2
+branch=feature/d5-b-retrieval-vertical-slice
+tested_commit=a7fa30c6b885414a9615eadaa5182f7bc7d3c003
+git_rev_parse=a7fa30c6b885414a9615eadaa5182f7bc7d3c003 (host git, code via git archive HEAD, VM no git repo)
+host=Kylin V11
+kernel=6.6.0-63-generic
+python=Python 3.12.3
+timestamp=2026-08-25T12:48:44Z
+---
+command=python3 /home/yanmouren778/test-rounds/eir/py/w2_service_fault_e2e.py
+[W2] normal candidates: ['mem-b', 'mem-a'] degraded=False
+[W2] stopping vector service...
+[W2] caught VectorCliError code=3 message=Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock
+[W2] mapped -> provider_unavailable (retryable=True)
+[W2] degraded candidates: ['mem-b', 'mem-a']
+[W2] degraded_channels: {'vector': 'VectorCliError: vector_cli error code=3: Failed to connect uri: unix:/tmp/kylin-ai-vector-engine-1000.sock'}
+[W2] restarting vector service...
+[W2] recovered candidates: ['mem-b', 'mem-a'] degraded=False
+[W2] PASS: service fault degrades gracefully and recovers
+exit_code=0

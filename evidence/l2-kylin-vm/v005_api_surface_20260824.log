@@ -1,0 +1,45 @@
+# V005 API surface 证据（SDK Database.h 无 rename/swap/replace/atomic）
+
+- SDK commit: 2213447ef765e709e93f94d4177f4417478fe8ea
+- 运行库: libkysdk-vector-engine-client 1.2.0.0-0k0.7
+- 检查对象: include/kysdk-vector-engine-client/Database.h（公开头文件）
+
+## grep 结果
+
+在 SDK 公开头文件（include/ 递归）中检索 rename/swap/replace/atomic（含大小写变体）：
+
+- rename: 0 命中
+- swap: 0 命中
+- replace: 0 命中
+- atomic: 0 命中
+
+## Database.h 公开方法清单（virtual Status）
+
+- Create()
+- Connect(ConnectParam)
+- Disconnect()
+- LoadDBFile(db_file, encrypt, key)
+- CreateCollection(schema) / CreateCollection(schema, index) / CreateCollection(name, dim, ...)
+- HasCollection(name, has)
+- DropCollection(name)
+- CreateIndex(name, index_desc)
+- Insert(name, fields, results)
+- Delete(name, expression, results)
+- Upsert(name, fields, results)
+- HybridSearch(...)
+- Search(arguments, results, timeout)
+- Query(arguments, results, timeout)
+- LoadCollection(name) / ReleaseCollection(name)
+- DescribeCollection(name, desc) / DescribeIndex(name, field, desc)
+- ShowCollections(names)
+- DropIndex(name, index_name)
+- GetCollectionStatistics(name, stat)
+- GetLoadState(name, is_loaded)
+
+## 结论
+
+SDK public API 未暴露任何 rename / swap / replace / atomic 的 collection generation 切换接口；
+切换只能通过 CreateCollection + DropCollection 组合实现（即 routing-switch 等价方案）。
+
+该证据为静态 API surface 检查（E3/ABI 级），配合 V005 运行时探针
+（`v005_atomic_switch_20260823.log`）共同支撑「无原子切换 API」结论。
