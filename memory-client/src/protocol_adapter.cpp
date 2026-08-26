@@ -91,6 +91,10 @@ ProtocolError errorFromKind(ProtocolErrorKind kind)
         return makeError(kind, QStringLiteral("Error response has an unknown error_code not in the frozen enum."));
     case ProtocolErrorKind::InvalidServerTs:
         return makeError(kind, QStringLiteral("Response server_ts is not a valid ISO 8601 UTC timestamp."));
+    case ProtocolErrorKind::MissingDeadlineMs:
+        return makeError(kind, QStringLiteral("Envelope is missing deadline_ms."));
+    case ProtocolErrorKind::InvalidDeadlineMs:
+        return makeError(kind, QStringLiteral("Envelope deadline_ms is missing, invalid type, or negative."));
     }
     return {ProtocolErrorKind::None, {}};
 }
