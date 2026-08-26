@@ -386,14 +386,13 @@ class EmbeddingService:
         if cached is not None:
             return {"ok": True, "result": cached, "cache_hit": True}
 
+        # D10 REWORK HIGH-3：捕获代次，Provider 返回后检查，stale 结果不传播
+        gen = self._cache.generation
+
         # Day9 请求合并：相同原文的并发请求共享一次 Provider 调用
-        # （后台批量合并候选；等待已有 in-flight Future 的结果）
-        coalesce_key = cache_key[2]  # 原文确定性哈希（与缓存键同源）
+        coalesce_key = cache_key[2]
         existing, was_merged = self._coalescer.get_or_create(coalesce_key)
         if was_merged and existing is not None:
-            # Review 修复：合并等待请求同样进入积压队列（enter/leave）——
-            # 合并突发时 backlog/oldest_pending_age 必须反映全部排队请求，
-            # 否则恰在需要观测吞吐压力时指标失灵。
             seq = self._backlog.enter()
             try:
                 try:
@@ -402,10 +401,8 @@ class EmbeddingService:
                     return self._error(ProviderErrorCode.ERR_TIMEOUT.name,
                                        "embed coalesced wait timed out")
                 except ProviderError as exc:
-                    # Review 修复：合并等待者保留原始错误码（与发起者一致）
                     return self._degrade(exc.code, f"coalesced embed failed: {exc}")
-                except Exception as exc:  # noqa: BLE001
-                    # 合并的 Provider 调用失败：传播结构化降级（不重复调用）
+                except Exception as exc:
                     return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
                                          f"coalesced embed failed: {type(exc).__name__}: {exc}")
                 result_dict = {
@@ -413,7 +410,10 @@ class EmbeddingService:
                     "dimension": result.dimension,
                     "l2_norm": result.l2_norm,
                 }
-                self._cache.set(cache_key, result_dict)
+                write_ok = self._cache.set(cache_key, result_dict, generation=gen)
+                if not write_ok:
+                    return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
+                                         "stale coalesced result discarded after deletion")
                 return {"ok": True, "result": result_dict, "coalesced": True}
             finally:
                 self._backlog.leave(seq)
@@ -433,33 +433,31 @@ class EmbeddingService:
         seq = self._backlog.enter()
         try:
             return self._embed_uncached(text, timeout_ms, cache_key,
-                                        coalesce_key=coalesce_key)
+                                        coalesce_key=coalesce_key,
+                                        generation=gen)
         finally:
             self._backlog.leave(seq)
 
     def _embed_uncached(self, text: str, timeout_ms: int,
-                        cache_key, *, coalesce_key: str) -> Dict[str, Any]:
-        """未命中缓存的 embed：实际 Provider 调用（D5 原逻辑 + D9 写缓存 + 合并注册）。"""
-        fut = None  # Review 修复：_submit_bridge 自身抛异常时 finally 不 NameError
+                        cache_key, *, coalesce_key: str,
+                        generation: Optional[int] = None) -> Dict[str, Any]:
+        """未命中缓存的 embed：实际 Provider 调用。
+
+        D10 REWORK HIGH-3：捕获 generation，set() 失败时返回降级。
+        """
+        fut = None
         try:
-            # Day5-3: Bridge 调用放线程池，不阻塞聊天线程
             fut = _submit_bridge(self._provider.embed, text, timeout_ms=timeout_ms)
-            # Day9 合并注册：在途 Future 供后续同文本并发请求共享
             self._coalescer.register(coalesce_key, fut)
             try:
                 result = fut.result(timeout=timeout_ms / 1000.0 + 1.0)
             except FutureTimeout:
-                # 超时：返回结构化错误；尽力取消任务（线程池中的任务可能无法中断，
-                # 但调用方线程立即获得控制权，不阻塞聊天线程）。
-                # [TD-A-005-01] 主动超时中断未实现：fut.cancel() 对已运行任务无效，
-                # 精确中断需 Bridge 内部定时器（Day6+ 跟踪）。
                 fut.cancel()
                 return self._error(ProviderErrorCode.ERR_TIMEOUT.name,
                                    "embed timed out (Bridge 未返回)")
         except ProviderError as exc:
-            # Provider 不可用/失败 → 结构化错误 + 真实降级（明确空向量）
             return self._degrade(exc.code, str(exc))
-        except Exception as exc:  # noqa: BLE001 - 任何异常都结构化返回
+        except Exception as exc:
             return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
                                  f"unexpected error: {type(exc).__name__}: {exc}")
         finally:
@@ -471,8 +469,10 @@ class EmbeddingService:
             "dimension": result.dimension,
             "l2_norm": result.l2_norm,
         }
-        # Day9 写缓存（空向量/degraded 不缓存，见 EmbeddingQueryCache.set）
-        self._cache.set(cache_key, result_dict)
+        write_ok = self._cache.set(cache_key, result_dict, generation=generation)
+        if not write_ok:
+            return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
+                                 "stale embed result discarded after deletion")
         return {"ok": True, "result": result_dict}
 
     def embed_batch(self, texts: List[str], *, timeout_ms: int = 30000) -> Dict[str, Any]:
