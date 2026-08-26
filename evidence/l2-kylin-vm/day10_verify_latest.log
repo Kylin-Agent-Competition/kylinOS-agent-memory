@@ -92,4 +92,4 @@ memory-service/tests/test_server_lifecycle.py::test_ensure_socket_dir_converges_
 memory-service/tests/test_server_lifecycle.py::test_ensure_socket_dir_skips_shared_tmp PASSED [ 98%]
 memory-service/tests/test_server_lifecycle.py::test_ensure_socket_dir_skips_home_dir PASSED [100%]
 
-============================== 87 passed in 5.81s ==============================
+============================== 87 passed in 5.53s ==============================
