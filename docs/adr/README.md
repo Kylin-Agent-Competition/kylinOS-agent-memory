@@ -32,6 +32,8 @@
 | [ADR-007：DB 迁移基线命名](007-db-migration-baseline-naming.md) | 已采纳 | 基线迁移命名裁定 |
 | [ADR-008：embedding 子服务方法域独立承认](008-embedding-subservice-method-domain.md) | 已采纳（2026-08-25，Reviewer E 谢嘉然已签） | 方案 A：承认 embedding 子服务方法域，Phase 2 统一 Gateway 合并路由（仅 method routing，不涉 socket 方案） |
 | [ADR-009：UDS socket ownership 归属裁决](009-socket-ownership.md) | 已采纳（2026-08-25，Reviewer E 谢嘉然已签） | 方案 A：Memory Service/Gateway owns `memory.sock`；Embedding 子服务 owns 私有 `embedding.sock`；echo 属 Gate 0 验证细节（ALIGN-005） |
+| [ADR-010：新增 `turn.finalized` IPC 方法](010-turn-finalized-method.md) | 📝 提议（待 D 决策 + Reviewer E 签署） | 方案 A1：FRZ-IPC-007 新增写方法；payload 对齐 C 轨 `TurnFinalizedEvent` 候选契约形成 D 轨 IPC 映射；Upsert 落库 + host/db turn_id 区分 + envelope 唯一真源 + 幂等冲突语义 |
+| [ADR-011：新增 nullable trace_id / host_turn_id 列](011-trace-id-columns.md) | 📝 提议（待 D 决策 + Reviewer E 签署） | 方案 B1：turns 增 trace_id + host_turn_id（部分唯一索引），memory_entries 增 trace_id；迁移 `20260826_add_trace_id.py`（ADR-007 命名，downgrade 表重建合规） |
 
 **ADR-001 已形成 D3-B 冻结候选；独立审查前不得将状态改为“已采纳”。**
 
