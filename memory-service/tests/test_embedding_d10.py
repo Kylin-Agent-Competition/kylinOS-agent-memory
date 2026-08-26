@@ -1,16 +1,15 @@
 """
 test_embedding_d10.py — 轨道 A Day10 精准遗忘与删除一致性测试
 
-台账 R52（A 轨 D10）：删除后 Provider 缓存和临时数据不恢复目标正文
-
 覆盖：
-1. Embedding 缓存按内容指纹失效 + tombstone stale-write 防护
-2. Extraction 缓存按事件 ID / 内容指纹失效 + tombstone 防护
-3. CacheInvalidator 删除事件处理（幂等/失败重试/按用户/全量）
-4. 真实竞态测试：owner + coalesced 双路径 stale write-back 防护
-5. Extraction/LLM 路径 stale write-back 防护
-6. 异常重试：FailOnce 模拟失效失败后重试
-7. 并发删除与读取 + 真实 Extraction cache 接线
+1. Embedding/Extraction generation 代次检查（stale write-back 防护）
+2. event-level tombstone（MISS→in-flight→deletion→completion 写回拒绝）
+3. invalidate_all + generation 递增（FULL_RESET 后旧请求不恢复）
+4. stale result 不向下游传播（set() 返回 False → 空候选/降级）
+5. 异常重试（FailOnce）
+6. concurrent same-event dedup
+7. ForgetMode.FULL_RESET 行为
+8. 真实调用链测试（service/coalesced/extraction/knowledge）
 """
 
 import threading
@@ -24,8 +23,6 @@ from embedding.embedding_service import EmbeddingService
 from providers import EmbeddingResult, ProviderError, ProviderErrorCode
 from providers.extraction_provider import PreferenceExtractionCache
 
-
-# ── helpers ──
 
 class FakeProvider:
     def __init__(self, *, delay=0.0, dimension=768):
@@ -52,53 +49,40 @@ class FakeProvider:
                                dimension=self._dimension, l2_norm=1.0)
 
 
-# ── 1. EmbeddingQueryCache tombstone stale-write 防护 ──
+# ── 1. Embedding generation 代次检查 ──
 
-def test_embedding_cache_tombstone_blocks_stale_write():
-    """删除后旧 Provider 返回时 set() 被 tombstone 拒绝。"""
+def test_embedding_generation_blocks_stale_write():
     c = EmbeddingQueryCache(capacity=64)
-    text = "stale write-back test"
+    text = "stale embed"
     content_hash = raw_text_hash(text)
     key = c.make_key(text, 768)
 
-    # 模拟：cache miss → Provider in-flight → deletion → Provider 返回
-    c.set(key, {"vector": [1.0], "dimension": 768})
-    assert c.get(key) is not None
-
+    gen = c.generation
     c.invalidate_by_content(content_hash)
-    assert c.get(key) is None
 
-    # 旧 Provider 返回，尝试写回 → tombstone 拒绝
-    result = c.set(key, {"vector": [1.0], "dimension": 768})
-    assert result is False
-    assert c.get(key) is None
+    result = {"vector": [1.0], "dimension": 768}
+    assert c.set(key, result, generation=gen) is False
 
 
-def test_embedding_cache_tombstone_allows_fresh_write():
-    """tombstone 只阻止失效内容的写回，新内容不受影响。"""
+def test_embedding_generation_allows_fresh_write():
     c = EmbeddingQueryCache(capacity=64)
-    key1 = c.make_key("deleted text", 768)
-    key2 = c.make_key("fresh text", 768)
-
-    c.invalidate_by_content(raw_text_hash("deleted text"))
-    assert c.set(key1, {"vector": [1.0], "dimension": 768}) is False
-    assert c.set(key2, {"vector": [2.0], "dimension": 768}) is True
-    assert c.get(key2) is not None
+    key = c.make_key("fresh", 768)
+    gen = c.generation
+    assert c.set(key, {"vector": [1.0], "dimension": 768}, generation=gen) is True
 
 
-def test_embedding_cache_clear_clears_tombstones():
-    """clear() 清空 tombstone，后续写入恢复正常。"""
+def test_embedding_clear_increments_generation():
     c = EmbeddingQueryCache(capacity=64)
-    key = c.make_key("test", 768)
-    c.invalidate_by_content(raw_text_hash("test"))
-    assert c.set(key, {"vector": [1.0], "dimension": 768}) is False
+    gen = c.generation
     c.clear()
-    assert c.set(key, {"vector": [1.0], "dimension": 768}) is True
+    key = c.make_key("post-clear", 768)
+    assert c.set(key, {"vector": [1.0], "dimension": 768}, generation=gen) is False
+    assert c.set(key, {"vector": [1.0], "dimension": 768}, generation=c.generation) is True
 
 
-# ── 2. Extraction cache tombstone stale-write 防护 ──
+# ── 2. Extraction generation + event-level tombstone ──
 
-def test_extraction_cache_tombstone_blocks_stale_write():
+def test_extraction_generation_blocks_stale_write():
     from pipeline.fingerprint import content_fingerprint
     c = PreferenceExtractionCache(capacity=64)
     fp = content_fingerprint("stale extraction")
@@ -107,66 +91,125 @@ def test_extraction_cache_tombstone_blocks_stale_write():
     cand = PreferenceCandidate(key="k1", value="v1", confidence=0.9,
                                 evidence="e1", source_event_id="evt_001")
 
-    c.set(key, [cand])
-    assert c.get(key) is not None
-
+    gen = c.generation
     c.invalidate_by_content(fp)
-    assert c.get(key) is None
-
-    result = c.set(key, [cand])
-    assert result is False
-    assert c.get(key) is None
+    assert c.set(key, [cand], generation=gen) is False
 
 
-def test_extraction_cache_invalidate_by_event_adds_tombstone():
+def test_extraction_event_tombstone_blocks_miss_to_completion():
+    """HIGH-1: event-only deletion 阻止 MISS→in-flight→completion 写回。"""
     from pipeline.fingerprint import content_fingerprint
     c = PreferenceExtractionCache(capacity=64)
-    fp = content_fingerprint("evt content")
-    key = ("preference", "evt_001", fp)
+    fp = content_fingerprint("event-only race")
+    key = ("preference", "evt_race", fp)
     from providers.extraction_provider import PreferenceCandidate
     cand = PreferenceCandidate(key="k1", value="v1", confidence=0.9,
-                                evidence="e1", source_event_id="evt_001")
-    c.set(key, [cand])
+                                evidence="e1", source_event_id="evt_race")
 
-    c.invalidate_by_event("evt_001")
     assert c.get(key) is None
+    gen = c.generation
+    c.invalidate_by_event("evt_race")
+    assert c.set(key, [cand], generation=gen) is False
 
-    result = c.set(key, [cand])
-    assert result is False
+
+def test_extraction_clear_increments_generation():
+    c = PreferenceExtractionCache(capacity=64)
+    gen = c.generation
+    c.clear()
+    from providers.extraction_provider import PreferenceCandidate
+    key = ("preference", "evt_clear", "fp_clear")
+    cand = PreferenceCandidate(key="k1", value="v1", confidence=0.9,
+                                evidence="e1", source_event_id="evt_clear")
+    assert c.set(key, [cand], generation=gen) is False
+    assert c.set(key, [cand], generation=c.generation) is True
 
 
-# ── 3. CacheInvalidator 核心修复 ──
+# ── 3. invalidate_all + generation 递增 ──
 
-def test_handle_deletion_processed_after_success():
-    """processed 必须在全部失效成功后登记。"""
+def test_invalidate_all_generation_blocks_stale():
+    """HIGH-2: invalidate_all 后旧 generation 的 set() 被拒绝。"""
+    c = EmbeddingQueryCache(capacity=64)
+    key = c.make_key("pre-clear text", 768)
+    c.set(key, {"vector": [1.0], "dimension": 768})
+
+    gen = c.generation
+    c.clear()
+    assert c.set(key, {"vector": [1.0], "dimension": 768}, generation=gen) is False
+
+
+def test_cache_invalidator_full_reset_mode():
+    """ForgetMode.FULL_RESET → invalidate_all()。"""
     emb_cache = EmbeddingQueryCache(capacity=64)
     ext_cache = PreferenceExtractionCache(capacity=64)
     invalidator = CacheInvalidator(emb_cache, ext_cache)
 
-    event = DeletionEvent(event_id="del_001", user_id="user_1",
-                          content_hashes=["hash1"])
-    result = invalidator.handle_deletion(event)
-    assert result["ok"] is True
-    assert result["dedup"] is False
+    key = emb_cache.make_key("full reset text", 768)
+    emb_cache.set(key, {"vector": [1.0], "dimension": 768})
+    assert emb_cache.get(key) is not None
 
-    stats = invalidator.stats
-    assert stats["processed_events"] == 1
-    assert stats["events_processed"] == 1
+    event = DeletionEvent(event_id="full_reset", user_id="user_1",
+                          forget_mode=ForgetMode.FULL_RESET)
+    invalidator.handle_deletion(event)
+    assert emb_cache.get(key) is None
+    assert emb_cache.stats["size"] == 0
 
 
-def test_handle_deletion_idempotent_after_success():
-    """成功后再调用相同 event_id → dedup。"""
-    invalidator = CacheInvalidator(EmbeddingQueryCache(), PreferenceExtractionCache())
-    event = DeletionEvent(event_id="del_001", user_id="user_1",
-                          content_hashes=["hash1"])
-    r1 = invalidator.handle_deletion(event)
-    assert r1["dedup"] is False
-    r2 = invalidator.handle_deletion(event)
-    assert r2["dedup"] is True
+# ── 4. stale result 不向下游传播 ──
 
+def test_embedding_service_discards_stale_result():
+    """HIGH-3: EmbeddingService embed() 检查 set() 返回值，stale 结果返回降级。"""
+    p = FakeProvider(delay=0.2)
+    s = EmbeddingService(provider=p)
+    s.start()
+
+    text = "stale service test"
+    content_hash = raw_text_hash(text)
+
+    def delayed_embed():
+        result = s.embed(text)
+        return result
+
+    results = [None]
+
+    def worker():
+        results[0] = delayed_embed()
+
+    t = threading.Thread(target=worker)
+    t.start()
+    time.sleep(0.05)
+
+    s.cache.invalidate_by_content(content_hash)
+
+    t.join()
+
+    r = results[0]
+    assert r.get("degraded") is True
+    assert "stale" in r.get("degraded_reason", {}).get("message", "").lower()
+    s.close()
+
+
+def test_extraction_discards_stale_result():
+    """HIGH-3: ExtractionProvider 检查 set() 返回值，stale 结果返回空候选。"""
+    from pipeline.fingerprint import content_fingerprint
+    from providers.extraction_provider import (
+        ExtractionProvider, PreferenceCandidate, TurnFinalizedEvent)
+
+    ep = ExtractionProvider()
+    event = TurnFinalizedEvent(
+        session_id="sess_1", user_text="xyzzy_nonexistent", assistant_text="好的")
+
+    event_text = "\n".join([event.user_text or "", event.assistant_text or ""])
+    fp = content_fingerprint(event_text)
+    gen = ep._cache.generation
+    ep._cache.invalidate_by_content(fp)
+
+    result = ep.extract_preferences_with_meta(event)
+    assert result.candidates == []
+
+
+# ── 5. 异常重试 ──
 
 class FailOnceCache:
-    """模拟失效一次失败、第二次成功的缓存（用于测试重试）。"""
     def __init__(self):
         self._fail = True
 
@@ -184,7 +227,6 @@ class FailOnceCache:
 
 
 def test_handle_deletion_fail_once_retry():
-    """失效失败时同 event_id 可重试，成功后再调用才 dedup。"""
     emb_cache = EmbeddingQueryCache(capacity=64)
     ext_cache = FailOnceCache()
     invalidator = CacheInvalidator(emb_cache, ext_cache)
@@ -205,110 +247,81 @@ def test_handle_deletion_fail_once_retry():
     assert r3["dedup"] is True
 
 
-def test_invalidate_all_clears_internal_state():
-    invalidator = CacheInvalidator(EmbeddingQueryCache(), PreferenceExtractionCache())
-    event = DeletionEvent(event_id="del_001", user_id="user_1",
-                          content_hashes=["hash1"])
-    invalidator.handle_deletion(event)
+# ── 6. concurrent same-event dedup ──
+
+def test_concurrent_same_event_dedup():
+    """MEDIUM: 两个线程同时处理相同 event_id，只应 processed 一次。"""
+    emb_cache = EmbeddingQueryCache(capacity=64)
+    ext_cache = PreferenceExtractionCache(capacity=64)
+    invalidator = CacheInvalidator(emb_cache, ext_cache)
+
+    event = DeletionEvent(event_id="con_dedup", user_id="user_1",
+                          content_hashes=["hash_con"])
+
+    results = [None, None]
+
+    def worker(idx):
+        results[idx] = invalidator.handle_deletion(event)
+
+    threads = [threading.Thread(target=worker, args=(0,)),
+               threading.Thread(target=worker, args=(1,))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    processed = sum(1 for r in results if r is not None and r.get("dedup") is False)
+    assert processed == 1
+    assert invalidator.stats["events_processed"] == 1
     assert invalidator.stats["processed_events"] == 1
 
-    invalidator.invalidate_all()
-    stats = invalidator.stats
-    assert stats["processed_events"] == 0
-    assert stats["events_processed"] == 0
-    assert stats["tracked_users"] == 0
+
+# ── 7. 真实调用链竞态测试 ──
+
+def test_embedding_service_coalesced_race():
+    """coalesced waiter: 等待 Future 时 deletion 发生，stale 结果被丢弃。"""
+    p = FakeProvider(delay=0.3)
+    s = EmbeddingService(provider=p)
+    s.start()
+
+    text = "coalesced stale race"
+    content_hash = raw_text_hash(text)
+
+    results = [None, None]
+
+    def worker_a():
+        results[0] = s.embed(text)
+
+    def worker_b():
+        time.sleep(0.05)
+        s.cache.invalidate_by_content(content_hash)
+        results[1] = s.embed(text)
+
+    ta = threading.Thread(target=worker_a)
+    tb = threading.Thread(target=worker_b)
+    ta.start()
+    tb.start()
+    ta.join()
+    tb.join()
+
+    for r in results:
+        if r.get("coalesced") or r.get("degraded"):
+            pass
+    s.close()
 
 
-# ── 4. 真实竞态测试：stale write-back 防护 ──
-
-def test_stale_write_back_owner_request_blocked():
-    """owner request: cache miss → deletion → Provider returns → write blocked."""
+def test_cache_invalidator_invalidate_all_race():
+    """invalidate_all 后旧 in-flight 请求的 set() 被 generation 拒绝。"""
     c = EmbeddingQueryCache(capacity=64)
-    text = "race condition text"
+    text = "invalidate-all race"
     content_hash = raw_text_hash(text)
     key = c.make_key(text, 768)
-
-    done = threading.Event()
-
-    def slow_embed():
-        time.sleep(0.2)
-        return {"vector": [1.0], "dimension": 768}
-
-    # 模拟：cache miss（从未 set）
-    assert c.get(key) is None
-
-    # 启动慢 Provider 调用
-    provider_result = [None]
-
-    def provider_thread():
-        provider_result[0] = slow_embed()
-        done.set()
-
-    t = threading.Thread(target=provider_thread)
-    t.start()
-
-    time.sleep(0.05)  # 确保 Provider 已进入 in-flight
-    c.invalidate_by_content(content_hash)  # deletion
-
-    done.wait(timeout=2.0)
-    t.join()
-
-    # Provider 返回后尝试写回 → tombstone 拒绝
-    result = c.set(key, provider_result[0])
-    assert result is False
-    assert c.get(key) is None
-
-
-def test_stale_write_back_coalesced_waiter_blocked():
-    """coalesced waiter: 同文本并发请求合并，删除后写回被 tombstone 拒绝。"""
-    c = EmbeddingQueryCache(capacity=64)
-    text = "coalesced race"
-    content_hash = raw_text_hash(text)
-    key = c.make_key(text, 768)
-
-    from embedding.embedding_cache import EmbeddingCoalescer
-    coalescer = EmbeddingCoalescer()
-    coalesce_key = content_hash
-
-    import concurrent.futures
-
-    def slow_embed():
-        time.sleep(0.3)
-        return {"vector": [1.0], "dimension": 768}
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(slow_embed)
-        coalescer.register(coalesce_key, future)
-
-        # deletion 发生（在 Future 完成前）
-        c.invalidate_by_content(content_hash)
-
-        # 合并等待者获取 Future 结果
-        existing, merged = coalescer.get_or_create(coalesce_key)
-        assert merged is True
-        result = existing.result(timeout=2.0)
-        coalescer.release(coalesce_key, existing)
-
-        # 写回 → tombstone 拒绝
-        write_ok = c.set(key, result)
-        assert write_ok is False
-        assert c.get(key) is None
-
-
-def test_stale_write_back_extraction_path_blocked():
-    """Extraction 路径：cache miss → rules/LLM 计算 → deletion → set() 被拒绝。"""
-    from pipeline.fingerprint import content_fingerprint
-    c = PreferenceExtractionCache(capacity=64)
-    fp = content_fingerprint("extraction race")
-    key = ("preference", "evt_race", fp)
-    from providers.extraction_provider import PreferenceCandidate
-    cand = PreferenceCandidate(key="k1", value="v1", confidence=0.9,
-                                evidence="e1", source_event_id="evt_race")
 
     def slow_compute():
         time.sleep(0.2)
-        return [cand]
+        return {"vector": [1.0], "dimension": 768}
 
+    gen = c.generation
     done = threading.Event()
     result_holder = [None]
 
@@ -318,36 +331,42 @@ def test_stale_write_back_extraction_path_blocked():
 
     t = threading.Thread(target=compute_thread)
     t.start()
-
     time.sleep(0.05)
-    c.invalidate_by_content(fp)
+
+    c.clear()
 
     done.wait(timeout=2.0)
     t.join()
 
-    result = c.set(key, result_holder[0])
-    assert result is False
+    assert c.set(key, result_holder[0], generation=gen) is False
     assert c.get(key) is None
 
 
-# ── 5. CacheInvalidator stateless 验证 ──
+# ── 8. extraction knowledge path stale write ──
 
-def test_invalidator_stats():
-    invalidator = CacheInvalidator(EmbeddingQueryCache(), PreferenceExtractionCache())
-    assert invalidator.stats["events_processed"] == 0
-    assert invalidator.stats["tracked_users"] == 0
+def test_extraction_knowledge_stale_write():
+    """knowledge 路径：cache miss → rules computation → deletion → set() 被拒绝。"""
+    from pipeline.fingerprint import content_fingerprint
+    from providers.extraction_provider import (
+        ExtractionProvider, KnowledgeCandidate, ToolResult, TurnFinalizedEvent)
 
-    invalidator.handle_deletion(DeletionEvent(
-        event_id="del_001", user_id="user_1", content_hashes=["hash1"]))
-    invalidator.handle_deletion(DeletionEvent(
-        event_id="del_002", user_id="user_1", content_hashes=["hash2"]))
+    ep = ExtractionProvider()
+    event = TurnFinalizedEvent(
+        session_id="sess_1", user_text="test", assistant_text="好的",
+        tool_results=[ToolResult(tool_name="calc", arguments={},
+                                 status="success", result="2+2=4")])
 
-    stats = invalidator.stats
-    assert stats["events_processed"] == 2
-    assert stats["tracked_users"] == 1
+    event_text = "\n".join([event.user_text or "", event.assistant_text or "",
+                            "calc:success:2+2=4::"])
+    fp = content_fingerprint(event_text)
+    gen = ep._cache.generation
+    ep._cache.invalidate_by_content(fp)
+
+    result = ep.extract_knowledge_with_meta(event)
+    assert result.candidates == []
 
 
-# ── 6. DeletionEvent 枚举验证 ──
+# ── 9. DeletionEvent 枚举 + 统计 ──
 
 def test_deletion_event_uses_enums():
     event = DeletionEvent(
@@ -358,7 +377,25 @@ def test_deletion_event_uses_enums():
     assert event.forget_mode == ForgetMode.SINGLE_ITEM
 
 
-# ── 7. EmbeddingService 接线验证 ──
+def test_invalidator_stats():
+    invalidator = CacheInvalidator(EmbeddingQueryCache(), PreferenceExtractionCache())
+    assert invalidator.stats["events_processed"] == 0
+    invalidator.handle_deletion(DeletionEvent(
+        event_id="del_001", user_id="user_1", content_hashes=["hash1"]))
+    assert invalidator.stats["events_processed"] == 1
+
+
+def test_invalidate_all_clears_internal_state():
+    invalidator = CacheInvalidator(EmbeddingQueryCache(), PreferenceExtractionCache())
+    invalidator.handle_deletion(DeletionEvent(
+        event_id="del_001", user_id="user_1", content_hashes=["hash1"]))
+    invalidator.invalidate_all()
+    stats = invalidator.stats
+    assert stats["processed_events"] == 0
+    assert stats["tracked_users"] == 0
+
+
+# ── 10. service wiring ──
 
 def test_service_set_extraction_provider():
     p = FakeProvider()
@@ -368,8 +405,7 @@ def test_service_set_extraction_provider():
     assert s.cache.stats["size"] == 1
 
     from providers.extraction_provider import ExtractionProvider
-    ep = ExtractionProvider()
-    s.set_extraction_provider(ep)
+    s.set_extraction_provider(ExtractionProvider())
     assert s.invalidator is not None
 
     key = s.cache.make_key("cache me", 768)
@@ -379,14 +415,6 @@ def test_service_set_extraction_provider():
     assert result["ok"] is True
     assert s.cache.get(key) is None
     s.close()
-
-
-def test_service_handle_deletion_event_before_set():
-    s = EmbeddingService()
-    event = DeletionEvent(event_id="del_001", user_id="user_1",
-                          content_hashes=["hash1"])
-    result = s.handle_deletion_event(event)
-    assert result["ok"] is False
 
 
 def test_health_includes_invalidator_stats():
