@@ -188,6 +188,32 @@ QString MemoryClient::sendHealthRequest()
     return sendRequest(methods::kHealth, QJsonObject{});
 }
 
+QString MemoryClient::sendMemoryStoreRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kMemoryStore, payload);
+}
+
+QString MemoryClient::sendTurnFinalizedEvent(const QJsonObject& eventJson)
+{
+    // D5-C: 封装 TurnFinalizedEvent 为 memory.store payload。
+    // 按 D 轨契约，memory.store 的 payload 包含 event_type + event_body，
+    // 以便服务端路由到对应的 Handler。
+    const QJsonObject storePayload{
+        {QStringLiteral("event_type"), QStringLiteral("turn_finalized")},
+        {QStringLiteral("event_body"), eventJson},
+    };
+    return sendRequest(methods::kMemoryStore, storePayload);
+}
+
+QString MemoryClient::sendToolExecutionEvent(const QJsonObject& eventJson)
+{
+    const QJsonObject storePayload{
+        {QStringLiteral("event_type"), QStringLiteral("tool_execution")},
+        {QStringLiteral("event_body"), eventJson},
+    };
+    return sendRequest(methods::kMemoryStore, storePayload);
+}
+
 void MemoryClient::handleSocketConnected()
 {
     setConnectionState(ConnectionState::Connected);

@@ -83,6 +83,17 @@ public:
     // 便捷方法：memory.health 请求，无 payload。
     Q_INVOKABLE QString sendHealthRequest();
 
+    // D5-C 便捷方法：memory.store 请求，用于写入 Post-Turn 观察事件
+    // （TurnFinalizedEvent / ToolExecutionEvent 等）。payload 由调用方按契约构造。
+    Q_INVOKABLE QString sendMemoryStoreRequest(const QJsonObject& payload);
+
+    // D5-C 便捷方法：发送 TurnFinalizedEvent（Post-Turn 观察）。
+    // eventJson 必须符合 os-agent-integration/contracts 中 TurnFinalizedEvent 契约。
+    Q_INVOKABLE QString sendTurnFinalizedEvent(const QJsonObject& eventJson);
+
+    // D5-C 便捷方法：发送 ToolExecutionEvent。
+    Q_INVOKABLE QString sendToolExecutionEvent(const QJsonObject& eventJson);
+
 signals:
     void socketPathChanged();
     void connectionStateChanged();
