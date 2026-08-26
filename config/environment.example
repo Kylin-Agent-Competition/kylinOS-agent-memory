@@ -1,51 +1,32 @@
-# 环境变量示例
+# 环境变量示例（R-3 定案：KMA_* → KYLIN_MEMORY_*，与冻结 FRZ-CFG-001 对齐）
 # 复制为 .env 后填入实际值。.env 不会进入版本控制。
+# 优先级：CLI > 环境变量 > config.toml > 默认值
 
-# 项目根目录
-KMA_PROJECT_ROOT=
+# ── Memory Service 配置（FRZ-CFG-001 8 键全量映射，FR-DB-006） ──
 
-# Memory Service Unix Domain Socket 路径（ALIGN-005 冻结标准路径）
-KMA_SOCKET_PATH=$XDG_RUNTIME_DIR/kylin-memory/memory.sock
+# UDS Socket 路径（默认 $XDG_RUNTIME_DIR/kylin-memory/memory.sock）
+KYLIN_MEMORY_SOCKET=
 
-# SQLite 数据库路径
-KMA_DATABASE_PATH=
+# SQLite 数据库路径（默认 ~/.local/share/kylin-memory/kylin_memory.db）
+KYLIN_MEMORY_DB=
 
-# 日志级别: DEBUG, INFO, WARNING, ERROR
-KMA_LOG_LEVEL=INFO
+# 默认 deadline（毫秒，正整数 1..60000）
+KYLIN_MEMORY_DEADLINE_MS=5000
 
-# 检索超时 (毫秒)
-KMA_RETRIEVE_DEADLINE_MS=150
+# 检索 deadline（毫秒，正整数 1..5000；聊天优先：超时返回空上下文）
+KYLIN_MEMORY_RETRIEVE_DEADLINE_MS=150
 
-# 推送上下文最大 token 数
-KMA_MAX_CONTEXT_TOKENS=800
+# Outbox 轮询间隔（秒，正整数 1..60）
+KYLIN_MEMORY_OUTBOX_POLL_INTERVAL_S=1
 
-# ======== UDS Echo 组件路径 (os-agent-integration/echo) ========
-# 注意: 以下路径区分 dev 模式与 systemd/prod 模式
-# 统一部署布局 (Gate 0): /home/<user>/kylin-memory-echo/
-#
-# ---- 统一部署布局 (Gate 0) ----
-# /home/<user>/kylin-memory-echo/
-# ├── bin/
-# │   ├── kylin-memory-echo-server    (服务端脚本)
-# │   ├── echo_client                 (C++ 客户端)
-# │   └── kaiming_memory_client       (Kaiming 模拟客户端)
-# ├── share/
-# │   └── kylin-memory-echo.service   (仓库正式 Unit)
-# ├── logs/
-# └── build/
-#
-# ---- 构建产物安装路径 (CMake install, 默认 prefix=/usr/local) ----
-# echo_client 二进制:          /usr/local/bin/echo_client
-# kaiming_memory_client 二进制: /usr/local/bin/kaiming_memory_client
-# 服务端脚本 (rename):          /usr/local/bin/kylin-memory-echo-server
-# KYSEC/rollback 脚本:          /usr/local/share/kylin-memory-echo/
-#
-# ---- UDS Socket 路径 (按运行模式区分) ----
-# systemd 模式: /run/kylin-memory-echo/echo.sock
-# dev 模式:     /tmp/kylin-memory-echo/echo.sock  (传递 --dev 或 --socket 参数)
-#
-# ---- 服务端脚本 dev 路径 (未安装时从仓库直接运行) ----
-# os-agent-integration/echo/memory_echo_server.py --dev
+# Outbox 最大重试次数（正整数 1..10；默认保持 3，偏离须走 ADR 同步评估索引）
+KYLIN_MEMORY_OUTBOX_MAX_RETRIES=3
+
+# Embedding 模型名（非空）
+KYLIN_MEMORY_EMBEDDING_MODEL=default
+
+# 日志级别（DEBUG/INFO/WARNING/ERROR/CRITICAL）
+KYLIN_MEMORY_LOG_LEVEL=INFO
 
 # ======== SSH 远程 VM 连接凭据 (evidence/gate0_echo/*.py 使用) ========
 # 麒麟 VM SSH 主机地址

@@ -1,0 +1,76 @@
+=== L1 回归（麒麟 VM）===
+tested_commit: eda2f5da3ec1911f4b15701c42d6a040bc5156aa
+command: PYTHONPATH=memory-service python -m pytest memory-service/tests/test_db_d4d.py memory-service/tests/test_migrations_d4d.py -v
+date: 2026-08-25 00:35:13
+
+
+# ===== 两个文件 -v =====
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/kylin-agent/d4d-venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/kylin-agent/kylinOS-agent-memory
+collecting ... collected 27 items
+
+memory-service/tests/test_db_d4d.py::test_wal_mode PASSED                [  3%]
+memory-service/tests/test_db_d4d.py::test_foreign_keys_on PASSED         [  7%]
+memory-service/tests/test_db_d4d.py::test_init_schema_idempotent PASSED  [ 11%]
+memory-service/tests/test_db_d4d.py::test_tables_exist PASSED            [ 14%]
+memory-service/tests/test_db_d4d.py::test_has_alembic_version_false_after_init_schema PASSED [ 18%]
+memory-service/tests/test_db_d4d.py::test_frozen_indexes_exist PASSED    [ 22%]
+memory-service/tests/test_db_d4d.py::test_entry_type_check_constraint PASSED [ 25%]
+memory-service/tests/test_db_d4d.py::test_idempotency_composite_pk PASSED [ 29%]
+memory-service/tests/test_db_d4d.py::test_turn_with_outbox_same_transaction_commit PASSED [ 33%]
+memory-service/tests/test_db_d4d.py::test_uow_rollback_atomic PASSED     [ 37%]
+memory-service/tests/test_db_d4d.py::test_memory_entry_soft_delete_fts_sync PASSED [ 40%]
+memory-service/tests/test_db_d4d.py::test_memory_entry_optimistic_lock_conflict PASSED [ 44%]
+memory-service/tests/test_db_d4d.py::test_idempotent_hit_returns_cache PASSED [ 48%]
+memory-service/tests/test_db_d4d.py::test_idempotent_expired_ttl_reexecute PASSED [ 51%]
+memory-service/tests/test_db_d4d.py::test_idempotent_concurrent_conflict_returns_first PASSED [ 55%]
+memory-service/tests/test_db_d4d.py::test_outbox_retry_backoff PASSED    [ 59%]
+memory-service/tests/test_db_d4d.py::test_outbox_dead_letter_after_max_retries PASSED [ 62%]
+memory-service/tests/test_db_d4d.py::test_cleanup_expired_idempotency PASSED [ 66%]
+memory-service/tests/test_db_d4d.py::test_list_memory_entries_user_isolation PASSED [ 70%]
+memory-service/tests/test_db_d4d.py::test_is_locked_error_recognizes_operational PASSED [ 74%]
+memory-service/tests/test_db_d4d.py::test_get_turn_user_isolation PASSED [ 77%]
+memory-service/tests/test_db_d4d.py::test_fts_update_syncs_entry_type_and_user_id PASSED [ 81%]
+memory-service/tests/test_migrations_d4d.py::test_upgrade_head_schema PASSED [ 85%]
+memory-service/tests/test_migrations_d4d.py::test_alembic_version_table_present_after_upgrade PASSED [ 88%]
+memory-service/tests/test_migrations_d4d.py::test_upgrade_schema_columns PASSED [ 92%]
+memory-service/tests/test_migrations_d4d.py::test_downgrade_base_clean PASSED [ 96%]
+memory-service/tests/test_migrations_d4d.py::test_upgrade_then_downgrade_then_upgrade PASSED [100%]
+
+============================= 27 passed in 10.48s ==============================
+
+
+# ===== 全量 =====
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/kylin-agent/kylinOS-agent-memory
+collected 72 items
+
+memory-service/tests/test_config_d4d.py ...........                      [ 15%]
+memory-service/tests/test_db_d4d.py ......................               [ 45%]
+memory-service/tests/test_gateway_protocol_d4d.py ................       [ 68%]
+memory-service/tests/test_gateway_server_d4d.py ............             [ 84%]
+memory-service/tests/test_migrations_d4d.py .....                        [ 91%]
+memory-service/tests/test_outbox_worker_d4d.py ......                    [100%]
+
+=============================== warnings summary ===============================
+memory-service/tests/test_gateway_server_d4d.py::test_stop_rejects_after_shutdown
+  /home/kylin-agent/d4d-venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-21 (start)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+      self.run()
+    File "/usr/lib/python3.12/threading.py", line 1010, in run
+      self._target(*self._args, **self._kwargs)
+    File "/home/kylin-agent/kylinOS-agent-memory/memory-service/gateway/server.py", line 83, in start
+      os.chmod(self._socket_path, 0o600)
+  FileNotFoundError: [Errno 2] No such file or directory: '/var/tmp/pytest-of-kylin-agent/pytest-5/test_stop_rejects_after_shutdo0/memory2.sock'
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 72 passed, 1 warning in 14.74s ========================
