@@ -256,6 +256,24 @@ entries:
       init_schema() 二次调用幂等: IDEMPOTENT_OK；UDS stop unlink: SOCK_UNLINKED_OK
       归档自校验: 无 Traceback，三脚本 PASS 标识齐全；verify_run.log 与 RESULT.md 一致。
 
+  - id: "D4D-L1-REGRESSION"
+    task_id: "D4-D"
+    description: "D4D 麒麟 VM L1 回归（2026-08-25，被测 eda2f5da）—— test_db_d4d.py + test_migrations_d4d.py 27 项 + 全量 test_*_d4d.py 72 passed（PR#52 body L1 计数 65→72 依据）"
+    status: "PASS"
+    evidence_level: "E2"
+    source: "evidence/l1/l1_regression_20260825_003513.log"
+    tested_commit: "eda2f5da3ec1911f4b15701c42d6a040bc5156aa"
+    date: "2026-08-25"
+    reviewer: "待审"
+    limitations: "L1 为集成回归计数证据（E2），不构成麒麟宿主 HOST_VERIFIED；仅证明被测 eda2f5da 上 D4D L1 全量 72 项通过；D4D L2 宿主证据见 D4D-L2-VERIFY；systemd 生产启动/迁移路径（U-1 等）不在 L1 范围"
+    checksum_sha256: "ccee82ce2ed92229955609454005f09cce4eb2cbfcd551f23115254258928e53"
+    details: |
+      执行环境: 麒麟 VM（SSH 127.0.0.1:2222，kylin-agent，d4d-venv Python 3.12.3，
+      sqlalchemy 2.0.52 / alembic 1.19.1 / pydantic 2.13.4），仓库同步至被测 HEAD eda2f5da。
+      两文件 -v: 27 passed in 10.48s（test_db_d4d.py + test_migrations_d4d.py，含新增回归）。
+      全量 test_*_d4d.py: 72 passed in 14.74s, 1 warning（PytestUnhandledThreadExceptionWarning，
+      test_stop_rejects_after_shutdown 线程清理竞态，非功能失败）。
+      证据由 scripts/run_l1_regression.py 生成，用于 PR#52 body L1 计数 65→72 更新。
 
   - id: "ECHO-005"
     task_id: "D1-C"
