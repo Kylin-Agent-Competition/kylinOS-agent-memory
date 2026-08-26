@@ -95,14 +95,21 @@ class CacheInvalidator:
 
         # 先执行失效操作（在锁外执行，避免持有锁期间调用外部 cache）
         try:
-            embedding_removed = 0
-            for ch in event.content_hashes:
-                embedding_removed += self._embedding_cache.invalidate_by_content(ch)
+            # D10 REWORK MEDIUM：ForgetMode.FULL_RESET → invalidate_all
+            if event.forget_mode == ForgetMode.FULL_RESET:
+                self._embedding_cache.clear()
+                self._extraction_cache.clear()
+                embedding_removed = 0
+                extraction_removed = 0
+            else:
+                embedding_removed = 0
+                for ch in event.content_hashes:
+                    embedding_removed += self._embedding_cache.invalidate_by_content(ch)
 
-            extraction_removed = 0
-            for fp in event.content_fingerprints:
-                extraction_removed += self._extraction_cache.invalidate_by_content(fp)
-            extraction_removed += self._extraction_cache.invalidate_by_event(event.event_id)
+                extraction_removed = 0
+                for fp in event.content_fingerprints:
+                    extraction_removed += self._extraction_cache.invalidate_by_content(fp)
+                extraction_removed += self._extraction_cache.invalidate_by_event(event.event_id)
         except Exception:
             # 失效失败：不标记 processed，允许重试
             return {"ok": False, "error": "invalidation failed",
