@@ -91,6 +91,12 @@
 - **局部 scope 覆盖不得删除 global 历史**：UI 展示当前生效值时，global 历史版本必须保留可回溯。
 - scope 优先级在 UI 展示层面的业务语义：局部 scope 当前值优先展示，但**不得删除或隐藏 global 历史**。
 
+### 版本号单调唯一约束（本规范遵循）
+
+- rollback 后再次 UPDATE 时，`next_version` = 同 `user_id + preference_key + scope` 链内**全部现存记录（含历史 SUPERSEDED）**的 `max(version) + 1`；
+- 版本号单调唯一，**不复用历史版本号**（避免 rollback 到旧 active 后再次 UPDATE 复用已被历史记录占用的版本号）；
+- 来源：`preference_version_policy.py` `_find_max_version_in_chain` + `_update`（L400-441），对应 TD-020。
+
 ---
 
 ## 五、业务验收案例（用户可观察行为）
@@ -128,7 +134,7 @@
 - **通过判据**：
   - 当前生效值为 v2（version 递增）；
   - 不原地覆盖：v1 历史版本保留，标记 superseded 不删除，版本链可回溯；
-  - D 轨：version = current.version + 1、previous_version_id 指向 v1；
+  - D 轨：version = max(同 user_id + preference_key + scope 链内全部现存记录 version) + 1（含历史 SUPERSEDED 记录，保证 rollback 后再次 UPDATE 不复用历史版本号）；previous_version_id 指向当前 active；
   - C 轨：历史列表展示 v1，当前值对话上下文展示 v2。
 - **失败判据**：值原地覆盖导致 v1 丢失；或 version 不递增；或 previous_version_id 不指向上一版；或历史列表不可见 v1。
 - **责任轨道**：D（版本链持久化：递增 + 历史保留）；C（历史列表展示 + 当前值对话展示）。
@@ -244,6 +250,7 @@ E 轨策略（D7E-01/02/03）已有单元测试与回归测试（S-07），但�
 | 版本 | 日期 | 作者 | 变更说明 | 状态 |
 |------|------|------|----------|------|
 | v1 | 2026-08-24 | E 轨道 | 初稿：形成 Day7E 对 C 轨偏好 UI 与 D 轨版本持久化的业务验收规范（CREATE/COEXIST/UPDATE/NO_OP/ROLLBACK + 临时偏好 + 跨用户隔离）；明确 D/C 各自证据清单；全部 C/D 验收案例证据状态 `RUNTIME_UNVERIFIED`；文档状态 `PENDING_INTEGRATION` | `PENDING_INTEGRATION` |
+| v2 | 2026-08-26 | E 轨道 | 明确 rollback 后 UPDATE 版本号单调唯一约束（同 user/key/scope 链 max(existing version)+1，含历史 SUPERSEDED，不复用历史版本号）；对应 TD-020 登记；状态仍 `PENDING_INTEGRATION`，C/D/L2/L3 不变 | `PENDING_INTEGRATION` |
 
 ---
 

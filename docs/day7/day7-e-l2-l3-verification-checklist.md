@@ -86,3 +86,4 @@
 |------|------|------|----------|------|
 | v1 | 2026-08-24 | E 轨道 | 初稿：将 `day7-e-ui-version-acceptance-v1.md` 第六、七章 C/D 轨证据清单可执行化为 L2/L3 分层编号清单；全部条目 `RUNTIME_UNVERIFIED` | `RUNTIME_UNVERIFIED` |
 | v2 | 2026-08-26 | E 轨道 | 将 §〇.2「L1 本地 100 passed」改为不易漂移表述（退出码 0 + passed 数量以实际执行证据为准），避免 passed 数量漂移误导；同步 PR #58 审查收敛补记状态 | `RUNTIME_UNVERIFIED` |
+| v3 | 2026-08-26 | E 轨道 | 登记 TD-019/TD-020（跨用户 Rollback 拒绝载荷回显他人 key/scope + rollback 后 UPDATE 版本号冲突，均 Medium/In Progress），同步 HEAD `85f7754` 独立复测 109 passed 与跨阶段 305 passed 的 L1 时点（非 Runtime 证据）；全部 L2/L3 条目保持 `RUNTIME_UNVERIFIED` | `RUNTIME_UNVERIFIED` |

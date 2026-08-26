@@ -52,12 +52,21 @@ PR #58 正式审查提出 #1、#2、#3 三个问题；#1 与 #2 已通过代码 
 - **修复**：`PreferenceVersionPlan.coexist_with_scopes` 使用 `Field(default_factory=list)`（`preference_version_policy.py:169`），两个默认实例的列表互相独立，无共享可变默认值。
 - **测试**：`test_coexist_with_scopes_default_independent_instances`（`test_preference_version_policy_d7e.py` 第 702–726 行）。
 
+### 复审追加收敛（TD-019 / TD-020）
+
+PR #58 复审进一步识别并收敛两项 **Medium** 问题，分别登记为 TD-019 与 TD-020（均 In Progress，等待非作者 Reviewer 最终确认后关闭）：
+
+- **identity 门禁（TD-019）**：跨用户 Rollback 拒绝时载荷不回显他人 `key`/`scope`。`18818a8` 将跨用户拒绝的 `preference_key`/`scope` 置空（`_reject(REASON_REJECTED_CROSS_USER, intent.user_id, "", "")`），5 个负向泄露测试（`test_rollback_cross_user_*` 等 L822-984）覆盖。
+- **monotonic version（TD-020）**：rollback 后 UPDATE 版本号按同 `user_id + preference_key + scope` 链内全部现存记录（含历史 SUPERSEDED）的 `max(version)+1` 分配，不复用历史版本号（`_find_max_version_in_chain` + `_update`，L400-441）；7 个 monotonic version 测试（L998-1163）覆盖，含 v1 active + v2v3 历史后 UPDATE=4。
+
 ### 技术债登记
 
 - **TD-018**（PR #58 审查收敛补记与审查状态同步治理）= `Technical Debt` / `Low` / **`In Progress`**，详见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`。
 - **责任人**：E 轨成员；**Reviewer**：D 主审；**关联 PR**：#58。
 - **验收标准摘要**：保留原 Reviewer 正式审查正文与时点事实（首次 100 passed），仅追加收敛补记，不篡改历史正文；补记明确 `b883516` 已收敛原审查问题 #1（scope fail-closed）/ #2（default_factory / identity Low）；区分首次 100 passed 与后续 Reviewer 独立复测 104 passed（不同时点，互不覆盖）；本轮 identity Low 已修但待非作者 Reviewer 复核；C/D/L2/L3 状态保持 `PENDING_INTEGRATION` / `RUNTIME_UNVERIFIED`，不虚报；Acceptance Spec 不冻结；最终由非作者 Reviewer 确认后标记 `Resolved`。
 - **当前状态**：`In Progress`，等待非作者 Reviewer 最终确认后关闭。
+- **TD-019**（跨用户 Rollback 拒绝载荷回显他人 key/scope）= `Technical Debt` / `Medium` / **`In Progress`**，详见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`。**责任人**：E 轨成员；**Reviewer**：D 主审；**关联 PR**：#58。**摘要**：跨用户 REJECTED 时 key/scope 清空（不回显 target 用户数据）+ 5 个负向泄露测试全部通过 + 非作者 Reviewer 确认后关闭。
+- **TD-020**（rollback 后 UPDATE 版本号可能与历史冲突）= `Technical Debt` / `Medium` / **`In Progress`**，详见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`。**责任人**：E 轨成员；**Reviewer**：D 主审；**关联 PR**：#58。**摘要**：同 user_id + preference_key + scope 链 max(existing version)+1 + v1 active/v2v3 历史后 UPDATE=4 隔离测试通过 + 非作者 Reviewer 确认后关闭。
 
 ## 明确不修改范围
 
@@ -102,7 +111,9 @@ D 轨版本持久化 **尚未实现**：
 
 ## L0 / L1 测试命令与通过判据
 
-> 无 D7E 专属执行日志（`evidence/l1/` 无 day7e 日志，`evidence/index.yaml` 无 D7E 条目）。因此本文档**不虚构具体 passed 数量或耗时**，只记录命令与通过判据（退出码 0）。L0/L1 仅作为「文档任务不破坏既有 E 轨代码」的回归证据，不冒充 C 轨 UI 或 D 轨版本持久化的 Runtime 验收。
+> 本任务为**纯文档修改**，不触碰任何生产/测试代码，以下 L0/L1 仅作为「文档任务不破坏既有 E 轨代码」的回归证据，不冒充 C 轨 UI 或 D 轨版本持久化的 Runtime 验收。
+>
+> **已记录的 L1 时点**：HEAD `85f7754` 独立复测 109 passed（三 D7E 文件）与跨阶段 305 passed，均为 **L1 非 Runtime 证据**（详见 `docs/day7/day7-e-l2l3-review-result.md` §6.2）。本任务执行环境（HEAD `d6a388b`）实际回归输出：`test_preference_version_policy_d7e.py` **51 passed**、三 D7E 文件全量 **121 passed**（退出码 0），为独立新时点，不覆盖前述 109/305 记录。
 
 ### L0
 
@@ -127,7 +138,7 @@ python3 -m pytest memory-service/tests/test_preference_business_policy_d7e.py me
 
 - C 轨 QML 偏好 UI 未实现，D 轨版本持久化未实现，均需对应轨道在银河麒麟 VM 中提供真实证据。
 - Acceptance Spec 为 E 轨单方面提出的验收规范候选，冻结前须经非作者 D Reviewer 批准且 PR 合并。
-- 无 D7E 专属 L1/L2 执行日志，pass 数量与耗时未在本文档声称。
+- 无 D7E 专属 L2 Runtime 执行日志。已记录 L1 passed 时点（HEAD `85f7754` 独立复测 109 passed、跨阶段 305 passed，以及本任务 HEAD `d6a388b` 实际 51/121 passed），全部为 **L1 非 Runtime 证据**，不以静态检查 / L1 pytest 冒充真实宿主验收。
 
 ## 回滚方式
 
