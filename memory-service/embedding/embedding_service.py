@@ -36,7 +36,7 @@ from providers import (
     ProviderErrorCode,
 )
 from embedding.embedding_cache import EmbeddingCoalescer, EmbeddingQueryCache
-from embedding.cache_invalidator import CacheInvalidator, DeletionEvent
+from embedding.cache_invalidator import CacheInvalidator, DeletionEvent, ForgetMode, TargetType
 from embedding.embedding_metrics import EmbeddingBacklogTracker
 from embedding.protocol import (
     PROTOCOL_VERSION,
@@ -183,7 +183,7 @@ class EmbeddingService:
         self._backlog = EmbeddingBacklogTracker()
         self._coalescer = EmbeddingCoalescer()
         # D10：缓存失效协调器（精准遗忘与删除一致性）
-        # 注入 extraction_cache 需外部传入，默认 None 时延迟创建
+        # 通过 set_extraction_provider() 或 set_cache_invalidator() 接线
         self._invalidator: Optional[CacheInvalidator] = None
         # [TABLE 29 降级策略] 短文本阈值：积压告警时超过此长度的文本跳过
         # embed，直接返回结构化降级（避免长文本拖慢整个队列）。
@@ -243,6 +243,16 @@ class EmbeddingService:
             extraction_cache: PreferenceExtractionCache 实例。
         """
         self._invalidator = CacheInvalidator(self._cache, extraction_cache)
+
+    def set_extraction_provider(self, extraction_provider: Any) -> None:
+        """从 ExtractionProvider 接入真实抽取缓存（D10 REWORK：真实接线路径）。
+
+        Args:
+            extraction_provider: ExtractionProvider 实例，使用其 _cache。
+        """
+        ext_cache = getattr(extraction_provider, "_cache", None)
+        if ext_cache is not None:
+            self._invalidator = CacheInvalidator(self._cache, ext_cache)
 
     def handle_deletion_event(self, event: DeletionEvent) -> Dict[str, Any]:
         """处理删除事件：失效关联缓存（D10：精准遗忘入口）。
