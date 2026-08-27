@@ -1,4 +1,6 @@
-# D6B Collection Schema 与组合过滤宿主验证
+# D6B Collection Schema 与组合过滤宿主验证（历史，已取代）
+
+> 此 2026-08-26 记录的对象是 `a493a3f` 之上的未提交工作树，未声明 `tested_commit`，不构成 PR #63 合并证据。最终绑定 `aef8d52ad602b2e73e0336f7fb0dd0167b4043e6` 的记录见 [2026-08-28 报告](d6b_vector_schema_filter_20260828.md)。
 
 - 任务：D6B — Collection Schema、用户/场景过滤、异常输入验证与删除门禁
 - 结论：`HOST_VERIFIED / E4`（仅限下表所列未提交工作树）

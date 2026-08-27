@@ -35,7 +35,7 @@
 
 - L0：输入验证、异常命中丢弃、空场景 allowlist 的 `[] + false` / `[] + true` 透传回归、降级与历史 B 轨脚本回归。
 - L1：`memory-service/tests/retrieval` 全组通过。
-- L2：Kylin V11 真实 Vector Engine 覆盖 metadata 写入、用户隔离、场景/状态/删除过滤、未知键拒绝和 Python provider 端到端；证据见 [D6B L2 报告](../../evidence/l2-kylin-vm/d6b_vector_schema_filter_20260826.md)。
+- L2：Kylin V11 真实 Vector Engine 覆盖 metadata 写入、用户隔离、场景/状态/删除过滤、未知键拒绝和 Python provider 端到端；最终绑定 `tested_commit` 的证据见 [D6B L2 报告](../../evidence/l2-kylin-vm/d6b_vector_schema_filter_20260828.md)。
 
 ## 安全与失败语义
 
