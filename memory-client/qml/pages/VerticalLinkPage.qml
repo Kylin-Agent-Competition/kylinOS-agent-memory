@@ -1,9 +1,20 @@
-// VerticalLinkPage.qml — D5-C 首个真实垂直链路演示
+// VerticalLinkPage.qml — D5-C 垂直链路 Demo / Prototype 面板
 //
-// 目标（台账 D5-C，完成定义：AI 助手最小 Pre/Post 链路在虚拟机真实工作）：
-//   ① 打通 用户输入 → Pre-Chat (memory.retrieve → MemoryContext) → 模型请求
-//   ② 打通 最终回答 → Post-Turn (TurnFinalizedEvent → memory.store) → 观察
-//   ③ 验证 UI/聊天库保存原文，不保存 Memory Context（三路口径隔离面板）
+// ⚠️ 重要声明（路线 B — REWORK 修正）：
+//   本页仅为 memory-client 侧的 Pipeline Harness / Demo，用于在 L0 Mock
+//   Gateway 或 Echo/D 轨 Gateway 上演示 Pre-Chat / Post-Turn envelope / payload
+//   形状。它 **尚未** 证明接入：真实 AI Assistant Hook、真实 model request、
+//   真实 Chat DB / ChatRecord、真实 assistant final message。
+//   因此本 Demo 不关闭 C-D5，也不声称 SEC-CTX-01 已完成 Runtime 验证。
+//
+// 演示范围：
+//   ① Pre-Chat Demo：用户输入 → memory.retrieve → 按正式 MemoryContext
+//     契约 (memory_context.v1.json) 解析 envelope.data.context；
+//     空 context / error / malformed 一律保持空注入，不产生伪 [MEMORY-CONTEXT]。
+//     status=error (UNSUPPORTED_METHOD / TIMEOUT / …) → 明确 failed / timeout。
+//   ② Post-Turn Demo：构造 TurnFinalizedEvent → memory.store 发送。
+//     status=error → 明确 failed，不得将 UNSUPPORTED_METHOD 显示为 sent。
+//   ③ 原文隔离面板：三路字符串对比 + PASS/FAIL 指示灯（仅 Demo 口径校验）。
 import QtQuick 2.12
 import QtQuick.Controls 2.12
 import QtQuick.Layouts 1.12
@@ -13,381 +24,447 @@ Page {
     id: root
     property MemoryViewModel viewModel
 
-    ColumnLayout {
+    // 问题4/非阻断项：整个页面包一层 ScrollView，默认 960×640 不再溢出
+    ScrollView {
         anchors.fill: parent
-        anchors.margins: 12
-        spacing: 8
+        clip: true
 
-        // ====================================================================
-        // 标题 + 连接状态
-        // ====================================================================
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
+        ColumnLayout {
+            width: root.width
+            spacing: 8
+            leftPadding: 12
+            rightPadding: 12
+            topPadding: 12
+            bottomPadding: 12
 
+            // =================================================================
+            // 标题 + Demo 声明 + 连接状态
+            // =================================================================
             Label {
-                text: qsTr("D5-C · Vertical Link (Pre-Chat ⇄ Post-Turn)")
+                Layout.fillWidth: true
+                text: qsTr("D5-C · Vertical Link Demo / Prototype（仅 memory-client Harness，不关闭 C-D5）")
                 font.bold: true
-                font.pointSize: 15
+                font.pointSize: 14
+                color: "#6a1b9a"
+                wrapMode: Text.WordWrap
             }
-            Item { Layout.fillWidth: true }
             Label {
-                text: qsTr("Gateway: ") + viewModel.connectionState
-                color: viewModel.connectionState === "connected" ? "#2e7d32" : "#c62828"
-            }
-            Label { text: "  |  Busy: " + (viewModel.busy ? "yes" : "no") }
-        }
-
-        // ====================================================================
-        // Tab 1：Pre-Chat 链路
-        // ====================================================================
-        Frame {
-            Layout.fillWidth: true
-            ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                text: qsTr(
+                    "⚠️ 本面板仅展示 envelope / payload 形状（L0 Mock / Echo 可验证）。" +
+                    "真实 AI Assistant Hook、Chat DB、ChatRecord、assistant final message 尚未集成。" +
+                    "Pre/Post status=error / timeout 均进入明确 failed 阶段；" +
+                    "空 MemoryContext 不产生伪 [MEMORY-CONTEXT] 标记。"
+                )
+                wrapMode: Text.WordWrap
+                color: "#7b1fa2"
+            }
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    Label {
-                        text: qsTr("① Pre-Chat Pipeline")
-                        font.bold: true
-                        font.pointSize: 12
-                    }
-                    Label {
-                        text: qsTr("Stage: ") + viewModel.preChatStage
-                        color: (viewModel.preChatStage === "ready")
-                               ? "#2e7d32"
-                               : (viewModel.preChatStage === "failed" ? "#c62828" : "#616161")
-                    }
-                    Item { Layout.fillWidth: true }
-                    Button {
-                        text: qsTr("Reset")
-                        onClicked: viewModel.resetPreChatPipeline()
-                    }
-                }
-
-                GridLayout {
-                    columns: 2
-                    Layout.fillWidth: true
-                    columnSpacing: 10
-                    rowSpacing: 6
-
-                    Label { text: qsTr("user_id") }
-                    TextField {
-                        id: preUserId
-                        Layout.fillWidth: true
-                        text: "local-user"
-                    }
-                    Label { text: qsTr("session_id") }
-                    TextField {
-                        id: preSessionId
-                        Layout.fillWidth: true
-                        text: "session-demo-" + Math.floor(Math.random() * 1000)
-                    }
-                    Label { text: qsTr("scene") }
-                    TextField {
-                        id: preScene
-                        Layout.fillWidth: true
-                        text: "software_development"
-                    }
-                    Label { text: qsTr("max_context_tokens") }
-                    SpinBox {
-                        id: preMaxTokens
-                        from: 1; to: 8192; value: 800
-                    }
-                }
-
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
                 Label {
-                    text: qsTr("用户原文 (originalUserText — 用于 UI/聊天库保存)")
-                    font.bold: true
+                    text: qsTr("Gateway: ") + viewModel.connectionState
+                    color: viewModel.connectionState === "connected" ? "#2e7d32" : "#c62828"
                 }
-                TextArea {
-                    id: userOriginalInput
-                    Layout.fillWidth: true
-                    Layout.minimumHeight: 70
-                    wrapMode: TextArea.Wrap
-                    placeholderText: qsTr("输入原文，例如：帮我回忆昨天讨论的麒麟 OS Agent 记忆系统架构要点")
-                    text: qsTr("帮我回忆昨天讨论的麒麟 OS Agent 记忆系统架构要点")
+                Label {
+                    text: qsTr("PreChat busy: ") + (viewModel.preChatBusy ? "yes" : "no")
                 }
+                Label {
+                    text: qsTr("PostTurn busy: ") + (viewModel.postTurnBusy ? "yes" : "no")
+                }
+            }
 
-                RowLayout {
+            // =================================================================
+            // ① Pre-Chat
+            // =================================================================
+            Frame {
+                Layout.fillWidth: true
+                ColumnLayout {
                     Layout.fillWidth: true
-                    Button {
-                        text: viewModel.busy
-                              ? qsTr("Running Pre-Chat…")
-                              : qsTr("⟶ Run Pre-Chat (memory.retrieve → Context)")
-                        highlighted: true
-                        enabled: viewModel.connectionState === "connected" && !viewModel.busy
-                        onClicked: {
-                            viewModel.runPreChatPipeline(
-                                preUserId.text,
-                                preSessionId.text,
-                                preScene.text,
-                                preMaxTokens.value,
-                                userOriginalInput.text)
+                    spacing: 8
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            text: qsTr("① Pre-Chat Pipeline")
+                            font.bold: true
+                            font.pointSize: 12
+                        }
+                        Label {
+                            text: qsTr("Stage: ") + viewModel.preChatStage
+                            color: {
+                                const s = viewModel.preChatStage
+                                if (s === "ready")   return "#2e7d32"
+                                if (s === "failed" || s === "timeout") return "#c62828"
+                                if (s === "querying") return "#f57c00"
+                                return "#616161"
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        Button {
+                            text: qsTr("Reset (取消在途请求)")
+                            onClicked: viewModel.resetPreChatPipeline()
                         }
                     }
-                    Item { Layout.fillWidth: true }
-                    Label { text: qsTr("lastRequestId: ") + viewModel.lastRequestId
-                            elide: Text.ElideMiddle; Layout.maximumWidth: 420 }
-                }
 
-                // ── Pre-Chat 三路口径对比 ──────────────────────────────
-                Label {
-                    text: qsTr("三路口径对比（原文隔离验证）")
-                    font.bold: true
-                    Layout.topMargin: 6
-                }
-
-                GridLayout {
-                    columns: 2
-                    rows: 3
-                    Layout.fillWidth: true
-                    Layout.minimumHeight: 320
-                    columnSpacing: 10
-                    rowSpacing: 6
-
-                    Label {
-                        text: qsTr("❶ UI/聊天库保存内容 (originalUserText)")
-                        font.bold: true
-                        color: "#1565c0"
-                    }
-                    Label {
-                        text: qsTr("❷ 模型请求文本 (modelRequestText)")
-                        font.bold: true
-                        color: "#6a1b9a"
-                    }
-
-                    TextArea {
-                        readOnly: true
+                    GridLayout {
+                        columns: 2
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        wrapMode: TextArea.Wrap
-                        text: viewModel.originalUserText
-                        background: Rectangle { color: "#e3f2fd" }
-                    }
-                    TextArea {
-                        readOnly: true
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        wrapMode: TextArea.Wrap
-                        text: viewModel.modelRequestText
-                        font.family: "Consolas,Menlo,monospace"
-                        background: Rectangle { color: "#f3e5f5" }
-                    }
+                        columnSpacing: 10
+                        rowSpacing: 6
 
-                    Label {
-                        text: qsTr("❸ 注入的 Memory Context 片段 (诊断用)")
-                        font.bold: true
-                        color: "#4527a0"
-                        Layout.columnSpan: 2
-                    }
-                    TextArea {
-                        readOnly: true
-                        Layout.columnSpan: 2
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        Layout.minimumHeight: 120
-                        wrapMode: TextArea.Wrap
-                        text: viewModel.injectedContextText
-                        font.family: "Consolas,Menlo,monospace"
-                        background: Rectangle { color: "#ede7f6" }
-                    }
-                }
-
-                // ── 原文隔离验证结论 ────────────────────────────────────
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-                    Label {
-                        text: qsTr("原文隔离验证：")
-                        font.bold: true
-                    }
-                    Rectangle {
-                        width: 24
-                        height: 24
-                        radius: 12
-                        color: viewModel.textIsolationVerified ? "#43a047" : "#e53935"
-                    }
-                    Label {
-                        text: viewModel.textIsolationVerified
-                               ? qsTr("PASS — originalUserText 不含任何 Memory Context 标记片段")
-                               : qsTr("FAIL — 原文疑似被 MemoryContext 污染！（请检查 UI/DB 保存逻辑）")
-                        color: viewModel.textIsolationVerified ? "#2e7d32" : "#c62828"
-                        font.bold: true
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                    }
-                }
-            }
-        }
-
-        // ====================================================================
-        // Tab 2：Post-Turn 链路
-        // ====================================================================
-        Frame {
-            Layout.fillWidth: true
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Label {
-                        text: qsTr("② Post-Turn Pipeline")
-                        font.bold: true
-                        font.pointSize: 12
-                    }
-                    Label {
-                        text: qsTr("Stage: ") + viewModel.postTurnStage
-                        color: (viewModel.postTurnStage === "sent")
-                               ? "#2e7d32"
-                               : (viewModel.postTurnStage === "failed" ? "#c62828" : "#616161")
-                    }
-                }
-
-                GridLayout {
-                    columns: 4
-                    Layout.fillWidth: true
-                    columnSpacing: 10
-                    rowSpacing: 6
-
-                    Label { text: qsTr("user_id") }
-                    TextField {
-                        id: postUserId
-                        Layout.fillWidth: true
-                        text: "local-user"
-                    }
-                    Label { text: qsTr("session_id") }
-                    TextField {
-                        id: postSessionId
-                        Layout.fillWidth: true
-                        text: preSessionId.text  // 默认与 Pre-Chat 同会话
-                        Binding on text { value: preSessionId.text; when: true }
-                    }
-
-                    Label { text: qsTr("turn_id") }
-                    TextField {
-                        id: postTurnId
-                        Layout.fillWidth: true
-                        text: "turn-d5c-001"
-                    }
-                    Label { text: qsTr("trace_id") }
-                    TextField {
-                        id: postTraceId
-                        Layout.fillWidth: true
-                        text: "trace-d5c-" + Math.floor(Math.random() * 10000)
-                    }
-
-                    Label { text: qsTr("final_message_id") }
-                    TextField {
-                        id: postMsgId
-                        Layout.fillWidth: true
-                        text: "msg-d5c-003"
-                    }
-                    Label { text: qsTr("finalization_reason") }
-                    TextField {
-                        id: postReason
-                        Layout.fillWidth: true
-                        text: "completed"
-                    }
-
-                    Label { text: qsTr("stop_reason") }
-                    TextField {
-                        id: postStop
-                        Layout.fillWidth: true
-                        text: "stop"
-                    }
-                    Label { text: "" } // 4th col spacer
-                }
-
-                Label {
-                    text: qsTr("助手最终回答文本 (仅用于预览展示，不写入事件正文)")
-                    font.bold: true
-                }
-                TextArea {
-                    id: assistantFinalText
-                    Layout.fillWidth: true
-                    Layout.minimumHeight: 60
-                    wrapMode: TextArea.Wrap
-                    text: qsTr("麒麟 OS Agent 记忆系统由用户侧 Hook (C)、记忆服务 Gateway (D)、业务层 (E) 三部分组成，采用短→中→长期三级记忆流转。")
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Button {
-                        text: qsTr("Preview TurnFinalizedEvent JSON (不发送)")
-                        onClicked: {
-                            const obj = viewModel.buildTurnFinalizedEventJson(
-                                postUserId.text, postSessionId.text,
-                                postTurnId.text, postTraceId.text,
-                                postMsgId.text, assistantFinalText.text,
-                                postReason.text, postStop.text)
-                            postTurnPreview.text = JSON.stringify(obj, null, 2)
+                        Label { text: qsTr("user_id") }
+                        TextField {
+                            id: preUserId
+                            Layout.fillWidth: true
+                            text: "local-user"
+                        }
+                        Label { text: qsTr("session_id") }
+                        TextField {
+                            id: preSessionId
+                            Layout.fillWidth: true
+                            text: "session-demo-" + Math.floor(Math.random() * 1000)
+                        }
+                        Label { text: qsTr("scene") }
+                        TextField {
+                            id: preScene
+                            Layout.fillWidth: true
+                            text: "software_development"
+                        }
+                        Label { text: qsTr("max_context_tokens") }
+                        SpinBox {
+                            id: preMaxTokens
+                            from: 1; to: 8192; value: 800
                         }
                     }
-                    Button {
-                        text: viewModel.busy
-                              ? qsTr("Sending…")
-                              : qsTr("⟶ Run Post-Turn (sendTurnFinalizedEvent → Gateway)")
-                        highlighted: true
-                        enabled: viewModel.connectionState === "connected" && !viewModel.busy
-                        onClicked: {
-                            viewModel.runPostTurnPipeline(
-                                postUserId.text, postSessionId.text,
-                                postTurnId.text, postTraceId.text,
-                                postMsgId.text, assistantFinalText.text,
-                                postReason.text, postStop.text)
-                            // 同步刷新预览（viewModel.lastTurnFinalizedEvent 会变化）
+
+                    Label {
+                        text: qsTr("用户原文 (originalUserText — Demo UI 展示口径)")
+                        font.bold: true
+                    }
+                    TextArea {
+                        id: userOriginalInput
+                        Layout.fillWidth: true
+                        Layout.minimumHeight: 60
+                        wrapMode: TextArea.Wrap
+                        placeholderText: qsTr("输入原文，例如：帮我回忆昨天讨论的麒麟 OS Agent 记忆系统架构要点")
+                        text: qsTr("帮我回忆昨天讨论的麒麟 OS Agent 记忆系统架构要点")
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Button {
+                            text: (viewModel.preChatStage === "querying")
+                                  ? qsTr("Running Pre-Chat…")
+                                  : qsTr("⟶ Run Pre-Chat (memory.retrieve → Context)")
+                            highlighted: true
+                            enabled: viewModel.connectionState === "connected"
+                                       && !viewModel.preChatBusy
+                            onClicked: {
+                                viewModel.runPreChatPipeline(
+                                    preUserId.text,
+                                    preSessionId.text,
+                                    preScene.text,
+                                    preMaxTokens.value,
+                                    userOriginalInput.text)
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: qsTr("lastRequestId: ") + viewModel.lastRequestId
+                            elide: Text.ElideMiddle
+                            Layout.maximumWidth: 420
                         }
                     }
-                    Item { Layout.fillWidth: true }
-                }
 
-                Label {
-                    text: qsTr("TurnFinalizedEvent（契约 v1，实际发送到 Gateway 的 payload）")
-                    font.bold: true
-                }
-                ScrollView {
-                    Layout.fillWidth: true
-                    Layout.minimumHeight: 200
-                    TextArea {
-                        id: postTurnPreview
-                        readOnly: true
-                        wrapMode: TextArea.Wrap
-                        text: viewModel.lastTurnFinalizedEvent
-                        font.family: "Consolas,Menlo,monospace"
-                        background: Rectangle { color: "#fbe9e7" }
+                    // 三路口径对比
+                    Label {
+                        text: qsTr("三路口径对比（原文隔离验证 · Demo 口径）")
+                        font.bold: true
+                        Layout.topMargin: 6
+                    }
+
+                    GridLayout {
+                        columns: 2
+                        Layout.fillWidth: true
+                        Layout.minimumHeight: 260
+                        columnSpacing: 10
+                        rowSpacing: 6
+
+                        Label {
+                            text: qsTr("❶ UI/聊天库保存内容 (originalUserText)")
+                            font.bold: true; color: "#1565c0"
+                        }
+                        Label {
+                            text: qsTr("❷ 模型请求文本 (modelRequestText)")
+                            font.bold: true; color: "#6a1b9a"
+                        }
+
+                        TextArea {
+                            readOnly: true
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            wrapMode: TextArea.Wrap
+                            text: viewModel.originalUserText
+                            background: Rectangle { color: "#e3f2fd" }
+                        }
+                        TextArea {
+                            readOnly: true
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            wrapMode: TextArea.Wrap
+                            text: viewModel.modelRequestText
+                            font.family: "Consolas,Menlo,monospace"
+                            background: Rectangle { color: "#f3e5f5" }
+                        }
+
+                        Label {
+                            text: qsTr("❸ 注入的 Memory Context 片段 (诊断用)")
+                            font.bold: true; color: "#4527a0"
+                            Layout.columnSpan: 2
+                        }
+                        TextArea {
+                            readOnly: true
+                            Layout.columnSpan: 2
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumHeight: 100
+                            wrapMode: TextArea.Wrap
+                            text: viewModel.injectedContextText
+                            font.family: "Consolas,Menlo,monospace"
+                            background: Rectangle { color: "#ede7f6" }
+                            placeholderText: qsTr(
+                                "空/error/malformed context 保持空白，不产生伪标记。" +
+                                "仅当 context 包含 schema_version/query_id/context_version" +
+                                " 且 selected_memory_ids 或 actual_token_count 非空时填充")
+                        }
+                    }
+
+                    // 原文隔离指示灯
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        Label { text: qsTr("原文隔离（Demo 口径）："); font.bold: true }
+                        Rectangle {
+                            width: 24; height: 24; radius: 12
+                            color: viewModel.textIsolationVerified ? "#43a047" : "#e53935"
+                        }
+                        Label {
+                            text: viewModel.textIsolationVerified
+                                   ? qsTr("PASS — originalUserText 不含任何 MemoryContext 标记片段")
+                                   : qsTr("FAIL — 原文疑似被标记片段污染（检查 Demo 保存逻辑）")
+                            color: viewModel.textIsolationVerified ? "#2e7d32" : "#c62828"
+                            font.bold: true
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
                     }
                 }
             }
-        }
 
-        // ====================================================================
-        // Tab 3：最近响应 envelope
-        // ====================================================================
-        Frame {
-            Layout.fillWidth: true
-            Layout.minimumHeight: 160
-            ColumnLayout {
+            // =================================================================
+            // ② Post-Turn
+            // =================================================================
+            Frame {
                 Layout.fillWidth: true
-                spacing: 6
-                Label {
-                    text: qsTr("③ 最近 Gateway 响应 Envelope (原始 JSON)")
-                    font.bold: true
-                }
-                ScrollView {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    spacing: 8
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            text: qsTr("② Post-Turn Pipeline")
+                            font.bold: true
+                            font.pointSize: 12
+                        }
+                        Label {
+                            text: qsTr("Stage: ") + viewModel.postTurnStage
+                            color: {
+                                const s = viewModel.postTurnStage
+                                if (s === "sent")    return "#2e7d32"
+                                if (s === "failed" || s === "timeout") return "#c62828"
+                                if (s === "sending") return "#f57c00"
+                                return "#616161"
+                            }
+                        }
+                    }
+
+                    GridLayout {
+                        columns: 4
+                        Layout.fillWidth: true
+                        columnSpacing: 10
+                        rowSpacing: 6
+
+                        Label { text: qsTr("user_id") }
+                        TextField {
+                            id: postUserId
+                            Layout.fillWidth: true
+                            text: "local-user"
+                        }
+                        Label { text: qsTr("session_id") }
+                        TextField {
+                            id: postSessionId
+                            Layout.fillWidth: true
+                            // 非阻断项修复：去掉重复 Binding，仅作为默认值初始化为 preSessionId.text
+                            text: preSessionId.text
+                        }
+
+                        Label { text: qsTr("turn_id") }
+                        TextField {
+                            id: postTurnId
+                            Layout.fillWidth: true
+                            text: "turn-d5c-001"
+                        }
+                        Label { text: qsTr("trace_id") }
+                        TextField {
+                            id: postTraceId
+                            Layout.fillWidth: true
+                            text: "trace-d5c-" + Math.floor(Math.random() * 10000)
+                        }
+
+                        Label { text: qsTr("final_message_id (Demo 参考，不写入真实 ChatRecord)") }
+                        TextField {
+                            id: postMsgId
+                            Layout.fillWidth: true
+                            text: "msg-d5c-003"
+                        }
+                        Label { text: qsTr("finalization_reason") }
+                        TextField {
+                            id: postReason
+                            Layout.fillWidth: true
+                            text: "completed"
+                        }
+
+                        Label { text: qsTr("stop_reason") }
+                        TextField {
+                            id: postStop
+                            Layout.fillWidth: true
+                            text: "stop"
+                        }
+                        Label { text: "" }
+                    }
+
+                    Label {
+                        text: qsTr("助手最终回答文本（仅 Demo 预览参考；未对接真实 final message）")
+                        font.bold: true
+                    }
                     TextArea {
-                        readOnly: true
+                        id: assistantFinalText
+                        Layout.fillWidth: true
+                        Layout.minimumHeight: 50
                         wrapMode: TextArea.Wrap
-                        text: JSON.stringify(viewModel.lastResponse, null, 2)
-                        font.family: "Consolas,Menlo,monospace"
+                        text: qsTr(
+                            "麒麟 OS Agent 记忆系统由用户侧 Hook (C)、记忆服务 Gateway (D)、业务层 (E) 三部分组成，" +
+                            "采用短→中→长期三级记忆流转。")
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        // 非阻断项修复：Preview 与 Send 复用同一 buildTurnFinalizedEventJson
+                        // （ViewModel 内部按 key 缓存 event_id / timestamp，两者完全一致）。
+                        // 并将 postTurnPreview 从"手动赋值破坏 binding" 改为 text: viewModel.lastTurnFinalizedEvent
+                        Button {
+                            text: qsTr("Preview TurnFinalizedEvent (不发送 · 与 Send 共用同一 event_id)")
+                            onClicked: {
+                                const obj = viewModel.buildTurnFinalizedEventJson(
+                                    postUserId.text, postSessionId.text,
+                                    postTurnId.text, postTraceId.text,
+                                    postMsgId.text, assistantFinalText.text,
+                                    postReason.text, postStop.text)
+                                // 注意：此处故意不直接写 postTurnPreview.text，
+                                // 而是通过 runPostTurnPipeline 中 setLastTurnFinalizedEvent 路径
+                                // 统一更新，避免破坏绑定。为此提供一个只读 setter 辅助：
+                                const doc = JSON.stringify(obj, null, 2)
+                                previewHelper.tmpDoc = doc
+                                previewHelper.update()
+                            }
+                        }
+
+                        Button {
+                            text: (viewModel.postTurnStage === "sending")
+                                  ? qsTr("Sending…")
+                                  : qsTr("⟶ Run Post-Turn (sendTurnFinalizedEvent → Gateway)")
+                            highlighted: true
+                            enabled: viewModel.connectionState === "connected"
+                                       && !viewModel.postTurnBusy
+                            onClicked: {
+                                viewModel.runPostTurnPipeline(
+                                    postUserId.text, postSessionId.text,
+                                    postTurnId.text, postTraceId.text,
+                                    postMsgId.text, assistantFinalText.text,
+                                    postReason.text, postStop.text)
+                                // ViewModel 已同步更新 lastTurnFinalizedEvent；
+                                // postTurnPreview 使用 binding 自动刷新。
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    Label {
+                        text: qsTr("TurnFinalizedEvent（契约 v1 · Preview/Send 共用同一 event_id）")
+                        font.bold: true
+                    }
+                    ScrollView {
+                        Layout.fillWidth: true
+                        Layout.minimumHeight: 180
+                        TextArea {
+                            id: postTurnPreview
+                            readOnly: true
+                            wrapMode: TextArea.Wrap
+                            // 非阻断项修复：使用 binding，不再被 JS 赋值覆盖
+                            text: previewHelper.displayDoc
+                            font.family: "Consolas,Menlo,monospace"
+                            background: Rectangle { color: "#fbe9e7" }
+                        }
+                    }
+
+                    // 非阻断项修复：Preview 中间辅助对象，不破坏 property binding
+                    QtObject {
+                        id: previewHelper
+                        property string tmpDoc: ""
+                        property string displayDoc: viewModel.lastTurnFinalizedEvent
+                        function update() {
+                            // 仅当 viewModel 尚未更新时（纯 Preview）才用 tmpDoc
+                            if (viewModel.lastTurnFinalizedEvent.length === 0
+                                || viewModel.postTurnStage === "idle"
+                                || viewModel.postTurnStage === "failed"
+                                || viewModel.postTurnStage === "timeout") {
+                                postTurnPreview.text = tmpDoc  // 仅在 idle/failed 允许直接写入（无绑定风险）
+                            }
+                        }
                     }
                 }
             }
-        }
-    }
+
+            // =================================================================
+            // ③ 最近响应 envelope
+            // =================================================================
+            Frame {
+                Layout.fillWidth: true
+                Layout.minimumHeight: 140
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Label {
+                        text: qsTr("③ 最近 Gateway 响应 Envelope (原始 JSON)")
+                        font.bold: true
+                    }
+                    ScrollView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        TextArea {
+                            readOnly: true
+                            wrapMode: TextArea.Wrap
+                            text: JSON.stringify(viewModel.lastResponse, null, 2)
+                            font.family: "Consolas,Menlo,monospace"
+                        }
+                    }
+                }
+            }
+        }  // ColumnLayout
+    }  // ScrollView
 }
