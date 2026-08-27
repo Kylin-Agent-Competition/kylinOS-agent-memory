@@ -190,11 +190,7 @@ void D5VerticalLinkDemoTest::memoryRetrieveWithUnsupportedMethodRoutesPreChatToF
                           QStringLiteral("原文A：Hello"));
 
     // 期望进入 failed 阶段，而非 ready
-    QTRY_VERIFY_WITH_TIMEOUT(
-        [&]() {
-            return vm.preChatStage() == QStringLiteral("failed");
-        }(),
-        5000);
+    QTRY_COMPARE_WITH_TIMEOUT(vm.preChatStage(), QStringLiteral("failed"), 5000);
     QVERIFY(vm.injectedContextText().isEmpty());
     QCOMPARE(vm.modelRequestText(), QStringLiteral("原文A：Hello"));
     QCOMPARE(vm.originalUserText(), QStringLiteral("原文A：Hello"));
@@ -238,11 +234,7 @@ void D5VerticalLinkDemoTest::memoryStoreWithUnsupportedMethodRoutesPostTurnToFai
                            QStringLiteral("completed"), QStringLiteral("stop"));
 
     // 不得显示 sent，必须是 failed
-    QTRY_VERIFY_WITH_TIMEOUT(
-        [&]() {
-            return vm.postTurnStage() == QStringLiteral("failed");
-        }(),
-        5000);
+    QTRY_COMPARE_WITH_TIMEOUT(vm.postTurnStage(), QStringLiteral("failed"), 5000);
 
     QVERIFY(reqFailedSpy.count() >= 1);
     const auto args = reqFailedSpy.takeFirst();
@@ -441,23 +433,10 @@ void D5VerticalLinkDemoTest::injectionStatusFailedProducesEmptyInjectedText()
 void D5VerticalLinkDemoTest::postTurnResponseDoesNotHijackInFlightPreChat()
 {
     test_support::MockGatewayServer mock;
-    // 故意让 memory.retrieve 不回复（保持 pending），让 memory.store 先回复。
-    // 验证 PostTurn 响应不把 PreChat 的 pending id 清空 / 串台。
+    // 两个方法都返回 success；验证 PostTurn 响应不会串台影响 PreChat 阶段。
     mock.setHandler([](const client::EnvelopeParts& parts) -> QJsonObject {
-        if (parts.method == client::methods::kMemoryStore) {
-            // 立即 success
-            return client::buildSuccessResponse(
-                parts.requestId, parts.traceId, QJsonObject{});
-        }
-        // memory.retrieve 不回复（返回空响应 envelope，用 sleep 由客户端死线兜底也可；
-        // 但为了避免等待 5s，这里延迟策略改为：延迟响应通过不发包模拟）。
-        // L0 Mock 内不做真实异步延迟；我们改为：retrieve 返回 success 但
-        // 在设置好 PostTurn 状态后断言阶段各自正确。
-        if (parts.method == client::methods::kMemoryRetrieve) {
-            return client::buildSuccessResponse(
-                parts.requestId, parts.traceId, QJsonObject{});
-        }
-        return client::buildSuccessResponse(parts.requestId, parts.traceId, QJsonObject{});
+        return client::buildSuccessResponse(
+            parts.requestId, parts.traceId, QJsonObject{});
     });
     const QString socket = mock.listen(uniqueSocketName("c1"));
     QVERIFY(!socket.isEmpty());
@@ -488,14 +467,12 @@ void D5VerticalLinkDemoTest::postTurnResponseDoesNotHijackInFlightPreChat()
 void D5VerticalLinkDemoTest::resetPreChatClearsPendingAndBackToIdle()
 {
     test_support::MockGatewayServer mock;
-    // memory.retrieve 永远不回复，以保持 pending
+    // Handler 返回 requestId 不匹配的响应 → 客户端丢弃 → 请求保持 pending。
     mock.setHandler([](const client::EnvelopeParts&) -> QJsonObject {
-        // 返回空对象并让 Mock 编码时正常响应（这样客户端会收到 ready；
-        // 为了让请求保持 pending，这里直接不返回 envelope 会导致死循环，
-        // 改为让 handler 发送"永不读取"需要客户端侧调整。
-        // 折中：让 retrieve 立即 success 但 run 后马上 reset，验证 idle 路径。
         return client::buildSuccessResponse(
-            QStringLiteral("forged"), QStringLiteral("forged"), QJsonObject{});
+            QStringLiteral("req_forged_unknown_id"),
+            QStringLiteral("req_forged_unknown_id"),
+            QJsonObject{});
     });
     const QString socket = mock.listen(uniqueSocketName("c2"));
     QVERIFY(!socket.isEmpty());
@@ -504,16 +481,6 @@ void D5VerticalLinkDemoTest::resetPreChatClearsPendingAndBackToIdle()
     vm.setSocketPath(socket);
     vm.connectToService();
     QTRY_COMPARE_WITH_TIMEOUT(vm.connectionState(), QStringLiteral("connected"), 5000);
-
-    // 改为：连接后直接断开 Gateway 侧 handler，使发送请求永远得不到响应。
-    mock.setHandler([](const client::EnvelopeParts&) -> QJsonObject {
-        // 返回 malformed 标记会写坏包；这里简单让 handler 仍 success，但响应
-        // envelope.requestId 使用 forged 非匹配值（因此 client 丢弃，request 保持 pending）。
-        return client::buildSuccessResponse(
-            QStringLiteral("req_forged_unknown_id"),
-            QStringLiteral("req_forged_unknown_id"),
-            QJsonObject{});
-    });
 
     QSignalSpy preBusySpy(&vm, &client::MemoryViewModel::preChatBusyChanged);
     vm.runPreChatPipeline("u", "s", "dev", 800, QStringLiteral("原文reset"));
