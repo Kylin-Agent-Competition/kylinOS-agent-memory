@@ -130,9 +130,9 @@ FRZ-IPC-007 路由表新增写方法 `turn.finalized`，payload 对齐事件契�
   - `original_user_text` 唯一来源 = **受控 resolver** 解析 `source_reference` 所得正文；事件**不内嵌正文**（保持原文隔离，`[02 §4.1]`）。
   - resolver 归属 = `memory-service/service/source_resolver.py`（新增 seam），接口 `resolve(source_reference) -> Optional[ResolvedContent{original_user_text, model_request?, model_response?}]`；
   - resolver 生产实现状态 = **`BLOCKED_BY_HOST_MAPPING / NOT_IMPLEMENTED`**（与 C 轨 `TurnExtractionAdapter` 一致）；PR-2 只交付测试/纯内存 resolver，接真实 UoW 写入路径，**不声称真实正文通道已支持**；
-  - **失败语义**：
-    - INSERT 场景（无既有 turn）+ resolver 失败 → `INTERNAL_ERROR`（safe）；**禁止编造正文、禁止以空串替代**（`turns.original_user_text` NOT NULL 冻结语义）；
-    - UPDATE/refinalize 场景（已有 turn）+ resolver 失败 → **继续使用既有 `original_user_text`，不报错**（正文已在首次 INSERT 落库，收尾/重投不应因 resolver 暂不可用失败，保证聊天优先 + 幂等重投不丢既有数据）。
+  - **失败语义（INSERT 调 resolver，UPDATE/refinalize 不调 resolver）**：
+    - **INSERT（无既有 turn）**：**调用 resolver**。resolver 成功 → 写入 `original_user_text`；resolver 失败 → `INTERNAL_ERROR`（safe）；**禁止编造正文、禁止以空串替代**（`turns.original_user_text` NOT NULL 冻结语义）；
+    - **UPDATE/refinalize（已有 turn）**：**不调用 resolver**，直接复用数据库已有 `original_user_text`；**不存在「UPDATE resolver 失败」分支**（正文已在首次 INSERT 落库，重投/refinalize 不改变首次正文，保证原文隔离 + 幂等重投不丢既有数据）。
   - 正文隔离 = resolver 结果只用于落库 `original_user_text`，不进入日志/异常消息/响应；
   - `model_request` / `model_response` 本轮不落（NULL），由后续提取/正文链路填充，不属于本方法契约；
   - `occurred_at` / `collected_at` / `finalized_at` 随 outbox.payload 元数据入队，不落 turns 列（turns 无对应列，FRZ-DB-001 冻结）。
@@ -179,7 +179,7 @@ FRZ-IPC-007 路由表新增写方法 `turn.finalized`，payload 对齐事件契�
 
 ### 开发影响
 
-- `gateway/handlers.py` 新增 `turn_finalized_handler`；`gateway/registry.py` 注册方法；`app.py` 注入 UnitOfWork；
+- `gateway/handlers.py` 新增 `turn_finalized_handler`；`gateway/registry.py` 提供 `turn.finalized` **显式注册 seam**（production default registry 不注册；test profile 显式注册 + 注入 in-memory resolver）；`app.py` 注入 UnitOfWork；
 - `db/repositories.py` / `db/uow.py` 补 `trace_id` / `host_turn_id` 透传 + upsert 逻辑 + 幂等指纹（与 ADR-011 联动）；
 - `service/source_resolver.py` 新增 resolver seam（测试/内存实现 + 生产占位标注 BLOCKED_BY_HOST_MAPPING）；
 - C 轨 `protocol_adapter` 需同步 `turn.finalized` 方法（ADR 签署后单独 PR，不阻塞本 PR 服务端）。
