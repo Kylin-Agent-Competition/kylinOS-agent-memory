@@ -8,6 +8,9 @@ set -euo pipefail
 
 binary=""
 collection="d6b_schema_filter_l2_${RANDOM}_$$"
+original_args=("$@")
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/../.." && pwd)"
 
 fail() {
     printf 'D6B_L2 result=FAIL reason=%s\n' "$1" >&2
@@ -45,9 +48,28 @@ done
 [[ "$collection" =~ ^d6b_[A-Za-z0-9_]+$ ]] || fail "collection_must_use_d6b_prefix"
 
 cleanup() {
-    "$binary" drop_collection "$collection" >/dev/null 2>&1 || true
+    if "$binary" drop_collection "$collection" >/dev/null 2>&1; then
+        printf 'D6B_L2 cleanup=PASS collection=%s\n' "$collection"
+    else
+        printf 'D6B_L2 cleanup=FAIL collection=%s\n' "$collection" >&2
+    fi
 }
 trap cleanup EXIT
+
+emit_metadata() {
+    printf 'D6B_L2_META command='
+    printf '%q ' "$0" "${original_args[@]}"
+    printf '\n'
+    printf 'D6B_L2_META git_branch=%s\n' "$(git -C "$repo_root" branch --show-current)"
+    printf 'D6B_L2_META tested_commit=%s\n' "$(git -C "$repo_root" rev-parse HEAD)"
+    printf 'D6B_L2_META os=%s\n' "$(uname -srmo)"
+    printf 'D6B_L2_META packages=%s\n' "$(dpkg-query -W -f='${Package}=${Version};' kylin-ai-vector-engine libkysdk-vector-engine-client)"
+    printf 'D6B_L2_META cli_sha256=%s\n' "$(sha256sum "$binary" | awk '{print $1}')"
+    printf 'D6B_L2_META bridge_sha256=%s\n' "$(sha256sum "$repo_root/tests/vector-engine/vector_bridge_cli.cpp" | awk '{print $1}')"
+    printf 'D6B_L2_META runner_sha256=%s\n' "$(sha256sum "$script_dir/run_d6_vector_schema_filter_l2.sh" | awk '{print $1}')"
+}
+
+emit_metadata
 
 assert_ok() {
     local name="$1"
@@ -139,4 +161,4 @@ if payload.get("ok") is not False or "unknown filter" not in payload.get("messag
 print("D6B_L2 name=unknown_filter_key_fail_closed result=PASS")
 ' "$unknown_filter_output"
 
-printf 'D6B_L2 result=PASS collection=%s cleanup=scheduled\n' "$collection"
+printf 'D6B_L2 result=PASS collection=%s cleanup=reported_by_trap\n' "$collection"
