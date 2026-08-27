@@ -1,0 +1,44 @@
+[  8%] Automatic MOC for target test_memory_client_mock
+[  8%] Automatic MOC for target test_protocol_adapter
+[ 12%] Automatic MOC for target kylin_memory_client
+[ 12%] Built target kylin_memory_client_autogen
+[ 12%] Built target test_protocol_adapter_autogen
+[ 12%] Built target test_memory_client_mock_autogen
+[ 20%] Building CXX object tests/CMakeFiles/test_protocol_adapter.dir/test_protocol_adapter_autogen/mocs_compilation.cpp.o
+[ 29%] Building CXX object tests/CMakeFiles/test_protocol_adapter.dir/__/src/protocol_adapter.cpp.o
+[ 33%] Building CXX object CMakeFiles/kylin_memory_client.dir/kylin_memory_client_autogen/mocs_compilation.cpp.o
+[ 33%] Building CXX object tests/CMakeFiles/test_protocol_adapter.dir/test_protocol_adapter.cpp.o
+[ 33%] Building CXX object CMakeFiles/kylin_memory_client.dir/src/protocol_adapter.cpp.o
+[ 45%] Building CXX object CMakeFiles/kylin_memory_client.dir/src/memory_client.cpp.o
+[ 45%] Building CXX object tests/CMakeFiles/test_memory_client_mock.dir/test_memory_client_mock_autogen/mocs_compilation.cpp.o
+[ 54%] Building CXX object tests/CMakeFiles/test_memory_client_mock.dir/__/src/memory_client.cpp.o
+[ 58%] Building CXX object CMakeFiles/kylin_memory_client.dir/src/view_models/memory_view_model.cpp.o
+[ 62%] Building CXX object tests/CMakeFiles/test_memory_client_mock.dir/mock_gateway_server.cpp.o
+[ 62%] Building CXX object tests/CMakeFiles/test_memory_client_mock.dir/__/src/protocol_adapter.cpp.o
+[ 62%] Building CXX object tests/CMakeFiles/test_memory_client_mock.dir/test_memory_client_mock.cpp.o
+/mnt/e/tiaozhanbei/kylinOS-agent-memory/memory-client/src/memory_client.cpp:35:9: warning: ‘QString kylin::memory::client::v1::{anonymous}::protocolErrorKindToString(kylin::memory::client::v1::ProtocolErrorKind)’ defined but not used [-Wunused-function]
+   35 | QString protocolErrorKindToString(ProtocolErrorKind kind)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~
+/mnt/e/tiaozhanbei/kylinOS-agent-memory/memory-client/src/memory_client.cpp:20:9: warning: ‘QString kylin::memory::client::v1::{anonymous}::connectionStateToString(kylin::memory::client::v1::MemoryClient::ConnectionState)’ defined but not used [-Wunused-function]
+   20 | QString connectionStateToString(MemoryClient::ConnectionState state)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~
+/mnt/e/tiaozhanbei/kylinOS-agent-memory/memory-client/src/memory_client.cpp:35:9: warning: ‘QString kylin::memory::client::v1::{anonymous}::protocolErrorKindToString(kylin::memory::client::v1::ProtocolErrorKind)’ defined but not used [-Wunused-function]
+   35 | QString protocolErrorKindToString(ProtocolErrorKind kind)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~
+/mnt/e/tiaozhanbei/kylinOS-agent-memory/memory-client/src/memory_client.cpp:20:9: warning: ‘QString kylin::memory::client::v1::{anonymous}::connectionStateToString(kylin::memory::client::v1::MemoryClient::ConnectionState)’ defined but not used [-Wunused-function]
+   20 | QString connectionStateToString(MemoryClient::ConnectionState state)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~
+[ 66%] Linking CXX static library libkylin_memory_client.a
+[ 66%] Built target kylin_memory_client
+[ 70%] Automatic MOC for target kylin_memory_client_app
+[ 70%] Built target kylin_memory_client_app_autogen
+[ 75%] Generating qrc_resources.cpp
+[ 79%] Building CXX object CMakeFiles/kylin_memory_client_app.dir/kylin_memory_client_app_autogen/mocs_compilation.cpp.o
+[ 83%] Building CXX object CMakeFiles/kylin_memory_client_app.dir/src/main.cpp.o
+[ 87%] Building CXX object CMakeFiles/kylin_memory_client_app.dir/qrc_resources.cpp.o
+[ 91%] Linking CXX executable test_memory_client_mock
+[ 95%] Linking CXX executable test_protocol_adapter
+[ 95%] Built target test_protocol_adapter
+[ 95%] Built target test_memory_client_mock
+[100%] Linking CXX executable kylin-memory-client
+[100%] Built target kylin_memory_client_app

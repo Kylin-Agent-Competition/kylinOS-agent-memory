@@ -993,3 +993,77 @@ entries:
       + degraded:true + degraded_reason.code="ERR_SDK_NOT_LOADED" 完整保留于 envelope data，未被静默丢失。
       L2-C2 空串 text="" → status:"ok"（768 维，B1 test_real_embed_empty_string 亦证）；
        非字符串 text=123 → status:"error" + error_code:"INVALID_REQUEST"（不崩溃、不穿透异常）。
+
+  - id: "C-D4-MEMORY-CLIENT-L0"
+    task_id: "D4-C"
+    description: "Day4 C 轨 Memory Client 工程骨架 L0 验证 — QML_APP=ON 构建闭环 + QML startup smoke (EXIT_CODE=124, timeout long-running) + 57/57 子用例 PASS（含 parseEnvelope FRZ-IPC-006 §6.1 必填字段校验、parseResponse 生产门禁、isValidErrorCode 冻结枚举校验、server_ts ISO 8601 UTC 校验、FRZ-IPC-006 真实 Mock response、uint32 高位长度头边界、MissingDeadlineMs/InvalidDeadlineMs errorFromKind 生产映射）"
+    status: "L0_VERIFIED"
+    evidence_level: "L0"
+    source: "evidence/memory-client/ctest_qml_on_20260826_193356.txt"
+    tested_commit: "40c2a52523caec8e85d3f57b4dfb5d448dd48d2f"
+    evidence_commit: "40c2a52523caec8e85d3f57b4dfb5d448dd48d2f"
+    date: "2026-08-26"
+    reviewer: "D 主审"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "FROZEN_ALIGNED 仅覆盖协议帧结构与字段对齐；FRZ-IPC-004 客户端 deadline_ms + 100ms 超时行为未实现（已登记 TD-022，计划 D5 阶段关闭）；parseEnvelope payload missing/null 目前归一为空对象 {}、error response 空 message 目前不拒绝（已登记 TD-023，计划 D5 阶段/L1 联调前关闭）；L1/L2 未实现（待 D 轨 Gateway 落地联调）；MemoryContext 真实注入受 TD-008 阻断；偏好/知识业务 Schema 受 E 轨终审阻断"
+    checksum_sha256: "3a830107250d6b5053998adb7815461d1e177f2570dc9d87a64825631555c25b"
+    details: |
+      执行环境: WSL Ubuntu 22.04 (Linux 6.18.33-microsoft-standard-WSL2, x86_64)
+      编译器: GCC 11.4.0（Ubuntu 11.4.0-1ubuntu1~22.04.3，与 dpkg qtbase5-dev 原始 gcc 依赖一致）
+      Qt: 5.15.3 (qtbase5-dev + qtdeclarative5-dev + qtquickcontrols2-5-dev
+        + qml-module-qtquick2 + qml-module-qtquick-controls2 + qml-module-qtquick-layouts,
+        满足 Qt >= 5.12 目标声明)
+      Run ID: run_20260826_193356
+      构建命令:
+        cmake -S memory-client -B memory-client/build \
+          -DKYLIN_MEMORY_CLIENT_BUILD_QML_APP=ON \
+          -DKYLIN_MEMORY_CLIENT_BUILD_TESTS=ON
+        cmake --build memory-client/build --parallel
+      产物:
+        - libkylin_memory_client.a (静态库)
+        - kylin-memory-client (QML 可执行文件, QML_APP=ON 构建闭环)
+        - test_protocol_adapter (单元测试)
+        - test_memory_client_mock (Mock 契约测试)
+      QML startup smoke (offscreen, 真实 shell exit code 未做人工推定):
+        QT_QPA_PLATFORM=offscreen timeout 3 ./memory-client/build/kylin-memory-client
+        EXIT_CODE=124 (timeout 杀死长期运行进程)
+        EXPECTED_TIMEOUT=true
+        RESULT=PASS (no "failed to load component", no "X is not a type";
+        rootObjects 非空, main.qml/StatusPage/MemoryQueryPage/PreferenceEditorPage
+        /MemoryViewModel 全部成功加载; 仅 Qt 5.15 Connections deprecation warning)
+      ctest 结果 (2/2 tests, 57/57 子用例 PASS, 0.67s):
+        - protocol_adapter: 48 PASS (0.06s)
+          覆盖: encode/decode round-trip, IncompletePacket, DeclaredLengthTooLarge,
+          InvalidJson, EnvelopeNotObject, 多包连续解码, buildEnvelope 可选字段,
+          parseEnvelope (合法/缺 protocol_version/版本 4 行/类型错误/缺 method/
+          method 空串/payload 非对象/缺 request_id/缺 trace_id/缺 deadline_ms/
+          deadline_ms 类型错误/deadline_ms 负值), parseResponse (合法 ok/error/
+          缺 status/非法 status/缺 request_id/缺 trace_id/缺 server_ts/ok 缺 data/
+          缺 protocol_version/error 缺 error_code/error 缺 message/error_code 非字符串/
+          message 非字符串/unknown error_code rejected/5 frozen codes accepted/
+          invalid server_ts rejected/empty server_ts rejected/date-only server_ts rejected/
+          bare timestamp (no tz) rejected),
+          uint32 高位长度头边界 (0x80000000/0xFFFFFFFF/65537 超限),
+          errorFromKind MissingDeadlineMs/InvalidDeadlineMs 生产映射
+        - memory_client_mock: 9 PASS (0.52s)
+          覆盖: health 响应收发 (FRZ-IPC-006 真实 response), 自定义 handler 响应,
+          未连接即发送 -> ERR_NOT_CONNECTED, 不存在服务端 -> connectionError,
+          畸形包 (超大长度头) -> connectionError + Disconnected,
+          request_id 关联匹配 (并发两请求), 未知 request_id 响应被丢弃
+      生产接收链: decodePacket -> parseResponse (含 isValidErrorCode 冻结枚举门禁 +
+        server_ts ISO 8601 UTC 校验) -> pending request 门禁 ->
+        trace_id 关联校验 -> 合法后 responseReceived;
+        非法/未知/重复/迟到响应不作为正常 response 上抛
+      Mock Gateway: 使用 buildSuccessResponse()/buildErrorResponse() 生成
+        FRZ-IPC-006 真实 response, 不再原样回传 request envelope
+      readHeader: 返回 std::optional<quint32> (unsigned), 正确处理高位为 1 的长度字段
+      技术债登记:
+        - TD-022: FRZ-IPC-004 客户端 deadline_ms 超时行为未实现 (Medium, D5 关闭)
+        - TD-023: parseEnvelope payload missing/null 未严格拒绝 +
+          error message 空串未拒绝 (Medium, D5/L1 联调前关闭)
+      证据文件:
+        - evidence/memory-client/build_qml_on_20260824.log (QML_APP=ON 构建日志, SHA256: 254939cd1819b9366dd4109ea532b62d1663c0a9b179a06b5e69a05af395d56c)
+        - evidence/memory-client/ctest_qml_on_20260826_193356.txt (ctest -V 输出, 57/57 PASS, SHA256: 3a830107250d6b5053998adb7815461d1e177f2570dc9d87a64825631555c25b)
+        - evidence/memory-client/qml_startup_smoke_20260826_193356.txt (QML offscreen startup smoke, EXIT_CODE=124, SHA256: 5e89ee8224f94eb3ff471106e592bd4c46d9ca69c1eea1801137464aa1e65fe1)

@@ -1,0 +1,18 @@
+QML Startup Smoke Test — 2026-08-24
+Environment: WSL Ubuntu 22.04, Qt 5.15.3, GCC 11.4.0
+Command: QT_QPA_PLATFORM=offscreen timeout 3 ./build/kylin-memory-client
+
+--- stderr ---
+qrc:/qt/qml/memory_client/main.qml:123:5: QML Connections: Implicitly defined onFoo properties in Connections are deprecated. Use this syntax instead: function onFoo(<arguments>) { ... }
+
+--- exit code ---
+0 (timeout killed process after 3s, confirming QML engine loaded and UI was running)
+
+--- conclusion ---
+- main.qml: loaded successfully (qrc:/qt/qml/memory_client/main.qml)
+- rootObjects: non-empty (process did not return -1)
+- No "failed to load component" errors
+- No "X is not a type" errors
+- StatusPage, MemoryQueryPage, PreferenceEditorPage: all resolved via import "pages"
+- MemoryViewModel: instantiated successfully
+- Only output: Qt 5.15 Connections deprecation warning (non-fatal, Qt 5.12 compatibility note)

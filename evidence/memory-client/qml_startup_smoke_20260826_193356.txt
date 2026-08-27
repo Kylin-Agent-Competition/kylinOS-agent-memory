@@ -1,0 +1,16 @@
+=== QML STARTUP SMOKE HEADER ===
+RUN_ID: run_20260826_193356
+DATE: 2026-08-26T19:34:12+08:00
+HEAD_SHA: 40c2a52523caec8e85d3f57b4dfb5d448dd48d2f
+EXE: /mnt/e/tiaozhanbei/kylinOS-agent-memory/memory-client/build/kylin-memory-client
+COMMAND: QT_QPA_PLATFORM=offscreen timeout 3 ./memory-client/build/kylin-memory-client
+---BEGIN-STDOUT/STDERR---
+qrc:/qt/qml/memory_client/main.qml:123:5: QML Connections: Implicitly defined onFoo properties in Connections are deprecated. Use this syntax instead: function onFoo(<arguments>) { ... }
+---END-STDOUT/STDERR---
+EXIT_CODE=124
+EXPECTED_TIMEOUT=true
+RESULT=PASS (timeout killed long-running app; no load failure)
+CHECK: no 'module not installed' error?
+1
+CHECK: rootObjects?
+1
