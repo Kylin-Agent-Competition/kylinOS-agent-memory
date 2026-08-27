@@ -39,6 +39,13 @@ class Knowledge(BaseModel):
 
     仅业务字段定义；不冻结 SQLite 存储布局、Vector 索引结构或 FTS5 分词策略
     （D3 §8.2、README 技术路线：Vector 可重建非真源）。
+
+    Day8 结构化承载（TD-017 关闭）：模型新增六类结构化字段（conditions /
+    evidence / steps / expected_result / problem / outcome / reproducible /
+    template_body / parameters / priority / failure_reason / avoid_condition /
+    alternative，共 13 个 Optional[str]），由 Candidate Governance 从
+    KnowledgeCandidate 1:1 无损映射。全部可选、默认 None，向后兼容既有构造；
+    且为已声明模型字段，不改变 extra="forbid" fail-closed 语义（未知字段仍拒绝）。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -65,6 +72,37 @@ class Knowledge(BaseModel):
     access_count: Optional[int] = Field(default=None, ge=0)  # DEFERRED：统计窗口待 D
     last_accessed_at: Optional[AwareDatetime] = None  # DEFERRED：统计窗口待 D
     extracted_entities: Optional[List[str]] = None
+
+    # ── Day8 结构化承载（TD-017 关闭：六类结构化字段无损映射） ──
+    # 全部 Optional[str]，默认 None；向后兼容（既有构造不提供这些字段时为 None）。
+    # 与 KnowledgeCandidate 六类结构化字段完全同名，实现 1:1 直接映射、无转换、
+    # 无改写。extra="forbid" 保持：这些为已声明字段，非静默接受未知字段。
+    # 通用：适用条件
+    conditions: Optional[str] = None
+    # 通用：证据（R3 系统可信来源，非 LLM 自述）
+    evidence: Optional[str] = None
+    # workflow：步骤 / 流程
+    steps: Optional[str] = None
+    # workflow：期望结果
+    expected_result: Optional[str] = None
+    # case：问题
+    problem: Optional[str] = None
+    # case：结果
+    outcome: Optional[str] = None
+    # case：是否复现
+    reproducible: Optional[str] = None
+    # template：模板正文
+    template_body: Optional[str] = None
+    # template：参数
+    parameters: Optional[str] = None
+    # constraint：优先级
+    priority: Optional[str] = None
+    # failure_experience：失败原因
+    failure_reason: Optional[str] = None
+    # failure_experience：避免条件
+    avoid_condition: Optional[str] = None
+    # failure_experience：替代方案
+    alternative: Optional[str] = None
 
     @model_validator(mode="after")
     def _time_order(self) -> "Knowledge":
