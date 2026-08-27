@@ -1,0 +1,336 @@
+================================================================================
+# Day7E L2/L3 已部署 repo 勘察  @ 2026-08-24T21:32:16
+================================================================================
+
+----- deployed_tree :: ls -la /home/kylin-agent/kylinOS-agent-memory 2>/dev/null; echo '--- memory-service ---'; ls -la /home/kylin-agent/kylinOS-agent-memory/memory-service 2>/dev/null; echo '--- git ---'; cd /home/kylin-agent/kylinOS-agent-memory 2>/dev/null && git rev-parse HEAD 2>/dev/null && git log --oneline -5 2>/dev/null -----
+# exit=0
+总计 248
+drwxrwxr-x 20 kylin-agent kylin-agent 4096  8月21日 23:05 .
+drwx------ 33 kylin-agent kylin-agent 4096  8月24日 17:30 ..
+-rw-rw-r--  1 kylin-agent kylin-agent  209  8月21日 23:05 CHANGELOG.md
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 config
+-rw-rw-r--  1 kylin-agent kylin-agent 1764  8月21日 23:05 CONTRIBUTING.md
+drwxrwxr-x  5 kylin-agent kylin-agent 4096  8月21日 23:05 cpp-bridge
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 datasets
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 deliverables
+drwxrwxr-x 21 kylin-agent kylin-agent 4096  8月21日 23:05 docs
+-rw-rw-r--  1 kylin-agent kylin-agent  516  8月21日 23:05 .editorconfig
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 evaluation
+drwxrwxr-x  5 kylin-agent kylin-agent 4096  8月21日 23:05 evidence
+drwxrwxr-x  8 kylin-agent kylin-agent 4096  8月24日 15:04 .git
+-rw-rw-r--  1 kylin-agent kylin-agent  348  8月21日 23:05 .gitattributes
+drwxrwxr-x  4 kylin-agent kylin-agent 4096  8月21日 23:05 .github
+-rw-rw-r--  1 kylin-agent kylin-agent  737  8月21日 23:05 .gitignore
+-rw-rw-r--  1 kylin-agent kylin-agent  243  8月21日 23:05 LICENSE
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 memory-client
+drwxrwxr-x 14 kylin-agent kylin-agent 4096  8月22日 17:35 memory-service
+drwxrwxr-x  4 kylin-agent kylin-agent 4096  8月22日 00:27 migrations
+-rw-rw-r--  1 kylin-agent kylin-agent  967  8月21日 23:05 NOTICE
+drwxrwxr-x  6 kylin-agent kylin-agent 4096  8月21日 23:05 os-agent-integration
+drwxrwxr-x  4 kylin-agent kylin-agent 4096  8月21日 23:05 packaging
+-rw-rw-r--  1 kylin-agent kylin-agent 4706  8月21日 23:05 PR_REPORT_DAY3.md
+-rw-rw-r--  1 kylin-agent kylin-agent 4736  8月21日 23:05 README.md
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 reviewDocuments
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 scripts
+-rw-rw-r--  1 kylin-agent kylin-agent 1446  8月21日 23:05 SECURITY.md
+drwxrwxr-x  4 kylin-agent kylin-agent 4096  8月21日 23:05 tests
+drwxrwxr-x  3 kylin-agent kylin-agent 4096  8月21日 23:05 third_party
+--- memory-service ---
+总计 156
+drwxrwxr-x 14 kylin-agent kylin-agent 4096  8月22日 17:35 .
+drwxrwxr-x 20 kylin-agent kylin-agent 4096  8月21日 23:05 ..
+-rw-rw-r--  1 kylin-agent kylin-agent 3036  8月21日 23:05 app.py
+-rw-rw-r--  1 kylin-agent kylin-agent 6668  8月21日 23:05 config.py
+drwxrwxr-x  3 kylin-agent kylin-agent 4096  8月22日 00:23 db
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 domain
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 embedding
+drwxrwxr-x  3 kylin-agent kylin-agent 4096  8月22日 00:23 gateway
+-rw-rw-r--  1 kylin-agent kylin-agent 2209  8月21日 23:05 logging_setup.py
+drwxrwxr-x  3 kylin-agent kylin-agent 4096  8月22日 00:40 outbox
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 pipeline
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 providers
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月22日 00:40 __pycache__
+drwxrwxr-x  3 kylin-agent kylin-agent 4096  8月22日 17:35 .pytest_cache
+-rw-rw-r--  1 kylin-agent kylin-agent 3364  8月21日 23:05 README.md
+-rw-rw-r--  1 kylin-agent kylin-agent  755  8月21日 23:05 requirements.txt
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 security
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 service
+drwxrwxr-x  3 kylin-agent kylin-agent 4096  8月22日 17:35 tests
+--- git ---
+ed9949c5bb82d2736b1e1ea9aac78477172ff433
+ed9949c feat(D4D): IPC Gateway + 数据库层（SQLAlchemy/Alembic/UoW）+ Outbox/配置/日志/systemd 骨架
+2b8bed7 Feat/e d5 business candidate governance (#47)
+ef050b0 feat(D4): Gate 0 结论 PASS_WITH_DEBT + IPC/DB 契约内容定稿（D 决策完成，Reviewer E 待签，正式生效 = NO） (#42)
+03857eb Feat/day9 embedding throughput (#48)
+c07a8b3 [A 轨] 技术债批量收口——11 项 TD Resolved（含 3 项麒麟 VM 实测关闭）+ 1 项 Wontfix (#41)
+
+----- deployed_pref_files :: find /home/kylin-agent/kylinOS-agent-memory -type f \( -name '*.py' -o -name '*.sql' -o -name '*.qml' -o -name '*.db' -o -name '*.sqlite*' \) 2>/dev/null | grep -i -E 'preference|version|memory|sqlite|migration|repository|storage|qml' | head -100 -----
+# exit=0
+/home/kylin-agent/kylinOS-agent-memory/evidence/_d4_final.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/_stage3_final_report.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/_d4_deploy_test.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/_stage3_quick.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/l2-kylin-vm/memorymap-boundary-20260817/_kylin_ssh.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/_stage3_comprehensive.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/run_d2_1_kaiming_hook_investigation.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/rebuild_evidence_p05.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/test_ut1_original_text_isolation.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/run_d2_1_investigation_v2.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/run_phase4_tests.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/run_ut_tests.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/test_ut2_ipc_restart_recovery.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/p05_direct_test.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/final/ssh_diag.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/final/collect_baseline.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/final/collect_environment.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/kylin_diag.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/vm_test_runner.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/_download_r3.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/collect_remaining.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/run_day1_kylin_runtime.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/p0bc_systemd_evidence.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/run_day2_kylin_runtime.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/collect_p1_p2_evidence.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/fix_and_finalize.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/test_kysec_verify.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/collect_uds_test.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/p05_final.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/run_kysec_verify.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/run_all_phases.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/verify_r2_r3_fix.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/r2_standalone.py
+/home/kylin-agent/kylinOS-agent-memory/evidence/gate0_echo/pr21_r3_verify.py
+/home/kylin-agent/kylinOS-agent-memory/scripts/benchmark_embedding.py
+/home/kylin-agent/kylinOS-agent-memory/migrations/env.py
+/home/kylin-agent/kylinOS-agent-memory/migrations/versions/001_initial_schema.py
+/home/kylin-agent/kylinOS-agent-memory/os-agent-integration/echo/memory_echo_server.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/config.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/domain/knowledge.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/domain/forgetting.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/domain/conflict.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/domain/enums.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/domain/preference.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/domain/__init__.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/domain/common.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/embedding/embedding_service.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/embedding/protocol.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/embedding/server.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/embedding/__init__.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/embedding/embedding_cache.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/embedding/embedding_metrics.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db/schema.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db/repositories.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db/__init__.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db/engine.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db/uow.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/providers/preference_rules.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/providers/embedding_provider.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/providers/knowledge_rules.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/providers/extraction_provider.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/providers/__init__.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_td_a_005_09.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_gateway_protocol_d4d.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_config_d4d.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_protocol.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_business_boundaries_d4e.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_load_idempotent.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_extraction_provider.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_embedding_d9.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_candidate_admission_gate_d5e.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_db_d4d.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_pipeline_fingerprint.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_exception_mapping.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_td_a_local_batch.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_embedding_provider_import.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_migrations_d4d.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_embedding_service_real.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_pipeline_sensitive.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_pipeline_quality.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/run_smoke.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_embedding_service.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_cross_session_business_case_d5e.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_server_lifecycle.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_pipeline_cleaner.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_candidate_governance_d5e.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_td_a_005_03_05.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_pipeline_schema_enums.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_pipeline_integration.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_provider_failure_recovery.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_gateway_server_d4d.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_domain_models_d4e.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_extraction_provider_d7.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_preference_rules.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_outbox_worker_d4d.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_knowledge_extraction_d8.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_interpreter_exit.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_domain_contract_compatibility_d4e.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/gateway/registry.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/gateway/handlers.py
+
+----- deployed_qml :: find /home/kylin-agent/kylinOS-agent-memory /home/kylin-agent -maxdepth 6 -type f -name '*.qml' 2>/dev/null | head -60; echo '--- memclient ---'; ls -laR /home/kylin-agent/kylinOS-agent-memory/memory-client 2>/dev/null | head -60 -----
+# exit=0
+--- memclient ---
+/home/kylin-agent/kylinOS-agent-memory/memory-client:
+总计 24
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 .
+drwxrwxr-x 20 kylin-agent kylin-agent 4096  8月21日 23:05 ..
+-rw-rw-r--  1 kylin-agent kylin-agent 1142  8月21日 23:05 README.md
+
+----- deployed_sql :: find /home/kylin-agent/kylinOS-agent-memory /home/kylin-agent -maxdepth 8 -type f -name '*.sql' 2>/dev/null | head -60; echo '--- migrations ---'; ls -laR /home/kylin-agent/kylinOS-agent-memory/migrations 2>/dev/null | head -60 -----
+# exit=0
+--- migrations ---
+/home/kylin-agent/kylinOS-agent-memory/migrations:
+总计 56
+drwxrwxr-x  4 kylin-agent kylin-agent 4096  8月22日 00:27 .
+drwxrwxr-x 20 kylin-agent kylin-agent 4096  8月21日 23:05 ..
+-rw-rw-r--  1 kylin-agent kylin-agent  838  8月21日 23:05 alembic.ini
+-rw-rw-r--  1 kylin-agent kylin-agent 2476  8月21日 23:05 env.py
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月22日 00:27 __pycache__
+-rw-rw-r--  1 kylin-agent kylin-agent 1733  8月21日 23:05 README.md
+drwxrwxr-x  3 kylin-agent kylin-agent 4096  8月22日 00:27 versions
+
+/home/kylin-agent/kylinOS-agent-memory/migrations/__pycache__:
+总计 24
+drwxrwxr-x 2 kylin-agent kylin-agent 4096  8月22日 00:27 .
+drwxrwxr-x 4 kylin-agent kylin-agent 4096  8月22日 00:27 ..
+-rw-rw-r-- 1 kylin-agent kylin-agent 3822  8月22日 00:27 env.cpython-312.pyc
+
+/home/kylin-agent/kylinOS-agent-memory/migrations/versions:
+总计 36
+drwxrwxr-x 3 kylin-agent kylin-agent 4096  8月22日 00:27 .
+drwxrwxr-x 4 kylin-agent kylin-agent 4096  8月22日 00:27 ..
+-rw-rw-r-- 1 kylin-agent kylin-agent 7071  8月22日 19:28 001_initial_schema.py
+drwxrwxr-x 2 kylin-agent kylin-agent 4096  8月22日 19:28 __pycache__
+
+/home/kylin-agent/kylinOS-agent-memory/migrations/versions/__pycache__:
+总计 28
+drwxrwxr-x 2 kylin-agent kylin-agent 4096  8月22日 19:28 .
+drwxrwxr-x 3 kylin-agent kylin-agent 4096  8月22日 00:27 ..
+-rw-rw-r-- 1 kylin-agent kylin-agent 7521  8月22日 19:28 001_initial_schema.cpython-312.pyc
+
+----- deployed_db :: find /home/kylin-agent /data/home/kylin-agent -maxdepth 6 -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \) 2>/dev/null | head -80 -----
+# exit=0
+/home/kylin-agent/.config/.kylin_calendar_Schedule2.db
+/home/kylin-agent/.config/kylin-config/user.db
+/home/kylin-agent/.config/org.ukui/ukui-search/appdata/app-info.db
+/home/kylin-agent/.config/kylin-note-conf/kylin-note.db
+/home/kylin-agent/.config/kylin-aiassistant/knowledgeBase/knowledge_base.db
+/home/kylin-agent/.config/kylin-aiassistant/knowledgeBase/vector.db
+/home/kylin-agent/.config/kylin-aiassistant/knowledgebase_database.db
+/home/kylin-agent/.config/kylin-aiassistant/kylin_aiassistant_database.db
+/home/kylin-agent/.config/qaxbrowser/Default/heavy_ad_intervention_opt_out.db
+/home/kylin-agent/.config/qaxbrowser/Default/databases/Databases.db
+/home/kylin-agent/.kylinbot/workspace/sessions/sessions.db
+/home/kylin-agent/.kylinbot/workspace/memory/brain.db
+/home/kylin-agent/.kylinbot/workspace/devices.db
+/home/kylin-agent/.kylinbot/workspace/cron/jobs.db
+/home/kylin-agent/.local/kylin-ai-business-framework/datamanagement/database/fileinfo.db
+/home/kylin-agent/.local/kylin-ai-business-framework/datamanagement/database/default.db
+/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db
+/home/kylin-agent/.local/share/kylin-ai-vector-engine/kylin-ai-vector-engine.db
+/home/kylin-agent/.local/share/kylin-ai-vector-engine/default.db
+/home/kylin-agent/.local/share/document_qa_service/document_qa.db
+/home/kylin-agent/.local/share/peony-intelligent-data-management-service/peony-idm.db
+/home/kylin-agent/.local/share/peony-intelligent-data-management-service/peony-idm-file.db
+/home/kylin-agent/.cache/uksc/uksc_pre.db
+/home/kylin-agent/.cache/uksc/uksc.db
+/home/kylin-agent/.cache/uksc/localDataInfomation.db
+/home/kylin-agent/.pki/nssdb/.config/qaxbrowser/key4.db
+/home/kylin-agent/.pki/nssdb/.config/qaxbrowser/cert9.db
+/data/home/kylin-agent/.config/.kylin_calendar_Schedule2.db
+/data/home/kylin-agent/.config/kylin-config/user.db
+/data/home/kylin-agent/.config/org.ukui/ukui-search/appdata/app-info.db
+/data/home/kylin-agent/.config/kylin-note-conf/kylin-note.db
+/data/home/kylin-agent/.config/kylin-aiassistant/knowledgeBase/knowledge_base.db
+/data/home/kylin-agent/.config/kylin-aiassistant/knowledgeBase/vector.db
+/data/home/kylin-agent/.config/kylin-aiassistant/knowledgebase_database.db
+/data/home/kylin-agent/.config/kylin-aiassistant/kylin_aiassistant_database.db
+/data/home/kylin-agent/.config/qaxbrowser/Default/heavy_ad_intervention_opt_out.db
+/data/home/kylin-agent/.config/qaxbrowser/Default/databases/Databases.db
+/data/home/kylin-agent/.kylinbot/workspace/sessions/sessions.db
+/data/home/kylin-agent/.kylinbot/workspace/memory/brain.db
+/data/home/kylin-agent/.kylinbot/workspace/devices.db
+/data/home/kylin-agent/.kylinbot/workspace/cron/jobs.db
+/data/home/kylin-agent/.local/kylin-ai-business-framework/datamanagement/database/fileinfo.db
+/data/home/kylin-agent/.local/kylin-ai-business-framework/datamanagement/database/default.db
+/data/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db
+/data/home/kylin-agent/.local/share/kylin-ai-vector-engine/kylin-ai-vector-engine.db
+/data/home/kylin-agent/.local/share/kylin-ai-vector-engine/default.db
+/data/home/kylin-agent/.local/share/document_qa_service/document_qa.db
+/data/home/kylin-agent/.local/share/peony-intelligent-data-management-service/peony-idm.db
+/data/home/kylin-agent/.local/share/peony-intelligent-data-management-service/peony-idm-file.db
+/data/home/kylin-agent/.cache/uksc/uksc_pre.db
+/data/home/kylin-agent/.cache/uksc/uksc.db
+/data/home/kylin-agent/.cache/uksc/localDataInfomation.db
+/data/home/kylin-agent/.pki/nssdb/.config/qaxbrowser/key4.db
+/data/home/kylin-agent/.pki/nssdb/.config/qaxbrowser/cert9.db
+
+----- current_version_ref :: grep -rln 'current_version' /home/kylin-agent/kylinOS-agent-memory 2>/dev/null | head -60 || echo 'NO_CURRENT_VERSION_IN_DEPLOYED' -----
+# exit=0
+/home/kylin-agent/kylinOS-agent-memory/deliverables/D4_DB_INITIAL_REQUIREMENTS_20260817.md
+/home/kylin-agent/kylinOS-agent-memory/docs/architecture/d2-retrieval-candidate-unified.md
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db/__pycache__/repositories.cpython-312.pyc
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db/repositories.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_db_d4d.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/__pycache__/test_db_d4d.cpython-312-pytest-9.1.1.pyc
+
+----- memory_entries_ref :: grep -rln 'memory_entries' /home/kylin-agent/kylinOS-agent-memory 2>/dev/null | head -60 || echo 'NO_MEMORY_ENTRIES_IN_DEPLOYED' -----
+# exit=0
+/home/kylin-agent/kylinOS-agent-memory/deliverables/D4_GATE0_FORMAL_DECISION_20260817.md
+/home/kylin-agent/kylinOS-agent-memory/deliverables/D4_DB_INITIAL_IMPLEMENTATION_AUDIT_20260817.md
+/home/kylin-agent/kylinOS-agent-memory/deliverables/D4_DB_INITIAL_REQUIREMENTS_20260817.md
+/home/kylin-agent/kylinOS-agent-memory/deliverables/D4_DB_SCHEMA_V53_COMPARISON_20260817.md
+/home/kylin-agent/kylinOS-agent-memory/deliverables/D4_DEPLOYMENT_FAILURE_ROUTE_FREEZE_20260807.md
+/home/kylin-agent/kylinOS-agent-memory/deliverables/D4_DB_IMPLEMENTATION_STATUS_SURVEY_20260817.md
+/home/kylin-agent/kylinOS-agent-memory/deliverables/D4_DB_REQUIREMENTS_COMPLIANCE_AUDIT_20260817.md
+/home/kylin-agent/kylinOS-agent-memory/evidence/l2-kylin-vm/d4d_vm_verify_20260821/verify_run.log
+/home/kylin-agent/kylinOS-agent-memory/docs/day10/01_task_card.md
+/home/kylin-agent/kylinOS-agent-memory/migrations/versions/001_initial_schema.py
+/home/kylin-agent/kylinOS-agent-memory/migrations/versions/__pycache__/001_initial_schema.cpython-312.pyc
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db/schema.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db/__pycache__/schema.cpython-312.pyc
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db/__pycache__/repositories.cpython-312.pyc
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db/repositories.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/.pytest_cache/v/cache/nodeids
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_db_d4d.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_migrations_d4d.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/__pycache__/test_db_d4d.cpython-312-pytest-9.1.1.pyc
+
+----- sqlite_py_usage :: grep -rln 'sqlite3' /home/kylin-agent/kylinOS-agent-memory 2>/dev/null | head -60 || echo 'NO_SQLITE3_USAGE_IN_DEPLOYED' -----
+# exit=0
+/home/kylin-agent/kylinOS-agent-memory/.gitignore
+/home/kylin-agent/kylinOS-agent-memory/deliverables/D4_DB_INITIAL_IMPLEMENTATION_AUDIT_20260817.md
+/home/kylin-agent/kylinOS-agent-memory/deliverables/D4_DB_IMPLEMENTATION_STATUS_SURVEY_20260817.md
+/home/kylin-agent/kylinOS-agent-memory/evidence/l2-kylin-vm/memorymap-boundary-20260817/phase9_kernel_depth.log
+/home/kylin-agent/kylinOS-agent-memory/evidence/l2-kylin-vm/memorymap-boundary-20260817/README.md
+/home/kylin-agent/kylinOS-agent-memory/evidence/l2-kylin-vm/memorymap-boundary-20260817/phase5_recollect_service.log
+/home/kylin-agent/kylinOS-agent-memory/scripts/check_kylin_environment.sh
+/home/kylin-agent/kylinOS-agent-memory/scripts/d2c_postturn_isend_counter.sh
+/home/kylin-agent/kylinOS-agent-memory/scripts/verify_repository_baseline.sh
+/home/kylin-agent/kylinOS-agent-memory/scripts/d2c_prechat_context_probe.sh
+/home/kylin-agent/kylinOS-agent-memory/docs/baseline/v2-20260816/06_memorymap_capability_boundary_20260817.md
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_business_boundaries_d4e.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_db_d4d.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/test_migrations_d4d.py
+/home/kylin-agent/kylinOS-agent-memory/memory-service/tests/__pycache__/test_db_d4d.cpython-312-pytest-9.1.1.pyc
+/home/kylin-agent/kylinOS-agent-memory/SECURITY.md
+
+----- service_d7e_policy :: ls -la /home/kylin-agent/kylinOS-agent-memory/memory-service/service 2>/dev/null; echo '---'; ls -la /home/kylin-agent/kylinOS-agent-memory/memory-service/domain 2>/dev/null -----
+# exit=0
+总计 56
+drwxrwxr-x  2 kylin-agent kylin-agent  4096  8月21日 23:05 .
+drwxrwxr-x 14 kylin-agent kylin-agent  4096  8月22日 17:35 ..
+-rw-rw-r--  1 kylin-agent kylin-agent 20018  8月21日 23:05 candidate_governance.py
+-rw-rw-r--  1 kylin-agent kylin-agent  4044  8月21日 23:05 contracts.py
+-rw-rw-r--  1 kylin-agent kylin-agent   812  8月21日 23:05 __init__.py
+---
+总计 84
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月21日 23:05 .
+drwxrwxr-x 14 kylin-agent kylin-agent 4096  8月22日 17:35 ..
+-rw-rw-r--  1 kylin-agent kylin-agent 2017  8月21日 23:05 common.py
+-rw-rw-r--  1 kylin-agent kylin-agent 3983  8月21日 23:05 conflict.py
+-rw-rw-r--  1 kylin-agent kylin-agent 4857  8月21日 23:05 enums.py
+-rw-rw-r--  1 kylin-agent kylin-agent 4853  8月21日 23:05 forgetting.py
+-rw-rw-r--  1 kylin-agent kylin-agent 1480  8月21日 23:05 __init__.py
+-rw-rw-r--  1 kylin-agent kylin-agent 3996  8月21日 23:05 knowledge.py
+-rw-rw-r--  1 kylin-agent kylin-agent 4200  8月21日 23:05 preference.py
