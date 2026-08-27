@@ -46,7 +46,7 @@
 
 - `TD-018`：真实 `filter_fingerprint` 尚待 D5 接线提供密钥和 canonical digest。
 - `TD-020`：绝对 `deadline_at` 预算递减尚未接入。
-- `TD-024`：真实 provider 尚未接入 D 轨管理的 serving `index_generation` 上下文，不能把 `None` 伪装为已验证代次。
+- `TD-027`：真实 provider 尚未接入 D 轨管理的 serving `index_generation` 上下文，不能把 `None` 伪装为已验证代次。
 
 ## 回滚
 

@@ -1,0 +1,38 @@
+================================================================================
+# Day7E L2/L3 独立验证  @ 2026-08-24T21:31:16
+================================================================================
+
+----- sysinfo :: uname -m; cat /etc/.kyinfo 2>/dev/null | head -20; echo '---'; id -----
+# exit=0
+x86_64
+[dist]
+name=Kylin-Desktop
+milestone=V11
+arch=x86_64
+beta=False
+time=2026-02-12 12:04:58
+dist_id=Kylin-Desktop-V11-2603-Release-20260228-X86_64-2026-02-12 12:04:58
+
+[servicekey]
+key=0689023
+
+[os]
+to=
+term=2027-05-29
+
+---
+uid=1000(kylin-agent) gid=1000(kylin-agent) 组=1000(kylin-agent),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),100(users),114(lpadmin),987(vboxsf),989(sambashare)
+
+----- service_memory :: systemctl list-units --all --no-pager 2>/dev/null | grep -i -E 'memory|kylin-memory|echo' || echo 'NO_MEMORY_UNIT' -----
+# exit=0
+  data-home-kylin\x2dagent-.box-kylin\x2dai\x2dmemorymap.mount                             loaded    active   mounted   /data/home/kylin-agent/.box/kylin-ai-memorymap
+  home-kylin\x2dagent-.box-kylin\x2dai\x2dmemorymap.mount                                  loaded    active   mounted   /home/kylin-agent/.box/kylin-ai-memorymap
+  systemd-drop-cache.service                                                               loaded    active   running   drop cache before S3 if memory available is less than 20%
+
+----- process_memory :: ps aux | grep -i -E 'memory[-_]service|memory[-_]echo|preference' | grep -v grep || echo 'NO_MEMORY_PROCESS' -----
+# exit=0
+kylin-a+    3107  0.1  0.3 296948 31196 ?        Ssl  8月23   1:55 /home/kylin-agent/d4d-venv/bin/python /home/kylin-agent/kylinOS-agent-memory/memory-service/app.py --socket /run/user/1000/kylin-memory/memory.sock
+
+----- sqlite_bin :: which sqlite3 || echo 'NO_SQLITE3_BIN' -----
+# exit=0
+/usr/bin/sqlite3
