@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
 
@@ -19,6 +20,7 @@ from db.engine import db_health_check
 from db.uow import UnitOfWork
 from gateway.protocol import ERROR_CODE_UNSUPPORTED_METHOD, RequestValidationError
 from gateway.registry import HandlerRegistry, RequestContext
+from observability.request_context import set_request_context
 from service.source_resolver import ResolvedContent, SourceResolver
 
 logger = logging.getLogger(__name__)
@@ -30,11 +32,20 @@ def echo_handler(payload: Dict[str, Any], ctx: RequestContext) -> Dict[str, Any]
 
 
 def health_handler(payload: Dict[str, Any], ctx: RequestContext) -> Dict[str, Any]:
-    """health：服务状态 + DB 可达性探测 + Outbox backlog（真实指标，非假数据）。"""
+    """health：服务状态 + DB 可达性探测 + Outbox backlog（真实指标，非假数据）。
+
+    data.status 为真实业务探针状态（M5）：
+      - DB 不可达 → degraded
+      - metrics 抛错 / 返回哨兵 backlog=-1（busy）→ degraded
+      - Worker 未注入（无 Outbox Worker）→ degraded（写入管道不可用）
+      - 全绿 → ok
+    envelope status 由 server 保持 "ok"（请求已被处理 ack），与 data.status 语义分离。
+    """
     engine = ctx.extras.get("engine")
     db_ok = db_health_check(engine) if engine is not None else False
+    status = "ok" if db_ok else "degraded"
     data: Dict[str, Any] = {
-        "status": "ok" if db_ok else "degraded",
+        "status": status,
         "db": "ok" if db_ok else "unreachable",
         "methods": ctx.extras.get("methods", []),
     }
@@ -47,6 +58,16 @@ def health_handler(payload: Dict[str, Any], ctx: RequestContext) -> Dict[str, An
             # DB/Outbox 故障降级不抛错（busy/dead → degraded 返回）
             logger.warning("health outbox metrics 降级: %s", exc)
             data["outbox"] = {"backlog": -1, "dead_letter": -1, "oldest_pending_created_at": None}
+            status = "degraded"
+        else:
+            # M5：哨兵/busy（backlog=-1）→ degraded（DB 层可感知的指标不可用）
+            if data["outbox"].get("backlog") == -1:
+                status = "degraded"
+    else:
+        # M5：Worker 未注入（未启动）→ 写管道不可用 → degraded
+        if status == "ok":
+            status = "degraded"
+    data["status"] = status
     return data
 
 
@@ -137,12 +158,19 @@ class _TurnFinalizedValidator:
             if not isinstance(metadata[f], str):
                 raise RequestValidationError(f"invalid_type: metadata.{f}")
 
-        # schema_version：接受 1.x（unsupported_schema_version → INVALID_REQUEST）
+        # M3.1：必填 ID/引用拒空与纯空白（" "/"" 一律 invalid_blank）
+        for f in ("event_id", "user_id", "session_id", "turn_id", "idempotency_key", "source_reference"):
+            if not metadata[f].strip():
+                raise RequestValidationError(f"invalid_blank: metadata.{f}")
+        if not metadata["schema_version"].strip():
+            raise RequestValidationError("invalid_blank: metadata.schema_version")
+
+        # schema_version：严格 `1.<minor 整数>`（M3.2），如 "1.0.0"/"1."/"1.abc" → 拒绝
         schema_version = metadata["schema_version"]
-        if not schema_version.startswith("1."):
+        if not re.fullmatch(r"1\.\d+", schema_version.strip()):
             raise RequestValidationError("unsupported_schema_version")
 
-        # 时间戳（invalid_timestamp → INVALID_REQUEST）
+        # 时间戳（invalid_timestamp → INVALID_REQUEST；M3.3 必须带时区）
         for f in ("occurred_at", "collected_at"):
             cls._require_iso_ts(metadata[f], f"metadata.{f}")
 
@@ -195,10 +223,13 @@ class _TurnFinalizedValidator:
 
     @staticmethod
     def _require_iso_ts(value: str, field: str) -> None:
+        # M3.3：必须可解析且带时区（拒绝无时区的 "2026-08-27T10:00:00" 及纯日期串）
         try:
-            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except (ValueError, TypeError):
             raise RequestValidationError(f"invalid_timestamp: {field}") from None
+        if dt.tzinfo is None:
+            raise RequestValidationError(f"invalid_timestamp: {field} (timezone required)")
 
 
 def _canonical_ts(value: Optional[str]) -> Optional[str]:
@@ -268,15 +299,29 @@ def register_turn_finalized_handler(
         idem_key = validated["idempotency_key"]
         trace_id = ctx.trace_id  # envelope 顶级（唯一真源，ADR-010）
 
+        # M4：校验通过后 Set event_id 到线程请求上下文（DAO 层/日志自动携带；
+        # server.py 的 finally 已负责清理，此处仅补充下半场业务上下文）
+        set_request_context(
+            request_id=ctx.request_id,
+            trace_id=trace_id,
+            method=ctx.method,
+            event_id=metadata.get("event_id", ""),
+        )
+
         fp = request_fingerprint(
             method="turn.finalized", metadata=metadata, event=validated["event"]
         )
 
         def _business(uow: UnitOfWork) -> Dict[str, Any]:
+            # B1 前置所有权校验：session_id 已存在但属其它用户 → 拒绝
+            # （同一线程内先由 DAO 层兜底，此处 handler 层前置 + 固定 safe_message）
+            conv = repo.get_conversation_with_user(uow.conn, session_id=session_id)
+            if conv is not None and conv["user_id"] != user_id:
+                raise RequestValidationError("session ownership conflict")
             existing = None
             if host_turn_id is not None:
                 existing = repo.find_turn_by_host(
-                    uow.conn, session_id=session_id, host_turn_id=host_turn_id
+                    uow.conn, session_id=session_id, host_turn_id=host_turn_id, user_id=user_id
                 )
             original_user_text: Optional[str] = None
             if existing is None:
@@ -303,10 +348,11 @@ def register_turn_finalized_handler(
                 host_turn_id=host_turn_id,
                 extra_payload={
                     # occurred_at/collected_at/finalized_at 随 outbox payload 元数据入队
-                    # （不落 turns 列，FRZ-DB-001）
-                    "occurred_at": metadata.get("occurred_at"),
-                    "collected_at": metadata.get("collected_at"),
-                    "finalized_at": validated["event"].get("finalized_at"),
+                    # （不落 turns 列，FRZ-DB-001）；M3.4：统一走 _canonical_ts 规范化
+                    # 为 UTC 毫秒 ISO 8601，避免等价时间表达在 outbox 中不一致
+                    "occurred_at": _canonical_ts(metadata.get("occurred_at")),
+                    "collected_at": _canonical_ts(metadata.get("collected_at")),
+                    "finalized_at": _canonical_ts(validated["event"].get("finalized_at")),
                 },
             )
             # ADR-010 响应：{db_turn_id, host_turn_id, conversation_id}
@@ -316,14 +362,19 @@ def register_turn_finalized_handler(
                 "conversation_id": result["conversation_id"],
             }
 
-        with uow_factory() as uow:
-            response, _from_cache = uow.execute_idempotent(
-                user_id=user_id,
-                session_id=session_id,
-                idempotency_key=idem_key,
-                business_fn=lambda: _business(uow),
-                request_fingerprint=fp,
-            )
+        try:
+            with uow_factory() as uow:
+                response, _from_cache = uow.execute_idempotent(
+                    user_id=user_id,
+                    session_id=session_id,
+                    idempotency_key=idem_key,
+                    business_fn=lambda: _business(uow),
+                    request_fingerprint=fp,
+                )
+        except repo.ConversationOwnershipError as exc:
+            # B1 双层防御兜底：DAO 层所有权校验兜异常 → INVALID_REQUEST
+            # （sane_message 固定英文，不回显 conversation_id/db_turn_id 等标识）
+            raise RequestValidationError(str(exc)) from exc
         return response
 
     registry.register("turn.finalized", handler)

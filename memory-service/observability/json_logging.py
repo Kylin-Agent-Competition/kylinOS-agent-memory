@@ -63,8 +63,10 @@ class JsonFormatter(logging.Formatter):
             "trace_id": ctx.get("trace_id", ""),
             "request_id": ctx.get("request_id", ""),
             "method": ctx.get("method", ""),
+            "event_id": ctx.get("event_id", ""),
             "message": sanitize_message(record.getMessage()),
         }
         if record.exc_info and record.exc_info[0] is not None:
-            entry["exc"] = self.formatException(record.exc_info)
+            # M4：traceback/exc 文本同样过 PII 脱敏（异常参数可能携带外部引用原文）
+            entry["exc"] = sanitize_message(self.formatException(record.exc_info))
         return json.dumps(entry, ensure_ascii=False)

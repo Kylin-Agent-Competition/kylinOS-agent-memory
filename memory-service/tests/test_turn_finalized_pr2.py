@@ -13,10 +13,13 @@ import pytest
 
 from db.engine import create_db_engine, init_schema
 from db import repositories as repo
+from db.uow import UnitOfWork
 from gateway import protocol as proto
 from gateway.handlers import register_default_handlers, register_turn_finalized_handler
-from gateway.registry import HandlerRegistry
+from gateway.protocol import RequestValidationError
+from gateway.registry import HandlerRegistry, RequestContext
 from gateway.server import UDSGatewayServer
+from observability.request_context import clear_request_context
 from service.source_resolver import InMemorySourceResolver, ResolvedContent
 
 
@@ -176,7 +179,8 @@ def test_turn_finalized_insert_ok(gw_turn_finalized):
         assert payload["trace_id"] == "trc-1"
         assert payload["host_turn_id"] == "H-1"
         assert payload["refinalize"] is False
-        assert payload["occurred_at"] == "2026-08-27T10:00:00+00:00"
+        # M3.4：outbox payload 时间戳经 _canonical_ts 规范化（UTC 毫秒）
+        assert payload["occurred_at"] == "2026-08-27T10:00:00.000+00:00"
 
 
 # ── 幂等（ADR-010：三元组 + 指纹 wrapper/unwrap） ──
@@ -262,12 +266,20 @@ def test_turn_finalized_resolver_miss_internal_error(gw_turn_finalized):
     resp = _request(gw_turn_finalized["sock"], _base("turn.finalized", payload))
     assert resp["status"] == "error"
     assert resp["error_code"] == "INTERNAL_ERROR"
-    # 未落库（失败请求不写 turns）
+    # M6.6：失败请求零副作用——无 Turn / 无 Outbox / 无幂等缓存半成品
     with gw_turn_finalized["engine"].connect() as conn:
         row = conn.execute(
             repo.turns.select().where(repo.turns.c.host_turn_id == "H-MISS")
         ).first()
         assert row is None
+        pending = repo.claim_pending_outbox(
+            conn, now_iso=datetime.now(timezone.utc).isoformat(), max_retries=3
+        )
+        assert len(pending) == 0
+        cached = repo.get_idempotency_cache(
+            conn, user_id="u1", session_id="s1", idempotency_key="idem-1"
+        )
+        assert cached is None
 
 
 # ── Upsert：重投/refinalize 更新同一条（保持首次值） ──
@@ -306,3 +318,344 @@ def test_turn_finalized_refinalize_upsert(gw_turn_finalized):
         )
         refinalized = [json.loads(p["payload"]) for p in pending if p["payload"]]
         assert any(x.get("refinalize") is True for x in refinalized)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PR#65 Rework 修复测试（T1/T3/T4/T8/T9：B1 + 热修）
+# 直接调用 handler（不经 UDS），Windows/VM 均可运行；UDS 全链路由
+# gw_turn_finalized fixture 覆盖（VM L2）。
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@pytest.fixture()
+def handler_env(tmp_path):
+    """直接注册 turn.finalized handler 并返回调用包装器（跨用户/校验逻辑测试）。"""
+    eng = create_db_engine(str(tmp_path / "handler_env_pr2.db"))
+    init_schema(eng)
+    registry = HandlerRegistry()
+    register_default_handlers(registry)
+    resolver = InMemorySourceResolver(
+        {
+            "ref://turn/H-1": ResolvedContent(original_user_text="银河麒麟桌面系统测试"),
+            "ref://turn/H-2": ResolvedContent(original_user_text="用户 B 的正文"),
+        }
+    )
+
+    def _uow_factory():
+        return UnitOfWork(eng)
+
+    register_turn_finalized_handler(registry, uow_factory=_uow_factory, resolver=resolver)
+
+    def _invoke(payload, *, trace_id="trc-1", idem_key=None):
+        h = registry.route("turn.finalized")
+        ctx = RequestContext(
+            request_id="req-d",
+            trace_id=trace_id,
+            method="turn.finalized",
+            deadline_ms=5000,
+            idempotency_key=idem_key,
+        )
+        return h(payload, ctx)
+
+    yield {"engine": eng, "invoke": _invoke, "registry": registry}
+    clear_request_context()
+
+
+# ── T1 跨用户 A/B 竞争（B1） ──
+
+
+def _payload_for(user_id, session_id, host_turn_id, event_id, idem_key, source_ref):
+    p = _valid_payload()
+    p["metadata"].update(
+        {
+            "user_id": user_id,
+            "session_id": session_id,
+            "turn_id": host_turn_id,
+            "event_id": event_id,
+            "idempotency_key": idem_key,
+            "source_reference": source_ref,
+        }
+    )
+    return p
+
+
+def test_t1_cross_user_session_pollution_blocked(handler_env):
+    """B1 T1：A（uA/s1/H-1）成功 → B（uB/s1/H-1，新 idem key）→ INVALID_REQUEST。
+
+    断言：
+      - B 得到 INVALID_REQUEST；
+      - 错误 message 固定英文，不含 A 的 conversation_id/db_turn_id；
+      - A 的 turn 未变；无新增 Turn/Outbox/幂等缓存行。
+    """
+    env = handler_env["engine"]
+    invoke = handler_env["invoke"]
+
+    # A 首次写入成功
+    resp_a = invoke(
+        _payload_for("uA", "s1", "H-1", "evt-A1", "idem-A", "ref://turn/H-1"),
+        trace_id="trc-A",
+    )
+    assert resp_a["db_turn_id"] > 0
+    assert resp_a["conversation_id"] > 0
+    conv_a = resp_a["conversation_id"]
+    turn_a = resp_a["db_turn_id"]
+
+    # B 复用 uA 的 session_id（同 s1/H-1，新 idempotency_key）→ INVALID_REQUEST
+    with pytest.raises(RequestValidationError) as ei:
+        invoke(
+            _payload_for("uB", "s1", "H-1", "evt-B1", "idem-B", "ref://turn/H-2"),
+            trace_id="trc-B",
+        )
+    msg = str(ei.value)
+    assert "ownership" in msg or "conflict" in msg  # 固定英文 safe_message
+    # 不回显 A 的 conversation_id / db_turn_id
+    assert str(conv_a) not in msg
+    assert str(turn_a) not in msg
+
+    # A 的 turn 未变
+    with env.connect() as conn:
+        rows = conn.execute(
+            repo.turns.select().where(repo.turns.c.host_turn_id == "H-1")
+        ).mappings().all()
+        assert len(rows) == 1
+        assert rows[0]["original_user_text"] == "银河麒麟桌面系统测试"
+        # B 的 ref://turn/H-2 未被写入
+        b_rows = conn.execute(
+            repo.turns.select().where(repo.turns.c.host_turn_id == "H-2")
+        ).mappings().all()
+        assert len(b_rows) == 0
+        # 无新增 outbox（A 的 1 条保留）
+        pending = repo.claim_pending_outbox(
+            conn, now_iso=datetime.now(timezone.utc).isoformat(), max_retries=3
+        )
+        assert len(pending) == 1
+        # B 的 idempotency 缓存未写入
+        cached_b = repo.get_idempotency_cache(
+            conn, user_id="uB", session_id="s1", idempotency_key="idem-B"
+        )
+        assert cached_b is None
+
+
+def test_t1_find_turn_by_host_user_scoped(handler_env):
+    """B1 定位项：find_turn_by_host 强制 user join——B 查不到 A 的 turn。"""
+    env = handler_env["engine"]
+    invoke = handler_env["invoke"]
+    invoke(
+        _payload_for("uA", "s1", "H-1", "evt-A1", "idem-A", "ref://turn/H-1"),
+        trace_id="trc-A",
+    )
+    with env.connect() as conn:
+        found_a = repo.find_turn_by_host(
+            conn, session_id="s1", host_turn_id="H-1", user_id="uA"
+        )
+        found_b = repo.find_turn_by_host(
+            conn, session_id="s1", host_turn_id="H-1", user_id="uB"
+        )
+        assert found_a is not None
+        assert found_b is None  # B 无法命中 A 的 turn → 走 INSERT/resolver/B 自己会话
+
+
+def test_t1_conversation_ownership_dao_layer(handler_env):
+    """B1 DAO 层防御：uB 直接 upsert uA 的 session → ConversationOwnershipError。"""
+    env = handler_env["engine"]
+    with UnitOfWork(env) as uow:
+        cid = repo.upsert_conversation(uow.conn, user_id="uA", session_id="s1")
+        assert cid > 0
+    with pytest.raises(repo.ConversationOwnershipError):
+        with UnitOfWork(env) as uow:
+            repo.upsert_conversation(uow.conn, user_id="uB", session_id="s1")
+
+
+# ── T3 并发 IntegrityError 幂等回查（fingerprint compare + unwrap） ──
+
+
+def test_t3_concurrent_integrity_idempotency_unwrap(handler_env):
+    """T3：预占三元组缓存后再次执行 → 回查走指纹比对，返回首次响应。
+
+    模拟并发双写：直接写缓存（另一请求已完成），同三元组不同指纹 → 冲突；
+    同指纹 → 回查命中返回首次缓存（不执行业务副作用）。
+    """
+    env = handler_env["engine"]
+    first = {"db_turn_id": 42, "host_turn_id": "H-3", "conversation_id": 9, "ok": "first"}
+
+    # 预占缓存：fingerprint A
+    with UnitOfWork(env) as uow:
+        repo.write_idempotency_cache(
+            uow.conn,
+            user_id="uA", session_id="s3", idempotency_key="idem-3",
+            response=repo._wrap_response(first, "fp-A"),
+        )
+
+    # 不同指纹（fp-B）→ IdempotencyConflictError（走指纹比对）
+    with pytest.raises(repo.IdempotencyConflictError):
+        with UnitOfWork(env) as uow:
+            uow.execute_idempotent(
+                user_id="uA", session_id="s3", idempotency_key="idem-3",
+                business_fn=lambda: {"db_turn_id": 999, "ok": "second"},
+                request_fingerprint="fp-B",
+            )
+
+    # 同指纹（fp-A）→ 回查返回首次缓存，from_cache=True
+    with UnitOfWork(env) as uow:
+        resp, from_cache = uow.execute_idempotent(
+            user_id="uA", session_id="s3", idempotency_key="idem-3",
+            business_fn=lambda: {"db_turn_id": 999, "ok": "second"},
+            request_fingerprint="fp-A",
+        )
+    assert from_cache is True
+    assert resp == first  # 首次响应 unwrap 还原
+
+
+# ── T4 指纹一致 unwrap 首次响应（_unwrap_response 层单测） ──
+
+
+def test_t4_unwrap_response_fingerprint():
+    """T4：_unwrap_response 指纹一致返回首次响应；不一致抛 IdempotencyConflictError。"""
+    first = {"db_turn_id": 1, "conversation_id": 1}
+    wrapped = repo._wrap_response(first, "fp-X")
+    stored = json.dumps(wrapped)
+    # 指纹一致 → 首次响应
+    assert repo._unwrap_response(stored, "fp-X") == first
+    # 指纹不一致 → 冲突
+    with pytest.raises(repo.IdempotencyConflictError):
+        repo._unwrap_response(stored, "fp-OTHER")
+    # legacy 无 wrapper 的缓存行 → 直接返回（向后兼容）
+    legacy = json.dumps(first)
+    assert repo._unwrap_response(legacy, None) == first
+
+
+# ── T9 M3 边界 / 严格 major.minor / 非空 ID / 带时区时间 ──
+
+
+def test_t9_schema_version_strict_major_minor(handler_env):
+    """M3.2：schema_version 必须严格 `1.<整数>`；1.0.0/1./1.abc → INVALID_REQUEST。"""
+    for bad in ("1.0.0", "1.", "1.abc", "2.0", ""):
+        p = _payload_for("uA", "s1", "H-T", "evt-T", "idem-T", "ref://turn/H-1")
+        p["metadata"]["schema_version"] = bad
+        with pytest.raises(RequestValidationError) as ei:
+            handler_env["invoke"](p)
+        assert "schema_version" in str(ei.value)
+
+
+def test_t9_reject_blank_ids(handler_env):
+    """M3.1：必填 ID/引用 空串/纯空白 → INVALID_REQUEST。"""
+    for field in ("event_id", "user_id", "session_id", "turn_id", "idempotency_key", "source_reference"):
+        for bad in ("", " ", "   "):
+            p = _payload_for("uA", "s1", "H-T", "evt-T", "idem-T", "ref://turn/H-1")
+            p["metadata"][field] = bad
+            with pytest.raises(RequestValidationError):
+                handler_env["invoke"](p)
+
+
+def test_t9_reject_timezone_missing(handler_env):
+    """M3.3：无时区时间 / 纯日期 → INVALID_REQUEST。"""
+    for field in ("occurred_at", "collected_at"):
+        p = _payload_for("uA", "s1", "H-T", "evt-T", "idem-T", "ref://turn/H-1")
+        p["metadata"][field] = "2026-08-27T10:00:00"  # 无时区
+        with pytest.raises(RequestValidationError):
+            handler_env["invoke"](p)
+    # 纯日期
+    p = _payload_for("uA", "s1", "H-T", "evt-T", "idem-T", "ref://turn/H-1")
+    p["metadata"]["occurred_at"] = "2026-08-27"
+    with pytest.raises(RequestValidationError):
+        handler_env["invoke"](p)
+
+
+def test_t9_equivalent_time_fingerprint_idempotent(handler_env):
+    """M3.5：等价时间表达（+00:00 / Z / +08:00 → 同指纹）幂等命中返回首次响应。"""
+    invoke = handler_env["invoke"]
+    env = handler_env["engine"]
+
+    p1 = _payload_for("uA", "s1", "H-T9", "evt-T9", "idem-T9", "ref://turn/H-1")
+    r1 = invoke(p1, trace_id="trc-A")
+    assert r1["db_turn_id"] > 0
+
+    # 等价表达：同一时刻 +08:00（finalized_at 换成 +08:00 表达同一绝对时刻）
+    p2 = _payload_for("uA", "s1", "H-T9", "evt-T9", "idem-T9", "ref://turn/H-1")
+    p2["metadata"]["occurred_at"] = "2026-08-27T18:00:00+08:00"
+    p2["metadata"]["collected_at"] = "2026-08-27T18:00:01+08:00"
+    p2["finalized_at"] = "2026-08-27T18:00:02+08:00"
+    r2 = invoke(p2, trace_id="trc-B")
+    # plus Z 表达
+    p3 = _payload_for("uA", "s1", "H-T9", "evt-T9", "idem-T9", "ref://turn/H-1")
+    p3["metadata"]["occurred_at"] = "2026-08-27T10:00:00Z"
+    p3["metadata"]["collected_at"] = "2026-08-27T10:00:01Z"
+    p3["finalized_at"] = "2026-08-27T10:00:02Z"
+    r3 = invoke(p3, trace_id="trc-C")
+
+    # 幂等命中 → 返回首次响应
+    assert r2 == r1
+    assert r3 == r1
+    # 不重复落库
+    with env.connect() as conn:
+        rows = conn.execute(
+            repo.turns.select().where(repo.turns.c.host_turn_id == "H-T9")
+        ).mappings().all()
+        assert len(rows) == 1
+
+
+def test_t9_error_safe_message_no_leak(handler_env):
+    """M3.6：错误 message 固定英文，不泄漏原始输入值（恶意 payload 不回显）。"""
+    p = _payload_for("uA", "s1", "H-T", "evt-T", "idem-T", "ref://turn/H-1")
+    p["metadata"]["session_id"] = "  "  # blank → INVALID_REQUEST
+    p["metadata"]["event_id"] = "MALICIOUS-evt"
+    with pytest.raises(RequestValidationError) as ei:
+        handler_env["invoke"](p)
+    msg = str(ei.value)
+    # 固定英文 safe_message，不回显任何原始输入值
+    assert "MALICIOUS-evt" not in msg
+    assert "ref://turn/H-1" not in msg
+    assert "H-T" not in msg
+
+
+# ── T8 validation profile 正向写（M6：load_resolver_from_json → 真实落库） ──
+
+
+def test_t8_load_resolver_from_json_and_write(tmp_path, handler_env):
+    """M6：JSON sources → resolver → turn.finalized 正向落库 original_user_text + Outbox。"""
+    from service.source_resolver import load_resolver_from_json
+
+    sources = tmp_path / "sources.json"
+    sources.write_text(
+        json.dumps(
+            {
+                "ref://turn/J-1": {
+                    "original_user_text": "来自 JSON 的原文",
+                    "model_request": {"role": "user", "content": "你好"},
+                    "model_response": {"role": "assistant", "content": "收到"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    resolver = load_resolver_from_json(str(sources))
+    assert resolver is not None
+    resolved = resolver.resolve("ref://turn/J-1")
+    assert resolved is not None
+    assert resolved.original_user_text == "来自 JSON 的原文"
+
+    # 用 JSON resolver 注册新 handler（模拟 app.main --validation-sources 路径）
+    registry = handler_env["registry"]
+    eng = handler_env["engine"]
+
+    def _uow_factory():
+        return UnitOfWork(eng)
+
+    # 重新注册（覆盖 resolver）
+    register_turn_finalized_handler(registry, uow_factory=_uow_factory, resolver=resolver)
+    invoke = handler_env["invoke"]
+
+    p = _payload_for("uA", "s2", "J-1", "evt-J", "idem-J", "ref://turn/J-1")
+    resp = invoke(p, trace_id="trc-J")
+    assert resp["db_turn_id"] > 0
+
+    with eng.connect() as conn:
+        row = conn.execute(
+            repo.turns.select().where(repo.turns.c.host_turn_id == "J-1")
+        ).mappings().first()
+        assert row is not None
+        assert row["original_user_text"] == "来自 JSON 的原文"
+        pending = repo.claim_pending_outbox(
+            conn, now_iso=datetime.now(timezone.utc).isoformat(), max_retries=3
+        )
+        assert len(pending) >= 1

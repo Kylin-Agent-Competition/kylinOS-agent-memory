@@ -63,7 +63,7 @@
 ## 待麒麟宿主 L2 验证项（人工操作清单，本 PR 不声称已执行）
 
 1. **L2-1 迁移升级**：`alembic -c migrations/alembic.ini upgrade head` + `.schema` → turns/memory_entries 含 trace_id 列
-2. **L2-2 turn.finalized 端到端**：`--register-turn-finalized`（test profile + in-memory resolver）模拟客户端发事件 → 落库+outbox 入队+worker 退避/DL；production profile 下 `turn.finalized → UNSUPPORTED_METHOD`
+2. **L2-2 turn.finalized 端到端**：`--register-turn-finalized --validation-sources <sources.json>`（test/validation profile；JSON 映射键为 source_reference、值为 original_user_text/model_request/model_response）模拟客户端发事件 → 正向落库+outbox 入队+worker 退避/DL；未提供 `--validation-sources` 时为空映射（仅负路径 INTERNAL_ERROR）；production profile 下 `turn.finalized → UNSUPPORTED_METHOD`
 3. **L2-3 health**：`uds_client --method health` 返回 outbox_backlog；停 DB 时 degraded
 4. **L2-4 JSON 日志**：`--json-logs` 运行日志每行 JSON 含 trace_id/request_id；无 PII
 5. **L2-5 systemd**：`systemctl --user` 安装 kylin-memory.service 启动/重启/回退

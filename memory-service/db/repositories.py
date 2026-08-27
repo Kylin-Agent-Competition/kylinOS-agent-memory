@@ -45,6 +45,15 @@ class IdempotencyConflictError(Exception):
     语义：不同事件误复用同一 idempotency_key 时禁止被静默吞掉。
     """
 
+
+class ConversationOwnershipError(Exception):
+    """会话所有权冲突：session_id 已存在但属于其它 user（B1 跨用户污染）。
+
+    语义：用户 B 复用用户 A 的 session_id 写入时，禁止命中/篡改 A 的 conversation
+    或 turn（[02 §16.6] 跨用户隔离）。UoW 回滚 → 无 Turn/Outbox/幂等缓存残留，
+    由 handler 层转 RequestValidationError → INVALID_REQUEST（不回显标识）。
+    """
+
 # outbox 事件类型（业务入队用）
 EVENT_TURN_FINALIZED = "turn.finalized"
 EVENT_MEMORY_UPSERTED = "memory.upserted"
@@ -69,13 +78,22 @@ def _wrap_locked(exc: BaseException) -> BaseException:
 def upsert_conversation(
     conn, *, user_id: str, session_id: str, started_at: Optional[str] = None
 ) -> int:
-    """按 session_id upsert conversation，返回 id（幂等：重复调用返回已有 id）。"""
+    """按 session_id upsert conversation，返回 id（幂等：重复调用返回已有 id）。
+
+    跨用户隔离（B1 修复，[02 §16.6]）：命中既有 conversation 时必须校验其
+    user_id 与调用方一致；不一致抛 ConversationOwnershipError，禁止复用其它
+    用户的会话（所有权边界 = conversation.user_id）。不修改冻结表结构。
+    """
     started_at = started_at or _now_iso()
     existing = conn.execute(
-        select(conversations.c.id).where(conversations.c.session_id == session_id)
-    ).first()
+        select(conversations).where(conversations.c.session_id == session_id)
+    ).mappings().first()
     if existing is not None:
-        return int(existing[0])
+        if existing["user_id"] != user_id:
+            raise ConversationOwnershipError(
+                "session ownership conflict (conversation belongs to another user)"
+            )
+        return int(existing["id"])
     try:
         res = conn.execute(
             insert(conversations)
@@ -84,6 +102,20 @@ def upsert_conversation(
     except OperationalError as exc:
         raise _wrap_locked(exc) from exc
     return int(res.lastrowid)
+
+
+def get_conversation_with_user(
+    conn, *, session_id: str
+) -> Optional[Dict[str, Any]]:
+    """按 session_id 查 conversation（不限定 user，供 handler 所有权前置校验）。
+
+    与 `get_conversation`（限定 user_id）区别：本函数返回任意用户持有的会话，
+    用于检测「会话已存在但属于其它用户」的跨用户冲突（B1）。
+    """
+    row = conn.execute(
+        select(conversations).where(conversations.c.session_id == session_id)
+    ).mappings().first()
+    return dict(row) if row else None
 
 
 def get_conversation(conn, *, session_id: str, user_id: str) -> Optional[Dict[str, Any]]:
@@ -137,20 +169,27 @@ def insert_turn(
 
 
 def find_turn_by_host(
-    conn, *, session_id: str, host_turn_id: str
+    conn, *, session_id: str, host_turn_id: str, user_id: str
 ) -> Optional[Dict[str, Any]]:
     """按 ADR-010 Upsert 匹配键 (session_id, host_turn_id) 查既有 turn。
 
+    跨用户隔离（B1 修复，[02 §16.6]）：JOIN conversations 并强制
+    `conversations.user_id == user_id`，保证只定位**当前用户**的 turn，
+    防止用户 B 以 `uB/s1/H-1` 命中用户 A 的既有 turn 走 UPDATE/refinalize 分支
+    篡改 A 的数据。
+
     Returns:
-        turns 行 dict；不存在返回 None。host_turn_id 为宿主字符串 ID，
-        与 DB turns.id（db_turn_id）显式区分。
+        turns 行 dict；不存在（或不属于该用户）返回 None。host_turn_id 为宿主
+        字符串 ID，与 DB turns.id（db_turn_id）显式区分。
     """
     row = conn.execute(
         select(turns)
+        .join(conversations, conversations.c.session_id == turns.c.session_id)
         .where(
             and_(
                 turns.c.session_id == session_id,
                 turns.c.host_turn_id == host_turn_id,
+                conversations.c.user_id == user_id,
             )
         )
         .order_by(turns.c.id.asc())

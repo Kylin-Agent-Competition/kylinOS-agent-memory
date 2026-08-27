@@ -161,7 +161,7 @@ def downgrade() -> None:
     op.execute(
         """
         INSERT INTO memory_fts(rowid, content, entry_type, user_id)
-        SELECT id, content, entry_type, user_id FROM memory_entries
+        SELECT id, content, entry_type, user_id FROM memory_entries WHERE is_deleted = 0
         """
     )
 

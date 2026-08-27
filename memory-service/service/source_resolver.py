@@ -19,6 +19,8 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Protocol, runtime_checkable
 
+from observability.json_logging import sanitize_message
+
 logger = logging.getLogger(__name__)
 
 
@@ -62,12 +64,47 @@ class InMemorySourceResolver:
     def resolve(self, source_reference: str) -> Optional[ResolvedContent]:
         content = self._mapping.get(source_reference)
         if content is None:
+            # M4.5：外部引用经 sanitize_message 脱敏后入日志（防止原文泄漏）
             logger.warning(
                 "resolver 未命中 source_reference=%s（返回 None，调用方按 INTERNAL_ERROR）",
-                source_reference,
+                sanitize_message(source_reference),
             )
             return None
         return content
+
+
+def load_resolver_from_json(path: str) -> InMemorySourceResolver:
+    """从 JSON 文件加载 InMemorySourceResolver 映射（M6.1 可加载 mapping）。
+
+    JSON 结构（validation profile --validation-sources）：
+        {
+          "ref://turn/H-1": {
+            "original_user_text": "...",
+            "model_request": {},        # 可选
+            "model_response": {}        # 可选
+          }
+        }
+
+    仅供 test/validation profile（--register-turn-finalized）使用；
+    production 不加载（ADR-010 activation 方案 A+B）。
+    """
+    import json as _json
+    from pathlib import Path
+
+    raw = _json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("resolver mapping must be a JSON object")
+    mapping: Dict[str, ResolvedContent] = {}
+    for ref, content in raw.items():
+        if not isinstance(content, dict) or not isinstance(content.get("original_user_text"), str):
+            raise ValueError(f"invalid resolver entry for {ref!r}: expected object with "
+                             "original_user_text string")
+        mapping[ref] = ResolvedContent(
+            original_user_text=content["original_user_text"],
+            model_request=content.get("model_request"),
+            model_response=content.get("model_response"),
+        )
+    return InMemorySourceResolver(mapping)
 
 
 # 生产占位（BLOCKED_BY_HOST_MAPPING）：真实正文通道待 C 轨 TurnExtractionAdapter

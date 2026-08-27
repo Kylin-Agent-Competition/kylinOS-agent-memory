@@ -23,7 +23,10 @@ from gateway.registry import HandlerRegistry
 from gateway.server import UDSGatewayServer
 from logging_setup import setup_logging
 from outbox.worker import OutboxWorker
-from service.source_resolver import InMemorySourceResolver
+from service.source_resolver import (
+    InMemorySourceResolver,
+    load_resolver_from_json,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="（仅 test/validation profile）显式注册 turn.finalized + in-memory resolver；"
         "production 默认不注册（ADR-010 activation 方案 A+B）",
+    )
+    p.add_argument(
+        "--validation-sources",
+        default=None,
+        help="（仅 --register-turn-finalized）resolver 映射 JSON 文件路径（M6）；"
+        "不提供时为空映射，仅负路径（INTERNAL_ERROR）可验证",
     )
     p.add_argument(
         "--json-logs",
@@ -93,9 +102,22 @@ def main(argv: Optional[list[str]] = None) -> int:
     # ADR-010 activation 方案 A+B：production 默认不注册 turn.finalized；
     # 仅 test/validation profile（--register-turn-finalized）显式注册 + 内存 resolver。
     if args.register_turn_finalized:
-        register_turn_finalized_handler(
-            registry, uow_factory=_uow_factory, resolver=InMemorySourceResolver()
-        )
+        # M6.2：--validation-sources 仅在本分支内解析（受控）——
+        # 提供 path → 加载 JSON 映射（正向写可验证）；
+        # 无 path → 保持空 resolver，仅负路径可验证（logger.warning 注明）。
+        resolver = InMemorySourceResolver()
+        if args.validation_sources:
+            resolver = load_resolver_from_json(args.validation_sources)
+            logger.info(
+                "validation profile：已加载 validation sources 映射（%s）",
+                args.validation_sources,
+            )
+        else:
+            logger.warning(
+                "validation profile：未提供 --validation-sources，resolver 为空映射，"
+                "仅负路径（resolver 未命中 → INTERNAL_ERROR）可验证"
+            )
+        register_turn_finalized_handler(registry, uow_factory=_uow_factory, resolver=resolver)
         logger.warning(
             "turn.finalized 已注册（test/validation profile，in-memory resolver）。"
             "production 禁止使用此参数（BLOCKED_BY_HOST_MAPPING）"

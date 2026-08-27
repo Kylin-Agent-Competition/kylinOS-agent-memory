@@ -154,7 +154,7 @@ class UnitOfWork(AbstractContextManager["UnitOfWork"]):
         existing = None
         if host_turn_id is not None:
             existing = repo.find_turn_by_host(
-                self.conn, session_id=session_id, host_turn_id=host_turn_id
+                self.conn, session_id=session_id, host_turn_id=host_turn_id, user_id=user_id
             )
 
         refinalize = existing is not None
