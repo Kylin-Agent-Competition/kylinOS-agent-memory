@@ -47,14 +47,17 @@ done
 [[ -n "$binary" && "$binary" = /* && -x "$binary" ]] || fail "binary_must_be_an_executable_absolute_path"
 [[ "$collection" =~ ^d6b_[A-Za-z0-9_]+$ ]] || fail "collection_must_use_d6b_prefix"
 
-cleanup() {
+cleanup_on_failure() {
+    local status=$?
+    trap - EXIT
     if "$binary" drop_collection "$collection" >/dev/null 2>&1; then
         printf 'D6B_L2 cleanup=PASS collection=%s\n' "$collection"
     else
         printf 'D6B_L2 cleanup=FAIL collection=%s\n' "$collection" >&2
     fi
+    exit "$status"
 }
-trap cleanup EXIT
+trap cleanup_on_failure EXIT
 
 emit_metadata() {
     printf 'D6B_L2_META command='
@@ -161,4 +164,11 @@ if payload.get("ok") is not False or "unknown filter" not in payload.get("messag
 print("D6B_L2 name=unknown_filter_key_fail_closed result=PASS")
 ' "$unknown_filter_output"
 
-printf 'D6B_L2 result=PASS collection=%s cleanup=reported_by_trap\n' "$collection"
+trap - EXIT
+if "$binary" drop_collection "$collection" >/dev/null 2>&1; then
+    printf 'D6B_L2 cleanup=PASS collection=%s\n' "$collection"
+else
+    printf 'D6B_L2 cleanup=FAIL collection=%s\n' "$collection" >&2
+    fail "cleanup_failed:$collection"
+fi
+printf 'D6B_L2 result=PASS collection=%s cleanup=complete\n' "$collection"

@@ -180,8 +180,13 @@ def main() -> None:
         else:
             raise AssertionError("mismatched filter user must fail before invoking vector_cli")
     finally:
-        client.drop_collection(args.collection)
-        print("D6B_PROVIDER_L2 cleanup=PASS")
+        try:
+            client.drop_collection(args.collection)
+        except Exception:
+            print(f"D6B_PROVIDER_L2 cleanup=FAIL collection={args.collection}")
+            raise
+        else:
+            print(f"D6B_PROVIDER_L2 cleanup=PASS collection={args.collection}")
     print(f"D6B_PROVIDER_L2 result=PASS collection={args.collection} cleanup=complete")
 
 
