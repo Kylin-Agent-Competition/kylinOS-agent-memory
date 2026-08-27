@@ -25,11 +25,18 @@ from service.source_resolver import InMemorySourceResolver, ResolvedContent
 
 def _wait_socket(path, timeout=5.0):
     deadline = time.monotonic() + timeout
+    last_err = None
     while time.monotonic() < deadline:
         if os.path.exists(path):
-            return
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.5)
+                    s.connect(path)
+                return
+            except OSError as exc:
+                last_err = exc
         time.sleep(0.05)
-    raise TimeoutError(f"socket not ready: {path}")
+    raise TimeoutError(f"socket not ready: {path} (last: {last_err})")
 
 
 def _request(sock_path: str, msg: dict, timeout: float = 5.0) -> dict:
