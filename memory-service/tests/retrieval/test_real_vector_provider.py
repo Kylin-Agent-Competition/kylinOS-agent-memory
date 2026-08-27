@@ -174,6 +174,26 @@ def test_insert_rejects_empty_vector_before_invoking_cli(monkeypatch):
         )
 
 
+def test_insert_rejects_mismatched_dimension_before_invoking_cli(monkeypatch):
+    """D6-B：写入维度不符合 Provider 配置时，必须在桥接前失败关闭。"""
+    def unexpected_cli(*args, **kwargs):
+        raise AssertionError("wrong-dimension vector must not reach vector_cli")
+
+    monkeypatch.setattr(subprocess, "run", unexpected_cli)
+
+    with pytest.raises(ValueError, match="写入向量维度必须等于 4"):
+        VectorCliClient(cli_path="vector_cli", expected_dimension=4).insert(
+            "d6_collection",
+            [7],
+            [[1, 0, 0]],
+            user_ids=["alice"],
+            version_ids=["v3"],
+            scene_ids=["work"],
+            memory_statuses=["active"],
+            deleted_flags=[False],
+        )
+
+
 def test_search_rejects_mismatched_filter_user_before_invoking_cli(monkeypatch):
     """D6-B：调用参数与 typed filter 的用户不一致时必须 fail-close。"""
     def unexpected_cli(*args, **kwargs):

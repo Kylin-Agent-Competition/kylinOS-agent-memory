@@ -112,6 +112,8 @@ class VectorCliClient:
                 for value in vector
             ):
                 raise ValueError("向量元素必须是有限实数")
+            if self.expected_dimension is not None and len(vector) != self.expected_dimension:
+                raise ValueError(f"写入向量维度必须等于 {self.expected_dimension}")
         result = self._run(
             "insert",
             name,
