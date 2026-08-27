@@ -21,6 +21,17 @@ class _FakeCompleted:
         self.returncode = returncode
 
 
+def _active_unscoped_filter(user_id="alice"):
+    return RetrievalFilter(
+        user_id=user_id,
+        scene=SceneFilter(allowed_scene_ids=[], include_unscoped=True),
+        object_types=[ObjectType.KNOWLEDGE],
+        allowed_memory_statuses=["active"],
+        conflict_policy="exclude_unresolved",
+        as_of=NOW,
+    )
+
+
 def test_search_maps_hits(monkeypatch):
     calls = []
 
@@ -37,7 +48,9 @@ def test_search_maps_hits(monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     client = VectorCliClient(cli_path="vector_cli", expected_dimension=4)
-    hits = client.search("c", [1, 0, 0, 0], 3, now=NOW, user_id="alice")
+    hits = client.search(
+        "c", [1, 0, 0, 0], 3, now=NOW, user_id="alice", filter=_active_unscoped_filter()
+    )
 
     assert len(hits) == 3
     assert [h.rank for h in hits] == [1, 2, 3]
@@ -67,21 +80,41 @@ def test_search_scopes_request_to_user_and_uses_returned_metadata(monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
     client = VectorCliClient(cli_path="vector_cli", expected_dimension=4)
 
-    hits = client.search("d6_collection", [1, 0, 0, 0], 3, user_id="alice", now=NOW)
+    hits = client.search(
+        "d6_collection", [1, 0, 0, 0], 3, user_id="alice", now=NOW, filter=_active_unscoped_filter()
+    )
 
     assert json.loads(calls[0][1]) == {
         "vector": [1, 0, 0, 0],
         "filter": {
             "user_id": "alice",
             "allowed_scene_ids": [],
-            "include_unscoped": False,
-            "allowed_memory_statuses": [],
+            "include_unscoped": True,
+            "allowed_memory_statuses": ["active"],
             "exclude_deleted": True,
         },
     }
     assert [(hit.memory_id, hit.version_id, hit.user_id) for hit in hits] == [
         ("7", "v3", "alice"),
     ]
+
+
+def test_search_rejects_missing_typed_filter_before_subprocess(monkeypatch):
+    """D6-B：场景作用域必须由策略层显式给出，Provider 不得自行猜测。"""
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+        return _FakeCompleted(json.dumps({"ok": True, "code": 0, "hits": []}))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(TypeError, match="filter"):
+        VectorCliClient(cli_path="vector_cli", expected_dimension=4).search(
+            "d6_collection", [1, 0, 0, 0], 3, user_id="alice", now=NOW
+        )
+
+    assert calls == []
 
 
 def test_search_forwards_typed_scene_and_status_filter(monkeypatch):
@@ -273,10 +306,11 @@ def test_search_rejects_invalid_request_before_invoking_cli(monkeypatch, vector,
     with pytest.raises(ValueError, match=message):
         VectorCliClient(cli_path="vector_cli", expected_dimension=4).search(
             "d6_collection",
-            vector,
-            top_n,
-            user_id="alice",
-            now=NOW,
+                vector,
+                top_n,
+                user_id="alice",
+                filter=_active_unscoped_filter(),
+                now=NOW,
         )
 
 
@@ -297,7 +331,7 @@ def test_search_drops_malformed_or_cross_user_hits(monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     hits = VectorCliClient(cli_path="vector_cli", expected_dimension=4).search(
-        "d6_collection", [1, 0, 0, 0], 10, user_id="alice", now=NOW,
+        "d6_collection", [1, 0, 0, 0], 10, user_id="alice", now=NOW, filter=_active_unscoped_filter(),
     )
 
     assert [(hit.memory_id, hit.version_id, hit.user_id) for hit in hits] == [("1", "v1", "alice")]
@@ -315,7 +349,7 @@ def test_search_error_raises(monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
     client = VectorCliClient(expected_dimension=4)
     with pytest.raises(VectorCliError) as exc:
-        client.search("missing", [1, 0, 0, 0], 3, user_id="alice", now=NOW)
+        client.search("missing", [1, 0, 0, 0], 3, user_id="alice", now=NOW, filter=_active_unscoped_filter())
     assert exc.value.code == 1002
     assert "collection not found" in exc.value.message
 

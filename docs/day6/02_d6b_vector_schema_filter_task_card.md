@@ -26,7 +26,7 @@
 ## 输入与输出契约
 
 - 写入：`id`、`vector`、`user_id`、`version_id`、`scene_id`、`memory_status`、`is_deleted`。
-- 查询过滤：`user_id` 必填；仅接受 `allowed_scene_ids`、`include_unscoped`、`allowed_memory_statuses` 与 `exclude_deleted` 四个可选键。
+- 查询过滤：调用方必须提供由策略层构造的 typed `RetrievalFilter`（`user_id` 必填）；仅接受 `allowed_scene_ids`、`include_unscoped`、`allowed_memory_statuses` 与 `exclude_deleted` 四个可选键，Provider 不为缺失策略猜测默认范围。
 - 场景过滤遵循 PR #63 中 D/E 冻结的方案 B：`allowed_scene_ids` 是允许的 scoped scene 集合，`include_unscoped` 独立决定无场景记录是否可见；空集合不是通配。故 `[] + false` 零命中，`[] + true` 仅允许无场景记录。
 - 删除态始终由服务端过滤：调用方传入 `exclude_deleted=false` 也不得返回已删除项。
 - 返回：命中必须携带同一 `user_id`、有效 `version_id` 与有限分数；不合格 SDK 命中丢弃并计数，不得污染正常结果。

@@ -146,7 +146,7 @@ class VectorCliClient:
         timeout: int = 5000,
         *,
         user_id: str,
-        filter: Optional[RetrievalFilter] = None,
+        filter: RetrievalFilter,
         now: Optional[datetime] = None,
     ) -> list[RetrievalHit]:
         """执行向量检索，返回 1 起始 rank 的 RetrievalHit。"""
@@ -168,13 +168,13 @@ class VectorCliClient:
             raise ValueError("搜索必须配置 expected_dimension")
         if len(vector) != self.expected_dimension:
             raise ValueError(f"查询向量维度必须等于 {self.expected_dimension}")
-        if filter is not None and filter.user_id != user_id:
+        if filter.user_id != user_id:
             raise ValueError("RetrievalFilter.user_id 必须与搜索 user_id 一致")
         cli_filter = {
             "user_id": user_id,
-            "allowed_scene_ids": sorted(set(filter.scene.allowed_scene_ids)) if filter else [],
-            "include_unscoped": filter.scene.include_unscoped if filter else False,
-            "allowed_memory_statuses": sorted(set(filter.allowed_memory_statuses)) if filter else [],
+            "allowed_scene_ids": sorted(set(filter.scene.allowed_scene_ids)),
+            "include_unscoped": filter.scene.include_unscoped,
+            "allowed_memory_statuses": sorted(set(filter.allowed_memory_statuses)),
             "exclude_deleted": True,
         }
         result = self._run(

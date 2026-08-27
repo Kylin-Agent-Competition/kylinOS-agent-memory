@@ -9,7 +9,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from retrieval.contracts import ObjectType, RetrievalFilter
+from retrieval.contracts import ObjectType, RetrievalFilter, SceneFilter
 from retrieval.fts5 import Fts5Index
 from retrieval.fusion import fuse_retrieval
 from retrieval.real_vector_provider import VectorCliClient
@@ -30,18 +30,21 @@ def main() -> int:
     cli = VectorCliClient(cli_path="./vector_cli", expected_dimension=4)
     cli.drop_collection(collection)
     cli.create_collection(collection, 4)
-    vector_hits = cli.search(collection, [1.0, 0.0, 0.0, 0.0], top_n=5, user_id=USER, now=NOW)
-    print(f"[W1] empty Vector hits: {len(vector_hits)} -> {vector_hits}")
-
-    # W1-3/W1-5 融合 -> 可解释空结果
     flt = RetrievalFilter(
         user_id=USER,
+        scene=SceneFilter(allowed_scene_ids=[], include_unscoped=True),
         object_types=[ObjectType.KNOWLEDGE],
         allowed_memory_statuses=["active"],
         allowed_sensitivity=["internal"],
         conflict_policy="resolve",
         as_of=NOW,
     )
+    vector_hits = cli.search(
+        collection, [1.0, 0.0, 0.0, 0.0], top_n=5, user_id=USER, filter=flt, now=NOW
+    )
+    print(f"[W1] empty Vector hits: {len(vector_hits)} -> {vector_hits}")
+
+    # W1-3/W1-5 融合 -> 可解释空结果
     candidates = fuse_retrieval(fts5_hits=fts5_hits, vector_hits=vector_hits, truth={}, flt=flt)
     print(f"[W1] fused candidates: {len(candidates)} -> {'EMPTY (解释为空库无匹配)' if not candidates else candidates}")
 

@@ -11,7 +11,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from retrieval.contracts import ObjectType, RetrievalFilter
+from retrieval.contracts import ObjectType, RetrievalFilter, SceneFilter
 from retrieval.fts5 import Fts5Index
 from retrieval.fusion import TruthRecord, retrieve_graceful
 from retrieval.real_vector_provider import VectorCliClient, VectorCliError
@@ -63,6 +63,7 @@ def main() -> int:
 
     flt = RetrievalFilter(
         user_id=USER, object_types=[ObjectType.KNOWLEDGE],
+        scene=SceneFilter(allowed_scene_ids=[], include_unscoped=True),
         allowed_memory_statuses=["active"], allowed_sensitivity=["internal"],
         conflict_policy="resolve", as_of=NOW,
     )
@@ -71,7 +72,7 @@ def main() -> int:
         return fts5.search("apple", USER, top_n=5, now=NOW)
 
     def vector_search():
-        return cli.search(collection, [1.0, 0.0, 0.0, 0.0], top_n=5, user_id=USER, now=NOW)
+        return cli.search(collection, [1.0, 0.0, 0.0, 0.0], top_n=5, user_id=USER, filter=flt, now=NOW)
 
     # 正常路径
     normal = retrieve_graceful(fts5_search=fts5_search, vector_search=vector_search, truth=truth, flt=flt)

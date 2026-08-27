@@ -9,7 +9,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from retrieval.contracts import ObjectType, RetrievalFilter
+from retrieval.contracts import ObjectType, RetrievalFilter, SceneFilter
 from retrieval.fts5 import Fts5Index
 from retrieval.fusion import TruthRecord, fuse_retrieval
 from retrieval.real_vector_provider import VectorCliClient
@@ -64,20 +64,23 @@ def main() -> int:
         deleted_flags=[False] * 3,
     ).get("ok"))
 
-    fts5_hits = fts5.search("apple", USER_ID, top_n=5, now=NOW)
-    vector_hits = cli.search(collection, [1.0, 0.0, 0.0, 0.0], top_n=5, user_id=USER_ID, now=NOW)
-
-    print("[V006] FTS5 hits:  ", [(h.memory_id, h.rank) for h in fts5_hits])
-    print("[V006] Vector hits:", [(h.memory_id, h.rank, h.raw_score) for h in vector_hits])
-
     flt = RetrievalFilter(
         user_id=USER_ID,
+        scene=SceneFilter(allowed_scene_ids=[], include_unscoped=True),
         object_types=[ObjectType.KNOWLEDGE],
         allowed_memory_statuses=["active"],
         allowed_sensitivity=["internal"],
         conflict_policy="resolve",
         as_of=NOW,
     )
+    fts5_hits = fts5.search("apple", USER_ID, top_n=5, now=NOW)
+    vector_hits = cli.search(
+        collection, [1.0, 0.0, 0.0, 0.0], top_n=5, user_id=USER_ID, filter=flt, now=NOW
+    )
+
+    print("[V006] FTS5 hits:  ", [(h.memory_id, h.rank) for h in fts5_hits])
+    print("[V006] Vector hits:", [(h.memory_id, h.rank, h.raw_score) for h in vector_hits])
+
     candidates = fuse_retrieval(
         fts5_hits=fts5_hits, vector_hits=vector_hits, truth=truth, flt=flt
     )
