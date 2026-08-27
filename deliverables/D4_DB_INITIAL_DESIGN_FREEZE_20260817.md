@@ -23,7 +23,9 @@
 
 | 编号 | 冻结对象 | 定义位置 | 状态 | 依赖 |
 |------|---------|---------|:---:|------|
-| FRZ-DB-001 | 核心表 5 张 + 4 项索引 + FTS5 `memory_fts` | 冻结文档 §2.2-2.4；需求 v1.3 §二 FR-DB-001 | ✅ | R-6 已采纳（ADR-006，复合 PK） |
+| FRZ-DB-001 | 核心表 5 张 + 4 项索引 + FTS5 `memory_fts` | 冻结文档 §2.2-2.4；需求 v1.3 §二 FR-DB-001 | ✅ | R-6 已采纳（ADR-006，复合 PK）；**2026-08-27 ADR-011 扩展已采纳** |
+
+> **2026-08-27 扩展（ADR-011 批准，D 决策 + Reviewer E 签署）**：FRZ-DB-001 在既有列定义**不变**前提下扩展——`turns` 增 nullable `trace_id` / `host_turn_id`，`memory_entries` 增 nullable `trace_id`；新增部分唯一索引 `idx_turns_host_turn_id`（`UNIQUE(session_id, host_turn_id) WHERE host_turn_id IS NOT NULL`，ADR-010 Upsert 匹配键）；落库迁移 `20260826_add_trace_id.py`（upgrade ADD COLUMN / downgrade 表重建，ADR-007 命名合规）；outbox 不改表。详见 `docs/adr/011-trace-id-columns.md` 与冻结文档 §2.2/§2.3（已回写）。
 | FRZ-DB-002 | 失败路由 5 条路径 | 冻结文档 §3.1；需求 v1.3 §三 FR-FB-001（映射表） | ✅ | R-5 已采纳（ADR-005，冻结枚举/envelope） |
 | FRZ-DB-003 | 降级层级 L0-L3+Fatal | 冻结文档 §3.2；需求 v1.3 §三 FR-FB-001 | ✅ | 无 |
 | FRZ-DB-004 | Dead Letter 策略 | 冻结文档 §3.4；需求 v1.3 §三 FR-FB-003 + §二 FR-DB-004 | ✅ | 无 |

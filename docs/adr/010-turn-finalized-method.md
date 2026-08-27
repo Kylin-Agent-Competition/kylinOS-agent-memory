@@ -1,8 +1,8 @@
 # ADR-010：新增 `turn.finalized` IPC 方法（FRZ-IPC-007 / B-1 方案 A1）
 
-- **状态**：📝 提议（待 D 决策 + Reviewer E 签署）
+- **状态**：✅ 已采纳（D 决策 + Reviewer E 签署，2026-08-27）
 - **日期**：2026-08-26（PR #60 Review 后语义细化修订）
-- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
+- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，已签 2026-08-27）
 - **责任轨道**：D（IPC）为主，C（Memory Client）协作，E 审查
 - **决策版本**：`turn-finalized-method-v1`
 - **适用范围**：FRZ-IPC-007 顶层方法路由表；关联 `docs/day3/11_os_agent_event_contract_v1.md` §7（TurnFinalizedEvent，**FROZEN_CANDIDATE**）、FRZ-IPC-005、ADR-006、ADR-011、checklist Phase 4.1
@@ -214,4 +214,4 @@ FRZ-IPC-007 路由表新增写方法 `turn.finalized`，payload 对齐事件契�
 - `docs/day10/06_pr60_semantic_refinement_plan.md`（本方案；PR #60 Review 逐项收口）
 - `memory-service/gateway/handlers.py` / `registry.py`、`memory-service/db/uow.py`（实现现状）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 A1（待定）；Reviewer E（谢嘉然）签署（待定），签署后状态更新为「已采纳」，并在**本 PR 内追加 commit 回写** FRZ-IPC-007 路由表。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-27 决策选方案 A1**；**Reviewer E（谢嘉然）2026-08-27 签署**；状态更新为「已采纳」，并在**本 PR 内追加 commit 回写** FRZ-IPC-007 路由表。

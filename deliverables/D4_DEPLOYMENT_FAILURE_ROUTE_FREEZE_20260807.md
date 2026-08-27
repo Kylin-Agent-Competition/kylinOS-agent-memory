@@ -127,6 +127,10 @@ WantedBy=default.target
 | `model_response` | TEXT | | 模型原始响应 |
 | `is_end` | INTEGER | NOT NULL DEFAULT 0 | TurnFinalizedEvent 标志 |
 | `created_at` | TEXT | NOT NULL | ISO 8601 |
+| `trace_id` | TEXT | | IPC envelope 链路追踪 ID（**ADR-011 新增，nullable，2026-08-27**；不入 FTS） |
+| `host_turn_id` | TEXT | | 宿主回合字符串 ID（**ADR-011 新增，nullable**；`turn.finalized` Upsert 匹配键，ADR-010） |
+
+> **2026-08-27 修订（ADR-011 批准，D 决策 + Reviewer E 签署）**：`turns` 新增 nullable `trace_id` / `host_turn_id` 列，既有列定义不变、向后兼容；二者均不入 FTS、不作业务正文字段；`host_turn_id` 作为 ADR-010 `turn.finalized` 的 Upsert 匹配键（配合 §2.3 新增部分唯一索引）。
 
 **原文隔离约束** [02 §4.1]：
 - `original_user_text` 保存用户原始输入
@@ -148,6 +152,9 @@ WantedBy=default.target
 | `is_deleted` | INTEGER | NOT NULL DEFAULT 0 | 软删除标记 |
 | `created_at` | TEXT | NOT NULL | ISO 8601 |
 | `updated_at` | TEXT | NOT NULL | ISO 8601 |
+| `trace_id` | TEXT | | IPC 链路追踪 ID（**ADR-011 新增，nullable，2026-08-27**；不入 FTS） |
+
+> **2026-08-27 修订（ADR-011 批准）**：`memory_entries` 新增 nullable `trace_id` 列，既有列定义不变、向后兼容；不入 FTS、不作业务正文字段。
 
 #### 2.2.4 outbox
 
@@ -191,6 +198,7 @@ WantedBy=default.target
 | `idx_memory_user_type` | memory_entries | (user_id, entry_type) | 按用户和类型检索 |
 | `idx_memory_deleted` | memory_entries | (is_deleted) | 过滤软删除 |
 | `idx_outbox_pending` | outbox | (next_retry_at) WHERE attempts <= 3 | 待处理事件扫描 |
+| `idx_turns_host_turn_id` | turns | (session_id, host_turn_id) WHERE host_turn_id IS NOT NULL | **部分唯一索引（ADR-011 新增，2026-08-27）**：ADR-010 `turn.finalized` Upsert 匹配键，避免重投/refinalize 重复计数 |
 
 ### 2.4 FTS5 全文搜索（设计冻结）
 

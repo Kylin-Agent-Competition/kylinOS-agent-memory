@@ -1,8 +1,8 @@
 # ADR-011：turns/memory_entries 新增 nullable `trace_id` / `host_turn_id` 列（FRZ-DB-001 / B-2 方案 B1 扩展）
 
-- **状态**：📝 提议（待 D 决策 + Reviewer E 签署）
+- **状态**：✅ 已采纳（D 决策 + Reviewer E 签署，2026-08-27）
 - **日期**：2026-08-26（PR #60 Review 后语义细化修订）
-- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
+- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，已签 2026-08-27）
 - **责任轨道**：D（IPC/DB）为主，E 审查
 - **决策版本**：`trace-id-columns-v1`
 - **适用范围**：FRZ-DB-001 `turns` / `memory_entries` 表定义；关联 `docs/day3/11_os_agent_event_contract_v1.md` §3.2（metadata.traceId，**FROZEN_CANDIDATE**）、FRZ-IPC-006、ADR-007、ADR-010、checklist 5.2/5.4
@@ -131,4 +131,4 @@ CREATE UNIQUE INDEX idx_turns_host_turn_id
 - `docs/day3/11_os_agent_event_contract_v1.md` §3.2（metadata.traceId 可选）
 - `docs/adr/010-turn-finalized-method.md`（联动：host_turn_id 为 Upsert 匹配键、trace_id 唯一真源）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：D 决策选方案 B1（待定）；Reviewer E（谢嘉然）签署（待定），签署后状态更新为「已采纳」，并在**本 PR 内追加 commit 回写** FRZ-DB-001 表定义。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-27 决策选方案 B1**；**Reviewer E（谢嘉然）2026-08-27 签署**；状态更新为「已采纳」，并在**本 PR 内追加 commit 回写** FRZ-DB-001 表定义。
