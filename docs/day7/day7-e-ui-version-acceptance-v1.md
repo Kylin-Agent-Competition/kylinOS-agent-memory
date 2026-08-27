@@ -95,7 +95,7 @@
 
 - rollback 后再次 UPDATE 时，`next_version` = 同 `user_id + preference_key + scope` 链内**全部现存记录（含历史 SUPERSEDED）**的 `max(version) + 1`；
 - 版本号单调唯一，**不复用历史版本号**（避免 rollback 到旧 active 后再次 UPDATE 复用已被历史记录占用的版本号）；
-- 来源：`preference_version_policy.py` `_find_max_version_in_chain` + `_update`（L400-441），对应 TD-020。
+- 来源：`preference_version_policy.py` `_find_max_version_in_chain` + `_update`（L400-441），对应 TD-023。
 
 ---
 
@@ -250,7 +250,7 @@ E 轨策略（D7E-01/02/03）已有单元测试与回归测试（S-07），但�
 | 版本 | 日期 | 作者 | 变更说明 | 状态 |
 |------|------|------|----------|------|
 | v1 | 2026-08-24 | E 轨道 | 初稿：形成 Day7E 对 C 轨偏好 UI 与 D 轨版本持久化的业务验收规范（CREATE/COEXIST/UPDATE/NO_OP/ROLLBACK + 临时偏好 + 跨用户隔离）；明确 D/C 各自证据清单；全部 C/D 验收案例证据状态 `RUNTIME_UNVERIFIED`；文档状态 `PENDING_INTEGRATION` | `PENDING_INTEGRATION` |
-| v2 | 2026-08-26 | E 轨道 | 明确 rollback 后 UPDATE 版本号单调唯一约束（同 user/key/scope 链 max(existing version)+1，含历史 SUPERSEDED，不复用历史版本号）；对应 TD-020 登记；状态仍 `PENDING_INTEGRATION`，C/D/L2/L3 不变 | `PENDING_INTEGRATION` |
+| v2 | 2026-08-26 | E 轨道 | 明确 rollback 后 UPDATE 版本号单调唯一约束（同 user/key/scope 链 max(existing version)+1，含历史 SUPERSEDED，不复用历史版本号）；对应 TD-023 登记；状态仍 `PENDING_INTEGRATION`，C/D/L2/L3 不变 | `PENDING_INTEGRATION` |
 
 ---
 

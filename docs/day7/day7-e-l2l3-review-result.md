@@ -133,15 +133,16 @@ PR #58 正式审查问题 #1（Medium，scope fail-closed）与 #2（Low，defau
 | Reviewer 独立复测 | `b883516` 收敛 #1/#2 之后 | L1 本地 **104 passed**（新增 4 个 #1/#2 测试） | 收敛补记时点的事实，由 Reviewer 独立复测得出 |
 | HEAD `85f7754` 独立复测 | 2026-08-26 | L1 本地 **109 passed**（三 D7E 文件，`18818a8` identity 门禁收敛后） | 与 100/104 属不同时点，互不覆盖；**L1 非 Runtime 证据** |
 | 跨阶段全量复测 | 2026-08-26 | L1 跨阶段 **305 passed** | 含 D7E 及跨 Day5/Day6/Day7 链路回归；**L1 非 Runtime 证据** |
+| HEAD `b9d5abe` Reviewer 复核 | Reviewer 复核时点 | L1 本地 **51 passed**（version policy）/ **121 passed**（三 D7E 文件）/ **317 passed**（跨阶段） | 与 100/104/109/305 属不同时点，互不覆盖；**L1 非 Runtime 证据** |
 
 - 若此后作者回归测试的 passed 数量再发生变化，**不得覆盖 Reviewer 独立复测 104 passed 这一已记录事实**，应作为新的独立时点另行记录。
-- 上表 109 / 305 为 HEAD `85f7754` 时点由 Reviewer 独立复测记录的历史事实，按本收敛补记一并保留、不与 100/104 相互覆盖。本任务执行环境（HEAD `d6a388b`）内的本地回归命令实际输出为：`test_preference_version_policy_d7e.py` **51 passed**、三 D7E 文件全量 **121 passed**（退出码 0，见 §6.5），属另一独立本地回归时点，**不得**以之覆盖或冒充上述 109 / 305 记录。
+- 上表 109 / 305 为 HEAD `85f7754` 时点由 Reviewer 独立复测记录的历史事实，按本收敛补记一并保留、不与 100/104 相互覆盖。本任务 Reviewer 在 HEAD `b9d5abe` 复核确认：`test_preference_version_policy_d7e.py` **51 passed**、三 D7E 文件全量 **121 passed**、跨阶段 **317 passed**（退出码 0，见 §6.5），属 Reviewer 复核的独立本地回归时点，**不得**以之覆盖或冒充上述 109 / 305 记录。
 
 ### 6.3 本轮 identity Low 修复状态
 
 - 本轮 `identity` 相关 Low（问题 #2，`default_factory` 可变默认值 / 实例 identity 独立性）已通过 `Field(default_factory=list)` 收敛，相关测试为 `test_coexist_with_scopes_default_independent_instances`。
 - **该修复仍待非作者 Reviewer 复核确认**，尚未标记为最终关闭。
-- 已登记 **TD-018**（Technical Debt / Low / In Progress，见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`），待非作者 Reviewer 确认后关闭。
+- 已登记 **TD-024**（Technical Debt / Low / In Progress，见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`），待非作者 Reviewer 确认后关闭。
 
 ### 6.4 C/D/L2/L3 与 Acceptance Spec 状态（保持诚实）
 
@@ -153,14 +154,14 @@ PR #58 正式审查问题 #1（Medium，scope fail-closed）与 #2（Low，defau
 - **Acceptance Spec**（`day7-e-ui-version-acceptance-v1.md`）：仍为 `PENDING_INTEGRATION`，**不冻结**。
 - **本补记不将任何 `RUNTIME_UNVERIFIED` 改为 `HOST_VERIFIED` / `PASS`** 的表述。
 
-本补记仅追加收敛事实与 TD-018 登记，不产生任何真实宿主验证证据，不代行 Reviewer 最终批准。
+本补记仅追加收敛事实与 TD-024 登记，不产生任何真实宿主验证证据，不代行 Reviewer 最终批准。
 
-### 6.5 `18818a8` identity 门禁收敛与 TD-019/TD-020 登记
+### 6.5 identity 门禁（`18818a8`）与 TD-022/TD-023 收敛登记
 
-本小节补记 PR #58 复审所引入的两项 Medium 收敛事实（对应 TD-019 / TD-020），并记录本任务实际执行的本地回归结果：
+本小节补记 PR #58 复审所引入的两项 Medium 收敛事实（对应 TD-022 / TD-023），并记录 Reviewer 在 HEAD `b9d5abe` 复核的本地回归结果：
 
-- **identity 门禁收敛（TD-019）**：`18818a8` 收敛跨用户 Rollback 拒绝载荷不回显他人 `key` / `scope`（`_reject(REASON_REJECTED_CROSS_USER, intent.user_id, "", "")`，`preference_version_policy.py` L281-289）。对应 5 个负向泄露测试（L822-984）：`test_rollback_cross_user_rejected_key_scope_empty`、`test_rollback_cross_user_rejected_no_target_leak_in_dump`、`test_rollback_cross_user_via_collection_key_scope_empty`、`test_rollback_non_cross_user_rejections_still_echo_key_scope`、`test_rollback_valid_history_unchanged_after_cross_user_fix`。**登记 TD-019**（Medium / In Progress / E 轨 / D 主审 / PR #58），等待非作者 Reviewer 最终确认后关闭。
-- **monotonic version 收敛（TD-020）**：rollback 后 UPDATE 版本号按同 `user_id + preference_key + scope` 链内全部现存记录（含历史 SUPERSEDED）的 `max(version)+1` 分配，不复用历史版本号（`_find_max_version_in_chain` + `_update`，L400-441）。对应 7 个测试（L998-1163）：`test_update_after_rollback_uses_chain_max_version`（v1 active + v2v3 历史 → UPDATE=4）等。**登记 TD-020**（Medium / In Progress / E 轨 / D 主审 / PR #58），等待非作者 Reviewer 最终确认后关闭。
-- **13 个 reason_code 权威集合**：`REASON_CODES` frozenset（`preference_version_policy.py` L92-106）已定义，测试 `test_reason_codes_match_authoritative_set` 覆盖。
-- **本任务实际执行的本地回归**（HEAD `d6a388b`，WSL）：L0 `test_preference_version_policy_d7e.py` **51 passed**（退出码 0）；L1 三 D7E 文件全量 **121 passed**（退出码 0）。以上为独立本地新时点，纯文档任务不改动任何生产/测试代码，仅证明既有 E 轨代码未被破坏。
-- **声明**：不将上表 109 / 305 或本小节 51 / 121 作为 Runtime 证据；不改变 C/D/L2/L3 状态（均保持 `RUNTIME_UNVERIFIED`）。
+- **跨用户 Rollback 拒绝载荷收敛（TD-022，commit `0344955`）**：`0344955` 收敛跨用户 Rollback 拒绝载荷不回显他人 `key` / `scope`（`_reject(REASON_REJECTED_CROSS_USER, intent.user_id, "", "")`）。对应 5 个负向泄露测试：`test_rollback_cross_user_rejected_key_scope_empty`、`test_rollback_cross_user_rejected_no_target_leak_in_dump`、`test_rollback_cross_user_via_collection_key_scope_empty`、`test_rollback_non_cross_user_rejections_still_echo_key_scope`、`test_rollback_valid_history_unchanged_after_cross_user_fix`。**登记 TD-022**（Medium / In Progress / E 轨 / D 主审 / PR #58），等待非作者 Reviewer 最终确认后关闭。注：`18818a8` 为版本意图与 decision identity 一致性门禁收敛，非本 TD 对应的 Medium 修复。
+- **monotonic version 收敛（TD-023，commit `ccc8664`）**：rollback 后 UPDATE 版本号按同 `user_id + preference_key + scope` 链内全部现存记录（含历史 SUPERSEDED）的 `max(version)+1` 分配，不复用历史版本号（`_find_max_version_in_chain` + `_update`）。对应 7 个测试：`test_update_after_rollback_uses_chain_max_version`（v1 active + v2/v3 历史 → UPDATE=4）、`test_update_version_isolated_across_keys`、`test_update_version_isolated_across_scopes`、`test_update_version_isolated_across_users`、`test_update_chain_max_includes_all_memory_statuses`、`test_update_after_rollback_no_side_effects`、`test_update_after_rollback_deterministic`。**登记 TD-023**（Medium / In Progress / E 轨 / D 主审 / PR #58），等待非作者 Reviewer 最终确认后关闭。
+- **13 个 reason_code 权威集合**：`REASON_CODES` frozenset（`preference_version_policy.py` L92-106）共 13 个，测试 `test_reason_codes_match_authoritative_set` 已断言 `len(REASON_CODES) == 13`，与权威集合**已一致**（测试文件未修改）。
+- **Reviewer 在 HEAD `b9d5abe` 复核的本地回归**（WSL）：L0 `test_preference_version_policy_d7e.py` **51 passed**（退出码 0）；L1 三 D7E 文件全量 **121 passed**（退出码 0）；跨阶段 **317 passed**（退出码 0）。以上为独立本地新时点，纯文档任务不改动任何生产/测试代码，仅证明既有 E 轨代码未被破坏。
+- **声明**：不将上表 100/104/109/305 或本小节 51 / 121 / 317 作为 Runtime 证据；不改变 C/D/L2/L3 状态（均保持 `RUNTIME_UNVERIFIED`）。
