@@ -2,6 +2,10 @@
 
 流程：CLI 参数 → 配置加载（FRZ-CFG-001）→ 日志 → DB 引擎（FR-DB-003）
      → 迁移检查/建表 → Outbox Worker（FR-DB-004）→ IPC Gateway 启动（FRZ-IPC）
+
+PR-2（T1.3）：注入 UnitOfWork 工厂 + worker metrics；turn.finalized 注册 seam
+（ADR-010 activation 方案 A+B：production 默认不注册，`--register-turn-finalized`
+仅供 test/validation profile 使用）。
 """
 
 from __future__ import annotations
@@ -13,11 +17,13 @@ from typing import Optional
 
 from config import load_config
 from db.engine import create_db_engine, has_alembic_version, init_schema
-from gateway.handlers import register_default_handlers
+from db.uow import UnitOfWork
+from gateway.handlers import register_default_handlers, register_turn_finalized_handler
 from gateway.registry import HandlerRegistry
 from gateway.server import UDSGatewayServer
 from logging_setup import setup_logging
 from outbox.worker import OutboxWorker
+from service.source_resolver import InMemorySourceResolver
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--db", default=None, help="SQLite 路径（等价 KYLIN_MEMORY_DB）")
     p.add_argument("--no-migrate", action="store_true", help="跳过建表（生产由 Alembic 迁移）")
     p.add_argument("--no-outbox", action="store_true", help="不启动 Outbox Worker（测试用）")
+    p.add_argument(
+        "--register-turn-finalized",
+        action="store_true",
+        help="（仅 test/validation profile）显式注册 turn.finalized + in-memory resolver；"
+        "production 默认不注册（ADR-010 activation 方案 A+B）",
+    )
+    p.add_argument(
+        "--json-logs",
+        action="store_true",
+        help="JSON 结构化日志（T3.2；production 建议开启，测试默认文本）",
+    )
     return p
 
 
@@ -41,7 +58,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     for w in warnings:
         logger.warning("%s", w)
 
-    setup_logging(level=cfg.log_level)
+    setup_logging(level=cfg.log_level, json_logs=args.json_logs)
 
     engine = create_db_engine(cfg.database_path)
     if args.no_migrate:
@@ -69,6 +86,21 @@ def main(argv: Optional[list[str]] = None) -> int:
     registry = HandlerRegistry()
     register_default_handlers(registry)
 
+    # T1.3：UnitOfWork 工厂（handler 幂等写 + Outbox 同事务）
+    def _uow_factory() -> UnitOfWork:
+        return UnitOfWork(engine)
+
+    # ADR-010 activation 方案 A+B：production 默认不注册 turn.finalized；
+    # 仅 test/validation profile（--register-turn-finalized）显式注册 + 内存 resolver。
+    if args.register_turn_finalized:
+        register_turn_finalized_handler(
+            registry, uow_factory=_uow_factory, resolver=InMemorySourceResolver()
+        )
+        logger.warning(
+            "turn.finalized 已注册（test/validation profile，in-memory resolver）。"
+            "production 禁止使用此参数（BLOCKED_BY_HOST_MAPPING）"
+        )
+
     worker: Optional[OutboxWorker] = None
     if not args.no_outbox:
         worker = OutboxWorker(
@@ -83,6 +115,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         registry,
         engine=engine,
         default_deadline_ms=cfg.deadline_default_ms,
+        # T3.1：health 携带 outbox backlog（worker.metrics() 现成；worker=None 时无）
+        worker_metrics=worker.metrics if worker is not None else None,
     )
 
     def _run_server() -> None:

@@ -51,6 +51,10 @@ turns = Table(
     Column("model_response", Text, nullable=True),
     Column("is_end", Integer, nullable=False, server_default="0"),
     Column("created_at", String, nullable=False),  # ISO8601 UTC
+    # ADR-011（2026-08-27 签署）：nullable 追踪列，trace_id 为 IPC envelope 唯一真源；
+    # host_turn_id 为 ADR-010 Upsert 匹配键（部分唯一索引见下）
+    Column("trace_id", String, nullable=True),
+    Column("host_turn_id", String, nullable=True),
 )
 
 memory_entries = Table(
@@ -70,6 +74,8 @@ memory_entries = Table(
     Column("is_deleted", Integer, nullable=False, server_default="0"),
     Column("created_at", String, nullable=False),
     Column("updated_at", String, nullable=False),
+    # ADR-011：nullable 追踪列（trace_id 来自 IPC envelope，非正文）
+    Column("trace_id", String, nullable=True),
     CheckConstraint("entry_type IN ('preference','knowledge','tool_result','behavior')", name="ck_memory_entries_entry_type"),
     CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_memory_entries_confidence"),
 )
@@ -101,8 +107,16 @@ idempotency_cache = Table(
     Column("expires_at", String, nullable=False),  # TTL=24h
 )
 
-# ── 索引（4 冻结 + 1 辅助，冻结文档 §2.3） ──
+# ── 索引（4 冻结 + 1 辅助 + 1 ADR-011，冻结文档 §2.3） ──
 idx_turns_session = Index("idx_turns_session", turns.c.session_id, turns.c.turn_index)
+# ADR-011：部分唯一索引（ADR-010 Upsert 匹配键；SQLite 多 NULL 允许，非空才唯一）
+idx_turns_host_turn_id = Index(
+    "idx_turns_host_turn_id",
+    turns.c.session_id,
+    turns.c.host_turn_id,
+    unique=True,
+    sqlite_where=turns.c.host_turn_id.isnot(None),
+)
 idx_memory_user_type = Index("idx_memory_user_type", memory_entries.c.user_id, memory_entries.c.entry_type)
 idx_memory_deleted = Index("idx_memory_deleted", memory_entries.c.is_deleted)
 idx_outbox_pending = Index(

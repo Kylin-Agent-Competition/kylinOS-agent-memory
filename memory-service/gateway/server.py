@@ -18,14 +18,14 @@ import os
 import socket
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
-from gateway import protocol as proto
+from db import repositories as repo
 from gateway.handlers import _UnsupportedStoreError
 from gateway.protocol import (
     ERROR_CODE_INTERNAL_ERROR,
+    ERROR_CODE_INVALID_REQUEST,
     ERROR_CODE_TIMEOUT,
-    ERROR_CODE_UNSUPPORTED_METHOD,
     IncompletePacket,
     ProtocolError,
     RequestValidationError,
@@ -37,6 +37,7 @@ from gateway.protocol import (
     validate_request,
 )
 from gateway.registry import HandlerRegistry, RequestContext, UnsupportedMethodError
+from observability.request_context import clear_request_context, set_request_context
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class UDSGatewayServer:
         *,
         engine=None,
         default_deadline_ms: int = 5000,
+        worker_metrics: Optional[Callable[[], Dict[str, Any]]] = None,
     ) -> None:
         self._socket_path = socket_path
         self._registry = registry
@@ -61,10 +63,11 @@ class UDSGatewayServer:
         self._stopped = False
         self._conn_threads: list[threading.Thread] = []
         self._conn_lock = threading.Lock()
-        # 注入 health handler 的 engine / methods 上下文
+        # 注入 health handler 的 engine / methods / outbox metrics 上下文
         self._extras: Dict[str, Any] = {
             "engine": engine,
             "methods": registry.methods(),
+            "worker_metrics": worker_metrics,
         }
 
     # ── 生命周期 ──
@@ -175,6 +178,22 @@ class UDSGatewayServer:
         trace_id = str(msg.get("trace_id", ""))
         method = str(msg.get("method", ""))
 
+        # T3.3：请求上下文线程局部（JSON 结构化日志自动携带 trace_id/request_id）
+        set_request_context(request_id=request_id, trace_id=trace_id, method=method)
+        try:
+            self._dispatch_inner(conn, msg, start, request_id, trace_id, method)
+        finally:
+            clear_request_context()
+
+    def _dispatch_inner(
+        self,
+        conn: socket.socket,
+        msg: Dict[str, Any],
+        start: float,
+        request_id: str,
+        trace_id: str,
+        method: str,
+    ) -> None:
         try:
             validate_request(msg)
             deadline_ms = int(msg["deadline_ms"])
@@ -215,6 +234,20 @@ class UDSGatewayServer:
             self._send_error(
                 conn, request_id=request_id, trace_id=trace_id,
                 error_code=exc.error_code, message="memory.store not implemented",
+            )
+            return
+        except RequestValidationError as exc:
+            # ADR-010：payload 校验失败 → INVALID_REQUEST（safe_message 固定英文）
+            self._send_error(
+                conn, request_id=request_id, trace_id=trace_id,
+                error_code=exc.error_code, message=str(exc),
+            )
+            return
+        except repo.IdempotencyConflictError as exc:
+            # ADR-010：相同三元组 + 不同请求指纹 → INVALID_REQUEST
+            self._send_error(
+                conn, request_id=request_id, trace_id=trace_id,
+                error_code=ERROR_CODE_INVALID_REQUEST, message=str(exc),
             )
             return
         except Exception as exc:  # noqa: BLE001
