@@ -51,10 +51,19 @@ def _emit_metadata(cli: Path) -> None:
     print(f"D6B_PROVIDER_L2_META runner_sha256={_sha256(Path(__file__).resolve())}")
 
 
-def _filter(user_id: str, *, statuses: list[str], include_unscoped: bool) -> RetrievalFilter:
+def _filter(
+    user_id: str,
+    *,
+    statuses: list[str],
+    include_unscoped: bool,
+    allowed_scene_ids: list[str] | None = None,
+) -> RetrievalFilter:
     return RetrievalFilter(
         user_id=user_id,
-        scene=SceneFilter(allowed_scene_ids=["lab"], include_unscoped=include_unscoped),
+        scene=SceneFilter(
+            allowed_scene_ids=["lab"] if allowed_scene_ids is None else allowed_scene_ids,
+            include_unscoped=include_unscoped,
+        ),
         object_types=[ObjectType.KNOWLEDGE],
         allowed_memory_statuses=statuses,
         conflict_policy="exclude_unresolved",
@@ -105,6 +114,40 @@ def main() -> None:
                 now=NOW,
             ),
             [("201", "v1", "user-a"), ("205", "v5", "user-a")],
+        )
+        _assert_hits(
+            "empty_scene_allowlist_excludes_all",
+            client.search(
+                args.collection,
+                [1.0, 0.0],
+                10,
+                user_id="user-a",
+                filter=_filter(
+                    "user-a",
+                    statuses=["active"],
+                    include_unscoped=False,
+                    allowed_scene_ids=[],
+                ),
+                now=NOW,
+            ),
+            [],
+        )
+        _assert_hits(
+            "empty_scene_allowlist_allows_only_unscoped",
+            client.search(
+                args.collection,
+                [1.0, 0.0],
+                10,
+                user_id="user-a",
+                filter=_filter(
+                    "user-a",
+                    statuses=["active"],
+                    include_unscoped=True,
+                    allowed_scene_ids=[],
+                ),
+                now=NOW,
+            ),
+            [("205", "v5", "user-a")],
         )
         _assert_hits(
             "cross_user_isolation",

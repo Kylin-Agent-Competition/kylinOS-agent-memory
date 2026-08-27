@@ -27,12 +27,13 @@
 
 - 写入：`id`、`vector`、`user_id`、`version_id`、`scene_id`、`memory_status`、`is_deleted`。
 - 查询过滤：`user_id` 必填；仅接受 `allowed_scene_ids`、`include_unscoped`、`allowed_memory_statuses` 与 `exclude_deleted` 四个可选键。
+- 场景过滤遵循 PR #63 中 D/E 冻结的方案 B：`allowed_scene_ids` 是允许的 scoped scene 集合，`include_unscoped` 独立决定无场景记录是否可见；空集合不是通配。故 `[] + false` 零命中，`[] + true` 仅允许无场景记录。
 - 删除态始终由服务端过滤：调用方传入 `exclude_deleted=false` 也不得返回已删除项。
 - 返回：命中必须携带同一 `user_id`、有效 `version_id` 与有限分数；不合格 SDK 命中丢弃并计数，不得污染正常结果。
 
 ## 验收与验证
 
-- L0：输入验证、异常命中丢弃、降级与历史 B 轨脚本回归。
+- L0：输入验证、异常命中丢弃、空场景 allowlist 的 `[] + false` / `[] + true` 透传回归、降级与历史 B 轨脚本回归。
 - L1：`memory-service/tests/retrieval` 全组通过。
 - L2：Kylin V11 真实 Vector Engine 覆盖 metadata 写入、用户隔离、场景/状态/删除过滤、未知键拒绝和 Python provider 端到端；证据见 [D6B L2 报告](../../evidence/l2-kylin-vm/d6b_vector_schema_filter_20260826.md)。
 

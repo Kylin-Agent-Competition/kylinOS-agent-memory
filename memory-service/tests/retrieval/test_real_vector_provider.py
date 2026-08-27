@@ -123,6 +123,42 @@ def test_search_forwards_typed_scene_and_status_filter(monkeypatch):
     }
 
 
+@pytest.mark.parametrize("include_unscoped", [False, True])
+def test_search_forwards_empty_scene_allowlist_without_widening_scope(monkeypatch, include_unscoped):
+    """D6-B：D/E 方案 B 要求空 allowlist 保持为显式的服务端硬过滤输入。"""
+    calls = []
+
+    def fake_run(cmd, input=None, text=None, capture_output=None, timeout=None):
+        calls.append((cmd, input))
+        return _FakeCompleted(json.dumps({"ok": True, "code": 0, "hits": []}))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    filter_ = RetrievalFilter(
+        user_id="alice",
+        scene=SceneFilter(allowed_scene_ids=[], include_unscoped=include_unscoped),
+        object_types=[ObjectType.KNOWLEDGE],
+        conflict_policy="exclude_unresolved",
+        as_of=NOW,
+    )
+
+    VectorCliClient(cli_path="vector_cli", expected_dimension=4).search(
+        "d6_collection",
+        [1, 0, 0, 0],
+        3,
+        user_id="alice",
+        filter=filter_,
+        now=NOW,
+    )
+
+    assert json.loads(calls[0][1])["filter"] == {
+        "user_id": "alice",
+        "allowed_scene_ids": [],
+        "include_unscoped": include_unscoped,
+        "allowed_memory_statuses": [],
+        "exclude_deleted": True,
+    }
+
+
 def test_insert_forwards_filterable_metadata(monkeypatch):
     """D6-B：写入必须把检索所需标量元数据一同交给 Collection。"""
     calls = []

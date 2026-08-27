@@ -118,6 +118,18 @@ active_a_output="$({
 } | "$binary" search "$collection" 10 5000)"
 assert_hits "user_scene_unscoped_status_deleted_filter" "$active_a_output" "101:v1,105:v5"
 
+# D/E 冻结：空 allowlist 不是通配符。false 不得扩大为任意 scene 可见。
+empty_scene_scoped_output="$({
+    printf '%s\n' '{"vector":[1.0,0.0],"filter":{"user_id":"user-a","allowed_scene_ids":[],"include_unscoped":false,"allowed_memory_statuses":["active"],"exclude_deleted":true}}'
+} | "$binary" search "$collection" 10 5000)"
+assert_hits "empty_scene_allowlist_excludes_all" "$empty_scene_scoped_output" ""
+
+# D/E 冻结：空 allowlist + unscoped 仅允许 scene_id 为空的记录。
+empty_scene_unscoped_output="$({
+    printf '%s\n' '{"vector":[1.0,0.0],"filter":{"user_id":"user-a","allowed_scene_ids":[],"include_unscoped":true,"allowed_memory_statuses":["active"],"exclude_deleted":true}}'
+} | "$binary" search "$collection" 10 5000)"
+assert_hits "empty_scene_allowlist_allows_only_unscoped" "$empty_scene_unscoped_output" "105:v5"
+
 # 删除过滤是不可绕过的服务端门禁；伪造 false 不得暴露 104:v4。
 deleted_bypass_output="$({
     printf '%s\n' '{"vector":[1.0,0.0],"filter":{"user_id":"user-a","allowed_scene_ids":["lab"],"include_unscoped":true,"allowed_memory_statuses":["active"],"exclude_deleted":false}}'

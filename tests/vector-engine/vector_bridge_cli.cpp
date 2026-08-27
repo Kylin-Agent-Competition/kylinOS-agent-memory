@@ -197,10 +197,17 @@ void Search(const std::string& name, const json& query_vector, const json& filte
     const std::vector<std::string> scenes = filter.value(
         "allowed_scene_ids", std::vector<std::string>{});
     const bool include_unscoped = filter.value("include_unscoped", false);
-    if (!scenes.empty()) {
+    const std::string unscoped_scene = std::string(kSceneIdField) + " == \"\"";
+    if (scenes.empty()) {
+        // D/E 冻结：空 allowlist 表示没有任何 scoped scene 获得授权，绝不能退化为通配。
+        // is_deleted == false 已是不可绕过的前置门禁；再追加 true 构成确定性零命中。
+        clauses.push_back(include_unscoped
+            ? unscoped_scene
+            : std::string(kIsDeletedField) + " == true");
+    } else {
         const std::string scene_match = std::string(kSceneIdField) + " in " + QuotedExpressionList(scenes);
         clauses.push_back(include_unscoped
-            ? "(" + scene_match + " || " + std::string(kSceneIdField) + " == \"\")"
+            ? "(" + scene_match + " || " + unscoped_scene + ")"
             : scene_match);
     }
     const std::vector<std::string> statuses = filter.value(
@@ -227,22 +234,28 @@ void Search(const std::string& name, const json& query_vector, const json& filte
         const auto& result = results.Results().front();
         const auto& ids = result.Ids().IntIDArray();
         const auto& scores = result.Scores();
-        const auto users = std::static_pointer_cast<VectorDB::VarCharFieldData>(
-            result.OutputField(kUserIdField));
-        const auto versions = std::static_pointer_cast<VectorDB::VarCharFieldData>(
-            result.OutputField(kVersionIdField));
-        if (!users || !versions || users->Data().size() != ids.size() ||
-            versions->Data().size() != ids.size() || scores.size() != ids.size()) {
-            Fail("search response has inconsistent hit metadata");
-        }
         json hits = json::array();
-        for (std::size_t i = 0; i < ids.size(); ++i) {
-            hits.push_back({
-                {"id", ids[i]},
-                {"score", scores[i]},
-                {"user_id", users->Data()[i]},
-                {"version_id", versions->Data()[i]},
-            });
+        if (ids.empty()) {
+            if (!scores.empty()) {
+                Fail("search response has scores without hit ids");
+            }
+        } else {
+            const auto users = std::static_pointer_cast<VectorDB::VarCharFieldData>(
+                result.OutputField(kUserIdField));
+            const auto versions = std::static_pointer_cast<VectorDB::VarCharFieldData>(
+                result.OutputField(kVersionIdField));
+            if (!users || !versions || users->Data().size() != ids.size() ||
+                versions->Data().size() != ids.size() || scores.size() != ids.size()) {
+                Fail("search response has inconsistent hit metadata");
+            }
+            for (std::size_t i = 0; i < ids.size(); ++i) {
+                hits.push_back({
+                    {"id", ids[i]},
+                    {"score", scores[i]},
+                    {"user_id", users->Data()[i]},
+                    {"version_id", versions->Data()[i]},
+                });
+            }
         }
         out["hits"] = hits;
     }
