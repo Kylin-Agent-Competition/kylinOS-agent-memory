@@ -8,11 +8,12 @@ SDK 错误码在此只做透传（结构化错误映射见 vector_sdk_errors.map
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 from datetime import datetime, timezone
 from typing import Optional
 
-from retrieval.contracts import Channel, RetrievalHit, ScoreSemantics
+from retrieval.contracts import Channel, RetrievalFilter, RetrievalHit, ScoreSemantics
 
 
 class VectorCliError(RuntimeError):
@@ -27,8 +28,15 @@ class VectorCliError(RuntimeError):
 class VectorCliClient:
     """vector_cli 子进程客户端。"""
 
-    def __init__(self, cli_path: str = "vector_cli") -> None:
+    def __init__(self, cli_path: str = "vector_cli", *, expected_dimension: Optional[int] = None) -> None:
+        if expected_dimension is not None and (
+            not isinstance(expected_dimension, int)
+            or isinstance(expected_dimension, bool)
+            or expected_dimension <= 0
+        ):
+            raise ValueError("expected_dimension 必须是正整数")
         self.cli_path = cli_path
+        self.expected_dimension = expected_dimension
 
     def _run(self, *args: str, stdin: Optional[str] = None) -> dict:
         proc = subprocess.run(
@@ -72,8 +80,53 @@ class VectorCliClient:
         self._require_ok(result)
         return result
 
-    def insert(self, name: str, ids: list[int], vectors: list[list[float]]) -> dict:
-        result = self._run("insert", name, stdin=json.dumps({"ids": ids, "vectors": vectors}))
+    def insert(
+        self,
+        name: str,
+        ids: list[int],
+        vectors: list[list[float]],
+        *,
+        user_ids: list[str],
+        version_ids: list[str],
+        scene_ids: list[str],
+        memory_statuses: list[str],
+        deleted_flags: list[bool],
+    ) -> dict:
+        if not (
+            len(ids)
+            == len(vectors)
+            == len(user_ids)
+            == len(version_ids)
+            == len(scene_ids)
+            == len(memory_statuses)
+            == len(deleted_flags)
+        ):
+            raise ValueError("ids、vectors 和全部元数据字段必须等长")
+        for vector in vectors:
+            if not vector:
+                raise ValueError("向量不能为空")
+            if any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                for value in vector
+            ):
+                raise ValueError("向量元素必须是有限实数")
+            if self.expected_dimension is not None and len(vector) != self.expected_dimension:
+                raise ValueError(f"写入向量维度必须等于 {self.expected_dimension}")
+        result = self._run(
+            "insert",
+            name,
+            stdin=json.dumps({
+                "ids": ids,
+                "vectors": vectors,
+                "user_ids": user_ids,
+                "version_ids": version_ids,
+                "scene_ids": scene_ids,
+                "memory_statuses": memory_statuses,
+                "deleted_flags": deleted_flags,
+            }),
+        )
         self._require_ok(result)
         return result
 
@@ -93,28 +146,95 @@ class VectorCliClient:
         timeout: int = 5000,
         *,
         user_id: str,
+        filter: RetrievalFilter,
         now: Optional[datetime] = None,
     ) -> list[RetrievalHit]:
         """执行向量检索，返回 1 起始 rank 的 RetrievalHit。"""
         now = now or datetime.now(timezone.utc)
+        if not isinstance(user_id, str) or not user_id:
+            raise ValueError("搜索 user_id 必须非空")
+        if not isinstance(top_n, int) or isinstance(top_n, bool) or top_n <= 0:
+            raise ValueError("top_n 必须大于 0")
+        if not isinstance(vector, list) or not vector:
+            raise ValueError("查询向量不能为空")
+        if any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            for value in vector
+        ):
+            raise ValueError("查询向量元素必须是有限实数")
+        if self.expected_dimension is None:
+            raise ValueError("搜索必须配置 expected_dimension")
+        if len(vector) != self.expected_dimension:
+            raise ValueError(f"查询向量维度必须等于 {self.expected_dimension}")
+        if filter.user_id != user_id:
+            raise ValueError("RetrievalFilter.user_id 必须与搜索 user_id 一致")
+        cli_filter = {
+            "user_id": user_id,
+            "allowed_scene_ids": sorted(set(filter.scene.allowed_scene_ids)),
+            "include_unscoped": filter.scene.include_unscoped,
+            "allowed_memory_statuses": sorted(set(filter.allowed_memory_statuses)),
+            "exclude_deleted": True,
+        }
         result = self._run(
-            "search", name, str(top_n), str(timeout), stdin=json.dumps({"vector": vector})
+            "search",
+            name,
+            str(top_n),
+            str(timeout),
+            stdin=json.dumps({"vector": vector, "filter": cli_filter}),
         )
         self._require_ok(result)
+        raw_hits = result.get("hits", [])
+        if not isinstance(raw_hits, list):
+            raise VectorCliError(-1, "search response hits must be a list")
+        valid_hits: list[tuple[int, str, str, str, float]] = []
+        dropped_hit_count = 0
+        for raw_rank, item in enumerate(raw_hits, 1):
+            if not isinstance(item, dict):
+                dropped_hit_count += 1
+                continue
+            memory_id = item.get("id")
+            hit_user_id = item.get("user_id")
+            version_id = item.get("version_id")
+            score = item.get("score")
+            if (
+                memory_id is None
+                or isinstance(memory_id, bool)
+                or not str(memory_id)
+                or not isinstance(hit_user_id, str)
+                or not hit_user_id
+                or hit_user_id != user_id
+                or not isinstance(version_id, str)
+                or not version_id
+                or isinstance(score, bool)
+                or not isinstance(score, (int, float))
+                or not math.isfinite(float(score))
+            ):
+                dropped_hit_count += 1
+                continue
+            valid_hits.append((raw_rank, str(memory_id), version_id, hit_user_id, float(score)))
+
+        diagnostics = {
+            "raw_hit_count": len(raw_hits),
+            "valid_hit_count": len(valid_hits),
+            "dropped_hit_count": dropped_hit_count,
+        }
         hits: list[RetrievalHit] = []
-        for rank, item in enumerate(result.get("hits", []), 1):
+        for rank, memory_id, version_id, hit_user_id, score in valid_hits:
             hits.append(
                 RetrievalHit(
-                    memory_id=str(item["id"]),
-                    version_id="v1",
-                    user_id=user_id,
+                    memory_id=memory_id,
+                    version_id=version_id,
+                    user_id=hit_user_id,
                     channel=Channel.VECTOR,
                     rank=rank,
-                    raw_score=float(item["score"]),
+                    raw_score=score,
                     score_semantics=ScoreSemantics.SDK_SCORE_UNVERIFIED,
                     provider="vector_cli",
                     retrieved_at=now,
                     filter_fingerprint="hmac-sha256:k1:" + "a" * 64,
+                    diagnostics=diagnostics,
                 )
             )
         return hits

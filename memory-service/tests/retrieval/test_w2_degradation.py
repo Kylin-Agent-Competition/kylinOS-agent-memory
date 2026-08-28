@@ -14,6 +14,7 @@ from retrieval.contracts import (
     RetrievalFilter,
     RetrievalHit,
     ScoreSemantics,
+    SceneFilter,
 )
 from retrieval.fusion import TruthRecord, retrieve_graceful
 from retrieval.real_vector_provider import VectorCliClient, VectorCliError
@@ -54,6 +55,7 @@ def _truth(mid):
 def _flt():
     return RetrievalFilter(
         user_id="alice",
+        scene=SceneFilter(allowed_scene_ids=[], include_unscoped=True),
         object_types=[ObjectType.KNOWLEDGE],
         allowed_memory_statuses=["active"],
         allowed_sensitivity=["internal"],
@@ -79,9 +81,9 @@ def test_cli_error_keeps_code_from_stdout_on_nonzero_exit(monkeypatch):
         )
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    cli = VectorCliClient()
+    cli = VectorCliClient(expected_dimension=4)
     with pytest.raises(VectorCliError) as exc:
-        cli.search("c", [1, 0, 0, 0], 3, user_id="alice", now=NOW)
+        cli.search("c", [1, 0, 0, 0], 3, user_id="alice", now=NOW, filter=_flt())
     assert exc.value.code == 3
     assert "Failed to connect" in exc.value.message
 
@@ -98,9 +100,9 @@ def test_cli_error_extracts_json_from_noisy_stdout(monkeypatch):
         return _FakeCompleted(noisy_stdout, stderr="", returncode=1)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    cli = VectorCliClient()
+    cli = VectorCliClient(expected_dimension=4)
     with pytest.raises(VectorCliError) as exc:
-        cli.search("c", [1, 0, 0, 0], 3, user_id="alice", now=NOW)
+        cli.search("c", [1, 0, 0, 0], 3, user_id="alice", now=NOW, filter=_flt())
     assert exc.value.code == 3
 
 

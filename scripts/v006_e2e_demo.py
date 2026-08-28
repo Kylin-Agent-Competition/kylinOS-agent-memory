@@ -9,7 +9,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from retrieval.contracts import ObjectType, RetrievalFilter
+from retrieval.contracts import ObjectType, RetrievalFilter, SceneFilter
 from retrieval.fts5 import Fts5Index
 from retrieval.fusion import TruthRecord, fuse_retrieval
 from retrieval.real_vector_provider import VectorCliClient
@@ -49,26 +49,38 @@ def main() -> int:
     for (_, mid, _), rec in truth.items():
         fts5.upsert(mid, rec.version_id, rec.content, USER_ID)
 
-    cli = VectorCliClient(cli_path="./vector_cli")
+    cli = VectorCliClient(cli_path="./vector_cli", expected_dimension=4)
     print(f"[V006] collection={collection}")
     print("[V006] drop (best-effort clean):", cli.drop_collection(collection).get("ok"))
     print("[V006] create:", cli.create_collection(collection, 4).get("ok"))
-    print("[V006] insert:", cli.insert(collection, [1, 2, 3], [[1, 0, 0, 0], [0, 1, 0, 0], [-1, 0, 0, 0]]).get("ok"))
-
-    fts5_hits = fts5.search("apple", USER_ID, top_n=5, now=NOW)
-    vector_hits = cli.search(collection, [1.0, 0.0, 0.0, 0.0], top_n=5, user_id=USER_ID, now=NOW)
-
-    print("[V006] FTS5 hits:  ", [(h.memory_id, h.rank) for h in fts5_hits])
-    print("[V006] Vector hits:", [(h.memory_id, h.rank, h.raw_score) for h in vector_hits])
+    print("[V006] insert:", cli.insert(
+        collection,
+        [1, 2, 3],
+        [[1, 0, 0, 0], [0, 1, 0, 0], [-1, 0, 0, 0]],
+        user_ids=[USER_ID] * 3,
+        version_ids=["v1"] * 3,
+        scene_ids=[""] * 3,
+        memory_statuses=["active"] * 3,
+        deleted_flags=[False] * 3,
+    ).get("ok"))
 
     flt = RetrievalFilter(
         user_id=USER_ID,
+        scene=SceneFilter(allowed_scene_ids=[], include_unscoped=True),
         object_types=[ObjectType.KNOWLEDGE],
         allowed_memory_statuses=["active"],
         allowed_sensitivity=["internal"],
         conflict_policy="resolve",
         as_of=NOW,
     )
+    fts5_hits = fts5.search("apple", USER_ID, top_n=5, now=NOW)
+    vector_hits = cli.search(
+        collection, [1.0, 0.0, 0.0, 0.0], top_n=5, user_id=USER_ID, filter=flt, now=NOW
+    )
+
+    print("[V006] FTS5 hits:  ", [(h.memory_id, h.rank) for h in fts5_hits])
+    print("[V006] Vector hits:", [(h.memory_id, h.rank, h.raw_score) for h in vector_hits])
+
     candidates = fuse_retrieval(
         fts5_hits=fts5_hits, vector_hits=vector_hits, truth=truth, flt=flt
     )
