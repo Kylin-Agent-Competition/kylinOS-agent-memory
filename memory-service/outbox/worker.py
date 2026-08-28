@@ -17,9 +17,9 @@ Vector/Embedding 消费（附录 C）待 D4-D 技术确认（R-9）：本任务�
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Optional
 
@@ -28,6 +28,8 @@ from sqlalchemy.exc import OperationalError
 
 from db import repositories as repo
 from db.engine import DatabaseLockedError, get_write_lock, is_locked_error
+from observability.json_logging import sanitize_message
+from observability.request_context import clear_request_context, set_request_context
 
 logger = logging.getLogger(__name__)
 
@@ -124,24 +126,52 @@ class OutboxWorker:
         event_type = event["event_type"]
         attempts = int(event["attempts"])
 
-        if self._consumer is None:
-            # Vector 接入未确认（R-9）：无法消费 → 按失败处理（真实结果，不假装成功）
-            self._fail(
-                conn,
-                event_id=event_id,
-                attempts=attempts,
-                now_iso=now_iso,
-                last_error="no consumer registered (vector integration pending, R-9)",
-            )
-            return
-
-        try:
-            payload = event["payload"]
-            import json
-
-            if isinstance(payload, str):
+        # M4：解析 payload 取 trace_id/event_id，建立 Worker 线程请求上下文，
+        # 使成功/重试/DL 日志携带二者（跨线程与 Gateway/DAO 关联）
+        payload: Any = event["payload"]
+        if isinstance(payload, str):
+            try:
                 payload = json.loads(payload)
+            except Exception as exc:  # noqa: BLE001 payload 损坏按失败处理
+                self._fail(
+                    conn,
+                    event_id=event_id,
+                    attempts=attempts,
+                    now_iso=now_iso,
+                    last_error=f"invalid payload json: {exc}"[:500],
+                )
+                return
+        payload_trace_id = ""
+        payload_event_id = ""
+        if isinstance(payload, dict):
+            payload_trace_id = str(payload.get("trace_id", ""))
+            payload_event_id = str(payload.get("event_id", ""))
+
+        set_request_context(
+            request_id="",
+            trace_id=payload_trace_id,
+            method=f"outbox:{event_type}",
+            event_id=payload_event_id,
+        )
+        try:
+            if self._consumer is None:
+                # Vector 接入未确认（R-9）：无法消费 → 按失败处理（真实结果，不假装成功）
+                self._fail(
+                    conn,
+                    event_id=event_id,
+                    attempts=attempts,
+                    now_iso=now_iso,
+                    last_error="no consumer registered (vector integration pending, R-9)",
+                )
+                return
             self._consumer(payload)
+
+            # 成功（附录 B 4a）
+            repo.mark_outbox_success(conn, outbox_id=event_id)
+            self._processed += 1
+            logger.info(
+                "Outbox 事件完成 id=%d type=%s agg=%s", event_id, event_type, aggregate_id
+            )
         except Exception as exc:  # noqa: BLE001
             self._fail(
                 conn,
@@ -151,13 +181,14 @@ class OutboxWorker:
                 last_error=f"{type(exc).__name__}: {exc}"[:500],  # 错误摘要，不含 PII
             )
             return
-
-        # 成功（附录 B 4a）
-        repo.mark_outbox_success(conn, outbox_id=event_id)
-        self._processed += 1
-        logger.info("Outbox 事件完成 id=%d type=%s agg=%s", event_id, event_type, aggregate_id)
+        finally:
+            # M4：无论成功/失败/早退都清理线程上下文（防泄漏/串号）
+            clear_request_context()
 
     def _fail(self, conn, *, event_id: int, attempts: int, now_iso: str, last_error: str) -> None:
+        # M4.5：last_error 统一经 sanitize_message 脱敏后存库/写日志，
+        # 防止异常参数携带外部引用原文（source_reference）泄漏进 outbox.last_error/日志
+        last_error = sanitize_message(last_error)
         new_attempts = attempts + 1
         if new_attempts > self._max_retries:
             # Dead Letter（附录 B 4c）：保留记录，next_retry_at=NULL，ERROR 日志

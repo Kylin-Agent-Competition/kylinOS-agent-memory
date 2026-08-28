@@ -39,6 +39,20 @@ class FakeProvider:
         return EmbeddingResult(vector=[0.1] * 768, dimension=768, l2_norm=1.0)
 
 
+def _wait_listening(sock_path: str, timeout: float = 3.0) -> None:
+    """等待 socket 真正进入监听（以 connect 成功为准，'文件存在'不足以判断就绪）。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)
+                s.connect(sock_path)
+            return
+        except OSError:
+            time.sleep(0.02)
+    raise TimeoutError(f"socket not listening: {sock_path}")
+
+
 def _send(sock: socket.socket, method: str, payload: dict, timeout: float = 3.0) -> dict:
     import json
     env = {"protocol_version": "1.0", "request_id": "req-t", "trace_id": "trc-t",
@@ -70,10 +84,7 @@ def server(tmp_path):
     srv = EmbeddingUDSServer(sock_path, provider=FakeProvider())
     t = threading.Thread(target=srv.start, daemon=True)
     t.start()
-    # 等待 socket 就绪
-    deadline = time.time() + 3
-    while not os.path.exists(sock_path) and time.time() < deadline:
-        time.sleep(0.02)
+    _wait_listening(sock_path)
     yield srv, sock_path
     srv.stop()
     shutdown_executor()
@@ -153,9 +164,7 @@ def test_restart_reinitializes(server):
     # 显式 restart：重新 start
     t = threading.Thread(target=srv.start, daemon=True)
     t.start()
-    deadline = time.time() + 3
-    while not os.path.exists(sock_path) and time.time() < deadline:
-        time.sleep(0.02)
+    _wait_listening(sock_path)
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.connect(sock_path)
     resp = _send(s, "memory.embed", {"text": "restarted"})
