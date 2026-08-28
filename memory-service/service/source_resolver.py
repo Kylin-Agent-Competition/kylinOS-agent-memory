@@ -19,8 +19,6 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Protocol, runtime_checkable
 
-from observability.json_logging import sanitize_message
-
 logger = logging.getLogger(__name__)
 
 
@@ -64,11 +62,8 @@ class InMemorySourceResolver:
     def resolve(self, source_reference: str) -> Optional[ResolvedContent]:
         content = self._mapping.get(source_reference)
         if content is None:
-            # M4.5：外部引用经 sanitize_message 脱敏后入日志（防止原文泄漏）
-            logger.warning(
-                "resolver 未命中 source_reference=%s（返回 None，调用方按 INTERNAL_ERROR）",
-                sanitize_message(source_reference),
-            )
+            # 外部引用是非可信输入；不得记录其任何内容，以免引用本身承载 PII。
+            logger.warning("resolver 未命中受控 source_reference，调用方按 INTERNAL_ERROR 处理")
             return None
         return content
 

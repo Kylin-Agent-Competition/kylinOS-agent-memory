@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import socket
 import threading
@@ -19,7 +20,8 @@ from gateway.handlers import register_default_handlers, register_turn_finalized_
 from gateway.protocol import RequestValidationError
 from gateway.registry import HandlerRegistry, RequestContext
 from gateway.server import UDSGatewayServer
-from observability.request_context import clear_request_context
+from observability.request_context import clear_request_context, get_request_context
+from outbox.worker import OutboxWorker
 from service.source_resolver import InMemorySourceResolver, ResolvedContent
 
 
@@ -190,6 +192,47 @@ def test_turn_finalized_insert_ok(gw_turn_finalized):
         assert payload["occurred_at"] == "2026-08-27T10:00:00.000+00:00"
 
 
+def test_turn_finalized_outbox_worker_preserves_event_context(gw_turn_finalized):
+    """真实写链路的 Outbox consumer 收到 trace_id/event_id，处理后上下文清空。"""
+    trace_id = "trc-outbox-context"
+    event_id = "evt-outbox-context"
+    payload = _valid_payload()
+    payload["metadata"]["event_id"] = event_id
+    payload["metadata"]["idempotency_key"] = "idem-outbox-context"
+    payload["metadata"]["turn_id"] = "H-OUTBOX-CONTEXT"
+    payload["metadata"]["source_reference"] = "ref://turn/H-1"
+
+    response = _request(
+        gw_turn_finalized["sock"],
+        _base("turn.finalized", payload, trace_id=trace_id),
+    )
+    assert response["status"] == "ok"
+
+    seen_context = []
+
+    def consumer(_payload):
+        seen_context.append(get_request_context())
+
+    worker = OutboxWorker(gw_turn_finalized["engine"], consumer=consumer)
+    worker._poll_once()
+    worker.stop()
+
+    assert seen_context == [
+        {
+            "request_id": "",
+            "trace_id": trace_id,
+            "method": "outbox:turn.finalized",
+            "event_id": event_id,
+        }
+    ]
+    assert get_request_context() == {
+        "request_id": "",
+        "trace_id": "",
+        "method": "",
+        "event_id": "",
+    }
+
+
 # ── 幂等（ADR-010：三元组 + 指纹 wrapper/unwrap） ──
 
 
@@ -265,14 +308,18 @@ def test_turn_finalized_invalid_payload(gw_turn_finalized, mutate, desc):
 # ── resolver 失败（INTERNAL_ERROR，禁止编造正文） ──
 
 
-def test_turn_finalized_resolver_miss_internal_error(gw_turn_finalized):
+def test_turn_finalized_resolver_miss_internal_error(gw_turn_finalized, caplog):
     """resolver 未命中（返回 None）→ INTERNAL_ERROR（safe，不编造正文）。"""
     payload = _valid_payload()
-    payload["metadata"]["source_reference"] = "ref://missing/XXX"
+    source_reference = "ref://missing/private-user-content"
+    payload["metadata"]["source_reference"] = source_reference
     payload["metadata"]["turn_id"] = "H-MISS"
-    resp = _request(gw_turn_finalized["sock"], _base("turn.finalized", payload))
+    with caplog.at_level(logging.WARNING, logger="service.source_resolver"):
+        resp = _request(gw_turn_finalized["sock"], _base("turn.finalized", payload))
     assert resp["status"] == "error"
     assert resp["error_code"] == "INTERNAL_ERROR"
+    assert source_reference not in caplog.text
+    assert "resolver 未命中受控 source_reference，调用方按 INTERNAL_ERROR 处理" in caplog.text
     # M6.6：失败请求零副作用——无 Turn / 无 Outbox / 无幂等缓存半成品
     with gw_turn_finalized["engine"].connect() as conn:
         row = conn.execute(

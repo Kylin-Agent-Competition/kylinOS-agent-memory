@@ -347,6 +347,9 @@ def register_turn_finalized_handler(
                 trace_id=trace_id,
                 host_turn_id=host_turn_id,
                 extra_payload={
+                    # 业务 event_id 与 envelope trace_id 一同跨 Outbox 传递；
+                    # Worker 以此重建消费上下文，供日志/下游关联使用。
+                    "event_id": metadata["event_id"],
                     # occurred_at/collected_at/finalized_at 随 outbox payload 元数据入队
                     # （不落 turns 列，FRZ-DB-001）；M3.4：统一走 _canonical_ts 规范化
                     # 为 UTC 毫秒 ISO 8601，避免等价时间表达在 outbox 中不一致
