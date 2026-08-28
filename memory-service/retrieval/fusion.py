@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Optional
 
 from retrieval.contracts import (
@@ -17,7 +18,14 @@ from retrieval.contracts import (
     RetrievalFilter,
     RetrievalHit,
 )
-from retrieval.rrf import AggregatedCandidate, aggregate_by_memory, dedupe_exact_version, rrf_rank, rrf_score
+from retrieval.rrf import (
+    AggregatedCandidate,
+    aggregate_by_memory,
+    dedupe_exact_version,
+    rrf_rank,
+    rrf_score,
+    rrf_terms,
+)
 
 RRF_DEFAULT_K = 60
 
@@ -38,6 +46,17 @@ class TruthRecord:
     is_current: bool = False  # SQLite 当前版本标记；每个 memory_id 唯一一个 True
     scene_id: Optional[str] = None
     scope_terms: Optional[dict[str, list[str]]] = None
+    valid_from: Optional[datetime] = None
+    valid_to: Optional[datetime] = None
+
+    def __post_init__(self) -> None:
+        for field_name in ("valid_from", "valid_to"):
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            if value.tzinfo is None:
+                raise ValueError(f"{field_name} 必须带时区（UTC）")
+            object.__setattr__(self, field_name, value.astimezone(timezone.utc))
 
 
 def _hard_filter(
@@ -57,11 +76,48 @@ def _hard_filter(
         return False
     if flt.memory_types and rec.memory_type not in flt.memory_types:
         return False
+    if rec.object_type is ObjectType.PREFERENCE:
+        if rec.scene_id is None:
+            if not flt.scene.include_unscoped:
+                return False
+        elif rec.scene_id not in flt.scene.allowed_scene_ids:
+            return False
+        for key, values in (rec.scope_terms or {}).items():
+            if not set(values).intersection(flt.scope_terms.get(key, [])):
+                return False
+        if rec.valid_from is not None and flt.as_of < rec.valid_from:
+            return False
+        if rec.valid_to is not None and flt.as_of >= rec.valid_to:
+            return False
     # 未解决冲突硬过滤：不注入上下文（ADR-001 输入边界第 5 步）。
     # conflict_policy 当前默认 exclude_unresolved；其他策略需新增 ADR 后才可放宽。
     if rec.conflict_state == "unresolved":
         return False
     return True
+
+
+def _preference_explanation(
+    rec: TruthRecord,
+    ranks: dict[Channel, int],
+    k: int,
+) -> dict:
+    return {
+        "algorithm_version": "rrf-v1",
+        "rrf_k": k,
+        "rrf_terms": {
+            channel.value: value
+            for channel, value in rrf_terms(ranks, k).items()
+        },
+        "degraded_channels": [],
+        "rerank_version": None,
+        "hard_filter": {
+            "policy_version": "preference-filter/v1",
+            "current_version": "passed",
+            "validity": "passed",
+            "scene": "allowed_scene" if rec.scene_id is not None else "unscoped_included",
+            "scope": "terms_matched" if rec.scope_terms else "global",
+        },
+    }
 
 
 def fuse_retrieval(
@@ -90,9 +146,17 @@ def fuse_retrieval(
     # 唯一确定 current version（SQLite 真源）：每个 memory_id 只有 is_current=True 的一个版本。
     # stale version 命中在聚合前移除，避免不同 version 的 rank 混入同一 memory_id（ADR-001 输入边界第 5 步）。
     current_version: dict[tuple[str, str], str] = {}
+    preference_current_versions: dict[tuple[str, str], set[str]] = {}
     for (uid, mid, vid), rec in truth.items():
         if rec.is_current:
             current_version[(uid, mid)] = vid
+            if rec.object_type is ObjectType.PREFERENCE:
+                preference_current_versions.setdefault((uid, mid), set()).add(vid)
+    for key, version_ids in preference_current_versions.items():
+        if len(version_ids) == 1:
+            current_version[key] = next(iter(version_ids))
+        else:
+            current_version.pop(key, None)
     legal = [
         h for h in legal
         if current_version.get((h.user_id, h.memory_id)) == h.version_id
@@ -144,7 +208,14 @@ def fuse_retrieval(
                 final_score=rrf_score(agg.ranks, k),
                 sensitivity=rec.sensitivity,
                 conflict_state=rec.conflict_state,
+                valid_from=rec.valid_from,
+                valid_to=rec.valid_to,
                 estimated_tokens=max(1, len(rec.content)),
+                explanation=(
+                    _preference_explanation(rec, agg.ranks, k)
+                    if rec.object_type is ObjectType.PREFERENCE
+                    else {}
+                ),
             )
         )
     return out
@@ -198,4 +269,16 @@ def retrieve_graceful(
         k=k,
         top_k=top_k,
     )
+    degraded_channel_names = sorted(degraded)
+    candidates = [
+        candidate.model_copy(update={
+            "explanation": {
+                **candidate.explanation,
+                "degraded_channels": degraded_channel_names,
+            }
+        })
+        if candidate.object_type is ObjectType.PREFERENCE
+        else candidate
+        for candidate in candidates
+    ]
     return RetrievalOutcome(candidates=candidates, degraded_channels=degraded)

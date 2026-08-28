@@ -37,12 +37,12 @@ def _hit(mid, channel=Channel.FTS5, rank=1):
     )
 
 
-def _truth(mid):
+def _truth(mid, object_type=ObjectType.KNOWLEDGE):
     return TruthRecord(
         memory_id=mid,
         version_id="v1",
         user_id="alice",
-        object_type=ObjectType.KNOWLEDGE,
+        object_type=object_type,
         memory_type="long_term",
         memory_status="active",
         content="content-" + mid,
@@ -52,11 +52,11 @@ def _truth(mid):
     )
 
 
-def _flt():
+def _flt(object_types=None):
     return RetrievalFilter(
         user_id="alice",
         scene=SceneFilter(allowed_scene_ids=[], include_unscoped=True),
-        object_types=[ObjectType.KNOWLEDGE],
+        object_types=object_types or [ObjectType.KNOWLEDGE],
         allowed_memory_statuses=["active"],
         allowed_sensitivity=["internal"],
         conflict_policy="resolve",
@@ -119,6 +119,29 @@ def test_retrieve_graceful_vector_fault_keeps_fts5():
     assert [c.memory_id for c in outcome.candidates] == ["mem-a"]
     assert "vector" in outcome.degraded_channels
     assert outcome.degraded is True
+
+
+def test_preference_explanation_records_observed_degraded_channel():
+    def fts5():
+        return [_hit("pref", Channel.FTS5, 1)]
+
+    def vector():
+        raise VectorCliError(3, "Failed to connect uri")
+
+    truth = {
+        ("alice", "pref", "v1"): _truth(
+            "pref", object_type=ObjectType.PREFERENCE
+        )
+    }
+    outcome = retrieve_graceful(
+        fts5_search=fts5,
+        vector_search=vector,
+        truth=truth,
+        flt=_flt(object_types=[ObjectType.PREFERENCE]),
+    )
+
+    assert [candidate.memory_id for candidate in outcome.candidates] == ["pref"]
+    assert outcome.candidates[0].explanation["degraded_channels"] == ["vector"]
 
 
 def test_retrieve_graceful_both_fault_returns_empty():
