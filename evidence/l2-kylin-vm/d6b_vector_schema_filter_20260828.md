@@ -42,8 +42,18 @@
 
 完整脱敏输出见 [d6b_vector_schema_filter_20260828.log](d6b_vector_schema_filter_20260828.log)。
 
+## 可复现构建补录
+
+为补足构建溯源，在同一隔离 VM 的保留干净 checkout 上进行了独立重构建复核。该复核的源码仍为 `aef8d52ad602b2e73e0336f7fb0dd0167b4043e6`；`aef8d52..acc1694` 仅为既有 evidence-only 变更，未包含生产行为或测试语义变更。
+
+- 构建命令、SDK 兼容头文件路径与 JSON include 路径已逐字记录在 [重构建原始输出](d6b_vector_schema_filter_20260828_rebuild.log)。
+- `g++` 构建 exit code 为 `0`；由 `vector_bridge_cli.cpp`（SHA-256 `28ca635...3b281`）产出的 CLI SHA-256 为 `5f0fbb8e136de5eccd781cdf1ac4166591bd8b8482b071215e2c2b15ce415e54`。
+- 使用该二进制直接执行的 CLI 与 Provider runner 均 exit code `0`，两个独立 `d6b_` Collection 均 `cleanup=PASS`；全部实际子 runner 命令与输出见同一原始日志。
+- 原外层 evidence runner 的严格远端一致性门禁要求 `origin/<branch>` 仍精确等于 `aef8d52`。本次复核时远端已前进到只含 evidence 的 `acc1694`，因此没有通过修改或绕过该门禁来伪造一次“外层 runner PASS”；改以保留的 clean `aef8d52` checkout 直接执行两个已记录的子 runner。
+
 ## 限制
 
 - 仅覆盖一个 Kylin V11 链接克隆与 SDK `0k0.7` ABI 兼容路径。
 - 不覆盖并发、性能、重启恢复或 Hybrid/RRF。
 - Runtime 证据证明 `tested_commit` 的行为，不代表 PR 已获 Reviewer 批准。
+- 重构建复核补充了可追溯 build → binary → runner 结果；它不替代 D/E 对方案 B 的可审计书面决定，也不将 `acc1694` 伪称为已重新执行的行为代码测试。

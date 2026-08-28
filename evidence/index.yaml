@@ -1089,3 +1089,26 @@ entries:
       CLI runner：metadata 写入、用户/场景/未设场景/状态过滤、删除 fail-closed、空 user_id、未知过滤键，以及 []+false 零命中、[]+true 仅 unscoped 均 PASS。
       Provider runner：typed filter 转发、相同两种空 allowlist 组合、跨用户隔离、inactive、空向量、写入维度与 filter-user 不匹配 fail-closed 均 PASS。
       脱敏原始输出：evidence/l2-kylin-vm/d6b_vector_schema_filter_20260828.log，SHA256 56009a323e7bda6d17e54b2a1de29d3c91a764dfa5cc26a72ecd2d63c2470219。
+      重构建 build provenance 及独立双 runner 复核见 D6B-L2-BUILD-PROVENANCE-20260828；不将该补充误表述为 D/E 决策来源或新的 acc1694 行为代码测试。
+
+  - id: "D6B-L2-BUILD-PROVENANCE-20260828"
+    task_id: "D6B"
+    description: "D6B aef8d52 在保留干净 Kylin checkout 上的可复现 CLI 重构建与双 L2 runner 复核"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d6b_vector_schema_filter_20260828_rebuild.log"
+    report: "evidence/l2-kylin-vm/d6b_vector_schema_filter_20260828.md"
+    tested_commit: "aef8d52ad602b2e73e0336f7fb0dd0167b4043e6"
+    date: "2026-08-28"
+    reviewer: "待审"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    probe_binary_sha256: "5f0fbb8e136de5eccd781cdf1ac4166591bd8b8482b071215e2c2b15ce415e54"
+    runner_source_sha256: "af0949a4ef1f5e9997525d5b8ccb53d5db4881a77e45f1a7377c27ccafacde7b"
+    checksum_sha256: "b6d0c7855c9bede32e7f2c90909a8b2b89d97aed49d17346d02479ff85d3b7b1"
+    limitations: "本补充记录实际的 build command、build exit code、source SHA、rebuild binary SHA 和两个直接子 runner command/exit code。严格外层 runner 不在本轮重跑：其 remote-ref 门禁要求 origin 仍指向 aef8d52，而远端已前进至只含 evidence 的 acc1694；未绕过该门禁。D/E 方案 B 的可审计决定来源仍为独立合并阻断。"
+    details: |
+      以记录的 g++ 命令从 vector_bridge_cli.cpp (SHA256 28ca63509d1c4f6af2ef410bf3a9e1a4cb05236e2514e5d6885f1597f3c3b281) 构建，exit code 0。
+      CLI runner 与 Provider runner 均 exit code 0；两套 d6b_ Collection cleanup=PASS。
+      原始输出同时记录两条实际子 runner 命令、环境、包版本、CLI/runner/provider SHA 与逐项 PASS 结果。
