@@ -2,7 +2,7 @@
 
 - **编制日期**：2026-08-28
 - **编制人**：opencode（D 轨开发 Agent）
-- **分支**：`feat/d5d-ipc-pr2`（当前 HEAD `dc4080a`，远端已同步；运行口径 `fac5411` 与 `dc4080a` 生产代码一致）
+- **分支**：`feat/d5d-ipc-pr2`（当前 HEAD `946eb3d`，远端已同步；运行口径 `fac5411` 与 `946eb3d` 生产代码一致）
 - **关联文档**：`docs/day10/10_pr65_review_rework_tracking.md`、`docs/day10/12_pr65_rework_evidence.md`、`docs/day10/13_pr65_l1_test_checklist_vm.md`
 - **目的**：将已闭合项与剩余待办分离，剩余项全部以本节为准，逐一勾销（本清单已全部执行完毕）。
 
@@ -54,12 +54,13 @@
 
 ### R1｜新 HEAD SHA 回填一致性（DONE）
 
-- [x] `docs/day10/12_pr65_rework_evidence.md` §R1 已回填：最新远端 HEAD `dc4080a`；VM L1/L2 运行于 `fac5411`（与 `dc4080a` 生产代码一致，差异仅文档 + 测试 import 清理）
+- [x] `docs/day10/12_pr65_rework_evidence.md` §R1 已回填：完整 L1/L2 执行 commit `fac5411`、后续证据/文档 commit `dc4080a`、当前远端 HEAD `946eb3d`；VM L1/L2 运行于 `fac5411`（与 `946eb3d` 生产代码一致，差异仅文档 + 测试 import 清理）
 
 ### 复审流程（流程待办）
 
-- [ ] 远端 HEAD 更新后（已同步 `dc4080a`），凭 R1-R6 证据向 Reviewer（lovezy0730-create）提交第二/三轮复审回复
+- [ ] 远端 HEAD 更新后（已同步 `946eb3d`），凭 R1-R6 证据向 Reviewer（lovezy0730-create）提交第二/三轮复审回复
   - [x] L2-1~L2-5 已执行并附证据（见 §R6 / `evidence/l2-kylin-vm/pr65_l2_vm_20260828.log`），不再有 `NOT_RUN` 遗留
+  - [x] 合并前治理回写完成（纯文档）：TD-027 登记（真实 IntegrityError 竞态回查分支缺少测试）+ T3 DEFERRED（关联 TD-027），HEAD 口径同步至 `946eb3d`
   - [ ] 复审回复 comment 提交（进行中）
 
 ---
