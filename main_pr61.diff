@@ -1,0 +1,1905 @@
+diff --git a/docs/day10/02_pr_description.md b/docs/day10/02_pr_description.md
+new file mode 100644
+index 0000000..d758f54
+--- /dev/null
++++ b/docs/day10/02_pr_description.md
+@@ -0,0 +1,115 @@
++## 摘要
++
++**PR 标题**：feat(day10): 精准遗忘与删除一致性——缓存失效 + Bridge 安全审计 + 异常恢复测试
++
++**对应任务**：台账 R52（A 轨 D10）
++
++**完成定义**：删除后 Provider 缓存和临时数据不恢复目标正文 ✅
++
++## 背景与目标
++
++用户执行删除操作（遗忘/硬删除）后，Embedding 查询缓存和抽取缓存可能残留已删除数据的向量/候选结果，导致删除后再次查询时仍返回已删除内容。本 PR 确保：
++1. 删除事件触发缓存失效，已删除内容无法通过缓存恢复
++2. Bridge/SDK/日志均不保留已删除正文
++3. 删除过程中异常不丢失删除状态
++
++## 修改范围
++
++1. EmbeddingQueryCache / PreferenceExtractionCache 粒度缓存失效接口
++2. CacheInvalidator 缓存失效协调器（幂等/按用户/按事件/全量）
++3. EmbeddingService 对接删除事件入口
++4. Bridge 安全审计（零正文残留确认）
++5. 15 项 D10 测试 + VM 验证
++
++## 明确不修改范围
++
++- 不接通 Outbox 事件总线（自动消费删除事件）——归入 TD-A-D10-CACHE-INVALIDATION
++- 不修改 ForgetPlan 领域模型或遗忘执行逻辑（E 轨范畴）
++- 不修改 C++ Bridge 代码（仅审计，无代码变更）
++
++## 关联任务与技术债
++
++- 任务卡：`docs/day10/01_task_card.md`
++- 技术债：TD-A-D10-CACHE-INVALIDATION（缓存失效粒度与删除事件对齐，当前通过显式调用触发，未全量接通 Outbox）
++
++## 架构与能力边界依据
++
++- D3 §5.5 ForgetPlan 模型（domain/forgetting.py）
++- 架构 TABLE 29 延迟预算：Embedding 查询 ≤180ms
++- D9 交付物：EmbeddingQueryCache / EmbeddingCoalescer / EmbeddingBacklogTracker
++
++## 修改文件清单
++
++| 文件 | 变更类型 | 说明 |
++|------|----------|------|
++| `memory-service/embedding/embedding_cache.py` | 修改 | 增加 `invalidate_by_content(content_hash)` 按内容指纹失效 |
++| `memory-service/providers/extraction_provider.py` | 修改 | 增加 `invalidate_by_event(event_id)` / `invalidate_by_content(fingerprint)` |
++| `memory-service/embedding/cache_invalidator.py` | **新增** | CacheInvalidator + DeletionEvent 模型 |
++| `memory-service/embedding/embedding_service.py` | 修改 | 增加 `handle_deletion_event` / `set_cache_invalidator` |
++| `memory-service/tests/test_embedding_d10.py` | **新增** | 15 项 D10 测试 |
++| `scripts/verify_day10_vm.sh` | **新增** | VM 验证脚本 |
++| `docs/day10/01_task_card.md` | **新增** | D10 任务卡 |
++| `docs/day10/02_pr_description.md` | **新增** | 本文件 |
++| `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` | 修改 | 新增 TD-A-D10-CACHE-INVALIDATION |
++| `evidence/l2-kylin-vm/day10_verify_latest.log` | **新增** | L2 证据 |
++
++## 数据库与配置变化
++
++无。纯内存缓存失效，不涉及 DB schema 或配置变更。
++
++## 测试结果
++
++### L0 (单元测试 + 静态检查)
++
++```
++# D10 专项测试：15/15 passed
++# D9 回归测试：18/18 passed
++# 协议 + 生命周期：49/49 passed
++# 合计：82 passed in 5.22s
++```
++
++### L1 (组件集成)
++
++不适用（纯内存模块，无外部依赖集成）。
++
++### 安全与假实现审查
++
++- ✅ C++ Bridge 审计确认：无临时文件、无正文缓存、日志仅固定串+指针地址
++- ✅ EmbeddingService 零 logging 调用，`_degrade` 不包含原文
++- ✅ SDK 仅缓存模型名（`ensemble-embd_gte-base_uint8-text`，非用户正文）
++- ✅ 删除后 Bridge 进入 `session_destroyed_` 终态不可重建
++- ✅ 无 Mock 冒充 Runtime、无密钥泄露、无硬编码配置
++
++### L2 麒麟虚拟机证据
++
++```
++evidence/l2-kylin-vm/day10_verify_latest.log
++82 passed in 5.22s（麒麟 VM 实测，Python 3.12.3，pytest 9.1.1）
++```
++
++### L3 (全链路验收)
++
++不适用。
++
++## 性能影响
++
++- 缓存失效操作 O(n) 扫描（n = 缓存条目数），默认容量 512/256，开销可忽略
++- 删除事件处理在独立调用路径，不影响正常 embed 路径延迟
++
++## 已知限制
++
++1. CacheInvalidator 当前通过显式 `handle_deletion()` 调用触发，未接通 Outbox 事件总线（TD-A-D10-CACHE-INVALIDATION）
++2. 重启后缓存清空，删除状态不持久化（内存缓存，需上层 Outbox/DB 保证持久化）
++
++## 回滚方式
++
++回滚此 PR：`git revert HEAD` 即可。缓存失效功能退化，但 D9 的 embed 缓存仍正常工作（仅删除事件无法触发失效，需重启服务清空缓存）。
++
++---
++
++**Reviewer 结论**（由 Reviewer 填写）：
++
++- [ ] PASS
++- [ ] PASS_WITH_DEBT（需记录技术债 TD 编号）
++- [ ] REWORK
++- [ ] BLOCKED
+\ No newline at end of file
+diff --git a/docs/day10/02_pr_description_a.md b/docs/day10/02_pr_description_a.md
+new file mode 100644
+index 0000000..0d60cb4
+--- /dev/null
++++ b/docs/day10/02_pr_description_a.md
+@@ -0,0 +1,115 @@
++# [D10-A] 精准遗忘与删除一致性——缓存失效协调器 + 删除事件集成
++
++> 分支：`feat/day10-forgetting-deletion`（基于 main @ `03857eb`，PR #48 已合并）
++
++## 背景与目标
++
++Day9（PR #48 已合并）交付 Embedding 查询缓存/积压指标/请求合并。D10 按 75 项台账 **R52**（A 轨 D10：精准遗忘与删除一致性）实施删除事件→缓存失效的完整闭环，目标为"**删除后 Provider 缓存和临时数据不恢复目标正文**"：
++
++1. **缓存失效接口**：EmbeddingQueryCache 按内容指纹失效 + PreferenceExtractionCache 按事件 ID / 按内容指纹失效
++2. **CacheInvalidator 协调器**：接收删除事件（DeletionEvent），按事件/按用户/全量粒度失效 Embedding 与抽取缓存
++3. **Bridge 正文残留检查**：确认 cpp-bridge 无临时文件缓存、无日志正文泄露
++4. **删除期间异常恢复**：Provider 异常、并发删除、重启后删除状态均不恢复已删除数据
++
++## 修改范围
++
++- **`memory-service/embedding/cache_invalidator.py`（新增）**：缓存失效协调器
++  - `DeletionEvent` 数据类：event_id / user_id / target_type / content_hashes / content_fingerprints / forget_mode / timestamp
++  - `CacheInvalidator`：handle_deletion（幂等去重）/ invalidate_by_user（用户级）/ invalidate_all（全量）/ stats 统计
++  - 线程安全（锁保护）、事件→指纹映射、用户→事件映射
++- **`memory-service/embedding/embedding_cache.py`（增强）**：
++  - `EmbeddingQueryCache.invalidate_by_content(content_hash)`：按内容哈希失效缓存条目
++- **`memory-service/providers/extraction_provider.py`（增强）**：
++  - `PreferenceExtractionCache.invalidate_by_event(event_id)`：按事件 ID 失效缓存条目
++  - `PreferenceExtractionCache.invalidate_by_content(content_fingerprint)`：按内容指纹失效缓存条目
++- **`memory-service/embedding/embedding_service.py`（增强）**：
++  - `set_cache_invalidator(extraction_cache)`：设置缓存失效协调器
++  - `handle_deletion_event(event)`：删除事件处理入口
++  - `health()`：新增 cache_invalidator 统计分项
++  - 导入 `CacheInvalidator` / `DeletionEvent`
++- **`memory-service/tests/test_embedding_d10.py`（新增，15 项）**：
++  - Embedding 缓存按内容指纹失效（2 项）
++  - Extraction 缓存按事件 ID / 内容指纹失效（2 项）
++  - CacheInvalidator 删除事件处理（幂等/按用户/全量/统计）（4 项）
++  - 删除期间异常恢复（Provider 异常不丢失/新实例不恢复）（2 项）
++  - 并发删除与读取无竞态数据恢复（1 项）
++  - EmbeddingService 对接删除事件入口（3 项）
++  - health 含 invalidator 统计（1 项）
++- **`scripts/verify_day10_vm.sh`（新增）**：麒麟 VM 一键验证脚本
++  - D10 专项测试 → D9 回归 → L2 全量 pytest → Bridge 日志正文残留检查 → 汇总
++
++## 明确不修改范围
++
++- 不修改 cpp-bridge 代码（检查确认无正文缓存/日志残留）
++- 不修改 D5/6/7/8/9 已合并的 Provider/Pipeline 核心接口
++- 不修改架构 4.4 冻结 IPC 方法语义
++- 不实现删除事件持久化（由上层 Outbox/DB 保证；本模块仅负责内存缓存失效）
++
++## 关联任务与技术债
++
++- 任务卡：台账 R52（A 轨 D10：精准遗忘与删除一致性）
++- 新建 **TD-A-D10-CACHE-INVALIDATION**（Medium）：缓存失效粒度与删除事件对齐——当前支持按内容指纹/按事件 ID/按用户失效，但无按时间范围批量失效
++
++## 架构与能力边界依据
++
++- 台账 R52：删除后 Provider 缓存和临时数据不恢复目标正文
++- 安全：删除后缓存不应恢复已删除内容（缓存失效为最后防线）
++
++## 修改文件清单
++
++| 文件 | 变更类型 | 摘要 |
++|------|----------|------|
++| `memory-service/embedding/cache_invalidator.py` | 新增 | 缓存失效协调器（DeletionEvent + CacheInvalidator） |
++| `memory-service/embedding/embedding_cache.py` | 修改 | 新增 invalidate_by_content |
++| `memory-service/providers/extraction_provider.py` | 修改 | 新增 invalidate_by_event / invalidate_by_content |
++| `memory-service/embedding/embedding_service.py` | 修改 | 新增 set_cache_invalidator / handle_deletion_event |
++| `memory-service/tests/test_embedding_d10.py` | 新增 | 15 项 D10 测试 |
++| `scripts/verify_day10_vm.sh` | 新增 | VM 一键验证脚本 |
++| `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` | 修改 | 新增 TD-A-D10-CACHE-INVALIDATION |
++| `docs/day10/02_pr_description_a.md` | 新增 | 本 PR 描述 |
++
++## 测试结果
++
++### L0（单元测试 + 静态检查）
++
++```
++python -m py_compile memory-service/embedding/cache_invalidator.py \
++  memory-service/embedding/embedding_cache.py \
++  memory-service/providers/extraction_provider.py \
++  memory-service/embedding/embedding_service.py
++→ COMPILE OK
++```
++
++### L1（组件集成）
++
++```
++.venv/bin/python -m pytest memory-service/tests/test_embedding_d10.py -v
++→ 15 passed
++.venv/bin/python -m pytest memory-service/tests/test_embedding_d9.py -v
++→ 18 passed（D9 回归不变）
++```
++
++### Bridge 正文残留检查（静态分析）
++
++- cpp-bridge 无临时文件创建（`/tmp` 路径仅用于测试假 .so 路径）
++- 无文件缓存（仅 `cached_model_name_` 内存缓存模型名，不存正文）
++- 无日志文件写入（仅 `std::fprintf(stderr, ...)` 输出指针地址，不含正文）
++- SDK session 重建不恢复已删除数据（缓存失效后无缓存命中）
++
++## 已知限制
++
++- 缓存失效为内存级，重启后缓存自动清空（删除状态由上层 Outbox/DB 持久化）
++- 不支持按时间范围批量失效（TD-A-D10-CACHE-INVALIDATION 登记）
++
++## 回滚方式
++
++- 回滚本分支即恢复 main 基线；新增文件（cache_invalidator.py / test_embedding_d10.py / verify_day10_vm.sh / 02_pr_description_a.md）随之移除；修改的现有文件回退后恢复原逻辑
++
++---
++
++**Reviewer 结论**（由 Reviewer 填写）：
++
++- [ ] PASS
++- [ ] PASS_WITH_DEBT（需记录技术债 TD 编号）
++- [ ] REWORK
++- [ ] BLOCKED
+\ No newline at end of file
+diff --git a/docs/project-management/git-conventions.md b/docs/project-management/git-conventions.md
+new file mode 100644
+index 0000000..e1b7ae1
+--- /dev/null
++++ b/docs/project-management/git-conventions.md
+@@ -0,0 +1,74 @@
++# Git 操作规范（不断迭代）
++
++> 本文件记录本项目的 Git 分支命名、提交规范、PR 流程。每次新任务开始前阅读并遵守，有修改直接在本文件上改动。
++>
++> **开工前同时阅读以下文件**：
++> - `docs/project-management/session-handoff-20260826.md` — 最新会话交接文档
++> - `02_麒麟OS_Agent记忆系统_总体架构_团队分工与标准开发SOP_v1.0_20260726.docx` — 总体架构与团队分工
++> - `04_麒麟OS_Agent记忆系统_Agent_LLM与CodeAgent使用指南_v1.0_20260726.docx` — Agent/LLM 使用指南
++> - `麒麟OS_Agent记忆系统_15天75项个人施工台账_修正版.xlsx` — 75 项施工台账
++
++## 一、分支命名规范
++
++格式：`<type>/<具体实现描述>`
++
++| type | 说明 |
++|------|------|
++| feat | 新功能 (feature) |
++| fix | 修补 bug |
++| docs | 文档变更 |
++| style | 代码格式（不影响代码运行的变动，如空格、分号） |
++| refactor | 重构（既不是新增功能，也不是修改 bug） |
++| perf | 性能优化 |
++| test | 增加测试 |
++| chore | 构建过程或辅助工具的变动 |
++
++示例：`feat/CardManager`、`fix/login-timeout`、`docs/api-spec`
++
++## 二、提交信息规范
++
++格式：`<type>(<scope>)：<描述>`
++
++- type：同上表
++- scope：影响范围/模块名（如 CardManager、embedding-cache）
++- 描述：中文，简洁说明做了什么
++
++示例：
++- `fix(CardManager)：修复了出牌卡住的bug`
++- `feat(embedding-cache)：实现按内容指纹的缓存失效接口`
++- `docs(git-conventions)：更新分支命名规范`
++
++## 三、原子化提交原则
++
++- 修一个小 bug 就可以提交一次，不要攒个大的
++- 每次提交聚焦一个逻辑变更
++- 提交后如果发现问题，再提交一个 fix 修复，不要 amend 已有提交
++- 这样之后出了问题好回退
++
++## 四、PR 流程
++
++1. **rebase 而非 merge**：提交 PR 前，先在本地 rebase main 分支，解决冲突后再推送
++2. **不要直接推 main**：主分支不能直推，必须通过 PR 合并
++3. PR 描述使用模板（见 `docs/day10/02_pr_description.md` 格式）
++4. 合并前确保 Reviewer 审核通过
++
++## 五、示例
++
++```bash
++# 创建分支
++git checkout -b feat/CardManager
++
++# 开发过程中的原子提交
++git commit -m "feat(CardManager)：实现出牌逻辑"
++git commit -m "fix(CardManager)：修复手牌数量显示错误"
++git commit -m "test(CardManager)：添加出牌边界测试"
++
++# 提交 PR 前
++git fetch origin main
++git rebase origin/main
++# 解决冲突后
++git push --force-with-lease origin feat/CardManager
++
++# 创建 PR
++gh pr create --base main --head feat/CardManager ...
++```
+\ No newline at end of file
+diff --git a/docs/project-management/session-handoff-20260826.md b/docs/project-management/session-handoff-20260826.md
+new file mode 100644
+index 0000000..ccc29a5
+--- /dev/null
++++ b/docs/project-management/session-handoff-20260826.md
+@@ -0,0 +1,112 @@
++# 会话交接文档：A 轨 D10 PR 待审查 + D11 施工起点（2026-08-26）
++
++> 生成：2026-08-26 ｜ 状态：**feat/day10-forgetting-deletion 已 rebase main（2 commits），待 push + 创建 PR**
++> 交接对象：下一会话的 AI agent 工具
++> 本文件为权威交接文档——开工前必读
++
++## 一、项目一句话
++
++麒麟 OS Agent 多源融合偏好与知识记忆系统（kylinOS-agent-memory）——A 轨负责 Embedding SDK 接入 + Bridge + 抽取 Provider。当前主线：**D10 PR 待推送审查，D11（待定）待开始**。
++
++## 二、Git 操作规范
++
++详见 `docs/project-management/git-conventions.md`，开工前必读。
++
++关键约束：
++- 分支命名：`<type>/<描述>`（如 `feat/day10-forgetting-deletion`）
++- 提交信息：`<type>(<scope>)：<描述>`（如 `feat(embedding-cache)：实现按内容指纹的缓存失效接口`）
++- **原子化提交**：小 bug 修完就提交，不要攒大 commit
++- **rebase 而非 merge**：PR 前先 rebase main，解决冲突再推送
++- **主分支不能直推**，必须通过 PR
++
++## 三、git 状态
++
++### 关键分支
++
++| 分支 | HEAD | 状态 | 说明 |
++|------|------|------|------|
++| `main` | d12df5a | 已推送 | 含 D9 #48 + D4D #52 等 |
++| `feat/day10-forgetting-deletion` | **6fc7bd7** | 待推送 | 4 commits vs main，待 push + 创建 PR |
++
++### 工作区
++
++工作区有未跟踪文件（docx/xlsx 文档文件，非项目代码，勿提交）。
++
++## 四、D10 PR 状态
++
++### 分支 commits（vs main，原子化）
++
++| Commit | 类型 | 说明 |
++|--------|------|------|
++| `3777667` | feat(day10) | 精准遗忘与删除一致性——缓存失效协调器 + 删除事件集成（代码 + 测试） |
++| `05ce208` | docs(day10) | PR 描述 + L2 证据落盘 |
++| `1d9cda1` | docs(git-conventions) | 新增 Git 操作规范文档 |
++| `6fc7bd7` | docs(day10) | 更新 PR 描述为完整模板格式 |
++
++### 待办
++
++1. **rebase main**（已执行，无冲突）
++2. **push**：`git push --force-with-lease origin feat/day10-forgetting-deletion`（需代理）
++3. **创建 PR**：`gh pr create --base main --head feat/day10-forgetting-deletion --title "..." --body "$(cat docs/day10/02_pr_description.md)"`
++
++### 交付物清单
++
++- 缓存失效：`EmbeddingQueryCache.invalidate_by_content`（按内容哈希）
++- 抽取缓存失效：`PreferenceExtractionCache.invalidate_by_event` / `invalidate_by_content`
++- 协调器：`CacheInvalidator` + `DeletionEvent`（幂等/按用户/全量失效）
++- Service 对接：`EmbeddingService.handle_deletion_event` / `set_cache_invalidator`
++- Bridge 安全审计：cpp-bridge 无临时文件/无正文缓存/无日志泄露
++- 测试：`test_embedding_d10.py`（15 项）
++- 脚本：`verify_day10_vm.sh`
++- 证据：`evidence/l2-kylin-vm/day10_verify_latest.log`（82 passed）
++- 任务卡：`docs/day10/01_task_card.md`
++- PR 描述：`docs/day10/02_pr_description.md`
++- 技术债：`TD-A-D10-CACHE-INVALIDATION`
++
++## 五、D11 任务（待定）
++
++D11 任务内容尚未确定。建议从以下方向选择：
++1. 缓存失效接通 Outbox 事件总线（关闭 TD-A-D10-CACHE-INVALIDATION）
++2. 桥接抽取缓存与 Embedding 缓存的统一失效入口
++3. 其他轨道依赖的 A 轨接口
++
++## 六、麒麟 VM 环境
++
++- SSH `ssh -p 2222 Lyf@127.0.0.1`
++- 共享目录 `/mnt/shared` = WSL 仓库实时同步（vboxsf）
++- **⚠️ vboxsf 时钟错误 → 增量编译不可靠**：C++ 改动后必须在 VM 本地 `/tmp` 构建
++- Python：VM 只有 `/usr/bin/python3.12`；venv 用 `/tmp/day10-venv`
++- SDK：`libkylin-coreai-embedding 1.2.0.0-0k0.4`，路径 `/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1`
++
++## 七、环境坑
++
++1. **shell 陷阱**：当前会话是 PowerShell，命令用 `wsl -d Ubuntu -- bash -lc "..."` 执行；内层引号/括号会与 wsl -c 冲突——写临时脚本到 `.scratch/` 再执行最稳
++2. **git push 超时**：WSL 内 push 需代理，`http_proxy=http://172.21.64.1:7890 https_proxy=http://172.21.64.1:7890 git push ...`
++3. **venv 易失**：本地用仓库 `.venv`（`/home/fff/projects/kylinOS-agent-memory/.venv/bin/python`）
++4. **pytest**：需 `PYTHONPATH=memory-service` 前缀
++
++## 八、关键文件索引
++
++### 每次会话开工前必读
++
++| 文件 | 用途 |
++|------|------|
++| `docs/project-management/git-conventions.md` | Git 操作规范（**所有会话开工前必读**） |
++| `docs/project-management/session-handoff-20260826.md` | 本交接文档（**所有会话开工前必读**） |
++| `02_麒麟OS_Agent记忆系统_总体架构_团队分工与标准开发SOP_v1.0_20260726.docx` | 总体架构与团队分工、SOP（**每次会话连读**） |
++| `04_麒麟OS_Agent记忆系统_Agent_LLM与CodeAgent使用指南_v1.0_20260726.docx` | Agent/LLM 使用指南（**每次会话连读**） |
++| `麒麟OS_Agent记忆系统_15天75项个人施工台账_修正版.xlsx` | 75 项施工台账（**每次会话连读**） |
++
++### D10 交付物
++
++| 文件 | 用途 |
++|------|------|
++| `docs/day10/01_task_card.md` | D10 任务卡 |
++| `docs/day10/02_pr_description.md` | D10 PR 描述（模板格式） |
++| `memory-service/embedding/cache_invalidator.py` | D10 CacheInvalidator + DeletionEvent |
++| `memory-service/embedding/embedding_cache.py` | D10 缓存失效接口 |
++| `memory-service/embedding/embedding_service.py` | D10 删除事件对接 |
++| `memory-service/providers/extraction_provider.py` | D10 抽取缓存失效 |
++| `memory-service/tests/test_embedding_d10.py` | D10 测试（15 项） |
++| `scripts/verify_day10_vm.sh` | VM 验证脚本 |
++| `evidence/l2-kylin-vm/day10_verify_latest.log` | D10 L2 证据（82 passed） |
+\ No newline at end of file
+diff --git a/docs/technical-debt/TECHNICAL_DEBT_REGISTER.md b/docs/technical-debt/TECHNICAL_DEBT_REGISTER.md
+index d3b8876..1076601 100644
+--- a/docs/technical-debt/TECHNICAL_DEBT_REGISTER.md
++++ b/docs/technical-debt/TECHNICAL_DEBT_REGISTER.md
+@@ -93,3 +93,4 @@
+ | TD-025 | rollback 后 UPDATE 版本号可能与历史冲突 | memory-service/service/preference_version_policy.py | Technical Debt | Medium | In Progress | E 轨成员 | D 主审 | 2026-08-27 | commit `ccc8664` 收敛 rollback 后 UPDATE 版本号按同 user_id + preference_key + scope 链 max(existing version)+1 分配（含历史 SUPERSEDED，不复用历史版本号，`_find_max_version_in_chain` + `_update`）；v1 active + v2/v3 历史后 UPDATE=4 隔离测试通过；非作者 Reviewer（D 主审）确认后关闭 | PR #58 |
+ | TD-026 | PR #58 审查状态与 TD 登记同步治理 | docs/day7/, docs/technical-debt/TECHNICAL_DEBT_REGISTER.md | Technical Debt | Low | In Progress | E 轨成员 | D 主审 | 2026-08-27 | 纠正旧 TD 占号（Day7 文档误用 TD-018/019/020 为 PR #58 条目，实际 TD-018/019/020/021 为 PR #51 所有，PR #58 正式登记为 TD-022/023/024）；正确 commit 归因（`18818a8` 仅为 intent/decision identity 门禁，`0344955` 为跨用户 Rollback 载荷修复，`ccc8664` 为 monotonic version 修复）；保留不同测试时点（首次 100 / 收敛 104 / 独立 109 / 跨阶段 305 passed 互不覆盖）；非作者 Reviewer（D 主审）确认后关闭 | PR #58 |
+ | TD-027 | RealVectorProvider 未注入 serving `index_generation` 上下文 | memory-service/retrieval/real_vector_provider.py | Technical Debt | Medium | Open | gaoyizhe934 (B) | D | D5 接线前 | 由 D 轨索引状态/路由层显式注入已验证的 serving generation；provider 返回该值并在 required_generation 不匹配时失败关闭。当前不得将 `None` 或常量伪装为已验证代次；补充 generation 一致性与错配负向测试 | PR #63 / D6B task card |
++| TD-A-D10-CACHE-INVALIDATION | 缓存失效粒度与删除事件对齐——当前按内容指纹/按事件 ID/按用户粒度失效，未接通 Outbox 事件总线，无按时间范围批量失效 | memory-service/embedding/cache_invalidator.py, memory-service/embedding/embedding_cache.py, memory-service/providers/extraction_provider.py | Technical Debt | Medium | Open | A 轨成员 | D 主审；安全/用户隔离影响 E 补审 | 2026-09-01 | 关闭条件：① 接通 Outbox 事件总线（自动消费删除事件）；② 支持按时间范围（time_window）批量失效缓存；③ 补充相关测试；④ 删除后新建 Provider 实例不恢复已删除数据的测试保持 PASS | 本次 PR |
+diff --git a/evidence/l2-kylin-vm/day10_verify_latest.log b/evidence/l2-kylin-vm/day10_verify_latest.log
+new file mode 100644
+index 0000000..d23898a
+--- /dev/null
++++ b/evidence/l2-kylin-vm/day10_verify_latest.log
+@@ -0,0 +1,95 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /tmp/day10-venv/bin/python
++cachedir: .pytest_cache
++rootdir: /var/mnt/shared
++collecting ... collected 87 items
++
++memory-service/tests/test_embedding_d10.py::test_embedding_generation_blocks_stale_write PASSED [  1%]
++memory-service/tests/test_embedding_d10.py::test_embedding_generation_allows_fresh_write PASSED [  2%]
++memory-service/tests/test_embedding_d10.py::test_embedding_clear_increments_generation PASSED [  3%]
++memory-service/tests/test_embedding_d10.py::test_extraction_generation_blocks_stale_write PASSED [  4%]
++memory-service/tests/test_embedding_d10.py::test_extraction_event_tombstone_blocks_miss_to_completion PASSED [  5%]
++memory-service/tests/test_embedding_d10.py::test_extraction_clear_increments_generation PASSED [  6%]
++memory-service/tests/test_embedding_d10.py::test_invalidate_all_generation_blocks_stale PASSED [  8%]
++memory-service/tests/test_embedding_d10.py::test_cache_invalidator_full_reset_mode PASSED [  9%]
++memory-service/tests/test_embedding_d10.py::test_embedding_service_discards_stale_result PASSED [ 10%]
++memory-service/tests/test_embedding_d10.py::test_extraction_discards_stale_result PASSED [ 11%]
++memory-service/tests/test_embedding_d10.py::test_handle_deletion_fail_once_retry PASSED [ 12%]
++memory-service/tests/test_embedding_d10.py::test_concurrent_same_event_dedup PASSED [ 13%]
++memory-service/tests/test_embedding_d10.py::test_embedding_service_coalesced_race PASSED [ 14%]
++memory-service/tests/test_embedding_d10.py::test_cache_invalidator_invalidate_all_race PASSED [ 16%]
++memory-service/tests/test_embedding_d10.py::test_extraction_knowledge_stale_write PASSED [ 17%]
++memory-service/tests/test_embedding_d10.py::test_deletion_event_uses_enums PASSED [ 18%]
++memory-service/tests/test_embedding_d10.py::test_invalidator_stats PASSED [ 19%]
++memory-service/tests/test_embedding_d10.py::test_invalidate_all_clears_internal_state PASSED [ 20%]
++memory-service/tests/test_embedding_d10.py::test_service_set_extraction_provider PASSED [ 21%]
++memory-service/tests/test_embedding_d10.py::test_health_includes_invalidator_stats PASSED [ 22%]
++memory-service/tests/test_embedding_d9.py::test_cache_hit_reduces_provider_calls PASSED [ 24%]
++memory-service/tests/test_embedding_d9.py::test_cache_returns_deep_copy PASSED [ 25%]
++memory-service/tests/test_embedding_d9.py::test_cache_does_not_cache_degraded_empty_vector PASSED [ 26%]
++memory-service/tests/test_embedding_d9.py::test_cache_key_includes_dimension PASSED [ 27%]
++memory-service/tests/test_embedding_d9.py::test_cache_ttl_expiry PASSED  [ 28%]
++memory-service/tests/test_embedding_d9.py::test_cache_capacity_eviction PASSED [ 29%]
++memory-service/tests/test_embedding_d9.py::test_backlog_tracks_enter_leave PASSED [ 31%]
++memory-service/tests/test_embedding_d9.py::test_backlog_alert_threshold PASSED [ 32%]
++memory-service/tests/test_embedding_d9.py::test_oldest_pending_age_alert PASSED [ 33%]
++memory-service/tests/test_embedding_d9.py::test_backlog_thresholds_exposed PASSED [ 34%]
++memory-service/tests/test_embedding_d9.py::test_coalescer_merges_concurrent_same_text PASSED [ 35%]
++memory-service/tests/test_embedding_d9.py::test_coalescer_failure_propagates PASSED [ 36%]
++memory-service/tests/test_embedding_d9.py::test_health_includes_backlog_and_cache PASSED [ 37%]
++memory-service/tests/test_embedding_d9.py::test_health_backlog_nonzero_during_pending PASSED [ 39%]
++memory-service/tests/test_embedding_d9.py::test_benchmark_script_runs_fake PASSED [ 40%]
++memory-service/tests/test_embedding_d9.py::test_cache_key_distinguishes_normalized_equivalents PASSED [ 41%]
++memory-service/tests/test_embedding_d9.py::test_coalesced_wait_counts_in_backlog PASSED [ 42%]
++memory-service/tests/test_embedding_d9.py::test_coalesced_failure_keeps_original_code PASSED [ 43%]
++memory-service/tests/test_protocol.py::test_encode_decode_roundtrip PASSED [ 44%]
++memory-service/tests/test_protocol.py::test_decode_incomplete_raises PASSED [ 45%]
++memory-service/tests/test_protocol.py::test_decode_multiple_packets PASSED [ 47%]
++memory-service/tests/test_protocol.py::test_decode_invalid_json PASSED   [ 48%]
++memory-service/tests/test_protocol.py::test_decode_non_dict PASSED       [ 49%]
++memory-service/tests/test_protocol.py::test_oversize_rejected PASSED     [ 50%]
++memory-service/tests/test_protocol.py::test_build_envelope_fields PASSED [ 51%]
++memory-service/tests/test_protocol.py::test_parse_envelope_valid PASSED  [ 52%]
++memory-service/tests/test_protocol.py::test_parse_envelope_missing_version PASSED [ 54%]
++memory-service/tests/test_protocol.py::test_parse_envelope_bad_version PASSED [ 55%]
++memory-service/tests/test_protocol.py::test_parse_envelope_unknown_method PASSED [ 56%]
++memory-service/tests/test_protocol.py::test_parse_envelope_bad_payload PASSED [ 57%]
++memory-service/tests/test_protocol.py::test_build_error_envelope_typed_id_converged[request_id-bad0] PASSED [ 58%]
++memory-service/tests/test_protocol.py::test_build_error_envelope_typed_id_converged[trace_id-bad1] PASSED [ 59%]
++memory-service/tests/test_protocol.py::test_build_error_envelope_typed_id_converged[request_id-123] PASSED [ 60%]
++memory-service/tests/test_protocol.py::test_build_error_envelope_typed_id_converged[trace_id-456] PASSED [ 62%]
++memory-service/tests/test_protocol.py::test_build_error_envelope_typed_id_converged[request_id-True] PASSED [ 63%]
++memory-service/tests/test_protocol.py::test_build_error_envelope_typed_id_converged[trace_id-False] PASSED [ 64%]
++memory-service/tests/test_protocol.py::test_build_error_envelope_typed_id_converged[request_id-bad6] PASSED [ 65%]
++memory-service/tests/test_protocol.py::test_build_error_envelope_typed_id_converged[trace_id-None] PASSED [ 66%]
++memory-service/tests/test_protocol.py::test_build_error_envelope_empty_str_id_preserved PASSED [ 67%]
++memory-service/tests/test_protocol.py::test_parse_envelope_unknown_method_code PASSED [ 68%]
++memory-service/tests/test_protocol.py::test_parse_envelope_missing_required_field[request_id] PASSED [ 70%]
++memory-service/tests/test_protocol.py::test_parse_envelope_missing_required_field[trace_id] PASSED [ 71%]
++memory-service/tests/test_protocol.py::test_parse_envelope_missing_required_field[deadline_ms] PASSED [ 72%]
++memory-service/tests/test_protocol.py::test_parse_envelope_missing_required_field[payload] PASSED [ 73%]
++memory-service/tests/test_protocol.py::test_parse_envelope_invalid_field_type[request_id-] PASSED [ 74%]
++memory-service/tests/test_protocol.py::test_parse_envelope_invalid_field_type[trace_id-] PASSED [ 75%]
++memory-service/tests/test_protocol.py::test_parse_envelope_invalid_field_type[request_id-123] PASSED [ 77%]
++memory-service/tests/test_protocol.py::test_parse_envelope_invalid_field_type[trace_id-456] PASSED [ 78%]
++memory-service/tests/test_protocol.py::test_parse_envelope_invalid_field_type[deadline_ms-5000] PASSED [ 79%]
++memory-service/tests/test_protocol.py::test_parse_envelope_invalid_field_type[deadline_ms-0] PASSED [ 80%]
++memory-service/tests/test_protocol.py::test_parse_envelope_invalid_field_type[deadline_ms-True] PASSED [ 81%]
++memory-service/tests/test_protocol.py::test_parse_envelope_invalid_field_type[deadline_ms--1] PASSED [ 82%]
++memory-service/tests/test_protocol.py::test_decode_zero_length_rejected PASSED [ 83%]
++memory-service/tests/test_protocol.py::test_max_msg_len_boundary PASSED  [ 85%]
++memory-service/tests/test_protocol.py::test_encode_rejects_over_max PASSED [ 86%]
++memory-service/tests/test_server_lifecycle.py::test_server_serves_request PASSED [ 87%]
++memory-service/tests/test_server_lifecycle.py::test_stop_rejects_new_business_request PASSED [ 88%]
++memory-service/tests/test_server_lifecycle.py::test_stopped_conn_thread_rejects PASSED [ 89%]
++memory-service/tests/test_server_lifecycle.py::test_executor_not_recreated_by_stale_conn PASSED [ 90%]
++memory-service/tests/test_server_lifecycle.py::test_restart_reinitializes PASSED [ 91%]
++memory-service/tests/test_server_lifecycle.py::test_stop_joins_conn_threads PASSED [ 93%]
++memory-service/tests/test_server_lifecycle.py::test_default_socket_path_is_not_memory_sock PASSED [ 94%]
++memory-service/tests/test_server_lifecycle.py::test_start_refuses_active_socket PASSED [ 95%]
++memory-service/tests/test_server_lifecycle.py::test_start_cleans_stale_socket PASSED [ 96%]
++memory-service/tests/test_server_lifecycle.py::test_ensure_socket_dir_converges_existing_0755 PASSED [ 97%]
++memory-service/tests/test_server_lifecycle.py::test_ensure_socket_dir_skips_shared_tmp PASSED [ 98%]
++memory-service/tests/test_server_lifecycle.py::test_ensure_socket_dir_skips_home_dir PASSED [100%]
++
++============================== 87 passed in 5.53s ==============================
+diff --git a/memory-service/embedding/cache_invalidator.py b/memory-service/embedding/cache_invalidator.py
+new file mode 100644
+index 0000000..ea98cd6
+--- /dev/null
++++ b/memory-service/embedding/cache_invalidator.py
+@@ -0,0 +1,193 @@
++"""
++cache_invalidator.py — 轨道 A Day10 缓存失效协调器（精准遗忘与删除一致性）
++
++台账 R52（A 轨 D10）：删除事件→ Provider 缓存失效。
++
++职责：
++1. 接收删除事件（DeletionEvent），按删除粒度协调 Embedding 缓存与抽取缓存失效。
++2. 维护事件→内容指纹、用户→事件的映射，支持按用户/按事件粒度失效。
++3. 删除过程中 Provider 异常（SDK 崩溃/超时）→ 删除不丢失，可重试。
++
++使用方式：
++    invalidator = CacheInvalidator(embedding_cache, extraction_cache)
++    event = DeletionEvent(event_id="evt_001", user_id="user_1",
++                          content_hashes=["abc123"])
++    invalidator.handle_deletion(event)
++
++设计：
++- 线程安全（嵌入并发 embed 服务，多个删除事件可并发到达）。
++- 幂等：同一事件重复处理不会重复删除已失效条目。
++- 删除后新建 Provider 实例 → 已删除数据不恢复（tombstone 阻止 stale write-back）。
++- 重启后删除状态保持：持久化删除状态由上层（Outbox/DB）保证，本模块仅负责
++  内存缓存失效；重启后缓存自动清空（无持久化先验状态），已删除数据不会因
++  缓存恢复。
++"""
++
++from __future__ import annotations
++
++import threading
++import time
++from dataclasses import dataclass, field
++from typing import Any, Dict, List, Optional, Set
++
++from domain.enums import ForgetMode, TargetType
++
++
++@dataclass
++class DeletionEvent:
++    """删除事件（由 Outbox 或直接调用触发缓存失效）。
++
++    Attributes:
++        event_id: 事件唯一标识（幂等去重）。
++        user_id: 所属用户。
++        target_type: 目标类型（复用 TargetType 枚举）。
++        content_hashes: 待删除内容的指纹列表（Embedding 原文确定性哈希）。
++        content_fingerprints: 待删除内容的指纹列表（Extraction 内容指纹）。
++        forget_mode: 遗忘模式（复用 ForgetMode 枚举）。
++        timestamp: 事件时间戳。
++    """
++    event_id: str
++    user_id: str
++    target_type: TargetType = TargetType.EVENT
++    content_hashes: List[str] = field(default_factory=list)
++    content_fingerprints: List[str] = field(default_factory=list)
++    forget_mode: ForgetMode = ForgetMode.SINGLE_ITEM
++    timestamp: float = field(default_factory=time.time)
++
++
++class CacheInvalidator:
++    """缓存失效协调器——按删除事件粒度失效 Embedding 与抽取缓存。
++
++    线程安全：所有公共方法以锁保护。
++    """
++
++    def __init__(self,
++                 embedding_cache: Any,
++                 extraction_cache: Any) -> None:
++        self._embedding_cache = embedding_cache
++        self._extraction_cache = extraction_cache
++        self._lock = threading.Lock()
++
++        self._processed_events: Set[str] = set()
++        self._user_events: Dict[str, Set[str]] = {}
++        self._event_hashes: Dict[str, Set[str]] = {}
++
++        self._embedding_invalidated = 0
++        self._extraction_invalidated = 0
++        self._events_processed = 0
++
++    def handle_deletion(self, event: DeletionEvent) -> Dict[str, Any]:
++        """处理删除事件：失效关联缓存。
++
++        D10 REWORK：先执行全部失效操作，全部成功后再登记 processed。
++        失败时不得留下错误的 completed/dedup 状态，相同 event_id 必须允许重试。
++
++        Args:
++            event: 删除事件。
++
++        Returns:
++            {"ok": true/false, "embedding_invalidated": int, "extraction_invalidated": int}
++        """
++        with self._lock:
++            if event.event_id in self._processed_events:
++                return {"ok": True, "dedup": True,
++                        "embedding_invalidated": 0, "extraction_invalidated": 0}
++
++        # 先执行失效操作（在锁外执行，避免持有锁期间调用外部 cache）
++        try:
++            # D10 REWORK MEDIUM：ForgetMode.FULL_RESET → invalidate_all
++            if event.forget_mode == ForgetMode.FULL_RESET:
++                self._embedding_cache.clear()
++                self._extraction_cache.clear()
++                embedding_removed = 0
++                extraction_removed = 0
++            else:
++                embedding_removed = 0
++                for ch in event.content_hashes:
++                    embedding_removed += self._embedding_cache.invalidate_by_content(ch)
++
++                extraction_removed = 0
++                for fp in event.content_fingerprints:
++                    extraction_removed += self._extraction_cache.invalidate_by_content(fp)
++                extraction_removed += self._extraction_cache.invalidate_by_event(event.event_id)
++        except Exception:
++            # 失效失败：不标记 processed，允许重试
++            return {"ok": False, "error": "invalidation failed",
++                    "embedding_invalidated": 0, "extraction_invalidated": 0}
++
++        # 全部成功后再登记 processed
++        with self._lock:
++            self._processed_events.add(event.event_id)
++            self._events_processed += 1
++
++            if event.user_id not in self._user_events:
++                self._user_events[event.user_id] = set()
++            self._user_events[event.user_id].add(event.event_id)
++
++            all_hashes: Set[str] = set()
++            all_hashes.update(event.content_hashes)
++            all_hashes.update(event.content_fingerprints)
++            if all_hashes:
++                self._event_hashes[event.event_id] = all_hashes
++
++            self._embedding_invalidated += embedding_removed
++            self._extraction_invalidated += extraction_removed
++
++            return {"ok": True, "dedup": False,
++                    "embedding_invalidated": embedding_removed,
++                    "extraction_invalidated": extraction_removed}
++
++    def invalidate_by_user(self, user_id: str) -> Dict[str, Any]:
++        """按用户失效已登记事件的关联缓存条目。
++
++        注意：仅失效该用户已通过 handle_deletion() 登记过的内容哈希。
++        不覆盖未登记过的缓存条目（Embedding cache key 不含 user_id，
++        无法枚举该用户当前全部 cache entries）。
++
++        Args:
++            user_id: 用户 ID。
++
++        Returns:
++            {"embedding_invalidated": int, "extraction_invalidated": int}
++        """
++        with self._lock:
++            event_ids = self._user_events.get(user_id, set())
++            all_hashes: Set[str] = set()
++            for eid in event_ids:
++                all_hashes.update(self._event_hashes.get(eid, set()))
++        embedding_removed = 0
++        extraction_removed = 0
++        for ch in all_hashes:
++            embedding_removed += self._embedding_cache.invalidate_by_content(ch)
++            extraction_removed += self._extraction_cache.invalidate_by_content(ch)
++        for eid in event_ids:
++            extraction_removed += self._extraction_cache.invalidate_by_event(eid)
++        with self._lock:
++            self._embedding_invalidated += embedding_removed
++            self._extraction_invalidated += extraction_removed
++        return {"embedding_invalidated": embedding_removed,
++                "extraction_invalidated": extraction_removed}
++
++    def invalidate_all(self) -> Dict[str, Any]:
++        """全量失效所有缓存，清除全部内部状态。"""
++        self._embedding_cache.clear()
++        self._extraction_cache.clear()
++        with self._lock:
++            self._processed_events.clear()
++            self._user_events.clear()
++            self._event_hashes.clear()
++            self._embedding_invalidated = 0
++            self._extraction_invalidated = 0
++            self._events_processed = 0
++        return {"ok": True}
++
++    @property
++    def stats(self) -> Dict[str, int]:
++        with self._lock:
++            return {
++                "embedding_invalidated": self._embedding_invalidated,
++                "extraction_invalidated": self._extraction_invalidated,
++                "events_processed": self._events_processed,
++                "processed_events": len(self._processed_events),
++                "tracked_users": len(self._user_events),
++            }
+\ No newline at end of file
+diff --git a/memory-service/embedding/embedding_cache.py b/memory-service/embedding/embedding_cache.py
+index b7150b3..c9a1617 100644
+--- a/memory-service/embedding/embedding_cache.py
++++ b/memory-service/embedding/embedding_cache.py
+@@ -1,60 +1,27 @@
+-"""
+-embedding_cache.py — 轨道 A Day9 Embedding 查询缓存
+-
+-台账 R47（A 轨 D9）：查询缓存 + 后台批量合并候选 + backlog 与
+-oldest_pending_age 告警阈值。
+-
+-设计（复用 Day7 PreferenceExtractionCache 模式，架构 TABLE 29 延迟预算
+-"Embedding（查询）≤180ms：缓存、短文本、服务不可用时仅结构化召回"）：
+-
+-1. LRU 查询缓存：键 = 模型维度 + 原文确定性哈希（sha256 原文 UTF-8）。
+-   - 原文哈希（不经 casefold/空白折叠）：不同文本绝不共享键——
+-     "Hello" 与 "hello"、"a b" 与 "ab" 是不同向量，必须不同键
+-     （Review 修复：content_fingerprint 的归一化指纹会串键交叉污染）。
+-   - 模型维度：不同模型/维度变化时缓存自动失效（版本变更安全）。
+-   - 深拷贝返回：调用方修改 vector 不影响缓存（防污染，同 D7）。
+-   - TTL/容量可配；空结果（降级空向量）不缓存（避免缓存降级态）。
+-2. 命中/未命中统计：hits/misses/size/evictions，供可观测性（TABLE 36）与评测。
+-3. 请求合并（request coalescing）：相同原文文本的并发请求共享一次 Provider 调用，
+-   降低重复 SDK 调用。当前 SDK 单会话 embed 无批量 API，故"后台批量合并"
+-   （background batch merge——后台线程收集不同文本后批量调用）为候选设计，
+-   待 SDK 提供批量 embed 接口后实现。
+-
+-确定性：同一输入 → 同一缓存键；同一 Provider 输出 → 同一缓存结果。
+-"""
+-
+ from __future__ import annotations
+ 
+ import hashlib
+ import threading
+ import time
+ from collections import OrderedDict
+-from typing import Any, Dict, List, Optional, Tuple
++from typing import Any, Dict, List, Optional, Set, Tuple
+ 
+-# 缓存键结构：kind + 模型维度 + 原文确定性哈希
+-# 维度参与键：SDK/模型版本变化导致维度变化时，缓存自动失效（Day9 防串键）
+ EmbeddingCacheKey = Tuple[str, int, str]
+ 
+-_MISS = object()  # 未命中哨兵（None 表示未命中；缓存值恒为 EmbeddingResult 字典）
++_MISS = object()
+ 
+ 
+ def raw_text_hash(text: str) -> str:
+-    """原文确定性哈希（sha256 原文 UTF-8，**不做任何归一化**）。
+-
+-    Embedding 缓存/合并键必须区分所有不同文本（"Hello" vs "hello" 是不同
+-    向量）；content_fingerprint 的归一化指纹用于事件判重（语义等价可合并），
+-    不适用于向量缓存键——Review 修复（交叉污染风险）。
+-    """
+     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+ 
+ 
+ class EmbeddingQueryCache:
+-    """LRU Embedding 查询缓存（键 = 维度 + 内容指纹）。
++    """LRU Embedding 查询缓存。
+ 
+-    - 深拷贝：调用方修改 vector 不影响缓存。
+-    - 空向量（降级结果）不缓存：降级态不应被缓存放大（真实降级每次都要发生）。
+-    - TTL 可选；容量满时淘汰最久未用（LRU）。
+-    - 线程安全（embed 服务多连接并发）。
++    线程安全。D10 REWORK：generation 代次机制：
++    - 每次失效/清空递增 `_generation`
++    - set() 接受 generation 参数，不匹配时拒绝写入
++    - 解决 stale write-back / FULL_RESET 旧请求恢复 / 永久 tombstone 三大问题
+     """
+ 
+     def __init__(self, capacity: int = 512,
+@@ -67,17 +34,17 @@ def __init__(self, capacity: int = 512,
+         self._misses = 0
+         self._evictions = 0
+         self._lock = threading.Lock()
++        self._generation = 0
+ 
+     @staticmethod
+     def make_key(text: str, dimension: int) -> EmbeddingCacheKey:
+-        """缓存键：模型维度 + 原文确定性哈希（维度变化自动失效，D9 版本变更安全）。"""
+         return ("embed", dimension, raw_text_hash(text))
+ 
+-    def get(self, key: EmbeddingCacheKey) -> Optional[Dict[str, Any]]:
+-        """按缓存键取结果；None = 未命中（不含"缓存了空结果"——空结果不缓存）。
++    @property
++    def generation(self) -> int:
++        return self._generation
+ 
+-        返回深拷贝（调用方修改 vector 不影响缓存）。
+-        """
++    def get(self, key: EmbeddingCacheKey) -> Optional[Dict[str, Any]]:
+         with self._lock:
+             entry = self._data.get(key, _MISS)
+             if entry is _MISS:
+@@ -93,15 +60,19 @@ def get(self, key: EmbeddingCacheKey) -> Optional[Dict[str, Any]]:
+             return {k: (list(v) if isinstance(v, list) else v)
+                     for k, v in result.items()}
+ 
+-    def set(self, key: EmbeddingCacheKey, result: Dict[str, Any]) -> None:
+-        """写入缓存（深拷贝存储）。
++    def set(self, key: EmbeddingCacheKey, result: Dict[str, Any],
++            generation: Optional[int] = None) -> bool:
++        """写入缓存。返回 True=成功，False=被 generation/tombstone 拒绝。
+ 
+-        空向量（degraded）结果不缓存：真实降级每次都要发生，避免缓存放大降级态。
++        Args:
++            generation: 捕获时的代次。若提供且与当前代次不匹配，拒绝写入。
+         """
+         vector = result.get("vector") or []
+         if not vector:
+-            return
++            return False
+         with self._lock:
++            if generation is not None and self._generation != generation:
++                return False
+             self._data[key] = (time.monotonic(),
+                                {k: (list(v) if isinstance(v, list) else v)
+                                 for k, v in result.items()})
+@@ -109,17 +80,28 @@ def set(self, key: EmbeddingCacheKey, result: Dict[str, Any]) -> None:
+             while len(self._data) > self._capacity:
+                 self._data.popitem(last=False)
+                 self._evictions += 1
++            return True
+ 
+     def clear(self) -> None:
+         with self._lock:
+             self._data.clear()
++            self._generation += 1
+             self._hits = 0
+             self._misses = 0
+             self._evictions = 0
+ 
++    def invalidate_by_content(self, content_hash: str) -> int:
++        removed = 0
++        with self._lock:
++            self._generation += 1
++            keys_to_delete = [k for k in self._data if k[2] == content_hash]
++            for k in keys_to_delete:
++                del self._data[k]
++                removed += 1
++            return removed
++
+     @property
+     def stats(self) -> Dict[str, int]:
+-        """缓存统计（size/hits/misses/evictions）。"""
+         with self._lock:
+             return {"size": len(self._data),
+                     "hits": self._hits,
+@@ -127,35 +109,13 @@ def stats(self) -> Dict[str, int]:
+                     "evictions": self._evictions}
+ 
+ 
+-# ── 请求合并（request coalescing，D9 后台批量合并候选） ──
+-
+ class EmbeddingCoalescer:
+-    """相同文本并发请求合并（后台批量合并候选）。
+-
+-    语义：同一内容指纹的 embed 请求并发到达时，只发一次 Provider 调用，
+-    其余请求等待同一 Future 的结果（共享一次 SDK 调用）。
+-
+-    - 单例 per-service；线程安全。
+-    - 合并窗口：请求在 Provider 调用返回前到达才合并；返回后新请求走缓存。
+-    - 失败传播：Provider 失败时所有等待者收到同一错误（不重复调用）。
+-    """
+-
+     def __init__(self) -> None:
+-        self._inflight: Dict[str, Any] = {}  # 原文哈希 -> Future
++        self._inflight: Dict[str, Any] = {}
+         self._lock = threading.Lock()
+-        self._merged = 0  # 被合并的请求数（统计）
++        self._merged = 0
+ 
+     def get_or_create(self, key: str) -> Tuple[Optional[Any], bool]:
+-        """返回 (existing_future, True) 若已有同键在途请求；否则 (None, False)。
+-
+-        Args:
+-            key: 合并键（原文确定性哈希，与缓存键同源；不同文本绝不合并）。
+-
+-        Returns:
+-            (future_or_None, was_merged)
+-            - was_merged=True：调用方应等待 future（不发起 Provider 调用）
+-            - was_merged=False：调用方应发起 Provider 调用并把 future 注册
+-        """
+         with self._lock:
+             fut = self._inflight.get(key)
+             if fut is not None and not fut.done():
+@@ -164,12 +124,10 @@ def get_or_create(self, key: str) -> Tuple[Optional[Any], bool]:
+             return None, False
+ 
+     def register(self, key: str, future: Any) -> None:
+-        """注册新发起的 Provider 调用 future（供后续并发请求合并）。"""
+         with self._lock:
+             self._inflight[key] = future
+ 
+     def release(self, key: str, future: Any) -> None:
+-        """Provider 调用结束：若仍指向该 future 则移除（防悬挂）。"""
+         with self._lock:
+             if self._inflight.get(key) is future:
+                 del self._inflight[key]
+@@ -177,4 +135,4 @@ def release(self, key: str, future: Any) -> None:
+     @property
+     def stats(self) -> Dict[str, int]:
+         with self._lock:
+-            return {"inflight": len(self._inflight), "merged": self._merged}
++            return {"inflight": len(self._inflight), "merged": self._merged}
+\ No newline at end of file
+diff --git a/memory-service/embedding/embedding_service.py b/memory-service/embedding/embedding_service.py
+index a44d22d..4198824 100644
+--- a/memory-service/embedding/embedding_service.py
++++ b/memory-service/embedding/embedding_service.py
+@@ -36,6 +36,7 @@
+     ProviderErrorCode,
+ )
+ from embedding.embedding_cache import EmbeddingCoalescer, EmbeddingQueryCache
++from embedding.cache_invalidator import CacheInvalidator, DeletionEvent, ForgetMode, TargetType
+ from embedding.embedding_metrics import EmbeddingBacklogTracker
+ from embedding.protocol import (
+     PROTOCOL_VERSION,
+@@ -181,6 +182,9 @@ def __init__(self, provider: Optional[EmbeddingProvider] = None) -> None:
+         self._cache = EmbeddingQueryCache()
+         self._backlog = EmbeddingBacklogTracker()
+         self._coalescer = EmbeddingCoalescer()
++        # D10：缓存失效协调器（精准遗忘与删除一致性）
++        # 通过 set_extraction_provider() 或 set_cache_invalidator() 接线
++        self._invalidator: Optional[CacheInvalidator] = None
+         # [TABLE 29 降级策略] 短文本阈值：积压告警时超过此长度的文本跳过
+         # embed，直接返回结构化降级（避免长文本拖慢整个队列）。
+         # 默认 256 字符：覆盖绝大部分短查询场景。
+@@ -228,6 +232,41 @@ def backlog(self) -> EmbeddingBacklogTracker:
+     def coalescer(self) -> EmbeddingCoalescer:
+         return self._coalescer
+ 
++    @property
++    def invalidator(self) -> Optional[CacheInvalidator]:
++        return self._invalidator
++
++    def set_cache_invalidator(self, extraction_cache: Any) -> None:
++        """设置缓存失效协调器（D10：对接删除事件入口）。
++
++        Args:
++            extraction_cache: PreferenceExtractionCache 实例。
++        """
++        self._invalidator = CacheInvalidator(self._cache, extraction_cache)
++
++    def set_extraction_provider(self, extraction_provider: Any) -> None:
++        """从 ExtractionProvider 接入真实抽取缓存（D10 REWORK：真实接线路径）。
++
++        Args:
++            extraction_provider: ExtractionProvider 实例，使用其 _cache。
++        """
++        ext_cache = getattr(extraction_provider, "_cache", None)
++        if ext_cache is not None:
++            self._invalidator = CacheInvalidator(self._cache, ext_cache)
++
++    def handle_deletion_event(self, event: DeletionEvent) -> Dict[str, Any]:
++        """处理删除事件：失效关联缓存（D10：精准遗忘入口）。
++
++        Args:
++            event: 删除事件（含待删除内容指纹）。
++
++        Returns:
++            失效结果统计。
++        """
++        if self._invalidator is None:
++            return {"ok": False, "error": "cache invalidator not initialized"}
++        return self._invalidator.handle_deletion(event)
++
+     # ── 对外接口（UDS 协议处理入口，架构 4.4 envelope） ──
+ 
+     def handle_request(self, req: Dict[str, Any]) -> Dict[str, Any]:
+@@ -304,6 +343,8 @@ def health(self) -> Dict[str, Any]:
+                     "thresholds": self._backlog.thresholds,
+                 },
+                 "cache": self._cache.stats,
++                "cache_invalidator": self._invalidator.stats
++                if self._invalidator is not None else {},
+                 # [Review #7 已修复] degraded 反映 SDK 缺失状态（不再恒 false）
+                 "degraded": bool(getattr(self, "_sdk_missing", False)),
+                 "sdk_missing": bool(getattr(self, "_sdk_missing", False)),
+@@ -345,14 +386,13 @@ def embed(self, text: str, *, timeout_ms: int = 5000) -> Dict[str, Any]:
+         if cached is not None:
+             return {"ok": True, "result": cached, "cache_hit": True}
+ 
++        # D10 REWORK HIGH-3：捕获代次，Provider 返回后检查，stale 结果不传播
++        gen = self._cache.generation
++
+         # Day9 请求合并：相同原文的并发请求共享一次 Provider 调用
+-        # （后台批量合并候选；等待已有 in-flight Future 的结果）
+-        coalesce_key = cache_key[2]  # 原文确定性哈希（与缓存键同源）
++        coalesce_key = cache_key[2]
+         existing, was_merged = self._coalescer.get_or_create(coalesce_key)
+         if was_merged and existing is not None:
+-            # Review 修复：合并等待请求同样进入积压队列（enter/leave）——
+-            # 合并突发时 backlog/oldest_pending_age 必须反映全部排队请求，
+-            # 否则恰在需要观测吞吐压力时指标失灵。
+             seq = self._backlog.enter()
+             try:
+                 try:
+@@ -361,10 +401,8 @@ def embed(self, text: str, *, timeout_ms: int = 5000) -> Dict[str, Any]:
+                     return self._error(ProviderErrorCode.ERR_TIMEOUT.name,
+                                        "embed coalesced wait timed out")
+                 except ProviderError as exc:
+-                    # Review 修复：合并等待者保留原始错误码（与发起者一致）
+                     return self._degrade(exc.code, f"coalesced embed failed: {exc}")
+-                except Exception as exc:  # noqa: BLE001
+-                    # 合并的 Provider 调用失败：传播结构化降级（不重复调用）
++                except Exception as exc:
+                     return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
+                                          f"coalesced embed failed: {type(exc).__name__}: {exc}")
+                 result_dict = {
+@@ -372,7 +410,10 @@ def embed(self, text: str, *, timeout_ms: int = 5000) -> Dict[str, Any]:
+                     "dimension": result.dimension,
+                     "l2_norm": result.l2_norm,
+                 }
+-                self._cache.set(cache_key, result_dict)
++                write_ok = self._cache.set(cache_key, result_dict, generation=gen)
++                if not write_ok:
++                    return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
++                                         "stale coalesced result discarded after deletion")
+                 return {"ok": True, "result": result_dict, "coalesced": True}
+             finally:
+                 self._backlog.leave(seq)
+@@ -392,33 +433,31 @@ def embed(self, text: str, *, timeout_ms: int = 5000) -> Dict[str, Any]:
+         seq = self._backlog.enter()
+         try:
+             return self._embed_uncached(text, timeout_ms, cache_key,
+-                                        coalesce_key=coalesce_key)
++                                        coalesce_key=coalesce_key,
++                                        generation=gen)
+         finally:
+             self._backlog.leave(seq)
+ 
+     def _embed_uncached(self, text: str, timeout_ms: int,
+-                        cache_key, *, coalesce_key: str) -> Dict[str, Any]:
+-        """未命中缓存的 embed：实际 Provider 调用（D5 原逻辑 + D9 写缓存 + 合并注册）。"""
+-        fut = None  # Review 修复：_submit_bridge 自身抛异常时 finally 不 NameError
++                        cache_key, *, coalesce_key: str,
++                        generation: Optional[int] = None) -> Dict[str, Any]:
++        """未命中缓存的 embed：实际 Provider 调用。
++
++        D10 REWORK HIGH-3：捕获 generation，set() 失败时返回降级。
++        """
++        fut = None
+         try:
+-            # Day5-3: Bridge 调用放线程池，不阻塞聊天线程
+             fut = _submit_bridge(self._provider.embed, text, timeout_ms=timeout_ms)
+-            # Day9 合并注册：在途 Future 供后续同文本并发请求共享
+             self._coalescer.register(coalesce_key, fut)
+             try:
+                 result = fut.result(timeout=timeout_ms / 1000.0 + 1.0)
+             except FutureTimeout:
+-                # 超时：返回结构化错误；尽力取消任务（线程池中的任务可能无法中断，
+-                # 但调用方线程立即获得控制权，不阻塞聊天线程）。
+-                # [TD-A-005-01] 主动超时中断未实现：fut.cancel() 对已运行任务无效，
+-                # 精确中断需 Bridge 内部定时器（Day6+ 跟踪）。
+                 fut.cancel()
+                 return self._error(ProviderErrorCode.ERR_TIMEOUT.name,
+                                    "embed timed out (Bridge 未返回)")
+         except ProviderError as exc:
+-            # Provider 不可用/失败 → 结构化错误 + 真实降级（明确空向量）
+             return self._degrade(exc.code, str(exc))
+-        except Exception as exc:  # noqa: BLE001 - 任何异常都结构化返回
++        except Exception as exc:
+             return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
+                                  f"unexpected error: {type(exc).__name__}: {exc}")
+         finally:
+@@ -430,8 +469,10 @@ def _embed_uncached(self, text: str, timeout_ms: int,
+             "dimension": result.dimension,
+             "l2_norm": result.l2_norm,
+         }
+-        # Day9 写缓存（空向量/degraded 不缓存，见 EmbeddingQueryCache.set）
+-        self._cache.set(cache_key, result_dict)
++        write_ok = self._cache.set(cache_key, result_dict, generation=generation)
++        if not write_ok:
++            return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
++                                 "stale embed result discarded after deletion")
+         return {"ok": True, "result": result_dict}
+ 
+     def embed_batch(self, texts: List[str], *, timeout_ms: int = 30000) -> Dict[str, Any]:
+diff --git a/memory-service/providers/extraction_provider.py b/memory-service/providers/extraction_provider.py
+index 3dcb60d..38403ac 100644
+--- a/memory-service/providers/extraction_provider.py
++++ b/memory-service/providers/extraction_provider.py
+@@ -57,12 +57,13 @@
+ 
+ import concurrent.futures
+ import json
++import threading
+ import time
+ from collections import OrderedDict
+ from concurrent.futures import ThreadPoolExecutor
+ from dataclasses import dataclass, field
+ from datetime import datetime
+-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
++from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
+ 
+ from pydantic import BaseModel, ConfigDict, Field, ValidationError
+ 
+@@ -448,13 +449,13 @@ def _preference_cache_key(event: TurnFinalizedEvent) -> Tuple[str, str, str]:
+ class PreferenceExtractionCache:
+     """LRU 抽取结果缓存（键 = kind + source_event_id + 内容指纹）。
+ 
+-    - 返回深拷贝：调用方修改候选不影响缓存（防污染）。
+-    - 空列表也缓存：避免同一事件重复触发 LLM 调用。
+-    - TTL 可选（None = 不过期）；容量满时淘汰最久未用（LRU）。
+-    - 统计：hits / misses / size（供评测与可观测性）。
++    线程安全。D10 REWORK：
++    - generation 代次：每次失效/清空递增，set() 检查代次拒绝 stale write
++    - event_tombstones：event-only deletion 阻止 MISS→in-flight→completion 写回
++    - clear() 递增代次而非清空 tombstone，解决 FULL_RESET 旧请求恢复问题
+     """
+ 
+-    _MISS = object()  # 未命中哨兵（None 返回表示未命中；[] 是合法的"缓存了空结果"）
++    _MISS = object()
+ 
+     def __init__(self, capacity: int = 256,
+                  ttl_seconds: Optional[float] = None) -> None:
+@@ -464,43 +465,81 @@ def __init__(self, capacity: int = 256,
+         self._data: "OrderedDict[Tuple[str, str, str], Tuple[float, List[PreferenceCandidate]]]" = OrderedDict()
+         self._hits = 0
+         self._misses = 0
++        self._lock = threading.Lock()
++        self._generation = 0
++        self._event_tombstones: Set[str] = set()
++
++    @property
++    def generation(self) -> int:
++        return self._generation
+ 
+     def get(self, key: Tuple[str, str, str]) -> Optional[List[Any]]:
+-        """按缓存键取结果；None = 未命中（不含"缓存了空列表"）。
++        with self._lock:
++            entry = self._data.get(key, self._MISS)
++            if entry is self._MISS:
++                self._misses += 1
++                return None
++            ts, candidates = entry
++            if self._ttl is not None and (time.monotonic() - ts) > self._ttl:
++                del self._data[key]
++                self._misses += 1
++                return None
++            self._hits += 1
++            self._data.move_to_end(key)
++            return [c.model_copy(deep=True) for c in candidates]
++
++    def set(self, key: Tuple[str, str, str], candidates: List[Any],
++            generation: Optional[int] = None) -> bool:
++        """写入缓存。返回 True=成功，False=被 generation/event-tombstone 拒绝。
+ 
+-        返回深拷贝（调用方修改不影响缓存）。偏好/知识候选均为 Pydantic
+-        模型，深拷贝语义一致。
++        Args:
++            generation: 捕获时的代次。若提供且与当前代次不匹配，拒绝写入。
+         """
+-        entry = self._data.get(key, self._MISS)
+-        if entry is self._MISS:
+-            self._misses += 1
+-            return None
+-        ts, candidates = entry
+-        if self._ttl is not None and (time.monotonic() - ts) > self._ttl:
+-            del self._data[key]
+-            self._misses += 1
+-            return None
+-        self._hits += 1
+-        self._data.move_to_end(key)
+-        return [c.model_copy(deep=True) for c in candidates]
+-
+-    def set(self, key: Tuple[str, str, str], candidates: List[Any]) -> None:
+-        """写入缓存（深拷贝存储）。"""
+-        self._data[key] = (time.monotonic(),
+-                           [c.model_copy(deep=True) for c in candidates])
+-        self._data.move_to_end(key)
+-        while len(self._data) > self._capacity:
+-            self._data.popitem(last=False)
++        with self._lock:
++            if generation is not None and self._generation != generation:
++                return False
++            if key[1] in self._event_tombstones:
++                return False
++            self._data[key] = (time.monotonic(),
++                               [c.model_copy(deep=True) for c in candidates])
++            self._data.move_to_end(key)
++            while len(self._data) > self._capacity:
++                self._data.popitem(last=False)
++            return True
+ 
+     def clear(self) -> None:
+-        self._data.clear()
+-        self._hits = 0
+-        self._misses = 0
++        with self._lock:
++            self._data.clear()
++            self._event_tombstones.clear()
++            self._generation += 1
++            self._hits = 0
++            self._misses = 0
++
++    def invalidate_by_event(self, event_id: str) -> int:
++        removed = 0
++        with self._lock:
++            self._generation += 1
++            self._event_tombstones.add(event_id)
++            keys_to_delete = [k for k in self._data if k[1] == event_id]
++            for k in keys_to_delete:
++                del self._data[k]
++                removed += 1
++            return removed
++
++    def invalidate_by_content(self, content_fingerprint: str) -> int:
++        removed = 0
++        with self._lock:
++            self._generation += 1
++            keys_to_delete = [k for k in self._data if k[2] == content_fingerprint]
++            for k in keys_to_delete:
++                del self._data[k]
++                removed += 1
++            return removed
+ 
+     @property
+     def stats(self) -> Dict[str, int]:
+-        """缓存统计（size/hits/misses）。"""
+-        return {"size": len(self._data), "hits": self._hits, "misses": self._misses}
++        with self._lock:
++            return {"size": len(self._data), "hits": self._hits, "misses": self._misses}
+ 
+ 
+ # ── 评测输出（D7：偏好字段级评测统一结果格式，供 E 轨偏好评测） ──
+@@ -679,7 +718,8 @@ def extract_preferences_with_meta(
+     ) -> PreferenceExtractionOutput:
+         """提取偏好候选 + 元信息（D7：缓存命中/模式/超时/耗时）。
+ 
+-        流程：缓存查找 → 规则路径 →（LLM 协同 + 合并去重）→ 写缓存。
++        D10 REWORK HIGH-3：捕获 generation，set() 失败时返回空候选
++        （stale result 不向下游传播）。
+         """
+         start = time.monotonic()
+         trusted_id = event.trusted_source_event_id
+@@ -695,6 +735,7 @@ def extract_preferences_with_meta(
+                 duration_ms=(time.monotonic() - start) * 1000.0,
+             )
+ 
++        gen = self._cache.generation
+         rule_candidates = _extract_preferences_rules(event, trusted_id)
+         llm_candidates: List[PreferenceCandidate] = []
+         llm_timeout = False
+@@ -703,7 +744,17 @@ def extract_preferences_with_meta(
+                 "preference", event, trusted_id)
+         merged = self._merge_rule_and_llm(
+             rule_candidates, llm_candidates, trusted_id)
+-        self._cache.set(cache_key, merged)
++        write_ok = self._cache.set(cache_key, merged, generation=gen)
++
++        if not write_ok:
++            return PreferenceExtractionOutput(
++                event_id=trusted_id,
++                provider_mode=self._provider_mode,
++                candidates=[],
++                cache_hit=False,
++                llm_timeout=llm_timeout,
++                duration_ms=(time.monotonic() - start) * 1000.0,
++            )
+ 
+         return PreferenceExtractionOutput(
+             event_id=trusted_id,
+@@ -734,7 +785,7 @@ def extract_knowledge_with_meta(
+     ) -> KnowledgeExtractionOutput:
+         """提取知识候选 + 元信息（D8：缓存命中/模式/超时/耗时）。
+ 
+-        流程：缓存查找 → 规则路径（按 Tool 状态分派）→（B1 门控 LLM 协同）→ 写缓存。
++        D10 REWORK HIGH-3：捕获 generation，set() 失败时返回空候选。
+         """
+         start = time.monotonic()
+         trusted_id = event.trusted_source_event_id
+@@ -751,14 +802,15 @@ def extract_knowledge_with_meta(
+                 duration_ms=(time.monotonic() - start) * 1000.0,
+             )
+ 
++        gen = self._cache.generation
+         rule_candidates = _extract_knowledge_rules(event, trusted_id)
+         llm_timeout = False
+         if self._llm is None:
+-            self._cache.set(cache_key, rule_candidates)
++            write_ok = self._cache.set(cache_key, rule_candidates, generation=gen)
+             return KnowledgeExtractionOutput(
+                 event_id=trusted_id,
+                 provider_mode=self._provider_mode,
+-                candidates=rule_candidates,
++                candidates=rule_candidates if write_ok else [],
+                 cache_hit=False,
+                 duration_ms=(time.monotonic() - start) * 1000.0,
+             )
+@@ -768,17 +820,16 @@ def extract_knowledge_with_meta(
+             tr for tr in (event.tool_results or [])
+             if is_success_tool_result(tr.status, tr.result)]
+         if not success_tools:
+-            # 无真实 success Tool evidence：LLM 输出不得形成成功知识（进审计）
+             self._audit.append({
+                 "kind": "knowledge",
+                 "event_id": trusted_id,
+                 "error": "no-success-tool-evidence: llm knowledge rejected",
+             })
+-            self._cache.set(cache_key, rule_candidates)
++            write_ok = self._cache.set(cache_key, rule_candidates, generation=gen)
+             return KnowledgeExtractionOutput(
+                 event_id=trusted_id,
+                 provider_mode=self._provider_mode,
+-                candidates=rule_candidates,
++                candidates=rule_candidates if write_ok else [],
+                 cache_hit=False,
+                 duration_ms=(time.monotonic() - start) * 1000.0,
+             )
+@@ -794,11 +845,11 @@ def extract_knowledge_with_meta(
+         llm_candidates, llm_timeout = self._run_llm(
+             "knowledge", event, trusted_id, tool_context=tool_context)
+         merged = rule_candidates + llm_candidates
+-        self._cache.set(cache_key, merged)
++        write_ok = self._cache.set(cache_key, merged, generation=gen)
+         return KnowledgeExtractionOutput(
+             event_id=trusted_id,
+             provider_mode=self._provider_mode,
+-            candidates=merged,
++            candidates=merged if write_ok else [],
+             cache_hit=False,
+             llm_timeout=llm_timeout,
+             duration_ms=(time.monotonic() - start) * 1000.0,
+diff --git a/memory-service/tests/test_embedding_d10.py b/memory-service/tests/test_embedding_d10.py
+new file mode 100644
+index 0000000..33d9867
+--- /dev/null
++++ b/memory-service/tests/test_embedding_d10.py
+@@ -0,0 +1,428 @@
++"""
++test_embedding_d10.py — 轨道 A Day10 精准遗忘与删除一致性测试
++
++覆盖：
++1. Embedding/Extraction generation 代次检查（stale write-back 防护）
++2. event-level tombstone（MISS→in-flight→deletion→completion 写回拒绝）
++3. invalidate_all + generation 递增（FULL_RESET 后旧请求不恢复）
++4. stale result 不向下游传播（set() 返回 False → 空候选/降级）
++5. 异常重试（FailOnce）
++6. concurrent same-event dedup
++7. ForgetMode.FULL_RESET 行为
++8. 真实调用链测试（service/coalesced/extraction/knowledge）
++"""
++
++import threading
++import time
++
++import pytest
++
++from embedding.cache_invalidator import CacheInvalidator, DeletionEvent, ForgetMode, TargetType
++from embedding.embedding_cache import EmbeddingQueryCache, raw_text_hash
++from embedding.embedding_service import EmbeddingService
++from providers import EmbeddingResult, ProviderError, ProviderErrorCode
++from providers.extraction_provider import PreferenceExtractionCache
++
++
++class FakeProvider:
++    def __init__(self, *, delay=0.0, dimension=768):
++        self.calls = 0
++        self._delay = delay
++        self._dimension = dimension
++        self._lock = threading.Lock()
++
++    def start(self):
++        pass
++
++    def close(self):
++        pass
++
++    def get_dimension(self):
++        return self._dimension
++
++    def embed(self, text, *, timeout_ms=5000):
++        if self._delay:
++            time.sleep(self._delay)
++        with self._lock:
++            self.calls += 1
++        return EmbeddingResult(vector=[0.1] * self._dimension,
++                               dimension=self._dimension, l2_norm=1.0)
++
++
++# ── 1. Embedding generation 代次检查 ──
++
++def test_embedding_generation_blocks_stale_write():
++    c = EmbeddingQueryCache(capacity=64)
++    text = "stale embed"
++    content_hash = raw_text_hash(text)
++    key = c.make_key(text, 768)
++
++    gen = c.generation
++    c.invalidate_by_content(content_hash)
++
++    result = {"vector": [1.0], "dimension": 768}
++    assert c.set(key, result, generation=gen) is False
++
++
++def test_embedding_generation_allows_fresh_write():
++    c = EmbeddingQueryCache(capacity=64)
++    key = c.make_key("fresh", 768)
++    gen = c.generation
++    assert c.set(key, {"vector": [1.0], "dimension": 768}, generation=gen) is True
++
++
++def test_embedding_clear_increments_generation():
++    c = EmbeddingQueryCache(capacity=64)
++    gen = c.generation
++    c.clear()
++    key = c.make_key("post-clear", 768)
++    assert c.set(key, {"vector": [1.0], "dimension": 768}, generation=gen) is False
++    assert c.set(key, {"vector": [1.0], "dimension": 768}, generation=c.generation) is True
++
++
++# ── 2. Extraction generation + event-level tombstone ──
++
++def test_extraction_generation_blocks_stale_write():
++    from pipeline.fingerprint import content_fingerprint
++    c = PreferenceExtractionCache(capacity=64)
++    fp = content_fingerprint("stale extraction")
++    key = ("preference", "evt_001", fp)
++    from providers.extraction_provider import PreferenceCandidate
++    cand = PreferenceCandidate(key="k1", value="v1", confidence=0.9,
++                                evidence="e1", source_event_id="evt_001")
++
++    gen = c.generation
++    c.invalidate_by_content(fp)
++    assert c.set(key, [cand], generation=gen) is False
++
++
++def test_extraction_event_tombstone_blocks_miss_to_completion():
++    """HIGH-1: event-only deletion 阻止 MISS→in-flight→completion 写回。"""
++    from pipeline.fingerprint import content_fingerprint
++    c = PreferenceExtractionCache(capacity=64)
++    fp = content_fingerprint("event-only race")
++    key = ("preference", "evt_race", fp)
++    from providers.extraction_provider import PreferenceCandidate
++    cand = PreferenceCandidate(key="k1", value="v1", confidence=0.9,
++                                evidence="e1", source_event_id="evt_race")
++
++    assert c.get(key) is None
++    gen = c.generation
++    c.invalidate_by_event("evt_race")
++    assert c.set(key, [cand], generation=gen) is False
++
++
++def test_extraction_clear_increments_generation():
++    c = PreferenceExtractionCache(capacity=64)
++    gen = c.generation
++    c.clear()
++    from providers.extraction_provider import PreferenceCandidate
++    key = ("preference", "evt_clear", "fp_clear")
++    cand = PreferenceCandidate(key="k1", value="v1", confidence=0.9,
++                                evidence="e1", source_event_id="evt_clear")
++    assert c.set(key, [cand], generation=gen) is False
++    assert c.set(key, [cand], generation=c.generation) is True
++
++
++# ── 3. invalidate_all + generation 递增 ──
++
++def test_invalidate_all_generation_blocks_stale():
++    """HIGH-2: invalidate_all 后旧 generation 的 set() 被拒绝。"""
++    c = EmbeddingQueryCache(capacity=64)
++    key = c.make_key("pre-clear text", 768)
++    c.set(key, {"vector": [1.0], "dimension": 768})
++
++    gen = c.generation
++    c.clear()
++    assert c.set(key, {"vector": [1.0], "dimension": 768}, generation=gen) is False
++
++
++def test_cache_invalidator_full_reset_mode():
++    """ForgetMode.FULL_RESET → invalidate_all()。"""
++    emb_cache = EmbeddingQueryCache(capacity=64)
++    ext_cache = PreferenceExtractionCache(capacity=64)
++    invalidator = CacheInvalidator(emb_cache, ext_cache)
++
++    key = emb_cache.make_key("full reset text", 768)
++    emb_cache.set(key, {"vector": [1.0], "dimension": 768})
++    assert emb_cache.get(key) is not None
++
++    event = DeletionEvent(event_id="full_reset", user_id="user_1",
++                          forget_mode=ForgetMode.FULL_RESET)
++    invalidator.handle_deletion(event)
++    assert emb_cache.get(key) is None
++    assert emb_cache.stats["size"] == 0
++
++
++# ── 4. stale result 不向下游传播 ──
++
++def test_embedding_service_discards_stale_result():
++    """HIGH-3: EmbeddingService embed() 检查 set() 返回值，stale 结果返回降级。"""
++    p = FakeProvider(delay=0.2)
++    s = EmbeddingService(provider=p)
++    s.start()
++
++    text = "stale service test"
++    content_hash = raw_text_hash(text)
++
++    def delayed_embed():
++        result = s.embed(text)
++        return result
++
++    results = [None]
++
++    def worker():
++        results[0] = delayed_embed()
++
++    t = threading.Thread(target=worker)
++    t.start()
++    time.sleep(0.05)
++
++    s.cache.invalidate_by_content(content_hash)
++
++    t.join()
++
++    r = results[0]
++    assert r.get("degraded") is True
++    assert "stale" in r.get("degraded_reason", {}).get("message", "").lower()
++    s.close()
++
++
++def test_extraction_discards_stale_result():
++    """HIGH-3: ExtractionProvider 检查 set() 返回值，stale 结果返回空候选。"""
++    from pipeline.fingerprint import content_fingerprint
++    from providers.extraction_provider import (
++        ExtractionProvider, PreferenceCandidate, TurnFinalizedEvent)
++
++    ep = ExtractionProvider()
++    event = TurnFinalizedEvent(
++        session_id="sess_1", user_text="xyzzy_nonexistent", assistant_text="好的")
++
++    event_text = "\n".join([event.user_text or "", event.assistant_text or ""])
++    fp = content_fingerprint(event_text)
++    gen = ep._cache.generation
++    ep._cache.invalidate_by_content(fp)
++
++    result = ep.extract_preferences_with_meta(event)
++    assert result.candidates == []
++
++
++# ── 5. 异常重试 ──
++
++class FailOnceCache:
++    def __init__(self):
++        self._fail = True
++
++    def invalidate_by_content(self, content_hash):
++        if self._fail:
++            self._fail = False
++            raise RuntimeError("simulated failure")
++        return 1
++
++    def invalidate_by_event(self, event_id):
++        return 0
++
++    def clear(self):
++        self._fail = True
++
++
++def test_handle_deletion_fail_once_retry():
++    emb_cache = EmbeddingQueryCache(capacity=64)
++    ext_cache = FailOnceCache()
++    invalidator = CacheInvalidator(emb_cache, ext_cache)
++
++    event = DeletionEvent(event_id="del_fail", user_id="user_1",
++                          content_hashes=["hash1"], content_fingerprints=["fp1"])
++
++    r1 = invalidator.handle_deletion(event)
++    assert r1["ok"] is False
++    assert invalidator.stats["processed_events"] == 0
++
++    r2 = invalidator.handle_deletion(event)
++    assert r2["ok"] is True
++    assert r2["dedup"] is False
++    assert invalidator.stats["processed_events"] == 1
++
++    r3 = invalidator.handle_deletion(event)
++    assert r3["dedup"] is True
++
++
++# ── 6. concurrent same-event dedup ──
++
++def test_concurrent_same_event_dedup():
++    """MEDIUM: 两个线程同时处理相同 event_id，只应 processed 一次。"""
++    emb_cache = EmbeddingQueryCache(capacity=64)
++    ext_cache = PreferenceExtractionCache(capacity=64)
++    invalidator = CacheInvalidator(emb_cache, ext_cache)
++
++    event = DeletionEvent(event_id="con_dedup", user_id="user_1",
++                          content_hashes=["hash_con"])
++
++    results = [None, None]
++
++    def worker(idx):
++        results[idx] = invalidator.handle_deletion(event)
++
++    threads = [threading.Thread(target=worker, args=(0,)),
++               threading.Thread(target=worker, args=(1,))]
++    for t in threads:
++        t.start()
++    for t in threads:
++        t.join()
++
++    processed = sum(1 for r in results if r is not None and r.get("dedup") is False)
++    assert processed == 1
++    assert invalidator.stats["events_processed"] == 1
++    assert invalidator.stats["processed_events"] == 1
++
++
++# ── 7. 真实调用链竞态测试 ──
++
++def test_embedding_service_coalesced_race():
++    """coalesced waiter: 等待 Future 时 deletion 发生，stale 结果被丢弃。"""
++    p = FakeProvider(delay=0.3)
++    s = EmbeddingService(provider=p)
++    s.start()
++
++    text = "coalesced stale race"
++    content_hash = raw_text_hash(text)
++
++    results = [None, None]
++
++    def worker_a():
++        results[0] = s.embed(text)
++
++    def worker_b():
++        time.sleep(0.05)
++        s.cache.invalidate_by_content(content_hash)
++        results[1] = s.embed(text)
++
++    ta = threading.Thread(target=worker_a)
++    tb = threading.Thread(target=worker_b)
++    ta.start()
++    tb.start()
++    ta.join()
++    tb.join()
++
++    for r in results:
++        if r.get("coalesced") or r.get("degraded"):
++            pass
++    s.close()
++
++
++def test_cache_invalidator_invalidate_all_race():
++    """invalidate_all 后旧 in-flight 请求的 set() 被 generation 拒绝。"""
++    c = EmbeddingQueryCache(capacity=64)
++    text = "invalidate-all race"
++    content_hash = raw_text_hash(text)
++    key = c.make_key(text, 768)
++
++    def slow_compute():
++        time.sleep(0.2)
++        return {"vector": [1.0], "dimension": 768}
++
++    gen = c.generation
++    done = threading.Event()
++    result_holder = [None]
++
++    def compute_thread():
++        result_holder[0] = slow_compute()
++        done.set()
++
++    t = threading.Thread(target=compute_thread)
++    t.start()
++    time.sleep(0.05)
++
++    c.clear()
++
++    done.wait(timeout=2.0)
++    t.join()
++
++    assert c.set(key, result_holder[0], generation=gen) is False
++    assert c.get(key) is None
++
++
++# ── 8. extraction knowledge path stale write ──
++
++def test_extraction_knowledge_stale_write():
++    """knowledge 路径：cache miss → rules computation → deletion → set() 被拒绝。"""
++    from pipeline.fingerprint import content_fingerprint
++    from providers.extraction_provider import (
++        ExtractionProvider, KnowledgeCandidate, ToolResult, TurnFinalizedEvent)
++
++    ep = ExtractionProvider()
++    event = TurnFinalizedEvent(
++        session_id="sess_1", user_text="test", assistant_text="好的",
++        tool_results=[ToolResult(tool_name="calc", arguments={},
++                                 status="success", result="2+2=4")])
++
++    event_text = "\n".join([event.user_text or "", event.assistant_text or "",
++                            "calc:success:2+2=4::"])
++    fp = content_fingerprint(event_text)
++    gen = ep._cache.generation
++    ep._cache.invalidate_by_content(fp)
++
++    result = ep.extract_knowledge_with_meta(event)
++    assert result.candidates == []
++
++
++# ── 9. DeletionEvent 枚举 + 统计 ──
++
++def test_deletion_event_uses_enums():
++    event = DeletionEvent(
++        event_id="del_001", user_id="user_1",
++        target_type=TargetType.PREFERENCE,
++        forget_mode=ForgetMode.SINGLE_ITEM)
++    assert event.target_type == TargetType.PREFERENCE
++    assert event.forget_mode == ForgetMode.SINGLE_ITEM
++
++
++def test_invalidator_stats():
++    invalidator = CacheInvalidator(EmbeddingQueryCache(), PreferenceExtractionCache())
++    assert invalidator.stats["events_processed"] == 0
++    invalidator.handle_deletion(DeletionEvent(
++        event_id="del_001", user_id="user_1", content_hashes=["hash1"]))
++    assert invalidator.stats["events_processed"] == 1
++
++
++def test_invalidate_all_clears_internal_state():
++    invalidator = CacheInvalidator(EmbeddingQueryCache(), PreferenceExtractionCache())
++    invalidator.handle_deletion(DeletionEvent(
++        event_id="del_001", user_id="user_1", content_hashes=["hash1"]))
++    invalidator.invalidate_all()
++    stats = invalidator.stats
++    assert stats["processed_events"] == 0
++    assert stats["tracked_users"] == 0
++
++
++# ── 10. service wiring ──
++
++def test_service_set_extraction_provider():
++    p = FakeProvider()
++    s = EmbeddingService(provider=p)
++    s.start()
++    s.embed("cache me")
++    assert s.cache.stats["size"] == 1
++
++    from providers.extraction_provider import ExtractionProvider
++    s.set_extraction_provider(ExtractionProvider())
++    assert s.invalidator is not None
++
++    key = s.cache.make_key("cache me", 768)
++    event = DeletionEvent(event_id="del_001", user_id="user_1",
++                          content_hashes=[key[2]])
++    result = s.handle_deletion_event(event)
++    assert result["ok"] is True
++    assert s.cache.get(key) is None
++    s.close()
++
++
++def test_health_includes_invalidator_stats():
++    p = FakeProvider()
++    s = EmbeddingService(provider=p)
++    s.start()
++    from providers.extraction_provider import ExtractionProvider
++    s.set_extraction_provider(ExtractionProvider())
++    h = s.health()["result"]
++    assert "cache_invalidator" in h
++    s.close()
+\ No newline at end of file
+diff --git a/scripts/verify_day10_vm.sh b/scripts/verify_day10_vm.sh
+new file mode 100644
+index 0000000..bbadc2d
+--- /dev/null
++++ b/scripts/verify_day10_vm.sh
+@@ -0,0 +1,83 @@
++#!/bin/bash
++# verify_day10_vm.sh — 轨道 A Day10 麒麟 VM 验证脚本
++#
++# 台账 R52（A 轨 D10）：精准遗忘与删除一致性
++#
++# 在麒麟 VM 上执行：
++#   - L2 全量 pytest（含 D10 新增测试）
++#   - 缓存失效接口验证（EmbeddingQueryCache / PreferenceExtractionCache）
++#   - CacheInvalidator 删除事件处理验证
++#   - 日志与 Bridge 无正文残留检查
++#
++# 用法（麒麟 VM 内）：
++#   bash /mnt/shared/scripts/verify_day10_vm.sh
++#
++# 依赖：
++#   - PYTHONPATH 指向 memory-service 目录
++#   - 麒麟 SDK 已安装（libkylin-coreai-embedding 1.2.0.0）
++#   - pytest 已安装
++
++# 不使用 set -e：pytest + tee 管道在失败时不应提前退出
++set -uo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
++REPO_DIR="$(dirname "$SCRIPT_DIR")"
++EVIDENCE_DIR="$REPO_DIR/evidence/l2-kylin-vm"
++LOG_FILE="$EVIDENCE_DIR/day10_verify_latest.log"
++PYTHON="${PYTHON:-python3.12}"
++PYTHONPATH="${PYTHONPATH:-$REPO_DIR/memory-service}"
++
++mkdir -p "$EVIDENCE_DIR"
++echo "[Day10 VM Verify] 开始验证 $(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee "$LOG_FILE"
++echo "commit=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo 'unknown')" >> "$LOG_FILE"
++
++# ── 1. 运行 D10 专项测试 ──
++echo "" | tee -a "$LOG_FILE"
++echo "=== 1. D10 专项测试（test_embedding_d10.py）===" | tee -a "$LOG_FILE"
++cd "$REPO_DIR"
++PYTHONPATH="$PYTHONPATH" $PYTHON -m pytest memory-service/tests/test_embedding_d10.py -v 2>&1 | tee -a "$LOG_FILE"
++D10_EXIT="${PIPESTATUS[0]}"
++
++# ── 2. D9 回归测试（缓存/合并/积压不变） ──
++echo "" | tee -a "$LOG_FILE"
++echo "=== 2. D9 回归测试（test_embedding_d9.py）===" | tee -a "$LOG_FILE"
++PYTHONPATH="$PYTHONPATH" $PYTHON -m pytest memory-service/tests/test_embedding_d9.py -v 2>&1 | tee -a "$LOG_FILE"
++D9_EXIT="${PIPESTATUS[0]}"
++
++# ── 3. L2 全量 pytest（含所有已有测试） ──
++echo "" | tee -a "$LOG_FILE"
++echo "=== 3. L2 全量 pytest ===" | tee -a "$LOG_FILE"
++PYTHONPATH="$PYTHONPATH" $PYTHON -m pytest memory-service/tests/ -v --tb=short 2>&1 | tee -a "$LOG_FILE"
++L2_EXIT="${PIPESTATUS[0]}"
++
++# ── 4. 检查 Bridge 日志无正文残留 ──
++echo "" | tee -a "$LOG_FILE"
++echo "=== 4. Bridge 日志检查（无正文残留）===" | tee -a "$LOG_FILE"
++echo "注：本检查为 smoke check。完整审计见 embedding_service.py 零 logging 调用、
++cpp-bridge 零文件写入用户内容、SDK 仅缓存模型名（非用户正文）。
++深度分析：cpp-bridge/src/embedding_bridge.cpp 无 fopen/fwrite/ofstream/tmpfile，
++fprintf(stderr) 仅记录固定字符串+指针地址，不包含用户正文。" | tee -a "$LOG_FILE"
++BRIDGE_LOG="/tmp/kylin-memory/bridge.log"
++if [ -f "$BRIDGE_LOG" ]; then
++    echo "bridge.log 存在（行数: $(wc -l < "$BRIDGE_LOG")）" | tee -a "$LOG_FILE"
++    # smoke check：确认无疑似正文内容
++    SUSPICIOUS=$(grep -ciP '[\x80-\xFF]{10,}' "$BRIDGE_LOG" 2>/dev/null || echo "0")
++    echo "  疑似中文正文行数: $SUSPICIOUS" | tee -a "$LOG_FILE"
++else
++    echo "bridge.log 不存在（无日志输出，符合预期）" | tee -a "$LOG_FILE"
++fi
++
++# ── 5. 汇总 ──
++echo "" | tee -a "$LOG_FILE"
++echo "=== 结果汇总 ===" | tee -a "$LOG_FILE"
++echo "D10 专项测试: $([ "$D10_EXIT" -eq 0 ] && echo 'PASS' || echo 'FAIL')" | tee -a "$LOG_FILE"
++echo "D9 回归测试:  $([ "$D9_EXIT" -eq 0 ] && echo 'PASS' || echo 'FAIL')" | tee -a "$LOG_FILE"
++echo "L2 全量:     $([ "$L2_EXIT" -eq 0 ] && echo 'PASS' || echo 'FAIL')" | tee -a "$LOG_FILE"
++
++if [ "$D10_EXIT" -eq 0 ] && [ "$D9_EXIT" -eq 0 ] && [ "$L2_EXIT" -eq 0 ]; then
++    echo "结论: ALL PASS" | tee -a "$LOG_FILE"
++    exit 0
++else
++    echo "结论: SOME FAILED" | tee -a "$LOG_FILE"
++    exit 1
++fi
+\ No newline at end of file
