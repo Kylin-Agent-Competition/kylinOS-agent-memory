@@ -2,7 +2,7 @@
 
 - **编制日期**：2026-08-28
 - **编制人**：opencode（D 轨开发 Agent）
-- **基线**：PR #65 Base `main @ 11afb36c` → HEAD `5e9e1f43`（分支 `feat/d5d-ipc-pr2`）
+- **基线**：PR #65 Base `main @ 11afb36c` → HEAD `fac5411`（分支 `feat/d5d-ipc-pr2`，2026-08-28 VM L1 回归后回填）
 - **对照**：`docs/day10/10_pr65_review_rework_tracking.md`、`docs/day10/11_pr65_rework_fix_plan.md`
 - **修复范围**：B1（High）×5 待办 / B2（High）×4 / M3~M6（Medium）×24 / 测试缺口 T1-T9
 
@@ -12,9 +12,10 @@
 
 ## R1｜新 HEAD SHA
 
-- **状态**：待提交后回填。
-- 当前 HEAD：`5e9e1f43`（修复前）；修复改动在工作区/后续提交。
-- 提交后 `git rev-parse HEAD` 回填此处。
+- **状态**：已回填（2026-08-28）。
+- 修复合入：`a94ae55` `fix(d5d): PR-65 rework 修复 - B1/B2/M3~M6/T1-T9 验收合入 + VM L1 测试清单与证据`
+- 测试基础设施（UDS 就绪等待竞态）固定：`fac5411` `test(d5d): 修复 UDS 就绪等待竞态 - _wait_socket 改为 connect 探测（bind↔listen 窗口误判）`
+- 最新 HEAD：**`fac5411`**（`git rev-parse HEAD`）
 
 ---
 
@@ -60,7 +61,7 @@
   3. handler `_business` 前置 `RequestValidationError("session ownership conflict")` → INVALID_REQUEST，固定英文不泄漏 `conversation_id/db_turn_id`；
   4. 异常在 `execute_idempotent` 写缓存前抛出 → UoW 回滚，无 Turn/Outbox/缓存残留。
 - **L1 测试**：`test_t1_cross_user_session_pollution_blocked`（A 成功 → B 抢占 → INVALID_REQUEST + A turn 未变 + 无新增 Turn/Outbox/缓存行）——已 PASS（本机 L1 logic）。
-- **L2（麒麟 VM，NOT_RUN）**：真实 UDS 下复跑 `test_turn_finalized_pr2.py::test_t1_cross_user_session_pollution_blocked`。
+- **麒麟 VM L1（真实 UDS，RUN 2026-08-28）**：A1 阶段 `memory-service/tests/test_turn_finalized_pr2.py`（`-v`，52 passed）内 `test_t1_cross_user_session_pollution_blocked` / `test_t1_find_turn_by_host_user_scoped` / `test_t1_conversation_ownership_dao_layer` **全部 PASSED**（VM HEAD `fac5411`）。
 
 ---
 
@@ -70,7 +71,8 @@
 - **L1 数据级验证（本机 SQLite 3.49 sqlite3 **未跑 Alembic**，用等价 SQL 探针）**：
   - 正常记录 `MATCH` 命中 = 1；软删记录 `MATCH` 命中 = 0；`memory_fts` 行数 = 非软删行数（探针输出 `normal_hits= 1 deleted_hits= 0 fts_total= 1 normal_total= 1`）。
   - 迁移级测试 `test_downgrade_excludes_soft_deleted_from_fts` / `test_downgrade_upgrade_roundtrip_fts_matchers` 完成编写，待 VM 跑（本机 Alembic 因 Windows 读取 alembic.ini 编码问题无法执行，见测试结果节）。
-- **L2（麒麟 VM，NOT_RUN）**：`alembic upgrade head` → 插正常+软删 → `alembic downgrade 001_initial_schema` → `MATCH` 探针 + `PRAGMA foreign_key_check`。既有 `test_downgrade_returns_001_schema` 已覆盖触发器/外键数据级断言（迁移测试在 VM 全绿）。
+- **麒麟 VM L1（真实 Alembic，RUN 2026-08-28）**：A3 阶段 `memory-service/tests/test_migrations_trace_id_pr2.py`（`-v`，10 passed）真实 Alembic 迁移下 `test_downgrade_excludes_soft_deleted_from_fts` / `test_downgrade_upgrade_roundtrip_fts_matchers` / `test_downgrade_preserves_data_and_fts` / `test_downgrade_returns_001_schema` / `test_upgrade_downgrade_upgrade_roundtrip_pr2` **全部 PASSED**；既有 `test_migrations_d4d.py`（C3，5 passed）覆盖基线迁移/往返/FK/触发器。亦含 `SELECT count(*) FROM memory_entries WHERE is_deleted=1 → 保留` 与 `MATCH` 不命中软删（downgrade/FTS 数据级探针在 A3 断言内）。
+- **L2（麒麟 VM，NOT_RUN）**：手工 `alembic upgrade head` + `.schema` 逐列对照 / `PRAGMA foreign_key_check` 交互探针仍列为 L2 项（不在本 L1 清单，见 R6）。
 
 ---
 
@@ -103,7 +105,23 @@ PYTHONPATH=memory-service python -m pytest memory-service/tests/test_observabili
 - 全量扫描 `memory-service/tests`（排除迁移）：**941 passed / 49 skipped / 26 failed / 29 errors**——失败与 error 全部可归因于本机平台限制（`AF_UNIX` 缺失 → Gateway/server/turn UDS 用例；GBK → migrations_d4d；DELETE-LIMIT → worker/db 清理用例）；**基线（git stash 后）同类用例同样失败**，确认非本次修复引入。
 - **T6**：`test_worker_restores_trace_event_and_clears` 本机失败仅因 `_poll_once` 触发 `cleanup_expired_idempotency` 的 `DELETE ... LIMIT`（本机 SQLite 编译未含该选项）；VM 的 SQLite 支持（基线 `test_outbox_worker_d4d.py *_poll_once` 通过即证明），待 VM 跑。
 
-### L1 待麒麟 VM 全量（R5 达标命令）
+### L1 麒麟 VM 全量（R5 达标命令，已执行）
+
+```bash
+cd /home/kylin-agent/kylinOS-agent-memory
+export PYTHONPATH=memory-service
+/home/kylin-agent/d4d-venv/bin/python -m pytest memory-service/tests -q
+```
+
+- 结果（VM HEAD `fac5411`，2026-08-28）：**1003 passed / 49 skipped in 43.44s，退出码 0**。与清单预期（基线 983 + 新增约 20 ≈ 1003）**一致**。
+- 分阶段计数（全部 exit 0）：
+  - A1 PR2 针对性（`test_turn_finalized_pr2.py test_observability_pr2.py test_migrations_trace_id_pr2.py`, -v）：52 passed
+  - B DAO/Worker（`test_db_d4d.py test_outbox_worker_d4d.py test_gateway_server_d4d.py`, -v）：40 passed
+  - C 契约/CLI（`test_gateway_protocol_d4d.py test_server_lifecycle.py test_migrations_d4d.py`）：33 passed
+  - D 全量（`memory-service/tests` -q）：1003 passed / 49 skipped
+- 完整日志：`evidence/l1/pr65_l1_vm_checklist_20260828.log`。
+
+### L1 待麒麟 VM 全量（R5 达标命令，执行前参考）
 
 ```bash
 alias ms="PYTHONPATH=memory-service"
@@ -140,8 +158,9 @@ python -m pytest memory-service/tests -q            # 基线 983 passed / 49 ski
 |---|---|
 | 修改 | `memory-service/db/repositories.py`、`memory-service/db/uow.py`、`memory-service/gateway/handlers.py`、`memory-service/observability/request_context.py`、`memory-service/observability/json_logging.py`、`memory-service/outbox/worker.py`、`memory-service/service/source_resolver.py`、`memory-service/app.py`、`migrations/versions/20260826_add_trace_id.py` |
 | 修改（测试） | `memory-service/tests/test_turn_finalized_pr2.py`、`memory-service/tests/test_observability_pr2.py`、`memory-service/tests/test_migrations_trace_id_pr2.py` |
-| 修改（文档） | `docs/day10/05_d5d_task_list_20260826.md`、`docs/day10/09_development_report_pr2.md`、`docs/day10/10_pr65_review_rework_tracking.md` |
-| 新增 | `docs/day10/12_pr65_rework_evidence.md`（本文件） |
+| 修改（测试/竞态固定，fac5411） | `memory-service/tests/test_gateway_server_d4d.py`、`memory-service/tests/test_server_lifecycle.py`、`memory-service/tests/test_turn_finalized_pr2.py`、`memory-service/tests/test_observability_pr2.py`（`_wait_socket`/`_wait_listening` 改为 connect 探测） |
+| 修改（文档） | `docs/day10/05_d5d_task_list_20260826.md`、`docs/day10/09_development_report_pr2.md`、`docs/day10/10_pr65_review_rework_tracking.md`、`docs/day10/13_pr65_l1_test_checklist_vm.md` |
+| 新增 | `docs/day10/11_pr65_rework_fix_plan.md`、`docs/day10/12_pr65_rework_evidence.md`（本文件）、`evidence/l1/pr65_l1_vm_checklist_20260828.log` |
 
 ## 契约变化
 
@@ -150,5 +169,6 @@ Schema / IPC / DB 表结构 / 错误码枚举：**无变化**（B1 为查询层�
 ## 技术债变化
 
 - 关闭/解决：B1、B2（红线，不转技术债）；M3~M6（本 PR 内修复）。
+- 测试基础设施（VM L1 中发现并修复，分类 **Risk**）：UDS 就绪等待以 `os.path.exists` 判据在 `bind↔listen` 窗口误判就绪 → 负载叠加时偶发 `ECONNREFUSED`（B/D 阶段各 1 例，隔离复跑 3/3 PASS 佐证为竞态非逻辑缺陷）。fac5411 将 `_wait_socket`/`_wait_listening` 改为 connect 探测修复（未改生产 `gateway/server.py`、`embedding/server.py`）；VM 全量复跑 A/B/C/D 全绿。
 - 新增：无。
 - 仍存在（仅登记不扩大改动）：`_business` 与 `save_turn_with_outbox` 重复查 turn 的问题（引用 `11_pr65_rework_fix_plan.md` §九.4）。

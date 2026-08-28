@@ -118,14 +118,14 @@
 
 ## 四、复审回复必备证据（提交修复后回复 Reviewer）
 
-- [x] R1 新 HEAD SHA ← 证据文档已建：`docs/day10/12_pr65_rework_evidence.md`（提交后回填 SHA）
+- [x] R1 新 HEAD SHA ← 已回填 `fac5411`（证据文档 §R1）
 - [x] R2 逐项修复所在文件 + 测试文件清単 ← 已汇编（证据文档 §R2 + 修改文件清单）
-- [ ] R3 跨用户污染复现用例的修复后结果 ← L1 已过；真实 UDS 复跑 NOT_RUN
-- [ ] R4 downgrade/FTS 探针的修复后结果 ← L1 逻辑已过；Alembic 复跑 NOT_RUN
-- [x] R5 针对性测试及全量测试的真实命令、退出码与数量 ← L0 已过 + 本机逻辑 L1 实测（证据文档 §R5）
+- [x] R3 跨用户污染复现用例的修复后结果 ← L1 已过；**麒麟 VM L1 真实 UDS 复跑 RUN 全绿**（A1：`test_t1_cross_user_session_pollution_blocked` 等 52 passed，见证据文档 §R3）
+- [x] R4 downgrade/FTS 探针的修复后结果 ← L1 逻辑已过；**麒麟 VM L1 真实 Alembic 复跑 RUN 全绿**（A3：`test_downgrade_excludes_soft_deleted_from_fts` / roundtrip，见证据文档 §R4；L2 手工探针仍 NOT_RUN，见 R6）
+- [x] R5 针对性测试及全量测试的真实命令、退出码与数量 ← L0 已过 + 本机逻辑 L1 实测 + **麒麟 VM L1 全量 1003 passed / 49 skipped / exit 0**（证据文档 §R5，日志 `evidence/l1/pr65_l1_vm_checklist_20260828.log`）
 - [x] R6 L2 尚未执行的项目继续明确标记为 `NOT_RUN` ← 已列（证据文档 §R6）
 
-> 状态：R1（提交后填 SHA）、R2（见下方修改清单草稿）、R3/R4（L1 本地逻辑验证通过 + VM L2 待跑）、R5（L0 已过，L1 部分 VM 运行时补 RUN）、R6（下述 L2 项均标 NOT_RUN）。
+> 状态：R1（`fac5411` 已回填）、R2（见修改文件清单）、R3/R4（本地 L1 + 麒麟 VM L1 真实 UDS/Alembic 复跑全绿）、R5（L0 已过 + 麒麟 VM 全量 1003 passed / 49 skipped / exit 0）、R6（下述 L2 项均标 NOT_RUN）。
 
 ### 修改文件清单草稿（R2）
 

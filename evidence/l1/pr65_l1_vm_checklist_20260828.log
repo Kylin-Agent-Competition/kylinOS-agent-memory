@@ -1,0 +1,205 @@
+========================================================================
+ PR #65 Rework — 麒麟 VM L1 测试清单
+========================================================================
+[OK] 已连接麒麟 VM (127.0.0.1:2222)
+
+========================================================================
+STEP: 前置-1: 校验 VM HEAD == fac5411
+========================================================================
+[INFO] VM HEAD: fac5411 test(d5d): 修复 UDS 就绪等待竞态 - _wait_socket 改为 connect 探测（bind↔listen 窗口误判）
+[INFO] VM HEAD: fac5411826b6b50bbbe23de97f1b16f1442755da
+[OK] VM HEAD 与本地一致（fac5411）
+[INFO] 工作区状态（应干净）:
+(clean)
+
+========================================================================
+STEP: 前置-2: 环境自检（sqlalchemy/alembic/pytest）
+========================================================================
+sqlalchemy 2.0.52 alembic 1.19.1 pytest 9.1.1
+
+========================================================================
+STEP: 一、A. Rework 针对性回归
+========================================================================
+
+========================================================================
+STEP: A: memory-service/tests/test_turn_finalized_pr2.py memory-servi ...
+========================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/kylin-agent/d4d-venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/kylin-agent/kylinOS-agent-memory
+collecting ... collected 52 items
+
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_unsupported_in_default_profile PASSED [  1%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_insert_ok PASSED [  3%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_idempotent_replay PASSED [  5%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_idempotent_conflict PASSED [  7%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_idempotency_key_merge PASSED [  9%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_invalid_payload[<lambda>-\u7f3a metadata] PASSED [ 11%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_invalid_payload[<lambda>-\u7f3a event_id] PASSED [ 13%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_invalid_payload[<lambda>-schema_version \u4e3b\u7248\u672c != 1] PASSED [ 15%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_invalid_payload[<lambda>-schema_version \u975e\u6cd5] PASSED [ 17%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_invalid_payload[<lambda>-is_final \u5fc5\u987b\u663e\u5f0f true] PASSED [ 19%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_invalid_payload[<lambda>-\u7f3a finalized_at] PASSED [ 21%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_invalid_payload[<lambda>-occurred_at \u975e\u6cd5\u65f6\u95f4\u6233] PASSED [ 23%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_invalid_payload[<lambda>-payload trace_id != envelope] PASSED [ 25%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_invalid_payload[<lambda>-tool_call_ids \u91cd\u590d] PASSED [ 26%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_invalid_payload[<lambda>-retry_of_turn_id == turn_id] PASSED [ 28%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_invalid_payload[<lambda>-turn_id \u975e\u5b57\u7b26\u4e32] PASSED [ 30%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_resolver_miss_internal_error PASSED [ 32%]
+memory-service/tests/test_turn_finalized_pr2.py::test_turn_finalized_refinalize_upsert PASSED [ 34%]
+memory-service/tests/test_turn_finalized_pr2.py::test_t1_cross_user_session_pollution_blocked PASSED [ 36%]
+memory-service/tests/test_turn_finalized_pr2.py::test_t1_find_turn_by_host_user_scoped PASSED [ 38%]
+memory-service/tests/test_turn_finalized_pr2.py::test_t1_conversation_ownership_dao_layer PASSED [ 40%]
+memory-service/tests/test_turn_finalized_pr2.py::test_t3_concurrent_integrity_idempotency_unwrap PASSED [ 42%]
+memory-service/tests/test_turn_finalized_pr2.py::test_t4_unwrap_response_fingerprint PASSED [ 44%]
+memory-service/tests/test_turn_finalized_pr2.py::test_t9_schema_version_strict_major_minor PASSED [ 46%]
+memory-service/tests/test_turn_finalized_pr2.py::test_t9_reject_blank_ids PASSED [ 48%]
+memory-service/tests/test_turn_finalized_pr2.py::test_t9_reject_timezone_missing PASSED [ 50%]
+memory-service/tests/test_turn_finalized_pr2.py::test_t9_equivalent_time_fingerprint_idempotent PASSED [ 51%]
+memory-service/tests/test_turn_finalized_pr2.py::test_t9_error_safe_message_no_leak PASSED [ 53%]
+memory-service/tests/test_turn_finalized_pr2.py::test_t8_load_resolver_from_json_and_write PASSED [ 55%]
+memory-service/tests/test_observability_pr2.py::test_health_includes_outbox_backlog PASSED [ 57%]
+memory-service/tests/test_observability_pr2.py::test_health_degraded_when_worker_metrics_fails PASSED [ 59%]
+memory-service/tests/test_observability_pr2.py::test_request_context_set_clear PASSED [ 61%]
+memory-service/tests/test_observability_pr2.py::test_request_context_event_id_backward_compat PASSED [ 63%]
+memory-service/tests/test_observability_pr2.py::test_request_context_thread_isolation PASSED [ 65%]
+memory-service/tests/test_observability_pr2.py::test_json_formatter_line PASSED [ 67%]
+memory-service/tests/test_observability_pr2.py::test_json_formatter_no_context PASSED [ 69%]
+memory-service/tests/test_observability_pr2.py::test_pii_sanitize_filter_masks_secrets PASSED [ 71%]
+memory-service/tests/test_observability_pr2.py::test_pii_filter_on_record PASSED [ 73%]
+memory-service/tests/test_observability_pr2.py::test_setup_logging_json_logs PASSED [ 75%]
+memory-service/tests/test_observability_pr2.py::test_worker_restores_trace_event_and_clears PASSED [ 76%]
+memory-service/tests/test_observability_pr2.py::test_health_status_ok_all_green PASSED [ 78%]
+memory-service/tests/test_observability_pr2.py::test_health_status_degraded_when_metrics_raises PASSED [ 80%]
+memory-service/tests/test_observability_pr2.py::test_health_status_degraded_when_sentinel_backlog PASSED [ 82%]
+memory-service/tests/test_observability_pr2.py::test_health_status_degraded_when_no_worker PASSED [ 84%]
+memory-service/tests/test_observability_pr2.py::test_health_status_degraded_when_db_unreachable PASSED [ 86%]
+memory-service/tests/test_migrations_trace_id_pr2.py::test_upgrade_head_has_trace_columns PASSED [ 88%]
+memory-service/tests/test_migrations_trace_id_pr2.py::test_host_turn_id_partial_unique_index PASSED [ 90%]
+memory-service/tests/test_migrations_trace_id_pr2.py::test_downgrade_returns_001_schema PASSED [ 92%]
+memory-service/tests/test_migrations_trace_id_pr2.py::test_downgrade_preserves_data_and_fts PASSED [ 94%]
+memory-service/tests/test_migrations_trace_id_pr2.py::test_downgrade_upgrade_roundtrip_fts_matchers PASSED [ 96%]
+memory-service/tests/test_migrations_trace_id_pr2.py::test_upgrade_downgrade_upgrade_roundtrip_pr2 PASSED [ 98%]
+memory-service/tests/test_migrations_trace_id_pr2.py::test_downgrade_excludes_soft_deleted_from_fts PASSED [100%]
+
+============================= 52 passed in 21.34s ==============================
+
+[A] exit_code=0 elapsed=22.1s
+[A] 汇总: (无总结行)
+
+========================================================================
+STEP: 二、B. 受影响 DAO/Worker 回归
+========================================================================
+
+========================================================================
+STEP: B: memory-service/tests/test_db_d4d.py memory-service/tests/tes ...
+========================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/kylin-agent/d4d-venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/kylin-agent/kylinOS-agent-memory
+collecting ... collected 40 items
+
+memory-service/tests/test_db_d4d.py::test_wal_mode PASSED                [  2%]
+memory-service/tests/test_db_d4d.py::test_foreign_keys_on PASSED         [  5%]
+memory-service/tests/test_db_d4d.py::test_init_schema_idempotent PASSED  [  7%]
+memory-service/tests/test_db_d4d.py::test_tables_exist PASSED            [ 10%]
+memory-service/tests/test_db_d4d.py::test_has_alembic_version_false_after_init_schema PASSED [ 12%]
+memory-service/tests/test_db_d4d.py::test_frozen_indexes_exist PASSED    [ 15%]
+memory-service/tests/test_db_d4d.py::test_entry_type_check_constraint PASSED [ 17%]
+memory-service/tests/test_db_d4d.py::test_idempotency_composite_pk PASSED [ 20%]
+memory-service/tests/test_db_d4d.py::test_turn_with_outbox_same_transaction_commit PASSED [ 22%]
+memory-service/tests/test_db_d4d.py::test_uow_rollback_atomic PASSED     [ 25%]
+memory-service/tests/test_db_d4d.py::test_memory_entry_soft_delete_fts_sync PASSED [ 27%]
+memory-service/tests/test_db_d4d.py::test_memory_entry_optimistic_lock_conflict PASSED [ 30%]
+memory-service/tests/test_db_d4d.py::test_idempotent_hit_returns_cache PASSED [ 32%]
+memory-service/tests/test_db_d4d.py::test_idempotent_expired_ttl_reexecute PASSED [ 35%]
+memory-service/tests/test_db_d4d.py::test_idempotent_concurrent_conflict_returns_first PASSED [ 37%]
+memory-service/tests/test_db_d4d.py::test_outbox_retry_backoff PASSED    [ 40%]
+memory-service/tests/test_db_d4d.py::test_outbox_dead_letter_after_max_retries PASSED [ 42%]
+memory-service/tests/test_db_d4d.py::test_cleanup_expired_idempotency PASSED [ 45%]
+memory-service/tests/test_db_d4d.py::test_list_memory_entries_user_isolation PASSED [ 47%]
+memory-service/tests/test_db_d4d.py::test_is_locked_error_recognizes_operational PASSED [ 50%]
+memory-service/tests/test_db_d4d.py::test_get_turn_user_isolation PASSED [ 52%]
+memory-service/tests/test_db_d4d.py::test_fts_update_syncs_entry_type_and_user_id PASSED [ 55%]
+memory-service/tests/test_outbox_worker_d4d.py::test_worker_consumes_success PASSED [ 57%]
+memory-service/tests/test_outbox_worker_d4d.py::test_worker_no_consumer_retries PASSED [ 60%]
+memory-service/tests/test_outbox_worker_d4d.py::test_worker_dead_letter_after_max_retries PASSED [ 62%]
+memory-service/tests/test_outbox_worker_d4d.py::test_worker_cleans_expired_idempotency PASSED [ 65%]
+memory-service/tests/test_outbox_worker_d4d.py::test_worker_metrics_backlog PASSED [ 67%]
+memory-service/tests/test_outbox_worker_d4d.py::test_worker_start_stop_lifecycle PASSED [ 70%]
+memory-service/tests/test_gateway_server_d4d.py::test_echo_ok PASSED     [ 72%]
+memory-service/tests/test_gateway_server_d4d.py::test_health_ok PASSED   [ 75%]
+memory-service/tests/test_gateway_server_d4d.py::test_memory_retrieve_empty_context PASSED [ 77%]
+memory-service/tests/test_gateway_server_d4d.py::test_memory_store_unsupported PASSED [ 80%]
+memory-service/tests/test_gateway_server_d4d.py::test_unknown_method_unsupported PASSED [ 82%]
+memory-service/tests/test_gateway_server_d4d.py::test_bad_protocol_version PASSED [ 85%]
+memory-service/tests/test_gateway_server_d4d.py::test_missing_field_invalid_request PASSED [ 87%]
+memory-service/tests/test_gateway_server_d4d.py::test_invalid_json_packet_protocol_error PASSED [ 90%]
+memory-service/tests/test_gateway_server_d4d.py::test_deadline_timeout PASSED [ 92%]
+memory-service/tests/test_gateway_server_d4d.py::test_deadline_not_exceeded_ok PASSED [ 95%]
+memory-service/tests/test_gateway_server_d4d.py::test_stop_rejects_after_shutdown PASSED [ 97%]
+memory-service/tests/test_gateway_server_d4d.py::test_stop_unlinks_socket PASSED [100%]
+
+============================== 40 passed in 7.01s ==============================
+
+[B] exit_code=0 elapsed=7.7s
+[B] 汇总: (无总结行)
+
+========================================================================
+STEP: 三、C. 契约/CLI 回归
+========================================================================
+
+========================================================================
+STEP: C: memory-service/tests/test_gateway_protocol_d4d.py memory-ser ...
+========================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/kylin-agent/kylinOS-agent-memory
+collected 33 items
+
+memory-service/tests/test_gateway_protocol_d4d.py ................       [ 48%]
+memory-service/tests/test_server_lifecycle.py ............               [ 84%]
+memory-service/tests/test_migrations_d4d.py .....                        [100%]
+
+============================= 33 passed in 10.16s ==============================
+
+[C] exit_code=0 elapsed=10.7s
+[C] 汇总: (无总结行)
+
+========================================================================
+STEP: 四、D. 全量 L1（R5 达标命令）
+========================================================================
+
+========================================================================
+STEP: D: memory-service/tests -q 2>&1 ...
+========================================================================
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 27%]
+........................................................................ [ 34%]
+.......................................................................s [ 41%]
+ssssssssssssssssssssssssssssssssss...................................... [ 47%]
+...............................................................s........ [ 54%]
+..................sssssssssssss......................................... [ 61%]
+........................................................................ [ 68%]
+........................................................................ [ 75%]
+........................................................................ [ 82%]
+........................................................................ [ 88%]
+........................................................................ [ 95%]
+............................................                             [100%]
+1003 passed, 49 skipped in 43.44s
+
+[D] exit_code=0 elapsed=49.4s
+[D] 汇总: 1003 passed, 49 skipped in 43.44s
+
+========================================================================
+STEP: 汇总
+========================================================================
+A(Rework 针对性)  exit=0  
+B(DAO/Worker)    exit=0  
+C(契约/CLI)      exit=0  
+D(全量 L1)       exit=0  1003 passed, 49 skipped in 43.44s
+整体判定: PASS
