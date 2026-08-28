@@ -14,10 +14,10 @@
 
 - **状态**：已回填（2026-08-28）。
 - 修复合入：`a94ae55` `fix(d5d): PR-65 rework 修复 - B1/B2/M3~M6/T1-T9 验收合入 + VM L1 测试清单与证据`
-- 完整 L1/L2 执行 commit：`fac5411` `test(d5d): 修复 UDS 就绪等待竞态 - _wait_socket 改为 connect 探测（bind↔listen 窗口误判）`
+- 完整麒麟 VM L1/L2 执行 commit：`fac5411` `test(d5d): 修复 UDS 就绪等待竞态 - _wait_socket 改为 connect 探测（bind↔listen 窗口误判）`
 - 后续证据/文档 commit：`dc4080a`（仅证据文档 + 测试 import 清理，无生产代码变更）
-- **当前远端 HEAD：`946eb3d`**（`946eb3d` 上的 30 项测试 + 两项定向用例结果：`test_turn_finalized_pr2.py` 30 passed、`test_observability_pr2.py` + `test_migrations_trace_id_pr2.py` 23 passed、新增 2 项定向用例 2 passed、`git diff --check` 通过）
-- 运行口径：L1/L2 全部在麒麟 VM 于 `fac5411` 上执行；`dc4080a`、`946eb3d` 与 `fac5411` 的 `memory-service/` 生产代码一致（差异仅为 docs + 测试文件一处未使用 import 清理）。
+- 后续代码修复 commit：`946eb3d`（修改 Outbox event_id 传递与 resolver miss 日志；生产代码与 `fac5411` **不完全一致**，不能继续声明一致）
+- 测试口径：完整麒麟 VM L1/L2 执行于 `fac5411`。后续代码修复 commit `946eb3d` 修改了 Outbox event_id 传递和 resolver miss 日志，并在该精确提交上通过 `test_turn_finalized_pr2.py` 30 项及 observability/migrations 23 项测试；其中两项新增定向用例包含在 30 项中；`git diff --check` 通过。`946eb3d` 之后的治理提交仅修改文档，不改变运行时代码，因此未重跑完整麒麟 VM L2。
 
 ---
 
