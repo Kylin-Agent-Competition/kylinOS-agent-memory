@@ -57,12 +57,13 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import threading
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -448,13 +449,13 @@ def _preference_cache_key(event: TurnFinalizedEvent) -> Tuple[str, str, str]:
 class PreferenceExtractionCache:
     """LRU 抽取结果缓存（键 = kind + source_event_id + 内容指纹）。
 
-    - 返回深拷贝：调用方修改候选不影响缓存（防污染）。
-    - 空列表也缓存：避免同一事件重复触发 LLM 调用。
-    - TTL 可选（None = 不过期）；容量满时淘汰最久未用（LRU）。
-    - 统计：hits / misses / size（供评测与可观测性）。
+    线程安全。D10 REWORK：
+    - generation 代次：每次失效/清空递增，set() 检查代次拒绝 stale write
+    - event_tombstones：event-only deletion 阻止 MISS→in-flight→completion 写回
+    - clear() 递增代次而非清空 tombstone，解决 FULL_RESET 旧请求恢复问题
     """
 
-    _MISS = object()  # 未命中哨兵（None 返回表示未命中；[] 是合法的"缓存了空结果"）
+    _MISS = object()
 
     def __init__(self, capacity: int = 256,
                  ttl_seconds: Optional[float] = None) -> None:
@@ -464,43 +465,81 @@ class PreferenceExtractionCache:
         self._data: "OrderedDict[Tuple[str, str, str], Tuple[float, List[PreferenceCandidate]]]" = OrderedDict()
         self._hits = 0
         self._misses = 0
+        self._lock = threading.Lock()
+        self._generation = 0
+        self._event_tombstones: Set[str] = set()
+
+    @property
+    def generation(self) -> int:
+        return self._generation
 
     def get(self, key: Tuple[str, str, str]) -> Optional[List[Any]]:
-        """按缓存键取结果；None = 未命中（不含"缓存了空列表"）。
+        with self._lock:
+            entry = self._data.get(key, self._MISS)
+            if entry is self._MISS:
+                self._misses += 1
+                return None
+            ts, candidates = entry
+            if self._ttl is not None and (time.monotonic() - ts) > self._ttl:
+                del self._data[key]
+                self._misses += 1
+                return None
+            self._hits += 1
+            self._data.move_to_end(key)
+            return [c.model_copy(deep=True) for c in candidates]
 
-        返回深拷贝（调用方修改不影响缓存）。偏好/知识候选均为 Pydantic
-        模型，深拷贝语义一致。
+    def set(self, key: Tuple[str, str, str], candidates: List[Any],
+            generation: Optional[int] = None) -> bool:
+        """写入缓存。返回 True=成功，False=被 generation/event-tombstone 拒绝。
+
+        Args:
+            generation: 捕获时的代次。若提供且与当前代次不匹配，拒绝写入。
         """
-        entry = self._data.get(key, self._MISS)
-        if entry is self._MISS:
-            self._misses += 1
-            return None
-        ts, candidates = entry
-        if self._ttl is not None and (time.monotonic() - ts) > self._ttl:
-            del self._data[key]
-            self._misses += 1
-            return None
-        self._hits += 1
-        self._data.move_to_end(key)
-        return [c.model_copy(deep=True) for c in candidates]
-
-    def set(self, key: Tuple[str, str, str], candidates: List[Any]) -> None:
-        """写入缓存（深拷贝存储）。"""
-        self._data[key] = (time.monotonic(),
-                           [c.model_copy(deep=True) for c in candidates])
-        self._data.move_to_end(key)
-        while len(self._data) > self._capacity:
-            self._data.popitem(last=False)
+        with self._lock:
+            if generation is not None and self._generation != generation:
+                return False
+            if key[1] in self._event_tombstones:
+                return False
+            self._data[key] = (time.monotonic(),
+                               [c.model_copy(deep=True) for c in candidates])
+            self._data.move_to_end(key)
+            while len(self._data) > self._capacity:
+                self._data.popitem(last=False)
+            return True
 
     def clear(self) -> None:
-        self._data.clear()
-        self._hits = 0
-        self._misses = 0
+        with self._lock:
+            self._data.clear()
+            self._event_tombstones.clear()
+            self._generation += 1
+            self._hits = 0
+            self._misses = 0
+
+    def invalidate_by_event(self, event_id: str) -> int:
+        removed = 0
+        with self._lock:
+            self._generation += 1
+            self._event_tombstones.add(event_id)
+            keys_to_delete = [k for k in self._data if k[1] == event_id]
+            for k in keys_to_delete:
+                del self._data[k]
+                removed += 1
+            return removed
+
+    def invalidate_by_content(self, content_fingerprint: str) -> int:
+        removed = 0
+        with self._lock:
+            self._generation += 1
+            keys_to_delete = [k for k in self._data if k[2] == content_fingerprint]
+            for k in keys_to_delete:
+                del self._data[k]
+                removed += 1
+            return removed
 
     @property
     def stats(self) -> Dict[str, int]:
-        """缓存统计（size/hits/misses）。"""
-        return {"size": len(self._data), "hits": self._hits, "misses": self._misses}
+        with self._lock:
+            return {"size": len(self._data), "hits": self._hits, "misses": self._misses}
 
 
 # ── 评测输出（D7：偏好字段级评测统一结果格式，供 E 轨偏好评测） ──
@@ -679,7 +718,8 @@ class ExtractionProvider:
     ) -> PreferenceExtractionOutput:
         """提取偏好候选 + 元信息（D7：缓存命中/模式/超时/耗时）。
 
-        流程：缓存查找 → 规则路径 →（LLM 协同 + 合并去重）→ 写缓存。
+        D10 REWORK HIGH-3：捕获 generation，set() 失败时返回空候选
+        （stale result 不向下游传播）。
         """
         start = time.monotonic()
         trusted_id = event.trusted_source_event_id
@@ -695,6 +735,7 @@ class ExtractionProvider:
                 duration_ms=(time.monotonic() - start) * 1000.0,
             )
 
+        gen = self._cache.generation
         rule_candidates = _extract_preferences_rules(event, trusted_id)
         llm_candidates: List[PreferenceCandidate] = []
         llm_timeout = False
@@ -703,7 +744,17 @@ class ExtractionProvider:
                 "preference", event, trusted_id)
         merged = self._merge_rule_and_llm(
             rule_candidates, llm_candidates, trusted_id)
-        self._cache.set(cache_key, merged)
+        write_ok = self._cache.set(cache_key, merged, generation=gen)
+
+        if not write_ok:
+            return PreferenceExtractionOutput(
+                event_id=trusted_id,
+                provider_mode=self._provider_mode,
+                candidates=[],
+                cache_hit=False,
+                llm_timeout=llm_timeout,
+                duration_ms=(time.monotonic() - start) * 1000.0,
+            )
 
         return PreferenceExtractionOutput(
             event_id=trusted_id,
@@ -734,7 +785,7 @@ class ExtractionProvider:
     ) -> KnowledgeExtractionOutput:
         """提取知识候选 + 元信息（D8：缓存命中/模式/超时/耗时）。
 
-        流程：缓存查找 → 规则路径（按 Tool 状态分派）→（B1 门控 LLM 协同）→ 写缓存。
+        D10 REWORK HIGH-3：捕获 generation，set() 失败时返回空候选。
         """
         start = time.monotonic()
         trusted_id = event.trusted_source_event_id
@@ -751,14 +802,15 @@ class ExtractionProvider:
                 duration_ms=(time.monotonic() - start) * 1000.0,
             )
 
+        gen = self._cache.generation
         rule_candidates = _extract_knowledge_rules(event, trusted_id)
         llm_timeout = False
         if self._llm is None:
-            self._cache.set(cache_key, rule_candidates)
+            write_ok = self._cache.set(cache_key, rule_candidates, generation=gen)
             return KnowledgeExtractionOutput(
                 event_id=trusted_id,
                 provider_mode=self._provider_mode,
-                candidates=rule_candidates,
+                candidates=rule_candidates if write_ok else [],
                 cache_hit=False,
                 duration_ms=(time.monotonic() - start) * 1000.0,
             )
@@ -768,17 +820,16 @@ class ExtractionProvider:
             tr for tr in (event.tool_results or [])
             if is_success_tool_result(tr.status, tr.result)]
         if not success_tools:
-            # 无真实 success Tool evidence：LLM 输出不得形成成功知识（进审计）
             self._audit.append({
                 "kind": "knowledge",
                 "event_id": trusted_id,
                 "error": "no-success-tool-evidence: llm knowledge rejected",
             })
-            self._cache.set(cache_key, rule_candidates)
+            write_ok = self._cache.set(cache_key, rule_candidates, generation=gen)
             return KnowledgeExtractionOutput(
                 event_id=trusted_id,
                 provider_mode=self._provider_mode,
-                candidates=rule_candidates,
+                candidates=rule_candidates if write_ok else [],
                 cache_hit=False,
                 duration_ms=(time.monotonic() - start) * 1000.0,
             )
@@ -794,11 +845,11 @@ class ExtractionProvider:
         llm_candidates, llm_timeout = self._run_llm(
             "knowledge", event, trusted_id, tool_context=tool_context)
         merged = rule_candidates + llm_candidates
-        self._cache.set(cache_key, merged)
+        write_ok = self._cache.set(cache_key, merged, generation=gen)
         return KnowledgeExtractionOutput(
             event_id=trusted_id,
             provider_mode=self._provider_mode,
-            candidates=merged,
+            candidates=merged if write_ok else [],
             cache_hit=False,
             llm_timeout=llm_timeout,
             duration_ms=(time.monotonic() - start) * 1000.0,
