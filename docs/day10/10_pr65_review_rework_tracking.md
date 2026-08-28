@@ -145,13 +145,15 @@
 | `memory-service/tests/test_migrations_trace_id_pr2.py` | T2 新增 |
 | `docs/day10/05_d5d_task_list_20260826.md`、`docs/day10/09_development_report_pr2.md` | M6.7 操作方式同步 |
 
-### L2 未执行项（R6，全部 NOT_RUN，待麒麟 VM）
+### L2 项（R6，麒麟 VM 验证已于 2026-08-28 执行）
 
-- [ ] L2-1 `alembic upgrade head` + schema 对照
-- [ ] L2-2 turn.finalized 端到端（`--register-turn-finalized --validation-sources <file>` 真实 UDS）
-- [ ] L2-3 health degraded 真实探针
-- [ ] L2-4 JSON 日志 event_id 真实输出
-- [ ] L2-5 systemd 启动/重启/回退
+- [x] L2-1 `alembic upgrade head` + schema 对照 + `PRAGMA foreign_key_check` + 往返 + FTS 软删数据级探针（RUN/PASS，见证据文档 §R6）
+- [x] L2-2 turn.finalized 端到端（`--register-turn-finalized --validation-sources <file>` 真实 UDS：正向写 / 幂等 / 跨用户拒绝 / 空映射负路径 / production UNSUPPORTED_METHOD，RUN/PASS）
+- [x] L2-3 health degraded 真实探针（正常 ok / worker 未注入 degraded 于真实 UDS；DB 不可达/metrics 哨兵由 VM L1 同 handler 单测覆盖，见证据文档 §R6 实机受限说明）
+- [x] L2-4 JSON 日志 event_id 真实输出（trace_id/request_id/event_id 均有实据；PII 零泄漏）
+- [x] L2-5 systemd 启动/重启/回退（enable/start/restart/stop/回退 + socket + health，RUN/PASS）
+
+> 说明：`14_pr65_outstanding_tasks.md` 已随此更新全部勾销；L2 证据详见 `docs/day10/12_pr65_rework_evidence.md` §R6 与 `evidence/l2-kylin-vm/pr65_l2_vm_20260828.log`。
 
 ---
 

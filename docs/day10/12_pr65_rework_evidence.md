@@ -15,7 +15,8 @@
 - **状态**：已回填（2026-08-28）。
 - 修复合入：`a94ae55` `fix(d5d): PR-65 rework 修复 - B1/B2/M3~M6/T1-T9 验收合入 + VM L1 测试清单与证据`
 - 测试基础设施（UDS 就绪等待竞态）固定：`fac5411` `test(d5d): 修复 UDS 就绪等待竞态 - _wait_socket 改为 connect 探测（bind↔listen 窗口误判）`
-- 最新 HEAD：**`fac5411`**（`git rev-parse HEAD`）
+- 最新远端 HEAD：**`dc4080a`**（`git rev-parse HEAD`；仅证据文档 + 测试 import 清理，无生产代码变更）。
+- 运行口径：L1/L2 全部在麒麟 VM 于 `fac5411` 上执行；`dc4080a` 与 `fac5411` 的 `memory-service/` 生产代码一致（差异仅为 docs + 测试文件一处未使用 import 清理）。
 
 ---
 
@@ -130,17 +131,21 @@ python -m pytest memory-service/tests -q            # 基线 983 passed / 49 ski
 
 ---
 
-## R6｜L2 未执行项（全部 NOT_RUN，待麒麟 VM）
+## R6｜L2 麒麟 VM 验证（L2-1~L2-5，2026-08-28 已执行）
 
-| # | 验证项 | 命令 | 状态 |
+> 执行入口：`kylin-vm-test` SSH（127.0.0.1:2222），仓库 `/home/kylin-agent/kylinOS-agent-memory`（HEAD `fac5411`，
+> 与本地 `dc4080a` 生产代码一致），venv `/home/kylin-agent/d4d-venv/bin/python`。完整日志：`evidence/l2-kylin-vm/pr65_l2_vm_20260828.log`。
+
+| # | 验证项 | 命令/要点 | 结果 |
 |---|---|---|---|
-| L2-1 | 迁移升级 + schema 对照 | `alembic -c migrations/alembic.ini upgrade head` + `.schema` | NOT_RUN |
-| L2-2 | turn.finalized 端到端（跨用户 +正向写） | `--register-turn-finalized --validation-sources <sources.json>` + uds_client | NOT_RUN |
-| L2-3 | health degraded 真实探针 | `uds_client --method health`（停 DB / metrics 异常 / busy） | NOT_RUN |
-| L2-4 | JSON 日志 event_id | `--json-logs` 运行日志逐行含 trace_id/request_id/event_id | NOT_RUN |
-| L2-5 | systemd 启动/重启/回退 | `systemctl --user` kylin-memory.service | NOT_RUN |
+| L2-1 | 迁移手工探针 | `alembic -c migrations/alembic.ini upgrade head` + `.schema` 对照 + `PRAGMA foreign_key_check`；downgrade→upgrade 往返；FTS 软删过滤数据级探针 | **RUN/PASS**：upgrade exit=0；`turns.trace_id/host_turn_id`、`memory_entries.trace_id`、`idx_turns_host_turn_id`(唯一+`WHERE host_turn_id IS NOT NULL`)、`memory_fts`+4 触发器、`alembic_version` 全员 OK；FK 检查空；往返 exit=0；MATCH `麒麟` insert=1 / 软删后=0 |
+| L2-2 | turn.finalized 真实 CLI 端到端 | `app.py --register-turn-finalized --validation-sources sources.json` + `uds_client` | **RUN/PASS**：正向写 `status ok` + 落库（turn.host_turn_id=H-1, trace_id=L2A-1, original_user_text=resolver 正文）+ Outbox 入队（payload 含 trace_id/host_turn_id，UTC 毫秒）；幂等回放同响应；跨用户毒素（u2 复用 u1 的 s1）→ `INVALID_REQUEST`（message 固定英文、无 db_turn_id 泄漏）+ B 零副作用；无 `--validation-sources` → 空映射 warning + resolver miss → `INTERNAL_ERROR`（turns/idempotency/outbox 全 0）；production 默认 → `UNSUPPORTED_METHOD` |
+| L2-3 | health degraded 真实探针 | `uds_client --method health` | **RUN/PASS**：全绿 `data.status=ok, db=ok, backlog=0`；`--no-outbox`（worker 未注入）→ `data.status=degraded`；DB 不可达 / metrics 异常 / 哨兵 `backlog=-1` 分支由 VM L1 handler 单测（`test_health_status_degraded_*`）覆盖 3 passed。实机受限说明：health db 探针 `SELECT 1` 不做页 I/O，对存活池化连接无法从外部伪造 DB 不可达 |
+| L2-4 | JSON 日志 event_id | `--json-logs` 运行日志 | **RUN/PASS**：单行 JSON 格式；`memory.retrieve` 请求日志含 `trace_id=L2R-1 / request_id=req-r-1`；Worker 处理注入 outbox 事件日志含 `trace_id=L2W-1 / event_id=evt-W1`（M4 跨线程）；resolver 注入正文未出现在任何日志（PII 零泄漏） |
+| L2-5 | systemd 部署 | `systemctl --user` kylin-memory.service | **RUN/PASS**：默认库 alembic 迁移后 enable/start RC=0；socket `/run/user/1000/kylin-memory/memory.sock` 可达；health ok；restart 后 active；stop 后 inactive + socket 清理；`enable --now` 回退恢复 active。注：冻结 ExecStart 不带 `--json-logs`（文本日志），JSON 由 L2-4 独立覆盖 |
 
-> 遵循纪律：未在麒麟 VM 取得证据前，不声称已通过。T1 跨用户毒素、B2 FTS 探针在真实 UDS/迁移下复跑标记为 NOT_RUN。
+> 遵循纪律：L2 证据均来自麒麟 VM 真实运行；「生产 DB 不可达 → degraded」在实机以存活池化连接自检 `SELECT 1` 不可外部注入，已如实标注并以同 handler 单测覆盖。
+> R3/R4 的 L1-VM 复跑证据另见本文件 §R3/§R4 与 `evidence/l1/pr65_l1_vm_checklist_20260828.log`。
 
 ---
 
