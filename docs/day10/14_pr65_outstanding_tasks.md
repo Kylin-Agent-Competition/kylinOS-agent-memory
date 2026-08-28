@@ -60,7 +60,7 @@
 
 - [ ] 凭 R1-R6 证据向 Reviewer（lovezy0730-create）提交复审回复（治理提交后已提交，见 PR #65 comment）
   - [x] L2-1~L2-5 已执行并附证据（见 §R6 / `evidence/l2-kylin-vm/pr65_l2_vm_20260828.log`），不再有 `NOT_RUN` 遗留
-  - [x] 合并前治理回写完成（纯文档）：TD-027 登记（真实 IntegrityError 竞态回查分支缺少测试）+ T3 DEFERRED（关联 TD-027）；证据 HEAD 口径按「测试 commit / 最后运行时代码 commit / 后续纯治理提交」稳定表述，不再追写当前 HEAD
+  - [x] 合并前治理回写完成（纯文档）：TD-028 登记（真实 IntegrityError 竞态回查分支缺少测试；注：同步 main 后 TD-027 已被 PR #63 占用，故改用 TD-028）+ T3 DEFERRED（关联 TD-028）；证据 HEAD 口径按「测试 commit / 最后运行时代码 commit / 后续纯治理提交」稳定表述，不再追写当前 HEAD
   - [ ] 复审回复 comment 提交（进行中）
 
 ---

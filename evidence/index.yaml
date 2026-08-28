@@ -1067,3 +1067,48 @@ entries:
         - evidence/memory-client/build_qml_on_20260824.log (QML_APP=ON 构建日志, SHA256: 254939cd1819b9366dd4109ea532b62d1663c0a9b179a06b5e69a05af395d56c)
         - evidence/memory-client/ctest_qml_on_20260826_193356.txt (ctest -V 输出, 57/57 PASS, SHA256: 3a830107250d6b5053998adb7815461d1e177f2570dc9d87a64825631555c25b)
         - evidence/memory-client/qml_startup_smoke_20260826_193356.txt (QML offscreen startup smoke, EXIT_CODE=124, SHA256: 5e89ee8224f94eb3ff471106e592bd4c46d9ca69c1eea1801137464aa1e65fe1)
+
+  - id: "D6B-L2-VECTOR-SCHEMA-FILTER-20260828"
+    task_id: "D6B"
+    description: "D6B Collection Schema 与组合过滤修补后的麒麟宿主验证：元数据持久化、用户/场景/生命周期过滤、删除不可绕过、未知过滤键拒绝，以及 Python provider 真实 CLI 端到端验证"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d6b_vector_schema_filter_20260828.md"
+    tested_commit: "aef8d52ad602b2e73e0336f7fb0dd0167b4043e6"
+    date: "2026-08-28"
+    reviewer: "待审"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    probe_binary_sha256: "7e6f41aa95e6b0647bf1814e886761803173f234174806626e39e97abd473e50"
+    runner_source_sha256: "83bfec9f7a1dfcbcf7b843ac8df84b4eda30333b3bc9649be2fe769ef8694669"
+    checksum_sha256: "e8718f7acb74030052788b88c057cf14d6a575d91b9950045a8ce9f87d34bc6c"
+    limitations: "仅覆盖单一 Kylin V11 链接克隆与 SDK 0k0.7 ABI 兼容路径，不覆盖并发、性能、重启恢复或 Hybrid/RRF；该 Runtime PASS 仅证明 tested_commit，不替代独立 Reviewer 审批。"
+    details: |
+      外层 runner 已确认 clean checkout、HEAD、远端分支均为 tested_commit aef8d52ad602b2e73e0336f7fb0dd0167b4043e6。
+      CLI runner：metadata 写入、用户/场景/未设场景/状态过滤、删除 fail-closed、空 user_id、未知过滤键，以及 []+false 零命中、[]+true 仅 unscoped 均 PASS。
+      Provider runner：typed filter 转发、相同两种空 allowlist 组合、跨用户隔离、inactive、空向量、写入维度与 filter-user 不匹配 fail-closed 均 PASS。
+      脱敏原始输出：evidence/l2-kylin-vm/d6b_vector_schema_filter_20260828.log，SHA256 56009a323e7bda6d17e54b2a1de29d3c91a764dfa5cc26a72ecd2d63c2470219。
+      重构建 build provenance 及独立双 runner 复核见 D6B-L2-BUILD-PROVENANCE-20260828；不将该补充误表述为 D/E 决策来源或新的 acc1694 行为代码测试。
+
+  - id: "D6B-L2-BUILD-PROVENANCE-20260828"
+    task_id: "D6B"
+    description: "D6B aef8d52 在保留干净 Kylin checkout 上的可复现 CLI 重构建与双 L2 runner 复核"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d6b_vector_schema_filter_20260828_rebuild.log"
+    report: "evidence/l2-kylin-vm/d6b_vector_schema_filter_20260828.md"
+    tested_commit: "aef8d52ad602b2e73e0336f7fb0dd0167b4043e6"
+    date: "2026-08-28"
+    reviewer: "待审"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    probe_binary_sha256: "5f0fbb8e136de5eccd781cdf1ac4166591bd8b8482b071215e2c2b15ce415e54"
+    runner_source_sha256: "af0949a4ef1f5e9997525d5b8ccb53d5db4881a77e45f1a7377c27ccafacde7b"
+    checksum_sha256: "b6d0c7855c9bede32e7f2c90909a8b2b89d97aed49d17346d02479ff85d3b7b1"
+    limitations: "本补充记录实际的 build command、build exit code、source SHA、rebuild binary SHA 和两个直接子 runner command/exit code。严格外层 runner 不在本轮重跑：其 remote-ref 门禁要求 origin 仍指向 aef8d52，而远端已前进至只含 evidence 的 acc1694；未绕过该门禁。D/E 方案 B 的可审计决定来源仍为独立合并阻断。"
+    details: |
+      以记录的 g++ 命令从 vector_bridge_cli.cpp (SHA256 28ca63509d1c4f6af2ef410bf3a9e1a4cb05236e2514e5d6885f1597f3c3b281) 构建，exit code 0。
+      CLI runner 与 Provider runner 均 exit code 0；两套 d6b_ Collection cleanup=PASS。
+      原始输出同时记录两条实际子 runner 命令、环境、包版本、CLI/runner/provider SHA 与逐项 PASS 结果。

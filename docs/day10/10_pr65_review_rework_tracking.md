@@ -100,7 +100,7 @@
 
 - [x] T1 跨用户 session/turn 隔离（A/B 竞争复现用例）
 - [x] T2 downgrade 后软删除记录不进入 FTS
-- [ ] T3 并发 `IntegrityError` 幂等回查（fingerprint compare + unwrap）—— DEFERRED → TD-027（真实 IntegrityError 竞态回查分支缺少测试，详见技术债登记表）
+- [ ] T3 并发 `IntegrityError` 幂等回查（fingerprint compare + unwrap）—— DEFERRED → TD-028（真实 IntegrityError 竞态回查分支缺少测试，详见技术债登记表）
 - [x] T4 fingerprint 一致时 unwrap 首次响应
 - [x] T5 fingerprint 不一致时返回 `INVALID_REQUEST`
 - [x] T6 Worker 跨线程恢复 `trace_id / event_id`
