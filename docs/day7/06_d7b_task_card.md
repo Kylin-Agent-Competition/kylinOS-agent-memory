@@ -44,6 +44,7 @@
 
 ### 有效期
 
+- `RetrievalFilter.as_of` 在 typed contract 构造边界拒绝 naive datetime，并统一归一化到 UTC；PR #69 Review 的“`as_of` 未校验”建议经代码与运行时负向构造确认不成立。
 - `valid_from`、`valid_to` 必须带时区，并在回源边界归一化到 UTC。
 - 有效区间采用半开语义：`valid_from <= as_of < valid_to`；空边界表示该侧不受限。
 
@@ -72,10 +73,10 @@
 
 | 层级 | 检查 | 结果 |
 |---|---|---|
-| L0 | D7B 相关 RRF/fusion/degradation 测试 | `52 passed in 0.68s` |
-| L1 | `memory-service/tests/retrieval` 完整回归 | `233 passed in 1.30s`；基线为 209，新增 24 项 |
+| L0 | D7B 相关 RRF/fusion/degradation 测试 | `52 passed in 0.76s` |
+| L1 | `memory-service/tests/retrieval` 完整回归 | `233 passed in 1.22s`；基线为 209，新增 24 项 |
 | 静态 | `git diff --check` | PASS |
-| Review 返工 | PR #66 High/Medium | scope identity、unknown key、Scene 空组合与 main 同步均已修复；Standards / Spec 双轴复审均 `0 findings / PASS`，待 GitHub 复审 |
+| Review 返工 | PR #66 → #69 | scope identity、unknown key、Scene 空组合与 main 同步均已修复；PR #69 在 `3409aca` 获非作者 Reviewer `APPROVED / PASS_WITH_DEBT`，GitHub CI 通过 |
 | L2/L3 | 麒麟宿主 / 完整持久化链 | 不适用于本次纯融合实现；D 轨版本持久化仍为跨轨依赖 |
 
 ## 安全与失败语义
@@ -84,6 +85,14 @@
 - 偏好 current version 不唯一、scope identity/必要 term 缺失、unknown key、scope 上下文不匹配或场景未授权时均失败关闭。
 - 单通道故障保持既有 graceful degradation；解释只记录通道名，不暴露异常正文。
 - RRF 分项和总分共享同一纯函数，避免解释与排序发生公式漂移。
+
+## 技术债引用
+
+- `TD-029`：`RetrievalOutcome.degraded_channels` 的 Provider 异常原文需在对外序列化或统一日志接线前脱敏、结构化。
+- `TD-030`：倒置有效期当前会在检索阶段自然失败关闭，但 `TruthRecord` 构造边界尚未显式拒绝。
+- `TD-031`：Knowledge 多 current 仍保持既有 last-wins；D8B 验收前应收敛为输入顺序无关的 fail-closed。
+
+以上均为 PR #69 Reviewer 明确认可的非阻断债务，不改变 D7B 已通过的偏好检索验收结论。
 
 ## 已知限制与跨轨依赖
 

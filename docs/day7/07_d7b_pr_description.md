@@ -4,7 +4,7 @@
 
 **建议 PR 标题**：`feat: 完成 D7B 偏好检索过滤与解释`
 
-本 PR 在既有融合接缝内完成 D7B：偏好候选必须通过当前版本、UTC 有效期、场景和显式作用域硬过滤，并返回与 `rrf-v1` 排序同源的确定性解释。首轮 HEAD 为 `cc62f8b`；PR #66 返工已同步 `main@4926345`，最终返工 SHA 与对应测试结果在提交、推送后同步到 GitHub PR 正文和 Review 回复。
+本 PR 在既有融合接缝内完成 D7B：偏好候选必须通过当前版本、UTC 有效期、场景和显式作用域硬过滤，并返回与 `rrf-v1` 排序同源的确定性解释。首轮 HEAD 为 `cc62f8b`；PR #66 的 Review 返工同步 `main@4926345` 后形成 `3409aca`，因来源分支按仓库规范重命名而由 PR #69 承接。PR #69 已在该 HEAD 获非作者 Reviewer `APPROVED / PASS_WITH_DEBT`。
 
 ## 背景与目标
 
@@ -32,6 +32,7 @@
 
 - 任务卡：`docs/day7/06_d7b_task_card.md`
 - 权威台账：D7B 三项交付与“仅返回当前有效、场景匹配版本”验收口径
+- 技术债：`TD-029`（降级异常详情脱敏）、`TD-030`（倒置有效期构造校验）、`TD-031`（Knowledge 多 current 确定性 fail-closed）
 - 跨轨依赖：D 轨 `current_version` / `previous_version_id` 持久化与事务证据尚未落地；不由本 PR 代做
 
 ## 架构与能力边界依据
@@ -62,14 +63,14 @@
 ### L0（单元测试 + 静态检查）
 
 ```text
-相关 RRF / fusion / degradation：52 passed in 0.68s
+相关 RRF / fusion / degradation：52 passed in 0.76s
 git diff --check：PASS
 ```
 
 ### L1（检索组件回归）
 
 ```text
-memory-service/tests/retrieval：233 passed in 1.30s
+memory-service/tests/retrieval：233 passed in 1.22s
 基线：209 passed in 1.22s
 增量：24 个 D7B 回归用例，无检索回退
 ```
@@ -91,6 +92,7 @@ memory-service/tests：990 passed, 49 skipped, 36 failed, 36 errors in 214.80s
 - explanation 不含正文、可执行过滤表达式或 Provider 异常文本。
 - 无密钥、硬编码生产配置或 Mock 冒充 Runtime。
 - Standards 与 Spec 双轴本地独立预审均为 `0 findings / PASS`；不替代 GitHub 非作者人工批准。
+- `RetrievalFilter.as_of` 已在契约构造边界拒绝 naive datetime 并归一化 UTC；PR #69 Review 中相关 Medium 建议经代码和运行时负向构造确认不是现存缺陷。
 
 ### L2 麒麟虚拟机证据
 
@@ -111,6 +113,7 @@ memory-service/tests：990 passed, 49 skipped, 36 failed, 36 errors in 214.80s
 1. 调用方必须提供可信的 SQLite `is_current` 真值；默认分支尚未实现 D 轨持久化指针和版本链。
 2. 本地 Windows 无法证明 Linux UDS/宿主集成；全服务诊断中的既有失败未在本 PR 越轨修复。
 3. D9 重排和 token 预算未实现，`rerank_version` 固定为 `null`。
+4. PR #69 的非阻断后续治理已正式登记为 `TD-029`、`TD-030`、`TD-031`。
 
 ## 回滚方式
 
@@ -118,9 +121,9 @@ memory-service/tests：990 passed, 49 skipped, 36 failed, 36 errors in 214.80s
 
 ---
 
-**Reviewer 结论**（由 Reviewer 填写）：
+**Reviewer 结论**（PR #69，`3409aca`）：
 
 - [ ] PASS
-- [ ] PASS_WITH_DEBT（需记录技术债 TD 编号）
+- [x] PASS_WITH_DEBT（`TD-029`、`TD-030`、`TD-031`）
 - [ ] REWORK
 - [ ] BLOCKED
