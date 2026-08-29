@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from domain.enums import PreferenceScope
 from retrieval.contracts import (
     Channel,
     ObjectType,
@@ -37,7 +38,7 @@ def _hit(mid, channel=Channel.FTS5, rank=1):
     )
 
 
-def _truth(mid, object_type=ObjectType.KNOWLEDGE):
+def _truth(mid, object_type=ObjectType.KNOWLEDGE, preference_scope=None):
     return TruthRecord(
         memory_id=mid,
         version_id="v1",
@@ -49,13 +50,15 @@ def _truth(mid, object_type=ObjectType.KNOWLEDGE):
         sensitivity="internal",
         conflict_state="resolved",
         is_current=True,
+        preference_scope=preference_scope,
     )
 
 
-def _flt(object_types=None):
+def _flt(object_types=None, scope_terms=None):
     return RetrievalFilter(
         user_id="alice",
         scene=SceneFilter(allowed_scene_ids=[], include_unscoped=True),
+        scope_terms=scope_terms or {},
         object_types=object_types or [ObjectType.KNOWLEDGE],
         allowed_memory_statuses=["active"],
         allowed_sensitivity=["internal"],
@@ -130,7 +133,9 @@ def test_preference_explanation_records_observed_degraded_channel():
 
     truth = {
         ("alice", "pref", "v1"): _truth(
-            "pref", object_type=ObjectType.PREFERENCE
+            "pref",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
         )
     }
     outcome = retrieve_graceful(
@@ -142,6 +147,31 @@ def test_preference_explanation_records_observed_degraded_channel():
 
     assert [candidate.memory_id for candidate in outcome.candidates] == ["pref"]
     assert outcome.candidates[0].explanation["degraded_channels"] == ["vector"]
+
+
+def test_preference_query_is_validated_before_provider_callbacks():
+    called = []
+
+    def fts5():
+        called.append("fts5")
+        return []
+
+    def vector():
+        called.append("vector")
+        return []
+
+    with pytest.raises(ValueError, match="invalid_argument"):
+        retrieve_graceful(
+            fts5_search=fts5,
+            vector_search=vector,
+            truth={},
+            flt=_flt(
+                object_types=[ObjectType.PREFERENCE],
+                scope_terms={"unknown_scope": ["x"]},
+            ),
+        )
+
+    assert called == []
 
 
 def test_retrieve_graceful_both_fault_returns_empty():

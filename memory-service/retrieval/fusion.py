@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
+from domain.enums import PreferenceScope
 from retrieval.contracts import (
     Channel,
     ContentSource,
@@ -17,6 +18,11 @@ from retrieval.contracts import (
     RetrievalCandidate,
     RetrievalFilter,
     RetrievalHit,
+)
+from retrieval.preference_scope import (
+    PREFERENCE_SCOPE_TERM_KEYS,
+    PREFERENCE_SCOPE_TERMS_SCHEMA_VERSION,
+    preference_scope_terms_match,
 )
 from retrieval.rrf import (
     AggregatedCandidate,
@@ -26,8 +32,14 @@ from retrieval.rrf import (
     rrf_score,
     rrf_terms,
 )
+from retrieval.validation import validate_retrieval_filter
 
 RRF_DEFAULT_K = 60
+
+
+def _validate_preference_filter(flt: RetrievalFilter) -> None:
+    if ObjectType.PREFERENCE in flt.object_types:
+        validate_retrieval_filter(flt, PREFERENCE_SCOPE_TERM_KEYS)
 
 
 @dataclass(frozen=True)
@@ -46,10 +58,22 @@ class TruthRecord:
     is_current: bool = False  # SQLite 当前版本标记；每个 memory_id 唯一一个 True
     scene_id: Optional[str] = None
     scope_terms: Optional[dict[str, list[str]]] = None
+    preference_scope: Optional[PreferenceScope] = None
     valid_from: Optional[datetime] = None
     valid_to: Optional[datetime] = None
 
     def __post_init__(self) -> None:
+        if self.preference_scope is not None and not isinstance(
+            self.preference_scope, PreferenceScope
+        ):
+            try:
+                object.__setattr__(
+                    self,
+                    "preference_scope",
+                    PreferenceScope(self.preference_scope),
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError("preference_scope 必须使用冻结五值") from exc
         for field_name in ("valid_from", "valid_to"):
             value = getattr(self, field_name)
             if value is None:
@@ -82,9 +106,12 @@ def _hard_filter(
                 return False
         elif rec.scene_id not in flt.scene.allowed_scene_ids:
             return False
-        for key, values in (rec.scope_terms or {}).items():
-            if not set(values).intersection(flt.scope_terms.get(key, [])):
-                return False
+        if not preference_scope_terms_match(
+            preference_scope=rec.preference_scope,
+            truth_scope_terms=rec.scope_terms,
+            query_scope_terms=flt.scope_terms,
+        ):
+            return False
         if rec.valid_from is not None and flt.as_of < rec.valid_from:
             return False
         if rec.valid_to is not None and flt.as_of >= rec.valid_to:
@@ -111,11 +138,17 @@ def _preference_explanation(
         "degraded_channels": [],
         "rerank_version": None,
         "hard_filter": {
-            "policy_version": "preference-filter/v1",
+            "policy_version": "preference-filter/v2",
+            "scope_schema_version": PREFERENCE_SCOPE_TERMS_SCHEMA_VERSION,
             "current_version": "passed",
             "validity": "passed",
             "scene": "allowed_scene" if rec.scene_id is not None else "unscoped_included",
-            "scope": "terms_matched" if rec.scope_terms else "global",
+            "preference_scope": rec.preference_scope.value,
+            "scope": (
+                "global"
+                if rec.preference_scope is PreferenceScope.GLOBAL
+                else "terms_matched"
+            ),
         },
     }
 
@@ -136,6 +169,8 @@ def fuse_retrieval(
     - 过滤后的合法命中按 memory_id 聚合、RRF 排序；
     - 输出 RetrievalCandidate，rrf_score == final_score（v1 不做业务重排）。
     """
+    _validate_preference_filter(flt)
+
     deduped = dedupe_exact_version(list(fts5_hits) + list(vector_hits))
     legal: list[RetrievalHit] = []
     for hit in deduped:
@@ -249,6 +284,8 @@ def retrieve_graceful(
     - 某路抛出异常时，该路命中记为空，并把错误登记到 degraded_channels。
     - 正常那路命中仍参与融合，保证服务故障时可解释降级而非整体崩溃。
     """
+    _validate_preference_filter(flt)
+
     degraded: dict[str, str] = {}
     try:
         fts5_hits = list(fts5_search())
