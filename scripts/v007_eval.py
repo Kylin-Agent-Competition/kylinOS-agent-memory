@@ -1,6 +1,6 @@
 """V007 检索评测 CLI（B 轨脚本）。
 
-读取 B 轨消费的评测输入 JSON，分别计算 FTS5-only / Vector-only / rrf-v1 的
+读取 B 轨消费的评测输入 JSON，分别计算 FTS5-only / Vector-only / rrf-v1 / weighted-rrf-v1 的
 Recall@K、MRR、nDCG@K、P50、P95，并绑定配置版本输出 JSON 报告。
 
 注意：
@@ -19,7 +19,9 @@ Recall@K、MRR、nDCG@K、P50、P95，并绑定配置版本输出 JSON 报告。
         "implementation_commit": "...",
         "environment": "...",
         "k": 10,
-        "rrf_k": 60
+        "rrf_k": 60,
+        "algorithm_version": "rrf-v1",
+          "channel_weights": {"fts5": 1.0, "vector": 1.0}
       },
       "queries": [
         {
@@ -28,6 +30,7 @@ Recall@K、MRR、nDCG@K、P50、P95，并绑定配置版本输出 JSON 报告。
           "fts5_ranked_ids": ["kn1", "kn3"],
           "vector_ranked_ids": ["kn2", "kn1"],
           "rrf_ranked_ids": ["kn1", "kn2"],
+          "weighted_rrf_ranked_ids": ["kn2", "kn1"],
           "latency_ms": 120.5
         }
       ]
@@ -58,6 +61,7 @@ def _build_queries(raw_queries: list[dict], mode: ChannelMode) -> list[QueryEval
         ChannelMode.FTS5_ONLY: "fts5_ranked_ids",
         ChannelMode.VECTOR_ONLY: "vector_ranked_ids",
         ChannelMode.RRF_V1: "rrf_ranked_ids",
+        ChannelMode.WEIGHTED_RRF_V1: "weighted_rrf_ranked_ids",
     }[mode]
     out = []
     for item in raw_queries:
@@ -78,6 +82,11 @@ def _config(raw: dict, mode: ChannelMode) -> EvalConfig:
         k=int(raw.get("k", 10)),
         top_k=int(raw.get("top_k", raw.get("k", 10))),
         rrf_k=int(raw.get("rrf_k", 60)),
+        algorithm_version=str(raw.get(
+            "algorithm_version",
+            "weighted-rrf/v1" if mode is ChannelMode.WEIGHTED_RRF_V1 else "rrf-v1",
+        )),
+        channel_weights=dict(raw.get("channel_weights", {})),
         dataset_version=str(raw.get("dataset_version", "UNKNOWN")),
         gold_label_version=str(raw.get("gold_label_version", "UNKNOWN")),
         implementation_commit=str(raw.get("implementation_commit", "UNKNOWN")),
@@ -105,7 +114,14 @@ def main() -> int:
         "status": "UNVERIFIED" if not raw_queries else "SCRIPT_OUTPUT",
         "channels": {},
     }
-    for mode in (ChannelMode.FTS5_ONLY, ChannelMode.VECTOR_ONLY, ChannelMode.RRF_V1):
+    modes = [
+        ChannelMode.FTS5_ONLY,
+        ChannelMode.VECTOR_ONLY,
+        ChannelMode.RRF_V1,
+    ]
+    if raw_config.get("algorithm_version") == "weighted-rrf/v1":
+        modes.append(ChannelMode.WEIGHTED_RRF_V1)
+    for mode in modes:
         report = evaluate_queries(_build_queries(raw_queries, mode), _config(raw_config, mode))
         result["channels"][mode.value] = report_to_dict(report)
 

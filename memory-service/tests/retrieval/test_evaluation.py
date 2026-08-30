@@ -75,3 +75,17 @@ def test_report_to_dict():
     assert d["dataset_version"] == "dev-1"
     assert d["gold_label_version"] == "gl-1"
     assert d["query_count"] == 1
+
+
+def test_weighted_rrf_evaluation_records_algorithm_and_weight_configuration():
+    config = EvalConfig(
+        channel_mode=ChannelMode.WEIGHTED_RRF_V1,
+        algorithm_version="weighted-rrf/v1",
+        channel_weights={"fts5": 0.5, "vector": 2.0},
+    )
+    report = evaluate_queries([_q("q1", ["a"], {"a"})], config)
+    data = report_to_dict(report)
+
+    assert data["channel_mode"] == "weighted_rrf_v1"
+    assert data["algorithm_version"] == "weighted-rrf/v1"
+    assert data["channel_weights"] == {"fts5": 0.5, "vector": 2.0}

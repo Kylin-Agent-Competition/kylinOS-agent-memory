@@ -177,10 +177,19 @@ class UTCBaseModel(BaseModel):
 
 
 class RerankPolicy(UTCBaseModel):
-    """版本化的应用层加权 RRF 配置。"""
+    """`weighted-rrf/v1` 的显式应用层融合策略。"""
 
-    version: str = Field(min_length=1)
+    version: Literal["weighted-rrf/v1"]
     channel_weights: dict[Channel, float] = Field(min_length=1)
+
+    @field_validator("channel_weights", mode="before")
+    @classmethod
+    def _strict_weight_values(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or any(
+            type(weight) not in (int, float) for weight in value.values()
+        ):
+            raise ValueError("重排通道权重必须为有限正数")
+        return value
 
     @field_validator("channel_weights")
     @classmethod
@@ -189,6 +198,8 @@ class RerankPolicy(UTCBaseModel):
     ) -> dict[Channel, float]:
         if any(not math.isfinite(weight) or weight <= 0 for weight in value.values()):
             raise ValueError("重排通道权重必须为有限正数")
+        if set(value) != {Channel.FTS5, Channel.VECTOR}:
+            raise ValueError("weighted-rrf/v1 必须显式提供 FTS5 与 Vector 权重")
         return value
 
 
