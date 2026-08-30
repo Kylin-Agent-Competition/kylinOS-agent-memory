@@ -102,15 +102,17 @@ extern const QString kServerTsKey;
 extern const QString kErrorCodeKey;
 extern const QString kMessageKey;
 
-// D 冻结方法路由表（FRZ-IPC-007，2026-08-17 已签署更正版）。
+// D 冻结方法路由表（FRZ-IPC-007，2026-08-17 已签署更正版 + ADR-010 2026-08-27）。
 // 活跃方法仅 3 项：echo / health / memory.retrieve。
 // evidence.record 已按 P0-4 移除（PR21_R3），memory.store 尚未实现（服务端返回
-// UNSUPPORTED_METHOD）；保留常量供客户端侧类型引用，但标注未实现。
+// UNSUPPORTED_METHOD）；turn.finalized 按 ADR-010 作为写链路候选方法新增
+// （CANDIDATE / BLOCKED_BY_HOST_MAPPING，生产默认不注册，Demo 客户端可调用）。
 namespace methods {
 extern const QString kEcho;              // "echo"
 extern const QString kHealth;            // "health"
 extern const QString kMemoryRetrieve;   // "memory.retrieve"
 extern const QString kMemoryStore;      // "memory.store"（未实现，服务端返回 UNSUPPORTED_METHOD）
+extern const QString kTurnFinalized;    // "turn.finalized"（ADR-010 新增，写链路）
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）。

@@ -1,0 +1,53 @@
+# D6B rebuild-and-rerun transcript (sanitized)
+# Date: 2026-08-28
+# Purpose: reproducible build-provenance supplement for the aef8d52 runtime evidence.
+# tested_commit: aef8d52ad602b2e73e0336f7fb0dd0167b4043e6
+# Branch: feature/d6-b-vector-schema-filter-main
+
+D6B_BUILD command=g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -DKYLIN_VECTOR_LEGACY_0K0_7=1 -include /home/yanmouren778/d6b-final-aef8d52-clean/tests/vector-engine/compat/d2_legacy_abi_asserts.h -isystem /home/yanmouren778/.local/d6b-sdk/sdk-compat-0k0.7/include/kysdk-vector-engine-client -isystem /home/yanmouren778/.local/d6b-sdk/nlohmann-deb/usr/include /home/yanmouren778/d6b-final-aef8d52-clean/tests/vector-engine/vector_bridge_cli.cpp -o /tmp/d6b_rebuild_aef8d52_cli -L/home/yanmouren778/.local/d6b-sdk/lib -lkysdk-vector-engine-client
+D6B_BUILD exit_code=0
+
+D6B_L2 command=bash /home/yanmouren778/d6b-final-aef8d52-clean/tests/vector-engine/run_d6_vector_schema_filter_l2.sh --binary /tmp/d6b_rebuild_aef8d52_cli --collection d6b_rebuild_aef8d52_cli
+D6B_L2_META command=/home/yanmouren778/d6b-final-aef8d52-clean/tests/vector-engine/run_d6_vector_schema_filter_l2.sh --binary /tmp/d6b_rebuild_aef8d52_cli --collection d6b_rebuild_aef8d52_cli
+D6B_L2_META git_branch=feature/d6-b-vector-schema-filter-main
+D6B_L2_META tested_commit=aef8d52ad602b2e73e0336f7fb0dd0167b4043e6
+D6B_L2_META os=Linux 6.6.0-63-generic x86_64 GNU/Linux
+D6B_L2_META packages=kylin-ai-vector-engine=1.2.0.1-0k0.11;libkysdk-vector-engine-client=1.2.0.0-0k0.7;
+D6B_L2_META cli_sha256=5f0fbb8e136de5eccd781cdf1ac4166591bd8b8482b071215e2c2b15ce415e54
+D6B_L2_META bridge_sha256=28ca63509d1c4f6af2ef410bf3a9e1a4cb05236e2514e5d6885f1597f3c3b281
+D6B_L2_META runner_sha256=af0949a4ef1f5e9997525d5b8ccb53d5db4881a77e45f1a7377c27ccafacde7b
+D6B_L2 name=create_collection result=PASS
+D6B_L2 name=insert_filterable_metadata result=PASS
+D6B_L2 name=user_scene_unscoped_status_deleted_filter result=PASS hits=['101:v1', '105:v5']
+D6B_L2 name=empty_scene_allowlist_excludes_all result=PASS hits=[]
+D6B_L2 name=empty_scene_allowlist_allows_only_unscoped result=PASS hits=['105:v5']
+D6B_L2 name=deleted_filter_fail_closed result=PASS hits=['101:v1', '105:v5']
+D6B_L2 name=cross_user_isolation result=PASS hits=['103:v3']
+D6B_L2 name=lifecycle_status_filter result=PASS hits=['106:v6']
+D6B_L2 name=empty_user_filter result=PASS
+D6B_L2 name=unknown_filter_key_fail_closed result=PASS
+D6B_L2 cleanup=PASS collection=d6b_rebuild_aef8d52_cli
+D6B_L2 result=PASS collection=d6b_rebuild_aef8d52_cli cleanup=complete
+D6B_L2 command_name=cli_runner exit_code=0
+
+D6B_L2 command=PYTHONPATH=/home/yanmouren778/.local/d6b-python /usr/bin/python3 /home/yanmouren778/d6b-final-aef8d52-clean/memory-service/tests/retrieval/run_d6_real_vector_provider_l2.py --cli /tmp/d6b_rebuild_aef8d52_cli --collection d6b_rebuild_aef8d52_provider
+D6B_PROVIDER_L2_META command=/usr/bin/python3 /home/yanmouren778/d6b-final-aef8d52-clean/memory-service/tests/retrieval/run_d6_real_vector_provider_l2.py --cli /tmp/d6b_rebuild_aef8d52_cli --collection d6b_rebuild_aef8d52_provider
+D6B_PROVIDER_L2_META git_branch=feature/d6-b-vector-schema-filter-main
+D6B_PROVIDER_L2_META tested_commit=aef8d52ad602b2e73e0336f7fb0dd0167b4043e6
+D6B_PROVIDER_L2_META os=Linux-6.6.0-63-generic-x86_64-with-glibc2.38
+D6B_PROVIDER_L2_META packages=kylin-ai-vector-engine=1.2.0.1-0k0.11
+libkysdk-vector-engine-client=1.2.0.0-0k0.7
+D6B_PROVIDER_L2_META cli_sha256=5f0fbb8e136de5eccd781cdf1ac4166591bd8b8482b071215e2c2b15ce415e54
+D6B_PROVIDER_L2_META provider_sha256=e67f97b919ce1e84a541c39ff0fbc7d188feedb656cf8d60dcfb6ba16b195aee
+D6B_PROVIDER_L2_META runner_sha256=e0fe1b69364c47acb103ad9fdc2aac4c987e3dc49627b7cd32b11941c5a713cc
+D6B_PROVIDER_L2 name=typed_filter_forwarding result=PASS hits=[('201', 'v1', 'user-a'), ('205', 'v5', 'user-a')]
+D6B_PROVIDER_L2 name=empty_scene_allowlist_excludes_all result=PASS hits=[]
+D6B_PROVIDER_L2 name=empty_scene_allowlist_allows_only_unscoped result=PASS hits=[('205', 'v5', 'user-a')]
+D6B_PROVIDER_L2 name=cross_user_isolation result=PASS hits=[('203', 'v3', 'user-b')]
+D6B_PROVIDER_L2 name=inactive_status_filter result=PASS hits=[('202', 'v2', 'user-a')]
+D6B_PROVIDER_L2 name=empty_vector_fail_closed result=PASS
+D6B_PROVIDER_L2 name=insert_dimension_fail_closed result=PASS
+D6B_PROVIDER_L2 name=mismatched_filter_user_fail_closed result=PASS
+D6B_PROVIDER_L2 cleanup=PASS collection=d6b_rebuild_aef8d52_provider
+D6B_PROVIDER_L2 result=PASS collection=d6b_rebuild_aef8d52_provider cleanup=complete
+D6B_L2 command_name=provider_runner exit_code=0

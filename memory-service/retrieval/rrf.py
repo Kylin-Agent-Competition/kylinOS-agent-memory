@@ -14,16 +14,23 @@ from retrieval.contracts import Channel, RetrievalHit
 RRF_DEFAULT_K = 60
 
 
-def rrf_score(ranks: Dict[Channel, int], k: int = RRF_DEFAULT_K) -> float:
-    """返回 `sum(1/(k+rank))`，只统计实际命中通道。"""
+def rrf_terms(
+    ranks: Dict[Channel, int], k: int = RRF_DEFAULT_K
+) -> Dict[Channel, float]:
+    """返回各命中通道的 `1/(k+rank)` 分项。"""
     if k <= 0:
         raise ValueError("k 必须为正整数")
-    total = 0.0
-    for rank in ranks.values():
+    terms: Dict[Channel, float] = {}
+    for channel, rank in ranks.items():
         if rank < 1:
             raise ValueError("rank 必须从 1 开始")
-        total += 1.0 / (k + rank)
-    return total
+        terms[channel] = 1.0 / (k + rank)
+    return terms
+
+
+def rrf_score(ranks: Dict[Channel, int], k: int = RRF_DEFAULT_K) -> float:
+    """返回 `sum(1/(k+rank))`，只统计实际命中通道。"""
+    return sum(rrf_terms(ranks, k).values())
 
 
 def dedupe_exact_version(hits: Iterable[RetrievalHit]) -> List[RetrievalHit]:

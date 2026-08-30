@@ -5,11 +5,11 @@
 //       不声称代表真实 AI Assistant Hook / Chat DB / ChatRecord。
 //
 // 用例清单：
-//   §A  问题1 — status=error 明确路由失败路径
+//   §A  问题1 + ADR-010 — status=error 明确路由失败路径
 //     A1  memory.retrieve → status=error, UNSUPPORTED_METHOD
 //         → preChatStage == "failed", injectedContextText == "", modelRequestText == originalUserText
-//     A2  memory.store    → status=error, UNSUPPORTED_METHOD
-//         → postTurnStage == "failed"
+//     A2  turn.finalized  → status=error, UNSUPPORTED_METHOD（生产默认未注册 handler）
+//         → postTurnStage == "failed"（不得再走旧 memory.store wrapper）
 //   §B  问题2 — MemoryContext 形状严格按 memory_context.v1.json 契约
 //     B1  empty context     (schema/query/context_version 齐全，但无 token/count)
 //         → injectedContextText == "" (不产生伪标记)
@@ -51,9 +51,9 @@ private slots:
     void init();
     void cleanup();
 
-    // §A 问题1 — status=error 路由失败路径
+    // §A 问题1 + ADR-010 — status=error 路由失败路径
     void memoryRetrieveWithUnsupportedMethodRoutesPreChatToFailed();   // A1
-    void memoryStoreWithUnsupportedMethodRoutesPostTurnToFailed();    // A2
+    void turnFinalizedWithUnsupportedMethodRoutesPostTurnToFailed();   // A2（ADR-010 turn.finalized）
 
     // §B 问题2 — MemoryContext 契约形状 (memory_context.v1.json)
     void emptyContextProducesEmptyInjectedTextNoFakeMarker();          // B1
@@ -202,15 +202,30 @@ void D5VerticalLinkDemoTest::memoryRetrieveWithUnsupportedMethodRoutesPreChatToF
              client::error_codes::kUnsupportedMethod);
 }
 
-void D5VerticalLinkDemoTest::memoryStoreWithUnsupportedMethodRoutesPostTurnToFailed()
+void D5VerticalLinkDemoTest::turnFinalizedWithUnsupportedMethodRoutesPostTurnToFailed()
 {
     test_support::MockGatewayServer mock;
+    // ADR-010：生产默认不注册 turn.finalized → 服务端返回 UNSUPPORTED_METHOD。
+    // Client 必须通过 sendTurnFinalizedEvent() 直接路由 turn.finalized，
+    // 不再包装 memory.store → {event_type, event_body}。
     mock.setHandler([](const client::EnvelopeParts& parts) -> QJsonObject {
-        if (parts.method == client::methods::kMemoryStore) {
+        if (parts.method == client::methods::kTurnFinalized) {
+            // 额外断言：payload 是 TurnFinalizedEvent JSON 本身，不能再出现
+            // event_type / event_body wrapper（旧路径，ADR-010 冲突）。
+            QVERIFY(!parts.payload.contains(QStringLiteral("event_type")));
+            QVERIFY(!parts.payload.contains(QStringLiteral("event_body")));
+            QVERIFY(parts.payload.contains(QStringLiteral("schema_version")));
+            QVERIFY(parts.payload.contains(QStringLiteral("idempotency_key")));
+            QVERIFY(parts.payload.contains(QStringLiteral("is_final")));
+
             return client::buildErrorResponse(
                 parts.requestId, parts.traceId,
                 client::error_codes::kUnsupportedMethod,
-                QStringLiteral("Gateway has not implemented memory.store."));
+                QStringLiteral("Gateway default profile has not registered turn.finalized handler (BLOCKED_BY_HOST_MAPPING)."));
+        }
+        if (parts.method == client::methods::kMemoryStore) {
+            // 保证 sendTurnFinalizedEvent **不经过** memory.store。
+            QFAIL("sendTurnFinalizedEvent must route turn.finalized, not memory.store (ADR-010).");
         }
         return client::buildSuccessResponse(
             parts.requestId, parts.traceId, QJsonObject{});

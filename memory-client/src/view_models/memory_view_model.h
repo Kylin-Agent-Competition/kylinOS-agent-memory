@@ -45,7 +45,8 @@ namespace kylin::memory::client::v1 {
 //     - 新增 per-request deadline QTimer（kDefaultDeadlineMs=5000），超时失败
 //     - 拆 busy_ → preChatBusy_ + postTurnBusy_，避免多请求竞态
 //     - injection failure 落实 injection_status=failed（见 data.context 解析）
-//     - memory.store payload 形状明确标为"与 D 轨联调用；未单方面冻结"
+//     - sendTurnFinalizedEvent 按 ADR-010 路由 turn.finalized；移除
+//       旧 {event_type,event_body} wrapper；memory.store 保持 UNSUPPORTED
 //     - 移除超出 C-D5 范围的 sendToolExecutionEvent
 // ============================================================================
 
@@ -60,6 +61,9 @@ class MemoryViewModel : public QObject {
     Q_PROPERTY(QJsonObject lastResponse READ lastResponse NOTIFY lastResponseChanged)
     Q_PROPERTY(bool preChatBusy READ preChatBusy NOTIFY preChatBusyChanged)
     Q_PROPERTY(bool postTurnBusy READ postTurnBusy NOTIFY postTurnBusyChanged)
+    // HIGH 修复：向后兼容通用"any busy"属性。等价于 preChatBusy || postTurnBusy，
+    // 避免旧页（main/Status/MemoryQuery）继续引用已不存在的全局 busy_。
+    Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
 
     // ── D5-C Pre-Chat 原文隔离三路口径 ─────────────────────────────────
     // ① UI / 聊天库展示：始终是用户原始输入文本，不含任何 Memory Context。
@@ -103,6 +107,7 @@ public:
     [[nodiscard]] QJsonObject lastResponse() const { return lastResponse_; }
     [[nodiscard]] bool preChatBusy() const { return preChatBusy_; }
     [[nodiscard]] bool postTurnBusy() const { return postTurnBusy_; }
+    [[nodiscard]] bool busy() const { return preChatBusy_ || postTurnBusy_; }
 
     // D5-C Getter
     [[nodiscard]] QString originalUserText() const { return originalUserText_; }
@@ -164,6 +169,7 @@ signals:
     void lastResponseChanged();
     void preChatBusyChanged();
     void postTurnBusyChanged();
+    void busyChanged();
 
     // D5-C 信号
     void originalUserTextChanged();

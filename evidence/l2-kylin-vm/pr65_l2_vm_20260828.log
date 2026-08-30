@@ -1,0 +1,179 @@
+==========================================================================
+ PR #65 Rework — L2-1~L2-5 麒麟 VM 探针
+==========================================================================
+[OK] 已连接麒麟 VM
+
+
+==========================================================================
+STEP: 0. 准备（清理遗留 + 上传载荷）
+==========================================================================
+[OK] 写入 /tmp/pr65-l2/sources.json (f5255c16acad)
+[OK] 写入 /tmp/pr65-l2/env_pos.json (e3858f6053cc)
+[OK] 写入 /tmp/pr65-l2/env_replay.json (293f232fc668)
+[OK] 写入 /tmp/pr65-l2/env_crossB.json (ff7efd7f34b0)
+[OK] 写入 /tmp/pr65-l2/env_miss.json (f95b619b758a)
+[OK] 写入 /tmp/pr65-l2/env_health.json (c43c6dec0f1e)
+[OK] 写入 /tmp/pr65-l2/env_echo.json (91087126ff9c)
+[OK] 写入 /tmp/pr65-l2/env_retrieve.json (005bec79d0cc)
+[OK] 写入 /tmp/pr65-l2/uds_client.py (6c9f918e1078)
+
+==========================================================================
+STEP: L2-1 迁移手工探针（alembic upgrade head + schema 对照 + FK）
+==========================================================================
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 001_initial_schema, 001_initial_schema — D4D 基线迁移（ADR-007 命名：001_initial_schema.py）
+INFO  [alembic.runtime.migration] Running upgrade 001_initial_schema -> 20260826_add_trace_id, 20260826_add_trace_id — ADR-011：turns/memory_entries 新增 nullable trace_id/host_turn_id 列
+EXIT=0
+
+L2-1 upgrade head: PASS
+[OK] 写入 /tmp/pr65-l2/l2_1_check.py (aecbc48eed1a)
+  turns.trace_id: OK
+  turns.host_turn_id: OK
+  memory_entries.trace_id: OK
+  idx_turns_host_turn_id(unique,partial): OK
+  memory_fts: OK
+  triggers: OK
+  alembic_version: OK
+  foreign_key_check_empty: OK
+  -- roundtrip downgrade base / upgrade head (见 alembic 输出) --
+SCHEMA_CHECKS_PASS
+
+L2-1 schema 对照(FRS-DB-001/ADR-011): PASS
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running downgrade 20260826_add_trace_id -> 001_initial_schema, 20260826_add_trace_id — ADR-011：turns/memory_entries 新增 nullable trace_id/host_turn_id 列
+INFO  [alembic.runtime.migration] Running downgrade 001_initial_schema -> , 001_initial_schema — D4D 基线迁移（ADR-007 命名：001_initial_schema.py）
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 001_initial_schema, 001_initial_schema — D4D 基线迁移（ADR-007 命名：001_initial_schema.py）
+INFO  [alembic.runtime.migration] Running upgrade 001_initial_schema -> 20260826_add_trace_id, 20260826_add_trace_id — ADR-011：turns/memory_entries 新增 nullable trace_id/host_turn_id 列
+RT_EXIT=0
+
+L2-1 往返(downgrade→upgrade): PASS
+[OK] 写入 /tmp/pr65-l2/l2_1_fts.py (6bdf29ea5d83)
+  insert-MATCH='麒麟' -> 1（期望>=1）; 软删后 -> 0（期望0）
+FTS_FILTER_PASS
+
+L2-1 FTS 软删过滤探针: PASS
+
+==========================================================================
+STEP: L2-2 turn.finalized 真实 CLI 端到端
+==========================================================================
+[A] ready=True
+[A] boot health: {"protocol_version": "1.0", "request_id": "req-h-1", "trace_id": "L2H-1", "status": "ok", "data": {"status": "degraded", "db": "ok", "methods": ["echo", "health", "memory.retrieve", "memory.store", "turn.finalized"]}, "server_ts": "2026-08-28T06:37:10.950172+00:00"}
+[A] 正向写(env_pos): {"protocol_version": "1.0", "request_id": "req-l2a-1", "trace_id": "L2A-1", "status": "ok", "data": {"db_turn_id": 1, "host_turn_id": "H-1", "conversation_id": 1}, "server_ts": "2026-08-28T06:37:11.102560+00:00"}
+L2-2 正向写 ok: PASS
+[A] 幂等回放(env_replay): {"protocol_version": "1.0", "request_id": "req-l2a-2", "trace_id": "L2A-1", "status": "ok", "data": {"db_turn_id": 1, "host_turn_id": "H-1", "conversation_id": 1}, "server_ts": "2026-08-28T06:37:11.213856+00:00"}
+L2-2 幂等回放相同响应: PASS
+[A] DB 状态:
+turns: [(1, 's1', 'H-1', 'L2A-1', 'CLI L2 正向落库原文')]
+outbox: [(1, 'turn.finalized', '{"conversation_id": 1, "turn_id": 1, "is_end": 1, "occurred_at": "2026-08-28T01:00:00.000+00:00", "collected_at": "2026-08-28T01:00:01.000+00:00", "finalized_at": "2026-08-28T01:00:02.000+00:00", "trace_id": "L2A-1", "host_turn_id": "H-1", "refinalize": false}')]
+L2-2 落库+Outbox入队: PASS
+[A] 跨用户B(env_crossB): {"protocol_version": "1.0", "request_id": "req-l2b-1", "trace_id": "L2B-1", "status": "error", "data": {}, "server_ts": "2026-08-28T06:37:11.415308+00:00", "error_code": "INVALID_REQUEST", "message": "session ownership conflict"}
+L2-2 跨用户毒素拒绝(真实UDS): PASS
+[A] 跨用户后 DB 状态:
+turns: [(1, 's1', 'H-1', 'L2A-1', 'CLI L2 正向落库原文')]
+outbox: [(1, 'turn.finalized', '{"conversation_id": 1, "turn_id": 1, "is_end": 1, "occurred_at": "2026-08-28T01:00:00.000+00:00", "collected_at": "2026-08-28T01:00:01.000+00:00", "finalized_at": "2026-08-28T01:00:02.000+00:00", "trace_id": "L2A-1", "host_turn_id": "H-1", "refinalize": false}')]
+L2-2 跨用户后零副作用: PASS
+[B] resolver miss(env_miss): {"protocol_version": "1.0", "request_id": "req-miss-1", "trace_id": "L2M-1", "status": "error", "data": {}, "server_ts": "2026-08-28T06:37:26.737576+00:00", "error_code": "INTERNAL_ERROR", "message": "INTERNAL_ERROR"}
+L2-2 空映射→INTERNAL_ERROR: PASS
+L2-2 空映射 warning 日志: PASS
+[B] resolver miss 副作用: (0,) (0,) (0,)
+L2-2 resolver miss 零副作用: PASS
+[C] production(env_pos): {"protocol_version": "1.0", "request_id": "req-l2a-1", "trace_id": "L2A-1", "status": "error", "data": {}, "server_ts": "2026-08-28T06:37:42.074646+00:00", "error_code": "UNSUPPORTED_METHOD", "message": "unsupported method: turn.finalized"}
+L2-2 production→UNSUPPORTED_METHOD: PASS
+
+==========================================================================
+STEP: L2-3 health degraded 真实探针（正常 / worker 未注入 / DB 不可达）
+==========================================================================
+[D] health 正常态: {"protocol_version": "1.0", "request_id": "req-h-1", "trace_id": "L2H-1", "status": "ok", "data": {"status": "ok", "db": "ok", "methods": ["echo", "health", "memory.retrieve", "memory.store"], "outbox": {"backlog": 0, "dead_letter": 0, "oldest_pending_created_at": null, "processed": 0, "dead_letters": 0}}, "server_ts": "2026-08-28T06:37:57.291430+00:00"}
+L2-3 health 全绿 data.status=ok: PASS
+[A] health(no worker): {"protocol_version": "1.0", "request_id": "req-h-1", "trace_id": "L2H-1", "status": "ok", "data": {"status": "degraded", "db": "ok", "methods": ["echo", "health", "memory.retrieve", "memory.store", "turn.finalized"]}, "server_ts": "2026-08-28T06:37:57.405727+00:00"}
+L2-3 worker 未注入→degraded: PASS
+  [注] 实机受限说明：health db 探针为 SELECT 1（无页 I/O），外部无法伪造 DB 不可达/metrics 异常；对应分支由 VM L1 单测（同一 handler 代码）覆盖如下：
+...                                                                      [100%]
+3 passed in 0.89s
+
+L2-3 DB不可达/metrics哨兵(VM L1 handler 单测): PASS
+
+==========================================================================
+STEP: L2-4 JSON 结构化日志 event_id + PII
+==========================================================================
+[A] boot 日志行: {"ts": "2026-08-28T14:36:56+0800", "level": "WARNING", "logger": "__main__", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "turn.finalized 已注册（test/validation profile，in-memory resolver）。production 禁止使用此参数（BLOCKED_BY_HOST_MAPPING）"}
+L2-4 JSON 单行日志: PASS
+[A] memory.retrieve 响应: {"protocol_version": "1.0", "request_id": "req-r-1", "trace_id": "L2R-1", "status": "ok", "data": {"context": [], "degraded": false, "reason": "retrieval main chain pending"}, "server_ts": "2026-08-28T06:37:59.153032+00:00"}
+[A] memory.retrieve 日志行:
+{"ts": "2026-08-28T14:37:59+0800", "level": "INFO", "logger": "gateway.handlers", "trace_id": "L2R-1", "request_id": "req-r-1", "method": "memory.retrieve", "event_id": "", "message": "memory.retrieve method=memory.retrieve request_id=req-r-1（主链未接入，返回空上下文）"}
+L2-4 请求日志含 trace_id+request_id: PASS
+[OK] 写入 /tmp/pr65-l2/l2_4_inject.py (b94af1d611a0)
+[D] outbox 注入: INJECTED
+[D] Worker 日志(含 event_id):
+{"ts": "2026-08-28T14:38:00+0800", "level": "WARNING", "logger": "outbox.worker", "trace_id": "L2W-1", "request_id": "", "method": "outbox:turn.finalized", "event_id": "evt-W1", "message": "Outbox 重试 id=1 attempts=1 next_retry_at=2026-08-28T06:39:00.165128+00:00"}
+L2-4 Worker 日志含 trace_id+event_id: PASS
+L2-4 无 PII(正文)泄漏: PASS
+
+==========================================================================
+STEP: L2-5 systemd --user 部署
+==========================================================================
+  迁移默认库: INFO  [alembic.runtime.migration] Running upgrade  -> 001_initial_schema, 001_initial_schema — D4D 基线迁移（ADR-007 命名：001_initial_schema.py）
+INFO  [alembic.runtime.migration] Running upgrade 001_initial_schema -> 20260826_add_trace_id, 20260826_add_trace_id — ADR-011：turns/memory_entries 新增 nullable trace_id/host_turn_id 列
+ALEMBIC_EXIT=0
+L2-5 默认库 alembic: PASS
+  enable/start: RC=0
+L2-5 enable/start: PASS
+  socket: SOCK_READY
+SOCK_FINAL_OK
+L2-5 socket 可达: PASS
+  systemd health: {"protocol_version": "1.0", "request_id": "req-h-1", "trace_id": "L2H-1", "status": "ok", "data": {"status": "ok", "db": "ok", "methods": ["echo", "health", "memory.retrieve", "memory.store"], "outbox": {"backlog": 0, "dead_letter": 0, "oldest_pending_created_at": null, "processed": 0, "dead_letters": 0}}, "server_ts": "2026-08-28T06:38:05.620365+00:00"}
+L2-5 health(运行态): PASS
+  status: ● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/kylin-agent/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Fri 2026-08-28 14:38:04 CST; 1s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+  journal: 8月 28 14:38:05 kylin-agent-pc kylin-memory-server[1227771]: 2026-08-28T14:38:05+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+8月 28 14:38:05 kylin-agent-pc kylin-memory-server[1227771]: 2026-08-28T14:38:05+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+8月 28 14:38:05 kylin-agent-pc kylin-memory-server[1227771]: 2026-08-28T14:38:05+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+  restart 后 is-active: active
+L2-5 restart: PASS
+  stop 后: inactive
+SOCK_GONE
+L2-5 stop+socket 清理: PASS
+  回退(enable --now): active
+L2-5 回退恢复 active: PASS
+
+==========================================================================
+STEP: L2 汇总
+==========================================================================
+[L2-1]
+   L2-1 upgrade head: PASS
+   L2-1 schema 对照(FRS-DB-001/ADR-011): PASS
+   L2-1 往返(downgrade→upgrade): PASS
+   L2-1 FTS 软删过滤探针: PASS
+[L2-2]
+   L2-2 正向写 ok: PASS
+   L2-2 幂等回放相同响应: PASS
+   L2-2 落库+Outbox入队: PASS
+   L2-2 跨用户毒素拒绝(真实UDS): PASS
+   L2-2 跨用户后零副作用: PASS
+   L2-2 空映射→INTERNAL_ERROR: PASS
+   L2-2 空映射 warning 日志: PASS
+   L2-2 resolver miss 零副作用: PASS
+   L2-2 production→UNSUPPORTED_METHOD: PASS
+[L2-3]
+   L2-3 health 全绿 data.status=ok: PASS
+   L2-3 worker 未注入→degraded: PASS
+   L2-3 DB不可达/metrics哨兵(VM L1 handler 单测): PASS
+[L2-4]
+   L2-4 JSON 单行日志: PASS
+   L2-4 请求日志含 trace_id+request_id: PASS
+   L2-4 Worker 日志含 trace_id+event_id: PASS
+   L2-4 无 PII(正文)泄漏: PASS
+[L2-5]
+   L2-5 默认库 alembic: PASS
+   L2-5 enable/start: PASS
+   L2-5 socket 可达: PASS
+   L2-5 health(运行态): PASS
+   L2-5 restart: PASS
+   L2-5 stop+socket 清理: PASS
+   L2-5 回退恢复 active: PASS
+
+整体判定: PASS

@@ -364,9 +364,10 @@ Page {
                         Layout.fillWidth: true
                         spacing: 6
 
-                        // 非阻断项修复：Preview 与 Send 复用同一 buildTurnFinalizedEventJson
+                        // HIGH 修复：Preview 与 Send 复用同一 buildTurnFinalizedEventJson
                         // （ViewModel 内部按 key 缓存 event_id / timestamp，两者完全一致）。
-                        // 并将 postTurnPreview 从"手动赋值破坏 binding" 改为 text: viewModel.lastTurnFinalizedEvent
+                        // Preview 只写 previewHelper.previewDoc（纯状态）；postTurnPreview
+                        // 通过 declarative binding 自动响应，绝不破坏 binding。
                         Button {
                             text: qsTr("Preview TurnFinalizedEvent (不发送 · 与 Send 共用同一 event_id)")
                             onClicked: {
@@ -375,12 +376,7 @@ Page {
                                     postTurnId.text, postTraceId.text,
                                     postMsgId.text, assistantFinalText.text,
                                     postReason.text, postStop.text)
-                                // 注意：此处故意不直接写 postTurnPreview.text，
-                                // 而是通过 runPostTurnPipeline 中 setLastTurnFinalizedEvent 路径
-                                // 统一更新，避免破坏绑定。为此提供一个只读 setter 辅助：
-                                const doc = JSON.stringify(obj, null, 2)
-                                previewHelper.tmpDoc = doc
-                                previewHelper.update()
+                                previewHelper.previewDoc = JSON.stringify(obj, null, 2)
                             }
                         }
 
@@ -415,27 +411,24 @@ Page {
                             id: postTurnPreview
                             readOnly: true
                             wrapMode: TextArea.Wrap
-                            // 非阻断项修复：使用 binding，不再被 JS 赋值覆盖
-                            text: previewHelper.displayDoc
+                            // HIGH 修复：纯 declarative binding（优先级：
+                            // 1) 最近已发送/发送中的 viewModel.lastTurnFinalizedEvent；
+                            // 2) 否则 previewHelper.previewDoc（纯预览）。
+                            // 绝不在 JS 中做 imperative .text = 赋值，避免移除 binding。
+                            text: (viewModel.lastTurnFinalizedEvent.length > 0
+                                   && viewModel.postTurnStage !== "idle")
+                                      ? viewModel.lastTurnFinalizedEvent
+                                      : previewHelper.previewDoc
                             font.family: "Consolas,Menlo,monospace"
                             background: Rectangle { color: "#fbe9e7" }
                         }
                     }
 
-                    // 非阻断项修复：Preview 中间辅助对象，不破坏 property binding
+                    // HIGH 修复：Preview 辅助对象仅作为纯 QObject 状态承载；所有使用方
+                    // 读取 previewDoc，不调用破坏 binding 的 imperative 赋值。
                     QtObject {
                         id: previewHelper
-                        property string tmpDoc: ""
-                        property string displayDoc: viewModel.lastTurnFinalizedEvent
-                        function update() {
-                            // 仅当 viewModel 尚未更新时（纯 Preview）才用 tmpDoc
-                            if (viewModel.lastTurnFinalizedEvent.length === 0
-                                || viewModel.postTurnStage === "idle"
-                                || viewModel.postTurnStage === "failed"
-                                || viewModel.postTurnStage === "timeout") {
-                                postTurnPreview.text = tmpDoc  // 仅在 idle/failed 允许直接写入（无绑定风险）
-                            }
-                        }
+                        property string previewDoc: ""
                     }
                 }
             }

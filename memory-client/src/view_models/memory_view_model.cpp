@@ -494,16 +494,20 @@ void MemoryViewModel::setPostTurnStage(const QString& value)
 
 void MemoryViewModel::setPreChatBusy(bool value)
 {
-    if (preChatBusy_ == value) return;
+    const bool oldBusy = preChatBusy_ || postTurnBusy_;
+    if (preChatBusy_ == value) { return; }
     preChatBusy_ = value;
     emit preChatBusyChanged();
+    if (oldBusy != (preChatBusy_ || postTurnBusy_)) { emit busyChanged(); }
 }
 
 void MemoryViewModel::setPostTurnBusy(bool value)
 {
-    if (postTurnBusy_ == value) return;
+    const bool oldBusy = preChatBusy_ || postTurnBusy_;
+    if (postTurnBusy_ == value) { return; }
     postTurnBusy_ = value;
     emit postTurnBusyChanged();
+    if (oldBusy != (preChatBusy_ || postTurnBusy_)) { emit busyChanged(); }
 }
 
 // ── 问题2修复：正式 MemoryContext 契约解析（memory_context.v1.json） ────────

@@ -83,14 +83,20 @@ public:
     // 便捷方法：memory.health 请求，无 payload。
     Q_INVOKABLE QString sendHealthRequest();
 
-    // D5-C 便捷方法：memory.store 请求（Post-Turn 观察事件写入）。
-    // ⚠️  payload 形状目前仅用于与 D 轨 Gateway 联调 Demo，
-    //     尚未由 D 轨正式冻结；待 D 轨 memory.store ADR 落地后，
-    //     以 D 侧契约为准进行校验。
+    // D5-C 便捷方法：memory.store 请求（记忆条目写入骨架）。
+    // ⚠️  D 轨 FRZ-IPC-007 持续返回 UNSUPPORTED_METHOD（ADR-010 §决策明确
+    //     memory.store 保持未实现，不动）。仅保留常量 / 入口方便对比测试。
     Q_INVOKABLE QString sendMemoryStoreRequest(const QJsonObject& payload);
 
-    // D5-C 便捷方法：发送 TurnFinalizedEvent（Post-Turn 观察 Demo）。
-    // eventJson 须符合 os-agent-integration/contracts 中的 TurnFinalizedEvent 契约。
+    // D5-C 便捷方法：发送 TurnFinalizedEvent（Post-Turn 写链路 Demo）。
+    // 路由：turn.finalized（ADR-010 冻结；CANDIDATE / BLOCKED_BY_HOST_MAPPING；
+    // 生产默认不注册；Demo/测试可注册）。
+    // payload = eventJson，字段严格对齐 ADR-010 IPC 映射契约：
+    //   metadata(schema_version,event_id,user_id,session_id,turn_id,
+    //     idempotency_key,trace_id?,occurred_at,collected_at,source_reference)
+    //   事件(is_final,finalized_at,final_message_id?,finalization_reason?,
+    //     stop_reason?,retry_of_turn_id?,tool_call_ids?)
+    // 注：不再使用旧 {event_type,event_body} wrapper。
     Q_INVOKABLE QString sendTurnFinalizedEvent(const QJsonObject& eventJson);
 
 signals:

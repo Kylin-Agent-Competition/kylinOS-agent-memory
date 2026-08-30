@@ -16,10 +16,10 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import Engine, and_, delete, func, insert, select, update
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy import and_, delete, func, insert, select, update
+from sqlalchemy.exc import OperationalError
 
 from db.engine import DatabaseLockedError, is_locked_error
 from db.schema import (
@@ -34,6 +34,25 @@ logger = logging.getLogger(__name__)
 
 # 幂等 TTL（冻结 FRZ-IPC-005 / FRZ-DB-005）：24h
 IDEMPOTENCY_TTL = timedelta(hours=24)
+
+# 幂等缓存 wrapper 键（ADR-010 冻结缓存内部结构，不改 DDL）
+FINGERPRINT_KEY = "_request_fingerprint"
+
+
+class IdempotencyConflictError(Exception):
+    """幂等冲突：相同三元组 + 不同请求指纹（ADR-010）→ INVALID_REQUEST。
+
+    语义：不同事件误复用同一 idempotency_key 时禁止被静默吞掉。
+    """
+
+
+class ConversationOwnershipError(Exception):
+    """会话所有权冲突：session_id 已存在但属于其它 user（B1 跨用户污染）。
+
+    语义：用户 B 复用用户 A 的 session_id 写入时，禁止命中/篡改 A 的 conversation
+    或 turn（[02 §16.6] 跨用户隔离）。UoW 回滚 → 无 Turn/Outbox/幂等缓存残留，
+    由 handler 层转 RequestValidationError → INVALID_REQUEST（不回显标识）。
+    """
 
 # outbox 事件类型（业务入队用）
 EVENT_TURN_FINALIZED = "turn.finalized"
@@ -59,13 +78,22 @@ def _wrap_locked(exc: BaseException) -> BaseException:
 def upsert_conversation(
     conn, *, user_id: str, session_id: str, started_at: Optional[str] = None
 ) -> int:
-    """按 session_id upsert conversation，返回 id（幂等：重复调用返回已有 id）。"""
+    """按 session_id upsert conversation，返回 id（幂等：重复调用返回已有 id）。
+
+    跨用户隔离（B1 修复，[02 §16.6]）：命中既有 conversation 时必须校验其
+    user_id 与调用方一致；不一致抛 ConversationOwnershipError，禁止复用其它
+    用户的会话（所有权边界 = conversation.user_id）。不修改冻结表结构。
+    """
     started_at = started_at or _now_iso()
     existing = conn.execute(
-        select(conversations.c.id).where(conversations.c.session_id == session_id)
-    ).first()
+        select(conversations).where(conversations.c.session_id == session_id)
+    ).mappings().first()
     if existing is not None:
-        return int(existing[0])
+        if existing["user_id"] != user_id:
+            raise ConversationOwnershipError(
+                "session ownership conflict (conversation belongs to another user)"
+            )
+        return int(existing["id"])
     try:
         res = conn.execute(
             insert(conversations)
@@ -74,6 +102,20 @@ def upsert_conversation(
     except OperationalError as exc:
         raise _wrap_locked(exc) from exc
     return int(res.lastrowid)
+
+
+def get_conversation_with_user(
+    conn, *, session_id: str
+) -> Optional[Dict[str, Any]]:
+    """按 session_id 查 conversation（不限定 user，供 handler 所有权前置校验）。
+
+    与 `get_conversation`（限定 user_id）区别：本函数返回任意用户持有的会话，
+    用于检测「会话已存在但属于其它用户」的跨用户冲突（B1）。
+    """
+    row = conn.execute(
+        select(conversations).where(conversations.c.session_id == session_id)
+    ).mappings().first()
+    return dict(row) if row else None
 
 
 def get_conversation(conn, *, session_id: str, user_id: str) -> Optional[Dict[str, Any]]:
@@ -99,8 +141,14 @@ def insert_turn(
     model_response: Optional[str] = None,
     is_end: int = 0,
     created_at: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    host_turn_id: Optional[str] = None,
 ) -> int:
-    """插入 turn，返回 id。original_user_text 保存用户原文（隔离语义）。"""
+    """插入 turn，返回 id。original_user_text 保存用户原文（隔离语义）。
+
+    ADR-011：trace_id（IPC envelope 唯一真源）/ host_turn_id（Upsert 匹配键）
+    nullable 列透传落库。
+    """
     try:
         res = conn.execute(
             insert(turns).values(
@@ -111,11 +159,82 @@ def insert_turn(
                 model_response=model_response,
                 is_end=is_end,
                 created_at=created_at or _now_iso(),
+                trace_id=trace_id,
+                host_turn_id=host_turn_id,
             )
         )
     except OperationalError as exc:
         raise _wrap_locked(exc) from exc
     return int(res.lastrowid)
+
+
+def find_turn_by_host(
+    conn, *, session_id: str, host_turn_id: str, user_id: str
+) -> Optional[Dict[str, Any]]:
+    """按 ADR-010 Upsert 匹配键 (session_id, host_turn_id) 查既有 turn。
+
+    跨用户隔离（B1 修复，[02 §16.6]）：JOIN conversations 并强制
+    `conversations.user_id == user_id`，保证只定位**当前用户**的 turn，
+    防止用户 B 以 `uB/s1/H-1` 命中用户 A 的既有 turn 走 UPDATE/refinalize 分支
+    篡改 A 的数据。
+
+    Returns:
+        turns 行 dict；不存在（或不属于该用户）返回 None。host_turn_id 为宿主
+        字符串 ID，与 DB turns.id（db_turn_id）显式区分。
+    """
+    row = conn.execute(
+        select(turns)
+        .join(conversations, conversations.c.session_id == turns.c.session_id)
+        .where(
+            and_(
+                turns.c.session_id == session_id,
+                turns.c.host_turn_id == host_turn_id,
+                conversations.c.user_id == user_id,
+            )
+        )
+        .order_by(turns.c.id.asc())
+        .limit(1)
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def next_turn_index(conn, *, session_id: str) -> int:
+    """服务端计算 turn_index：同一会话内 1 + MAX(turn_index)（ADR-010）。
+
+    事件不携带 turn_index；重投/refinalize 不重算（保持首次值），
+    仅 INSERT 路径调用。
+    """
+    current = conn.execute(
+        select(func.max(turns.c.turn_index)).where(turns.c.session_id == session_id)
+    ).scalar()
+    return 1 + int(current or 0)
+
+
+def update_turn_refinalize(
+    conn,
+    *,
+    turn_id: int,
+    trace_id: str,
+    is_end: int = 1,
+) -> int:
+    """UPDATE/refinalize 路径：更新 trace_id（指向最终写入链路），保持首次值不动。
+
+    ADR-010 字段矩阵：UPDATE 仅更新 trace_id（最新请求）；
+    turn_index / original_user_text / created_at / is_end 保持首次值；
+    不调用 resolver（正文已在首次 INSERT 落库）。
+
+    Returns:
+        受影响行数。
+    """
+    try:
+        res = conn.execute(
+            update(turns)
+            .where(turns.c.id == turn_id)
+            .values(trace_id=trace_id, is_end=is_end)
+        )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+    return int(res.rowcount)
 
 
 def get_turn(conn, *, turn_id: int, user_id: str) -> Optional[Dict[str, Any]]:
@@ -143,8 +262,12 @@ def insert_memory_entry(
     content: Dict[str, Any],
     source_turn_id: Optional[int] = None,
     confidence: float = 0.0,
+    trace_id: Optional[str] = None,
 ) -> int:
-    """插入 memory_entry（content 序列化为 JSON 文本），返回 id。"""
+    """插入 memory_entry（content 序列化为 JSON 文本），返回 id。
+
+    ADR-011：trace_id nullable 列透传（IPC envelope 唯一真源）。
+    """
     now = _now_iso()
     try:
         res = conn.execute(
@@ -158,6 +281,7 @@ def insert_memory_entry(
                 is_deleted=0,
                 created_at=now,
                 updated_at=now,
+                trace_id=trace_id,
             )
         )
     except OperationalError as exc:
@@ -382,7 +506,34 @@ def write_idempotency_cache(
         raise _wrap_locked(exc) from exc
 
 
-# ── 幂等执行（附录 A：检查 → 执行 → 缓存，同事务） ──
+def _wrap_response(response: Dict[str, Any], request_fingerprint: Optional[str]) -> Dict[str, Any]:
+    """幂等缓存 wrapper（ADR-010）：提供指纹时包 wrapper，否则原样返回。"""
+    if request_fingerprint is None:
+        return response
+    return {FINGERPRINT_KEY: request_fingerprint, "response": response}
+
+
+def _unwrap_response(
+    stored: str, request_fingerprint: Optional[str]
+) -> Dict[str, Any]:
+    """幂等缓存 unwrap（ADR-010）。
+
+    - 缓存行无 `_request_fingerprint`（legacy）→ 直接返回 response（向后兼容）；
+    - 缓存行有指纹且调用方提供指纹：比对，不一致 → IdempotencyConflictError；
+    - 缓存行有指纹但调用方未提供（legacy 调用方）→ 直接返回 response（不破坏既有调用）。
+    """
+    parsed = json.loads(stored)
+    if not isinstance(parsed, dict) or FINGERPRINT_KEY not in parsed:
+        return parsed
+    cached_fp = parsed[FINGERPRINT_KEY]
+    if request_fingerprint is not None and cached_fp != request_fingerprint:
+        raise IdempotencyConflictError(
+            "idempotency key reused with different request fingerprint"
+        )
+    return parsed["response"]
+
+
+# ── 幂等执行（附录 A：检查 → 执行 → 缓存，同事务；ADR-010 指纹 wrapper/unwrap） ──
 
 
 def execute_idempotent(
@@ -392,17 +543,22 @@ def execute_idempotent(
     session_id: str,
     idempotency_key: str,
     business_fn,
+    request_fingerprint: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], bool]:
-    """幂等执行器（附录 A 单一真相源）。
+    """幂等执行器（附录 A 单一真相源 + ADR-010 请求指纹）。
 
     Args:
         business_fn: 无参可调用，返回 (response_dict)；副作用（SQLite+Outbox）必须
             在传入的同一 conn 事务中执行，保证与缓存写入同事务。
+        request_fingerprint: ADR-010 `_request_fingerprint`（sha256 规范化
+            method+业务语义字段）。提供时写缓存走 wrapper；命中时比对指纹，
+            不一致抛 IdempotencyConflictError（转 INVALID_REQUEST）。
 
     Returns:
         (response, from_cache)：from_cache=True 表示命中缓存未执行副作用。
 
     Raises:
+        IdempotencyConflictError: 相同三元组 + 不同请求指纹（ADR-010）。
         IntegrityError: 并发未命中双写冲突（UoW 捕获后回查，不视为错误）。
     """
     cached = get_idempotency_cache(
@@ -410,7 +566,7 @@ def execute_idempotent(
     )
     if cached is not None:
         if cached["expires_at"] > datetime.now(timezone.utc).isoformat():
-            return json.loads(cached["response"]), True
+            return _unwrap_response(cached["response"], request_fingerprint), True
         # 命中但已过期 → 删除后继续执行
         delete_idempotency_cache(
             conn, user_id=user_id, session_id=session_id, idempotency_key=idempotency_key
@@ -422,7 +578,7 @@ def execute_idempotent(
         user_id=user_id,
         session_id=session_id,
         idempotency_key=idempotency_key,
-        response=response,
+        response=_wrap_response(response, request_fingerprint),
     )
     return response, False
 

@@ -195,14 +195,10 @@ QString MemoryClient::sendMemoryStoreRequest(const QJsonObject& payload)
 
 QString MemoryClient::sendTurnFinalizedEvent(const QJsonObject& eventJson)
 {
-    // D5-C Demo：封装 TurnFinalizedEvent 为 memory.store payload。
-    // ⚠️  {event_type, event_body} 形状仅用于与 D 轨 Gateway 联调 Demo，
-    //     尚未由 D 轨 memory.store ADR 正式冻结；后续按 D 侧契约对齐。
-    const QJsonObject storePayload{
-        {QStringLiteral("event_type"), QStringLiteral("turn_finalized")},
-        {QStringLiteral("event_body"), eventJson},
-    };
-    return sendRequest(methods::kMemoryStore, storePayload);
+    // D5-C Demo / Route B：按 ADR-010 路由 turn.finalized；payload 直接复用
+    // TurnFinalizedEvent JSON（metadata + event 字段同层），不再包装
+    // {event_type, event_body} wrapper（该旧形状与 ADR-010 冲突）。
+    return sendRequest(methods::kTurnFinalized, eventJson);
 }
 
 void MemoryClient::handleSocketConnected()

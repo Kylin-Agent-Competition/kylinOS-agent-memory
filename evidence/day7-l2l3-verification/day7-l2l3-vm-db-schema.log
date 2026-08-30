@@ -1,0 +1,487 @@
+================================================================================
+# Day7E L2/L3 D4d DB 层核对  @ 2026-08-24T21:33:10
+================================================================================
+
+----- db_schema_py :: sed -n '1,200p' /home/kylin-agent/kylinOS-agent-memory/memory-service/db/schema.py 2>/dev/null -----
+# exit=0
+"""schema.py — D4D SQLAlchemy 2.0 Core 表定义（FRZ-DB-001，DDL 逐字段对齐）
+
+契约来源：deliverables/D4_DB_INITIAL_REQUIREMENTS_20260817.md §FR-DB-001
+  - 5 张核心表 + 4 冻结索引 + 1 辅助索引 + FTS5 memory_fts
+  - 列名/类型/约束不得偏离冻结文档
+  - idempotency_cache 使用复合 PK (user_id, session_id, idempotency_key)（ADR-006）
+  - FTS5 触发器（INSERT/UPDATE/DELETE）同步 memory_entries ↔ memory_fts
+
+本模块同时被以下两处引用，保证单一真相：
+  - migrations/env.py 的 target_metadata（Alembic autogenerate/对比）
+  - db/engine.py 的 create_all（测试/开发快速建库）
+"""
+
+from __future__ import annotations
+
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    Text,
+)
+
+# 所有迁移/建表共享同一 metadata（Alembic env.py 也引用它）
+metadata = MetaData()
+
+conversations = Table(
+    "conversations",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", String, nullable=False),
+    Column("session_id", String, nullable=False, unique=True),
+    Column("started_at", String, nullable=False),  # ISO8601 UTC
+    Column("ended_at", String, nullable=True),
+    sqlite_autoincrement=True,
+)
+
+turns = Table(
+    "turns",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("session_id", String, ForeignKey("conversations.session_id"), nullable=False),
+    Column("turn_index", Integer, nullable=False),
+    Column("original_user_text", Text, nullable=False),
+    Column("model_request", Text, nullable=True),
+    Column("model_response", Text, nullable=True),
+    Column("is_end", Integer, nullable=False, default=0),
+    Column("created_at", String, nullable=False),  # ISO8601 UTC
+)
+
+memory_entries = Table(
+    "memory_entries",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("user_id", String, nullable=False),
+    Column(
+        "entry_type",
+        String,
+        nullable=False,
+    ),
+    Column("content", Text, nullable=False),  # JSON 文本
+    Column("source_turn_id", Integer, ForeignKey("turns.id"), nullable=True),
+    Column("confidence", Float, nullable=False, default=0.0),  # ∈ [0,1]
+    Column("version", Integer, nullable=False, default=1),  # 乐观锁
+    Column("is_deleted", Integer, nullable=False, default=0),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    CheckConstraint("entry_type IN ('preference','knowledge','tool_result','behavior')", name="ck_memory_entries_entry_type"),
+    CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_memory_entries_confidence"),
+)
+
+outbox = Table(
+    "outbox",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("aggregate_type", String, nullable=False),
+    Column("aggregate_id", String, nullable=False),
+    Column("event_type", String, nullable=False),
+    Column("payload", Text, nullable=False),  # JSON 文本
+    Column("attempts", Integer, nullable=False, default=0),
+    Column("next_retry_at", String, nullable=True),  # ISO8601 UTC
+    Column("last_error", Text, nullable=True),
+    Column("created_at", String, nullable=False),
+    CheckConstraint("aggregate_type IN ('turn','memory')", name="ck_outbox_aggregate_type"),
+)
+
+idempotency_cache = Table(
+    "idempotency_cache",
+    metadata,
+    # 复合主键（ADR-006，冻结 §2.2.5 回写）
+    Column("user_id", String, primary_key=True),
+    Column("session_id", String, primary_key=True),
+    Column("idempotency_key", String, primary_key=True),
+    Column("response", Text, nullable=False),  # JSON 文本（缓存响应）
+    Column("created_at", String, nullable=False),
+    Column("expires_at", String, nullable=False),  # TTL=24h
+)
+
+# ── 索引（4 冻结 + 1 辅助，冻结文档 §2.3） ──
+idx_turns_session = Index("idx_turns_session", turns.c.session_id, turns.c.turn_index)
+idx_memory_user_type = Index("idx_memory_user_type", memory_entries.c.user_id, memory_entries.c.entry_type)
+idx_memory_deleted = Index("idx_memory_deleted", memory_entries.c.is_deleted)
+idx_outbox_pending = Index(
+    "idx_outbox_pending",
+    outbox.c.next_retry_at,
+    sqlite_where=outbox.c.attempts <= 3,  # 与 outbox.max_retries=3 配套（需求 §2.2）
+)
+idx_idempotency_expires = Index("idx_idempotency_expires", idempotency_cache.c.expires_at)
+
+# ── FTS5（冻结文档 §2.4） ──
+FTS5_DDL = (
+    "CREATE VIRTUAL TABLE memory_fts USING fts5("
+    "content, entry_type, user_id UNINDEXED, tokenize='unicode61')"
+)
+
+# FTS 同步触发器（软删除语义：is_deleted 0→1 时自动从 FTS5 删除对应记录）
+# 说明：SQLite 触发器内 FTS5 'delete' 命令与 JSON 中文内容不兼容（实测 SQL logic
+# error，SQLite 3.37），统一改用 `DELETE FROM memory_fts WHERE rowid = old.id`
+# （实验验证方式 B/C 可用）。UPDATE 场景拆分为两个 WHEN 子句触发器。
+# 幂等契约（TD 关联：init_schema() 二次调用）：全部使用 `IF NOT EXISTS`，
+# 保证同一触发器在重复调用 init_schema()/create_all 时不冲突（SQLite 原生支持，
+# 不改变冻结语义）。engine.py::init_schema() 依赖此契约。
+FTS_TRIGGERS_DDL = [
+    # INSERT：新记录入 FTS
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_fts_ai AFTER INSERT ON memory_entries BEGIN
+        INSERT INTO memory_fts(rowid, content, entry_type, user_id)
+        VALUES (new.id, new.content, new.entry_type, new.user_id);
+    END
+    """,
+    # UPDATE（内容变化，非软删除）：先删旧再插新
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_fts_au_content AFTER UPDATE ON memory_entries
+    WHEN old.is_deleted = 0 AND new.is_deleted = 0 AND old.content IS NOT new.content
+    BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.id;
+        INSERT INTO memory_fts(rowid, content, entry_type, user_id)
+        VALUES (new.id, new.content, new.entry_type, new.user_id);
+    END
+    """,
+    # UPDATE（软删除 0→1）：只删 FTS，不插回（MATCH 不再命中，冻结文档 §2.4）
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_fts_au_deleted AFTER UPDATE ON memory_entries
+    WHEN old.is_deleted = 0 AND new.is_deleted = 1
+    BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.id;
+    END
+    """,
+    # DELETE：物理删除同步删 FTS
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_fts_ad AFTER DELETE ON memory_entries BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.id;
+    END
+    """,
+]
+
+----- db_repositories_py :: grep -n 'current_version\|version\|previous_version\|memory_entries\|class ' /home/kylin-agent/kylinOS-agent-memory/memory-service/db/repositories.py 2>/dev/null | head -80 -----
+# exit=0
+4:  - 5 张核心表的基础 CRUD（conversations/turns/memory_entries/outbox/idempotency_cache）
+26:    memory_entries,
+117:# ── memory_entries ──
+132:        insert(memory_entries).values(
+138:            version=1,
+148:    conn, *, entry_id: int, user_id: str, current_version: int
+150:    """乐观锁软删除：is_deleted 0→1 + version+1（FTS 由触发器同步删除）。
+157:            update(memory_entries)
+160:                    memory_entries.c.id == entry_id,
+161:                    memory_entries.c.user_id == user_id,
+162:                    memory_entries.c.version == current_version,
+163:                    memory_entries.c.is_deleted == 0,
+166:            .values(is_deleted=1, version=current_version + 1, updated_at=_now_iso())
+173:def list_memory_entries(
+182:    stmt = select(memory_entries).where(memory_entries.c.user_id == user_id)
+184:        stmt = stmt.where(memory_entries.c.entry_type == entry_type)
+186:        stmt = stmt.where(memory_entries.c.is_deleted == 0)
+187:    stmt = stmt.order_by(memory_entries.c.id.desc()).limit(limit)
+
+----- migration_001 :: sed -n '1,120p' /home/kylin-agent/kylinOS-agent-memory/migrations/versions/001_initial_schema.py 2>/dev/null -----
+# exit=0
+"""001_initial_schema — D4D 基线迁移（ADR-007 命名：001_initial_schema.py）
+
+契约来源：deliverables/D4_DB_INITIAL_REQUIREMENTS_20260817.md §FR-DB-001
+  5 张核心表 + 4 冻结索引 + 1 辅助索引 + FTS5 memory_fts + 触发器
+  列名/类型/约束逐字段对齐冻结文档；idempotency_cache 为复合 PK（ADR-006）。
+"""
+
+from __future__ import annotations
+
+from alembic import op
+from sqlalchemy import CheckConstraint, Column, Float, ForeignKey, Index, Integer, String, Text, text
+
+# ── revision 元数据（ADR-007：基线固定 001_initial_schema.py） ──
+revision = "001_initial_schema"
+down_revision = None
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    # ── conversations ──
+    op.create_table(
+        "conversations",
+        Column("id", Integer, primary_key=True, autoincrement=True),
+        Column("user_id", String, nullable=False),
+        Column("session_id", String, nullable=False, unique=True),
+        Column("started_at", String, nullable=False),  # ISO8601 UTC
+        Column("ended_at", String, nullable=True),
+        sqlite_autoincrement=True,
+    )
+
+    # ── turns ──
+    op.create_table(
+        "turns",
+        Column("id", Integer, primary_key=True),
+        Column("session_id", String, ForeignKey("conversations.session_id"), nullable=False),
+        Column("turn_index", Integer, nullable=False),
+        Column("original_user_text", Text, nullable=False),
+        Column("model_request", Text, nullable=True),
+        Column("model_response", Text, nullable=True),
+        Column("is_end", Integer, nullable=False, server_default="0"),
+        Column("created_at", String, nullable=False),
+    )
+
+    # ── memory_entries ──
+    op.create_table(
+        "memory_entries",
+        Column("id", Integer, primary_key=True),
+        Column("user_id", String, nullable=False),
+        Column("entry_type", String, nullable=False),
+        Column("content", Text, nullable=False),  # JSON 文本
+        Column("source_turn_id", Integer, ForeignKey("turns.id"), nullable=True),
+        Column("confidence", Float, nullable=False, server_default="0.0"),  # ∈ [0,1]
+        Column("version", Integer, nullable=False, server_default="1"),  # 乐观锁
+        Column("is_deleted", Integer, nullable=False, server_default="0"),
+        Column("created_at", String, nullable=False),
+        Column("updated_at", String, nullable=False),
+        CheckConstraint("entry_type IN ('preference','knowledge','tool_result','behavior')", name="ck_memory_entries_entry_type"),
+        CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_memory_entries_confidence"),
+    )
+
+    # ── outbox ──
+    op.create_table(
+        "outbox",
+        Column("id", Integer, primary_key=True),
+        Column("aggregate_type", String, nullable=False),
+        Column("aggregate_id", String, nullable=False),
+        Column("event_type", String, nullable=False),
+        Column("payload", Text, nullable=False),  # JSON 文本
+        Column("attempts", Integer, nullable=False, server_default="0"),
+        Column("next_retry_at", String, nullable=True),  # ISO8601 UTC
+        Column("last_error", Text, nullable=True),
+        Column("created_at", String, nullable=False),
+        CheckConstraint("aggregate_type IN ('turn','memory')", name="ck_outbox_aggregate_type"),
+    )
+
+    # ── idempotency_cache（复合 PK，ADR-006 冻结 §2.2.5） ──
+    op.create_table(
+        "idempotency_cache",
+        Column("user_id", String, primary_key=True),
+        Column("session_id", String, primary_key=True),
+        Column("idempotency_key", String, primary_key=True),
+        Column("response", Text, nullable=False),  # JSON 文本（缓存响应）
+        Column("created_at", String, nullable=False),
+        Column("expires_at", String, nullable=False),  # TTL=24h
+    )
+
+    # ── 索引（4 冻结 + 1 辅助，冻结文档 §2.3） ──
+    op.create_index("idx_turns_session", "turns", ["session_id", "turn_index"])
+    op.create_index("idx_memory_user_type", "memory_entries", ["user_id", "entry_type"])
+    op.create_index("idx_memory_deleted", "memory_entries", ["is_deleted"])
+    op.create_index(
+        "idx_outbox_pending",
+        "outbox",
+        ["next_retry_at"],
+        sqlite_where=text("attempts <= 3"),  # 与 outbox.max_retries=3 配套
+    )
+    op.create_index("idx_idempotency_expires", "idempotency_cache", ["expires_at"])
+
+    # ── FTS5（冻结文档 §2.4）+ 同步触发器 ──
+    op.execute(
+        "CREATE VIRTUAL TABLE memory_fts USING fts5("
+        "content, entry_type, user_id UNINDEXED, tokenize='unicode61')"
+    )
+    # 幂等契约（与 db/schema.py FTS_TRIGGERS_DDL 单一真相一致，详见 TD 关联）：
+    # `IF NOT EXISTS` 保证重复执行建库/迁移脚本时不冲突（alembic 按 revision id
+    # 记录，不校验内容，修改安全且不改变冻结语义）。
+    op.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS memory_fts_ai AFTER INSERT ON memory_entries BEGIN
+            INSERT INTO memory_fts(rowid, content, entry_type, user_id)
+            VALUES (new.id, new.content, new.entry_type, new.user_id);
+        END
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS memory_fts_au_content AFTER UPDATE ON memory_entries
+        WHEN old.is_deleted = 0 AND new.is_deleted = 0 AND old.content IS NOT new.content
+        BEGIN
+
+----- kylin_memory_db_tables :: sqlite3 /data/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db '.tables' 2>&1; echo '--- schema ---'; sqlite3 /data/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db '.schema' 2>&1 | head -120 -----
+# exit=0
+conversations       memory_fts          memory_fts_data     outbox            
+idempotency_cache   memory_fts_config   memory_fts_docsize  turns             
+memory_entries      memory_fts_content  memory_fts_idx    
+--- schema ---
+CREATE TABLE conversations (
+	id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, 
+	user_id VARCHAR NOT NULL, 
+	session_id VARCHAR NOT NULL, 
+	started_at VARCHAR NOT NULL, 
+	ended_at VARCHAR, 
+	UNIQUE (session_id)
+);
+CREATE TABLE sqlite_sequence(name,seq);
+CREATE TABLE outbox (
+	id INTEGER NOT NULL, 
+	aggregate_type VARCHAR NOT NULL, 
+	aggregate_id VARCHAR NOT NULL, 
+	event_type VARCHAR NOT NULL, 
+	payload TEXT NOT NULL, 
+	attempts INTEGER NOT NULL, 
+	next_retry_at VARCHAR, 
+	last_error TEXT, 
+	created_at VARCHAR NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT ck_outbox_aggregate_type CHECK (aggregate_type IN ('turn','memory'))
+);
+CREATE INDEX idx_outbox_pending ON outbox (next_retry_at) WHERE attempts <= 3;
+CREATE TABLE idempotency_cache (
+	user_id VARCHAR NOT NULL, 
+	session_id VARCHAR NOT NULL, 
+	idempotency_key VARCHAR NOT NULL, 
+	response TEXT NOT NULL, 
+	created_at VARCHAR NOT NULL, 
+	expires_at VARCHAR NOT NULL, 
+	PRIMARY KEY (user_id, session_id, idempotency_key)
+);
+CREATE INDEX idx_idempotency_expires ON idempotency_cache (expires_at);
+CREATE TABLE turns (
+	id INTEGER NOT NULL, 
+	session_id VARCHAR NOT NULL, 
+	turn_index INTEGER NOT NULL, 
+	original_user_text TEXT NOT NULL, 
+	model_request TEXT, 
+	model_response TEXT, 
+	is_end INTEGER NOT NULL, 
+	created_at VARCHAR NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(session_id) REFERENCES conversations (session_id)
+);
+CREATE INDEX idx_turns_session ON turns (session_id, turn_index);
+CREATE TABLE memory_entries (
+	id INTEGER NOT NULL, 
+	user_id VARCHAR NOT NULL, 
+	entry_type VARCHAR NOT NULL, 
+	content TEXT NOT NULL, 
+	source_turn_id INTEGER, 
+	confidence FLOAT NOT NULL, 
+	version INTEGER NOT NULL, 
+	is_deleted INTEGER NOT NULL, 
+	created_at VARCHAR NOT NULL, 
+	updated_at VARCHAR NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT ck_memory_entries_entry_type CHECK (entry_type IN ('preference','knowledge','tool_result','behavior')), 
+	CONSTRAINT ck_memory_entries_confidence CHECK (confidence >= 0 AND confidence <= 1), 
+	FOREIGN KEY(source_turn_id) REFERENCES turns (id)
+);
+CREATE INDEX idx_memory_user_type ON memory_entries (user_id, entry_type);
+CREATE INDEX idx_memory_deleted ON memory_entries (is_deleted);
+CREATE VIRTUAL TABLE memory_fts USING fts5(content, entry_type, user_id UNINDEXED, tokenize='unicode61')
+/* memory_fts(content,entry_type,user_id) */;
+CREATE TABLE IF NOT EXISTS 'memory_fts_data'(id INTEGER PRIMARY KEY, block BLOB);
+CREATE TABLE IF NOT EXISTS 'memory_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS 'memory_fts_content'(id INTEGER PRIMARY KEY, c0, c1, c2);
+CREATE TABLE IF NOT EXISTS 'memory_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
+CREATE TABLE IF NOT EXISTS 'memory_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID;
+CREATE TRIGGER memory_fts_ai AFTER INSERT ON memory_entries BEGIN
+        INSERT INTO memory_fts(rowid, content, entry_type, user_id)
+        VALUES (new.id, new.content, new.entry_type, new.user_id);
+    END;
+CREATE TRIGGER memory_fts_au_content AFTER UPDATE ON memory_entries
+    WHEN old.is_deleted = 0 AND new.is_deleted = 0 AND old.content IS NOT new.content
+    BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.id;
+        INSERT INTO memory_fts(rowid, content, entry_type, user_id)
+        VALUES (new.id, new.content, new.entry_type, new.user_id);
+    END;
+CREATE TRIGGER memory_fts_au_deleted AFTER UPDATE ON memory_entries
+    WHEN old.is_deleted = 0 AND new.is_deleted = 1
+    BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.id;
+    END;
+CREATE TRIGGER memory_fts_ad AFTER DELETE ON memory_entries BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.id;
+    END;
+
+----- kylin_memory_db_current_version :: sqlite3 /data/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db '.schema' 2>&1 | grep -i -E 'current_version|previous_version|version' || echo 'NO_VERSION_COLUMN_IN_DB' -----
+# exit=0
+	version INTEGER NOT NULL, 
+
+----- d4d_service_dir :: ls -la /home/kylin-agent/kylinOS-agent-memory/memory-service/service /home/kylin-agent/kylinOS-agent-memory/memory-service/db /home/kylin-agent/kylinOS-agent-memory/memory-service/gateway /home/kylin-agent/kylinOS-agent-memory/memory-service/outbox 2>/dev/null -----
+# exit=0
+/home/kylin-agent/kylinOS-agent-memory/memory-service/db:
+总计 88
+drwxrwxr-x  3 kylin-agent kylin-agent  4096  8月22日 00:23 .
+drwxrwxr-x 14 kylin-agent kylin-agent  4096  8月22日 17:35 ..
+-rw-rw-r--  1 kylin-agent kylin-agent  4240  8月21日 23:05 engine.py
+-rw-rw-r--  1 kylin-agent kylin-agent    84  8月21日 23:05 __init__.py
+drwxrwxr-x  2 kylin-agent kylin-agent  4096  8月22日 19:28 __pycache__
+-rw-rw-r--  1 kylin-agent kylin-agent 13425  8月21日 23:05 repositories.py
+-rw-rw-r--  1 kylin-agent kylin-agent  6585  8月22日 19:28 schema.py
+-rw-rw-r--  1 kylin-agent kylin-agent  5447  8月21日 23:05 uow.py
+
+/home/kylin-agent/kylinOS-agent-memory/memory-service/gateway:
+总计 76
+drwxrwxr-x  3 kylin-agent kylin-agent 4096  8月22日 00:23 .
+drwxrwxr-x 14 kylin-agent kylin-agent 4096  8月22日 17:35 ..
+-rw-rw-r--  1 kylin-agent kylin-agent 2629  8月21日 23:05 handlers.py
+-rw-rw-r--  1 kylin-agent kylin-agent   75  8月21日 23:05 __init__.py
+-rw-rw-r--  1 kylin-agent kylin-agent 6407  8月21日 23:05 protocol.py
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月22日 19:28 __pycache__
+-rw-rw-r--  1 kylin-agent kylin-agent 2314  8月21日 23:05 registry.py
+-rw-rw-r--  1 kylin-agent kylin-agent 9031  8月22日 19:28 server.py
+
+/home/kylin-agent/kylinOS-agent-memory/memory-service/outbox:
+总计 44
+drwxrwxr-x  3 kylin-agent kylin-agent 4096  8月22日 00:40 .
+drwxrwxr-x 14 kylin-agent kylin-agent 4096  8月22日 17:35 ..
+-rw-rw-r--  1 kylin-agent kylin-agent   68  8月21日 23:05 __init__.py
+drwxrwxr-x  2 kylin-agent kylin-agent 4096  8月22日 00:40 __pycache__
+-rw-rw-r--  1 kylin-agent kylin-agent 7617  8月21日 23:05 worker.py
+
+/home/kylin-agent/kylinOS-agent-memory/memory-service/service:
+总计 56
+drwxrwxr-x  2 kylin-agent kylin-agent  4096  8月21日 23:05 .
+drwxrwxr-x 14 kylin-agent kylin-agent  4096  8月22日 17:35 ..
+-rw-rw-r--  1 kylin-agent kylin-agent 20018  8月21日 23:05 candidate_governance.py
+-rw-rw-r--  1 kylin-agent kylin-agent  4044  8月21日 23:05 contracts.py
+-rw-rw-r--  1 kylin-agent kylin-agent   812  8月21日 23:05 __init__.py
+
+----- git_branches :: cd /home/kylin-agent/kylinOS-agent-memory && git branch -a 2>/dev/null | head -40; echo '--- describe ---'; git describe --always 2>/dev/null -----
+# exit=0
+* feat/d4d-ipc-db-outbox
+  remotes/origin/HEAD -> origin/main
+  remotes/origin/docs/C-d1-osagent-spike
+  remotes/origin/docs/C-d2-osagent-runtime
+  remotes/origin/docs/a-day1-baseline-deliverables
+  remotes/origin/docs/day1-baseline-deliverables
+  remotes/origin/docs/e-d1-memory-business-baseline
+  remotes/origin/docs/e-d2-event-gate-review
+  remotes/origin/docs/e-d3-gate0-business-freeze
+  remotes/origin/feat/C-d3-host-contract-v1
+  remotes/origin/feat/C-d4-memory-client-skeleton
+  remotes/origin/feat/d4d-ipc-db-outbox
+  remotes/origin/feat/day2-embedding-smoke
+  remotes/origin/feat/day2-embedding-smoke-v2
+  remotes/origin/feat/day3-provider-contract
+  remotes/origin/feat/day4-bridge-provider-new
+  remotes/origin/feat/day5-minimal-vertical-chain
+  remotes/origin/feat/day6-event-quality-pipeline
+  remotes/origin/feat/day7-preference-extraction
+  remotes/origin/feat/day8-knowledge-extraction
+  remotes/origin/feat/day9-embedding-throughput
+  remotes/origin/feat/e-d4-business-layer-skeleton
+  remotes/origin/feat/e-d5-business-candidate-governance
+  remotes/origin/feature/d4-b-vector-provider-contract-tests
+  remotes/origin/feature/d4-gate0-review-freeze
+  remotes/origin/feature/uds-echo-clean
+  remotes/origin/fix/td-a-pure
+  remotes/origin/main
+  remotes/origin/test/B-vector-engine-baseline
+  remotes/origin/test/B-vector-engine-user-isolation
+  remotes/origin/test/day0-runtime-chain
+--- describe ---
+ed9949c
