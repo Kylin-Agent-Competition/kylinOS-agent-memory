@@ -77,16 +77,24 @@ def _build_queries(raw_queries: list[dict], mode: ChannelMode) -> list[QueryEval
 
 
 def _config(raw: dict, mode: ChannelMode) -> EvalConfig:
+    algorithm_version = {
+        ChannelMode.FTS5_ONLY: "fts5-only/v1",
+        ChannelMode.VECTOR_ONLY: "vector-only/v1",
+        ChannelMode.RRF_V1: "rrf-v1",
+        ChannelMode.WEIGHTED_RRF_V1: "weighted-rrf/v1",
+    }[mode]
+    channel_weights = (
+        dict(raw.get("channel_weights", {}))
+        if mode is ChannelMode.WEIGHTED_RRF_V1
+        else {}
+    )
     return EvalConfig(
         channel_mode=mode,
         k=int(raw.get("k", 10)),
         top_k=int(raw.get("top_k", raw.get("k", 10))),
         rrf_k=int(raw.get("rrf_k", 60)),
-        algorithm_version=str(raw.get(
-            "algorithm_version",
-            "weighted-rrf/v1" if mode is ChannelMode.WEIGHTED_RRF_V1 else "rrf-v1",
-        )),
-        channel_weights=dict(raw.get("channel_weights", {})),
+        algorithm_version=algorithm_version,
+        channel_weights=channel_weights,
         dataset_version=str(raw.get("dataset_version", "UNKNOWN")),
         gold_label_version=str(raw.get("gold_label_version", "UNKNOWN")),
         implementation_commit=str(raw.get("implementation_commit", "UNKNOWN")),
