@@ -9,7 +9,12 @@
 //     A1  memory.retrieve → status=error, UNSUPPORTED_METHOD
 //         → preChatStage == "failed", injectedContextText == "", modelRequestText == originalUserText
 //     A2  turn.finalized  → status=error, UNSUPPORTED_METHOD（生产默认未注册 handler）
-//         → postTurnStage == "failed"（不得再走旧 memory.store wrapper）
+//         → postTurnStage == "failed"
+//         Mock 同时做 ADR-010 契约防御：若出现 {event_type/event_body} wrapper、
+//         或缺少 schema_version/idempotency_key/is_final、或路由到 memory.store，
+//         服务端返回 INVALID_REQUEST，ViewModel 仍进入 failed；
+//         INVALID_REQUEST != UNSUPPORTED_METHOD，测试最后通过 requestFailed
+//         中的 errorCode 对比，明确区分两种失败。
 //   §B  问题2 — MemoryContext 形状严格按 memory_context.v1.json 契约
 //     B1  empty context     (schema/query/context_version 齐全，但无 token/count)
 //         → injectedContextText == "" (不产生伪标记)
@@ -210,22 +215,47 @@ void D5VerticalLinkDemoTest::turnFinalizedWithUnsupportedMethodRoutesPostTurnToF
     // 不再包装 memory.store → {event_type, event_body}。
     mock.setHandler([](const client::EnvelopeParts& parts) -> QJsonObject {
         if (parts.method == client::methods::kTurnFinalized) {
-            // 额外断言：payload 是 TurnFinalizedEvent JSON 本身，不能再出现
-            // event_type / event_body wrapper（旧路径，ADR-010 冲突）。
-            QVERIFY(!parts.payload.contains(QStringLiteral("event_type")));
-            QVERIFY(!parts.payload.contains(QStringLiteral("event_body")));
-            QVERIFY(parts.payload.contains(QStringLiteral("schema_version")));
-            QVERIFY(parts.payload.contains(QStringLiteral("idempotency_key")));
-            QVERIFY(parts.payload.contains(QStringLiteral("is_final")));
-
+            // ADR-010：payload 必须是 TurnFinalizedEvent JSON 本身，不能再出现
+            // event_type / event_body wrapper（旧路径，ADR-010 冲突）；
+            // 并必须包含 schema_version / idempotency_key / is_final 字段。
+            const bool hasWrapper =
+                parts.payload.contains(QStringLiteral("event_type"))
+                || parts.payload.contains(QStringLiteral("event_body"));
+            const bool missingRequired =
+                !parts.payload.contains(QStringLiteral("schema_version"))
+                || !parts.payload.contains(QStringLiteral("idempotency_key"))
+                || !parts.payload.contains(QStringLiteral("is_final"));
+            if (hasWrapper) {
+                // 直接以 INVALID_REQUEST 失败替代 QFAIL（测试宏在返回 QJsonObject
+                // 的 lambda 内不可用；会产生 no-value return 的编译错误）。
+                return client::buildErrorResponse(
+                    parts.requestId, parts.traceId,
+                    client::error_codes::kInvalidRequest,
+                    QStringLiteral("ADR-010 violation: turn.finalized payload still "
+                                   "carries legacy {event_type,event_body} wrapper."));
+            }
+            if (missingRequired) {
+                return client::buildErrorResponse(
+                    parts.requestId, parts.traceId,
+                    client::error_codes::kInvalidRequest,
+                    QStringLiteral("ADR-010 violation: turn.finalized payload missing "
+                                   "schema_version / idempotency_key / is_final."));
+            }
+            // 正常路径：生产默认 turn.finalized 未注册，返回 UNSUPPORTED_METHOD。
             return client::buildErrorResponse(
                 parts.requestId, parts.traceId,
                 client::error_codes::kUnsupportedMethod,
                 QStringLiteral("Gateway default profile has not registered turn.finalized handler (BLOCKED_BY_HOST_MAPPING)."));
         }
         if (parts.method == client::methods::kMemoryStore) {
-            // 保证 sendTurnFinalizedEvent **不经过** memory.store。
-            QFAIL("sendTurnFinalizedEvent must route turn.finalized, not memory.store (ADR-010).");
+            // sendTurnFinalizedEvent 绝不能路由 memory.store；
+            // 以 INVALID_REQUEST 失败让 ViewModel 进入 failed 阶段，
+            // （等价于断言，避免在返回 QJsonObject 的 lambda 里使用 QFAIL 宏）。
+            return client::buildErrorResponse(
+                parts.requestId, parts.traceId,
+                client::error_codes::kInvalidRequest,
+                QStringLiteral("MOCK-ASSERTION-FAILED: sendTurnFinalizedEvent still routed "
+                               "memory.store instead of turn.finalized (ADR-010)."));
         }
         return client::buildSuccessResponse(
             parts.requestId, parts.traceId, QJsonObject{});
