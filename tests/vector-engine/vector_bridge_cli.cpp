@@ -25,6 +25,10 @@ constexpr char kUserIdField[] = "user_id";
 constexpr char kVersionIdField[] = "version_id";
 constexpr char kSceneIdField[] = "scene_id";
 constexpr char kMemoryStatusField[] = "memory_status";
+constexpr char kObjectTypeField[] = "object_type";
+constexpr char kKnowledgeTypeField[] = "knowledge_type";
+constexpr char kPrimaryCategoryField[] = "primary_category";
+constexpr char kSourceEventIdField[] = "source_event_id";
 constexpr char kIsDeletedField[] = "is_deleted";
 
 std::shared_ptr<VectorDB::Database> g_client;
@@ -90,6 +94,9 @@ void ValidateFilterKeys(const json& filter) {
         const std::string& key = it.key();
         if (key != "user_id" && key != "allowed_scene_ids" &&
             key != "include_unscoped" && key != "allowed_memory_statuses" &&
+            key != "object_types" && key != "knowledge_types" &&
+            key != "primary_categories" && key != "source_event_ids" &&
+            key != "version_ids" &&
             key != "exclude_deleted") {
             Fail("unknown filter key: " + key);
         }
@@ -116,6 +123,18 @@ void CreateCollection(const std::string& name, int dim) {
     if (!schema.AddField(VectorDB::FieldSchema(kMemoryStatusField, VectorDB::DataType::VARCHAR, "lifecycle status").WithMaxLength(64))) {
         Fail("failed to add memory_status field");
     }
+    if (!schema.AddField(VectorDB::FieldSchema(kObjectTypeField, VectorDB::DataType::VARCHAR, "memory object type").WithMaxLength(64))) {
+        Fail("failed to add object_type field");
+    }
+    if (!schema.AddField(VectorDB::FieldSchema(kKnowledgeTypeField, VectorDB::DataType::VARCHAR, "knowledge type").WithMaxLength(64))) {
+        Fail("failed to add knowledge_type field");
+    }
+    if (!schema.AddField(VectorDB::FieldSchema(kPrimaryCategoryField, VectorDB::DataType::VARCHAR, "knowledge category").WithMaxLength(128))) {
+        Fail("failed to add primary_category field");
+    }
+    if (!schema.AddField(VectorDB::FieldSchema(kSourceEventIdField, VectorDB::DataType::VARCHAR, "knowledge source event").WithMaxLength(128))) {
+        Fail("failed to add source_event_id field");
+    }
     if (!schema.AddField({kIsDeletedField, VectorDB::DataType::BOOL, "logical deletion marker"})) {
         Fail("failed to add is_deleted field");
     }
@@ -131,7 +150,9 @@ void CreateCollection(const std::string& name, int dim) {
 
 void Insert(const std::string& name, const json& ids, const json& vectors,
             const json& user_ids, const json& version_ids, const json& scene_ids,
-            const json& memory_statuses, const json& deleted_flags) {
+            const json& memory_statuses, const json& deleted_flags,
+            const json& object_types, const json& knowledge_types,
+            const json& primary_categories, const json& source_event_ids) {
     std::vector<std::int64_t> id_vec = ids.get<std::vector<std::int64_t>>();
     std::vector<std::vector<float>> vecs;
     for (const auto& v : vectors) {
@@ -142,9 +163,15 @@ void Insert(const std::string& name, const json& ids, const json& vectors,
     const std::vector<std::string> scenes = scene_ids.get<std::vector<std::string>>();
     const std::vector<std::string> statuses = memory_statuses.get<std::vector<std::string>>();
     const std::vector<bool> deleted = deleted_flags.get<std::vector<bool>>();
+    const std::vector<std::string> objects = object_types.get<std::vector<std::string>>();
+    const std::vector<std::string> knowledge_kinds = knowledge_types.get<std::vector<std::string>>();
+    const std::vector<std::string> categories = primary_categories.get<std::vector<std::string>>();
+    const std::vector<std::string> source_events = source_event_ids.get<std::vector<std::string>>();
     if (id_vec.size() != vecs.size() || id_vec.size() != users.size() ||
         id_vec.size() != versions.size() || id_vec.size() != scenes.size() ||
-        id_vec.size() != statuses.size() || id_vec.size() != deleted.size()) {
+        id_vec.size() != statuses.size() || id_vec.size() != deleted.size() ||
+        id_vec.size() != objects.size() || id_vec.size() != knowledge_kinds.size() ||
+        id_vec.size() != categories.size() || id_vec.size() != source_events.size()) {
         Fail("ids, vectors and metadata fields must have equal length");
     }
     std::vector<VectorDB::FieldDataPtr> fields{
@@ -154,6 +181,10 @@ void Insert(const std::string& name, const json& ids, const json& vectors,
         std::make_shared<VectorDB::VarCharFieldData>(kVersionIdField, versions),
         std::make_shared<VectorDB::VarCharFieldData>(kSceneIdField, scenes),
         std::make_shared<VectorDB::VarCharFieldData>(kMemoryStatusField, statuses),
+        std::make_shared<VectorDB::VarCharFieldData>(kObjectTypeField, objects),
+        std::make_shared<VectorDB::VarCharFieldData>(kKnowledgeTypeField, knowledge_kinds),
+        std::make_shared<VectorDB::VarCharFieldData>(kPrimaryCategoryField, categories),
+        std::make_shared<VectorDB::VarCharFieldData>(kSourceEventIdField, source_events),
         std::make_shared<VectorDB::BoolFieldData>(kIsDeletedField, deleted),
     };
     VectorDB::DmlResults results;
@@ -215,6 +246,25 @@ void Search(const std::string& name, const json& query_vector, const json& filte
     if (!statuses.empty()) {
         clauses.push_back(std::string(kMemoryStatusField) + " in " + QuotedExpressionList(statuses));
     }
+    const std::vector<std::string> object_types = filter.value(
+        "object_types", std::vector<std::string>{});
+    if (!object_types.empty()) {
+        clauses.push_back(std::string(kObjectTypeField) + " in " + QuotedExpressionList(object_types));
+    }
+    const auto add_knowledge_filter = [&clauses, &filter](
+        const char* filter_key, const char* field_name) {
+        const std::vector<std::string> values = filter.value(
+            filter_key, std::vector<std::string>{});
+        if (!values.empty()) {
+            clauses.push_back(
+                "(" + std::string(kObjectTypeField) + " != \"knowledge\" || " +
+                std::string(field_name) + " in " + QuotedExpressionList(values) + ")");
+        }
+    };
+    add_knowledge_filter("knowledge_types", kKnowledgeTypeField);
+    add_knowledge_filter("primary_categories", kPrimaryCategoryField);
+    add_knowledge_filter("source_event_ids", kSourceEventIdField);
+    add_knowledge_filter("version_ids", kVersionIdField);
     std::string expression;
     for (std::size_t index = 0; index < clauses.size(); ++index) {
         if (index != 0) {
@@ -280,11 +330,28 @@ int main(int argc, char** argv) {
             if (argc < 4) Fail("create_collection <name> <dim>");
             CreateCollection(argv[2], std::stoi(argv[3]));
         } else if (op == "insert") {
-            if (argc < 3) Fail("insert <name>  (JSON on stdin: {ids:[...],vectors:[[...]],user_ids:[...],version_ids:[...],scene_ids:[...],memory_statuses:[...],deleted_flags:[...]})");
+            if (argc < 3) Fail("insert <name>  (JSON on stdin: {ids:[...],vectors:[[...]],user_ids:[...],version_ids:[...],scene_ids:[...],memory_statuses:[...],deleted_flags:[...],object_types?:[...],knowledge_types?:[...],primary_categories?:[...],source_event_ids?:[...]})");
             json in;
             std::cin >> in;
+            const std::size_t record_count = in["ids"].size();
+            const auto default_metadata = [record_count](const std::string& value) {
+                json values = json::array();
+                for (std::size_t index = 0; index < record_count; ++index) {
+                    values.push_back(value);
+                }
+                return values;
+            };
+            const json object_types = in.value(
+                "object_types", default_metadata("knowledge"));
+            const json knowledge_types = in.value(
+                "knowledge_types", default_metadata(""));
+            const json primary_categories = in.value(
+                "primary_categories", default_metadata(""));
+            const json source_event_ids = in.value(
+                "source_event_ids", default_metadata(""));
             Insert(argv[2], in["ids"], in["vectors"], in["user_ids"], in["version_ids"],
-                   in["scene_ids"], in["memory_statuses"], in["deleted_flags"]);
+                   in["scene_ids"], in["memory_statuses"], in["deleted_flags"],
+                   object_types, knowledge_types, primary_categories, source_event_ids);
         } else if (op == "search") {
             if (argc < 4) Fail("search <name> <top_n> [timeout]  (JSON on stdin: {vector:[...],filter:{user_id:...}})");
             json in;

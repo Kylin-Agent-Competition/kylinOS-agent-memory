@@ -9,6 +9,7 @@ import pytest
 from domain.enums import PreferenceScope
 from retrieval.contracts import (
     Channel,
+    KnowledgeIndexMetadata,
     ObjectType,
     RetrievalFilter,
     RetrievalHit,
@@ -73,6 +74,15 @@ def _truth(
         is_current=is_current,
         scene_id=scene_id,
         scope_terms=scope_terms,
+        knowledge=(
+            KnowledgeIndexMetadata(
+                knowledge_type="legacy",
+                source_event_id="legacy-fixture",
+                memory_status=status,
+            )
+            if object_type is ObjectType.KNOWLEDGE
+            else None
+        ),
         **scope_identity,
         **validity,
     )
@@ -209,7 +219,7 @@ def test_preference_with_multiple_current_versions_fails_closed():
     assert out == []
 
 
-def test_multiple_current_versions_preserve_existing_knowledge_selection():
+def test_multiple_current_versions_fail_closed_for_knowledge():
     hits = [
         _hit("knowledge", "v1", Channel.FTS5, 1),
         _hit("knowledge", "v2", Channel.FTS5, 2),
@@ -230,7 +240,7 @@ def test_multiple_current_versions_preserve_existing_knowledge_selection():
         flt=_flt(),
     )
 
-    assert [candidate.version_id for candidate in out] == ["v2"]
+    assert out == []
 
 
 def test_preference_scene_match_honors_allowed_scenes_and_unscoped_policy():

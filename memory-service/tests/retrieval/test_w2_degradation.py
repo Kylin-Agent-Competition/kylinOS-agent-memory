@@ -11,6 +11,7 @@ import pytest
 from domain.enums import PreferenceScope
 from retrieval.contracts import (
     Channel,
+    KnowledgeIndexMetadata,
     ObjectType,
     RetrievalFilter,
     RetrievalHit,
@@ -51,6 +52,15 @@ def _truth(mid, object_type=ObjectType.KNOWLEDGE, preference_scope=None):
         conflict_state="resolved",
         is_current=True,
         preference_scope=preference_scope,
+        knowledge=(
+            KnowledgeIndexMetadata(
+                knowledge_type="legacy",
+                source_event_id="legacy-fixture",
+                memory_status="active",
+            )
+            if object_type is ObjectType.KNOWLEDGE
+            else None
+        ),
     )
 
 
