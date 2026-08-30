@@ -28,15 +28,16 @@ D8-B 按 75 项施工台账交付 Knowledge 的 FTS5/Vector 索引字段设计�
 - 用户隔离、对象类型、状态、敏感度、冲突、当前版本和关系过滤均在 RRF 前执行。
 - 索引端的命中永远不能绕过 SQLite 回源复核；未解决冲突、多个 current、状态不一致、
   关系缺失或非法元数据均不进入融合。
-- 关系 ID 不写入候选解释或异常文本；单通道降级只公开通道名称。
+- 关系 ID 不写入候选解释；候选 `explanation` 的单通道降级只公开通道名称。
+  `RetrievalOutcome.degraded_channels` 的 Provider 异常原文脱敏仍由 `TD-029` 跟踪。
 
 ## 验证
 
 | 层级 | 检查 | 结果 |
 |---|---|---|
-| L0/L1 | `memory-service/tests/retrieval/test_d8b_knowledge_retrieval.py` | 30 passed |
-| L1 | `memory-service/tests/retrieval` | 263 passed |
-| 全仓 Python | `memory-service/tests` | 2 passed |
+| L0/L1 | D8-B、E2E 输入契约与 Vector 桥定向测试 | 53 passed |
+| L1 | `memory-service/tests/retrieval` | 265 passed |
+| 更广 Python（信息性） | `cd memory-service && pytest tests -q` | 1022 passed、49 skipped、36 failed、36 errors（Windows 缺少 `socket.AF_UNIX`，并有非 D8-B 配置、迁移、Outbox 失败）；不作为本 PR 的通过证据 |
 | 静态 | `git diff --check` | PASS |
 | L2 | `tests/vector-engine/run_d8b_knowledge_filter_l2.sh` | 待目标麒麟环境与 KySec-trusted CLI 执行；未声称已验证 |
 
