@@ -164,13 +164,30 @@ Day7E（偏好侧业务能力）**不是** Day8E Business Core 的开发前置�
 
 **L3 状态：`PENDING_INTEGRATION`**。含义：Day8E Business Core 尚未与上述 D/B/C 实际接线，且未在银河麒麟真实环境完成全链路验收；直到实际接线并完成真实环境验收后，方可推进 L3。本文档**不声明** Day8 整体集成完成。
 
+### 8.1 跨轨接线约束（scope 规范化与时间输入，接线期责任划分）
+
+以下两条为 B/C/D 后续接线时必须遵守的输入责任约束。二者均为**接线期责任划分说明**，不新增、不冻结任何新的共享枚举或 Runtime 契约，不修改任何既有类型签名与默认值。
+
+#### 8.1.1 ConflictSide.scope：上游已规范化，策略仅精确比较
+
+- `ConflictSide.scope`（`service/conflict_resolution_policy.py`，类型 `Optional[str]`，默认 `None`）是**上游（B/C/D 构造方）已完成 canonicalization 的业务 scope**。
+- `ConflictResolutionPolicy.resolve()` 对 scope **仅做精确比较**（两侧均非 None 且 `!=` → `COEXIST` / `scope_distinguishable`），**不负责**自由字符串 normalization（无 trim、大小写折叠、同义归一或任何改写）。
+- 因此 B（冲突候选发现）、C（客户端/Adapter）、D（持久化接线）在构造 `ConflictSide` 时**不得直接传入**模型原文、UI 展示文本或未规范化的 Topic/topic 等自由字符串；scope 的归一化责任在上游构造方（与 Preference 路径 `candidate.scope` 经 `PreferenceScope` 五值同源枚举校验入域的方式对齐，由上游显式归一后再传入）。
+- 若上游传入未规范化字符串导致本应共存的两侧被判定为可区分（或反之），属上游接线缺陷，不由 Conflict Policy 兜底归一。
+
+#### 8.1.2 LifecyclePolicy 时间输入：调用方 SHOULD 传 timezone-aware datetime
+
+- `LifecyclePolicy.decide(snapshot, *, now)` 的调用方**应当（SHOULD）传入 timezone-aware datetime**（如 `datetime.now(timezone.utc)`）。
+- 代码中 naive datetime 的处理（`lifecycle_policy.py`：`now.tzinfo is None` 时补 `timezone.utc` 后统一 `astimezone(timezone.utc)`）**仅为兼容行为，不是宿主时间解析规范**；接线代码不得依赖该兼容路径把宿主本地 naive 时间当作 UTC 语义输入，否则可能产生与调用方意图不符的年龄/不活跃时长计算。
+- 本条不改变 `decide()` 既有签名与 fail-closed 语义（naive 输入仍被接受并按 UTC 处理），仅约束调用方输入质量。
+
 ## 9. TD-016 / TD-017 状态表述
 
-依据 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` 现状（两条目 register 状态均为 **Open**）与管理规则（"代码合并 ≠ 技术债关闭；关闭需要对应 PR 的 Reviewer 确认验收标准达成"），本批次如实表述：
+依据 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` 现状（**TD-016 状态为 Open、计划日期 2026-08-27；TD-017 状态为 In Progress（Closure Candidate）、计划日期 2026-09-10**）与管理规则（"代码合并 ≠ 技术债关闭；关闭需要对应 PR 的 Reviewer 确认验收标准达成"），本批次如实表述：
 
-- **TD-016：保持 Open。** 本批次只要求 `lifecycle_policy` 以 `memory_status` 为真源（`LifecycleSnapshot` 强制携带、`extra="forbid"` 隔离过渡字段），**不实施** `is_active` / `should_decay` / `is_outdated` 过渡布尔字段的删除、派生或正交化迁移（该规划属 D/E 协同的正式 Lifecycle 状态机冻结，未在本批次实施）。关闭条件见 register。
-- **TD-017：closure candidate / pending reviewer。** 13 个结构化字段 1:1 无损映射已实现（`domain/knowledge.py` + `candidate_governance.py::_build_knowledge`）且 `test_knowledge_domain_mapping_d8e.py` 已通过字段进出 Domain 一致性验证，**满足关闭的技术条件**；但 register 状态仍为 **Open**，需 D 主审确认验收标准达成后方可正式关闭。**本批次不自行关闭，不修改 register。**
-  - 已知一致性提示：`domain/knowledge.py` 与 `candidate_governance.py` 代码注释已写"TD-017 关闭"，与 register 的 Open 状态存在表述差异——本批次如实记录该差异，正式关闭以 register 状态 + D 主审确认为准。
+- **TD-016：保持 Open。** register 中计划日期为 2026-08-27（原登记日期恢复；PR #64 文档治理轮移除了模板占位符，未批准新的计划日期），关联 PR 保留 `PR #39 / PR #64`。本批次只要求 `lifecycle_policy` 以 `memory_status` 为真源（`LifecycleSnapshot` 强制携带、`extra="forbid"` 隔离过渡字段），**不实施** `is_active` / `should_decay` / `is_outdated` 过渡布尔字段的删除、派生或正交化迁移（该规划属 D/E 协同的正式 Lifecycle 状态机冻结，未在本批次实施）。关闭条件见 register ①–⑤。
+- **TD-017：In Progress / Closure Candidate（pending D Reviewer）。** 13 个结构化字段 1:1 无损映射已实现（`domain/knowledge.py` + `candidate_governance.py::_build_knowledge`）且 `test_knowledge_domain_mapping_d8e.py` 已通过字段进出 Domain 一致性验证，**满足关闭的主要技术条件**；register 状态为 **In Progress**，需 D 主审核对 register 验收标准 ①–④ 全部达成后方可标记 Resolved。PR #64 文档治理轮仅同步本节表述与 register 状态的一致性，**不关闭 TD-017、不将其标记为 Resolved**。
+  - 代码注释一致性说明：`domain/knowledge.py` 与 `candidate_governance.py` 代码注释当前表述为"TD-017 实现完成/技术关闭候选，待 D Reviewer 确认后正式关闭"，与 register 的 In Progress 状态语义一致；正式关闭以 register 状态 + D 主审确认为准。
 
 ## 10. 验证状态汇总
 
