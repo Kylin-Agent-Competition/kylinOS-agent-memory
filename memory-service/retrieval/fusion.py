@@ -232,15 +232,21 @@ def fuse_retrieval(
     flt: RetrievalFilter,
     k: int = RRF_DEFAULT_K,
     top_k: Optional[int] = None,
+    token_budget: Optional[int] = None,
 ) -> list[RetrievalCandidate]:
     """融合 FTS5 与 Vector 命中，回源硬过滤，rrf-v1 融合，返回统一候选。
 
     - 同一通道按精确 (memory_id, version_id) 去重后取最佳 rank；
     - 回源 truth[(user_id, memory_id, version_id)] 并做硬过滤；
     - 过滤后的合法命中按 memory_id 聚合、RRF 排序；
-    - 输出 RetrievalCandidate，rrf_score == final_score（v1 不做业务重排）。
+    - 输出 RetrievalCandidate，rrf_score == final_score（v1 不做业务重排）；
+    - 指定 token_budget 时，按最终排序依次保留不超预算的候选。
     """
     _validate_preference_filter(flt)
+    if token_budget is not None and (
+        isinstance(token_budget, bool) or token_budget < 0
+    ):
+        raise ValueError("token_budget 必须是非负整数")
 
     deduped = dedupe_exact_version(list(fts5_hits) + list(vector_hits))
     legal: list[RetrievalHit] = []
@@ -273,14 +279,14 @@ def fuse_retrieval(
         ranked = ranked[:top_k]
 
     out: list[RetrievalCandidate] = []
+    used_tokens = 0
     for agg in ranked:
         version_id = next(
             h.version_id for h in legal if h.memory_id == agg.memory_id
         )
         rec = truth[(flt.user_id, agg.memory_id, version_id)]
         channels = sorted(agg.ranks.keys())
-        out.append(
-            RetrievalCandidate(
+        candidate = RetrievalCandidate(
                 memory_id=agg.memory_id,
                 version_id=version_id,
                 object_type=rec.object_type,
@@ -320,7 +326,25 @@ def fuse_retrieval(
                     else _knowledge_explanation(rec, flt, agg.ranks, k)
                 ),
             )
-        )
+        if token_budget is not None:
+            next_used_tokens = used_tokens + candidate.estimated_tokens
+            if next_used_tokens > token_budget:
+                continue
+            candidate = candidate.model_copy(
+                update={
+                    "explanation": {
+                        **candidate.explanation,
+                        "token_budget": {
+                            "policy_version": "token-budget/v1",
+                            "budget": token_budget,
+                            "used": next_used_tokens,
+                            "decision": "included",
+                        },
+                    }
+                }
+            )
+            used_tokens = next_used_tokens
+        out.append(candidate)
     return out
 
 
@@ -345,6 +369,7 @@ def retrieve_graceful(
     flt: RetrievalFilter,
     k: int = RRF_DEFAULT_K,
     top_k: Optional[int] = None,
+    token_budget: Optional[int] = None,
 ) -> RetrievalOutcome:
     """执行两路召回并融合；单路故障时降级为空命中的该路，不抛未捕获异常。
 
@@ -373,6 +398,7 @@ def retrieve_graceful(
         flt=flt,
         k=k,
         top_k=top_k,
+        token_budget=token_budget,
     )
     degraded_channel_names = sorted(degraded)
     candidates = [

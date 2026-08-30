@@ -734,6 +734,34 @@ def test_top_k_truncation():
     assert [c.memory_id for c in out] == ["mem-a"]
 
 
+def test_token_budget_keeps_ranked_candidates_without_exceeding_budget():
+    fts5 = [
+        _hit("mem-a", "v1", Channel.FTS5, 1),
+        _hit("mem-b", "v1", Channel.FTS5, 2),
+    ]
+    truth = {
+        ("alice", "mem-a", "v1"): _truth("mem-a", content="four"),
+        ("alice", "mem-b", "v1"): _truth("mem-b", content="sixsix"),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=fts5,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(),
+        token_budget=5,
+    )
+
+    assert [candidate.memory_id for candidate in out] == ["mem-a"]
+    assert out[0].estimated_tokens == 4
+    assert out[0].explanation["token_budget"] == {
+        "policy_version": "token-budget/v1",
+        "budget": 5,
+        "used": 4,
+        "decision": "included",
+    }
+
+
 def test_fts5_index_returns_ranked_hits():
     idx = Fts5Index()
     idx.upsert("mem-a", "v1", "apple banana cherry", "alice")
