@@ -1119,15 +1119,16 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/pr65_l2_vm_20260828.log"
+    evidence_commit: "49263457593037d5f01fdd0e0799d422a62e84a5"
     report: "docs/day10/15_pr3_l2_verification_checklist.md"
-    tested_commit: "fac5411（完整 L1/L2 执行）；946eb3d 后续代码修复（Outbox event_id + resolver miss 日志）定向测试 30+23 passed；合并 main 4926345"
+    tested_commit: "fac5411"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
     date: "2026-08-28"
     reviewer: "待签（Reviewer E）"
     limitations: "L2 完整执行于 fac5411；946eb3d 修改 Outbox event_id 传递与 resolver miss 日志后未重跑完整 L2（定向 30+23 passed）；health DB 不可达/metrics 哨兵由 VM L1 handler 单测覆盖（SELECT 1 对存活池化连接无页 I/O，无法外部伪造）"
-    checksum_sha256: "5A43D289BA336E4F922F93B7E316DC2C21529E9D277B7F07940FCCB82DDB72E3"
+    checksum_sha256: "FF78527139A2B52CE784A5CB3D88B1D053B7E10F4F50EE82EBBE1BEA144B3416"
     details: |
       执行环境: 银河麒麟桌面 V11 x86_64，SSH 127.0.0.1:2222，用户 kylin-agent，venv sqlalchemy 2.0.52 / alembic 1.19.1。
       L2-1 迁移: upgrade head exit=0；turns.trace_id/host_turn_id、memory_entries.trace_id、idx_turns_host_turn_id(唯一+WHERE host_turn_id IS NOT NULL)、memory_fts+4 触发器、alembic_version 全落位；PRAGMA foreign_key_check 空；downgrade->upgrade 往返 exit=0；MATCH 麒麟 insert=1 / 软删后=0。
@@ -1136,3 +1137,4 @@ entries:
       L2-4 JSON 日志: 单行 JSON 含 trace_id/request_id/method/event_id；memory.retrieve 日志含 trace_id=L2R-1+request_id=req-r-1；Worker 日志含 trace_id=L2W-1+event_id=evt-W1（跨线程）；resolver 正文/source_reference 无 PII 泄漏。
       L2-5 systemd: 默认库 alembic 迁移 ALEMBIC_EXIT=0；enable/start RC=0；socket /run/user/1000/kylin-memory/memory.sock 可达；health ok；restart active；stop inactive+socket 清理；enable --now 回退恢复 active。
       归档: 完整日志 evidence/l2-kylin-vm/pr65_l2_vm_20260828.log；L1 全量 1003 passed/49 skipped @ fac5411（evidence/l1/pr65_l1_vm_checklist_20260828.log）。
+      tested_commit 说明: 完整 L1/L2 执行于 fac5411；946eb3d 后续代码修复（Outbox event_id + resolver miss 日志）经定向测试 30+23 passed；证据文件随 PR #65 合并 main @ 4926345 入库（evidence_commit）。checksum 以 git 仓库 LF 归一化 blob 为准（sha256sum over committed bytes），与 Windows 工作树 CRLF 副本哈希不同，勿混用。

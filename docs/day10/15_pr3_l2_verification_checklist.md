@@ -89,8 +89,8 @@
 
 | 文件 | 说明 | SHA-256 |
 |---|---|---|
-| `evidence/l2-kylin-vm/pr65_l2_vm_20260828.log` | L2-1~L2-5 完整探针日志（本次归档主证据） | `5A43D289BA336E4F922F93B7E316DC2C21529E9D277B7F07940FCCB82DDB72E3` |
-| `evidence/l1/pr65_l1_vm_checklist_20260828.log` | 麒麟 VM L1 全量（1003 passed, 49 skipped） | `788E22FB4F3E515FB8972CF4BA1423FD9C0B815DA369F1C075555798E48E3206` |
+| `evidence/l2-kylin-vm/pr65_l2_vm_20260828.log` | L2-1~L2-5 完整探针日志（本次归档主证据） | `FF78527139A2B52CE784A5CB3D88B1D053B7E10F4F50EE82EBBE1BEA144B3416` |
+| `evidence/l1/pr65_l1_vm_checklist_20260828.log` | 麒麟 VM L1 全量（1003 passed, 49 skipped） | `9EE65EF82D17B336EF96B8E44B56157B6A7E6710005330299D641795DA51F1CA` |
 | `docs/day10/12_pr65_rework_evidence.md` §R6 | L2 验证结果文字归档 | — |
 | `docs/day10/14_pr65_outstanding_tasks.md` | 待办勾销（L2-1~L2-5 DONE） | — |
 
