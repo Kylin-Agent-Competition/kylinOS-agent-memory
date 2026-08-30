@@ -58,7 +58,7 @@ T0 = datetime(2026, 8, 25, 9, 0, 0, tzinfo=timezone.utc)
 T1 = datetime(2026, 8, 25, 10, 0, 0, tzinfo=timezone.utc)
 POLICY = ConflictResolutionPolicy()
 
-# 六档优先级（声明顺序 = 优先级从高到低，与 _TIER_PRIORITY 数值语义一致）
+# 六档优先级（声明顺序 = 优先级从高到低，与 EvidenceTier.priority 派生语义一致）
 TIER_ORDER = [
     EvidenceTier.USER_EXPLICIT_CONFIG_LATEST,
     EvidenceTier.USER_CONFIRMED,
@@ -130,6 +130,28 @@ def test_evidence_tier_six_values():
         "model_inference",
     }
     assert list(EvidenceTier) == TIER_ORDER
+
+
+def test_evidence_tier_priority_derived_zero_to_five_monotonic():
+    """EvidenceTier.priority 从声明顺序派生，锁定 0..5 单调顺序。
+
+    USER_EXPLICIT_CONFIG_LATEST=0（最高）… MODEL_INFERENCE=5（最低）；
+    仅断言派生结果，不复制任何 production 优先级逻辑（避免双真源）。
+    """
+    assert [t.priority for t in TIER_ORDER] == list(range(6))
+    assert TIER_ORDER[0].priority < TIER_ORDER[-1].priority
+
+
+def test_no_parallel_priority_tables_in_policy_modules():
+    """生产策略模块不得另建独立优先级表（唯一真源为 EvidenceTier.priority）。
+
+    仅以符号不存在作负向锁定，不复制优先级逻辑；lifecycle_policy 惰性
+    导入（断言其消费同一派生真源而非维护并行表）。
+    """
+    assert not hasattr(crp, "_TIER_PRIORITY")
+    import service.lifecycle_policy as lp
+
+    assert not hasattr(lp, "_EVIDENCE_PRIORITY")
 
 
 def test_decision_action_five_values():

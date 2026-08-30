@@ -40,7 +40,8 @@ class Knowledge(BaseModel):
     仅业务字段定义；不冻结 SQLite 存储布局、Vector 索引结构或 FTS5 分词策略
     （D3 §8.2、README 技术路线：Vector 可重建非真源）。
 
-    Day8 结构化承载（TD-017 关闭）：模型新增六类结构化字段（conditions /
+    Day8 结构化承载（TD-017 实现完成/技术关闭候选，待 D Reviewer 确认后
+    正式关闭）：模型新增六类结构化字段（conditions /
     evidence / steps / expected_result / problem / outcome / reproducible /
     template_body / parameters / priority / failure_reason / avoid_condition /
     alternative，共 13 个 Optional[str]），由 Candidate Governance 从
@@ -73,7 +74,7 @@ class Knowledge(BaseModel):
     last_accessed_at: Optional[AwareDatetime] = None  # DEFERRED：统计窗口待 D
     extracted_entities: Optional[List[str]] = None
 
-    # ── Day8 结构化承载（TD-017 关闭：六类结构化字段无损映射） ──
+    # ── Day8 结构化承载（TD-017 实现完成/技术关闭候选：六类结构化字段无损映射，待 D Reviewer 确认） ──
     # 全部 Optional[str]，默认 None；向后兼容（既有构造不提供这些字段时为 None）。
     # 与 KnowledgeCandidate 六类结构化字段完全同名，实现 1:1 直接映射、无转换、
     # 无改写。extra="forbid" 保持：这些为已声明字段，非静默接受未知字段。

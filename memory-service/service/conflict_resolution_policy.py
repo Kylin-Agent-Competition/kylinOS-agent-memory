@@ -31,7 +31,10 @@ conflict_resolution_policy.py — Day8 E 轨知识冲突六档证据优先级业
   冲突类型枚举）；
 - EvidenceTier / DecisionAction 仅为本 service policy 局部业务类型，
   不进入 service/__init__.py.__all__，不进入 domain.enums；
-- 本模块不复制任何既有 Enum / Pydantic 模型。
+- 本模块不复制任何既有 Enum / Pydantic 模型；
+- 六档证据优先级唯一派生真源为 EvidenceTier.priority（从声明顺序派生，
+  数值越小优先级越高）；conflict_resolution_policy 与 lifecycle_policy
+  均消费该单一派生产物，任何策略不得另建独立优先级映射。
 """
 
 from __future__ import annotations
@@ -47,7 +50,7 @@ from domain.common import AwareDatetime, NonEmptyStr
 class EvidenceTier(str, Enum):
     """六档证据可信优先级（仅属于本 service policy 的局部业务类型）。
 
-    数值语义：数字越小优先级越高（见 _TIER_PRIORITY 映射）。
+    数值语义：数字越小优先级越高（见本类 priority 属性，从声明顺序派生）。
     声明顺序即优先级顺序（1 → 6，从高到低）。
     """
 
@@ -63,6 +66,15 @@ class EvidenceTier(str, Enum):
     """第 5 档：单次行为推断。"""
     MODEL_INFERENCE = "model_inference"
     """第 6 档（最低）：模型自身推测（不得覆盖 Tier 1-5 任何来源）。"""
+
+    @property
+    def priority(self) -> int:
+        """唯一派生证据优先级（0..5，声明顺序即档位顺序）。
+
+        数值越小优先级越高：USER_EXPLICIT_CONFIG_LATEST=0（最高）…
+        MODEL_INFERENCE=5（最低）。纯从声明顺序派生，禁止各策略另建数值表。
+        """
+        return list(EvidenceTier).index(self)
 
 
 class DecisionAction(str, Enum):
@@ -118,17 +130,6 @@ class ConflictDecision(BaseModel):
     winner_id: Optional[str] = None
 
 
-# 六档证据优先级映射：数值越小优先级越高（1 最高 → 6 最低）。
-_TIER_PRIORITY: dict[EvidenceTier, int] = {
-    EvidenceTier.USER_EXPLICIT_CONFIG_LATEST: 1,
-    EvidenceTier.USER_CONFIRMED: 2,
-    EvidenceTier.TOOL_EXECUTION_RESULT: 3,
-    EvidenceTier.CONSISTENT_BEHAVIOR_MULTIPLE: 4,
-    EvidenceTier.BEHAVIOR_INFERENCE_SINGLE: 5,
-    EvidenceTier.MODEL_INFERENCE: 6,
-}
-
-
 class ConflictResolutionPolicy:
     """E 轨知识冲突六档证据优先级裁决入口（无状态、纯函数式、确定性）。
 
@@ -138,7 +139,7 @@ class ConflictResolutionPolicy:
        REJECT(cross_user_blocked)；
     3. 作用域可区分：left.scope 与 right.scope 均非 None 且不等 →
        COEXIST(scope_distinguishable)（不得无条件覆盖）；
-    4. 证据优先级比较（_TIER_PRIORITY，数值小=高档）：
+    4. 证据优先级比较（EvidenceTier.priority，数值小=高档）：
        - 高档侧保留，低档侧被替代 → KEEP_LEFT / KEEP_RIGHT
          (evidence_tier_priority)，winner_id 为高档侧 knowledge_id；
        - （自动满足：Tier 6 不得覆盖 Tier 1-5；真实 Tool 胜模型自述）；
@@ -173,8 +174,8 @@ class ConflictResolutionPolicy:
             return self._coexist()
 
         # 4. 证据优先级比较（数值小=高档；Tier 6 自动无法覆盖 Tier 1-5）
-        pri_left = _TIER_PRIORITY[left.evidence_tier]
-        pri_right = _TIER_PRIORITY[right.evidence_tier]
+        pri_left = left.evidence_tier.priority
+        pri_right = right.evidence_tier.priority
         if pri_left < pri_right:
             return self._keep_left(left.knowledge_id)
         if pri_right < pri_left:

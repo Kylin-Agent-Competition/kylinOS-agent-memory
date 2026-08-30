@@ -32,7 +32,8 @@ lifecycle_policy.py — Day8 E 轨知识短中长期生命周期业务决策策�
 - MemoryStatus 复用自 domain.enums（六值冻结，唯一优先真源）；
 - MemoryType 复用自 pipeline.schemas（四值冻结，不在本包重复定义）；
 - EvidenceTier 从 service.conflict_resolution_policy 只读导入（同一 D3
-  冻结六档证据语义，不复制 Enum、不导入其私有 _TIER_PRIORITY）；
+  冻结六档证据语义，不复制 Enum；EvidenceTier.priority 为唯一派生优先级
+  真源，本模块消费之，不另建数值表）；
 - 本模块不复制任何既有 Enum / Pydantic 模型。
 """
 
@@ -154,14 +155,6 @@ class LifecycleDecision(BaseModel):
     target_memory_status: Optional[MemoryStatus] = None
 
 
-# 六档证据优先级：从 EvidenceTier 声明顺序派生（D3 冻结：声明顺序即优先级
-# 顺序），数值越小优先级越高（0=USER_EXPLICIT_CONFIG_LATEST 最高 ...
-# 5=MODEL_INFERENCE 最低）。不导入 conflict_resolution_policy 私有 _TIER_PRIORITY。
-_EVIDENCE_PRIORITY: dict[EvidenceTier, int] = {
-    tier: idx for idx, tier in enumerate(EvidenceTier)
-}
-
-
 class LifecyclePolicy:
     """E 轨知识生命周期决策入口（无状态、纯函数式、确定性）。
 
@@ -180,7 +173,7 @@ class LifecyclePolicy:
        - (a) PROMOTE（仅 SHORT_TERM→MEDIUM_TERM、MEDIUM_TERM→LONG_TERM）：
          age >= promote_min_age 且 access_count 非 None 且 >=
          promote_min_access_count 且 confidence >= promote_min_confidence
-         且证据档位不低（_EVIDENCE_PRIORITY 数值 <= required，inclusive；
+         且证据档位不低（EvidenceTier.priority 数值 <= required，inclusive；
          模型单独推测 priority=5 > 任何非 MODEL_INFERENCE 要求档 → 不满足）
          → PROMOTE(credible_evidence_threshold)，target_memory_type=目标分层；
        - (b) EXPIRE：age >= expire_after_age →
@@ -263,11 +256,9 @@ class LifecyclePolicy:
             return None
         if snapshot.confidence_score < self._config.promote_min_confidence:
             return None
-        required_priority = _EVIDENCE_PRIORITY[
-            self._config.promote_required_evidence_tier
-        ]
+        required_priority = self._config.promote_required_evidence_tier.priority
         # 数值小=档位高；当前档位数值 > 要求档数值 → 证据不足，不满足
-        if _EVIDENCE_PRIORITY[snapshot.evidence_tier] > required_priority:
+        if snapshot.evidence_tier.priority > required_priority:
             return None
         return self._promote(target)
 

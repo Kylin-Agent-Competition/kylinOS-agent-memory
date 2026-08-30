@@ -359,7 +359,8 @@ class CandidateGovernanceService:
         - source_event_id 直接相等，不重新生成/覆盖（R3）；
         - user_id 来自 ctx（可信归属）；
         - memory_status 恒 candidate，requires_embedding=True（候选将来需嵌入）；
-        - Day8 结构化承载（TD-017 关闭）：KnowledgeCandidate 六类扩展结构字段
+        - Day8 结构化承载（TD-017 实现完成/技术关闭候选，待 D Reviewer 确认后
+          正式关闭）：KnowledgeCandidate 六类扩展结构字段
           （conditions / evidence / steps / expected_result / problem / outcome /
           reproducible / template_body / parameters / priority / failure_reason /
           avoid_condition / alternative，共 13 个 Optional[str]）逐字段无损映射进
@@ -379,7 +380,7 @@ class CandidateGovernanceService:
             is_outdated=False,  # 过渡字段
             created_at=ts,
             updated_at=ts,
-            # ── Day8 结构化承载（TD-017：六类结构化字段无损映射，1:1 同名直传） ──
+            # ── Day8 结构化承载（TD-017 实现完成/技术关闭候选：六类结构化字段无损映射，1:1 同名直传） ──
             conditions=candidate.conditions,
             evidence=candidate.evidence,
             steps=candidate.steps,
