@@ -35,8 +35,8 @@ D8-B 按 75 项施工台账交付 Knowledge 的 FTS5/Vector 索引字段设计�
 
 | 层级 | 检查 | 结果 |
 |---|---|---|
-| L0/L1 | D8-B、E2E 输入契约与 Vector 桥定向测试 | 53 passed |
-| L1 | `memory-service/tests/retrieval` | 265 passed |
+| L0/L1 | D8-B、E2E 输入契约与 Vector 桥定向测试 | 54 passed |
+| L1 | `memory-service/tests/retrieval` | 266 passed |
 | 更广 Python（信息性） | `cd memory-service && pytest tests -q` | 1022 passed、49 skipped、36 failed、36 errors（Windows 缺少 `socket.AF_UNIX`，并有非 D8-B 配置、迁移、Outbox 失败）；不作为本 PR 的通过证据 |
 | 静态 | `git diff --check` | PASS |
 | L2 | `tests/vector-engine/run_d8b_knowledge_filter_l2.sh` | 待目标麒麟环境与 KySec-trusted CLI 执行；未声称已验证 |

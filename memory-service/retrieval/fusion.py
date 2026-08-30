@@ -211,7 +211,9 @@ def _knowledge_explanation(
             "source": (
                 "matched" if flt.knowledge.source_event_ids else "not_requested"
             ),
-            "status": "matched",
+            "status": (
+                "matched" if flt.allowed_memory_statuses else "not_requested"
+            ),
             "relations": (
                 "matched"
                 if flt.knowledge.required_relation_ids

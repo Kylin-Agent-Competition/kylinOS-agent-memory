@@ -386,6 +386,26 @@ def test_knowledge_candidate_reports_matched_metadata_without_relation_ids_in_ex
     assert "relation-a" not in str(out[0].explanation)
 
 
+def test_knowledge_explanation_marks_status_not_requested_when_unfiltered():
+    truth = {("alice", "knowledge-1", "v1"): _truth("knowledge-1")}
+    flt = c.RetrievalFilter(
+        user_id="alice",
+        object_types=[c.ObjectType.KNOWLEDGE],
+        allowed_sensitivity=["internal"],
+        conflict_policy="exclude_unresolved",
+        as_of=NOW,
+    )
+
+    out = fuse_retrieval(
+        fts5_hits=[_hit("knowledge-1")],
+        vector_hits=[],
+        truth=truth,
+        flt=flt,
+    )
+
+    assert out[0].explanation["hard_filter"]["status"] == "not_requested"
+
+
 def test_knowledge_explanation_reports_degraded_channel_without_error_text():
     truth = {
         ("alice", "knowledge-1", "v1"): _truth("knowledge-1")
