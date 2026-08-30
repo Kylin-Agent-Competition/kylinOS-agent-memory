@@ -91,7 +91,37 @@ class VectorCliClient:
         scene_ids: list[str],
         memory_statuses: list[str],
         deleted_flags: list[bool],
+        object_types: Optional[list[str]] = None,
+        knowledge_types: Optional[list[str]] = None,
+        primary_categories: Optional[list[str]] = None,
+        source_event_ids: Optional[list[str]] = None,
     ) -> dict:
+        has_knowledge_metadata = any(
+            value is not None
+            for value in (
+                object_types,
+                knowledge_types,
+                primary_categories,
+                source_event_ids,
+            )
+        )
+        if has_knowledge_metadata:
+            object_types = (
+                object_types if object_types is not None else ["knowledge"] * len(ids)
+            )
+            knowledge_types = (
+                knowledge_types if knowledge_types is not None else [""] * len(ids)
+            )
+            primary_categories = (
+                primary_categories
+                if primary_categories is not None
+                else [""] * len(ids)
+            )
+            source_event_ids = (
+                source_event_ids
+                if source_event_ids is not None
+                else [""] * len(ids)
+            )
         if not (
             len(ids)
             == len(vectors)
@@ -100,6 +130,14 @@ class VectorCliClient:
             == len(scene_ids)
             == len(memory_statuses)
             == len(deleted_flags)
+        ):
+            raise ValueError("ids、vectors 和全部元数据字段必须等长")
+        if has_knowledge_metadata and not (
+            len(ids)
+            == len(object_types)
+            == len(knowledge_types)
+            == len(primary_categories)
+            == len(source_event_ids)
         ):
             raise ValueError("ids、vectors 和全部元数据字段必须等长")
         for vector in vectors:
@@ -114,18 +152,26 @@ class VectorCliClient:
                 raise ValueError("向量元素必须是有限实数")
             if self.expected_dimension is not None and len(vector) != self.expected_dimension:
                 raise ValueError(f"写入向量维度必须等于 {self.expected_dimension}")
+        payload = {
+            "ids": ids,
+            "vectors": vectors,
+            "user_ids": user_ids,
+            "version_ids": version_ids,
+            "scene_ids": scene_ids,
+            "memory_statuses": memory_statuses,
+            "deleted_flags": deleted_flags,
+        }
+        if has_knowledge_metadata:
+            payload.update({
+                "object_types": object_types,
+                "knowledge_types": knowledge_types,
+                "primary_categories": primary_categories,
+                "source_event_ids": source_event_ids,
+            })
         result = self._run(
             "insert",
             name,
-            stdin=json.dumps({
-                "ids": ids,
-                "vectors": vectors,
-                "user_ids": user_ids,
-                "version_ids": version_ids,
-                "scene_ids": scene_ids,
-                "memory_statuses": memory_statuses,
-                "deleted_flags": deleted_flags,
-            }),
+            stdin=json.dumps(payload),
         )
         self._require_ok(result)
         return result
@@ -176,7 +222,19 @@ class VectorCliClient:
             "include_unscoped": filter.scene.include_unscoped,
             "allowed_memory_statuses": sorted(set(filter.allowed_memory_statuses)),
             "exclude_deleted": True,
+            "object_types": sorted({value.value for value in filter.object_types}),
         }
+        if any(filter.knowledge.model_dump().values()):
+            cli_filter.update({
+                "knowledge_types": sorted(set(filter.knowledge.knowledge_types)),
+                "primary_categories": sorted(
+                    set(filter.knowledge.primary_categories)
+                ),
+                "source_event_ids": sorted(
+                    set(filter.knowledge.source_event_ids)
+                ),
+                "version_ids": sorted(set(filter.knowledge.version_ids)),
+            })
         result = self._run(
             "search",
             name,

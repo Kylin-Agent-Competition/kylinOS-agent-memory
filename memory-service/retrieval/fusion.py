@@ -14,6 +14,7 @@ from domain.enums import PreferenceScope
 from retrieval.contracts import (
     Channel,
     ContentSource,
+    KnowledgeIndexMetadata,
     ObjectType,
     RetrievalCandidate,
     RetrievalFilter,
@@ -59,6 +60,7 @@ class TruthRecord:
     scene_id: Optional[str] = None
     scope_terms: Optional[dict[str, list[str]]] = None
     preference_scope: Optional[PreferenceScope] = None
+    knowledge: Optional[KnowledgeIndexMetadata] = None
     valid_from: Optional[datetime] = None
     valid_to: Optional[datetime] = None
 
@@ -116,6 +118,35 @@ def _hard_filter(
             return False
         if rec.valid_to is not None and flt.as_of >= rec.valid_to:
             return False
+    if rec.object_type is ObjectType.KNOWLEDGE:
+        # Knowledge 的结构化真值是 D8-B 的回源边界；缺失时不能让索引命中进入 RRF。
+        if rec.knowledge is None:
+            return False
+        if rec.knowledge.memory_status != rec.memory_status:
+            return False
+        if flt.knowledge.knowledge_types and (
+            rec.knowledge.knowledge_type not in flt.knowledge.knowledge_types
+        ):
+            return False
+        if flt.knowledge.primary_categories and (
+            rec.knowledge.primary_category not in flt.knowledge.primary_categories
+        ):
+            return False
+        if flt.knowledge.source_event_ids and (
+            rec.knowledge.source_event_id not in flt.knowledge.source_event_ids
+        ):
+            return False
+        if (
+            flt.knowledge.version_ids
+            and rec.version_id not in flt.knowledge.version_ids
+        ):
+            return False
+        if flt.knowledge.required_relation_ids and (
+            not set(flt.knowledge.required_relation_ids).issubset(
+                rec.knowledge.relation_ids
+            )
+        ):
+            return False
     # 未解决冲突硬过滤：不注入上下文（ADR-001 输入边界第 5 步）。
     # conflict_policy 当前默认 exclude_unresolved；其他策略需新增 ADR 后才可放宽。
     if rec.conflict_state == "unresolved":
@@ -153,6 +184,46 @@ def _preference_explanation(
     }
 
 
+def _knowledge_explanation(
+    rec: TruthRecord,
+    flt: RetrievalFilter,
+    ranks: dict[Channel, int],
+    k: int,
+) -> dict:
+    return {
+        "algorithm_version": "rrf-v1",
+        "rrf_k": k,
+        "rrf_terms": {
+            channel.value: value
+            for channel, value in rrf_terms(ranks, k).items()
+        },
+        "degraded_channels": [],
+        "rerank_version": None,
+        "hard_filter": {
+            "policy_version": "knowledge-filter/v1",
+            "current_version": "passed",
+            "knowledge_type": (
+                "matched" if flt.knowledge.knowledge_types else "not_requested"
+            ),
+            "primary_category": (
+                "matched" if flt.knowledge.primary_categories else "not_requested"
+            ),
+            "source": (
+                "matched" if flt.knowledge.source_event_ids else "not_requested"
+            ),
+            "status": (
+                "matched" if flt.allowed_memory_statuses else "not_requested"
+            ),
+            "relations": (
+                "matched"
+                if flt.knowledge.required_relation_ids
+                else "not_requested"
+            ),
+            "conflict": rec.conflict_state,
+        },
+    }
+
+
 def fuse_retrieval(
     *,
     fts5_hits: list[RetrievalHit],
@@ -181,17 +252,13 @@ def fuse_retrieval(
     # 唯一确定 current version（SQLite 真源）：每个 memory_id 只有 is_current=True 的一个版本。
     # stale version 命中在聚合前移除，避免不同 version 的 rank 混入同一 memory_id（ADR-001 输入边界第 5 步）。
     current_version: dict[tuple[str, str], str] = {}
-    preference_current_versions: dict[tuple[str, str], set[str]] = {}
+    current_versions: dict[tuple[str, str], set[str]] = {}
     for (uid, mid, vid), rec in truth.items():
         if rec.is_current:
-            current_version[(uid, mid)] = vid
-            if rec.object_type is ObjectType.PREFERENCE:
-                preference_current_versions.setdefault((uid, mid), set()).add(vid)
-    for key, version_ids in preference_current_versions.items():
+            current_versions.setdefault((uid, mid), set()).add(vid)
+    for key, version_ids in current_versions.items():
         if len(version_ids) == 1:
             current_version[key] = next(iter(version_ids))
-        else:
-            current_version.pop(key, None)
     legal = [
         h for h in legal
         if current_version.get((h.user_id, h.memory_id)) == h.version_id
@@ -222,6 +289,7 @@ def fuse_retrieval(
                 memory_status=rec.memory_status,
                 scene_id=rec.scene_id,
                 scope_terms=rec.scope_terms or {},
+                knowledge=rec.knowledge,
                 content=rec.content,
                 content_source=ContentSource.SQLITE_CURRENT,
                 channels=channels,
@@ -249,7 +317,7 @@ def fuse_retrieval(
                 explanation=(
                     _preference_explanation(rec, agg.ranks, k)
                     if rec.object_type is ObjectType.PREFERENCE
-                    else {}
+                    else _knowledge_explanation(rec, flt, agg.ranks, k)
                 ),
             )
         )
@@ -314,8 +382,6 @@ def retrieve_graceful(
                 "degraded_channels": degraded_channel_names,
             }
         })
-        if candidate.object_type is ObjectType.PREFERENCE
-        else candidate
         for candidate in candidates
     ]
     return RetrievalOutcome(candidates=candidates, degraded_channels=degraded)

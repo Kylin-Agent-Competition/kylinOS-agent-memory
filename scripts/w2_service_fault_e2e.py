@@ -11,7 +11,12 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from retrieval.contracts import ObjectType, RetrievalFilter, SceneFilter
+from retrieval.contracts import (
+    KnowledgeIndexMetadata,
+    ObjectType,
+    RetrievalFilter,
+    SceneFilter,
+)
 from retrieval.fts5 import Fts5Index
 from retrieval.fusion import TruthRecord, retrieve_graceful
 from retrieval.real_vector_provider import VectorCliClient, VectorCliError
@@ -26,26 +31,62 @@ def run_svc(action: str) -> None:
     subprocess.run(["systemctl", "--user", action, SERVICE], check=True)
 
 
-def main() -> int:
-    collection = f"w2_fault_{int(time.time())}"
-    truth = {
+def build_truth() -> dict[tuple[str, str, str], TruthRecord]:
+    return {
         (USER, "mem-a", "v1"): TruthRecord(
             memory_id="mem-a", version_id="v1", user_id=USER,
             object_type=ObjectType.KNOWLEDGE, memory_type="long_term",
             memory_status="active", content="apple banana cherry",
             sensitivity="internal", conflict_state="resolved", is_current=True,
+            knowledge=KnowledgeIndexMetadata(
+                knowledge_type="workflow",
+                primary_category="operations",
+                source_event_id="w2-fault-mem-a",
+                memory_status="active",
+            ),
         ),
         (USER, "mem-b", "v1"): TruthRecord(
             memory_id="mem-b", version_id="v1", user_id=USER,
             object_type=ObjectType.KNOWLEDGE, memory_type="long_term",
             memory_status="active", content="apple banana",
             sensitivity="internal", conflict_state="resolved", is_current=True,
+            knowledge=KnowledgeIndexMetadata(
+                knowledge_type="workflow",
+                primary_category="operations",
+                source_event_id="w2-fault-mem-b",
+                memory_status="active",
+            ),
         ),
     }
 
+
+def knowledge_index_fields(records: list[TruthRecord]) -> dict[str, list[str]]:
+    metadata = [record.knowledge for record in records]
+    if any(value is None for value in metadata):
+        raise RuntimeError("W2 Knowledge truth must include index metadata")
+    return {
+        "object_types": [record.object_type.value for record in records],
+        "knowledge_types": [value.knowledge_type for value in metadata],
+        "primary_categories": [value.primary_category or "" for value in metadata],
+        "source_event_ids": [value.source_event_id for value in metadata],
+    }
+
+
+def main() -> int:
+    collection = f"w2_fault_{int(time.time())}"
+    truth = build_truth()
+    records = list(truth.values())
+
     fts5 = Fts5Index()
     for (_, mid, _), rec in truth.items():
-        fts5.upsert(mid, rec.version_id, rec.content, USER)
+        fts5.upsert(
+            mid,
+            rec.version_id,
+            content_summary=rec.content,
+            user_id=USER,
+            object_type=rec.object_type,
+            knowledge=rec.knowledge,
+        )
 
     cli = VectorCliClient(cli_path="./vector_cli", expected_dimension=4)
     cli.drop_collection(collection)
@@ -59,6 +100,7 @@ def main() -> int:
         scene_ids=[""] * 2,
         memory_statuses=["active"] * 2,
         deleted_flags=[False] * 2,
+        **knowledge_index_fields(records),
     )
 
     flt = RetrievalFilter(
@@ -77,6 +119,7 @@ def main() -> int:
     # 正常路径
     normal = retrieve_graceful(fts5_search=fts5_search, vector_search=vector_search, truth=truth, flt=flt)
     print(f"[W2] normal candidates: {[c.memory_id for c in normal.candidates]} degraded={normal.degraded}")
+    assert {c.memory_id for c in normal.candidates} == {"mem-a", "mem-b"}
 
     # 停服务 -> 真实错误
     print("[W2] stopping vector service...")
@@ -103,6 +146,7 @@ def main() -> int:
     recovered = retrieve_graceful(fts5_search=fts5_search, vector_search=vector_search, truth=truth, flt=flt)
     print(f"[W2] recovered candidates: {[c.memory_id for c in recovered.candidates]} degraded={recovered.degraded}")
     assert not recovered.degraded
+    assert {c.memory_id for c in recovered.candidates} == {"mem-a", "mem-b"}
 
     cli.drop_collection(collection)
     print("[W2] PASS: service fault degrades gracefully and recovers")
