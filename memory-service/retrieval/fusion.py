@@ -16,6 +16,7 @@ from retrieval.contracts import (
     ContentSource,
     KnowledgeIndexMetadata,
     ObjectType,
+    RerankPolicy,
     RetrievalCandidate,
     RetrievalFilter,
     RetrievalHit,
@@ -36,6 +37,56 @@ from retrieval.rrf import (
 from retrieval.validation import validate_retrieval_filter
 
 RRF_DEFAULT_K = 60
+
+
+def _final_score(
+    ranks: dict[Channel, int],
+    k: int,
+    rerank_policy: Optional[RerankPolicy],
+) -> float:
+    if rerank_policy is None:
+        return rrf_score(ranks, k)
+    return sum(
+        term * rerank_policy.channel_weights.get(channel, 1.0)
+        for channel, term in rrf_terms(ranks, k).items()
+    )
+
+
+def _rank_aggregated_candidates(
+    candidates: list[AggregatedCandidate],
+    k: int,
+    rerank_policy: Optional[RerankPolicy],
+) -> list[AggregatedCandidate]:
+    if rerank_policy is None:
+        return rrf_rank(candidates, k)
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            -_final_score(candidate.ranks, k, rerank_policy),
+            -candidate.channel_count,
+            candidate.best_rank,
+            candidate.memory_id,
+        ),
+    )
+
+
+def _with_rerank_explanation(
+    explanation: dict,
+    rerank_policy: Optional[RerankPolicy],
+) -> dict:
+    if rerank_policy is None:
+        return explanation
+    return {
+        **explanation,
+        "rerank_version": rerank_policy.version,
+        "rerank": {
+            "version": rerank_policy.version,
+            "channel_weights": {
+                channel.value: rerank_policy.channel_weights.get(channel, 1.0)
+                for channel in sorted(Channel)
+            },
+        },
+    }
 
 
 def _validate_preference_filter(flt: RetrievalFilter) -> None:
@@ -233,6 +284,7 @@ def fuse_retrieval(
     k: int = RRF_DEFAULT_K,
     top_k: Optional[int] = None,
     token_budget: Optional[int] = None,
+    rerank_policy: Optional[RerankPolicy] = None,
 ) -> list[RetrievalCandidate]:
     """融合 FTS5 与 Vector 命中，回源硬过滤，rrf-v1 融合，返回统一候选。
 
@@ -274,7 +326,7 @@ def fuse_retrieval(
     agg_candidates = [
         AggregatedCandidate(memory_id=mid, ranks=ranks) for mid, ranks in aggregated.items()
     ]
-    ranked = rrf_rank(agg_candidates, k)
+    ranked = _rank_aggregated_candidates(agg_candidates, k, rerank_policy)
     if top_k is not None:
         ranked = ranked[:top_k]
 
@@ -314,16 +366,17 @@ def fuse_retrieval(
                     for ch in channels
                 },
                 rrf_score=rrf_score(agg.ranks, k),
-                final_score=rrf_score(agg.ranks, k),
+                final_score=_final_score(agg.ranks, k, rerank_policy),
                 sensitivity=rec.sensitivity,
                 conflict_state=rec.conflict_state,
                 valid_from=rec.valid_from,
                 valid_to=rec.valid_to,
                 estimated_tokens=max(1, len(rec.content)),
-                explanation=(
+                explanation=_with_rerank_explanation(
                     _preference_explanation(rec, agg.ranks, k)
                     if rec.object_type is ObjectType.PREFERENCE
-                    else _knowledge_explanation(rec, flt, agg.ranks, k)
+                    else _knowledge_explanation(rec, flt, agg.ranks, k),
+                    rerank_policy,
                 ),
             )
         if token_budget is not None:
@@ -370,6 +423,7 @@ def retrieve_graceful(
     k: int = RRF_DEFAULT_K,
     top_k: Optional[int] = None,
     token_budget: Optional[int] = None,
+    rerank_policy: Optional[RerankPolicy] = None,
 ) -> RetrievalOutcome:
     """执行两路召回并融合；单路故障时降级为空命中的该路，不抛未捕获异常。
 
@@ -399,6 +453,7 @@ def retrieve_graceful(
         k=k,
         top_k=top_k,
         token_budget=token_budget,
+        rerank_policy=rerank_policy,
     )
     degraded_channel_names = sorted(degraded)
     candidates = [

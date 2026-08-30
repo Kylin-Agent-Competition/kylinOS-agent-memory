@@ -176,6 +176,22 @@ class UTCBaseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class RerankPolicy(UTCBaseModel):
+    """版本化的应用层加权 RRF 配置。"""
+
+    version: str = Field(min_length=1)
+    channel_weights: dict[Channel, float] = Field(min_length=1)
+
+    @field_validator("channel_weights")
+    @classmethod
+    def _positive_finite_weights(
+        cls, value: dict[Channel, float]
+    ) -> dict[Channel, float]:
+        if any(not math.isfinite(weight) or weight <= 0 for weight in value.values()):
+            raise ValueError("重排通道权重必须为有限正数")
+        return value
+
+
 # ── 5.6.1 canonical-json/v1 与 Digest ──
 
 

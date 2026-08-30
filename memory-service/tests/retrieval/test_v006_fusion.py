@@ -11,6 +11,7 @@ from retrieval.contracts import (
     Channel,
     KnowledgeIndexMetadata,
     ObjectType,
+    RerankPolicy,
     RetrievalFilter,
     RetrievalHit,
     SceneFilter,
@@ -759,6 +760,37 @@ def test_token_budget_keeps_ranked_candidates_without_exceeding_budget():
         "budget": 5,
         "used": 4,
         "decision": "included",
+    }
+
+
+def test_weighted_rerank_uses_versioned_channel_weights():
+    fts5 = [_hit("fts5-first", "v1", Channel.FTS5, 1)]
+    vector = [_hit("vector-first", "v1", Channel.VECTOR, 1)]
+    truth = {
+        ("alice", "fts5-first", "v1"): _truth("fts5-first"),
+        ("alice", "vector-first", "v1"): _truth("vector-first"),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=fts5,
+        vector_hits=vector,
+        truth=truth,
+        flt=_flt(),
+        rerank_policy=RerankPolicy(
+            version="weighted-rrf/v1",
+            channel_weights={Channel.FTS5: 0.5, Channel.VECTOR: 2.0},
+        ),
+    )
+
+    assert [candidate.memory_id for candidate in out] == [
+        "vector-first",
+        "fts5-first",
+    ]
+    assert out[0].rrf_score == pytest.approx(1 / 61)
+    assert out[0].final_score == pytest.approx(2 / 61)
+    assert out[0].explanation["rerank"] == {
+        "version": "weighted-rrf/v1",
+        "channel_weights": {"fts5": 0.5, "vector": 2.0},
     }
 
 
