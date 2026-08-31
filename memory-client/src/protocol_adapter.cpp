@@ -35,6 +35,10 @@ const QString kTurnFinalized = QStringLiteral("turn.finalized");  // ADR-010 新
 const QString kToolExecution = QStringLiteral("tool.execution");
 const QString kManualConfigIngest = QStringLiteral("manual.config.ingest");
 const QString kBehaviorObserve = QStringLiteral("behavior.observe");
+// D7-C 候选偏好版本方法常量（不冻结；ADR-016 待立项；对齐 D7D Repository）
+const QString kPreferenceVersionCommit = QStringLiteral("preference.version.commit");
+const QString kPreferenceVersionHistory = QStringLiteral("preference.version.history");
+const QString kPreferenceVersionRollback = QStringLiteral("preference.version.rollback");
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）

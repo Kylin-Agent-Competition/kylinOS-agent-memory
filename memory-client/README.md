@@ -17,10 +17,10 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 
 ## 当前状态
 
-**D6-C Demo / Prototype 扩展（在 D5-C Route B 基础上）；L0_COMPLETE；
-ctest 4/4 全部子用例 PASS；C-D5 保持 OPEN；C-D6 不关闭；
+**D7-C Demo / Prototype 扩展（在 D5-C Route B + D6-C 基础上）；L0_COMPLETE；
+ctest 5/5 全部子用例 PASS；C-D5 / C-D6 / C-D7 保持 OPEN；
 SEC-CTX-01 Runtime Evidence 未生成；未接入真实 AI Assistant Hook /
-Chat DB / ChatRecord / model_request / TurnExtractionAdapter）。**
+Chat DB / ChatRecord / model_request / TurnExtractionAdapter / 偏好持久化后端）。**
 
 - 协议编解码 `protocol_adapter.{h,cpp}`：4 字节大端长度前缀 + UTF-8 JSON envelope
   （对齐 D 轨 FRZ-IPC-001~007 + ADR-010 turn.finalized，`deliverables/D4_IPC_PROTOCOL_*FREEZE_20260817.md`）
@@ -28,11 +28,15 @@ Chat DB / ChatRecord / model_request / TurnExtractionAdapter）。**
   - **写链路候选方法**：`turn.finalized`（ADR-010；CANDIDATE / BLOCKED_BY_HOST_MAPPING；生产默认不注册；Demo 客户端可发送）
   - **D6-C 候选写方法**（不冻结；ADR-013/014/015 待立项）：
     `tool.execution` / `manual.config.ingest` / `behavior.observe`
+  - **D7-C 候选偏好版本方法**（不冻结；ADR-016 待立项；对齐 D7D Repository）：
+    `preference.version.commit` / `preference.version.history` / `preference.version.rollback`
   - **未实现**：`memory.store`（保持 UNSUPPORTED_METHOD，ADR-010 §决策不动）
 - MemoryClient `memory_client.{h,cpp}`：QLocalSocket 异步收发，信号驱动，不回显原文
   - `sendTurnFinalizedEvent()`：按 ADR-010 直接路由 `turn.finalized`
   - D6-C 新增 `sendToolExecutionEvent()` / `sendManualConfigEvent()` / `sendBehaviorEvent()`
     （复用 `sendEventEnvelope()` 共享写链路：trace_id 取 metadata.trace_id）
+  - D7-C 新增 `sendPreferenceCommitEvent()` / `sendPreferenceHistoryRequest()` /
+    `sendPreferenceRollbackEvent()`（复用同一 `sendEventEnvelope()` 共享写链路）
 - 公共 ViewModel `view_models/memory_view_model.{h,cpp}`：
   - D5-C Pre-Chat Pipeline：`runPreChatPipeline()`；status=error 明确失败；MemoryContext 严格按 `memory_context.v1.json` 契约解析；空/error/malformed/injection=failed 不产生伪 `[MEMORY-CONTEXT]`
   - D5-C Post-Turn Pipeline：`runPostTurnPipeline()` → `turn.finalized`；status=error 明确 `failed/timeout`，memory.store 不再承担 TurnFinalizedEvent 写链路
@@ -42,27 +46,34 @@ Chat DB / ChatRecord / model_request / TurnExtractionAdapter）。**
     - `runToolPipeline()` → `tool.execution`；5 状态（success/partial/failure/cancelled/timeout）；独立 `pendingToolRequestId_` + `toolBusy_`
     - `runManualConfigPipeline()` → `manual.config.ingest`；客户端侧敏感预检（high/critical 拒绝发送）；独立 `pendingManualConfigRequestId_` + `manualConfigBusy_`
     - `runBehaviorPipeline()` → `behavior.observe`；显式注入 `mapping_status=PENDING_C_CONFIRMATION`；独立 `pendingBehaviorRequestId_` + `behaviorBusy_`
-    - `busy` 兼容属性扩展为五 busy 合并：`preChatBusy || postTurnBusy || toolBusy || manualConfigBusy || behaviorBusy`
-    - 四 busy 独立 pending（沿用 D5-C REWORK §C1 模式扩展），PreChat in-flight 时 Tool 响应不串台
-- QML：`qml/main.qml` + StackView 路由（Status / MemoryQuery / Preferences / VerticalLink Demo / **D6 Tool Adapter / D6 Manual Config / D6 Behavior Observe**）
+  - **D7-C 偏好版本管理 Pipeline（Demo / Prototype；对齐 D7D Repository）**：
+    - `runPreferenceCommitPipeline()` → `preference.version.commit`（对齐 `save_preference_version`）；客户端侧敏感预检（high/critical 拒绝发送）；独立 `pendingPreferenceCommitRequestId_` + `preferenceCommitBusy_`
+    - `runPreferenceHistoryPipeline()` → `preference.version.history`（对齐 `list_preference_versions`）；独立 `pendingPreferenceHistoryRequestId_` + `preferenceHistoryBusy_`
+    - `runPreferenceRollbackPipeline()` → `preference.version.rollback`（对齐 `rollback_preference_version`）；独立 `pendingPreferenceRollbackRequestId_` + `preferenceRollbackBusy_`
+    - `busy` 兼容属性扩展为八 busy 合并：`preChatBusy || postTurnBusy || toolBusy || manualConfigBusy || behaviorBusy || preferenceCommitBusy || preferenceHistoryBusy || preferenceRollbackBusy`
+    - 三 busy 独立 pending（沿用 D6-C §C1 模式扩展），commit in-flight 时 rollback 响应不串台
+- QML：`qml/main.qml` + StackView 路由（Status / MemoryQuery / Preferences / VerticalLink Demo / D6 Tool Adapter / D6 Manual Config / D6 Behavior Observe / **D7 Preference Version**）
   - **High 修复**：VerticalLinkPage postTurnPreview 采用纯 declarative binding（`lastTurnFinalizedEvent || previewHelper.previewDoc`），不再做 imperative `.text =` 赋值；Preview 只写 `previewHelper.previewDoc` 状态
-  - **High 修复**：`viewModel.busy` 兼容属性 = `preChatBusy || postTurnBusy || toolBusy || manualConfigBusy || behaviorBusy`；旧页（main/Status/MemoryQuery）不再引用已移除的全局 `busy_`
+  - **High 修复**：`viewModel.busy` 兼容属性 = `preChatBusy || postTurnBusy || toolBusy || manualConfigBusy || behaviorBusy || preferenceCommitBusy || preferenceHistoryBusy || preferenceRollbackBusy`；旧页（main/Status/MemoryQuery）不再引用已移除的全局 `busy_`
 - L0 Mock 契约测试 `tests/`：
   - `test_protocol_adapter.cpp` 协议编解码
   - `test_memory_client_mock.cpp` Client ↔ Mock Gateway
   - `test_d5_vertical_link_demo.cpp` D5-C Demo 覆盖（10 用例：A1/A2/B1-B5/C1-C3）
   - `test_d6c_multi_source_adapters.cpp` D6-C 多源 Adapter 覆盖（17 用例：A1-A5/B1-B5/C1-C4/D1-D4/E1-E2）
+  - `test_d7c_preference_version_management.cpp` D7-C 偏好版本管理覆盖（14 用例：A1-A5/B1-B3/C1-C3/D1-D4/E1-E3）
 
-**关键声明（Route B + D6-C）**：
+**关键声明（Route B + D6-C + D7-C）**：
 - 本实现仅为 memory-client 侧的 Pipeline Harness / Demo
-- **不关闭 C-D5**，也**不关闭 C-D6**
+- **不关闭 C-D5**，也**不关闭 C-D6 / C-D7**
 - **不声称 SEC-CTX-01 Runtime Verified**
-- **尚未接入**：真实 AI Assistant Hook、真实 model request、真实 Chat DB / ChatRecord / source resolver、真实 assistant final message、真实 sendToolMessage 路径
+- **尚未接入**：真实 AI Assistant Hook、真实 model request、真实 Chat DB / ChatRecord / source resolver、真实 assistant final message、真实 sendToolMessage 路径、真实偏好持久化后端
 - memory_items 在 Context 渲染中的使用为 Demo 扩展，**不是**正式 C-D5 Context renderer 最终契约
 - ADR-010 turn.finalized 标注为 CANDIDATE / BLOCKED_BY_HOST_MAPPING：本 Demo 客户端可发送，但生产服务端默认不注册 handler，因此 Demo 调用真实生产 Gateway 仍返回 UNSUPPORTED_METHOD（符合预期）
 - D6-C 三个新写方法 `tool.execution` / `manual.config.ingest` / `behavior.observe` 为候选方法，生产 Gateway 默认不注册 → UNSUPPORTED_METHOD（符合预期）；handler 注册属 D 轨 D6D 范围（PENDING_D_TRACK）
+- D7-C 三个新写方法 `preference.version.commit` / `preference.version.history` / `preference.version.rollback` 为候选方法（对齐 D7D Repository 的 save/list/rollback_preference_version），生产 Gateway 默认不注册 → UNSUPPORTED_METHOD（符合预期）；handler 注册属 D 轨范围（PENDING_D_TRACK）
 - behavior → MemorySourceEvent.source_type 映射未冻结，ViewModel 显式注入 `mapping_status=PENDING_C_CONFIRMATION`；不擅自新增 SourceType 枚举（待 E 轨审查 + ADR）
-- ManualConfig 客户端侧敏感预检为简化版（high/critical 拦截），完整敏感识别在 A 轨 `pipeline/sensitive.py`
+- preference.version.* → MemorySourceEvent.source_type 映射同样未冻结，沿用 `PENDING_C_CONFIRMATION` 占位
+- ManualConfig / PreferenceCommit 客户端侧敏感预检为简化版（high/critical 拦截），完整敏感识别在 A 轨 `pipeline/sensitive.py`
 
 **非阻断 Technical Debt（可后续跟踪）**：
 - FRZ-IPC-004 deadline 计时精度：目前使用 `deadlineMs` 常量；冻结口径为 `deadline_ms + 100ms`

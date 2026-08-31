@@ -123,6 +123,14 @@ ApplicationWindow {
                 text: qsTr("D6 Behavior Observe")
                 onClicked: stack.replace(behaviorObservePage)
             }
+            // D7-C 偏好版本管理 Demo（Commit / History / Rollback + 跨会话行为联调）
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                highlighted: true
+                text: qsTr("D7 Preference Version")
+                onClicked: stack.replace(preferenceVersionPage)
+            }
             Item { Layout.fillHeight: true }
             Button {
                 Layout.fillWidth: true
@@ -149,6 +157,8 @@ ApplicationWindow {
     Component { id: toolAdapterPage; ToolAdapterPage { viewModel: window.viewModel } }
     Component { id: manualConfigPage; ManualConfigPage { viewModel: window.viewModel } }
     Component { id: behaviorObservePage; BehaviorObservePage { viewModel: window.viewModel } }
+    // D7-C 偏好版本管理 Demo 页面
+    Component { id: preferenceVersionPage; PreferenceVersionPage { viewModel: window.viewModel } }
 
     // 连接错误与请求失败统一弹出提示（不展示原始正文/凭据）。
     // Qt 5.12 风格：信号参数按名直接可见。

@@ -114,6 +114,29 @@ class MemoryViewModel : public QObject {
                    NOTIFY behaviorStageChanged)
     Q_PROPERTY(bool behaviorBusy READ behaviorBusy NOTIFY behaviorBusyChanged)
 
+    // ── D7-C 偏好版本管理 Pipeline（Demo / Prototype） ───────────────────
+    // Preference Commit
+    Q_PROPERTY(QString lastPreferenceCommitEvent READ lastPreferenceCommitEvent
+                   NOTIFY lastPreferenceCommitEventChanged)
+    Q_PROPERTY(QString preferenceCommitStage READ preferenceCommitStage
+                   NOTIFY preferenceCommitStageChanged)
+    Q_PROPERTY(bool preferenceCommitBusy READ preferenceCommitBusy
+                   NOTIFY preferenceCommitBusyChanged)
+    // Preference History
+    Q_PROPERTY(QString lastPreferenceHistoryEvent READ lastPreferenceHistoryEvent
+                   NOTIFY lastPreferenceHistoryEventChanged)
+    Q_PROPERTY(QString preferenceHistoryStage READ preferenceHistoryStage
+                   NOTIFY preferenceHistoryStageChanged)
+    Q_PROPERTY(bool preferenceHistoryBusy READ preferenceHistoryBusy
+                   NOTIFY preferenceHistoryBusyChanged)
+    // Preference Rollback
+    Q_PROPERTY(QString lastPreferenceRollbackEvent READ lastPreferenceRollbackEvent
+                   NOTIFY lastPreferenceRollbackEventChanged)
+    Q_PROPERTY(QString preferenceRollbackStage READ preferenceRollbackStage
+                   NOTIFY preferenceRollbackStageChanged)
+    Q_PROPERTY(bool preferenceRollbackBusy READ preferenceRollbackBusy
+                   NOTIFY preferenceRollbackBusyChanged)
+
 public:
     explicit MemoryViewModel(QObject* parent = nullptr);
     ~MemoryViewModel() override;
@@ -130,10 +153,14 @@ public:
     [[nodiscard]] QJsonObject lastResponse() const { return lastResponse_; }
     [[nodiscard]] bool preChatBusy() const { return preChatBusy_; }
     [[nodiscard]] bool postTurnBusy() const { return postTurnBusy_; }
-    // D6-C 扩展：四 busy 合并兼容属性（PreChat / PostTurn / Tool / ManualConfig / Behavior）
+    // D6-C / D7-C 扩展：八 busy 合并兼容属性
+    // （PreChat / PostTurn / Tool / ManualConfig / Behavior /
+    //  PreferenceCommit / PreferenceHistory / PreferenceRollback）
     [[nodiscard]] bool busy() const {
         return preChatBusy_ || postTurnBusy_
-            || toolBusy_ || manualConfigBusy_ || behaviorBusy_;
+            || toolBusy_ || manualConfigBusy_ || behaviorBusy_
+            || preferenceCommitBusy_ || preferenceHistoryBusy_
+            || preferenceRollbackBusy_;
     }
 
     // D5-C Getter
@@ -155,6 +182,17 @@ public:
     [[nodiscard]] QString lastBehaviorEvent() const { return lastBehaviorEvent_; }
     [[nodiscard]] QString behaviorStage() const { return behaviorStage_; }
     [[nodiscard]] bool behaviorBusy() const { return behaviorBusy_; }
+
+    // ── D7-C 偏好版本管理 getters ──────────────────────────────────────
+    [[nodiscard]] QString lastPreferenceCommitEvent() const { return lastPreferenceCommitEvent_; }
+    [[nodiscard]] QString preferenceCommitStage() const { return preferenceCommitStage_; }
+    [[nodiscard]] bool preferenceCommitBusy() const { return preferenceCommitBusy_; }
+    [[nodiscard]] QString lastPreferenceHistoryEvent() const { return lastPreferenceHistoryEvent_; }
+    [[nodiscard]] QString preferenceHistoryStage() const { return preferenceHistoryStage_; }
+    [[nodiscard]] bool preferenceHistoryBusy() const { return preferenceHistoryBusy_; }
+    [[nodiscard]] QString lastPreferenceRollbackEvent() const { return lastPreferenceRollbackEvent_; }
+    [[nodiscard]] QString preferenceRollbackStage() const { return preferenceRollbackStage_; }
+    [[nodiscard]] bool preferenceRollbackBusy() const { return preferenceRollbackBusy_; }
 
     // QML 可调用动作。
     Q_INVOKABLE void connectToService();
@@ -257,6 +295,44 @@ public:
         const QString& contextRef,
         const QString& actor);
 
+    // ── D7-C 偏好版本管理 Pipeline ─────────────────────────────────────
+    // Commit：scope / key / value / memory_status / sensitivity_level。
+    // sensitivityLevel ∈ {"none","low","medium","high","critical"}；
+    // high/critical → 客户端侧预检拒绝发送，preferenceCommitStage=failed。
+    // 对齐 D7D save_preference_version（候选 IPC 方法 preference.version.commit）。
+    Q_INVOKABLE void runPreferenceCommitPipeline(
+        const QString& userId,
+        const QString& sessionId,
+        const QString& scope,
+        const QString& key,
+        const QString& value,
+        bool isTemporary,
+        bool shouldPersist,
+        const QString& memoryStatus,
+        const QString& sensitivityLevel,
+        double confidence);
+
+    // History：查询偏好版本链。
+    // includeHistory=true 时返回含 superseded 的全版本链。
+    // 对齐 D7D list_preference_versions（候选 IPC 方法 preference.version.history）。
+    Q_INVOKABLE void runPreferenceHistoryPipeline(
+        const QString& userId,
+        const QString& sessionId,
+        const QString& scope,
+        const QString& key,
+        bool includeHistory);
+
+    // Rollback：回滚到目标历史版本。
+    // targetVersionId 为 D7D memory_versions.id（int）；客户端以字符串传输，
+    // 由服务端校验存在性 / 跨用户隔离 / 链内历史版本约束。
+    // 对齐 D7D rollback_preference_version（候选 IPC 方法 preference.version.rollback）。
+    Q_INVOKABLE void runPreferenceRollbackPipeline(
+        const QString& userId,
+        const QString& sessionId,
+        const QString& scope,
+        const QString& key,
+        const QString& targetVersionId);
+
     // 原文隔离验证
     Q_INVOKABLE bool verifyOriginalTextIsolation() const;
 
@@ -289,6 +365,17 @@ signals:
     void lastBehaviorEventChanged();
     void behaviorStageChanged();
     void behaviorBusyChanged();
+
+    // D7-C 偏好版本管理信号
+    void lastPreferenceCommitEventChanged();
+    void preferenceCommitStageChanged();
+    void preferenceCommitBusyChanged();
+    void lastPreferenceHistoryEventChanged();
+    void preferenceHistoryStageChanged();
+    void preferenceHistoryBusyChanged();
+    void lastPreferenceRollbackEventChanged();
+    void preferenceRollbackStageChanged();
+    void preferenceRollbackBusyChanged();
 
     void requestFailed(const QString& requestId, const QString& errorCode, const QString& safeMessage);
     void connectionError(const QString& safeMessage);
@@ -324,6 +411,17 @@ private:
     void setLastBehaviorEvent(const QString& value);
     void setBehaviorStage(const QString& value);
     void setBehaviorBusy(bool value);
+
+    // D7-C 私有 setter
+    void setLastPreferenceCommitEvent(const QString& value);
+    void setPreferenceCommitStage(const QString& value);
+    void setPreferenceCommitBusy(bool value);
+    void setLastPreferenceHistoryEvent(const QString& value);
+    void setPreferenceHistoryStage(const QString& value);
+    void setPreferenceHistoryBusy(bool value);
+    void setLastPreferenceRollbackEvent(const QString& value);
+    void setPreferenceRollbackStage(const QString& value);
+    void setPreferenceRollbackBusy(bool value);
 
     // D6-C 共享：构造 metadata 嵌套对象（schema_version/event_id/.../source_reference）。
     QJsonObject buildEventMetadata(
@@ -391,6 +489,22 @@ private:
     QString pendingToolRequestId_;
     QString pendingManualConfigRequestId_;
     QString pendingBehaviorRequestId_;
+
+    // ── D7-C 偏好版本管理状态（三 busy 独立 pending，沿用 D6-C §C1 模式） ──
+    bool preferenceCommitBusy_ = false;
+    bool preferenceHistoryBusy_ = false;
+    bool preferenceRollbackBusy_ = false;
+
+    QString lastPreferenceCommitEvent_;
+    QString preferenceCommitStage_ = QStringLiteral("idle");
+    QString lastPreferenceHistoryEvent_;
+    QString preferenceHistoryStage_ = QStringLiteral("idle");
+    QString lastPreferenceRollbackEvent_;
+    QString preferenceRollbackStage_ = QStringLiteral("idle");
+
+    QString pendingPreferenceCommitRequestId_;
+    QString pendingPreferenceHistoryRequestId_;
+    QString pendingPreferenceRollbackRequestId_;
 
     // 问题4修复：per-request deadline timer（超时→ requestFailed TIMEOUT）
     // key = requestId；超时后由单例 QTimer 回调，统一在 onRequestFailed 路径处理。

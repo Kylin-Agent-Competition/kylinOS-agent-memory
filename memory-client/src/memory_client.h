@@ -128,6 +128,32 @@ public:
     //    ViewModel 在事件 JSON 中显式注入 mapping_status 字段。
     Q_INVOKABLE QString sendBehaviorEvent(const QJsonObject& eventJson);
 
+    // ── D7-C 偏好版本管理写链路 Demo（候选方法，不冻结） ──────────────────
+    // 三个候选方法沿用 ADR-010 / D6-C 模式：生产 Gateway 默认不注册 →
+    // UNSUPPORTED_METHOD；测试态可显式注入 handler。
+    //
+    // 1) preference.version.commit：对齐 D7D save_preference_version。
+    //    payload = eventJson，候选字段：
+    //      metadata{schema_version,event_id,user_id,session_id,turn_id,
+    //        idempotency_key,trace_id?,occurred_at,collected_at,source_reference}
+    //      preference{user_id,key,scope,value,memory_status,is_temporary,
+    //        should_persist,confidence?,sensitivity_level,mapping_status=
+    //        "PENDING_C_CONFIRMATION"}
+    //    trace_id 唯一真源：envelope.trace_id 取 metadata.trace_id（若提供）。
+    Q_INVOKABLE QString sendPreferenceCommitEvent(const QJsonObject& eventJson);
+
+    // 2) preference.version.history：对齐 D7D list_preference_versions。
+    //    payload = eventJson，候选字段：
+    //      metadata{...同上}
+    //      query{user_id,key,scope,include_history}
+    Q_INVOKABLE QString sendPreferenceHistoryRequest(const QJsonObject& eventJson);
+
+    // 3) preference.version.rollback：对齐 D7D rollback_preference_version。
+    //    payload = eventJson，候选字段：
+    //      metadata{...同上}
+    //      rollback{user_id,key,scope,target_version_id,idempotency_key?}
+    Q_INVOKABLE QString sendPreferenceRollbackEvent(const QJsonObject& eventJson);
+
 signals:
     void socketPathChanged();
     void connectionStateChanged();
@@ -155,11 +181,13 @@ private:
     void failInFlightRequests(const QString& errorCode, const QString& safeMessage);
     QString generateRequestId() const;
 
-    // D6-C 共享写链路：构造 envelope（trace_id 取 metadata.trace_id 若提供，
+    // D6-C / D7-C 共享写链路：构造 envelope（trace_id 取 metadata.trace_id 若提供，
     // 否则回退 request_id）→ 编码 → 写入 socket → 注册 pending。
     // 失败时 emit requestFailed 并返回空串；成功返回 request_id。
     // 供 sendTurnFinalizedEvent / sendToolExecutionEvent /
-    //     sendManualConfigEvent / sendBehaviorEvent 复用。
+    //     sendManualConfigEvent / sendBehaviorEvent /
+    //     sendPreferenceCommitEvent / sendPreferenceHistoryRequest /
+    //     sendPreferenceRollbackEvent 复用。
     QString sendEventEnvelope(const QString& method, const QJsonObject& eventJson);
 
     QString socketPath_;

@@ -538,6 +538,169 @@ void MemoryViewModel::runBehaviorPipeline(
     armDeadlineTimer(requestId, kDefaultDeadlineMs);
 }
 
+// ── D7-C 偏好版本管理 Pipeline ─────────────────────────────────────────────
+
+void MemoryViewModel::runPreferenceCommitPipeline(
+    const QString& userId,
+    const QString& sessionId,
+    const QString& scope,
+    const QString& key,
+    const QString& value,
+    bool isTemporary,
+    bool shouldPersist,
+    const QString& memoryStatus,
+    const QString& sensitivityLevel,
+    double confidence)
+{
+    // 客户端侧敏感预检：high / critical 等级（大小写归一）拒绝构造事件、拒绝发送。
+    // 与 runManualConfigPipeline 对称：偏好版本管理同样保护敏感内容不进入 Gateway。
+    const QString sl = sensitivityLevel.trimmed().toLower();
+    if (sl == QStringLiteral("high") || sl == QStringLiteral("critical")) {
+        setLastPreferenceCommitEvent({});
+        setPreferenceCommitStage(QStringLiteral("failed"));
+        emit connectionError(QStringLiteral(
+            "sensitive_content_blocked: preference commit rejected at client"));
+        return;
+    }
+
+    setPreferenceCommitStage(QStringLiteral("sending"));
+
+    // 幂等键：sessionId+scope+key；同一三元组重复提交由 D7D Repository 幂等缓存兜底。
+    const QString idempotencyKey = QStringLiteral("preference-commit:%1:%2:%3")
+        .arg(sessionId, scope, key);
+    const QString srcRef = QStringLiteral("ref:preference-commit:%1:%2")
+        .arg(scope, key);
+
+    QJsonObject metadata = buildEventMetadata(
+        userId, sessionId, /*turnId=*/QStringLiteral(""),
+        /*traceId=*/QStringLiteral(""), idempotencyKey, srcRef);
+
+    QJsonObject preference;
+    preference.insert(QStringLiteral("user_id"), userId);
+    preference.insert(QStringLiteral("key"), key);
+    preference.insert(QStringLiteral("scope"), scope);
+    preference.insert(QStringLiteral("value"), value);
+    preference.insert(QStringLiteral("memory_status"), memoryStatus);
+    preference.insert(QStringLiteral("is_temporary"), isTemporary);
+    preference.insert(QStringLiteral("should_persist"), shouldPersist);
+    preference.insert(QStringLiteral("confidence"), confidence);
+    preference.insert(QStringLiteral("sensitivity_level"), sensitivityLevel);
+    // C 轨未冻结 preference.version.commit → MemorySourceEvent.source_type 映射；
+    // 显式注入 PENDING_C_CONFIRMATION 字段，不擅自新增 SourceType 枚举。
+    preference.insert(QStringLiteral("mapping_status"),
+                      QStringLiteral("PENDING_C_CONFIRMATION"));
+
+    QJsonObject event;
+    event.insert(QStringLiteral("metadata"), metadata);
+    event.insert(QStringLiteral("preference"), preference);
+
+    const QJsonDocument doc(event);
+    setLastPreferenceCommitEvent(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)));
+
+    setPreferenceCommitBusy(true);
+    const QString requestId = client_.sendPreferenceCommitEvent(event);
+    if (requestId.isEmpty()) {
+        setPreferenceCommitBusy(false);
+        setPreferenceCommitStage(QStringLiteral("failed"));
+        return;
+    }
+    pendingPreferenceCommitRequestId_ = requestId;
+    setLastRequestId(requestId);
+    armDeadlineTimer(requestId, kDefaultDeadlineMs);
+}
+
+void MemoryViewModel::runPreferenceHistoryPipeline(
+    const QString& userId,
+    const QString& sessionId,
+    const QString& scope,
+    const QString& key,
+    bool includeHistory)
+{
+    setPreferenceHistoryStage(QStringLiteral("sending"));
+
+    // 历史查询为只读操作，沿用 idempotency_key 语义以便追踪。
+    const QString idempotencyKey = QStringLiteral("preference-history:%1:%2:%3")
+        .arg(sessionId, scope, key);
+    const QString srcRef = QStringLiteral("ref:preference-history:%1:%2")
+        .arg(scope, key);
+
+    QJsonObject metadata = buildEventMetadata(
+        userId, sessionId, /*turnId=*/QStringLiteral(""),
+        /*traceId=*/QStringLiteral(""), idempotencyKey, srcRef);
+
+    QJsonObject query;
+    query.insert(QStringLiteral("user_id"), userId);
+    query.insert(QStringLiteral("key"), key);
+    query.insert(QStringLiteral("scope"), scope);
+    query.insert(QStringLiteral("include_history"), includeHistory);
+
+    QJsonObject event;
+    event.insert(QStringLiteral("metadata"), metadata);
+    event.insert(QStringLiteral("query"), query);
+
+    const QJsonDocument doc(event);
+    setLastPreferenceHistoryEvent(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)));
+
+    setPreferenceHistoryBusy(true);
+    const QString requestId = client_.sendPreferenceHistoryRequest(event);
+    if (requestId.isEmpty()) {
+        setPreferenceHistoryBusy(false);
+        setPreferenceHistoryStage(QStringLiteral("failed"));
+        return;
+    }
+    pendingPreferenceHistoryRequestId_ = requestId;
+    setLastRequestId(requestId);
+    armDeadlineTimer(requestId, kDefaultDeadlineMs);
+}
+
+void MemoryViewModel::runPreferenceRollbackPipeline(
+    const QString& userId,
+    const QString& sessionId,
+    const QString& scope,
+    const QString& key,
+    const QString& targetVersionId)
+{
+    setPreferenceRollbackStage(QStringLiteral("sending"));
+
+    // 回滚操作幂等键：sessionId+scope+key+target_version_id；
+    // 与 D7D rollback_preference_version 的 idempotency_key 语义对齐。
+    const QString idempotencyKey = QStringLiteral("preference-rollback:%1:%2:%3:%4")
+        .arg(sessionId, scope, key, targetVersionId);
+    const QString srcRef = QStringLiteral("ref:preference-rollback:%1:%2:%3")
+        .arg(scope, key, targetVersionId);
+
+    QJsonObject metadata = buildEventMetadata(
+        userId, sessionId, /*turnId=*/QStringLiteral(""),
+        /*traceId=*/QStringLiteral(""), idempotencyKey, srcRef);
+
+    QJsonObject rollback;
+    rollback.insert(QStringLiteral("user_id"), userId);
+    rollback.insert(QStringLiteral("key"), key);
+    rollback.insert(QStringLiteral("scope"), scope);
+    rollback.insert(QStringLiteral("target_version_id"), targetVersionId);
+    // D7D Repository rollback_preference_version 接受 idempotency_key；
+    // 此处同时写入 rollback 嵌套，便于服务端 handler 直接对齐。
+    rollback.insert(QStringLiteral("idempotency_key"), idempotencyKey);
+
+    QJsonObject event;
+    event.insert(QStringLiteral("metadata"), metadata);
+    event.insert(QStringLiteral("rollback"), rollback);
+
+    const QJsonDocument doc(event);
+    setLastPreferenceRollbackEvent(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)));
+
+    setPreferenceRollbackBusy(true);
+    const QString requestId = client_.sendPreferenceRollbackEvent(event);
+    if (requestId.isEmpty()) {
+        setPreferenceRollbackBusy(false);
+        setPreferenceRollbackStage(QStringLiteral("failed"));
+        return;
+    }
+    pendingPreferenceRollbackRequestId_ = requestId;
+    setLastRequestId(requestId);
+    armDeadlineTimer(requestId, kDefaultDeadlineMs);
+}
+
 // ── 信号槽：问题1核心修复 onResponseReceived ─────────────────────────────────
 
 void MemoryViewModel::onConnectionStateChanged()
@@ -658,6 +821,26 @@ void MemoryViewModel::onResponseReceived(
         setBehaviorBusy(false);
         setBehaviorStage(QStringLiteral("sent"));
     }
+
+    // ── D7-C 偏好版本管理路由（三 busy 独立 pending，沿用 §C1 模式） ──────
+    if (!pendingPreferenceCommitRequestId_.isEmpty()
+        && requestId == pendingPreferenceCommitRequestId_) {
+        pendingPreferenceCommitRequestId_.clear();
+        setPreferenceCommitBusy(false);
+        setPreferenceCommitStage(QStringLiteral("sent"));
+    }
+    if (!pendingPreferenceHistoryRequestId_.isEmpty()
+        && requestId == pendingPreferenceHistoryRequestId_) {
+        pendingPreferenceHistoryRequestId_.clear();
+        setPreferenceHistoryBusy(false);
+        setPreferenceHistoryStage(QStringLiteral("sent"));
+    }
+    if (!pendingPreferenceRollbackRequestId_.isEmpty()
+        && requestId == pendingPreferenceRollbackRequestId_) {
+        pendingPreferenceRollbackRequestId_.clear();
+        setPreferenceRollbackBusy(false);
+        setPreferenceRollbackStage(QStringLiteral("sent"));
+    }
 }
 
 void MemoryViewModel::onRequestFailed(
@@ -712,6 +895,32 @@ void MemoryViewModel::onRequestFailed(
         setBehaviorStage(errorCode == QString::fromUtf8(kErrClientTimeout)
                              ? QStringLiteral("timeout")
                              : QStringLiteral("failed"));
+    }
+
+    // ── D7-C 偏好版本管理 pending 命中 ───────────────────────────────────
+    if (!pendingPreferenceCommitRequestId_.isEmpty()
+        && requestId == pendingPreferenceCommitRequestId_) {
+        pendingPreferenceCommitRequestId_.clear();
+        setPreferenceCommitBusy(false);
+        setPreferenceCommitStage(errorCode == QString::fromUtf8(kErrClientTimeout)
+                                     ? QStringLiteral("timeout")
+                                     : QStringLiteral("failed"));
+    }
+    if (!pendingPreferenceHistoryRequestId_.isEmpty()
+        && requestId == pendingPreferenceHistoryRequestId_) {
+        pendingPreferenceHistoryRequestId_.clear();
+        setPreferenceHistoryBusy(false);
+        setPreferenceHistoryStage(errorCode == QString::fromUtf8(kErrClientTimeout)
+                                      ? QStringLiteral("timeout")
+                                      : QStringLiteral("failed"));
+    }
+    if (!pendingPreferenceRollbackRequestId_.isEmpty()
+        && requestId == pendingPreferenceRollbackRequestId_) {
+        pendingPreferenceRollbackRequestId_.clear();
+        setPreferenceRollbackBusy(false);
+        setPreferenceRollbackStage(errorCode == QString::fromUtf8(kErrClientTimeout)
+                                       ? QStringLiteral("timeout")
+                                       : QStringLiteral("failed"));
     }
 
     emit requestFailed(requestId, errorCode, safeMessage);
@@ -867,6 +1076,77 @@ void MemoryViewModel::setBehaviorBusy(bool value)
     if (behaviorBusy_ == value) { return; }
     behaviorBusy_ = value;
     emit behaviorBusyChanged();
+    if (oldBusy != busy()) { emit busyChanged(); }
+}
+
+// ── D7-C 偏好版本管理私有 setters ─────────────────────────────────────────
+
+void MemoryViewModel::setLastPreferenceCommitEvent(const QString& value)
+{
+    if (lastPreferenceCommitEvent_ == value) return;
+    lastPreferenceCommitEvent_ = value;
+    emit lastPreferenceCommitEventChanged();
+}
+
+void MemoryViewModel::setPreferenceCommitStage(const QString& value)
+{
+    if (preferenceCommitStage_ == value) return;
+    preferenceCommitStage_ = value;
+    emit preferenceCommitStageChanged();
+}
+
+void MemoryViewModel::setPreferenceCommitBusy(bool value)
+{
+    const bool oldBusy = busy();
+    if (preferenceCommitBusy_ == value) { return; }
+    preferenceCommitBusy_ = value;
+    emit preferenceCommitBusyChanged();
+    if (oldBusy != busy()) { emit busyChanged(); }
+}
+
+void MemoryViewModel::setLastPreferenceHistoryEvent(const QString& value)
+{
+    if (lastPreferenceHistoryEvent_ == value) return;
+    lastPreferenceHistoryEvent_ = value;
+    emit lastPreferenceHistoryEventChanged();
+}
+
+void MemoryViewModel::setPreferenceHistoryStage(const QString& value)
+{
+    if (preferenceHistoryStage_ == value) return;
+    preferenceHistoryStage_ = value;
+    emit preferenceHistoryStageChanged();
+}
+
+void MemoryViewModel::setPreferenceHistoryBusy(bool value)
+{
+    const bool oldBusy = busy();
+    if (preferenceHistoryBusy_ == value) { return; }
+    preferenceHistoryBusy_ = value;
+    emit preferenceHistoryBusyChanged();
+    if (oldBusy != busy()) { emit busyChanged(); }
+}
+
+void MemoryViewModel::setLastPreferenceRollbackEvent(const QString& value)
+{
+    if (lastPreferenceRollbackEvent_ == value) return;
+    lastPreferenceRollbackEvent_ = value;
+    emit lastPreferenceRollbackEventChanged();
+}
+
+void MemoryViewModel::setPreferenceRollbackStage(const QString& value)
+{
+    if (preferenceRollbackStage_ == value) return;
+    preferenceRollbackStage_ = value;
+    emit preferenceRollbackStageChanged();
+}
+
+void MemoryViewModel::setPreferenceRollbackBusy(bool value)
+{
+    const bool oldBusy = busy();
+    if (preferenceRollbackBusy_ == value) { return; }
+    preferenceRollbackBusy_ = value;
+    emit preferenceRollbackBusyChanged();
     if (oldBusy != busy()) { emit busyChanged(); }
 }
 

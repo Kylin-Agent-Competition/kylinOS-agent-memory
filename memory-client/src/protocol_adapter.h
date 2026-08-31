@@ -114,6 +114,13 @@ extern const QString kMessageKey;
 //   - behavior.observe      : 候选 schema（behavior_event.v1.json）
 // 三者均沿用 ADR-010 模式：生产 Gateway 默认不注册 → UNSUPPORTED_METHOD；
 // 测试态可显式注入 handler。本 PR 不修改 FRZ-IPC-007 冻结路由表。
+//
+// D7-C 候选偏好版本方法（ADR-016 待立项，本 PR 仅客户端侧常量 + Demo 发送）：
+//   - preference.version.commit   : 对齐 D7D save_preference_version
+//   - preference.version.history  : 对齐 D7D list_preference_versions
+//   - preference.version.rollback : 对齐 D7D rollback_preference_version
+// 三者沿用 ADR-010 / D6-C 模式：生产 Gateway 默认不注册 → UNSUPPORTED_METHOD；
+// 测试态可显式注入 handler。本 PR 不修改 FRZ-IPC-007 冻结路由表。
 namespace methods {
 extern const QString kEcho;              // "echo"
 extern const QString kHealth;            // "health"
@@ -124,6 +131,10 @@ extern const QString kTurnFinalized;    // "turn.finalized"（ADR-010 新增，�
 extern const QString kToolExecution;        // "tool.execution"
 extern const QString kManualConfigIngest;   // "manual.config.ingest"
 extern const QString kBehaviorObserve;      // "behavior.observe"
+// D7-C 候选偏好版本方法（不冻结，对齐 D7D Repository）
+extern const QString kPreferenceVersionCommit;   // "preference.version.commit"
+extern const QString kPreferenceVersionHistory;  // "preference.version.history"
+extern const QString kPreferenceVersionRollback; // "preference.version.rollback"
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）。

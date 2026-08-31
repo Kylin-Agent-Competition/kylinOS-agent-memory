@@ -8,5 +8,6 @@
         <file>pages/ToolAdapterPage.qml</file>
         <file>pages/ManualConfigPage.qml</file>
         <file>pages/BehaviorObservePage.qml</file>
+        <file>pages/PreferenceVersionPage.qml</file>
     </qresource>
 </RCC>

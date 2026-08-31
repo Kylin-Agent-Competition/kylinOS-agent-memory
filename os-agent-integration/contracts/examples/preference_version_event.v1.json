@@ -1,0 +1,78 @@
+{
+  "_comment": "D7-C 候选偏好版本事件 schema 草案（CANDIDATE，不冻结）。包含三类候选 payload：commit / history / rollback。对齐 D7D Repository save/list/rollback_preference_version。所有 method 沿用 FRZ-IPC-006 envelope。",
+  "_variants": {
+    "preference.version.commit": "提交（创建或更新）偏好版本；对齐 save_preference_version",
+    "preference.version.history": "查询偏好版本链；对齐 list_preference_versions",
+    "preference.version.rollback": "回滚到目标历史版本；对齐 rollback_preference_version"
+  },
+
+  "preference.version.commit": {
+    "metadata": {
+      "schema_version": "1.0",
+      "event_id": "event-preference-commit-001",
+      "trace_id": "trace-001",
+      "user_id": "local-user",
+      "session_id": "session-pref-001",
+      "turn_id": "",
+      "occurred_at": "2026-08-31T05:00:00.000Z",
+      "collected_at": "2026-08-31T05:00:00.050Z",
+      "source_reference": "ref:preference-commit:preference:language",
+      "idempotency_key": "preference-commit:session-pref-001:preference:language"
+    },
+    "preference": {
+      "user_id": "local-user",
+      "key": "language",
+      "scope": "preference",
+      "value": "zh-CN",
+      "memory_status": "active",
+      "is_temporary": false,
+      "should_persist": true,
+      "confidence": 0.8,
+      "sensitivity_level": "none",
+      "mapping_status": "PENDING_C_CONFIRMATION"
+    }
+  },
+
+  "preference.version.history": {
+    "metadata": {
+      "schema_version": "1.0",
+      "event_id": "event-preference-history-001",
+      "trace_id": "trace-002",
+      "user_id": "local-user",
+      "session_id": "session-pref-001",
+      "turn_id": "",
+      "occurred_at": "2026-08-31T05:01:00.000Z",
+      "collected_at": "2026-08-31T05:01:00.050Z",
+      "source_reference": "ref:preference-history:preference:language",
+      "idempotency_key": "preference-history:session-pref-001:preference:language"
+    },
+    "query": {
+      "user_id": "local-user",
+      "key": "language",
+      "scope": "preference",
+      "include_history": true
+    }
+  },
+
+  "preference.version.rollback": {
+    "metadata": {
+      "schema_version": "1.0",
+      "event_id": "event-preference-rollback-001",
+      "trace_id": "trace-003",
+      "user_id": "local-user",
+      "session_id": "session-pref-001",
+      "turn_id": "",
+      "occurred_at": "2026-08-31T05:02:00.000Z",
+      "collected_at": "2026-08-31T05:02:00.050Z",
+      "source_reference": "ref:preference-rollback:preference:language:1",
+      "idempotency_key": "preference-rollback:session-pref-001:preference:language:1"
+    },
+    "rollback": {
+      "user_id": "local-user",
+      "key": "language",
+      "scope": "preference",
+      "target_version_id": "1",
+      "idempotency_key": "preference-rollback:session-pref-001:preference:language:1"
+    }
+  }
+}

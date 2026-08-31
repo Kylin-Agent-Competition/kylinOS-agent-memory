@@ -224,6 +224,28 @@ QString MemoryClient::sendBehaviorEvent(const QJsonObject& eventJson)
     return sendEventEnvelope(methods::kBehaviorObserve, eventJson);
 }
 
+// ── D7-C 偏好版本管理写链路 Demo ─────────────────────────────────────────
+QString MemoryClient::sendPreferenceCommitEvent(const QJsonObject& eventJson)
+{
+    // preference.version.commit：对齐 D7D save_preference_version。
+    // 生产 Gateway 默认不注册 → UNSUPPORTED_METHOD（符合预期）。
+    return sendEventEnvelope(methods::kPreferenceVersionCommit, eventJson);
+}
+
+QString MemoryClient::sendPreferenceHistoryRequest(const QJsonObject& eventJson)
+{
+    // preference.version.history：对齐 D7D list_preference_versions。
+    // 候选查询方法，沿用 ADR-010 trace_id 唯一真源。
+    return sendEventEnvelope(methods::kPreferenceVersionHistory, eventJson);
+}
+
+QString MemoryClient::sendPreferenceRollbackEvent(const QJsonObject& eventJson)
+{
+    // preference.version.rollback：对齐 D7D rollback_preference_version。
+    // 生产 Gateway 默认不注册 → UNSUPPORTED_METHOD（符合预期）。
+    return sendEventEnvelope(methods::kPreferenceVersionRollback, eventJson);
+}
+
 QString MemoryClient::sendEventEnvelope(const QString& method, const QJsonObject& eventJson)
 {
     // 共享写链路：trace_id 唯一真源 = payload.metadata.trace_id（若提供），

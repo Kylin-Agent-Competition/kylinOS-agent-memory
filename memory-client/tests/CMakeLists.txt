@@ -122,3 +122,41 @@ add_test(
     NAME d6c_multi_source_adapters
     COMMAND test_d6c_multi_source_adapters
 )
+
+# ============================================================================
+# D7-C 偏好版本管理 L0 测试（Commit / History / Rollback + 事件契约 + 三 busy 独立）
+# 范围：
+#   A. Commit 5 用例（首版 sent / 敏感 high 拦截 / critical 拦截 / UNSUPPORTED_METHOD /
+#      客户端 deadline timeout）
+#   B. History 3 用例（查询 sent / 空历史 sent / 错误响应 failed）
+#   C. Rollback 3 用例（成功 sent / INVALID_REQUEST failed / deadline timeout）
+#   D. 事件契约（commit/rollback/history 嵌套 + mapping_status=PENDING_C_CONFIRMATION）
+#   E. 运行正确性（三 busy 独立 pending 不串台 + busy 合并属性反映三组）
+# 重要说明：本测试仅为 memory-client Demo / Prototype 的 L0 契约验证，
+#           不代表真实 AI Assistant Hook / Chat DB / 偏好持久化后端已接入。
+# ============================================================================
+add_executable(test_d7c_preference_version_management
+    ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+    ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
+    mock_gateway_server.cpp
+    test_d7c_preference_version_management.cpp
+)
+target_link_libraries(test_d7c_preference_version_management
+    PRIVATE
+        Qt5::Core
+        Qt5::Network
+        Qt5::Test
+)
+target_include_directories(test_d7c_preference_version_management
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_d7c_preference_version_management
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME d7c_preference_version_management
+    COMMAND test_d7c_preference_version_management
+)
