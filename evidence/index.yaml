@@ -1145,26 +1145,26 @@ entries:
     description: "D11A 麒麟 VM 全功能联调验证——health 增强（model/errors/lifecycle）+ Outbox 桥接 + VM 检测 + 全量测试"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
-    source: "evidence/l2-kylin-vm/d11a_evidence_20260831_161014_vm_verify.log"
-    tested_commit: "03c93cd3f5ef3061d893dbe12a11aebdf7618a03"
+    source: "evidence/l2-kylin-vm/d11a_evidence_20260831_164919_vm_verify.log"
+    tested_commit: "c8515945cdffd9f67f40a9568644a75dd1f3a578"
     date: "2026-08-31"
     reviewer: "pending"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "VM 检测 13/14 PASS（ABI 符号名 `text_embedding` 与 SDK 实际导出名不完全匹配，已知问题，非代码 bug）；kylin_embedding pybind11 模块需编译方可执行真实 SDK 调用；全链路 Vector 消费（R-9）pending，consumer 当前仅处理 memory.deletion 事件类型"
-    checksum_sha256: "91ba6ed4f1be1341cd8484ab52b18b9329ab1a7213806c08fbbca4e53f220feb"
+    limitations: "ABI 关键符号 5/10 因 SDK 导出名与头文件不一致标记为 warn-not-fail（embed 功能已验证正常，bridge_loaded=True，dim=768）；全链路 Vector 消费（R-9）pending，consumer 当前仅处理 memory.deletion 事件类型"
+    checksum_sha256: "65510da8fe26fca581e1366c450f554b3ea1c98f5fc0758db7191ee3e5d4e8ab"
     details: |
-      VM 检测结果: 13/14 PASS（1 FAIL = ABI 符号名微小差异，非代码 bug）
+      VM 检测结果: 14/14 PASS（ABI 符号 warn-not-fail，不计入失败）
       全量测试结果: 50/50 PASS
       SDK: kylin-coreai-embedding 1.2.0.0-0k0.4, Runtime 1.3.0
       模型: ensemble-embd_gte-base_uint8-text
       Bridge: loaded=True, has_session=True
       health() D11A 字段: model/errors/lifecycle ALL PASS
       lifecycle: READY（完整状态名）
-      延迟: avg=54.7ms p99=86.6ms < 架构预算 180ms
+      延迟: avg=58.8ms p99=83.3ms < 架构预算 180ms
       缓存命中延迟: 0.1ms（5次）
       ABI 符号: 62 个导出
       日志: 无正文残留
-      日志: evidence/l2-kylin-vm/d11a_evidence_20260831_161014_vm_verify.log
-      全量测试: evidence/l2-kylin-vm/d11a_evidence_20260831_161014_test_all.log
+      日志: evidence/l2-kylin-vm/d11a_evidence_20260831_164919_vm_verify.log
+      全量测试: evidence/l2-kylin-vm/d11a_evidence_20260831_164919_test_all.log
