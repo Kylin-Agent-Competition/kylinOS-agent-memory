@@ -1,6 +1,6 @@
 # ADR-012：新增 `source_events` 表持久化多源事件（FRZ-DB-001 / D6-D 扩展）
 
-- **状态**：📝 草案（待 D 决策 + Reviewer E 签署）
+- **状态**：✅ D 已决策（2026-08-31，方案 A）；待 Reviewer E 签署
 - **日期**：2026-08-31
 - **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
 - **责任轨道**：D（DB）为主，A/E 协作（消费现有 pipeline / admission 模型，不复制真源）
@@ -193,4 +193,4 @@ CREATE TABLE source_events (
 - `memory-service/pipeline/fingerprint.py`（content_fingerprint / event_duplicate_key）
 - `docs/day6/day6-d-01-event-persistence-contract-plan-v0.2.md`（D6-D 契约规划，D-1/D-4/D-5/D-6 决策）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）待决策**；**Reviewer E（谢嘉然）待签署**；签署后回写 `D4_DB_INITIAL_DESIGN_FREEZE_20260817.md`（FRZ-DB-001 扩展节）。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-31 决策选方案 A**；**Reviewer E（谢嘉然）待签署**；签署后回写 `D4_DB_INITIAL_DESIGN_FREEZE_20260817.md`（FRZ-DB-001 扩展节）。

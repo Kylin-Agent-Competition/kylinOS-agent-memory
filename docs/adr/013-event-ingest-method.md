@@ -1,6 +1,6 @@
 # ADR-013：新增 `event.ingest` IPC 写方法（FRZ-IPC-007 / D6-D 扩展）
 
-- **状态**：📝 草案（待 D 决策 + Reviewer E 签署）
+- **状态**：✅ D 已决策（2026-08-31，方案 A）；待 Reviewer E 签署
 - **日期**：2026-08-31
 - **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
 - **责任轨道**：D（IPC）为主，A/E 协作（编排现有 pipeline / admission，不复制真源）
@@ -169,4 +169,4 @@ FRZ-IPC-007 路由表新增写方法 `event.ingest`，payload 对齐 A 轨 `Memo
 - `memory-service/security/source_admission.py`（SourceAdmissionPolicy，三值决策）
 - `docs/day6/day6-d-01-event-persistence-contract-plan-v0.2.md`（D6-D 契约规划，D-7 决策：本版含 handler）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）待决策**；**Reviewer E（谢嘉然）待签署**；签署后回写 `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（FRZ-IPC-007 路由表）。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-31 决策选方案 A**；**Reviewer E（谢嘉然）待签署**；签署后回写 `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（FRZ-IPC-007 路由表）。
