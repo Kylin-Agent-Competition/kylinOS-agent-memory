@@ -1146,8 +1146,8 @@ entries:
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d11a_evidence_20260831_204650_vm_verify.log"
-    tested_commit: "b16b00fb4a2a2cdd345704f1e3f20e80c3d4480a"
-    evidence_commit: "b16b00f"
+    tested_commit: "b16b00fb4a2a2cdd345704f1e3f20e80c3d4480a"  # 被测生产代码 branch tip（日志头声明一致；rebase 后对应 60a9ff9，生产代码零差异）
+    evidence_commit: "4ebbcdff66d087201971164ba49425aeba8b87c9"  # 证据文件最终形态入库 commit（rebase 后为分支 tip，仅 evidence/脚本新行修正）
     date: "2026-08-31"
     reviewer: "pending"
     runtime_result: "PASS"
