@@ -1,0 +1,46 @@
+name: Memory Client L0 ctest
+
+on:
+  pull_request:
+    branches: [main, integration]
+    paths:
+      - 'memory-client/**'
+      - '.github/workflows/memory-client-ctest.yml'
+  push:
+    branches: [main, integration, 'feat/**']
+    paths:
+      - 'memory-client/**'
+      - '.github/workflows/memory-client-ctest.yml'
+  workflow_dispatch: {}
+
+jobs:
+  ctest:
+    name: memory-client L0 ctest
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt5 & build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            qtbase5-dev \
+            qt5-qmake
+
+      - name: Configure CMake (QML app OFF, tests ON)
+        run: |
+          cmake -B memory-client/build -S memory-client \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DKYLIN_MEMORY_CLIENT_BUILD_QML_APP=OFF \
+            -DKYLIN_MEMORY_CLIENT_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build memory-client/build -j"$(nproc)"
+
+      - name: Run ctest
+        working-directory: memory-client/build
+        run: ctest --output-on-failure --verbose

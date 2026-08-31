@@ -96,6 +96,14 @@ ApplicationWindow {
                 text: qsTr("Preferences")
                 onClicked: stack.replace(prefPage)
             }
+            // D5-C 首个真实垂直链路：Pre-Chat + Post-Turn + 原文隔离验证
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                highlighted: true
+                text: qsTr("D5 Vertical Link")
+                onClicked: stack.replace(verticalLinkPage)
+            }
             Item { Layout.fillHeight: true }
             Button {
                 Layout.fillWidth: true
@@ -117,6 +125,7 @@ ApplicationWindow {
     Component { id: statusPage; StatusPage { viewModel: window.viewModel } }
     Component { id: queryPage; MemoryQueryPage { viewModel: window.viewModel } }
     Component { id: prefPage; PreferenceEditorPage { viewModel: window.viewModel } }
+    Component { id: verticalLinkPage; VerticalLinkPage { viewModel: window.viewModel } }
 
     // 连接错误与请求失败统一弹出提示（不展示原始正文/凭据）。
     // Qt 5.12 风格：信号参数按名直接可见。
