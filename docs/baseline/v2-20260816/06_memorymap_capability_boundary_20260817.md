@@ -1,5 +1,6 @@
 # 记忆地图（kylin-ai-memorymap）能力边界调查报告
 
+> **版本对照真源**：`Kylin-runtime-knowledge/VERSION_MAP.md`（2026-08-17，VM 运行时接口版本对照表）
 **编号**: KMA-CAPABILITY-MEMORYMAP-20260817
 **性质**: 麒麟 VM 实测能力边界调查（ABI/包/Schema/字符串/依赖级 + 运行态探查）
 **目标环境**: 银河麒麟 V11 2603 x86_64 VirtualBox（VM `kylin-agent-pc`，内核 6.6.0-76-generic）

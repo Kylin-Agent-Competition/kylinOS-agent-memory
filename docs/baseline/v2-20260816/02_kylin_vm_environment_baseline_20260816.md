@@ -1,5 +1,6 @@
 # 02 麒麟虚拟机实际环境基线（v2 · 2026-08-16 实测）
 
+> **版本对照真源**：`Kylin-runtime-knowledge/VERSION_MAP.md`（2026-08-17，VM 运行时接口版本对照表）
 > **用途**：记录当前麒麟 VM 的真实运行环境，取代旧基线中已过时的组件版本。
 > **采集方式**：VirtualBox guestcontrol（VM 名 `Kylin-desktop-neo`）· 用户 `kylin-agent`。
 > **采集时间**：2026-08-16。

@@ -17,9 +17,13 @@
 
 | 文件 | 内容 |
 |------|------|
-| `01_sdk_model_abi_baseline.md` | SDK / 模型 / ABI 基线清单（旧） |
-| `03_defensive_checklist.md` | 防御性检查清单 |
-| `v2-20260816/` | 新环境基线（v2）及基于其的能力边界调查工作区 |
+| `01_sdk_model_abi_baseline.md` | SDK / 模型 / ABI 基线清单（旧，已被 v2 取代） |
+| `03_defensive_checklist.md` | 防御性检查清单（旧，已被 v2 取代） |
+| `v2-20260816/01_sdk_model_abi_baseline_v2_20260816.md` | SDK / 模型 / ABI 基线清单（v2 · 2026-08-16 实测） |
+| `v2-20260816/02_kylin_vm_environment_baseline_20260816.md` | **麒麟 VM 实际环境基线（v2 · 2026-08-16 实测，当前权威）** |
+| `v2-20260816/03_defensive_checklist_v2_20260816.md` | 防御性检查清单（v2 · 2026-08-16） |
+| `v2-20260816/05_capability_boundary_reevaluation_20260816.md` | 能力边界重评估（v1.4 · 2026-08-16/17/25） |
+| `v2-20260816/06_memorymap_capability_boundary_20260817.md` | memorymap（kylin-ai-memorymap 2.0.23）能力边界调查（2026-08-17） |
 | `Kylin-runtime-knowledge/VERSION_MAP.md` | **VM 运行时接口真源**（版本对照表 v2，2026-08-17：9 项仓库版本对照 + 关键路径/接口 + Agent 使用规则） |
 
 ## 说明

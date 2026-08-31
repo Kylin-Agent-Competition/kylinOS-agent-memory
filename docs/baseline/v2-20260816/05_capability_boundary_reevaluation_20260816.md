@@ -1,5 +1,6 @@
 # 05 能力边界重新评估（v1.4 · 基于 2026-08-16 环境基线 v2，2026-08-17 memorymap 定案增补，2026-08-25 PR#57 L2 回写）
 
+> **版本对照真源**：`Kylin-runtime-knowledge/VERSION_MAP.md`（2026-08-17，VM 运行时接口版本对照表）
 > **性质**：对 `reviewDocuments/01_sdk_capability_boundary.md`（v1.1）的能力边界结论，依据新环境基线
 > `docs/baseline/02_kylin_vm_environment_baseline_20260816.md`（v2）重新评估的结果。
 > **评估方法**：本次为 **ABI/包/Schema 级** 评估（nm -D、dpkg、sqlite schema、路径探查），未做运行时功能测试；
