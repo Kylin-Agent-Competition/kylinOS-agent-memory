@@ -193,7 +193,8 @@ svc3.start()
 svc3.embed("wire test")
 check("invalidate 未接线时返回错误", svc3.handle_deletion_event(event).get("ok") is False)
 
-svc3.set_extraction_provider(type("Mock", (), {"_cache": PreferenceExtractionCache()})())
+from providers.extraction_provider import ExtractionProvider
+svc3.set_extraction_provider(ExtractionProvider())
 check("set_extraction_provider 后 invalidator 已就绪", svc3.invalidator is not None)
 
 h3 = svc3.health()["result"]
@@ -210,7 +211,7 @@ print("\n=== 6. outbox_consumer 模块测试 ===")
 
 svc4 = EmbeddingService(provider=FakeProvider())
 svc4.start()
-svc4.set_extraction_provider(type("Mock", (), {"_cache": PreferenceExtractionCache()})())
+svc4.set_extraction_provider(ExtractionProvider())
 
 consumer = build_deletion_consumer(svc4)
 check("consumer 创建成功", consumer is not None)
@@ -232,6 +233,39 @@ except Exception as e:
     check("consumer 调用异常", False, str(e))
 
 svc4.close()
+
+# 负路径测试
+print("\n--- 6.1 outbox_consumer 负路径测试 ---")
+
+svc5 = EmbeddingService(provider=FakeProvider())
+svc5.start()
+
+# 未接线
+consumer_no_inv = build_deletion_consumer(svc5)
+try:
+    consumer_no_inv({"event_type": "memory.deletion", "event_id": "neg_test", "user_id": "u"})
+    check("未接线应抛 RuntimeError", False)
+except RuntimeError:
+    check("未接线抛 RuntimeError", True)
+
+svc5.set_extraction_provider(ExtractionProvider())
+
+# 缺 event_id
+consumer_ok = build_deletion_consumer(svc5)
+try:
+    consumer_ok({"event_type": "memory.deletion", "user_id": "u"})
+    check("缺 event_id 应抛 ValueError", False)
+except ValueError:
+    check("缺 event_id 抛 ValueError", True)
+
+# 未知 event_type
+try:
+    consumer_ok({"event_type": "unknown.type", "event_id": "neg_test", "user_id": "u"})
+    check("未知 event_type 应抛 ValueError", False)
+except ValueError:
+    check("未知 event_type 抛 ValueError", True)
+
+svc5.close()
 
 
 # ============================================================

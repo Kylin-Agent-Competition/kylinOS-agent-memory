@@ -1138,3 +1138,29 @@ entries:
       L2-5 systemd: 默认库 alembic 迁移 ALEMBIC_EXIT=0；enable/start RC=0；socket /run/user/1000/kylin-memory/memory.sock 可达；health ok；restart active；stop inactive+socket 清理；enable --now 回退恢复 active。
       归档: 完整日志 evidence/l2-kylin-vm/pr65_l2_vm_20260828.log；L1 全量 1003 passed/49 skipped @ fac5411（evidence/l1/pr65_l1_vm_checklist_20260828.log）。
       tested_commit 说明: 完整 L1/L2 执行于 fac5411；946eb3d 后续代码修复（Outbox event_id + resolver miss 日志）经定向测试 30+23 passed；证据文件随 PR #65 合并 main @ 4926345 入库（evidence_commit）。checksum 以 git 仓库 LF 归一化 blob 为准（sha256sum over committed bytes），与 Windows 工作树 CRLF 副本哈希不同，勿混用。
+
+
+- id: "D11A-L2-VERIFY"
+    task_id: "D11A"
+    description: "D11A VM full function integration verification - health enhancement (model/errors/lifecycle) + Outbox bridge + 14/14 PASS"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/day11a_verify_20260831_093621.log"
+    tested_commit: "c63f569d732de59ce6388c6fd614da9e15b8191a"
+    date: "2026-08-31"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "kylin_embedding pybind11 module must be compiled for real SDK calls; without it all embed paths return degraded (correct behavior); full-chain Vector consumption (R-9) pending, consumer only handles memory.deletion events"
+    checksum_sha256: "PENDING"
+    details: |
+      SDK: kylin-coreai-embedding 1.2.0.0-0k0.4, Runtime 1.3.0
+      Model: ensemble-embd_gte-base_uint8-text
+      Bridge: loaded=True, has_session=True
+      14/14 ALL PASS
+      - Latency: avg=137.1ms < budget 180ms
+      - Cache hit latency: 0.3ms
+      - ABI symbols: 62 exported
+      - Logs: no plaintext user content residue
+      Log: evidence/l2-kylin-vm/day11a_verify_20260831_093621.log

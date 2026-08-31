@@ -63,7 +63,7 @@ def build_deletion_consumer(
         if event_type == EVENT_DELETION or event_type == "deletion":
             _handle_deletion_payload(payload, embedding_service)
         else:
-            logger.warning("未知 Outbox 事件类型: %s", event_type)
+            raise ValueError(f"unknown outbox event_type: {event_type!r}")
 
     return _consumer
 

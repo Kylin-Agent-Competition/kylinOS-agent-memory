@@ -21,7 +21,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 EVIDENCE_DIR="$REPO_DIR/evidence/l2-kylin-vm"
-LOG_FILE="$EVIDENCE_DIR/day11a_verify_$(date +%Y%m%d_%H%M%S).log"
+RUN_ID="${RUN_ID:-day11a_verify_$(date +%Y%m%d_%H%M%S)}"
+LOG_FILE="$EVIDENCE_DIR/${RUN_ID}.log"
 # 优先使用 venv Python（pydantic >= 2.13 / sqlalchemy 已安装）
 if [ -f "/tmp/day10-venv/bin/python" ]; then
     PYTHON="${PYTHON:-/tmp/day10-venv/bin/python}"
@@ -63,15 +64,19 @@ $PYTHON --version 2>&1
 check "Python 可用" $?
 
 echo -n "  SDK 包检测: "
-dpkg -l libkylin-coreai-embedding 2>/dev/null | grep -E '^ii' || echo "  (未安装 dpkg 包)"
-check "SDK 包检测" 0
+dpkg -l libkylin-coreai-embedding 2>/dev/null | grep -E '^ii' >/dev/null 2>&1
+check "SDK 包检测" $?
 
 echo -n "  SDK .so 路径: "
-ls -la /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.* 2>/dev/null || echo "  (未找到)"
+SDK_SO_PATH=$(dpkg -L libkylin-coreai-embedding 2>/dev/null | grep '\.so\.' | head -1)
+if [ -z "$SDK_SO_PATH" ]; then
+    SDK_SO_PATH="/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1"
+fi
+ls -la "$SDK_SO_PATH" 2>/dev/null
 check "SDK .so 存在" $?
 
 echo -n "  ldd 解析: "
-ldd /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1 2>/dev/null | grep -c "=>" || echo "0"
+ldd "$SDK_SO_PATH" 2>/dev/null | grep -c "=>" >/dev/null 2>&1
 check "SDK 动态库可解析" $?
 
 echo -n "  pytest 可用: "
@@ -79,7 +84,7 @@ $PYTHON -m pytest --version 2>&1 | head -1
 check "pytest 可用" $?
 
 echo -n "  Pydantic 版本: "
-$PYTHON -c "import pydantic; print(pydantic.__version__)" 2>/dev/null || echo "  (未安装)"
+$PYTHON -c "import pydantic; print(pydantic.__version__)" 2>/dev/null
 check "pydantic 可用" $?
 
 # ── 2. Embedding Service 健康检查 ──
@@ -106,6 +111,18 @@ try:
     print(f'  backlog: {r[\"backlog\"]}')
     print(f'  cache: {r[\"cache\"]}')
     print(f'  cache_invalidator: {r[\"cache_invalidator\"]}')
+    print(f'  model: {r[\"model\"]}')
+    print(f'  errors: {r[\"errors\"]}')
+    print(f'  provider_lifecycle: {r[\"provider_lifecycle\"]}')
+
+    # D11A 新增字段断言
+    assert 'model' in r, 'health 缺少 model 分项'
+    assert 'errors' in r, 'health 缺少 errors 分项'
+    assert 'provider_lifecycle' in r, 'health 缺少 provider_lifecycle 分项'
+    assert 'count' in r['errors'], 'errors 缺少 count'
+    assert 'last_code' in r['errors'], 'errors 缺少 last_code'
+    assert 'last_time_seconds_ago' in r['errors'], 'errors 缺少 last_time_seconds_ago'
+    print('  D11A 字段验证: ALL PASS')
     svc.close()
     sys.exit(0)
 except Exception as e:
@@ -289,15 +306,22 @@ echo ""
 echo "=== 7. Bridge ABI 符号检查 ==="
 
 echo -n "  导出 C API 符号: "
-nm -D /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1 2>/dev/null | grep -E 'text_embedding|embedding_result' | wc -l || echo "0"
-check "ABI 符号导出" $?
+ABI_COUNT=$(nm -D "$SDK_SO_PATH" 2>/dev/null | grep -cE 'text_embedding|embedding_result')
+echo "$ABI_COUNT"
+check "ABI 符号导出" $([ "$ABI_COUNT" -gt 0 ] && echo 0 || echo 1)
 
 echo -n "  关键符号验证: "
+ALL_FOUND=0
 for sym in text_embedding_create_session text_embedding text_embedding_async embedding_result_get_vector_data; do
-    nm -D /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1 2>/dev/null | grep -q "$sym" && echo -n "$sym " || echo -n "(missing:$sym) "
+    if nm -D "$SDK_SO_PATH" 2>/dev/null | grep -q "$sym"; then
+        echo -n "$sym "
+    else
+        echo -n "(missing:$sym) "
+        ALL_FOUND=1
+    fi
 done
 echo ""
-check "关键符号" $?
+check "关键符号" $ALL_FOUND
 
 # ── 8. 日志无正文残留 ──
 echo ""

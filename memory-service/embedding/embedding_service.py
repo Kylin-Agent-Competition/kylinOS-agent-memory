@@ -24,6 +24,7 @@ Day9 增强（台账 R47）：
 
 from __future__ import annotations
 
+import threading
 import time
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
@@ -190,6 +191,7 @@ class EmbeddingService:
         # 默认 256 字符：覆盖绝大部分短查询场景。
         self._max_short_text_length = 256
         # D11A：错误追踪（health 分项返回）
+        self._error_lock = threading.Lock()
         self._last_error: Optional[str] = None
         self._last_error_code: Optional[str] = None
         self._last_error_time: Optional[float] = None
@@ -353,12 +355,18 @@ class EmbeddingService:
         except Exception:
             model_info = {"name": "", "dimension": 0, "loaded": False, "ondevice": False}
 
-        lifecycle = getattr(self._provider, "_lifecycle", None)
-        lifecycle_name = lifecycle.name if lifecycle is not None else "N/A"
+        lifecycle_name = "N/A"
+        try:
+            mi = getattr(self._provider, "model_info", None)
+            if callable(mi):
+                m = mi()
+                lifecycle_name = "loaded" if m.loaded else "N/A"
+        except Exception:
+            lifecycle_name = "N/A"
 
-        last_error_time_ago = 0.0
+        last_error_time_ago = -1.0
         if self._last_error_time is not None:
-            last_error_time_ago = time.monotonic() - self._last_error_time
+            last_error_time_ago = round(time.monotonic() - self._last_error_time, 2)
 
         return {
             "ok": True,
@@ -550,12 +558,13 @@ class EmbeddingService:
     # ── 辅助 ──
 
     def _track_error(self, code: Any, message: str) -> None:
-        """记录错误追踪信息（health 分项返回）。"""
+        """记录错误追踪信息（health 分项返回）。线程安全。"""
         code_str = code.name if isinstance(code, ProviderErrorCode) else str(code)
-        self._last_error = message
-        self._last_error_code = code_str
-        self._last_error_time = time.monotonic()
-        self._error_count += 1
+        with self._error_lock:
+            self._last_error = message
+            self._last_error_code = code_str
+            self._last_error_time = time.monotonic()
+            self._error_count += 1
 
     @staticmethod
     def _envelope(body: Dict[str, Any],
