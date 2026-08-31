@@ -728,6 +728,36 @@ def list_preference_versions(
     return [dict(row) for row in rows]
 
 
+def list_preference_items(
+    conn,
+    *,
+    user_id: str,
+    preference_key: Optional[str] = None,
+    preference_scope: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """按用户列出偏好条目（可选按 key / scope 过滤），供 UI 枚举当前偏好。
+
+    D7C preference.list 消费：只返回当前用户（user_id 强制过滤）的
+    memory_items 行，跨用户不可见。每个条目附带 current_version_id 指针；
+    current 版本详情 / 全版本链由 get_current_preference_version /
+    list_preference_versions 提供。
+    """
+    _require_nonempty(user_id=user_id)
+    conditions = [memory_items.c.user_id == user_id]
+    if preference_key is not None:
+        _require_nonempty(preference_key=preference_key)
+        conditions.append(memory_items.c.preference_key == preference_key)
+    if preference_scope is not None:
+        _require_nonempty(preference_scope=preference_scope)
+        conditions.append(memory_items.c.preference_scope == preference_scope)
+    rows = conn.execute(
+        select(memory_items)
+        .where(and_(*conditions))
+        .order_by(memory_items.c.preference_key, memory_items.c.preference_scope)
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
 def rollback_preference_version(
     conn,
     *,

@@ -19,6 +19,7 @@ from config import load_config
 from db.engine import create_db_engine, has_alembic_version, init_schema
 from db.uow import UnitOfWork
 from gateway.handlers import register_default_handlers, register_turn_finalized_handler
+from gateway.preference_handlers import register_preference_handlers
 from gateway.registry import HandlerRegistry
 from gateway.server import UDSGatewayServer
 from logging_setup import setup_logging
@@ -122,6 +123,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             "turn.finalized 已注册（test/validation profile，in-memory resolver）。"
             "production 禁止使用此参数（BLOCKED_BY_HOST_MAPPING）"
         )
+
+    # D7C：偏好 IPC 方法（D 轨契约变更，随 D7C PR #87 落地；production 默认注册）
+    register_preference_handlers(registry, uow_factory=_uow_factory)
 
     worker: Optional[OutboxWorker] = None
     if not args.no_outbox:
