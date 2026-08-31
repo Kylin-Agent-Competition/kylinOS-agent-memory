@@ -55,7 +55,7 @@ private slots:
     void toolSuccessRoutesToSent();             // A1
     void toolFailureCarriesErrorFields();       // A2
     void toolCancelledSentAndAuditOnly();       // A3
-    void toolTimeoutRoutesToTimeoutStage();     // A4
+    void toolTimeoutExecutionStatusSentSuccessfully();  // A4（TB-D6C-10：原 RoutesToTimeoutStage）
     void toolPartialStatusPreserved();          // A5
 
     // §B Manual Config 5 用例
@@ -72,9 +72,9 @@ private slots:
     void behaviorCarriesPendingMappingStatus(); // C4
 
     // §D 事件标识契约
-    void retryTurnIdNotEqualSelfTurnId();       // D1
+    void retryOfTurnIdInjectedAndNotEqualToSelfTurnId();    // D1（TB-D6C-11：原 NotEqualSelfTurnId 名实不符）
     void stopReasonExplicitlySet();             // D2
-    void duplicateTurnIdDifferentIdempotencyKey();  // D3
+    void duplicateTurnIdProducesSameIdempotencyKeyDifferentEventId();  // D3（TB-D6C-11：原 DifferentIdempotencyKey 名实不符）
     void eventIdDoesNotReplaceIdempotencyKey(); // D4
 
     // §E 运行正确性
@@ -237,7 +237,7 @@ void D6cMultiSourceAdaptersTest::toolCancelledSentAndAuditOnly()  // A3
     QVERIFY(!vm.lastToolEvent().contains(QStringLiteral("result_ref")));
 }
 
-void D6cMultiSourceAdaptersTest::toolTimeoutRoutesToTimeoutStage()  // A4
+void D6cMultiSourceAdaptersTest::toolTimeoutExecutionStatusSentSuccessfully()  // A4
 {
     // A4 验证 executionStatus=timeout 的 Tool 事件能正确构造与发送。
     // 注意：executionStatus="timeout" 是 Tool 事件业务字段（工具执行超时），
@@ -609,29 +609,38 @@ void D6cMultiSourceAdaptersTest::behaviorCarriesPendingMappingStatus()  // C4
 // D1-D4 通过 ViewModel 的 buildTurnFinalizedEventJson 构造事件并断言契约字段
 // （不发送到 Gateway，纯构造验证）。
 
-void D6cMultiSourceAdaptersTest::retryTurnIdNotEqualSelfTurnId()  // D1
+void D6cMultiSourceAdaptersTest::retryOfTurnIdInjectedAndNotEqualToSelfTurnId()  // D1
 {
-    // Retry 场景：retry_of_turn_id 必须不等于 turn_id
+    // Retry 场景：retry_of_turn_id 必须注入 metadata，且不等于自身 turn_id
+    // （TB-D6C-04：buildTurnFinalizedEventJson 增加 retryOfTurnId 参数，
+    // 非空时自动写入 metadata.retry_of_turn_id）。
     client::MemoryViewModel vm;
+    const QString selfTurnId = QStringLiteral("turn-retry-002");
+    const QString retryOfTurnId = QStringLiteral("turn-retry-001");
     const QJsonObject event = vm.buildTurnFinalizedEventJson(
         QStringLiteral("u"), QStringLiteral("s"),
-        QStringLiteral("turn-retry-001"),  // 当前 turn_id
+        selfTurnId,            // 当前 turn_id
         QStringLiteral("trace-1"),
         QStringLiteral("msg-1"),
         QStringLiteral("assistant final text"),
         QStringLiteral("completed"),
-        QStringLiteral("retry"));  // finalization_reason=retry
+        QStringLiteral("retry"),   // finalization_reason=retry
+        retryOfTurnId);            // 新参数：被重试的 turn_id
 
     const QJsonValue metaVal = event.value(QStringLiteral("metadata"));
-    QVERIFY(metaVal.isObject());
+    QVERIFY2(metaVal.isObject(), "metadata 必须是对象");
     const QJsonObject meta = metaVal.toObject();
-    QCOMPARE(meta.value(QStringLiteral("turn_id")).toString(),
-             QStringLiteral("turn-retry-001"));
 
-    // Retry 必须携带 retry_of_turn_id，且不等于自身 turn_id
-    // 注意：当前 buildTurnFinalizedEventJson 不自动注入 retry_of_turn_id
-    // （需要调用方显式构造）。这里验证 turn_id 字段存在且非空。
-    QVERIFY(!meta.value(QStringLiteral("turn_id")).toString().isEmpty());
+    // ① turn_id == selfTurnId
+    QCOMPARE(meta.value(QStringLiteral("turn_id")).toString(), selfTurnId);
+    // ② retry_of_turn_id 字段存在且非空
+    QVERIFY2(meta.contains(QStringLiteral("retry_of_turn_id")),
+             "retry 场景 metadata 必须含 retry_of_turn_id");
+    QVERIFY(!meta.value(QStringLiteral("retry_of_turn_id")).toString().isEmpty());
+    // ③ retry_of_turn_id != turn_id
+    QVERIFY2(meta.value(QStringLiteral("retry_of_turn_id")).toString() != selfTurnId,
+             "retry_of_turn_id 必须不等于 turn_id 本身");
+    QCOMPARE(meta.value(QStringLiteral("retry_of_turn_id")).toString(), retryOfTurnId);
 }
 
 void D6cMultiSourceAdaptersTest::stopReasonExplicitlySet()  // D2
@@ -655,10 +664,11 @@ void D6cMultiSourceAdaptersTest::stopReasonExplicitlySet()  // D2
     QCOMPARE(event.value(QStringLiteral("is_final")).toBool(), true);
 }
 
-void D6cMultiSourceAdaptersTest::duplicateTurnIdDifferentIdempotencyKey()  // D3
+void D6cMultiSourceAdaptersTest::duplicateTurnIdProducesSameIdempotencyKeyDifferentEventId()  // D3
 {
-    // 重复 turn_id 但不同 idempotency_key 不应被静默吞
-    // idempotency_key 由 buildTurnFinalizedEventJson 按 (session,turn) 构造
+    // 重复 turn_id：两次构造 → idempotency_key 相同（(session,turn) 派生），
+    // 但 event_id 不同（每次构造新 UUID）— 不静默吞，idempotency 由服务端控制。
+    // （TB-D6C-11：原测试名 DifferentIdempotencyKey 名实不符，改为与行为一致。）
     client::MemoryViewModel vm;
     const QJsonObject event1 = vm.buildTurnFinalizedEventJson(
         QStringLiteral("u"), QStringLiteral("s"),
@@ -680,10 +690,10 @@ void D6cMultiSourceAdaptersTest::duplicateTurnIdDifferentIdempotencyKey()  // D3
     const QJsonObject meta1 = event1.value(QStringLiteral("metadata")).toObject();
     const QJsonObject meta2 = event2.value(QStringLiteral("metadata")).toObject();
 
-    // 两次构造的 idempotency_key 应一致（按 (session,turn) 派生）
+    // idempotency_key 应一致（按 (session,turn) 派生）
     QCOMPARE(meta1.value(QStringLiteral("idempotency_key")).toString(),
              meta2.value(QStringLiteral("idempotency_key")).toString());
-    // 但 event_id 不同（每次构造生成新 UUID）
+    // event_id 必须不同（每次构造生成新 UUID）
     QVERIFY(meta1.value(QStringLiteral("event_id")).toString()
             != meta2.value(QStringLiteral("event_id")).toString());
 }

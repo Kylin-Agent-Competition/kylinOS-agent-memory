@@ -19,6 +19,6 @@
     "should_persist": true,
     "confidence": 0.8,
     "sensitivity_level": "none",
-    "source_reference": "ref:manual-config:preference:language"
+    "mapping_status": "PENDING_C_CONFIRMATION"
   }
 }
