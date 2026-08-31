@@ -114,6 +114,12 @@ void MockGatewayServer::handleNewConnection()
                         continue;
                     }
 
+                    // 测试后门：若 handler 返回空 QJsonObject，则跳过回写，
+                    // 模拟 Gateway 不响应场景，让客户端等到 deadline 超时。
+                    if (response.isEmpty()) {
+                        continue;
+                    }
+
                     const auto packet = encodeEnvelope(response);
                     if (packet.has_value()) {
                         raw->write(*packet);
