@@ -4,5 +4,6 @@
         <file>pages/StatusPage.qml</file>
         <file>pages/MemoryQueryPage.qml</file>
         <file>pages/PreferenceEditorPage.qml</file>
+        <file>pages/VerticalLinkPage.qml</file>
     </qresource>
 </RCC>
