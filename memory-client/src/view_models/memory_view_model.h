@@ -94,6 +94,26 @@ class MemoryViewModel : public QObject {
     Q_PROPERTY(bool textIsolationVerified READ textIsolationVerified
                    NOTIFY textIsolationVerifiedChanged)
 
+    // ── D6-C 多源 Adapter Pipeline（Demo / Prototype） ──────────────────
+    // Tool Adapter
+    Q_PROPERTY(QString lastToolEvent READ lastToolEvent
+                   NOTIFY lastToolEventChanged)
+    Q_PROPERTY(QString toolStage READ toolStage NOTIFY toolStageChanged)
+    Q_PROPERTY(bool toolBusy READ toolBusy NOTIFY toolBusyChanged)
+    // Manual Config
+    Q_PROPERTY(QString lastManualConfigEvent READ lastManualConfigEvent
+                   NOTIFY lastManualConfigEventChanged)
+    Q_PROPERTY(QString manualConfigStage READ manualConfigStage
+                   NOTIFY manualConfigStageChanged)
+    Q_PROPERTY(bool manualConfigBusy READ manualConfigBusy
+                   NOTIFY manualConfigBusyChanged)
+    // Behavior Observe
+    Q_PROPERTY(QString lastBehaviorEvent READ lastBehaviorEvent
+                   NOTIFY lastBehaviorEventChanged)
+    Q_PROPERTY(QString behaviorStage READ behaviorStage
+                   NOTIFY behaviorStageChanged)
+    Q_PROPERTY(bool behaviorBusy READ behaviorBusy NOTIFY behaviorBusyChanged)
+
 public:
     explicit MemoryViewModel(QObject* parent = nullptr);
     ~MemoryViewModel() override;
@@ -110,7 +130,11 @@ public:
     [[nodiscard]] QJsonObject lastResponse() const { return lastResponse_; }
     [[nodiscard]] bool preChatBusy() const { return preChatBusy_; }
     [[nodiscard]] bool postTurnBusy() const { return postTurnBusy_; }
-    [[nodiscard]] bool busy() const { return preChatBusy_ || postTurnBusy_; }
+    // D6-C 扩展：四 busy 合并兼容属性（PreChat / PostTurn / Tool / ManualConfig / Behavior）
+    [[nodiscard]] bool busy() const {
+        return preChatBusy_ || postTurnBusy_
+            || toolBusy_ || manualConfigBusy_ || behaviorBusy_;
+    }
 
     // D5-C Getter
     [[nodiscard]] QString originalUserText() const { return originalUserText_; }
@@ -120,6 +144,17 @@ public:
     [[nodiscard]] QString lastTurnFinalizedEvent() const { return lastTurnFinalizedEvent_; }
     [[nodiscard]] QString postTurnStage() const { return postTurnStage_; }
     [[nodiscard]] bool textIsolationVerified() const;
+
+    // ── D6-C 多源 Adapter getters ───────────────────────────────────────
+    [[nodiscard]] QString lastToolEvent() const { return lastToolEvent_; }
+    [[nodiscard]] QString toolStage() const { return toolStage_; }
+    [[nodiscard]] bool toolBusy() const { return toolBusy_; }
+    [[nodiscard]] QString lastManualConfigEvent() const { return lastManualConfigEvent_; }
+    [[nodiscard]] QString manualConfigStage() const { return manualConfigStage_; }
+    [[nodiscard]] bool manualConfigBusy() const { return manualConfigBusy_; }
+    [[nodiscard]] QString lastBehaviorEvent() const { return lastBehaviorEvent_; }
+    [[nodiscard]] QString behaviorStage() const { return behaviorStage_; }
+    [[nodiscard]] bool behaviorBusy() const { return behaviorBusy_; }
 
     // QML 可调用动作。
     Q_INVOKABLE void connectToService();
@@ -161,6 +196,65 @@ public:
         const QString& finalizationReason,
         const QString& stopReason);
 
+    // ── D6-C 多源 Adapter Pipeline ─────────────────────────────────────
+    // Tool Adapter：executionStatus ∈ {"success","partial","failure",
+    //                                    "cancelled","timeout"}
+    // toolCallId / toolName / argumentsRef / resultRef 由调用方提供；
+    // ViewModel 构造 ToolExecutionEvent JSON 并发送 tool.execution。
+    Q_INVOKABLE void runToolPipeline(
+        const QString& userId,
+        const QString& sessionId,
+        const QString& turnId,
+        const QString& toolCallId,
+        const QString& toolName,
+        const QString& executionStatus,
+        const QString& argumentsRef,
+        const QString& resultRef,
+        const QString& errorType,
+        const QString& errorMessageSafe,
+        bool sideEffect,
+        bool rollbackRequired);
+
+    // 构造 ToolExecutionEvent JSON（可预览可发送复用）。
+    Q_INVOKABLE QJsonObject buildToolExecutionEventJson(
+        const QString& userId,
+        const QString& sessionId,
+        const QString& turnId,
+        const QString& toolCallId,
+        const QString& toolName,
+        const QString& executionStatus,
+        const QString& argumentsRef,
+        const QString& resultRef,
+        const QString& errorType,
+        const QString& errorMessageSafe,
+        bool sideEffect,
+        bool rollbackRequired);
+
+    // 手动配置：scope / key / value；isTemporary / shouldPersist 控制生命周期；
+    // sensitivityLevel ∈ {"none","low","medium","high","critical"}；
+    // high/critical → 客户端侧预检拒绝发送，manualConfigStage=failed。
+    Q_INVOKABLE void runManualConfigPipeline(
+        const QString& userId,
+        const QString& sessionId,
+        const QString& scope,
+        const QString& key,
+        const QString& value,
+        bool isTemporary,
+        bool shouldPersist,
+        const QString& sensitivityLevel,
+        double confidence);
+
+    // 行为观察：behaviorKind ∈ {"user_message","agent_response","system_message",
+    //                            "user_action"}；actor ∈ {"user","agent","system"}；
+    // mapping_status 固定 "PENDING_C_CONFIRMATION"（C 轨未冻结 behavior→source_type）。
+    Q_INVOKABLE void runBehaviorPipeline(
+        const QString& userId,
+        const QString& sessionId,
+        const QString& behaviorKind,
+        const QString& observedAction,
+        const QString& contextRef,
+        const QString& actor);
+
     // 原文隔离验证
     Q_INVOKABLE bool verifyOriginalTextIsolation() const;
 
@@ -182,6 +276,17 @@ signals:
     void lastTurnFinalizedEventChanged();
     void postTurnStageChanged();
     void textIsolationVerifiedChanged();
+
+    // D6-C 多源 Adapter 信号
+    void lastToolEventChanged();
+    void toolStageChanged();
+    void toolBusyChanged();
+    void lastManualConfigEventChanged();
+    void manualConfigStageChanged();
+    void manualConfigBusyChanged();
+    void lastBehaviorEventChanged();
+    void behaviorStageChanged();
+    void behaviorBusyChanged();
 
     void requestFailed(const QString& requestId, const QString& errorCode, const QString& safeMessage);
     void connectionError(const QString& safeMessage);
@@ -206,6 +311,26 @@ private:
     void setPostTurnStage(const QString& value);
     void setPreChatBusy(bool value);
     void setPostTurnBusy(bool value);
+
+    // D6-C 私有 setter
+    void setLastToolEvent(const QString& value);
+    void setToolStage(const QString& value);
+    void setToolBusy(bool value);
+    void setLastManualConfigEvent(const QString& value);
+    void setManualConfigStage(const QString& value);
+    void setManualConfigBusy(bool value);
+    void setLastBehaviorEvent(const QString& value);
+    void setBehaviorStage(const QString& value);
+    void setBehaviorBusy(bool value);
+
+    // D6-C 共享：构造 metadata 嵌套对象（schema_version/event_id/.../source_reference）。
+    QJsonObject buildEventMetadata(
+        const QString& userId,
+        const QString& sessionId,
+        const QString& turnId,
+        const QString& traceId,
+        const QString& idempotencyKey,
+        const QString& sourceReference) const;
 
     // 问题1修复：解析 envelope → ResponseParts；若 status=="error"，提取
     // errorCode/message 并返回 false。输出参数返回 parseResponse 结果引用。
@@ -248,6 +373,22 @@ private:
     QString pendingPreChatRequestId_;
     QString pendingPostTurnRequestId_;  // 问题4修复：独立 PostTurn pending
     int pendingPreChatMaxTokens_ = 800;
+
+    // ── D6-C 多源 Adapter 状态（四 busy 独立 pending，沿用 D5 REWORK §C1 模式） ─
+    bool toolBusy_ = false;
+    bool manualConfigBusy_ = false;
+    bool behaviorBusy_ = false;
+
+    QString lastToolEvent_;
+    QString toolStage_ = QStringLiteral("idle");
+    QString lastManualConfigEvent_;
+    QString manualConfigStage_ = QStringLiteral("idle");
+    QString lastBehaviorEvent_;
+    QString behaviorStage_ = QStringLiteral("idle");
+
+    QString pendingToolRequestId_;
+    QString pendingManualConfigRequestId_;
+    QString pendingBehaviorRequestId_;
 
     // 问题4修复：per-request deadline timer（超时→ requestFailed TIMEOUT）
     // key = requestId；超时后由单例 QTimer 回调，统一在 onRequestFailed 路径处理。

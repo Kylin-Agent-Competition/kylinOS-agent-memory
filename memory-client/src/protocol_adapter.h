@@ -107,12 +107,23 @@ extern const QString kMessageKey;
 // evidence.record 已按 P0-4 移除（PR21_R3），memory.store 尚未实现（服务端返回
 // UNSUPPORTED_METHOD）；turn.finalized 按 ADR-010 作为写链路候选方法新增
 // （CANDIDATE / BLOCKED_BY_HOST_MAPPING，生产默认不注册，Demo 客户端可调用）。
+//
+// D6-C 候选写方法（ADR-013/014/015 待立项，本 PR 仅客户端侧常量 + Demo 发送）：
+//   - tool.execution        : 对齐 ToolExecutionEvent v1（D3 已冻结）
+//   - manual.config.ingest  : 候选 schema（manual_config_event.v1.json）
+//   - behavior.observe      : 候选 schema（behavior_event.v1.json）
+// 三者均沿用 ADR-010 模式：生产 Gateway 默认不注册 → UNSUPPORTED_METHOD；
+// 测试态可显式注入 handler。本 PR 不修改 FRZ-IPC-007 冻结路由表。
 namespace methods {
 extern const QString kEcho;              // "echo"
 extern const QString kHealth;            // "health"
 extern const QString kMemoryRetrieve;   // "memory.retrieve"
 extern const QString kMemoryStore;      // "memory.store"（未实现，服务端返回 UNSUPPORTED_METHOD）
 extern const QString kTurnFinalized;    // "turn.finalized"（ADR-010 新增，写链路）
+// D6-C 候选写方法（不冻结，登记在 methods 命名空间以便客户端 / Mock 复用）
+extern const QString kToolExecution;        // "tool.execution"
+extern const QString kManualConfigIngest;   // "manual.config.ingest"
+extern const QString kBehaviorObserve;      // "behavior.observe"
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）。

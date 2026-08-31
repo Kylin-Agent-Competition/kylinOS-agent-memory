@@ -31,6 +31,10 @@ const QString kHealth = QStringLiteral("health");
 const QString kMemoryRetrieve = QStringLiteral("memory.retrieve");
 const QString kMemoryStore = QStringLiteral("memory.store");  // 未实现
 const QString kTurnFinalized = QStringLiteral("turn.finalized");  // ADR-010 新增写链路
+// D6-C 候选写方法常量（不冻结；ADR-013/014/015 待立项）
+const QString kToolExecution = QStringLiteral("tool.execution");
+const QString kManualConfigIngest = QStringLiteral("manual.config.ingest");
+const QString kBehaviorObserve = QStringLiteral("behavior.observe");
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）

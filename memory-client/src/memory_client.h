@@ -100,6 +100,34 @@ public:
     // （若提供）；不再使用旧 {event_type,event_body} wrapper。
     Q_INVOKABLE QString sendTurnFinalizedEvent(const QJsonObject& eventJson);
 
+    // ── D6-C 多源 Adapter 写链路 Demo（候选方法，不冻结） ───────────────
+    // 三个候选写方法均沿用 ADR-010 模式：生产 Gateway 默认不注册 → 返回
+    // UNSUPPORTED_METHOD；测试态可显式注入 handler。
+    //
+    // 1) tool.execution：对齐 ToolExecutionEvent v1（D3 已冻结）。
+    //    payload = eventJson，字段对齐 contracts/examples/tool_execution_event.v1.json
+    //    + metadata{schema_version,event_id,user_id,session_id,turn_id,
+    //      idempotency_key,trace_id?,occurred_at,collected_at,source_reference}
+    //    trace_id 唯一真源：envelope.trace_id 取 metadata.trace_id（若提供）。
+    Q_INVOKABLE QString sendToolExecutionEvent(const QJsonObject& eventJson);
+
+    // 2) manual.config.ingest：候选 schema（contracts/examples/manual_config_event.v1.json）。
+    //    payload = eventJson，候选字段：
+    //      metadata{...同上}
+    //      config{scope,key,value,is_temporary,should_persist,confidence?,
+    //             source_reference}
+    //    ViewModel 客户端侧预检敏感内容；high/critical 敏感等级不发送到 Gateway。
+    Q_INVOKABLE QString sendManualConfigEvent(const QJsonObject& eventJson);
+
+    // 3) behavior.observe：候选 schema（contracts/examples/behavior_event.v1.json）。
+    //    payload = eventJson，候选字段：
+    //      metadata{...同上}
+    //      behavior{behavior_kind,observed_action,context_ref,actor,occurred_at,
+    //               mapping_status="PENDING_C_CONFIRMATION"}
+    //    behavior → MemorySourceEvent.source_type 映射未冻结；
+    //    ViewModel 在事件 JSON 中显式注入 mapping_status 字段。
+    Q_INVOKABLE QString sendBehaviorEvent(const QJsonObject& eventJson);
+
 signals:
     void socketPathChanged();
     void connectionStateChanged();
@@ -126,6 +154,13 @@ private:
     void setLastError(const QString& message);
     void failInFlightRequests(const QString& errorCode, const QString& safeMessage);
     QString generateRequestId() const;
+
+    // D6-C 共享写链路：构造 envelope（trace_id 取 metadata.trace_id 若提供，
+    // 否则回退 request_id）→ 编码 → 写入 socket → 注册 pending。
+    // 失败时 emit requestFailed 并返回空串；成功返回 request_id。
+    // 供 sendTurnFinalizedEvent / sendToolExecutionEvent /
+    //     sendManualConfigEvent / sendBehaviorEvent 复用。
+    QString sendEventEnvelope(const QString& method, const QJsonObject& eventJson);
 
     QString socketPath_;
     ConnectionState connectionState_ = ConnectionState::Disconnected;

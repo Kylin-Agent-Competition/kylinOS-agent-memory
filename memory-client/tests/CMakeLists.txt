@@ -85,3 +85,40 @@ add_test(
     NAME d5_vertical_link_demo
     COMMAND test_d5_vertical_link_demo
 )
+
+# ============================================================================
+# D6-C 多源 Adapter L0 测试（Tool / Manual Config / Behavior + 事件标识 + 独立 pending）
+# 范围：
+#   A. Tool Adapter 5 状态（success/partial/failure/cancelled/timeout）
+#   B. Manual Config 5 用例（长期/临时/安全/敏感拦截×2）
+#   C. Behavior Observe 4 用例（含 mapping_status=PENDING_C_CONFIRMATION）
+#   D. 事件标识契约（retry_of_turn_id / stop_reason / 重复 turn_id / event_id 独立性）
+#   E. 运行正确性（四 busy 独立 pending 不串台）
+# 重要说明：本测试仅为 memory-client Demo / Prototype 的 L0 契约验证，
+#           不代表真实 AI Assistant Hook / Chat DB / ChatRecord 已接入。
+# ============================================================================
+add_executable(test_d6c_multi_source_adapters
+    ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+    ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
+    mock_gateway_server.cpp
+    test_d6c_multi_source_adapters.cpp
+)
+target_link_libraries(test_d6c_multi_source_adapters
+    PRIVATE
+        Qt5::Core
+        Qt5::Network
+        Qt5::Test
+)
+target_include_directories(test_d6c_multi_source_adapters
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_d6c_multi_source_adapters
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME d6c_multi_source_adapters
+    COMMAND test_d6c_multi_source_adapters
+)
