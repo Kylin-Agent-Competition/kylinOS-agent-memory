@@ -20,17 +20,23 @@
 ## 工作清单
 
 1. [x] **建立本工作清单**：确定 D10E 范围、验收、依赖、分支与 Draft PR 标题。
-2. [ ] **冻结请求与 Plan 输入边界**：每种 `forget_mode` 仅接受对应 selector；`full_reset` 仅允许 `target_type=all`，默认拒绝级联。  
+2. [ ] **冻结请求与 Plan 输入边界**：每种 `forget_mode` 仅接受对应 selector；`full_reset` 仅允许 `target_type=all`，默认拒绝级联。
+
    验证：模式正向、跨模式 selector、空白 ID/selector 的负向用例；关闭 TD-015 的实现部分。
-3. [ ] **目标解析与精准范围**：以请求 `user_id` 作为强制过滤键；规则引擎生成去重且稳定排序的 `resolved_target_ids`、`affected_count` 和脱敏预览。  
+3. [ ] **目标解析与精准范围**：以请求 `user_id` 作为强制过滤键；规则引擎生成去重且稳定排序的 `resolved_target_ids`、`affected_count` 和脱敏预览。
+
    验证：单条、会话、主题、时间窗、全量重置的快照；误删、漏删均为零。
-4. [ ] **预览—确认—执行状态机**：仅允许 `pending → previewing → awaiting_confirmation → executing → completed/failed/rolled_back`。  
+4. [ ] **预览—确认—执行状态机**：仅允许 `pending → previewing → awaiting_confirmation → executing → completed/failed/rolled_back`。
+
    验证：逐边迁移、过期/错配确认、幂等重放、失败与回滚路径。
-5. [ ] **软/硬删除业务语义**：软删除立即从标准检索与 MemoryContext 排除；硬删除后 SQLite、Vector、FTS5、日志、导出和备份中不得有可检索明文。  
+5. [ ] **软/硬删除业务语义**：软删除立即从标准检索与 MemoryContext 排除；硬删除后 SQLite、Vector、FTS5、日志、导出和备份中不得有可检索明文。
+
    验证：删除后检索排除，审计不含正文或原 selector，模式/保留字段反向测试。
-6. [ ] **高敏感和跨用户防线**：高敏感对象须已鉴权用户预览后确认；身份缺失、错配或越权目标一律拒绝，审计仅保留原因码与非敏感计数。  
+6. [ ] **高敏感和跨用户防线**：高敏感对象须已鉴权用户预览后确认；身份缺失、错配或越权目标一律拒绝，审计仅保留原因码与非敏感计数。
+
    验证：跨用户单条、批量、全量重置均零影响；敏感内容不进入审计。
-7. [ ] **安全测试矩阵与审查**：覆盖误删、漏删、批量、高敏感、跨用户、跳确认、重复提交、软删除排除、硬删除明文残留。  
+7. [ ] **安全测试矩阵与审查**：覆盖误删、漏删、批量、高敏感、跨用户、跳确认、重复提交、软删除排除、硬删除明文残留。
+
    验证：目标 pytest、`git diff --check`、D 轨非作者审查；麒麟宿主证据未完成时明确为 `UNVERIFIED`。
 
 ## 跨轨依赖
