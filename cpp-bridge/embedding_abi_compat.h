@@ -93,7 +93,7 @@ void embedding_result_destroy(EmbeddingResult** result);
 
 /** 显式初始化指定模型 */
 int text_embedding_init_model(TextEmbeddingSession* session, const char* model_name);
-/* SOURCE_VERIFIED | ABI_VERIFIED | HOST_VERIFIED ✅ 2026-08-31 D11A VM 实测：bridge 初始化时自动调用 init_model 成功（模型 ensemble-embd_gte-base_uint8-text，dim=768），见 evidence/l2-kylin-vm/d11a_evidence_20260831_165328_vm_verify.log */
+/* SOURCE_VERIFIED | ABI_VERIFIED | HOST_UNTESTED ⚠️ nm 确认符号存在；SDK 日志警告 Model was not initialized explicitly（自动加载默认模型），未真实调用 */
 
 /* ── 模型管理（ABI_VERIFIED 仅 nm 确认） ── */
 

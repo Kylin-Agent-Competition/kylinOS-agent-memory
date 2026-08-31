@@ -3,7 +3,7 @@
 > 本文件记录本项目的 Git 分支命名、提交规范、PR 流程。每次新任务开始前阅读并遵守，有修改直接在本文件上改动。
 >
 > **开工前同时阅读以下文件**：
-> - `docs/project-management/session-handoff-20260829.md` — 最新会话交接文档（D11）
+> - `docs/project-management/session-handoff-20260820.md` — 会话交接文档（D11，本地未跟踪）
 > - `02_麒麟OS_Agent记忆系统_总体架构_团队分工与标准开发SOP_v1.0_20260726.docx` — 总体架构与团队分工
 > - `04_麒麟OS_Agent记忆系统_Agent_LLM与CodeAgent使用指南_v1.0_20260726.docx` — Agent/LLM 使用指南
 > - `麒麟OS_Agent记忆系统_15天75项个人施工台账_修正版.xlsx` — 75 项施工台账

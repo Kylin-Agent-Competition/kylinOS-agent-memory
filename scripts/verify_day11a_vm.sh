@@ -318,7 +318,7 @@ check "ABI 符号导出" $([ "$ABI_COUNT" -gt 0 ] && echo 0 || echo 1)
 echo -n "  关键符号验证: "
 MISSING_COUNT=0
 for sym in text_embedding_create_session text_embedding_destroy_session text_embedding_init_session text_embedding text_embedding_async embedding_result_get_vector_data embedding_result_get_vector_length embedding_result_get_error_code embedding_result_get_error_message embedding_result_destroy; do
-    if nm -D "$SDK_SO_PATH" 2>/dev/null | grep -q "$sym"; then
+    if nm -D "$SDK_SO_PATH" 2>/dev/null | grep -wq "$sym"; then
         echo -n "$sym "
     else
         echo -n "(missing:$sym) "
