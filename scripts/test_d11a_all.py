@@ -265,6 +265,29 @@ try:
 except ValueError:
     check("未知 event_type 抛 ValueError", True)
 
+# 非 deletion 事件不误伤（turn.finalized 不会被 consumer 接管）
+try:
+    consumer_ok({"event_type": "turn.finalized", "event_id": "turn_test", "user_id": "u"})
+    check("非 deletion 事件应抛 ValueError", False, "不应被 consumer 消费")
+except ValueError:
+    check("非 deletion 事件不被 consumer 接管", True)
+
+# 非法 target_type 抛 ValueError
+try:
+    consumer_ok({"event_type": "memory.deletion", "event_id": "neg_test", "user_id": "u",
+                 "target_type": "invalid_type"})
+    check("非法 target_type 应抛 ValueError", False)
+except ValueError:
+    check("非法 target_type 抛 ValueError", True)
+
+# 非法 forget_mode 抛 ValueError
+try:
+    consumer_ok({"event_type": "memory.deletion", "event_id": "neg_test", "user_id": "u",
+                 "forget_mode": "invalid_mode"})
+    check("非法 forget_mode 应抛 ValueError", False)
+except ValueError:
+    check("非法 forget_mode 抛 ValueError", True)
+
 svc5.close()
 
 

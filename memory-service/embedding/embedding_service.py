@@ -39,6 +39,7 @@ from providers import (
 from embedding.embedding_cache import EmbeddingCoalescer, EmbeddingQueryCache
 from embedding.cache_invalidator import CacheInvalidator, DeletionEvent, ForgetMode, TargetType
 from embedding.embedding_metrics import EmbeddingBacklogTracker
+from observability.json_logging import sanitize_message
 from embedding.protocol import (
     PROTOCOL_VERSION,
     ProtocolError,
@@ -357,16 +358,20 @@ class EmbeddingService:
 
         lifecycle_name = "N/A"
         try:
-            mi = getattr(self._provider, "model_info", None)
-            if callable(mi):
-                m = mi()
-                lifecycle_name = "loaded" if m.loaded else "N/A"
+            lc = getattr(self._provider, "lifecycle", None)
+            if callable(lc):
+                lifecycle_name = lc()
         except Exception:
             lifecycle_name = "N/A"
 
+        with self._error_lock:
+            err_count = self._error_count
+            err_code = self._last_error_code or ""
+            err_msg = (self._last_error or "")[:200]
+            err_time = self._last_error_time
         last_error_time_ago = -1.0
-        if self._last_error_time is not None:
-            last_error_time_ago = round(time.monotonic() - self._last_error_time, 2)
+        if err_time is not None:
+            last_error_time_ago = round(time.monotonic() - err_time, 2)
 
         return {
             "ok": True,
@@ -387,10 +392,10 @@ class EmbeddingService:
                 if self._invalidator is not None else {},
                 "model": model_info,
                 "errors": {
-                    "count": self._error_count,
-                    "last_code": self._last_error_code or "",
-                    "last_message": (self._last_error or "")[:200],
-                    "last_time_seconds_ago": round(last_error_time_ago, 2),
+                    "count": err_count,
+                    "last_code": err_code,
+                    "last_message": err_msg,
+                    "last_time_seconds_ago": last_error_time_ago,
                 },
                 # [Review #7 已修复] degraded 反映 SDK 缺失状态（不再恒 false）
                 "degraded": bool(getattr(self, "_sdk_missing", False)),
@@ -560,8 +565,9 @@ class EmbeddingService:
     def _track_error(self, code: Any, message: str) -> None:
         """记录错误追踪信息（health 分项返回）。线程安全。"""
         code_str = code.name if isinstance(code, ProviderErrorCode) else str(code)
+        safe_msg = sanitize_message(message)
         with self._error_lock:
-            self._last_error = message
+            self._last_error = safe_msg
             self._last_error_code = code_str
             self._last_error_time = time.monotonic()
             self._error_count += 1

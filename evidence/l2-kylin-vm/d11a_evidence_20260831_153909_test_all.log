@@ -1,0 +1,73 @@
+CacheInvalidator 未接线（invalidator is None），删除事件 consumer 将始终失败
+
+=== 1. health() 增强测试 ===
+  [PASS] health 包含 model 分项
+  [PASS] model.name 非空
+  [PASS] model.dimension == 768
+  [PASS] model.loaded == True
+  [PASS] health 包含 errors 分项
+  [PASS] errors.count 初始为 0
+  [PASS] errors.last_code 初始为空
+  [PASS] health 包含 provider_lifecycle
+  [PASS] health 包含 cache_invalidator
+  [PASS] health 包含 backlog
+  [PASS] sdk_missing == False
+
+=== 2. 错误追踪测试 ===
+  [PASS] 错误返回 degraded
+  [PASS] 错误计数为 1
+  [PASS] last_code 为 ERR_SDK_ERROR
+  [PASS] last_message 非空
+  [PASS] last_time_seconds_ago >= 0
+
+=== 3. 缓存 + Generation 代次 ===
+  [PASS] 初始 generation 为 0
+  [PASS] fresh write 成功
+  [PASS] 失效后缓存为空
+  [PASS] stale write 被拒绝
+  [PASS] fresh write 成功(新代次)
+  [PASS] clear 后缓存为空
+  [PASS] clear 后 generation 递增
+
+=== 4. CacheInvalidator 功能测试 ===
+  [PASS] 缓存写入成功
+  [PASS] 删除事件处理成功
+  [PASS] embedding 已失效
+  [PASS] 缓存已清空
+  [PASS] 幂等去重成功
+  [PASS] events_processed == 1
+  [PASS] embedding_invalidated >= 1
+
+=== 5. Service 接线 + handle_deletion_event ===
+  [PASS] invalidate 未接线时返回错误
+  [PASS] set_extraction_provider 后 invalidator 已就绪
+  [PASS] health 含 cache_invalidator 统计
+  [PASS] cache_invalidator 含 events_processed
+
+=== 6. outbox_consumer 模块测试 ===
+  [PASS] consumer 创建成功
+  [PASS] consumer 调用成功
+
+--- 6.1 outbox_consumer 负路径测试 ---
+  [PASS] 未接线抛 RuntimeError
+  [PASS] 缺 event_id 抛 ValueError
+  [PASS] 未知 event_type 抛 ValueError
+
+=== 7. 累积指标追踪 ===
+  [PASS] 初始 backlog 为 0
+  [PASS] enter 后 backlog 为 2
+  [PASS] leave 后 backlog 为 0
+  [PASS] backlog_alert 为 True
+
+=== 8. 请求合并 ===
+  [PASS] 初始 inflight 为 0
+  [PASS] 初始 merged 为 0
+
+=== 9. 并发竞态 ===
+  [PASS] stale write 被 generation 拒绝
+  [PASS] fresh write 成功
+
+==================================================
+  PASS: 47  FAIL: 0
+  结论: ALL PASS
+==================================================

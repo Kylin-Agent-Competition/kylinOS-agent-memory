@@ -87,16 +87,14 @@ def _handle_deletion_payload(
     content_fingerprints = payload.get("content_fingerprints") or []
 
     target_type_str = payload.get("target_type", "event")
-    try:
-        target_type = TargetType(target_type_str)
-    except ValueError:
-        target_type = TargetType.EVENT
+    if not isinstance(target_type_str, str) or target_type_str not in TargetType._value2member_map_:
+        raise ValueError(f"invalid target_type: {target_type_str!r}")
+    target_type = TargetType(target_type_str)
 
     forget_mode_str = payload.get("forget_mode", "single_item")
-    try:
-        forget_mode = ForgetMode(forget_mode_str)
-    except ValueError:
-        forget_mode = ForgetMode.SINGLE_ITEM
+    if not isinstance(forget_mode_str, str) or forget_mode_str not in ForgetMode._value2member_map_:
+        raise ValueError(f"invalid forget_mode: {forget_mode_str!r}")
+    forget_mode = ForgetMode(forget_mode_str)
 
     event = DeletionEvent(
         event_id=event_id,
