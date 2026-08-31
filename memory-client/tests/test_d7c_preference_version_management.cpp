@@ -334,7 +334,7 @@ void D7cPreferenceVersionManagementTest::historyEmptyItemsStillSent()  // B2
             // 空历史 → data.items=[] 仍属合法响应
             return client::buildSuccessResponse(
                 parts.requestId, parts.traceId,
-                QJsonObject{{QStringLiteral("items"), QJsonArray{}});
+                QJsonObject{{QStringLiteral("items"), QJsonArray{}}});
         }
         return client::buildErrorResponse(
             parts.requestId, parts.traceId,
