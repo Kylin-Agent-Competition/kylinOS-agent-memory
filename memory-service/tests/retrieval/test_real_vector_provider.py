@@ -92,6 +92,7 @@ def test_search_scopes_request_to_user_and_uses_returned_metadata(monkeypatch):
             "include_unscoped": True,
             "allowed_memory_statuses": ["active"],
             "exclude_deleted": True,
+            "object_types": ["knowledge"],
         },
     }
     assert [(hit.memory_id, hit.version_id, hit.user_id) for hit in hits] == [
@@ -152,6 +153,7 @@ def test_search_forwards_typed_scene_and_status_filter(monkeypatch):
             "include_unscoped": True,
             "allowed_memory_statuses": ["active", "candidate"],
             "exclude_deleted": True,
+            "object_types": ["knowledge"],
         },
     }
 
@@ -189,6 +191,7 @@ def test_search_forwards_empty_scene_allowlist_without_widening_scope(monkeypatc
         "include_unscoped": include_unscoped,
         "allowed_memory_statuses": [],
         "exclude_deleted": True,
+        "object_types": ["knowledge"],
     }
 
 

@@ -9,7 +9,12 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from retrieval.contracts import ObjectType, RetrievalFilter, SceneFilter
+from retrieval.contracts import (
+    KnowledgeIndexMetadata,
+    ObjectType,
+    RetrievalFilter,
+    SceneFilter,
+)
 from retrieval.fts5 import Fts5Index
 from retrieval.fusion import TruthRecord, fuse_retrieval
 from retrieval.real_vector_provider import VectorCliClient
@@ -36,18 +41,44 @@ def build_truth() -> dict:
             sensitivity="internal",
             conflict_state="resolved",
             is_current=True,
+            knowledge=KnowledgeIndexMetadata(
+                knowledge_type="workflow",
+                primary_category="operations",
+                source_event_id=f"v006-e2e-{mid}",
+                memory_status="active",
+            ),
         )
         for mid, content in rows
+    }
+
+
+def knowledge_index_fields(records: list[TruthRecord]) -> dict[str, list[str]]:
+    metadata = [record.knowledge for record in records]
+    if any(value is None for value in metadata):
+        raise RuntimeError("V006 Knowledge truth must include index metadata")
+    return {
+        "object_types": [record.object_type.value for record in records],
+        "knowledge_types": [value.knowledge_type for value in metadata],
+        "primary_categories": [value.primary_category or "" for value in metadata],
+        "source_event_ids": [value.source_event_id for value in metadata],
     }
 
 
 def main() -> int:
     collection = f"v006_e2e_{int(time.time())}"
     truth = build_truth()
+    records = list(truth.values())
 
     fts5 = Fts5Index()
     for (_, mid, _), rec in truth.items():
-        fts5.upsert(mid, rec.version_id, rec.content, USER_ID)
+        fts5.upsert(
+            mid,
+            rec.version_id,
+            content_summary=rec.content,
+            user_id=USER_ID,
+            object_type=rec.object_type,
+            knowledge=rec.knowledge,
+        )
 
     cli = VectorCliClient(cli_path="./vector_cli", expected_dimension=4)
     print(f"[V006] collection={collection}")
@@ -62,6 +93,7 @@ def main() -> int:
         scene_ids=[""] * 3,
         memory_statuses=["active"] * 3,
         deleted_flags=[False] * 3,
+        **knowledge_index_fields(records),
     ).get("ok"))
 
     flt = RetrievalFilter(
@@ -90,6 +122,11 @@ def main() -> int:
         print(
             f"  {c.memory_id}: rrf={c.rrf_score:.9f} channels={[ch.value for ch in c.channels]} content={c.content!r}"
         )
+
+    candidate_ids = {candidate.memory_id for candidate in candidates}
+    assert {"1", "2"}.issubset(candidate_ids), (
+        "V006 expected FTS5 Knowledge candidates were filtered before RRF"
+    )
 
     print("[V006] final drop:", cli.drop_collection(collection).get("ok"))
     return 0
