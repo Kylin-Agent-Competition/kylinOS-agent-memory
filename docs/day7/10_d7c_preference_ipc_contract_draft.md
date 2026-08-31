@@ -37,10 +37,10 @@
 | `preference.list` | `user_id`、`scope?`、`key?`、`include_history` | `items[]`（含 `version` / `memory_status` / `previous_version_id` / `created_at` / `updated_at`） | 列出当前用户偏好及其历史版本链 |
 | `preference.create` | `user_id`、`key`、`value`、`scope`、`category`、`explicitness`、`is_temporary`、`should_persist`、`confidence`、`evidence_event_ids` | `item`（首版 `version=1`、`previous_version_id=None`） | 触发 CREATE / COEXIST（由策略而非 UI 决定） |
 | `preference.update` | `user_id`、`key`、`scope`、`new_value`、`idempotency_key` | `item`（`version` 递增、`previous_version_id` 指向当前 active） | 触发 UPDATE / NO_OP（值相同则不增版本） |
-| `preference.rollback` | `user_id`、`key`、`scope`、`target_version` 或 `target_version_id`、`idempotency_key` | `item`（**追加新 current 版本**，值恢复为目标版本）+ `history` | 触发 ROLLBACK；中间历史版本保留，不改写历史（`PENDING_D_E_ALIGNMENT`，见下） |
+| `preference.rollback` | `user_id`、`key`、`scope`、`target_version`、`idempotency_key` | `item`（**追加新 current 版本**，值恢复为目标版本）+ `history` | `target_version` 为同一 user/key/scope 链内正整数版本号；handler 先解析为 D7D `preference_version_id`，再触发 ROLLBACK；中间历史版本保留，不改写历史（`PENDING_D_E_ALIGNMENT`，见下） |
 | `preference.history` | `user_id`、`key`、`scope` | `items[]`（全版本链，含 superseded） | 供 UI 渲染历史列表 |
 
-> 对齐说明（D7D #90 已合入）：以上 `preference.list` 对应新增的 `list_preference_items`（按用户枚举条目，UI 列表）；`preference.history` 对应 `list_preference_versions`（单 key+scope 全版本链）；`preference.create / update` 对应 `save_preference_version`（`memory_status` 由 E 轨策略决定，`evidence_fingerprint / request_fingerprint / idempotency_key` 由 handler 或调用方产生，见下）；`preference.rollback` 对应对 `rollback_preference_version`（`target` 用 D7D 的 `preference_version_id:int`，非 `Preference.preference_id`）。D7C 只消费结果，`memory_status`、是否 `active/superseded`、版本号递增、`is_current` 唯一性均由 D 轨 Repository/策略保证。
+> 对齐说明（D7D #90 已合入）：以上 `preference.list` 对应新增的 `list_preference_items`（按用户枚举条目，UI 列表）；`preference.history` 对应 `list_preference_versions`（单 key+scope 全版本链）；`preference.create / update` 对应 `save_preference_version`（`memory_status` 由 E 轨策略决定，`evidence_fingerprint / request_fingerprint / idempotency_key` 由 handler 或调用方产生，见下）；`preference.rollback` 的 IPC 输入仅为 `target_version:int`，handler 在同一 user/key/scope 历史链中查找该版本，再把所得 D7D `preference_version_id:int` 传给 `rollback_preference_version`（不接受未实现的 `target_version_id` 字段）。D7C 只消费结果，`memory_status`、是否 `active/superseded`、版本号递增、`is_current` 唯一性均由 D 轨 Repository/策略保证。
 
 ## 三、建议 payload 字段与契约约束（非冻结）
 

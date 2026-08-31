@@ -403,8 +403,9 @@ def preference_list_handler(payload: Dict[str, Any], ctx: RequestContext, uow_fa
 def register_preference_handlers(registry: HandlerRegistry, uow_factory: Callable[[], UnitOfWork]) -> None:
     """注册 D7C 偏好 IPC 方法（D 轨契约变更，随本 PR 落地）。
 
-    与 turn.finalized 的 seam 模式不同：偏好方法为已实现写路径，
-    production 默认注册（uow_factory 由 app.py 注入）。
+    `preference.*` 仍是 CANDIDATE_SYNC：production 默认不注册；仅由
+    app.py 的 --register-preference-handlers 显式激活（验证/演示 profile）。
+    uow_factory 由 app.py 在激活时注入。
     """
     registry.register("preference.list", lambda p, c: preference_list_handler(p, c, uow_factory))
     registry.register("preference.create", lambda p, c: preference_create_handler(p, c, uow_factory))

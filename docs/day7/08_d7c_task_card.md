@@ -32,9 +32,9 @@
   - 5.6 临时偏好不得误展示为稳定 global 长期偏好
   - 5.7 跨用户历史不可见、不可回滚、不可修改
 
-## 二、修改范围（计划，当前未实现）
+## 二、已实现范围与剩余联调
 
-本任务卡为**准备产物**，不包含任何实现代码。计划修改范围如下：
+本任务卡最初作为准备产物建立；当前所列客户端、Gateway 与 L0 产物已在 PR #87 落地。以下范围同时标明已实现内容与仍待宿主联调的边界：
 
 - `memory-client/qml/pages/PreferenceEditorPage.qml`：由 D4 占位骨架升级为可操作偏好编辑器
   - 手动添加/编辑偏好（类别 / scope 五值 / value / 临时-长期标识）
@@ -72,7 +72,7 @@
 2. **编号风格**：`08_d7c_task_card.md` 与 D7D 的 `08_d7d_task_card.md`（PR #90）共用 `08_` 前缀，可考虑按台账序号重排避免引用歧义。→ 因牵连跨文档引用，本批次不直接重命名，登记为后续命名整理项。
 3. **契约节奏**：工作项 2「确定偏好 CRUD/历史/回滚 IPC 方法」建议与 D6-D 契约（ADR-012/013，PR #83）及 D7D 持久化（PR #90）保持同一 ADR 评审节奏，避免 C 轨实现等待期间契约再次变动。→ 见 `10_d7c_preference_ipc_contract_draft.md`，其已与 `origin/main` 上 D7D 落库 API 对齐（`CANDIDATE_SYNC`，不冻结）。
 
-**E 轨补审关切（非阻断但实现阶段必须双层落实）**：验收 5.7 跨用户历史不可见、不可回滚、不可修改，不能在 UI 层仅做隐藏；必须在 Repository（`user_id` 强制过滤）与 UI 双层落实。实际实现时将在保留 D7D Repository 的 `user_id` 过滤语义前提下，再由 UI 层做显示隔离。
+**E 轨补审关切（非阻断但 production activation 前必须双层落实）**：验收 5.7 跨用户历史不可见、不可回滚、不可修改，不能在 UI 层仅做隐藏；必须在 Repository（`user_id` 强制过滤）与 UI 双层落实。当前候选实现保留 Repository 过滤与 UI 显示隔离，但可信调用者身份绑定仍是 ADR-016 gate。
 
 **身份隔离声明（MEDIUM-01，lovezy0730-create 第二轮）**：当前已验证 Repository 按 `user_id` 过滤 + handler payload 一致性校验（双层数据隔离），但**尚未验证「可信调用者身份 → `RequestContext.user_id`」绑定**（QML 中 user_id 仍可由用户输入、生产 Gateway 未注入可信身份）。因此**不宣称验收 5.7 已完整闭环**；「可信调用者身份绑定」登记为 **ADR-016 / production activation gate**（候选契约未激活前不扩大为 UDS 认证工程）。
 
@@ -82,13 +82,13 @@
 |------|--------|------|------|----------|------|
 | 1 | 核对 D 轨版本持久化与 IPC 方法现状，确定 D7-C 可消费的契约 | 调研/对齐 | 无 | 读仓储、冻结契约文档 | 已完成 |
 | 2 | 确定偏好 CRUD / 历史 / 回滚的 IPC 方法与 payload 契约 | 契约对齐 | 1 | 与 D 轨契约冻结对齐 | 已完成（本 PR 落地） |
-| 3 | 客户端 `MemoryClient` / `MemoryViewModel` 增加偏好读/写/历史/回滚接口 | 实现 | 2 | L0 编译 + Mock 契约测试 | 已实现（L0 编译待 CI ctest） |
-| 4 | `PreferenceEditorPage.qml` 手动添加/编辑 + 当前/历史版本 + 回滚入口 | 实现 | 3 | QML 启动 + 交互链路证据 | 已实现（麒麟宿主交互待 L2） |
-| 5 | 临时/长期偏好展示区分 + 跨用户隔离渲染 | 实现 | 4 | 验收 5.6 / 5.7 | 已实现（UI + Repository 双层） |
+| 3 | 客户端 `MemoryClient` / `MemoryViewModel` 增加偏好读/写/历史/回滚接口 | 实现 | 2 | L0 编译 + Mock 契约测试 | 已实现（CI/VM ctest 4/4） |
+| 4 | `PreferenceEditorPage.qml` 手动添加/编辑 + 当前/历史版本 + 回滚入口 | 实现 | 3 | QML 启动 + 交互链路证据 | 已实现（网关 L2 已验证；宿主 GUI 交互仍待联调） |
+| 5 | 临时/长期偏好展示区分 + 跨用户隔离渲染 | 实现 | 4 | 验收 5.6 / 5.7 | 候选实现已落地；可信身份与 reload 生命周期仍为 ADR-016 gate |
 | 6 | 跨会话行为输入联调 | 联调 | 5 | 宿主链路日志 | 部分完成（网关级真实 IPC 已验证；宿主 AI 助手跨会话待联调） |
 | 7 | 本地回归（L0/L1 可用部分）+ 麒麟宿主 L2 验证 | 验证 | 3–6 | pytest / ctest / VM 后真实交互 | 已完成（VM L2 @ a4abe0e：pytest 1285 passed/49 skipped；ctest 4/4；真实 IPC 9/9，见 11 号文档） |
 
-总进度：6/7（86%）。工作项 7（麒麟 L2 验证）已完成，见 `docs/day7/11_d7c_l2_verification_20260831.md`；工作项 6 宿主 AI 助手跨会话联调仍未执行。工作项 1–5 已在 D7C PR #87 中落地：D 轨偏好 IPC 方法（`preference.*`，用户授权）实现并注册；服务端 L0 handler 测试 10/10 通过、相关回归 201/201 通过；客户端 `MemoryClient / MemoryViewModel / PreferenceEditorPage.qml` 与 L0 Mock 测试已写入（C++ 编译由 CI `memory-client L0 ctest` 验证，本机无 Qt 无法编译）。工作项 7 的麒麟 L2（pytest/ctest/真实 IPC）已执行并归档证据；工作项 6 的宿主 AI 助手跨会话联调仍需另行联调。
+总进度：6/7（86%）。工作项 7（麒麟 VM 网关级 L2）已完成，见 `docs/day7/11_d7c_l2_verification_20260831.md`；工作项 6 宿主 AI 助手跨会话联调仍未执行。工作项 1–5 已在 D7C PR #87 中形成候选实现：`preference.*` 仅由 `--register-preference-handlers` 显式激活，production 默认返回 `UNSUPPORTED_METHOD`；服务端定向 handler 测试为 14/14，最终 HEAD 全量 pytest 为 1285 passed/49 skipped，memory-client L0 ctest 为 4/4，网关级真实 IPC 为 9/9。宿主 GUI 跨会话联调、可信身份绑定和 reload 生命周期仍须在 ADR-016 / production activation 前收口。
 
 > 前置核对结论（v3 更新）：D7D #90 已合入，默认分支已具 `memory_items / memory_versions / memory_version_receipts` 版本链与 `save/get_current/list/rollback_preference_version` Repository；偏好 IPC 方法已由 D7C PR #87 实现（**条件注册**：production 默认不注册 → UNSUPPORTED_METHOD，`--register-preference-handlers` 显式激活）。**剩余待确认（不再表述为单一硬依赖）**：UI 所需字段（category / confidence / evidence_event_ids 等）与 D7D 真源的映射、用户偏好集合枚举（已补 `list_preference_items`，字段映射待 D/E 确认）、ROLLBACK 语义（`PENDING_D_E_ALIGNMENT`）。详见 `docs/day7/09_d7c_prerequisite_audit.md` 与 `10_d7c_preference_ipc_contract_draft.md`。
 
@@ -98,17 +98,17 @@
 |--------|------|------|
 | 1 现状核对 | 已完成 | 无 |
 | 2 确定 IPC 方法/payload 契约 | 已完成（`10_d7c_preference_ipc_contract_draft.md` 落地为 `preference.*` 方法） | D7D 持久化已就绪 |
-| 3 客户端接口 | 已实现（C++ 编译待 CI ctest） | preference.* 已由本 PR 实现 |
-| 4 QML 页面 | 已实现（麒麟宿主交互待 L2） | 工作项 3 |
-| 5 临时/长期 + 跨用户隔离 | 已实现（UI + Repository 双层） | 工作项 4 |
-| 6 跨会话联调 | 待 L2 | 麒麟宿主链路 |
-| 7 本地回归 + L2 | 服务端 L0 已过；客户端 ctest 待 CI；L2 待执行 | 工作项 3–6 |
+| 3 客户端接口 | 已实现（CI/VM ctest 4/4） | preference.* 候选实现已由本 PR 提供 |
+| 4 QML 页面 | 已实现（网关 L2 已验证；宿主 GUI 交互待联调） | 工作项 3 |
+| 5 临时/长期 + 跨用户隔离 | 候选实现已落地；可信身份与 reload 生命周期待 ADR-016 收口 | 工作项 4 |
+| 6 跨会话联调 | 部分完成（网关真实 IPC 已验证；宿主 AI 助手待联调） | 麒麟宿主链路 |
+| 7 本地回归 + L2 | 已完成（最终 HEAD 定向 14、全量 1285/49、ctest 4/4、真实 IPC 9/9） | 工作项 3–6 |
 
 ## 六、风险与说明
 
-- 本任务卡与工作清单为 D7-C **准备产物**，不意味着 D/C 轨道已完成或已通过验收；全部实现与验收证据状态为 `RUNTIME_UNVERIFIED`。
+- 本任务卡当前覆盖 D7-C 候选实现和网关级 L2，不意味着 production 或宿主 GUI 交互已验收；ADR-016、可信调用者身份、临时生命周期 reload 与宿主跨会话联调仍保持未完成状态。
 - 若实现中发现判据与真实宿主/存储能力不可调和，应由 C（或代做 D7-C 的 B）提出修订任务，不在本任务内降级判据。
-- 本 PR 当前包含准备产物 + D7C 实现（D 轨偏好 IPC 方法、客户端 `MemoryClient / MemoryViewModel / PreferenceEditorPage.qml`、L0 测试与文档更新）；QML/C++ 编译由 CI `memory-client L0 ctest` 验证，麒麟宿主真实交互（工作项 6/7）需在 L2 VM 执行后补充证据，逐提交保持原子化。
+- 本 PR 当前包含准备产物 + D7C 候选实现（D 轨偏好 IPC 方法、客户端 `MemoryClient / MemoryViewModel / PreferenceEditorPage.qml`、L0 测试与文档更新）；QML/C++ 编译已由 CI/VM ctest 验证，网关级 L2 已归档；仅宿主 AI 助手真实交互（工作项 6）仍需另行联调，逐提交保持原子化。
 
 ## 七、变更记录
 
@@ -122,3 +122,4 @@
 | v6 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | HIGH-2 收敛决策：用户确认路线 A——保留本 PR `preference.*` 为 D7-C 实现路线，#93 视为客户端候选 Demo，命名/页面归属由 D/E 在 ADR-016 统一；同步 08/09 表述（条件注册、字段映射/集合枚举/ROLLBACK 语义待 D/E 确认） |
 | v7 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 第二轮 REWORK（lovezy0730-create，0f05462）：HIGH-01——`_resolve_memory_status` 增加 D3 §7.9 冲突校验（is_temporary/should_persist 与显式 memory_status 冲突拒绝）；客户端 `updatePreference`/QML 显式携带生命周期标志；补 3 个测试；MEDIUM-01——身份隔离声明（可信调用者身份 → RequestContext.user_id 登记为 ADR-016/production gate，不宣称 5.7 完整闭环）；MEDIUM-02——L2 证据在最终 HEAD 重跑并绑定真实命令/SHA |
 | v8 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | MEDIUM-02 落地：L2 证据在最终 HEAD `a4abe0e` 重跑（VM 经字节传输同步；全量 1285/49、定向 14、真实 IPC 9/9 含 `--register-preference-handlers`）；11 号文档/证据摘要绑定 tested_commit= a4abe0e 与真实命令/日志 SHA |
+| v9 | 2026-09-01 | 高翌哲（代 C 轨 D7-C） | 最终复审治理收口：同步候选/production 边界、L2/ctest/handler 测试最新事实；不再把可信身份、temporary lifecycle reload 或宿主 GUI 联调表述为已完成，关联 TD-044/045 与 ADR-016 activation gate。 |
