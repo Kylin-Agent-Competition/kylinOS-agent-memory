@@ -239,12 +239,20 @@ void D6cMultiSourceAdaptersTest::toolCancelledSentAndAuditOnly()  // A3
 
 void D6cMultiSourceAdaptersTest::toolTimeoutRoutesToTimeoutStage()  // A4
 {
-    // Mock 对 tool.execution 不响应（永不 reply）→ 客户端 deadline 超时
+    // A4 验证 executionStatus=timeout 的 Tool 事件能正确构造与发送。
+    // 注意：executionStatus="timeout" 是 Tool 事件业务字段（工具执行超时），
+    // 与客户端 per-request deadline 超时（xxxStage="timeout"）是两个概念。
+    // 本用例 Mock 对 tool.execution 返回成功响应，期望 toolStage=="sent"。
     test_support::MockGatewayServer mock;
-    mock.setHandler([](const client::EnvelopeParts&) -> QJsonObject {
-        // 永不返回（模拟服务端卡死），客户端 5s deadline 超时
-        // 注意：实际 Mock 仍会执行 handler；此处返回空对象让 Mock 跳过发送
-        return QJsonObject{};
+    mock.setHandler([](const client::EnvelopeParts& parts) -> QJsonObject {
+        if (parts.method == client::methods::kToolExecution) {
+            return client::buildSuccessResponse(
+                parts.requestId, parts.traceId,
+                QJsonObject{{QStringLiteral("ack"), true}});
+        }
+        return client::buildErrorResponse(
+            parts.requestId, parts.traceId,
+            client::error_codes::kUnsupportedMethod, QString());
     });
     const QString socket = mock.listen(uniqueSocketName("a4"));
 
@@ -253,17 +261,16 @@ void D6cMultiSourceAdaptersTest::toolTimeoutRoutesToTimeoutStage()  // A4
     vm.connectToService();
     QTRY_COMPARE_WITH_TIMEOUT(vm.connectionState(), QStringLiteral("connected"), 5000);
 
-    QSignalSpy reqFailedSpy(&vm, &client::MemoryViewModel::requestFailed);
     vm.runToolPipeline(
         QStringLiteral("u"), QStringLiteral("s"), QStringLiteral("t"),
         QStringLiteral("tool-a4"), QStringLiteral("long.running"),
         QStringLiteral("timeout"), QStringLiteral("ref:args:4"),
         QString(), QString(), QString(), false, false);
 
-    // 期望 5s deadline 超时后进入 timeout stage
-    QTRY_COMPARE_WITH_TIMEOUT_WITH_TIMEOUT(
-        vm.toolStage(), QStringLiteral("timeout"), 8000);
-    QVERIFY(reqFailedSpy.count() >= 1);
+    QTRY_COMPARE_WITH_TIMEOUT(vm.toolStage(), QStringLiteral("sent"), 5000);
+    QVERIFY(vm.lastToolEvent().contains(QStringLiteral("timeout")));
+    QVERIFY(vm.lastToolEvent().contains(QStringLiteral("execution_status")));
+    QVERIFY(!vm.toolBusy());
 }
 
 void D6cMultiSourceAdaptersTest::toolPartialStatusPreserved()  // A5
