@@ -16,11 +16,12 @@ from typing import Optional
 
 
 class ChannelMode(str, Enum):
-    """评测通道：FTS5-only / Vector-only / rrf-v1。"""
+    """评测通道：FTS5-only / Vector-only / rrf-v1 / weighted-rrf-v1。"""
 
     FTS5_ONLY = "fts5"
     VECTOR_ONLY = "vector"
     RRF_V1 = "rrf_v1"
+    WEIGHTED_RRF_V1 = "weighted_rrf_v1"
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,8 @@ class EvalConfig:
     k: int = 10
     top_k: int = 10
     rrf_k: int = 60
+    algorithm_version: str = "rrf-v1"
+    channel_weights: dict[str, float] = field(default_factory=dict)
     dataset_version: str = "UNKNOWN"
     gold_label_version: str = "UNKNOWN"
     implementation_commit: str = "UNKNOWN"
@@ -49,6 +52,11 @@ class EvalConfig:
             raise ValueError("top_k 必须为正整数")
         if self.rrf_k <= 0:
             raise ValueError("rrf_k 必须为正整数")
+        if self.channel_mode is ChannelMode.WEIGHTED_RRF_V1:
+            if self.algorithm_version != "weighted-rrf/v1":
+                raise ValueError("weighted_rrf_v1 必须记录 algorithm_version=weighted-rrf/v1")
+            if set(self.channel_weights) != {"fts5", "vector"}:
+                raise ValueError("weighted_rrf_v1 必须记录 fts5 与 vector 权重")
         if self.warmup_count < 0 or self.repeat_count < 1:
             raise ValueError("warmup_count >= 0 且 repeat_count >= 1")
         if not 0.0 <= self.target_threshold <= 1.0:
@@ -262,6 +270,8 @@ def report_to_dict(report: EvalReport) -> dict:
         "max_ms": report.max_ms,
         "sample_count": report.sample_count,
         "rrf_k": report.config.rrf_k,
+        "algorithm_version": report.config.algorithm_version,
+        "channel_weights": report.config.channel_weights,
         "statistics_method": report.config.statistics_method,
         "warmup_count": report.config.warmup_count,
         "repeat_count": report.config.repeat_count,

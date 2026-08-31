@@ -16,6 +16,7 @@ from retrieval.contracts import (
     ContentSource,
     KnowledgeIndexMetadata,
     ObjectType,
+    RerankPolicy,
     RetrievalCandidate,
     RetrievalFilter,
     RetrievalHit,
@@ -36,6 +37,84 @@ from retrieval.rrf import (
 from retrieval.validation import validate_retrieval_filter
 
 RRF_DEFAULT_K = 60
+TOKEN_ESTIMATOR_VERSION = "character-count/v1"
+TOKEN_ESTIMATOR_SEMANTICS = "Unicode code point count; not a model tokenizer"
+
+
+def _final_score(
+    ranks: dict[Channel, int],
+    k: int,
+    rerank_policy: Optional[RerankPolicy],
+) -> float:
+    if rerank_policy is None:
+        return rrf_score(ranks, k)
+    return sum(
+        term * rerank_policy.channel_weights.get(channel, 1.0)
+        for channel, term in rrf_terms(ranks, k).items()
+    )
+
+
+def _rank_aggregated_candidates(
+    candidates: list[AggregatedCandidate],
+    k: int,
+    rerank_policy: Optional[RerankPolicy],
+) -> list[AggregatedCandidate]:
+    if rerank_policy is None:
+        return rrf_rank(candidates, k)
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            -_final_score(candidate.ranks, k, rerank_policy),
+            -candidate.channel_count,
+            candidate.best_rank,
+            candidate.memory_id,
+        ),
+    )
+
+
+def _with_rerank_explanation(
+    explanation: dict,
+    rerank_policy: Optional[RerankPolicy],
+    rrf_score_value: float,
+    final_score_value: float,
+) -> dict:
+    if rerank_policy is None:
+        return explanation
+    return {
+        **explanation,
+        "algorithm_version": rerank_policy.version,
+        "rerank_version": None,
+        "weighted_rrf": {
+            "policy_version": rerank_policy.version,
+            "channel_weights": {
+                channel.value: rerank_policy.channel_weights[channel]
+                for channel in sorted(Channel)
+            },
+            "formula": "sum(channel_weight[channel] * 1 / (rrf_k + rank[channel]))",
+            "direction": "higher final_score first",
+            "rrf_score": rrf_score_value,
+            "final_score": final_score_value,
+        },
+    }
+
+
+def _validate_query_options(
+    *,
+    k: int,
+    top_k: Optional[int],
+    token_budget: Optional[int],
+    rerank_policy: Optional[RerankPolicy],
+) -> None:
+    if type(k) is not int or k <= 0:
+        raise ValueError("k 必须是正整数")
+    if top_k is not None and (type(top_k) is not int or top_k <= 0):
+        raise ValueError("top_k 必须是正整数或 None")
+    if token_budget is not None and (
+        type(token_budget) is not int or token_budget < 0
+    ):
+        raise ValueError("token_budget 必须是非负整数或 None")
+    if rerank_policy is not None and not isinstance(rerank_policy, RerankPolicy):
+        raise ValueError("rerank_policy 必须是 RerankPolicy 或 None")
 
 
 def _validate_preference_filter(flt: RetrievalFilter) -> None:
@@ -232,15 +311,49 @@ def fuse_retrieval(
     flt: RetrievalFilter,
     k: int = RRF_DEFAULT_K,
     top_k: Optional[int] = None,
+    token_budget: Optional[int] = None,
+    rerank_policy: Optional[RerankPolicy] = None,
 ) -> list[RetrievalCandidate]:
     """融合 FTS5 与 Vector 命中，回源硬过滤，rrf-v1 融合，返回统一候选。
 
     - 同一通道按精确 (memory_id, version_id) 去重后取最佳 rank；
     - 回源 truth[(user_id, memory_id, version_id)] 并做硬过滤；
     - 过滤后的合法命中按 memory_id 聚合、RRF 排序；
-    - 输出 RetrievalCandidate，rrf_score == final_score（v1 不做业务重排）。
+    - 输出 RetrievalCandidate，rrf_score == final_score（v1 不做业务重排）；
+    - 指定 token_budget 时，按最终排序依次保留不超预算的候选。
     """
+    candidates, _ = _fuse_retrieval_with_diagnostics(
+        fts5_hits=fts5_hits,
+        vector_hits=vector_hits,
+        truth=truth,
+        flt=flt,
+        k=k,
+        top_k=top_k,
+        token_budget=token_budget,
+        rerank_policy=rerank_policy,
+    )
+    return candidates
+
+
+def _fuse_retrieval_with_diagnostics(
+    *,
+    fts5_hits: list[RetrievalHit],
+    vector_hits: list[RetrievalHit],
+    truth: dict[tuple[str, str, str], TruthRecord],
+    flt: RetrievalFilter,
+    k: int,
+    top_k: Optional[int],
+    token_budget: Optional[int],
+    rerank_policy: Optional[RerankPolicy],
+) -> tuple[list[RetrievalCandidate], dict[str, object]]:
+    """执行融合并返回不含候选正文的预算选择诊断。"""
     _validate_preference_filter(flt)
+    _validate_query_options(
+        k=k,
+        top_k=top_k,
+        token_budget=token_budget,
+        rerank_policy=rerank_policy,
+    )
 
     deduped = dedupe_exact_version(list(fts5_hits) + list(vector_hits))
     legal: list[RetrievalHit] = []
@@ -268,19 +381,27 @@ def fuse_retrieval(
     agg_candidates = [
         AggregatedCandidate(memory_id=mid, ranks=ranks) for mid, ranks in aggregated.items()
     ]
-    ranked = rrf_rank(agg_candidates, k)
-    if top_k is not None:
-        ranked = ranked[:top_k]
+    ranked = _rank_aggregated_candidates(agg_candidates, k, rerank_policy)
 
     out: list[RetrievalCandidate] = []
+    used_tokens = 0
+    skipped_budget_count = 0
     for agg in ranked:
+        if top_k is not None and len(out) >= top_k:
+            break
         version_id = next(
             h.version_id for h in legal if h.memory_id == agg.memory_id
         )
         rec = truth[(flt.user_id, agg.memory_id, version_id)]
         channels = sorted(agg.ranks.keys())
-        out.append(
-            RetrievalCandidate(
+        rrf_score_value = rrf_score(agg.ranks, k)
+        final_score_value = _final_score(agg.ranks, k, rerank_policy)
+        estimated_tokens = max(1, len(rec.content))
+        next_used_tokens = used_tokens + estimated_tokens
+        if token_budget is not None and next_used_tokens > token_budget:
+            skipped_budget_count += 1
+            continue
+        candidate = RetrievalCandidate(
                 memory_id=agg.memory_id,
                 version_id=version_id,
                 object_type=rec.object_type,
@@ -307,21 +428,53 @@ def fuse_retrieval(
                     )
                     for ch in channels
                 },
-                rrf_score=rrf_score(agg.ranks, k),
-                final_score=rrf_score(agg.ranks, k),
+                rrf_score=rrf_score_value,
+                final_score=final_score_value,
                 sensitivity=rec.sensitivity,
                 conflict_state=rec.conflict_state,
                 valid_from=rec.valid_from,
                 valid_to=rec.valid_to,
-                estimated_tokens=max(1, len(rec.content)),
-                explanation=(
+                estimated_tokens=estimated_tokens,
+                explanation=_with_rerank_explanation(
                     _preference_explanation(rec, agg.ranks, k)
                     if rec.object_type is ObjectType.PREFERENCE
-                    else _knowledge_explanation(rec, flt, agg.ranks, k)
+                    else _knowledge_explanation(rec, flt, agg.ranks, k),
+                    rerank_policy,
+                    rrf_score_value,
+                    final_score_value,
                 ),
             )
-        )
-    return out
+        if token_budget is not None:
+            candidate = candidate.model_copy(
+                update={
+                    "explanation": {
+                        **candidate.explanation,
+                        "token_budget": {
+                            "policy_version": "token-budget/v1",
+                            "budget": token_budget,
+                            "used": next_used_tokens,
+                            "decision": "included",
+                            "estimator_version": TOKEN_ESTIMATOR_VERSION,
+                            "estimator_semantics": TOKEN_ESTIMATOR_SEMANTICS,
+                        },
+                    }
+                }
+            )
+        used_tokens = next_used_tokens
+        out.append(candidate)
+    return out, {
+        "policy_version": "token-budget/v1",
+        "requested_top_k": top_k,
+        "token_budget": token_budget,
+        "selected_count": len(out),
+        "skipped_budget_count": skipped_budget_count,
+        "budget_used": used_tokens,
+        "budget_remaining": (
+            token_budget - used_tokens if token_budget is not None else None
+        ),
+        "estimator_version": TOKEN_ESTIMATOR_VERSION,
+        "estimator_semantics": TOKEN_ESTIMATOR_SEMANTICS,
+    }
 
 
 
@@ -331,6 +484,7 @@ class RetrievalOutcome:
 
     candidates: list[RetrievalCandidate]
     degraded_channels: dict[str, str] = field(default_factory=dict)
+    selection_diagnostics: dict[str, object] = field(default_factory=dict)
 
     @property
     def degraded(self) -> bool:
@@ -345,6 +499,8 @@ def retrieve_graceful(
     flt: RetrievalFilter,
     k: int = RRF_DEFAULT_K,
     top_k: Optional[int] = None,
+    token_budget: Optional[int] = None,
+    rerank_policy: Optional[RerankPolicy] = None,
 ) -> RetrievalOutcome:
     """执行两路召回并融合；单路故障时降级为空命中的该路，不抛未捕获异常。
 
@@ -353,6 +509,12 @@ def retrieve_graceful(
     - 正常那路命中仍参与融合，保证服务故障时可解释降级而非整体崩溃。
     """
     _validate_preference_filter(flt)
+    _validate_query_options(
+        k=k,
+        top_k=top_k,
+        token_budget=token_budget,
+        rerank_policy=rerank_policy,
+    )
 
     degraded: dict[str, str] = {}
     try:
@@ -366,13 +528,15 @@ def retrieve_graceful(
         vector_hits = []
         degraded["vector"] = f"{type(exc).__name__}: {exc}"
 
-    candidates = fuse_retrieval(
+    candidates, selection_diagnostics = _fuse_retrieval_with_diagnostics(
         fts5_hits=fts5_hits,
         vector_hits=vector_hits,
         truth=truth,
         flt=flt,
         k=k,
         top_k=top_k,
+        token_budget=token_budget,
+        rerank_policy=rerank_policy,
     )
     degraded_channel_names = sorted(degraded)
     candidates = [
@@ -384,4 +548,8 @@ def retrieve_graceful(
         })
         for candidate in candidates
     ]
-    return RetrievalOutcome(candidates=candidates, degraded_channels=degraded)
+    return RetrievalOutcome(
+        candidates=candidates,
+        degraded_channels=degraded,
+        selection_diagnostics=selection_diagnostics,
+    )

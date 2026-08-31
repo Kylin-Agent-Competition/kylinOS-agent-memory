@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
+
 import pytest
 
 from retrieval.evaluation import (
@@ -75,3 +78,38 @@ def test_report_to_dict():
     assert d["dataset_version"] == "dev-1"
     assert d["gold_label_version"] == "gl-1"
     assert d["query_count"] == 1
+
+
+def test_weighted_rrf_evaluation_records_algorithm_and_weight_configuration():
+    config = EvalConfig(
+        channel_mode=ChannelMode.WEIGHTED_RRF_V1,
+        algorithm_version="weighted-rrf/v1",
+        channel_weights={"fts5": 0.5, "vector": 2.0},
+    )
+    report = evaluate_queries([_q("q1", ["a"], {"a"})], config)
+    data = report_to_dict(report)
+
+    assert data["channel_mode"] == "weighted_rrf_v1"
+    assert data["algorithm_version"] == "weighted-rrf/v1"
+    assert data["channel_weights"] == {"fts5": 0.5, "vector": 2.0}
+
+
+def test_v007_eval_keeps_each_channel_algorithm_metadata_separate():
+    script = Path(__file__).resolve().parents[3] / "scripts" / "v007_eval.py"
+    spec = importlib.util.spec_from_file_location("v007_eval", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    raw = {
+        "algorithm_version": "weighted-rrf/v1",
+        "channel_weights": {"fts5": 0.5, "vector": 2.0},
+    }
+
+    assert module._config(raw, ChannelMode.FTS5_ONLY).algorithm_version == "fts5-only/v1"
+    assert module._config(raw, ChannelMode.FTS5_ONLY).channel_weights == {}
+    assert module._config(raw, ChannelMode.VECTOR_ONLY).algorithm_version == "vector-only/v1"
+    assert module._config(raw, ChannelMode.RRF_V1).algorithm_version == "rrf-v1"
+    weighted = module._config(raw, ChannelMode.WEIGHTED_RRF_V1)
+    assert weighted.algorithm_version == "weighted-rrf/v1"
+    assert weighted.channel_weights == {"fts5": 0.5, "vector": 2.0}

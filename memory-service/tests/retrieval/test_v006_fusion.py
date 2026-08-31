@@ -11,12 +11,13 @@ from retrieval.contracts import (
     Channel,
     KnowledgeIndexMetadata,
     ObjectType,
+    RerankPolicy,
     RetrievalFilter,
     RetrievalHit,
     SceneFilter,
     ScoreSemantics,
 )
-from retrieval.fusion import TruthRecord, fuse_retrieval
+from retrieval.fusion import TruthRecord, fuse_retrieval, retrieve_graceful
 from retrieval.fts5 import Fts5Index
 
 NOW = datetime(2026, 8, 22, 12, 0, 0, tzinfo=timezone.utc)
@@ -732,6 +733,199 @@ def test_top_k_truncation():
     }
     out = fuse_retrieval(fts5_hits=fts5, vector_hits=[], truth=truth, flt=_flt(), top_k=1)
     assert [c.memory_id for c in out] == ["mem-a"]
+
+
+def test_token_budget_keeps_ranked_candidates_without_exceeding_budget():
+    fts5 = [
+        _hit("mem-a", "v1", Channel.FTS5, 1),
+        _hit("mem-b", "v1", Channel.FTS5, 2),
+    ]
+    truth = {
+        ("alice", "mem-a", "v1"): _truth("mem-a", content="four"),
+        ("alice", "mem-b", "v1"): _truth("mem-b", content="sixsix"),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=fts5,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(),
+        token_budget=5,
+    )
+
+    assert [candidate.memory_id for candidate in out] == ["mem-a"]
+    assert out[0].estimated_tokens == 4
+    assert out[0].explanation["token_budget"] == {
+        "policy_version": "token-budget/v1",
+        "budget": 5,
+        "used": 4,
+        "decision": "included",
+        "estimator_version": "character-count/v1",
+        "estimator_semantics": "Unicode code point count; not a model tokenizer",
+    }
+
+
+def test_weighted_rerank_uses_versioned_channel_weights():
+    fts5 = [_hit("fts5-first", "v1", Channel.FTS5, 1)]
+    vector = [_hit("vector-first", "v1", Channel.VECTOR, 1)]
+    truth = {
+        ("alice", "fts5-first", "v1"): _truth("fts5-first"),
+        ("alice", "vector-first", "v1"): _truth("vector-first"),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=fts5,
+        vector_hits=vector,
+        truth=truth,
+        flt=_flt(),
+        rerank_policy=RerankPolicy(
+            version="weighted-rrf/v1",
+            channel_weights={Channel.FTS5: 0.5, Channel.VECTOR: 2.0},
+        ),
+    )
+
+    assert [candidate.memory_id for candidate in out] == [
+        "vector-first",
+        "fts5-first",
+    ]
+    assert out[0].rrf_score == pytest.approx(1 / 61)
+    assert out[0].final_score == pytest.approx(2 / 61)
+    assert out[0].explanation["algorithm_version"] == "weighted-rrf/v1"
+    assert out[0].explanation["rerank_version"] is None
+    assert out[0].explanation["weighted_rrf"] == {
+        "policy_version": "weighted-rrf/v1",
+        "channel_weights": {"fts5": 0.5, "vector": 2.0},
+        "formula": "sum(channel_weight[channel] * 1 / (rrf_k + rank[channel]))",
+        "direction": "higher final_score first",
+        "rrf_score": pytest.approx(1 / 61),
+        "final_score": pytest.approx(2 / 61),
+    }
+
+
+def test_token_budget_scans_past_oversized_top_rank_until_top_k_is_filled():
+    fts5 = [
+        _hit("too-large", "v1", Channel.FTS5, 1),
+        _hit("fits", "v1", Channel.FTS5, 2),
+        _hit("also-fits", "v1", Channel.FTS5, 3),
+    ]
+    truth = {
+        ("alice", "too-large", "v1"): _truth("too-large", content="abcdef"),
+        ("alice", "fits", "v1"): _truth("fits", content="four"),
+        ("alice", "also-fits", "v1"): _truth("also-fits", content="five"),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=fts5,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(),
+        top_k=1,
+        token_budget=5,
+    )
+
+    assert [candidate.memory_id for candidate in out] == ["fits"]
+
+
+def test_token_budget_zero_exact_and_cumulative_selection():
+    fts5 = [
+        _hit("four", "v1", Channel.FTS5, 1),
+        _hit("two", "v1", Channel.FTS5, 2),
+        _hit("later", "v1", Channel.FTS5, 3),
+    ]
+    truth = {
+        ("alice", "four", "v1"): _truth("four", content="four"),
+        ("alice", "two", "v1"): _truth("two", content="xx"),
+        ("alice", "later", "v1"): _truth("later", content="x"),
+    }
+
+    assert fuse_retrieval(
+        fts5_hits=fts5, vector_hits=[], truth=truth, flt=_flt(), token_budget=0
+    ) == []
+    exact = fuse_retrieval(
+        fts5_hits=fts5, vector_hits=[], truth=truth, flt=_flt(), token_budget=4
+    )
+    assert [candidate.memory_id for candidate in exact] == ["four"]
+    cumulative = fuse_retrieval(
+        fts5_hits=fts5, vector_hits=[], truth=truth, flt=_flt(), token_budget=6
+    )
+    assert [candidate.memory_id for candidate in cumulative] == ["four", "two"]
+
+
+def test_top_k_none_and_token_budget_none_keep_normal_rank_order():
+    fts5 = [
+        _hit("first", "v1", Channel.FTS5, 1),
+        _hit("second", "v1", Channel.FTS5, 2),
+    ]
+    truth = {
+        ("alice", "first", "v1"): _truth("first", content="abcdef"),
+        ("alice", "second", "v1"): _truth("second", content="x"),
+    }
+    out = fuse_retrieval(
+        fts5_hits=fts5, vector_hits=[], truth=truth, flt=_flt(), top_k=None
+    )
+    assert [candidate.memory_id for candidate in out] == ["first", "second"]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"k": True}, "k 必须是正整数"),
+        ({"k": 1.5}, "k 必须是正整数"),
+        ({"top_k": -1}, "top_k 必须是正整数或 None"),
+        ({"top_k": True}, "top_k 必须是正整数或 None"),
+        ({"top_k": 1.5}, "top_k 必须是正整数或 None"),
+        ({"token_budget": "5"}, "token_budget 必须是非负整数或 None"),
+        ({"token_budget": 5.5}, "token_budget 必须是非负整数或 None"),
+        ({"token_budget": True}, "token_budget 必须是非负整数或 None"),
+    ],
+)
+def test_query_options_require_exact_integer_contracts(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        fuse_retrieval(fts5_hits=[], vector_hits=[], truth={}, flt=_flt(), **kwargs)
+
+
+def test_weighted_policy_requires_fixed_version_and_both_channel_weights():
+    with pytest.raises(ValueError, match="weighted-rrf/v1"):
+        RerankPolicy(
+            version="rrf-v1",
+            channel_weights={Channel.FTS5: 0.5, Channel.VECTOR: 2.0},
+        )
+    with pytest.raises(ValueError, match="FTS5 与 Vector"):
+        RerankPolicy(version="weighted-rrf/v1", channel_weights={Channel.FTS5: 1.0})
+    with pytest.raises(ValueError, match="有限正数"):
+        RerankPolicy(
+            version="weighted-rrf/v1",
+            channel_weights={Channel.FTS5: "1", Channel.VECTOR: 1.0},
+        )
+
+
+def test_retrieve_graceful_records_selection_diagnostics_without_content():
+    outcome = retrieve_graceful(
+        fts5_search=lambda: [
+            _hit("too-large", "v1", Channel.FTS5, 1),
+            _hit("fits", "v1", Channel.FTS5, 2),
+        ],
+        vector_search=lambda: [],
+        truth={
+            ("alice", "too-large", "v1"): _truth("too-large", content="abcdef"),
+            ("alice", "fits", "v1"): _truth("fits", content="four"),
+        },
+        flt=_flt(),
+        top_k=1,
+        token_budget=5,
+    )
+    assert [candidate.memory_id for candidate in outcome.candidates] == ["fits"]
+    assert outcome.selection_diagnostics == {
+        "policy_version": "token-budget/v1",
+        "requested_top_k": 1,
+        "token_budget": 5,
+        "selected_count": 1,
+        "skipped_budget_count": 1,
+        "budget_used": 4,
+        "budget_remaining": 1,
+        "estimator_version": "character-count/v1",
+        "estimator_semantics": "Unicode code point count; not a model tokenizer",
+    }
 
 
 def test_fts5_index_returns_ranked_hits():
