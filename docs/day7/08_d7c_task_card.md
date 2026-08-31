@@ -86,7 +86,7 @@
 | 4 | `PreferenceEditorPage.qml` 手动添加/编辑 + 当前/历史版本 + 回滚入口 | 实现 | 3 | QML 启动 + 交互链路证据 | 已实现（麒麟宿主交互待 L2） |
 | 5 | 临时/长期偏好展示区分 + 跨用户隔离渲染 | 实现 | 4 | 验收 5.6 / 5.7 | 已实现（UI + Repository 双层） |
 | 6 | 跨会话行为输入联调 | 联调 | 5 | 宿主链路日志 | 部分完成（网关级真实 IPC 已验证；宿主 AI 助手跨会话待联调） |
-| 7 | 本地回归（L0/L1 可用部分）+ 麒麟宿主 L2 验证 | 验证 | 3–6 | pytest / ctest / VM 后真实交互 | 已完成（VM L2：pytest 1281 passed/49 skipped；ctest 4/4；真实 IPC 9/9，见 11 号文档） |
+| 7 | 本地回归（L0/L1 可用部分）+ 麒麟宿主 L2 验证 | 验证 | 3–6 | pytest / ctest / VM 后真实交互 | 已完成（VM L2 @ a4abe0e：pytest 1285 passed/49 skipped；ctest 4/4；真实 IPC 9/9，见 11 号文档） |
 
 总进度：6/7（86%）。工作项 7（麒麟 L2 验证）已完成，见 `docs/day7/11_d7c_l2_verification_20260831.md`；工作项 6 宿主 AI 助手跨会话联调仍未执行。工作项 1–5 已在 D7C PR #87 中落地：D 轨偏好 IPC 方法（`preference.*`，用户授权）实现并注册；服务端 L0 handler 测试 10/10 通过、相关回归 201/201 通过；客户端 `MemoryClient / MemoryViewModel / PreferenceEditorPage.qml` 与 L0 Mock 测试已写入（C++ 编译由 CI `memory-client L0 ctest` 验证，本机无 Qt 无法编译）。工作项 7 的麒麟 L2（pytest/ctest/真实 IPC）已执行并归档证据；工作项 6 的宿主 AI 助手跨会话联调仍需另行联调。
 
@@ -121,3 +121,4 @@
 | v5 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | REWORK 返工批次（Ducknesses）：HIGH-1 契约治理——`preference.*` 改为条件注册（默认不注册→UNSUPPORTED_METHOD，`--register-preference-handlers` 显式激活）；HIGH-2——显式声明与 #93（`preference.version.*` 候选）的关系与取舍；HIGH-01——10 号草案统一 ROLLBACK=追加新 current 版本并标 `PENDING_D_E_ALIGNMENT`；MEDIUM-1——`preference.list` 文档对齐 `list_preference_items`；MEDIUM-2——`is_temporary/should_persist` 显式 bool 校验 + 负测试；MEDIUM-03——PR body 同步实现批次状态 |
 | v6 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | HIGH-2 收敛决策：用户确认路线 A——保留本 PR `preference.*` 为 D7-C 实现路线，#93 视为客户端候选 Demo，命名/页面归属由 D/E 在 ADR-016 统一；同步 08/09 表述（条件注册、字段映射/集合枚举/ROLLBACK 语义待 D/E 确认） |
 | v7 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 第二轮 REWORK（lovezy0730-create，0f05462）：HIGH-01——`_resolve_memory_status` 增加 D3 §7.9 冲突校验（is_temporary/should_persist 与显式 memory_status 冲突拒绝）；客户端 `updatePreference`/QML 显式携带生命周期标志；补 3 个测试；MEDIUM-01——身份隔离声明（可信调用者身份 → RequestContext.user_id 登记为 ADR-016/production gate，不宣称 5.7 完整闭环）；MEDIUM-02——L2 证据在最终 HEAD 重跑并绑定真实命令/SHA |
+| v8 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | MEDIUM-02 落地：L2 证据在最终 HEAD `a4abe0e` 重跑（VM 经字节传输同步；全量 1285/49、定向 14、真实 IPC 9/9 含 `--register-preference-handlers`）；11 号文档/证据摘要绑定 tested_commit= a4abe0e 与真实命令/日志 SHA |
