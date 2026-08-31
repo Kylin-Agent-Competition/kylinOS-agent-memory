@@ -1,0 +1,122 @@
+{
+  "policy": "d9_retrieval_gold",
+  "policy_version": "v1",
+  "status": "CANDIDATE_FOR_FREEZE",
+  "baseline_ref": "evaluation/D3_GOLD_LABEL_AND_METRICS_SPEC_V1.md",
+  "spec_ref": "evaluation/D9_RETRIEVAL_GOLD_SPEC_V1.md",
+  "tech_debt_refs": [
+    "TD-036"
+  ],
+  "pr_refs": [
+    "PR #76",
+    "Issue #79"
+  ],
+  "roles": {
+    "positive_retrieval": {
+      "description": "正式检索查询：query 的 relevant_ids 非空且至少含一条有效正解（可检索、已验证的事实知识条目），是 Recall/MRR/nDCG 三项指标的正式评测样本。",
+      "in_m2_formal_denominator": true,
+      "reporting": "进入 Recall/MRR/nDCG 正式分母与聚合，并按 knowledge_type、primary_category 拆分子集报告。"
+    },
+    "negative_guardrail": {
+      "description": "无正解（relevant_ids 为空）的 no-answer/拒绝类查询，以及命中业务/安全边界的样本（removed_or_forgotten / expired / superseded / candidate / unresolved_conflict / cross_user / sensitive_recall_prohibited），用于防伪与行为护栏。",
+      "in_m2_formal_denominator": false,
+      "reporting": "单列 negative_guardrail 子集报告（计数与剔除原因），不得混入正式分母，不得计为满分。"
+    },
+    "boundary": {
+      "description": "标注规范 §4.1 争议裁决前，或 PENDING_* 待确认项（含 PENDING_B_CONFIRMATION 等）相关样本；语义未定不得参与正式评测。",
+      "in_m2_formal_denominator": false,
+      "reporting": "单列 boundary 子集报告，待语义确认后重新归类。"
+    }
+  },
+  "empty_gold_rule": {
+    "rule_id": "D9-EMPTY-GOLD-01",
+    "definition": "查询 relevant_ids 为空（Gold Label 判定为「不应形成记忆」/无正解）时，该查询不得进入 Recall/MRR/nDCG 三项指标的任何正式分母与分子，也不得解释为满分或其他默认值。",
+    "recall_denominator": "excluded",
+    "mrr_denominator": "excluded",
+    "ndcg_denominator": "excluded",
+    "forbidden_interpretations": [
+      "不得将 empty relevant_ids 查询计为 Recall=1.0 或 nDCG=1.0 满分，也不得计为 MRR 等效最高分",
+      "不得将 empty relevant_ids 查询计入 Recall/MRR/nDCG 任一正式分母与聚合"
+    ],
+    "required_report_fields": [
+      "valid_query_count（进入正式分母的有效查询数）",
+      "excluded_query_count（剔除查询数量）",
+      "exclusion_reason（剔除原因，按 negative_guardrail / boundary / 环境异常分类）"
+    ],
+    "d3_alignment": "无正解（Gold Label 判定为「不应形成记忆」）的查询不进入分母"
+  },
+  "negative_guardrail_scope": [
+    {
+      "category_id": "removed_or_forgotten",
+      "basis": "memory_status=removed；精准遗忘执行后（D3 第九章 9.4）已遗忘条目不得再被检索返回。",
+      "guardrail_expectation": "已遗忘/removed 条目不得作为查询正解；相关查询按 negative_guardrail 单列并记录剔除原因，不得进入正式分母。"
+    },
+    {
+      "category_id": "expired",
+      "basis": "memory_status=expired；临时偏好/临时知识过期后不再作为有效记忆（D3 第六章 6.3）。",
+      "guardrail_expectation": "expired 条目不得作为正解；仅含过期正解的查询不得进入 Recall/MRR/nDCG 正式分母。"
+    },
+    {
+      "category_id": "superseded",
+      "basis": "memory_status=superseded；被替代条目保留仅用于审计与回溯（D3 第八章 8.2）。",
+      "guardrail_expectation": "superseded 条目不得作为当前知识正解；相关查询单列排除。"
+    },
+    {
+      "category_id": "candidate",
+      "basis": "memory_status=candidate；未经人工复核/证据确认（模型自述、LLM 候选）不得升级为已验证正解（D3 第七章 7.3、标注规范 §4.1/§4.2）。",
+      "guardrail_expectation": "candidate 条目不得进入正式检索正解集合；相关查询排除并单列。"
+    },
+    {
+      "category_id": "unresolved_conflict",
+      "basis": "标注规范 §4.1 争议裁决前冲突双方保持 memory_status=candidate（D3 第八章 8.2）。",
+      "guardrail_expectation": "未裁决冲突条目不得作为正解；相关查询单列，待裁决后处置。"
+    },
+    {
+      "category_id": "cross_user",
+      "basis": "跨 user_id 读取/检索一律拒绝并标记 isolation_violation=true、sensitivity=critical（S-08、SEC-UI-05、D3 第九章 9.2 / 第十章）。",
+      "guardrail_expectation": "跨用户条目不得作为任何用户查询的正解；相关查询单列并记录隔离边界。"
+    },
+    {
+      "category_id": "sensitive_recall_prohibited",
+      "basis": "命中 S-01..S-09 强制不形成记忆（D3 第七章/第十章、SEC-SENS）；敏感原文不得出现在评测记录。",
+      "guardrail_expectation": "敏感内容不得被召回为正解；相关查询剔除并单列，记录仅用脱敏占位或 ID 引用。"
+    }
+  ],
+  "team_defined_params": {
+    "k": {
+      "origin": "TEAM_DEFINED",
+      "current_value": "PENDING",
+      "d3_ref": "D3 第五章 TD-06（M2 Recall@K 的 K 值与命中判定规则，责任 B，关联 PENDING_B_CONFIRMATION）"
+    },
+    "top_k": {
+      "origin": "TEAM_DEFINED",
+      "current_value": "PENDING",
+      "d3_ref": "D3 第四章 M2 命中判定 Top-K 检索结果窗口（TEAM_DEFINED）"
+    },
+    "rrf_k": {
+      "origin": "TEAM_DEFINED",
+      "current_value": "PENDING",
+      "d3_ref": "D3 第四章 M2 聚合方式 RRF k 值（待 B 确认，HD-SCHEMA-04 / D3-B 检索契约 08/09 REWORK，PENDING_B_CONFIRMATION）"
+    },
+    "statistics_method": {
+      "origin": "TEAM_DEFINED",
+      "current_value": "PENDING",
+      "d3_ref": "D3 第五章 TD-01 统计口径（p50/p95/mean/max 等，责任 B/D）"
+    },
+    "dataset_split": {
+      "origin": "TEAM_DEFINED",
+      "current_value": "PENDING",
+      "d3_ref": "D3 第五章 TD-07 数据集切分比例与抽样种子（责任 B/E）"
+    }
+  },
+  "evaluation_metadata": {
+    "case_id": "PENDING",
+    "dataset_version": "PENDING",
+    "gold_label_version": "PENDING",
+    "implementation_commit": "PENDING",
+    "environment": "PENDING",
+    "metric_result": "PENDING",
+    "evidence_reference": "PENDING",
+    "policy_version": "PENDING"
+  }
+}
