@@ -3,6 +3,12 @@
 > 状态：`CANDIDATE_SYNC`（建议草案，仅供 D 轨对齐的起点，**不冻结任何契约 / IPC / 数据库结构**）。
 > 作者：高翌哲（B 轨代 D7-C）。本文件不替 D 轨冻结 FRZ-IPC-007 路由表、payload schema 或 DB DDL。
 > 目标：缩小 D 轨与 C 轨对“偏好增改 / 历史 / 回滚”接口的交界缝隙，便于 D 轨落地持久化与 IPC 方法后 D7-C 实现 UI。
+>
+> **状态更新（2026-08-31，D7C PR #87）**：本草案已获用户授权落地为 D 轨契约变更，随 D7C PR #87 实现——
+> `memory-service/gateway/preference_handlers.py` 新增 `preference.list / create / update / rollback / history` 五个活跃方法（production 默认注册），方法名与 payload 语义与本草案一致。与草案的差异如实记录：
+> ① D7D 持久化模型无 `category / explicitness / confidence` 列，故 payload 未包含这些字段（E 轨 Schema 未终审，不制造不可持久化字段）；
+> ② `memory_status` 未显式传入时按 D3 §7.9 安全默认推导（临时/不持久化 → candidate，否则 active），显式传入则校验六值枚举；E 轨 `preference_version_policy` 的业务决策未在 handler 内实现（本模块不实现 E 轨策略）；
+> ③ 错误码沿用 FRZ-IPC-002 五枚举：偏好领域异常（版本不存在 / 幂等冲突 / 证据冲突）统一映射为 `INVALID_REQUEST`。
 
 ## 一、依据来源
 
@@ -12,7 +18,7 @@
 | `memory-service/domain/enums.py` | `PreferenceScope` 五值 `global/topic/tool/session/time_window`；`MemoryStatus` 六值 `active/superseded/deprecated/expired/removed/candidate` |
 | `memory-service/service/preference_version_policy.py` | 五种业务动作 `CREATE/COEXIST/UPDATE/NO_OP/ROLLBACK` + `REJECTED` 防御态；fixed reason_code 集合；版本号 `max(现存)/+1`、`previous_version_id`、历史保留、rollback 不删中间版本 |
 | `memory-service/db/repositories.py`（D7D #90，`origin/main@c1ee840`） | 持久化真源：`save_preference_version(conn,*, user_id, preference_key, preference_scope, preference_value, memory_status, evidence_fingerprint, idempotency_key?, request_fingerprint)`；`get_preference_version(conn,*, user_id, preference_version_id:int)`；`get_current_preference_version(conn,*, user_id, preference_key, preference_scope)`；`list_preference_versions(conn,*, user_id, preference_key, preference_scope)`；`rollback_preference_version(conn,*, user_id, preference_version_id:int, idempotency_key?, request_fingerprint)`。聚合键为 `memory_items`（user_id+key+scope），版本号与链由 `memory_versions`（`version / previous_version_id / rollback_of_version_id / is_current`）承载；回滚=追加新 current 版本，不覆盖历史 |
-| `migrations/versions/20260831_preference_versions.py`（D7D #90） | 表：`memory_items`（`current_version_id` 指针、`uq_memory_items_user_key_scope` 唯一、`ck_memory_items_preference_scope` 五值 CHECK）；`memory_versions`（`uq_memory_versions_item_version` 唯一、`uq_memory_versions_current` 部分唯一 `is_current=1`、`idx_memory_versions_idempotency/evidence/status`）；`preference_version_operations`（回滚/审计 operation_kind） |
+| `migrations/versions/20260831_preference_versions.py`（D7D #90） | 表：`memory_items`（`current_version_id` 指针、`uq_memory_items_user_key_scope` 唯一、`ck_memory_items_preference_scope` 五值 CHECK）；`memory_versions`（`uq_memory_versions_item_version` 唯一、`uq_memory_versions_current` 部分唯一 `is_current=1`、`idx_memory_versions_idempotency/evidence/status`）；`memory_version_receipts`（回滚/审计 operation_kind） |
 | `memory-service/retrieval/contracts.py` | 既有检索 filter 字段：`scene_id / allowed_scene_ids / include_unscoped / as_of / valid_from / valid_to` |
 | E 轨验收 `day7-e-ui-version-acceptance-v1.md` | C 轨 UI 需呈现 CREATE/COEXIST/UPDATE/NO_OP/ROLLBACK + 临时偏好 + 跨用户隔离 |
 
@@ -51,5 +57,5 @@
 
 ## 五、结论
 
-- 本文件是 D7-C 工作清单第 2 项「确定偏好 CRUD / 历史 / 回滚的 IPC 方法与 payload 契约」的**建议起点**，仅明确 D7-C 消费该契约所需的最小字段与语义，**不冻结**任何契约。
-- 待 D 轨落地 **偏好 IPC 方法（`preference.*`）** 后，D7-C 第 2 项可据此定稿（D7D `save/get_current/list/rollback_preference_version` 已就绪，`origin/main@c1ee840`），随后展开第 3–7 项客户端 `MemoryClient / MemoryViewModel`、QML、联调与验证。
+- 本文件是 D7-C 工作清单第 2 项「确定偏好 CRUD / 历史 / 回滚的 IPC 方法与 payload 契约」的**建议起点**；已随 D7C PR #87（用户授权 D 轨契约变更）落地为 `preference.*` 方法（见文件头状态更新），方法名与 payload 语义与本草案一致。
+- D7D `save/get_current/list/rollback_preference_version` 已就绪（`origin/main@c1ee840`）；D7-C 第 3–5 项实现与 L0 测试已写入，第 6–7 项（跨会话联调 / 麒麟 L2）待 VM 执行后补充证据。

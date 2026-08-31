@@ -58,9 +58,9 @@
 
 以下均为实现前需要先对齐的依赖，本任务卡先记录不掩盖：
 
-- **D 轨版本持久化已合入默认分支（本次校对解除）**：`origin/main@c1ee840` 已含 D7D #90 的 `memory_items / memory_versions / preference_version_operations` 表与 `save_preference_version / get_preference_version / get_current_preference_version / list_preference_versions / rollback_preference_version` Repository 接口；D7-C 的 ROLLBACK / UPDATE 用户可观察结果所需的持久化语义已具备（实现阶段仍需与 D7D 对列名/语义确认，因其以 `memory_items`（user_id+key+scope）为聚合键，而非 `Preference` domain 的 `preference_id`）。
-- **IPC 路由表仍无偏好方法（当前硬依赖 / 阻塞）**：FRZ-IPC-007 仅 `echo / health / memory.retrieve` 三项活跃，另含 `memory.store`（未实现）/ `turn.finalized`（候选，BLOCKED_BY_HOST_MAPPING）；无 `preference.list / create / update / rollback / history` 方法。需先确认是扩展方法（走 D 轨契约变更）还是复用既有路径。
-- **现有客户端能力不足**：`MemoryViewModel` 目前只有 `connect / disconnect / sendHealth / sendMemoryQuery`，无偏好读写能力。
+- **D 轨版本持久化已合入默认分支（本次校对解除）**：`origin/main@c1ee840` 已含 D7D #90 的 `memory_items / memory_versions / memory_version_receipts` 表与 `save_preference_version / get_preference_version / get_current_preference_version / list_preference_versions / rollback_preference_version` Repository 接口；D7-C 的 ROLLBACK / UPDATE 用户可观察结果所需的持久化语义已具备（实现阶段仍需与 D7D 对列名/语义确认，因其以 `memory_items`（user_id+key+scope）为聚合键，而非 `Preference` domain 的 `preference_id`）。
+- **IPC 偏好方法（原硬依赖，本 PR 已解决）**：FRZ-IPC-007 原先仅 `echo / health / memory.retrieve` 活跃、无 `preference.*` 方法；D 轨契约变更已获用户授权，本 PR 新增 `preference.list / create / update / rollback / history` 五个活跃方法（`memory-service/gateway/preference_handlers.py`，production 默认注册）。
+- **客户端能力（原不足，本 PR 已补齐）**：`MemoryClient` 新增 5 个偏好便捷方法；`MemoryViewModel` 新增偏好读/写/历史/回滚 `Q_INVOKABLE` 与 `preferenceItems / preferenceHistory / preferenceBusy / preferenceError / preferenceStage / lastPreferenceAction / lastPreferenceItem` 属性（保留 D5-C 既有管线方法）。
 - **TD-008**：真实 MemoryContext 注入被阻断；TD-022 / TD-023：客户端超时 / 响应字段归一化待关闭。
 
 ### Review 结论与对齐（Ducknesses，PR #87，APPROVE）
@@ -77,31 +77,35 @@
 
 | 序号 | 工作项 | 类型 | 依赖 | 验证方式 | 状态 |
 |------|--------|------|------|----------|------|
-| 1 | 核对 D 轨版本持久化与 IPC 方法现状，确定 D7-C 可消费的契约 | 调研/对齐 | 无 | 读仓储、冻结契约文档 | 待开始 |
-| 2 | 确定偏好 CRUD / 历史 / 回滚的 IPC 方法与 payload 契约 | 契约对齐 | 1 | 与 D 轨契约冻结对齐 | 待开始 |
-| 3 | 客户端 `MemoryClient` / `MemoryViewModel` 增加偏好读/写/历史/回滚接口 | 实现 | 2 | L0 编译 + Mock 契约测试 | 待开始 |
-| 4 | `PreferenceEditorPage.qml` 手动添加/编辑 + 当前/历史版本 + 回滚入口 | 实现 | 3 | QML 启动 + 交互链路证据 | 待开始 |
-| 5 | 临时/长期偏好展示区分 + 跨用户隔离渲染 | 实现 | 4 | 验收 5.6 / 5.7 | 待开始 |
-| 6 | 跨会话行为输入联调 | 联调 | 5 | 宿主链路日志 | 待开始 |
-| 7 | 本地回归（L0/L1 可用部分）+ 麒麟宿主 L2 验证 | 验证 | 3–6 | pytest / ctest / VM 后真实交互 | 待开始 |
+| 1 | 核对 D 轨版本持久化与 IPC 方法现状，确定 D7-C 可消费的契约 | 调研/对齐 | 无 | 读仓储、冻结契约文档 | 已完成 |
+| 2 | 确定偏好 CRUD / 历史 / 回滚的 IPC 方法与 payload 契约 | 契约对齐 | 1 | 与 D 轨契约冻结对齐 | 已完成（本 PR 落地） |
+| 3 | 客户端 `MemoryClient` / `MemoryViewModel` 增加偏好读/写/历史/回滚接口 | 实现 | 2 | L0 编译 + Mock 契约测试 | 已实现（L0 编译待 CI ctest） |
+| 4 | `PreferenceEditorPage.qml` 手动添加/编辑 + 当前/历史版本 + 回滚入口 | 实现 | 3 | QML 启动 + 交互链路证据 | 已实现（麒麟宿主交互待 L2） |
+| 5 | 临时/长期偏好展示区分 + 跨用户隔离渲染 | 实现 | 4 | 验收 5.6 / 5.7 | 已实现（UI + Repository 双层） |
+| 6 | 跨会话行为输入联调 | 联调 | 5 | 宿主链路日志 | 待 L2（需麒麟宿主） |
+| 7 | 本地回归（L0/L1 可用部分）+ 麒麟宿主 L2 验证 | 验证 | 3–6 | pytest / ctest / VM 后真实交互 | 部分完成（服务端 L0 已过；客户端 ctest 待 CI；L2 待执行） |
 
-总进度：1/7（14%）。工作项 1 已完成现状核对（见 `09_d7c_prerequisite_audit.md`）。本次校对确认 **D 轨版本持久化已合入 `origin/main@c1ee840`**（D7D #90），因此原先「持久化未达标」的阻塞已解除；工作项 2–7 当前唯一的硬依赖为 **偏好 IPC 方法（`preference.*`）尚未合入默认分支**，需先走 D 轨契约变更或明确复用路径后，方可进入 item 3–7 的实现/联调/验证。
+总进度：5/7（71%）。工作项 1–5 已在 D7C PR #87 中落地：D 轨偏好 IPC 方法（`preference.*`，用户授权）实现并注册；服务端 L0 handler 测试 10/10 通过、相关回归 201/201 通过；客户端 `MemoryClient / MemoryViewModel / PreferenceEditorPage.qml` 与 L0 Mock 测试已写入（C++ 编译由 CI `memory-client L0 ctest` 验证，本机无 Qt 无法编译）。工作项 6（跨会话行为输入联调）与工作项 7 的麒麟 L2 真实交互验证依赖银河麒麟 VM，需在 L2 环境执行后补充证据。
 
-> 前置核对结论（本次已更新）：D7D #90 已合入，默认分支已具 `memory_items / memory_versions` 版本链与 `save/get_current/list/rollback_preference_version` Repository；但 IPC 路由表仍仅 `echo / health / memory.retrieve` 活跃，无偏好增改/历史/回滚方法。详见 `docs/day7/09_d7c_prerequisite_audit.md`。
+> 前置核对结论（v3 更新）：D7D #90 已合入，默认分支已具 `memory_items / memory_versions / memory_version_receipts` 版本链与 `save/get_current/list/rollback_preference_version` Repository；偏好 IPC 方法已由 D7C PR #87 实现（`memory-service/gateway/preference_handlers.py`，production 默认注册），不再是阻塞。详见 `docs/day7/09_d7c_prerequisite_audit.md`。
 
-### 工作项状态补充（同步自前置核对）
+### 工作项状态补充（同步实现进度）
 
 | 工作项 | 状态 | 依赖 |
 |--------|------|------|
-| 1 现状核对 | 已完成（本提交） | 无 |
-| 2 确定 IPC 方法/payload 契约 | **待 D 轨**（契约未冻结） | D 轨偏好 IPC 方法扩展或复用路径确认 |
-| 3–7 实现/联调/验证 | **待 D 轨**（唯一硬前置：偏好 IPC 方法） | D 轨偏好 IPC 方法合入；D7D 持久化已就绪 |
+| 1 现状核对 | 已完成 | 无 |
+| 2 确定 IPC 方法/payload 契约 | 已完成（`10_d7c_preference_ipc_contract_draft.md` 落地为 `preference.*` 方法） | D7D 持久化已就绪 |
+| 3 客户端接口 | 已实现（C++ 编译待 CI ctest） | preference.* 已由本 PR 实现 |
+| 4 QML 页面 | 已实现（麒麟宿主交互待 L2） | 工作项 3 |
+| 5 临时/长期 + 跨用户隔离 | 已实现（UI + Repository 双层） | 工作项 4 |
+| 6 跨会话联调 | 待 L2 | 麒麟宿主链路 |
+| 7 本地回归 + L2 | 服务端 L0 已过；客户端 ctest 待 CI；L2 待执行 | 工作项 3–6 |
 
 ## 六、风险与说明
 
 - 本任务卡与工作清单为 D7-C **准备产物**，不意味着 D/C 轨道已完成或已通过验收；全部实现与验收证据状态为 `RUNTIME_UNVERIFIED`。
 - 若实现中发现判据与真实宿主/存储能力不可调和，应由 C（或代做 D7-C 的 B）提出修订任务，不在本任务内降级判据。
-- 本分支只包含准备产物（本任务卡）；实际 QML/C++/协议实现代码将在后续提交中追加，并逐提交保持原子化。
+- 本 PR 当前包含准备产物 + D7C 实现（D 轨偏好 IPC 方法、客户端 `MemoryClient / MemoryViewModel / PreferenceEditorPage.qml`、L0 测试与文档更新）；QML/C++ 编译由 CI `memory-client L0 ctest` 验证，麒麟宿主真实交互（工作项 6/7）需在 L2 VM 执行后补充证据，逐提交保持原子化。
 
 ## 七、变更记录
 
@@ -109,3 +113,4 @@
 |------|------|------|----------|
 | v1 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 初稿：基于 15 天 75 项台账 D7-C 口径与 E 轨 `day7-e-ui-version-acceptance-v1.md` 建立任务卡与工作清单；标记跨轨依赖（D 轨版本持久化、IPC 方法、TD-008/022/023）；不包含实现代码 |
 | v2 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 按 PR #87 Reviewer（Ducknesses）非阻断建议与当前事实校对：基线重对齐至 `origin/main@c1ee840`（D7D #90 已合并、持久化阻塞解除）；将剩余唯一硬依赖修正为「偏好 IPC 方法未合入」；纳入编号风格、契约节奏与 5.7 双层落实意见；新增 `09_d7c_prerequisite_audit.md` 与 `10_d7c_preference_ipc_contract_draft.md` 两份配套产物 |
+| v3 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 实现批次：修正 MEDIUM-1 表名（`preference_version_operations` → `memory_version_receipts`，3 文件 5 处）与 LOW-1 描述（09 MemoryViewModel）；用户授权跨轨依赖，新增 D 轨偏好 IPC 方法 `preference.list/create/update/rollback/history`（`gateway/preference_handlers.py` + `repositories.list_preference_items` + app 注册 + L0 测试 10 项）；客户端 `MemoryClient`/`MemoryViewModel`/`PreferenceEditorPage.qml` 与 L0 Mock 测试；工作清单更新为 5/7（6–7 待麒麟 L2） |
