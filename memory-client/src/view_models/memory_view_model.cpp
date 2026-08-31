@@ -250,13 +250,14 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
     const QString& finalMessageId,
     const QString& finalAssistantText,
     const QString& finalizationReason,
-    const QString& stopReason)
+    const QString& stopReason,
+    const QString& retryOfTurnId)
 {
     Q_UNUSED(finalAssistantText)
 
     // 非阻断项修复：Preview → Send 复用同一事件对象，避免 event_id / timestamp 漂移。
     const QStringList key{userId, sessionId, turnId, traceId,
-                          finalMessageId, finalizationReason, stopReason};
+                          finalMessageId, finalizationReason, stopReason, retryOfTurnId};
     if (!cachedTurnEvent_.isEmpty() && cachedTurnEventKey_ == key) {
         return cachedTurnEvent_;
     }
@@ -288,6 +289,10 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
         {QStringLiteral("source_reference"), srcRef},
     };
     if (!traceId.isEmpty()) metadata.insert(QStringLiteral("trace_id"), traceId);
+    // TB-D6C-04：finalization_reason=retry 时必须携带 retry_of_turn_id，
+    // 且 retry_of_turn_id != turn_id（调用方保证）。
+    if (!retryOfTurnId.isEmpty())
+        metadata.insert(QStringLiteral("retry_of_turn_id"), retryOfTurnId);
 
     QJsonObject event;
     event.insert(QStringLiteral("metadata"), metadata);
@@ -424,10 +429,10 @@ void MemoryViewModel::runManualConfigPipeline(
     const QString& sensitivityLevel,
     double confidence)
 {
-    // 客户端侧敏感预检：high / critical 等级拒绝构造事件、拒绝发送。
+    // 客户端侧敏感预检：high / critical 等级（大小写归一）拒绝构造事件、拒绝发送。
     // 完整敏感识别在 A 轨 pipeline/sensitive.py；此处为客户端侧第一道防线。
-    if (sensitivityLevel == QStringLiteral("high")
-        || sensitivityLevel == QStringLiteral("critical")) {
+    const QString sl = sensitivityLevel.trimmed().toLower();
+    if (sl == QStringLiteral("high") || sl == QStringLiteral("critical")) {
         setLastManualConfigEvent({});
         setManualConfigStage(QStringLiteral("failed"));
         emit connectionError(QStringLiteral(
@@ -453,7 +458,12 @@ void MemoryViewModel::runManualConfigPipeline(
     config.insert(QStringLiteral("should_persist"), shouldPersist);
     config.insert(QStringLiteral("confidence"), confidence);
     config.insert(QStringLiteral("sensitivity_level"), sensitivityLevel);
-    config.insert(QStringLiteral("source_reference"), srcRef);
+    // TB-D6C-08：与 Behavior 对称，候选手动配置事件也标记 PENDING_C_CONFIRMATION
+    // （C 轨未冻结 manual.config.ingest → 正式 schema / SourceType）。
+    config.insert(QStringLiteral("mapping_status"),
+                  QStringLiteral("PENDING_C_CONFIRMATION"));
+    // TB-D6C-12：删除 config.source_reference 重复字段
+    // （metadata.source_reference 已承载同一值）。
 
     QJsonObject event;
     event.insert(QStringLiteral("metadata"), metadata);
@@ -494,12 +504,16 @@ void MemoryViewModel::runBehaviorPipeline(
         userId, sessionId, /*turnId=*/QStringLiteral(""),
         /*traceId=*/QStringLiteral(""), idempotencyKey, srcRef);
 
+    // TB-D6C-05：behavior.occurred_at 复用 metadata.occurred_at，避免双源时间戳漂移。
+    const QString metaOccurredAt =
+        metadata.value(QStringLiteral("occurred_at")).toString();
+
     QJsonObject behavior;
     behavior.insert(QStringLiteral("behavior_kind"), behaviorKind);
     behavior.insert(QStringLiteral("observed_action"), observedAction);
     behavior.insert(QStringLiteral("context_ref"), contextRef);
     behavior.insert(QStringLiteral("actor"), actor);
-    behavior.insert(QStringLiteral("occurred_at"), nowIso8601UtcMs());
+    behavior.insert(QStringLiteral("occurred_at"), metaOccurredAt);
     // C 轨未冻结 behavior → MemorySourceEvent.source_type 映射；
     // 显式注入 PENDING_C_CONFIRMATION 字段，不擅自新增 SourceType 枚举。
     behavior.insert(QStringLiteral("mapping_status"),

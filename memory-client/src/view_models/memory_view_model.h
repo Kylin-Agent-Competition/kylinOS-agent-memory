@@ -186,6 +186,7 @@ public:
         const QString& stopReason);
 
     // 构造 TurnFinalizedEvent JSON（可预览可发送复用；Preview→Send 走缓存）。
+    // retryOfTurnId：finalization_reason=retry 时必须提供，显式注入 metadata.retry_of_turn_id。
     Q_INVOKABLE QJsonObject buildTurnFinalizedEventJson(
         const QString& userId,
         const QString& sessionId,
@@ -194,7 +195,8 @@ public:
         const QString& finalMessageId,
         const QString& finalAssistantText,
         const QString& finalizationReason,
-        const QString& stopReason);
+        const QString& stopReason,
+        const QString& retryOfTurnId = {});
 
     // ── D6-C 多源 Adapter Pipeline ─────────────────────────────────────
     // Tool Adapter：executionStatus ∈ {"success","partial","failure",

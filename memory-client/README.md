@@ -137,7 +137,40 @@ cmake --build memory-client/build
 
 | 层级 | 要求 | 状态 |
 |------|------|------|
-| **L0** | 编译通过、Mock 协议测试 | **L0_COMPLETE** — ctest **4/4**（test_protocol_adapter / test_memory_client_mock / test_d5_vertical_link_demo / test_d6c_multi_source_adapters），覆盖 D5-C §A/B/C 共 10 个 + D6-C §A/B/C/D/E 共 17 个用例；QML_APP=ON 构建闭环待 CI 扩展 |
+| **L0** | 编译通过、Mock 协议测试 | **L0_COMPLETE** — ctest **4/4**（test_protocol_adapter / test_memory_client_mock / test_d5_vertical_link_demo / test_d6c_multi_source_adapters），覆盖 D5-C §A/B/C 共 10 个 + D6-C §A/B/C/D/E 共 17 个用例；QML_APP=ON 构建闭环待 CI 扩展（TB-D6C-07） |
 | **L1** | QLocalSocket 连接真实 Gateway / Echo；turn.finalized 测试态 handler；真实 MemoryContext 返回非空 | 待联调 |
 | **L2** | 银河麒麟 VM 中真实 AI Assistant Hook / ChatRecord / Chat DB / SourceResolver 打通 | **未实现**（属后续真实 C-D5 关闭工作） |
 | **HOST_VERIFIED** | SEC-CTX-01 原文隔离宿主级证据 | **RUNTIME_UNVERIFIED** |
+
+## 技术债（D6-C PR #91）
+
+> 解除条件：BLOCK 类 **必须在 D6D 立项前解除**；DEBT 类优先 D6D 首迭代处理；COSMETIC 类随下次顺手修。
+
+### 🔴 BLOCK — D6D 前置解除条件
+
+| ID | 文件 | 债务描述 | 解除条件 |
+|----|------|----------|----------|
+| TB-D6C-01 | `protocol_adapter.{h,cpp}` | 三候选方法常量未冻结：`tool.execution` / `manual.config.ingest` / `behavior.observe` 仅登记在 `methods` 命名空间，未加入 FRZ-IPC-007 路由表 | ADR-013/014/015 立项并通过 E 轨冻结审查；三方法加入 `supportedMethod()` 白名单 |
+| TB-D6C-02 | `memory_view_model.cpp` / `.h` | Behavior `mapping_status=PENDING_C_CONFIRMATION`：`behavior` → `MemorySourceEvent.source_type` 映射未冻结，硬编码占位字符串 | C 轨审查通过 behavior→source_type 正式映射表；替换硬编码字符串为真实 `MemorySourceType` 枚举 |
+| TB-D6C-03 | 三 QML 页 / README | 真实 AI Assistant Hook / Chat DB / ChatRecord / SourceResolver / sendToolMessage 未接入；生产 Gateway 三方法均返回 UNSUPPORTED_METHOD | D 轨 D6D 完成 handler 注册与真实集成；真实 Gateway 联调至少 L1 通过 |
+| TB-D6C-04 ✅ 本 PR 已修 | `memory_view_model.{h,cpp}` + D1 测试 | `buildTurnFinalizedEventJson` 原无 `retryOfTurnId` 参数入口，D6D Retry 流程无法自动注入 `metadata.retry_of_turn_id` | ✅ 已扩展第 9 参数（默认空保持兼容），D1 测试补真实断言（存在性 + 非相等） |
+
+### 🟡 DEBT — 优先 D6D 首迭代处理
+
+| ID | 文件 | 债务描述 | 解除条件 |
+|----|------|----------|----------|
+| TB-D6C-05 ✅ 本 PR 已修 | `memory_view_model.cpp:507` | 双重 `occurred_at` 漂移：`behavior.occurred_at` 与 `metadata.occurred_at` 是两次独立 `nowIso8601UtcMs()` 调用 | ✅ 改为复用 `metadata["occurred_at"]`，保证单源时间戳 |
+| TB-D6C-06 | `memory_view_model.cpp:438` + B4 测试 | `connectionError` 语义过载：传输层错误与业务层敏感拦截复用同一信号 | 新增 `manualConfigRejected(QString reason)` 专用信号或标准化 `requestFailed` 无 requestId 语义 |
+| TB-D6C-07 | `README.md:140` + CI workflow | QML 页面未纳入 CI 编译验证：`QML_APP=ON` 构建路径无 Job，QML 语法错误 / 缺失 import 合并前无法发现 | 新增 workflow Job 编译 `QML_APP=ON` 目标（无需运行 GUI） |
+| TB-D6C-08 ✅ 本 PR 已修 | `manual_config_event.v1.json` | 候选样例不对称：`behavior_event.v1.json` 有 `PENDING_C_CONFIRMATION`，Manual Config 候选样例无对应字段 | ✅ `config.mapping_status = PENDING_C_CONFIRMATION`，与 behavior 对称 |
+| TB-D6C-09 ✅ 本 PR 已修 | `memory_view_model.cpp:434` | ManualConfig 敏感预检仅精确匹配 `"high"` / `"critical"`（大小写敏感），不兼容 `"HIGH"` / `"Critical"` / 前后空白 | ✅ 改为 `trimmed().toLower()` 归一化后比较 |
+
+### 🟢 COSMETIC — 代码卫生
+
+| ID | 文件 | 债务描述 | 解除条件 |
+|----|------|----------|----------|
+| TB-D6C-10 ✅ 本 PR 已修 | `test_d6c_multi_source_adapters.cpp:240` | A4 测试函数名 `toolTimeoutRoutesToTimeoutStage` 名实不符（修复后断言 `sent`） | ✅ 重命名为 `toolTimeoutExecutionStatusSentSuccessfully` |
+| TB-D6C-11 ✅ 本 PR 已修 | `test_d6c_multi_source_adapters.cpp` §D | D1/D3 测试名实不符：D1 只断言 turn_id 非空；D3 名字含 "DifferentIdempotencyKey" 实际断言 idempotency_key 相同 | ✅ D1 扩展第 9 参数 + 补真实断言；D3 重命名为 `duplicateTurnIdProducesSameIdempotencyKeyDifferentEventId` |
+| TB-D6C-12 ✅ 本 PR 已修 | `memory_view_model.cpp:461` | `config` 对象重复写入 `source_reference`（`metadata.source_reference` 已承载同值） | ✅ 删除重复字段，替换为候选冻结标记 `mapping_status` |
+
+**债务处理进度**：本 PR 修复 BLOCK 1/4、DEBT 3/5、COSMETIC 3/3，合计 7/12；剩余 BLOCK 3 项（需跨轨 ADR 立项 / 真实集成）、DEBT 2 项（跨文件信号重构 / CI workflow 扩展）。
