@@ -130,12 +130,19 @@ def test_td028_race_fingerprint_conflict_rejected(td028_env):
                 request_fingerprint="fp-B",  # 与缓存指纹 fp-A 不一致
             )
 
-    # 无副作用残留：turns 1 行 / outbox 0 / 缓存 1 行（首次响应保留）
+    # 无副作用残留：turns 1 行 / outbox 0 / 缓存 0 行。
+    # 说明：本场景的 fp-A 缓存由 business_fn 在同一事务内写入；IdempotencyConflictError
+    # 上抛后 UoW 整体 rollback，缓存随事务一并回滚 → 冲突请求不留下任何半写缓存
+    # （不含 fp-B 覆盖、不含半成品），这是比「保留缓存」更强的无副作用语义。
     with UnitOfWork(eng) as uow:
         turns_n = len(uow.conn.execute(repo.select(repo.turns.c.id)).fetchall())
         outbox_n = len(uow.conn.execute(repo.select(repo.outbox.c.id)).fetchall())
-    assert turns_n == 1
-    assert outbox_n == 0
+        cache_n = len(uow.conn.execute(
+            repo.select(repo.idempotency_cache.c.idempotency_key)
+        ).fetchall())
+    assert turns_n == 1, f"turns 应 1 行，实际 {turns_n}"
+    assert outbox_n == 0, f"outbox 应 0 行，实际 {outbox_n}"
+    assert cache_n == 0, f"冲突拒绝不得残留幂等缓存，实际 {cache_n}"
 
 
 # ── 场景 3：回查无缓存 → 原样抛错（不吞异常） ──
