@@ -122,6 +122,11 @@ try:
     assert 'count' in r['errors'], 'errors 缺少 count'
     assert 'last_code' in r['errors'], 'errors 缺少 last_code'
     assert 'last_time_seconds_ago' in r['errors'], 'errors 缺少 last_time_seconds_ago'
+    # H2: invalidator 未接线时标记警告（非失败）
+    if not r.get('cache_invalidator'):
+        print('  [WARN] cache_invalidator 未接线（set_extraction_provider() 未调用）')
+    else:
+        print('  cache_invalidator 已接线')
     print('  D11A 字段验证: ALL PASS')
     svc.close()
     sys.exit(0)
