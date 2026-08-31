@@ -7,6 +7,8 @@
 #include <QStringList>
 #include <QTimer>
 #include <QUuid>
+#include <QVariantList>
+#include <QVariantMap>
 
 namespace kylin::memory::client::v1 {
 
@@ -121,6 +123,122 @@ bool MemoryViewModel::verifyOriginalTextIsolation() const
         }
     }
     return true;
+}
+
+// ── D7C 偏好编辑（版本历史与回滚）────────────────────────────────────────────
+
+void MemoryViewModel::loadPreferences(const QString& userId)
+{
+    QJsonObject payload;
+    payload.insert(QStringLiteral("user_id"), userId);
+    payload.insert(QStringLiteral("include_history"), false);
+    startPreferenceRequest(methods::kPreferenceList, PreferenceKind::List, payload,
+                           QStringLiteral("loading"));
+}
+
+void MemoryViewModel::loadPreferenceHistory(
+    const QString& userId, const QString& key, const QString& scope)
+{
+    QJsonObject payload;
+    payload.insert(QStringLiteral("user_id"), userId);
+    payload.insert(QStringLiteral("preference_key"), key);
+    payload.insert(QStringLiteral("preference_scope"), scope);
+    startPreferenceRequest(methods::kPreferenceHistory, PreferenceKind::History, payload,
+                           QStringLiteral("loading"));
+}
+
+void MemoryViewModel::createPreference(
+    const QString& userId,
+    const QString& key,
+    const QString& scope,
+    const QString& value,
+    bool isTemporary,
+    bool shouldPersist,
+    const QString& idempotencyKey)
+{
+    QJsonObject payload;
+    payload.insert(QStringLiteral("user_id"), userId);
+    payload.insert(QStringLiteral("preference_key"), key);
+    payload.insert(QStringLiteral("preference_scope"), scope);
+    payload.insert(QStringLiteral("preference_value"), value);
+    payload.insert(QStringLiteral("is_temporary"), isTemporary);
+    payload.insert(QStringLiteral("should_persist"), shouldPersist);
+    if (!idempotencyKey.isEmpty()) {
+        payload.insert(QStringLiteral("idempotency_key"), idempotencyKey);
+    }
+    startPreferenceRequest(methods::kPreferenceCreate, PreferenceKind::Create, payload,
+                           QStringLiteral("saving"));
+}
+
+void MemoryViewModel::updatePreference(
+    const QString& userId,
+    const QString& key,
+    const QString& scope,
+    const QString& newValue,
+    bool isTemporary,
+    bool shouldPersist,
+    const QString& idempotencyKey)
+{
+    QJsonObject payload;
+    payload.insert(QStringLiteral("user_id"), userId);
+    payload.insert(QStringLiteral("preference_key"), key);
+    payload.insert(QStringLiteral("preference_scope"), scope);
+    payload.insert(QStringLiteral("new_value"), newValue);
+    // HIGH-01：显式携带生命周期标志，防止临时偏好 update 时被缺省晋升为 active。
+    payload.insert(QStringLiteral("is_temporary"), isTemporary);
+    payload.insert(QStringLiteral("should_persist"), shouldPersist);
+    if (!idempotencyKey.isEmpty()) {
+        payload.insert(QStringLiteral("idempotency_key"), idempotencyKey);
+    }
+    startPreferenceRequest(methods::kPreferenceUpdate, PreferenceKind::Update, payload,
+                           QStringLiteral("saving"));
+}
+
+void MemoryViewModel::rollbackPreference(
+    const QString& userId,
+    const QString& key,
+    const QString& scope,
+    int targetVersion,
+    const QString& idempotencyKey)
+{
+    QJsonObject payload;
+    payload.insert(QStringLiteral("user_id"), userId);
+    payload.insert(QStringLiteral("preference_key"), key);
+    payload.insert(QStringLiteral("preference_scope"), scope);
+    payload.insert(QStringLiteral("target_version"), targetVersion);
+    if (!idempotencyKey.isEmpty()) {
+        payload.insert(QStringLiteral("idempotency_key"), idempotencyKey);
+    }
+    startPreferenceRequest(methods::kPreferenceRollback, PreferenceKind::Rollback, payload,
+                           QStringLiteral("saving"));
+}
+
+void MemoryViewModel::startPreferenceRequest(
+    const QString& method, PreferenceKind kind, const QJsonObject& payload,
+    const QString& stage)
+{
+    if (preferenceBusy_) {
+        setPreferenceError(QStringLiteral("A preference request is already in flight."));
+        setPreferenceStage(QStringLiteral("failed"));
+        return;
+    }
+    if (client_.connectionState() != MemoryClient::ConnectionState::Connected) {
+        setPreferenceError(QStringLiteral("Client is not connected."));
+        setPreferenceStage(QStringLiteral("failed"));
+        return;
+    }
+    const QString id = client_.sendRequest(method, payload);
+    if (id.isEmpty()) {
+        setPreferenceError(QStringLiteral("Failed to send preference request."));
+        setPreferenceStage(QStringLiteral("failed"));
+        return;
+    }
+    pendingPreferenceRequestId_ = id;
+    pendingPreferenceKind_ = kind;
+    setPreferenceBusy(true);
+    setPreferenceError({});
+    setPreferenceStage(stage);
+    armDeadlineTimer(id, kDefaultDeadlineMs);
 }
 
 // ── 死线计时器 ──────────────────────────────────────────────────────────────
@@ -403,6 +521,12 @@ void MemoryViewModel::onResponseReceived(
         setPostTurnBusy(false);
         setPostTurnStage(QStringLiteral("sent"));
     }
+
+    // D7C 偏好请求（preference.list/create/update/rollback/history）。
+    if (!pendingPreferenceRequestId_.isEmpty()
+        && requestId == pendingPreferenceRequestId_) {
+        handlePreferenceResponse(requestId, envelope);
+    }
 }
 
 void MemoryViewModel::onRequestFailed(
@@ -431,6 +555,18 @@ void MemoryViewModel::onRequestFailed(
         setPostTurnStage(errorCode == QString::fromUtf8(kErrClientTimeout)
                              ? QStringLiteral("timeout")
                              : QStringLiteral("failed"));
+    }
+
+    // D7C 偏好 pending 命中
+    if (!pendingPreferenceRequestId_.isEmpty()
+        && requestId == pendingPreferenceRequestId_) {
+        pendingPreferenceRequestId_.clear();
+        pendingPreferenceKind_ = PreferenceKind::None;
+        setPreferenceBusy(false);
+        setPreferenceError(safeMessage);
+        setPreferenceStage(errorCode == QString::fromUtf8(kErrClientTimeout)
+                               ? QStringLiteral("timeout")
+                               : QStringLiteral("failed"));
     }
 
     emit requestFailed(requestId, errorCode, safeMessage);
@@ -516,6 +652,127 @@ void MemoryViewModel::setPostTurnBusy(bool value)
     postTurnBusy_ = value;
     emit postTurnBusyChanged();
     if (oldBusy != (preChatBusy_ || postTurnBusy_)) { emit busyChanged(); }
+}
+
+// ── D7C 偏好编辑：setter / 响应路由 / 投影 ─────────────────────────────────
+
+void MemoryViewModel::setPreferenceItems(const QVariantList& value)
+{
+    if (preferenceItems_ == value) return;
+    preferenceItems_ = value;
+    emit preferenceItemsChanged();
+}
+
+void MemoryViewModel::setPreferenceHistory(const QVariantList& value)
+{
+    if (preferenceHistory_ == value) return;
+    preferenceHistory_ = value;
+    emit preferenceHistoryChanged();
+}
+
+void MemoryViewModel::setPreferenceBusy(bool value)
+{
+    if (preferenceBusy_ == value) return;
+    preferenceBusy_ = value;
+    emit preferenceBusyChanged();
+}
+
+void MemoryViewModel::setPreferenceError(const QString& value)
+{
+    if (preferenceError_ == value) return;
+    preferenceError_ = value;
+    emit preferenceErrorChanged();
+}
+
+void MemoryViewModel::setPreferenceStage(const QString& value)
+{
+    if (preferenceStage_ == value) return;
+    preferenceStage_ = value;
+    emit preferenceStageChanged();
+}
+
+void MemoryViewModel::setLastPreferenceAction(const QString& value)
+{
+    if (lastPreferenceAction_ == value) return;
+    lastPreferenceAction_ = value;
+    emit lastPreferenceActionChanged();
+}
+
+void MemoryViewModel::setLastPreferenceItem(const QJsonObject& value)
+{
+    if (lastPreferenceItem_ == value) return;
+    lastPreferenceItem_ = value;
+    emit lastPreferenceItemChanged();
+}
+
+void MemoryViewModel::handlePreferenceResponse(
+    const QString& requestId, const QJsonObject& envelope)
+{
+    Q_UNUSED(requestId)
+    const PreferenceKind kind = pendingPreferenceKind_;
+    pendingPreferenceRequestId_.clear();
+    pendingPreferenceKind_ = PreferenceKind::None;
+
+    ResponseParts parts{};
+    QString errCode;
+    QString errMsg;
+    if (!tryParseResponseStatus(envelope, &parts, &errCode, &errMsg)) {
+        setPreferenceBusy(false);
+        setPreferenceError(errMsg.isEmpty() ? errCode : errMsg);
+        setPreferenceStage(QStringLiteral("failed"));
+        return;
+    }
+
+    const QJsonObject data = parts.data;
+    switch (kind) {
+    case PreferenceKind::List:
+        setPreferenceItems(projectPreferenceItems(
+            data.value(QStringLiteral("items")).toArray()));
+        setPreferenceStage(QStringLiteral("ready"));
+        break;
+    case PreferenceKind::History:
+        setPreferenceHistory(projectPreferenceHistory(
+            data.value(QStringLiteral("items")).toArray()));
+        setPreferenceStage(QStringLiteral("ready"));
+        break;
+    case PreferenceKind::Create:
+    case PreferenceKind::Update:
+    case PreferenceKind::Rollback: {
+        setLastPreferenceAction(data.value(QStringLiteral("action")).toString());
+        setLastPreferenceItem(data.value(QStringLiteral("item")).toObject());
+        if (kind == PreferenceKind::Rollback) {
+            setPreferenceHistory(projectPreferenceHistory(
+                data.value(QStringLiteral("history")).toArray()));
+        }
+        setPreferenceStage(kind == PreferenceKind::Rollback
+                               ? QStringLiteral("rolled_back")
+                               : QStringLiteral("ready"));
+        break;
+    }
+    default:
+        break;
+    }
+    setPreferenceBusy(false);
+}
+
+QVariantList MemoryViewModel::projectPreferenceItems(const QJsonArray& items) const
+{
+    QVariantList out;
+    for (const QJsonValue& value : items) {
+        if (!value.isObject()) continue;
+        out.append(value.toObject().toVariantMap());
+    }
+    return out;
+}
+
+QVariantList MemoryViewModel::projectPreferenceHistory(const QJsonArray& items) const
+{
+    QVariantList out;
+    for (const QJsonValue& value : items) {
+        if (!value.isObject()) continue;
+        out.append(value.toObject().toVariantMap());
+    }
+    return out;
 }
 
 // ── 问题2修复：正式 MemoryContext 契约解析（memory_context.v1.json） ────────

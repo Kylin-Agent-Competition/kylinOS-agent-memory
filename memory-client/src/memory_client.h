@@ -100,6 +100,22 @@ public:
     // （若提供）；不再使用旧 {event_type,event_body} wrapper。
     Q_INVOKABLE QString sendTurnFinalizedEvent(const QJsonObject& eventJson);
 
+    // D7C 偏好 IPC 便捷方法（D 轨契约变更，随 D7C PR #87 落地）。
+    // payload 字段与 memory-service/gateway/preference_handlers.py 对齐：
+    //   - list:     user_id / preference_key? / preference_scope? / include_history?
+    //   - create:   user_id / preference_key / preference_scope / preference_value /
+    //               memory_status? / is_temporary? / should_persist? / evidence_event_ids?
+    //   - update:   user_id / preference_key / preference_scope / new_value /
+    //               memory_status? / evidence_event_ids?
+    //   - rollback: user_id / preference_key / preference_scope / target_version(int)
+    //   - history:  user_id / preference_key / preference_scope
+    // idempotency_key 可在 payload 内提供（服务端亦接受 envelope 顶层）。
+    Q_INVOKABLE QString sendPreferenceListRequest(const QJsonObject& payload);
+    Q_INVOKABLE QString sendPreferenceCreateRequest(const QJsonObject& payload);
+    Q_INVOKABLE QString sendPreferenceUpdateRequest(const QJsonObject& payload);
+    Q_INVOKABLE QString sendPreferenceRollbackRequest(const QJsonObject& payload);
+    Q_INVOKABLE QString sendPreferenceHistoryRequest(const QJsonObject& payload);
+
 signals:
     void socketPathChanged();
     void connectionStateChanged();

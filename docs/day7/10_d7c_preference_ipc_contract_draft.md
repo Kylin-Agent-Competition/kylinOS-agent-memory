@@ -1,0 +1,67 @@
+# D7-C 偏好 IPC 契约建议草案（供 D 轨对齐）
+
+> 状态：`CANDIDATE_SYNC`（建议草案，仅供 D 轨对齐的起点，**不冻结任何契约 / IPC / 数据库结构**）。
+> 作者：高翌哲（B 轨代 D7-C）。本文件不替 D 轨冻结 FRZ-IPC-007 路由表、payload schema 或 DB DDL。
+> 目标：缩小 D 轨与 C 轨对“偏好增改 / 历史 / 回滚”接口的交界缝隙，便于 D 轨落地持久化与 IPC 方法后 D7-C 实现 UI。
+>
+> **状态更新（2026-08-31，D7C PR #87，含 REWORK 返工）**：本草案已获用户授权落地为 D 轨契约变更，随 D7C PR #87 实现——
+> `memory-service/gateway/preference_handlers.py` 新增 `preference.list / create / update / rollback / history` 五个方法；**契约冻结前（ADR-016 待立项）采用条件注册**：production 默认不注册（未注册 → `UNSUPPORTED_METHOD`），仅 `--register-preference-handlers` 显式激活（test/validation/demo profile），对齐 turn.finalized seam 模式（HIGH-1 返工）。与草案的差异如实记录：
+> ① D7D 持久化模型无 `category / explicitness / confidence` 列，故 payload 未包含这些字段（E 轨 Schema 未终审，不制造不可持久化字段）；
+> ② `memory_status` 未显式传入时按 D3 §7.9 安全默认推导（临时/不持久化 → candidate，否则 active），显式传入则校验六值枚举；`is_temporary / should_persist` 显式 `isinstance(bool)` 校验，字符串 `"false"` 直接拒绝（MEDIUM-2 返工）；E 轨 `preference_version_policy` 的业务决策未在 handler 内实现（本模块不实现 E 轨策略）；
+> ③ 错误码沿用 FRZ-IPC-002 五枚举：偏好领域异常（版本不存在 / 幂等冲突 / 证据冲突）统一映射为 `INVALID_REQUEST`。
+>
+> **身份隔离声明（MEDIUM-01）**：当前实现为「Repository `user_id` 过滤 + handler payload 一致性校验」双层数据隔离；**可信调用者身份 → `RequestContext.user_id` 的绑定未实现**（QML 可输入 user_id、生产 Gateway 未注入可信身份），登记为 **ADR-016 / production activation gate**，不宣称验收 5.7 完整闭环。
+>
+> **与 #93 的关系（HIGH-2 声明）**：#93（baconzha，C 轨）以 `preference.version.commit/history/rollback` 候选命名实现 memory-client 侧 Demo/Prototype；本 PR（#87，B 代 C）以 `preference.*` 命名实现服务端 handler + 客户端 + L2 证据。两者均为**候选、均未 production 激活**，FRZ-IPC-007 路由表在冻结前无实际冲突；建议由 D/E 在 ADR-016 立项时统一命名（`preference.*` 或 `preference.version.*`）与页面归属，届时以冻结契约为准。本 PR 不修改、不关闭 #93。
+>
+> **HIGH-2 收敛决策（2026-08-31，用户确认路线 A）**：保留本 PR（#87）的 `preference.*` 命名 + 服务端实现 + L2 证据作为 D7-C 实现路线；#93（`preference.version.*`）视为 memory-client 侧候选 Demo；方法命名与页面归属由 D/E 在 ADR-016 立项时统一，届时以冻结契约为准；本 PR 不合并、不修改、不关闭 #93。
+
+## 一、依据来源
+
+| 来源 | 关键语义 |
+|------|----------|
+| `memory-service/domain/preference.py` | `Preference` 字段：`preference_id / user_id / expression_type / preference_scope / preference_key / preference_value / confidence_score / memory_status / is_active / is_temporary / should_persist / should_decay / evidence_event_ids / version / created_at / updated_at / requires_confirmation`；可选 `previous_version_id / decay_after_at / extracted_entities`；校验器 `_version_chain / _temporary_boundary / _time_order` |
+| `memory-service/domain/enums.py` | `PreferenceScope` 五值 `global/topic/tool/session/time_window`；`MemoryStatus` 六值 `active/superseded/deprecated/expired/removed/candidate` |
+| `memory-service/service/preference_version_policy.py` | 五种业务动作 `CREATE/COEXIST/UPDATE/NO_OP/ROLLBACK` + `REJECTED` 防御态；fixed reason_code 集合；版本号 `max(现存)/+1`、`previous_version_id`、历史保留、rollback 不删中间版本 |
+| `memory-service/db/repositories.py`（D7D #90，`origin/main@c1ee840`） | 持久化真源：`save_preference_version(conn,*, user_id, preference_key, preference_scope, preference_value, memory_status, evidence_fingerprint, idempotency_key?, request_fingerprint)`；`get_preference_version(conn,*, user_id, preference_version_id:int)`；`get_current_preference_version(conn,*, user_id, preference_key, preference_scope)`；`list_preference_versions(conn,*, user_id, preference_key, preference_scope)`；`rollback_preference_version(conn,*, user_id, preference_version_id:int, idempotency_key?, request_fingerprint)`。聚合键为 `memory_items`（user_id+key+scope），版本号与链由 `memory_versions`（`version / previous_version_id / rollback_of_version_id / is_current`）承载；回滚=追加新 current 版本，不覆盖历史 |
+| `migrations/versions/20260831_preference_versions.py`（D7D #90） | 表：`memory_items`（`current_version_id` 指针、`uq_memory_items_user_key_scope` 唯一、`ck_memory_items_preference_scope` 五值 CHECK）；`memory_versions`（`uq_memory_versions_item_version` 唯一、`uq_memory_versions_current` 部分唯一 `is_current=1`、`idx_memory_versions_idempotency/evidence/status`）；`memory_version_receipts`（回滚/审计 operation_kind） |
+| `memory-service/retrieval/contracts.py` | 既有检索 filter 字段：`scene_id / allowed_scene_ids / include_unscoped / as_of / valid_from / valid_to` |
+| E 轨验收 `day7-e-ui-version-acceptance-v1.md` | C 轨 UI 需呈现 CREATE/COEXIST/UPDATE/NO_OP/ROLLBACK + 临时偏好 + 跨用户隔离 |
+
+## 二、建议的 IPC 方法（`CANDIDATE_SYNC`，非冻结）
+
+沿用 FRZ-IPC-006 envelope（`protocol_version / request_id / trace_id / method / deadline_ms / idempotency_key? / payload`）。建议新增以下方法（供 D 轨决策，命名可按 D 轨惯例调整）：
+
+| 建议 method | 请求 payload 关键字段 | 响应 `data` 关键字段 | 说明 |
+|-------------|----------------------|----------------------|------|
+| `preference.list` | `user_id`、`scope?`、`key?`、`include_history` | `items[]`（含 `version` / `memory_status` / `previous_version_id` / `created_at` / `updated_at`） | 列出当前用户偏好及其历史版本链 |
+| `preference.create` | `user_id`、`key`、`value`、`scope`、`category`、`explicitness`、`is_temporary`、`should_persist`、`confidence`、`evidence_event_ids` | `item`（首版 `version=1`、`previous_version_id=None`） | 触发 CREATE / COEXIST（由策略而非 UI 决定） |
+| `preference.update` | `user_id`、`key`、`scope`、`new_value`、`idempotency_key` | `item`（`version` 递增、`previous_version_id` 指向当前 active） | 触发 UPDATE / NO_OP（值相同则不增版本） |
+| `preference.rollback` | `user_id`、`key`、`scope`、`target_version`、`idempotency_key` | `item`（**追加新 current 版本**，值恢复为目标版本）+ `history` | `target_version` 为同一 user/key/scope 链内正整数版本号；handler 先解析为 D7D `preference_version_id`，再触发 ROLLBACK；中间历史版本保留，不改写历史（`PENDING_D_E_ALIGNMENT`，见下） |
+| `preference.history` | `user_id`、`key`、`scope` | `items[]`（全版本链，含 superseded） | 供 UI 渲染历史列表 |
+
+> 对齐说明（D7D #90 已合入）：以上 `preference.list` 对应新增的 `list_preference_items`（按用户枚举条目，UI 列表）；`preference.history` 对应 `list_preference_versions`（单 key+scope 全版本链）；`preference.create / update` 对应 `save_preference_version`（`memory_status` 由 E 轨策略决定，`evidence_fingerprint / request_fingerprint / idempotency_key` 由 handler 或调用方产生，见下）；`preference.rollback` 的 IPC 输入仅为 `target_version:int`，handler 在同一 user/key/scope 历史链中查找该版本，再把所得 D7D `preference_version_id:int` 传给 `rollback_preference_version`（不接受未实现的 `target_version_id` 字段）。D7C 只消费结果，`memory_status`、是否 `active/superseded`、版本号递增、`is_current` 唯一性均由 D 轨 Repository/策略保证。
+
+## 三、建议 payload 字段与契约约束（非冻结）
+
+- **用户隔离**：所有 method 均显式携带 `user_id`；服务端强制以 `user_id` 隔离过滤，跨用户一律拒绝（D3 §7.1）。
+- **版本链**：`version=1` → `previous_version_id=None`；`version>1` → 必填（`_version_chain`）。`current_version` 指向链内唯一 active。
+- **版本号单调**：`next_version = max(同 user_id+key+scope 链内全部现存记录的 version)+1`，含历史 superseded，不回用旧号（对应 TD-023）。
+- **临时/长期边界**：`is_temporary=true` 或 `should_persist=false` 时 `memory_status` 只能在 `candidate/expired`，不得晋升 active（D3 §7.9）。
+- **NO_OP**：同 key+scope+value 相同 → 不产生新版本、不推进 `current_version`。
+- **ROLLBACK**：**追加新 current 版本**（`rollback_of_version_id` 指向目标历史版本，值恢复为目标版本；不原地切换指针、不改写历史），中间版本保留不删除；目标必须是同 user_id+key+scope 链内历史版本。> 语义统一说明：本草案与 D7D #90 实际实现（`rollback_preference_version` = 追加新 current）已对齐；「切换指针」表述废弃，标记 `PENDING_D_E_ALIGNMENT`（待 D/E 冻结后回写任务卡）。
+- **时间**：`created_at/updated_at/valid_from/valid_to/as_of` 均为 aware UTC，半开区间 `valid_from <= as_of < valid_to`（空边界不限）。
+- **回滚后再次 UPDATE**：仍按链内 `max(version)+1`，避免版本号复用。
+
+## 四、与 D 轨的待确认点
+
+1. 新增方法是否纳入 FRZ-IPC-007 路由表（D 轨决策），还是复用 `memory.retrieve` / 既有方法？
+2. `current_version` 指针与版本链维护：D7D **已实现**（`memory_items.current_version_id` + `memory_versions`，`origin/main@c1ee840`），C 轨只消费结果；需 D 轨确认 handler 复用此接口时 `user_id` 强制过滤与跨用户拒绝语义不变。
+3. `idempotency_key` / `request_fingerprint` 是否由偏好 IPC 写 handler 沿用 D7D 幂等语义（本次自 D 轨确认）；D7C 调用方是否须随写请求携带 `idempotency_key`。
+4. `memory_status` 取值与“临时→长期”边界：D7D `save_preference_version` 要求 `memory_status`，但其 CHECK 约束仅限 `active/superseded/deprecated/expired/removed/candidate`；由 E 轨策略决定并传值，D7C 不自行判定；需 D 轨确认 handler 如何调用 E 轨 `preference_version_policy` 或在持久化层前置定型。
+5. 错误码是否沿用 FRZ-IPC-002 五枚举（`UNSUPPORTED_METHOD / INVALID_REQUEST / PROTOCOL_ERROR / TIMEOUT / INTERNAL_ERROR`），还是需为“版本冲突 / 回滚目标不存在”（D7D `PreferenceVersionNotFoundError / IdempotencyConflictError / EvidenceConflictError`）等新增语义（D 轨决策）。
+
+## 五、结论
+
+- 本文件是 D7-C 工作清单第 2 项「确定偏好 CRUD / 历史 / 回滚的 IPC 方法与 payload 契约」的**建议起点**；已随 D7C PR #87（用户授权 D 轨契约变更）落地为 `preference.*` 方法（见文件头状态更新），方法名与 payload 语义与本草案一致。
+- D7D `save/get_current/list/rollback_preference_version` 已就绪（`origin/main@c1ee840`）；D7-C 第 3–5 项实现与 L0 测试已写入，第 6–7 项（跨会话联调 / 麒麟 L2）待 VM 执行后补充证据。
