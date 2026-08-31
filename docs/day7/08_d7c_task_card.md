@@ -87,7 +87,7 @@
 
 总进度：6/7（86%）。工作项 7（麒麟 L2 验证）已完成，见 `docs/day7/11_d7c_l2_verification_20260831.md`；工作项 6 宿主 AI 助手跨会话联调仍未执行。工作项 1–5 已在 D7C PR #87 中落地：D 轨偏好 IPC 方法（`preference.*`，用户授权）实现并注册；服务端 L0 handler 测试 10/10 通过、相关回归 201/201 通过；客户端 `MemoryClient / MemoryViewModel / PreferenceEditorPage.qml` 与 L0 Mock 测试已写入（C++ 编译由 CI `memory-client L0 ctest` 验证，本机无 Qt 无法编译）。工作项 7 的麒麟 L2（pytest/ctest/真实 IPC）已执行并归档证据；工作项 6 的宿主 AI 助手跨会话联调仍需另行联调。
 
-> 前置核对结论（v3 更新）：D7D #90 已合入，默认分支已具 `memory_items / memory_versions / memory_version_receipts` 版本链与 `save/get_current/list/rollback_preference_version` Repository；偏好 IPC 方法已由 D7C PR #87 实现（`memory-service/gateway/preference_handlers.py`，production 默认注册），不再是阻塞。详见 `docs/day7/09_d7c_prerequisite_audit.md`。
+> 前置核对结论（v3 更新）：D7D #90 已合入，默认分支已具 `memory_items / memory_versions / memory_version_receipts` 版本链与 `save/get_current/list/rollback_preference_version` Repository；偏好 IPC 方法已由 D7C PR #87 实现（**条件注册**：production 默认不注册 → UNSUPPORTED_METHOD，`--register-preference-handlers` 显式激活）。**剩余待确认（不再表述为单一硬依赖）**：UI 所需字段（category / confidence / evidence_event_ids 等）与 D7D 真源的映射、用户偏好集合枚举（已补 `list_preference_items`，字段映射待 D/E 确认）、ROLLBACK 语义（`PENDING_D_E_ALIGNMENT`）。详见 `docs/day7/09_d7c_prerequisite_audit.md` 与 `10_d7c_preference_ipc_contract_draft.md`。
 
 ### 工作项状态补充（同步实现进度）
 

@@ -45,7 +45,7 @@
 ## 五、结论（随 D7C PR #87 更新）
 
 - **持久化前置已解除**：D7D #90 已把偏好版本持久化（`memory_items / memory_versions / memory_version_receipts` + Repository）合入默认分支。
-- **偏好 IPC 方法原为唯一硬依赖，已由 D7C PR #87 落地**（用户授权 D 轨契约变更）：`preference.list/create/update/rollback/history` 已实现并注册，客户端接口与 QML 页面已编写。
+- **偏好 IPC 方法原为唯一硬依赖，已由 D7C PR #87 落地**（用户授权 D 轨契约变更）：`preference.list/create/update/rollback/history` 已实现（**条件注册**：production 默认不注册，`--register-preference-handlers` 显式激活），客户端接口与 QML 页面已编写；**UI 所需字段（category / confidence / evidence_event_ids 等）与 D7D 真源的映射、用户偏好集合枚举（已补 `list_preference_items`）仍待 D/E 确认**（不再表述为单一硬依赖已全部解除）。
 - **剩余未完成**：工作项 6（跨会话行为输入联调）与工作项 7 的麒麟 L2 真实交互验证，需在银河麒麟 VM 执行后补充证据；C++/QML 编译由 CI `memory-client L0 ctest` 验证（本机无 Qt）。
 - 已完成的实质产物：本核对结论（第 1、2 项，已按 `c1ee840` 复核）+ D7C PR #87 实现批次。
 
