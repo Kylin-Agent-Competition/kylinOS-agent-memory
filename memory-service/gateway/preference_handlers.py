@@ -95,18 +95,30 @@ def _require_user_id(payload: Dict[str, Any], ctx: RequestContext) -> str:
 
 
 def _resolve_memory_status(payload: Dict[str, Any]) -> str:
-    raw = payload.get("memory_status")
-    if raw is not None:
-        if raw not in ALLOWED_MEMORY_STATUS:
-            raise RequestValidationError("invalid memory_status")
-        return raw
-    # D3 §7.9 安全默认：临时/不持久化要求不得晋升正式长期偏好。
-    # [I-1] 显式类型校验：字符串 "false" 不得被 bool() 自动转为 True（MEDIUM-2 返工）。
+    """解析 memory_status。
+
+    - [I-1] 显式类型校验：字符串 "false" 不得被 bool() 自动转为 True（MEDIUM-2 返工）。
+    - D3 §7.9：is_temporary=true 或 should_persist=false 时，memory_status 只能为
+      candidate/expired，不得晋升 active（HIGH-01 返工：即使显式传入 memory_status
+      也必须与临时/持久化生命周期标志做冲突校验）。
+    - 未显式传入时按 D3 §7.9 安全默认推导（临时/不持久化 → candidate，否则 active）。
+    """
     is_temporary = payload.get("is_temporary", False)
     should_persist = payload.get("should_persist", True)
     if not isinstance(is_temporary, bool) or not isinstance(should_persist, bool):
         raise RequestValidationError("is_temporary/should_persist must be boolean")
-    return "candidate" if (is_temporary or not should_persist) else "active"
+    temporary_lifecycle = is_temporary or not should_persist
+
+    raw = payload.get("memory_status")
+    if raw is not None:
+        if raw not in ALLOWED_MEMORY_STATUS:
+            raise RequestValidationError("invalid memory_status")
+        if temporary_lifecycle and raw not in ("candidate", "expired"):
+            raise RequestValidationError(
+                "memory_status conflicts with is_temporary/should_persist (D3 §7.9)"
+            )
+        return raw
+    return "candidate" if temporary_lifecycle else "active"
 
 
 def _resolve_idempotency_key(payload: Dict[str, Any], ctx: RequestContext) -> Optional[str]:

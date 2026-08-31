@@ -10,6 +10,8 @@
 > ② `memory_status` 未显式传入时按 D3 §7.9 安全默认推导（临时/不持久化 → candidate，否则 active），显式传入则校验六值枚举；`is_temporary / should_persist` 显式 `isinstance(bool)` 校验，字符串 `"false"` 直接拒绝（MEDIUM-2 返工）；E 轨 `preference_version_policy` 的业务决策未在 handler 内实现（本模块不实现 E 轨策略）；
 > ③ 错误码沿用 FRZ-IPC-002 五枚举：偏好领域异常（版本不存在 / 幂等冲突 / 证据冲突）统一映射为 `INVALID_REQUEST`。
 >
+> **身份隔离声明（MEDIUM-01）**：当前实现为「Repository `user_id` 过滤 + handler payload 一致性校验」双层数据隔离；**可信调用者身份 → `RequestContext.user_id` 的绑定未实现**（QML 可输入 user_id、生产 Gateway 未注入可信身份），登记为 **ADR-016 / production activation gate**，不宣称验收 5.7 完整闭环。
+>
 > **与 #93 的关系（HIGH-2 声明）**：#93（baconzha，C 轨）以 `preference.version.commit/history/rollback` 候选命名实现 memory-client 侧 Demo/Prototype；本 PR（#87，B 代 C）以 `preference.*` 命名实现服务端 handler + 客户端 + L2 证据。两者均为**候选、均未 production 激活**，FRZ-IPC-007 路由表在冻结前无实际冲突；建议由 D/E 在 ADR-016 立项时统一命名（`preference.*` 或 `preference.version.*`）与页面归属，届时以冻结契约为准。本 PR 不修改、不关闭 #93。
 >
 > **HIGH-2 收敛决策（2026-08-31，用户确认路线 A）**：保留本 PR（#87）的 `preference.*` 命名 + 服务端实现 + L2 证据作为 D7-C 实现路线；#93（`preference.version.*`）视为 memory-client 侧候选 Demo；方法命名与页面归属由 D/E 在 ADR-016 立项时统一，届时以冻结契约为准；本 PR 不合并、不修改、不关闭 #93。

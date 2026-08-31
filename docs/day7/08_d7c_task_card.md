@@ -74,6 +74,8 @@
 
 **E 轨补审关切（非阻断但实现阶段必须双层落实）**：验收 5.7 跨用户历史不可见、不可回滚、不可修改，不能在 UI 层仅做隐藏；必须在 Repository（`user_id` 强制过滤）与 UI 双层落实。实际实现时将在保留 D7D Repository 的 `user_id` 过滤语义前提下，再由 UI 层做显示隔离。
 
+**身份隔离声明（MEDIUM-01，lovezy0730-create 第二轮）**：当前已验证 Repository 按 `user_id` 过滤 + handler payload 一致性校验（双层数据隔离），但**尚未验证「可信调用者身份 → `RequestContext.user_id`」绑定**（QML 中 user_id 仍可由用户输入、生产 Gateway 未注入可信身份）。因此**不宣称验收 5.7 已完整闭环**；「可信调用者身份绑定」登记为 **ADR-016 / production activation gate**（候选契约未激活前不扩大为 UDS 认证工程）。
+
 ## 五、工作清单（初始进度）
 
 | 序号 | 工作项 | 类型 | 依赖 | 验证方式 | 状态 |
@@ -118,3 +120,4 @@
 | v4 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 麒麟 L2 验证批次：D7C 克隆（`Kylin-V11-2603-D7C-aaed155-Test`）上执行 memory-service 全量 pytest（1281 passed/49 skipped）、memory-client L0 ctest（4/4，含 d7c_preference_editor）、网关级真实 IPC 冒烟（9/9 PASS）；新增 `11_d7c_l2_verification_20260831.md`；工作项 7 完成，工作项 6 宿主 AI 助手跨会话联调待做 |
 | v5 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | REWORK 返工批次（Ducknesses）：HIGH-1 契约治理——`preference.*` 改为条件注册（默认不注册→UNSUPPORTED_METHOD，`--register-preference-handlers` 显式激活）；HIGH-2——显式声明与 #93（`preference.version.*` 候选）的关系与取舍；HIGH-01——10 号草案统一 ROLLBACK=追加新 current 版本并标 `PENDING_D_E_ALIGNMENT`；MEDIUM-1——`preference.list` 文档对齐 `list_preference_items`；MEDIUM-2——`is_temporary/should_persist` 显式 bool 校验 + 负测试；MEDIUM-03——PR body 同步实现批次状态 |
 | v6 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | HIGH-2 收敛决策：用户确认路线 A——保留本 PR `preference.*` 为 D7-C 实现路线，#93 视为客户端候选 Demo，命名/页面归属由 D/E 在 ADR-016 统一；同步 08/09 表述（条件注册、字段映射/集合枚举/ROLLBACK 语义待 D/E 确认） |
+| v7 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 第二轮 REWORK（lovezy0730-create，0f05462）：HIGH-01——`_resolve_memory_status` 增加 D3 §7.9 冲突校验（is_temporary/should_persist 与显式 memory_status 冲突拒绝）；客户端 `updatePreference`/QML 显式携带生命周期标志；补 3 个测试；MEDIUM-01——身份隔离声明（可信调用者身份 → RequestContext.user_id 登记为 ADR-016/production gate，不宣称 5.7 完整闭环）；MEDIUM-02——L2 证据在最终 HEAD 重跑并绑定真实命令/SHA |

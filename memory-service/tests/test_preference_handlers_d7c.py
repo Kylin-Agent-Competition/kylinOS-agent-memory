@@ -287,6 +287,53 @@ def test_default_registry_does_not_register_preference_methods():
         reg.route("preference.create")
 
 
+def test_temporary_update_does_not_promote_to_active(engine, registry):
+    """[HIGH-01] temporary create -> update 后仍为 candidate，不得缺省晋升 active。"""
+    created = _call(
+        registry,
+        "preference.create",
+        {"user_id": "u1", "preference_key": "k", "preference_scope": "global",
+         "preference_value": "v1", "is_temporary": True, "should_persist": False},
+        idempotency_key="idem-1",
+    )
+    assert created["item"]["memory_status"] == "candidate"
+
+    updated = _call(
+        registry,
+        "preference.update",
+        {"user_id": "u1", "preference_key": "k", "preference_scope": "global",
+         "new_value": "v2", "is_temporary": True, "should_persist": False},
+        idempotency_key="idem-2",
+    )
+    assert updated["item"]["memory_status"] == "candidate"
+
+
+def test_explicit_memory_status_conflicts_with_temporary_flags(engine, registry):
+    """[HIGH-01] is_temporary=true / should_persist=false 与 memory_status=active 冲突必须拒绝。"""
+    with pytest.raises(RequestValidationError):
+        _call(
+            registry,
+            "preference.create",
+            {"user_id": "u1", "preference_key": "k", "preference_scope": "global",
+             "preference_value": "v", "is_temporary": True, "memory_status": "active"},
+        )
+    with pytest.raises(RequestValidationError):
+        _call(
+            registry,
+            "preference.create",
+            {"user_id": "u1", "preference_key": "k", "preference_scope": "global",
+             "preference_value": "v", "should_persist": False, "memory_status": "active"},
+        )
+    with pytest.raises(RequestValidationError):
+        _call(
+            registry,
+            "preference.update",
+            {"user_id": "u1", "preference_key": "k", "preference_scope": "global",
+             "new_value": "v", "is_temporary": True, "should_persist": False,
+             "memory_status": "active"},
+        )
+
+
 def test_validation_errors(engine, registry):
     with pytest.raises(RequestValidationError):
         _call(registry, "preference.create", {"preference_key": "k", "preference_scope": "global", "preference_value": "v"})

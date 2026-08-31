@@ -61,6 +61,8 @@ Page {
             keyField.text.trim(),
             scopeCombo.currentText,
             valueField.text,
+            tempCheck.checked,
+            persistCheck.checked,
             idemField.text.trim())
     }
 

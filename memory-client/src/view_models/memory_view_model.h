@@ -210,11 +210,15 @@ public:
         bool shouldPersist,
         const QString& idempotencyKey);
     // 更新偏好值（preference.update）。
+    // isTemporary/shouldPersist 为临时/持久化生命周期标志，必须显式携带：
+    // 防止临时偏好因字段缺省在 update 时错误晋升为 active（D3 §7.9，HIGH-01）。
     Q_INVOKABLE void updatePreference(
         const QString& userId,
         const QString& key,
         const QString& scope,
         const QString& newValue,
+        bool isTemporary,
+        bool shouldPersist,
         const QString& idempotencyKey);
     // 回滚到历史版本（preference.rollback）。
     Q_INVOKABLE void rollbackPreference(

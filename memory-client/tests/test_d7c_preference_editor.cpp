@@ -184,6 +184,14 @@ void D7cPreferenceEditorTest::updatePreferenceSendsNewValuePayload()
                     client::error_codes::kInvalidRequest,
                     QStringLiteral("bad new_value"));
             }
+            // HIGH-01：update payload 必须显式携带生命周期标志，防止临时偏好缺省晋升 active。
+            if (!parts.payload.value(QStringLiteral("is_temporary")).isBool()
+                || !parts.payload.value(QStringLiteral("should_persist")).isBool()) {
+                return client::buildErrorResponse(
+                    parts.requestId, parts.traceId,
+                    client::error_codes::kInvalidRequest,
+                    QStringLiteral("missing lifecycle flags"));
+            }
             QJsonObject item{
                 {QStringLiteral("preference_version_id"), 2},
                 {QStringLiteral("version"), 2},
@@ -215,6 +223,8 @@ void D7cPreferenceEditorTest::updatePreferenceSendsNewValuePayload()
                         QStringLiteral("response.language"),
                         QStringLiteral("global"),
                         QStringLiteral("英文"),
+                        false,   // isTemporary
+                        true,    // shouldPersist
                         QStringLiteral("idem-2"));
     QTRY_COMPARE_WITH_TIMEOUT(vm.preferenceStage(), QStringLiteral("ready"), 5000);
     QCOMPARE(vm.lastPreferenceAction(), QStringLiteral("update"));
@@ -223,6 +233,8 @@ void D7cPreferenceEditorTest::updatePreferenceSendsNewValuePayload()
     QCOMPARE(req.method, client::methods::kPreferenceUpdate);
     QCOMPARE(req.payload.value(QStringLiteral("new_value")).toString(),
              QStringLiteral("英文"));
+    QCOMPARE(req.payload.value(QStringLiteral("is_temporary")).toBool(), false);
+    QCOMPARE(req.payload.value(QStringLiteral("should_persist")).toBool(), true);
     mock.close();
 }
 

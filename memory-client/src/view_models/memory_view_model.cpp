@@ -175,6 +175,8 @@ void MemoryViewModel::updatePreference(
     const QString& key,
     const QString& scope,
     const QString& newValue,
+    bool isTemporary,
+    bool shouldPersist,
     const QString& idempotencyKey)
 {
     QJsonObject payload;
@@ -182,6 +184,9 @@ void MemoryViewModel::updatePreference(
     payload.insert(QStringLiteral("preference_key"), key);
     payload.insert(QStringLiteral("preference_scope"), scope);
     payload.insert(QStringLiteral("new_value"), newValue);
+    // HIGH-01：显式携带生命周期标志，防止临时偏好 update 时被缺省晋升为 active。
+    payload.insert(QStringLiteral("is_temporary"), isTemporary);
+    payload.insert(QStringLiteral("should_persist"), shouldPersist);
     if (!idempotencyKey.isEmpty()) {
         payload.insert(QStringLiteral("idempotency_key"), idempotencyKey);
     }
