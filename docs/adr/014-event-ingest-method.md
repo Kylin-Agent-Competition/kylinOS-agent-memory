@@ -1,15 +1,17 @@
 # ADR-014：新增 `event.ingest` IPC 写方法（FRZ-IPC-007 / D6-D 扩展）
 
-- **状态**：✅ D 已决策（2026-08-31，方案 A）；REWORK 修订 v3（按 Review #83 Reviewer E 第三轮意见重冻结）；待 Reviewer E 签署
-- **日期**：2026-08-31（v3 修订同日）
+- **状态**：✅ D 已决策（2026-08-31，方案 A）；REWORK 修订 v4（按 Review #83 Reviewer E 第四轮意见重冻结）；待 Reviewer E 签署
+- **日期**：2026-08-31（v4 修订同日）
 - **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
 - **责任轨道**：D（IPC）为主，A/E 协作（编排现有 pipeline / admission，不复制真源）
-- **决策版本**：`event-ingest-method-v3`
+- **决策版本**：`event-ingest-method-v4`
 - **适用范围**：FRZ-IPC-007 顶层方法路由表；关联 `docs/adr/013-source-events-table.md`（落库表）、`memory-service/pipeline/schemas.py`（MemorySourceEvent 输入真源）、`memory-service/security/source_admission.py`（准入）、FRZ-IPC-002/005/006、ADR-010（turn.finalized 先例）、ADR-013
 
 > **v2 修订摘要（Review #83 REWORK 第一轮处置）**：① payload 统一为 **flat**（对齐 MemorySourceEvent，删除 `payload.metadata.*` 嵌套口径）；② 新增 Gateway `RequestContext` → `ServiceRequestContext` 转换步骤与身份可信源冻结；③ `consent_scope=none` 由 D 轨 handler 前置 REJECT；④ 指纹去重改"保留事件+标记"；⑤ event_id 对齐全局唯一（ADR-013）；⑥ 编排删除 outbox 同事务表述；⑦ schema_version 仅接受精确 `0.1`；⑧ ADR 编号从 013 重排为 014。
 
 > **v3 修订摘要（Review #83 Reviewer E 第三轮意见处置）**：① event_id 冲突区分「幂等重放 vs identity collision」——immutable identity 一致返回首次持久化结果（含既有 admission），不一致抛 `EventIdentityConflict` → `INVALID_REQUEST`（HIGH-01）；② 可信身份文案修正——payload 身份仅属事件声明，非独立可信身份源，「与 envelope 请求级身份一致」为不可实现表述删除；production ACTIVE 前必须以独立 trusted host identity + fail-close 比对为硬门禁（MEDIUM-02）；③ `schema_version` 界定为 event.ingest 的 **IPC required override**，handler 在校验前显式检查 payload 包含该字段（MEDIUM-04）；④ 响应区分 `duplicate_reason=idempotent_replay / content_duplicate`（MEDIUM-06）；⑤ 落库 `processing_status` 首次一律 `pending`，REJECT/AUDIT_ONLY 不落 extracting（MEDIUM-01）。
+
+> **v4 修订摘要（Review #83 Reviewer E 第四轮意见处置）**：① **请求级幂等补全 request_fingerprint 语义**——`same (user,session,idempotency_key) + same request fingerprint → cache replay`；`same triple + different request fingerprint → IdempotencyConflictError → INVALID_REQUEST`；场景「idem_1/evt_A 后 idem_1/evt_B」→ 冲突拒绝（HIGH-02）；② **事务边界冻结为 `UoW.execute_idempotent(...)` 单事务**：请求级幂等检查 + event collision + pipeline/admission + `source_event` 写入 + response cache **同一事务完成**；「source_events 独立事务」= 不与 Outbox 同事务，非与 idempotency_cache 拆两事务（HIGH-02）；③ immutable identity 对齐 ADR-013 v4 重定义（排除 idempotency_key/session_id，纳入 actor_id，统一 occurred_at canonicalization）——**禁止复用脆弱 content_fingerprint 作为身份**（HIGH-01，适配 ADR-013）；④ 敏感/security/consent reject 事件正文 NULL 时 `content_fingerprint` 亦为 NULL（HIGH-03）；⑤ `content_summary` 冻结「调用方已脱敏声明 ≠ 系统生成摘要」provenance 门禁——ACTIVE 前置 Host Adapter 必须产生经受控 sanitization/summarization 的 content_summary，禁止直映宿主原文（MEDIUM-05）；⑥ 事件碰撞处置固定顺序统一为「schema precheck → pipeline 纯计算 → identity compare → replay 跳过准入/落库」（MEDIUM-01）。
 
 ---
 
@@ -56,13 +58,15 @@ FRZ-IPC-007 路由表新增写方法 `event.ingest`，payload 对齐 A 轨 `Memo
 
 ## 决策
 
-选择方案 A：`event-ingest-method-v3`。**FRZ-IPC-007 路由表新增写方法 `event.ingest`（payload = A 轨 `MemorySourceEvent` 字段形成的 IPC 映射契约），Gateway handler 编排 `EventPipeline.process` → D 轨 consent 前置判定 → `SourceAdmissionPolicy.evaluate` → `source_events` 落库（ADR-013 表）；`turn.finalized` 保持专用语义不动；production 默认不注册（标 `CANDIDATE / BLOCKED_BY_HOST_MAPPING`），test/validation profile 显式注册。**
+选择方案 A：`event-ingest-method-v4`。**FRZ-IPC-007 路由表新增写方法 `event.ingest`（payload = A 轨 `MemorySourceEvent` 字段形成的 IPC 映射契约），Gateway handler 编排 `EventPipeline.process` → D 轨 consent 前置判定 → `SourceAdmissionPolicy.evaluate` → `source_events` 落库（ADR-013 表）——全部经 `UoW.execute_idempotent` 单事务完成（HIGH-02）；`turn.finalized` 保持专用语义不动；production 默认不注册（标 `CANDIDATE / BLOCKED_BY_HOST_MAPPING`），test/validation profile 显式注册。**
 
 本 ADR 冻结范围 = **D 轨 IPC 映射契约 + 编排语义**；A 轨 `MemorySourceEvent` / E 轨 `SourceAdmissionResult` 对象状态**不随本 ADR 改变**（如实标注：代码模型已实现，契约总体 CANDIDATE_FOR_FREEZE，不写成已冻结/宿主可用）。
 
 > **v2 修订摘要（Review #83 REWORK 第一轮处置）**：① payload 统一为 **flat**（对齐 MemorySourceEvent，删除 `payload.metadata.*` 嵌套口径）；② 新增 Gateway `RequestContext` → `ServiceRequestContext` 转换步骤与身份可信源冻结；③ `consent_scope=none` 由 D 轨 handler 前置 REJECT；④ 指纹去重改"保留事件+标记"；⑤ event_id 对齐全局唯一（ADR-013）；⑥ 编排删除 outbox 同事务表述；⑦ schema_version 仅接受精确 `0.1`；⑧ ADR 编号从 013 重排为 014。
 
 > **v3 修订摘要（Review #83 Reviewer E 第三轮意见处置）**：① event_id 冲突区分「幂等重放 vs identity collision」（HIGH-01）；② 可信身份文案修正、payload 身份仅属声明（MEDIUM-02）；③ schema_version 界定为 event.ingest 的 IPC required override（MEDIUM-04）；④ 响应区分 `duplicate_reason`（MEDIUM-06）；⑤ 落库 `processing_status` 首次一律 `pending`（MEDIUM-01）。
+
+> **v4 修订摘要（Review #83 Reviewer E 第四轮意见处置）**：① 请求级幂等补全 request_fingerprint 冲突语义 + `UoW.execute_idempotent` 单事务边界（HIGH-02）；② immutable identity 对齐 ADR-013 v4（HIGH-01）；③ 敏感/未授权事件 `content_fingerprint` NULL（HIGH-03）；④ `content_summary` caller-claimed provenance 门禁（MEDIUM-05）；⑤ 事件碰撞固定顺序统一 ADR-013（MEDIUM-01）——详见本篇各节。**本决策版本自 v3 起的所有修订均属本 ADR 冻结范围。**
 
 ### IPC 契约定义（映射契约）
 
@@ -89,7 +93,7 @@ FRZ-IPC-007 路由表新增写方法 `event.ingest`，payload 对齐 A 轨 `Memo
 | `memory_type` | string | 可选 | short_term/medium_term/long_term/ephemeral |
 | `turn_id` | string | 可选 | 宿主回合引用 |
 | `tool_call_id` | string | 条件 | `source_type=tool_result` 时必填 |
-| `content_summary` | string | 可选 | **脱敏摘要**（非原文；敏感/安全类强制 NULL，见 ADR-013；普通质量型 AUDIT_ONLY 保留已脱敏摘要） |
+| `content_summary` | string | 可选 | **脱敏摘要**（非原文；敏感/安全类强制 NULL，见 ADR-013；普通质量型 AUDIT_ONLY 保留已脱敏摘要）——**注意（MEDIUM-05）**：本字段为「调用方声称已脱敏」的声明值，非系统生成摘要；test/validation 态接受声明值（pipeline 扫敏感 pattern 后原样保留），**ACTIVE 前置**：Host Adapter 必须产生经受控 sanitization/summarization 的 content_summary，禁止把宿主原始用户/助手正文直接映射进本字段（详见「安全影响」） |
 | `sensitivity` | string | 默认 | 五级，默认 `none` |
 | `is_sensitive_matched` | boolean | 默认 | 默认 false |
 | `should_ignore` | boolean | 默认 | 默认 false（D3 安全契约） |
@@ -98,16 +102,22 @@ FRZ-IPC-007 路由表新增写方法 `event.ingest`，payload 对齐 A 轨 `Memo
 | `has_structured_payload` | boolean | 默认 | 默认 false |
 | `language_tag` | string | 可选 | — |
 
-- **Handler 编排（固定顺序，复用不改 + D 轨前置判定）**：
+- **Handler 编排（固定顺序，复用不改 + D 轨前置判定；v4 统一 ADR-013/014 事件碰撞顺序，MEDIUM-01；单事务 HIGH-02）**：
   1. **payload 显式字段预检**（MEDIUM-04）：确认 raw payload **显式包含** `schema_version`（`["schema_version"] not in raw` → `INVALID_REQUEST`）且值为精确 `"0.1"`，再调用 `MemorySourceEvent.model_validate`——避免模型默认值 `"0.1"` 吞掉"缺失"导致无法区分显式提供与缺省；
-  2. `EventPipeline.process(raw)`：清洗（校验+时间/状态标准化）→ 敏感标记 → 内容指纹 → 六维质量评分 → 安全/质量 Gate；输出 `PipelineResult`；校验失败 → `EventValidationError` → `INVALID_REQUEST`（safe_message 固定英文，不回显原值）；
-  3. **事件级冲突处置**（HIGH-01，先于准入）：按 `user_id + event_id` 点查既有行（`get_source_event_by_event_id`）：
-     - 无既有行 → 继续 4；
-     - 有既有行 + **immutable identity 一致**（`user_id`/`source_type`/`event_type`/`occurred_at`/`content_fingerprint` 全等）→ **幂等重放**：不再执行 consent/admission/落库，**返回首次持久化记录完整结果**（`source_event_id` + 既有 `admission_decision`/`admission_reason_code` + `duplicate=true` + `duplicate_reason='idempotent_replay'`）；不重新形成事件事实、不返回新请求重算结果；
+  2. **请求级幂等进入（HIGH-02）**：计算 `request_fingerprint`（见「幂等」节）→ 调用 **`UoW.execute_idempotent(user_id, session_id, 权威 idempotency_key, request_fingerprint=...)`** 进入**单事务**（同一进程级单写锁内）：
+     - 缓存命中 + **request_fingerprint 一致** → 直接返回首次成功响应（cache replay），**不执行**后续 pipeline/collision/admission/写入；
+     - 缓存命中 + **request_fingerprint 不一致** → `IdempotencyConflictError` → `INVALID_REQUEST`（同三元组、不同业务 payload 误用同一幂等键，防静默吞掉）；
+     - 未命中 → 在 `business_fn` 内继续 3-7，同事务写 `source_event` + 写 response cache；
+  3. `EventPipeline.process(raw)` **纯计算**（清洗（校验+时间/状态标准化）→ 敏感标记 → 内容指纹 → 六维质量评分 → 安全/质量 Gate；无 DB 副作用）；输出 `PipelineResult`；校验失败 → `EventValidationError` → `INVALID_REQUEST`（safe_message 固定英文，不回显原值）；
+  4. **事件级冲突处置**（HIGH-01，MEDIUM-01：pipeline 纯计算在前、identity 比较在后）：按 `user_id + event_id` 点查既有行（`get_source_event_by_event_id`）：
+     - 无既有行 → 继续 5；
+     - 有既有行 + **immutable identity 一致**（ADR-013 v4 重定义：`user_id`/`actor_id`/`source_type`/`event_type`/`occurred_at`(规范化)/`event_content_identity`，**不含 idempotency_key/session_id/content_fingerprint**）→ **幂等重放**：不再执行 consent/admission/落库，**返回首次持久化记录完整结果**（`source_event_id` + 既有 `admission_decision`/`admission_reason_code` + `duplicate=true` + `duplicate_reason='idempotent_replay'`）；不重新形成事件事实、不返回新请求重算结果；
      - 有既有行 + **immutable identity 不一致** → 抛 `EventIdentityConflict` → `INVALID_REQUEST`（不回显标识）；不得按普通 duplicate 返回旧行；
-  4. **D 轨 consent 前置判定**（不依赖 E 轨）：`event.consent_scope == "none"` → 直接 REJECT（`consent_not_granted`）随事件落库（ADR-013），不继续抽取放行；这一判定在 handler 层实现，不改 `security/source_admission.py`；
-  5. `SourceAdmissionPolicy.evaluate(result, ctx_svc)`：fail-closed 三值决策（类型准入 → 用户隔离 → 安全红线 → 生命周期保守 → 质量 Gate → 业务状态范围）；**REJECT / AUDIT_ONLY 不是 IPC 错误**，是正常业务决策，随事件落库；
-  6. `source_events` 落库（ADR-013 表）：`processing_status='pending'`（MEDIUM-01，REJECT/AUDIT_ONLY 亦为 pending，不落 extracting），`admission_decision/reason_code` 取自准入结果；指纹重复 → **仍插入新行**（event_id 必不相同）并标记 `duplicate_of`/`dedup_group`（不丢弃真实事件），响应 `duplicate=true` + `duplicate_reason='content_duplicate'` + `duplicate_of`；同 event_id 冲突已在步骤 3 处置。
+     - **跨用户 IntegrityError**（当前 user 未查到，但 `INSERT` 触发 `UNIQUE(event_id)`）→ fail-close：直接 `EventIdentityConflict` → `INVALID_REQUEST`，**不回查/不返回其他用户旧事件**（MEDIUM-03）；
+  5. **D 轨 consent 前置判定**（不依赖 E 轨）：`event.consent_scope == "none"` → 直接 REJECT（`consent_not_granted`）随事件落库（ADR-013），不继续抽取放行；这一判定在 handler 层实现，不改 `security/source_admission.py`；
+  6. `SourceAdmissionPolicy.evaluate(result, ctx_svc)`：fail-closed 三值决策（类型准入 → 用户隔离 → 安全红线 → 生命周期保守 → 质量 Gate → 业务状态范围）；**REJECT / AUDIT_ONLY 不是 IPC 错误**，是正常业务决策，随事件落库；
+  7. `source_events` 落库（ADR-013 表）：`processing_status='pending'`（MEDIUM-01/02，REJECT/AUDIT_ONLY 亦为 pending，不落 extracting），`admission_decision/reason_code` 取自准入结果；**敏感/security/consent reject 事件 `content_fingerprint` 持久化 NULL**（HIGH-03，不参与指纹去重）；指纹重复 → **仍插入新行**（event_id 必不相同）并标记 `duplicate_of`/`dedup_group`（`find_dedup_group_head` + insert 同事务，MEDIUM-04），响应 `duplicate=true` + `duplicate_reason='content_duplicate'` + `duplicate_of`；同 event_id 冲突已在步骤 4 处置；
+  8. 步骤 2-7 同事务提交；`commit` 时一并写 `idempotency_cache` response（含 `_request_fingerprint` wrapper，ADR-006/010）。
 
 - **Context 适配与身份真源**（Review #83 意见三 + 第三轮 MEDIUM-02）：
   - Gateway 收到 `gateway.registry.RequestContext`（无 user_id/actor_id 注入，见 `server.py`）；`SourceAdmissionPolicy.evaluate` 要求 `service.contracts.ServiceRequestContext`（fail-closed `invalid_context`）。**必须在 handler 内新增显式转换步骤**：`RequestContext → ServiceRequestContext`（取值见下）。
@@ -119,15 +129,24 @@ FRZ-IPC-007 路由表新增写方法 `event.ingest`，payload 对齐 A 轨 `Memo
 
 - **校验与错误映射**：
   - payload 校验失败（Pydantic ValidationError / EventValidationError）→ `INVALID_REQUEST`（safe_message 固定英文，不回显原值）；
+  - **请求级幂等冲突（同三元组 + 不同 request_fingerprint）→ `IdempotencyConflictError` → `INVALID_REQUEST`**（HIGH-02，对齐 ADR-010 幂等冲突收敛）；
+  - 同 event_id + immutable identity 不一致 → `EventIdentityConflict` → `INVALID_REQUEST`（HIGH-01 / MEDIUM-03 跨用户）；
   - envelope 校验失败沿用 Gateway `validate_request`（PROTOCOL_ERROR / INVALID_REQUEST，FRZ-IPC-002/006）；
   - 内部异常 → `INTERNAL_ERROR`（safe_error_code，不泄漏 traceback/正文）；
   - 未注册方法 → `UNSUPPORTED_METHOD`（production 默认注册表不含 `event.ingest`）。
 
-- **幂等**：
+- **幂等**（v4 补全 request fingerprint 语义，HIGH-02；对齐 ADR-010 request_fingerprint 模式）：
   - **权威 idempotency_key 合并规则**：取 IPC envelope 顶级字段（FRZ-IPC-006）→ 未提供则取 **payload 顶级 `idempotency_key`**（flat，无 `payload.metadata.*`）→ 两者同提供且不一致 → `INVALID_REQUEST`（对齐 ADR-010 合并规则）；
-  - **请求级幂等**：三元组 `(user_id, session_id, 权威 idempotency_key)` 走既有 `idempotency_cache`（FRZ-IPC-005 / ADR-006，TTL 24h）；命中 → 返回首次成功响应，不重复执行 pipeline/落库；失败请求不缓存；
-  - **事件级冲突处置**（HIGH-01，见 Handler 编排步骤 3）：`UNIQUE(event_id)`（ADR-013 全局唯一索引）为 DB 约束兜底；应用层先按 `user_id + event_id` 点查 → **immutable identity 一致 = 幂等重放**（返回首次持久化 `source_event_id` + 既有 `admission_decision/reason_code` + `duplicate=true` + `duplicate_reason='idempotent_replay'`）；**不一致 = `EventIdentityConflict` → `INVALID_REQUEST`**（跨用户/跨 session 复用统一归入此）；不再采用「同 event_id → 一律返回既有记录（EventOwnershipError）」旧口径；
-  - `event_id` **不替代** `idempotency_key`（保持 FRZ-IPC-005 / ADR-010 语义）。
+  - **请求级幂等**：三元组 `(user_id, session_id, 权威 idempotency_key)` 走既有 `idempotency_cache`（FRZ-IPC-005 / ADR-006，TTL 24h）；**命中 → 返回首次成功响应，不重复执行 pipeline/落库；失败请求不缓存**；
+  - **request_fingerprint（v4 新增，HIGH-02）**：`event.ingest` 定义与 ADR-010 turn.finalized 同款请求指纹，用于区分「相同三元组」下是否同一次业务请求：
+    - **定义**：`request_fingerprint = sha256(规范化 method + 业务语义字段)`；**业务语义字段 =** `event_id`、`user_id`、`actor_id`、`session_id`、`source_type`、`event_type`、`occurred_at`（规范化 UTC 毫秒）、`event_content_identity`（稳定内容身份，规则同 ADR-013 identity）、`consent_scope`、`source_business_status`（语义字段的 absent/null 统一占位，时间戳规范化后参与 hash）；**不进入**：`trace_id` / `request_id` / `deadline_ms`（传输字段，重投天然变化）、`schema_version`（固定 "0.1" 无判别力）、`idempotency_key` 本身（已是三元组组成）；
+    - **冲突语义（v4 冻结，HIGH-02）**：
+      - `same (user_id, session_id, idempotency_key) + same request_fingerprint` → **cache replay**：返回首次成功 response，**不新增业务副作用**；
+      - `same triple + different request_fingerprint` → **`IdempotencyConflictError` → `INVALID_REQUEST`**（如 `idem_1` 先用于 `evt_A`、后用于 `evt_B` → 冲突，防不同事件复用同一幂等键被静默吞掉；对齐 ADR-010 同款语义）；
+    - **实现**：复用 `db/repositories.py::execute_idempotent(request_fingerprint=...)` 既有 wrapper（`_request_fingerprint` / `_unwrap_response`，ADR-010 已冻结，不改 DDL）；
+  - **事务边界（v4 冻结，HIGH-02）**：请求级幂等检查 + 业务副作用（event collision → pipeline/admission → `source_event` 写入）+ response cache 写入在 **`UoW.execute_idempotent` 单个事务**内完成（`uow.py` 已保证：幂等检查与响应缓存写入同事务，`FR-DB-004` 写锁单写协调）。**「source_events 独立事务」解释为「不与 Outbox 同事务」**（TD-D4D-001 接线前不扩展 outbox），**不是**与 idempotency_cache 拆成两个事务——拆两会破坏「相同幂等请求只产生一次副作用」（FRZ-IPC-005 硬承诺）；
+  - **事件级冲突处置**（HIGH-01，见 Handler 编排步骤 4）：`UNIQUE(event_id)`（ADR-013 全局唯一索引）为 DB 约束兜底；应用层 pipeline 纯计算后按 `user_id + event_id` 点查 → **immutable identity 一致 = 幂等重放**（返回首次持久化 `source_event_id` + 既有 `admission_decision/reason_code` + `duplicate=true` + `duplicate_reason='idempotent_replay'`）；**不一致 = `EventIdentityConflict` → `INVALID_REQUEST`**（跨用户/跨 session 复用统一归入此）；不再采用「同 event_id → 一律返回既有记录（EventOwnershipError）」旧口径；
+  - `event_id` **不替代** `idempotency_key`（保持 FRZ-IPC-005 / ADR-010 语义）；请求级幂等与事件级 identity 为**两层正交语义**（HIGH-02）：相同 event_id + 不同 request_fingerprint 属请求级冲突，同 request_fingerprint + 不同 event_id 亦属请求级冲突；identity collision 只在「已持久化事件」维度判定。
 
 - **activation 策略（事件来源未就绪时）**：
   - 采用 **方案 A + B**（同 ADR-010）：默认生产路由**不注册** `event.ingest`（`register_default_handlers` 不含它）→ 未注册即 `UNSUPPORTED_METHOD`；
@@ -152,6 +171,7 @@ FRZ-IPC-007 路由表新增写方法 `event.ingest`，payload 对齐 A 轨 `Memo
 - 新增字段/方法/方法级必填约束走本次 ADR；已冻结 FRZ-IPC-001~006 字段/错误码/envelope **不得修改**；
 - **v2 契约变更已按 Review #83 第一轮处置**：payload 统一 flat、schema_version 精确 0.1、consent 前置、Context Adapter 与身份真源、指纹保留+标记——均属本 ADR 冻结范围，回写路由表时一并记录。
 - **v3 契约变更已按 Review #83 第三轮处置**：event_id 幂等重放 / identity collision 契约（HIGH-01）、可信身份文案修正 + ACTIVE 硬门禁（MEDIUM-02）、schema_version IPC required override（MEDIUM-04）、`duplicate_reason=idempotent_replay/content_duplicate`（MEDIUM-06）、processing_status 首次一律 pending（MEDIUM-01）——均属本 ADR 冻结范围，回写路由表时一并记录。
+- **v4 契约变更已按 Review #83 第四轮处置**：请求级幂等 request_fingerprint 冲突语义 + `UoW.execute_idempotent` 单事务边界（HIGH-02）、immutable identity 对齐 ADR-013 v4（HIGH-01）、敏感/未授权事件 `content_fingerprint` NULL（HIGH-03）、content_summary provenance 门禁（MEDIUM-05）、事件碰撞固定顺序统一（MEDIUM-01）——均属本 ADR 冻结范围，回写路由表时一并记录。
 
 ---
 
@@ -164,23 +184,26 @@ FRZ-IPC-007 路由表新增写方法 `event.ingest`，payload 对齐 A 轨 `Memo
 
 ### 开发影响
 
-- `gateway/handlers.py` 新增 `event_ingest_handler`（编排 payload 显式字段预检 → pipeline → event_id 冲突处置 → consent 前置 → admission → repository；新增 `RequestContext → ServiceRequestContext` 显式转换函数）；
+- `gateway/handlers.py` 新增 `event_ingest_handler`（编排 payload 显式字段预检 → request_fingerprint 计算 → `UoW.execute_idempotent` 单事务（≥ pipeline 纯计算 → event_id 冲突处置 → consent 前置 → admission → repository write → response cache）；新增 `RequestContext → ServiceRequestContext` 显式转换函数）；
 - `gateway/registry.py` 提供 `event.ingest` **显式注册 seam**（production default registry 不注册；test profile 显式注册）；
-- `db/repositories.py` / `db/uow.py` 新增事件写入（ADR-013；`get_source_event_by_event_id` / `insert_source_event` 支持 immutable identity 比对与 `EventIdentityConflict`）；
+- `db/repositories.py` / `db/uow.py` 新增事件写入（ADR-013；复用 `execute_idempotent(request_fingerprint=...)`；`get_source_event_by_event_id` / `insert_source_event` 支持 immutable identity 比对、`EventIdentityConflict`、敏感 content_fingerprint NULL、dedup head 同事务原子插入 MEDIUM-04）；
 - 不修改 `pipeline/`、`security/source_admission.py`、`service/candidate_governance.py`、`embedding/`、`retrieval/`；
 - C 轨调用方（D6-C 统一事件入口）后续接入，不阻塞本 PR 服务端。
 
 ### 评测影响
 
 - L1 契约测试覆盖：payload 缺 `schema_version` → INVALID_REQUEST（IPC required override）；pipeline 校验失败 → INVALID_REQUEST；schema_version 非 `0.1` → INVALID_REQUEST；consent_scope=none → REJECT 落库（consent_not_granted，`processing_status='pending'`）；准入 REJECT/AUDIT_ONLY 正常落库（非错误，均 `pending` 不落 extracting）；同 event_id + identity 一致 → 幂等重放返回首次记录完整结果（`duplicate=true, duplicate_reason='idempotent_replay'`）；同 event_id + identity 不一致 → EventIdentityConflict → INVALID_REQUEST；指纹重复 → 新行 + duplicate_of/dedup_group + `duplicate_reason='content_duplicate'`；跨用户复用 event_id → INVALID_REQUEST；高敏原文不出现于正文落库/日志/响应（BLOCKER 回归项）。
+- **新增 L1 契约用例（v4）**：① **request_fingerprint 重放（HIGH-02）**——`idem_1` 首次 `evt_A` → 成功；`idem_1` 再投相同 payload → cache replay 返回首次 response、无新增业务副作用；`idem_1` 再投 `evt_B`（不同 event_id）→ `IdempotencyConflictError` → INVALID_REQUEST；② **同 UoW 原子性（HIGH-02）**——断言幂等缓存写入与 `source_event` 写入同一事务（回滚时两者都不落地）；③ **identity 污染回归（HIGH-01）**——无正文事件换 `idempotency_key` 重投仍判 replay 而非 conflict；④ **敏感指纹 NULL（HIGH-03）**——security/consent reject 事件 `content_fingerprint` 为 NULL、不入 dedup 分组；⑤ **content_summary 声明标记（MEDIUM-05）**——test 态声明值不标注为系统脱敏产物；⑥ **fixed order（MEDIUM-01）**——pipeline 仅触发一次（无副作用重跑）且 replay 分支不重跑准入。
 
 ### 安全影响
 
 - `content_summary` / `source_reference` / `raw_payload_ref` 只承载脱敏摘要或受控引用，不承载正文（原文隔离 `[02 §4.1]`）；**敏感命中强制 NULL**（ADR-013，仅敏感/安全类；普通质量型 AUDIT_ONLY 保留脱敏摘要）；
+- **敏感/security reject/consent reject 事件 `content_fingerprint` 持久化 NULL（HIGH-03）**：pipeline 计算发生在正文 NULL 之前，落库投影时必须丢弃确定性 SHA-256（低熵敏感值可离线枚举，不等价脱敏）；此类事件**不参与任何内容级指纹去重/分组**；若未来需敏感判重，另行 keyed HMAC / 隐私保护型指纹并通过独立 ADR；
 - `user_id` / `event_id` / `trace_id` 按非正文受控标识处理；错误消息 safe_message 不回显原文/用户 ID/凭据；
-- 跨用户隔离：`user_id` 强制过滤 + `SourceAdmissionPolicy` `user_id` 比对 + ADR-013 `UNIQUE(event_id)` 全局唯一索引 + immutable identity 一致性（identity 冲突 → 拒绝）多重限制；
+- 跨用户隔离：`user_id` 强制过滤 + `SourceAdmissionPolicy` `user_id` 比对 + ADR-013 `UNIQUE(event_id)` 全局唯一索引 + immutable identity 一致性（identity 冲突 → 拒绝）+ 跨用户 IntegrityError fail-close（不回读他人事件，MEDIUM-03）多重限制；
 - consent_scope=none 在 D 轨 handler 前置 REJECT（不依赖 E 轨，消除授权语义缺口）；
-- **可信身份边界（v3）**：`payload.user_id` 仅属声明，非独立可信身份源；test/validation 下 `ctx_svc.user_id == event.user_id` 为声明内部自洽（已如实标注，非宿主认证证据）；production ACTIVE 前须以独立 trusted host identity + fail-close 比对为硬门禁（MEDIUM-02）。
+- **可信身份边界（MEDIUM-02）**：`payload.user_id` 仅属声明，非独立可信身份源；test/validation 下 `ctx_svc.user_id == event.user_id` 为声明内部自洽（已如实标注，非宿主认证证据）；production ACTIVE 前须以独立 trusted host identity + fail-close 比对为硬门禁。
+- **content_summary provenance 门禁（MEDIUM-05）**：`content_summary` 是「调用方声称已脱敏」的声明值，pipeline 不对其生成真实摘要（仅扫敏感 pattern）；**ACTIVE 前置**：Host Adapter 必须输出经受控 sanitization/summarization 的 content_summary，**禁止直接把宿主原始用户/助手正文映射进该字段**；或由 handler 在 persistence projection 前执行显式 sanitizer。test/validation 态允许声明值（标注为声明，非系统脱敏产物），**不得**把声明值上浮为「系统已完成脱敏」的证据。
 
 ---
 
@@ -200,6 +223,6 @@ FRZ-IPC-007 路由表新增写方法 `event.ingest`，payload 对齐 A 轨 `Memo
 - `memory-service/security/source_admission.py`（SourceAdmissionPolicy，三值决策）
 - `memory-service/gateway/registry.py`、`gateway/server.py`（RequestContext 现状：无 user_id/actor_id 注入 → 需显式 Adapter）
 - `memory-service/service/contracts.py`（ServiceRequestContext 结构）
-- `docs/day6/day6-d-01-event-persistence-contract-plan-v0.3.md`（D6-D 契约规划，D-7/D-8/D-9 决策：本版含 handler + consent 前置 + Context Adapter）
+- `docs/day6/day6-d-01-event-persistence-contract-plan-v0.4.md`（D6-D 契约规划，D-7/D-8/D-9/D-10/D-11/D-12 决策：本版含 handler + consent 前置 + Context Adapter + request_fingerprint）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-31 决策选方案 A，v2 按 Review #83 第一轮重冻结，v3 按第三轮意见修订**；**Reviewer E（谢嘉然）待签署**；签署后回写 `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（FRZ-IPC-007 路由表）。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-31 决策选方案 A，v2 按 Review #83 第一轮重冻结，v3 按第三轮意见修订，v4 按第四轮意见修订**；**Reviewer E（谢嘉然）待签署**；签署后回写 `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（FRZ-IPC-007 路由表）。
