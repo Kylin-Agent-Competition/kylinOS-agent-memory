@@ -4,7 +4,7 @@
 |---|---|
 | 任务编号 | D7D |
 | 责任轨道 | D（SQLite、Repository、Migration、事务与部署） |
-| 基线 | `origin/main` 的 `8ab369b`；创建实现前必须重新同步远端主线 |
+| 基线 | 起始基线为 `origin/main@8ab369b`；已通过 merge 同步至 `origin/main@31b5279` |
 | Reviewer | E（非作者 Reviewer） |
 | 当前状态 | `IMPLEMENTED_PENDING_REVIEW`：Migration、Repository 与 L0/L1 定向验证已完成，待独立审查与麒麟 L2 证据 |
 

@@ -38,7 +38,7 @@
 - 当前基线已有 `Preference.version` / `previous_version_id` 领域校验与 D7B current-version 消费逻辑；本 PR 新增 D7D 数据库真源，但尚未接入 C 轨 IPC/QML 调用链。
 - 版本表与 `memory_entries` 保持独立，避免改写 D4D 通用记忆表；跨轨需要时由调用方以 Repository 接缝集成。
 - 破坏性 Migration downgrade 会在版本历史存在时拒绝执行，避免静默删除数据；真实生产恢复策略仍需 L2 演练。
-- 本实现基于 `origin/main@8ab369b`；合并前必须再次同步远端主线。
+- 本实现起始于 `origin/main@8ab369b`，现已通过 merge 同步至 `origin/main@31b5279`。
 
 ## 验证状态
 
