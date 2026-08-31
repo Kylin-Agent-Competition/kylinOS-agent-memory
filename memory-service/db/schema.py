@@ -80,6 +80,79 @@ memory_entries = Table(
     CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_memory_entries_confidence"),
 )
 
+# D7D：稳定记忆项与不可变版本历史。`memory_entries` 保持既有通用记忆表职责；
+# 偏好版本链使用独立表，避免以 UPDATE 覆盖历史正文。一个 item 对应一个
+# (user_id, preference_key, preference_scope) 链，版本表的部分唯一索引保证只有一个
+# current 真值，供 D7B 的 current-version 过滤安全消费。
+memory_items = Table(
+    "memory_items",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", String, nullable=False),
+    Column("preference_key", String, nullable=False),
+    Column("preference_scope", String, nullable=False),
+    # current_version_id 由同一 UoW 在新版本插入后更新；不设物理 FK 以避免
+    # memory_items ↔ memory_versions 的 SQLite 循环建表/回退依赖。
+    Column("current_version_id", Integer, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    CheckConstraint(
+        "preference_scope IN ('global', 'topic', 'tool', 'session', 'time_window')",
+        name="ck_memory_items_preference_scope",
+    ),
+    sqlite_autoincrement=True,
+)
+
+memory_versions = Table(
+    "memory_versions",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("memory_item_id", Integer, ForeignKey("memory_items.id"), nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("previous_version_id", Integer, ForeignKey("memory_versions.id"), nullable=True),
+    Column("rollback_of_version_id", Integer, ForeignKey("memory_versions.id"), nullable=True),
+    Column("preference_value", Text, nullable=False),
+    Column("memory_status", String, nullable=False),
+    Column("evidence_fingerprint", String, nullable=False),
+    Column("idempotency_key", String, nullable=True),
+    Column("request_fingerprint", String, nullable=False),
+    Column("is_current", Integer, nullable=False, server_default="1"),
+    Column("created_at", String, nullable=False),
+    CheckConstraint("version >= 1", name="ck_memory_versions_version"),
+    CheckConstraint("is_current IN (0, 1)", name="ck_memory_versions_current"),
+    CheckConstraint(
+        "memory_status IN ('active', 'superseded', 'deprecated', 'expired', 'removed', 'candidate')",
+        name="ck_memory_versions_memory_status",
+    ),
+    sqlite_autoincrement=True,
+)
+
+# D7D 操作回执：CREATE/UPDATE/ROLLBACK 写入对应版本；NO_OP 则指向既有 current。
+# 因而每次请求均占用幂等键和证据指纹，却不为相同值新增无意义业务版本。
+memory_version_receipts = Table(
+    "memory_version_receipts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("memory_item_id", Integer, ForeignKey("memory_items.id"), nullable=False),
+    Column("memory_version_id", Integer, ForeignKey("memory_versions.id"), nullable=False),
+    Column("operation_kind", String, nullable=False),
+    Column("preference_value", Text, nullable=False),
+    Column("memory_status", String, nullable=False),
+    Column("evidence_fingerprint", String, nullable=False),
+    Column("idempotency_key", String, nullable=True),
+    Column("request_fingerprint", String, nullable=False),
+    Column("created_at", String, nullable=False),
+    CheckConstraint(
+        "operation_kind IN ('write', 'no_op', 'rollback')",
+        name="ck_memory_version_receipts_operation_kind",
+    ),
+    CheckConstraint(
+        "memory_status IN ('active', 'superseded', 'deprecated', 'expired', 'removed', 'candidate')",
+        name="ck_memory_version_receipts_memory_status",
+    ),
+    sqlite_autoincrement=True,
+)
+
 outbox = Table(
     "outbox",
     metadata,
@@ -119,6 +192,55 @@ idx_turns_host_turn_id = Index(
 )
 idx_memory_user_type = Index("idx_memory_user_type", memory_entries.c.user_id, memory_entries.c.entry_type)
 idx_memory_deleted = Index("idx_memory_deleted", memory_entries.c.is_deleted)
+uq_memory_items_user_key_scope = Index(
+    "uq_memory_items_user_key_scope",
+    memory_items.c.user_id,
+    memory_items.c.preference_key,
+    memory_items.c.preference_scope,
+    unique=True,
+)
+uq_memory_versions_item_version = Index(
+    "uq_memory_versions_item_version",
+    memory_versions.c.memory_item_id,
+    memory_versions.c.version,
+    unique=True,
+)
+uq_memory_versions_current = Index(
+    "uq_memory_versions_current",
+    memory_versions.c.memory_item_id,
+    unique=True,
+    sqlite_where=memory_versions.c.is_current == 1,
+)
+idx_memory_versions_idempotency = Index(
+    "idx_memory_versions_idempotency",
+    memory_versions.c.memory_item_id,
+    memory_versions.c.idempotency_key,
+    unique=True,
+    sqlite_where=memory_versions.c.idempotency_key.isnot(None),
+)
+idx_memory_versions_evidence = Index(
+    "idx_memory_versions_evidence",
+    memory_versions.c.memory_item_id,
+    memory_versions.c.evidence_fingerprint,
+)
+idx_memory_versions_status = Index(
+    "idx_memory_versions_status",
+    memory_versions.c.memory_item_id,
+    memory_versions.c.memory_status,
+)
+uq_memory_version_receipts_idempotency = Index(
+    "uq_memory_version_receipts_idempotency",
+    memory_version_receipts.c.memory_item_id,
+    memory_version_receipts.c.idempotency_key,
+    unique=True,
+    sqlite_where=memory_version_receipts.c.idempotency_key.isnot(None),
+)
+uq_memory_version_receipts_evidence = Index(
+    "uq_memory_version_receipts_evidence",
+    memory_version_receipts.c.memory_item_id,
+    memory_version_receipts.c.evidence_fingerprint,
+    unique=True,
+)
 idx_outbox_pending = Index(
     "idx_outbox_pending",
     outbox.c.next_retry_at,
@@ -174,6 +296,198 @@ FTS_TRIGGERS_DDL = [
     """
     CREATE TRIGGER IF NOT EXISTS memory_fts_ad AFTER DELETE ON memory_entries BEGIN
         DELETE FROM memory_fts WHERE rowid = old.id;
+    END
+    """,
+]
+
+# D7D 版本链跨表约束。SQLite 无法以普通 CHECK 表达「引用版本必须属于同一
+# memory item」或同步 current 指针，因此用触发器在数据库入口拒绝篡改，并将
+# current 指针随版本状态切换原子同步。
+VERSION_TRIGGERS_DDL = [
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_versions_bi_chain
+    BEFORE INSERT ON memory_versions
+    WHEN (NEW.previous_version_id IS NULL AND NEW.version != 1)
+      OR (NEW.previous_version_id IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM memory_versions AS previous_version
+            WHERE previous_version.id = NEW.previous_version_id
+              AND previous_version.memory_item_id = NEW.memory_item_id
+              AND previous_version.version = NEW.version - 1
+         ))
+      OR (NEW.rollback_of_version_id IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM memory_versions AS rollback_version
+            WHERE rollback_version.id = NEW.rollback_of_version_id
+              AND rollback_version.memory_item_id = NEW.memory_item_id
+         ))
+    BEGIN
+        SELECT RAISE(ABORT, '版本链引用必须属于同一 memory item');
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_versions_bu_immutable
+    BEFORE UPDATE ON memory_versions
+    WHEN NEW.preference_value IS NOT OLD.preference_value
+      OR NEW.evidence_fingerprint IS NOT OLD.evidence_fingerprint
+      OR NEW.idempotency_key IS NOT OLD.idempotency_key
+      OR NEW.request_fingerprint IS NOT OLD.request_fingerprint
+      OR NEW.created_at IS NOT OLD.created_at
+      OR NEW.previous_version_id IS NOT OLD.previous_version_id
+      OR NEW.rollback_of_version_id IS NOT OLD.rollback_of_version_id
+      OR (NEW.is_current IS NOT OLD.is_current AND NOT (
+            OLD.is_current = 1 AND NEW.is_current = 0 AND NEW.memory_status = 'superseded'
+            AND EXISTS (
+                SELECT 1 FROM memory_versions AS successor_version
+                WHERE successor_version.memory_item_id = OLD.memory_item_id
+                  AND successor_version.previous_version_id = OLD.id
+                  AND successor_version.version = OLD.version + 1
+                  AND successor_version.is_current = 0
+            )
+         ) AND NOT (
+            OLD.is_current = 0 AND NEW.is_current = 1
+            AND NEW.previous_version_id IS NOT NULL
+            AND EXISTS (
+                SELECT 1 FROM memory_versions AS previous_version
+                WHERE previous_version.id = NEW.previous_version_id
+                  AND previous_version.memory_item_id = NEW.memory_item_id
+                  AND previous_version.is_current = 0
+                  AND previous_version.memory_status = 'superseded'
+            )
+         ))
+      OR (NEW.memory_status IS NOT OLD.memory_status AND NOT (
+            OLD.is_current = 1 AND NEW.is_current = 0 AND NEW.memory_status = 'superseded'
+            AND EXISTS (
+                SELECT 1 FROM memory_versions AS successor_version
+                WHERE successor_version.memory_item_id = OLD.memory_item_id
+                  AND successor_version.previous_version_id = OLD.id
+                  AND successor_version.version = OLD.version + 1
+                  AND successor_version.is_current = 0
+            )
+         ))
+    BEGIN
+        SELECT RAISE(ABORT, 'memory_versions 历史字段不可原地修改');
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_versions_bd_immutable
+    BEFORE DELETE ON memory_versions
+    BEGIN
+        SELECT RAISE(ABORT, 'memory_versions 历史不可删除');
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_versions_bu_chain
+    BEFORE UPDATE OF memory_item_id, version, previous_version_id, rollback_of_version_id ON memory_versions
+    WHEN NEW.memory_item_id != OLD.memory_item_id
+      OR (NEW.previous_version_id IS NULL AND NEW.version != 1)
+      OR (NEW.previous_version_id IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM memory_versions AS previous_version
+            WHERE previous_version.id = NEW.previous_version_id
+              AND previous_version.memory_item_id = NEW.memory_item_id
+              AND previous_version.version = NEW.version - 1
+         ))
+      OR (NEW.rollback_of_version_id IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM memory_versions AS rollback_version
+            WHERE rollback_version.id = NEW.rollback_of_version_id
+              AND rollback_version.memory_item_id = NEW.memory_item_id
+         ))
+      OR EXISTS (
+            SELECT 1 FROM memory_versions AS child_version
+            WHERE child_version.previous_version_id = OLD.id
+              AND child_version.version != NEW.version + 1
+         )
+    BEGIN
+        SELECT RAISE(ABORT, '版本链引用必须属于同一 memory item');
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_items_bi_current_pointer
+    BEFORE INSERT ON memory_items
+    WHEN NEW.current_version_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM memory_versions
+        WHERE memory_versions.id = NEW.current_version_id
+          AND memory_versions.memory_item_id = NEW.id
+          AND memory_versions.is_current = 1
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'current_version 指针必须指向本 item 的 current 版本');
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_items_bu_current_pointer
+    BEFORE UPDATE OF current_version_id ON memory_items
+    WHEN (NEW.current_version_id IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM memory_versions
+            WHERE memory_versions.id = NEW.current_version_id
+              AND memory_versions.memory_item_id = NEW.id
+              AND memory_versions.is_current = 1
+         ))
+      OR (NEW.current_version_id IS NULL AND EXISTS (
+            SELECT 1 FROM memory_versions
+            WHERE memory_versions.memory_item_id = NEW.id
+              AND memory_versions.is_current = 1
+         ))
+    BEGIN
+        SELECT RAISE(ABORT, 'current_version 指针必须指向本 item 的 current 版本');
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_versions_ai_current_pointer
+    AFTER INSERT ON memory_versions
+    WHEN NEW.is_current = 1
+    BEGIN
+        UPDATE memory_items SET current_version_id = NEW.id WHERE id = NEW.memory_item_id;
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_versions_au_current_pointer_on
+    AFTER UPDATE OF is_current ON memory_versions
+    WHEN NEW.is_current = 1
+    BEGIN
+        UPDATE memory_items SET current_version_id = NEW.id WHERE id = NEW.memory_item_id;
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_versions_au_current_pointer_off
+    AFTER UPDATE OF is_current ON memory_versions
+    WHEN OLD.is_current = 1 AND NEW.is_current = 0
+    BEGIN
+        UPDATE memory_versions SET is_current = 1
+        WHERE id = (
+            SELECT successor_version.id
+            FROM memory_versions AS successor_version
+            WHERE successor_version.memory_item_id = NEW.memory_item_id
+              AND successor_version.previous_version_id = OLD.id
+              AND successor_version.version = OLD.version + 1
+              AND successor_version.is_current = 0
+        );
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_version_receipts_bi_consistency
+    BEFORE INSERT ON memory_version_receipts
+    WHEN NOT EXISTS (
+        SELECT 1 FROM memory_versions
+        WHERE memory_versions.id = NEW.memory_version_id
+          AND memory_versions.memory_item_id = NEW.memory_item_id
+          AND memory_versions.preference_value = NEW.preference_value
+          AND memory_versions.memory_status = NEW.memory_status
+    )
+    BEGIN
+        SELECT RAISE(ABORT, '操作回执必须与同一 memory item 的版本值和状态一致');
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_version_receipts_bu_immutable
+    BEFORE UPDATE ON memory_version_receipts
+    BEGIN
+        SELECT RAISE(ABORT, 'memory_version_receipts 回执不可修改');
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_version_receipts_bd_immutable
+    BEFORE DELETE ON memory_version_receipts
+    BEGIN
+        SELECT RAISE(ABORT, 'memory_version_receipts 回执不可删除');
     END
     """,
 ]
