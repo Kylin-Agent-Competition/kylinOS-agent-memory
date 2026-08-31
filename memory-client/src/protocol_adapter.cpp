@@ -36,6 +36,9 @@ const QString kPreferenceCreate = QStringLiteral("preference.create");  // D7C �
 const QString kPreferenceUpdate = QStringLiteral("preference.update");  // D7C 偏好 IPC
 const QString kPreferenceRollback = QStringLiteral("preference.rollback");  // D7C 偏好 IPC
 const QString kPreferenceHistory = QStringLiteral("preference.history");  // D7C 偏好 IPC
+const QString kKnowledgeDetail = QStringLiteral("knowledge.detail");  // D8C 候选
+const QString kConflictCompare = QStringLiteral("conflict.compare");  // D8C 候选
+const QString kLifecycleStatus = QStringLiteral("lifecycle.status");  // D8C 候选
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）

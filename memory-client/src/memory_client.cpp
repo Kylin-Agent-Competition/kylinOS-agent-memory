@@ -267,6 +267,21 @@ QString MemoryClient::sendPreferenceHistoryRequest(const QJsonObject& payload)
     return sendRequest(methods::kPreferenceHistory, payload);
 }
 
+QString MemoryClient::sendKnowledgeDetailRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kKnowledgeDetail, payload);
+}
+
+QString MemoryClient::sendConflictCompareRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kConflictCompare, payload);
+}
+
+QString MemoryClient::sendLifecycleStatusRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kLifecycleStatus, payload);
+}
+
 void MemoryClient::handleSocketConnected()
 {
     setConnectionState(ConnectionState::Connected);

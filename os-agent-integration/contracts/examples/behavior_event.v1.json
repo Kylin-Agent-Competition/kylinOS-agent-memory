@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "schema_version": "1.0",
+    "event_id": "event-behavior-001",
+    "trace_id": "trace-001",
+    "user_id": "local-user",
+    "session_id": "session-behavior-001",
+    "turn_id": "",
+    "occurred_at": "2026-08-31T05:00:00.000Z",
+    "collected_at": "2026-08-31T05:00:00.050Z",
+    "source_reference": "ref:behavior:session-behavior-001:user_message",
+    "idempotency_key": "behavior:session-behavior-001:user_message:01928374-abcdef"
+  },
+  "behavior": {
+    "behavior_kind": "user_message",
+    "observed_action": "user_clicked_send",
+    "context_ref": "ref:behavior:turn-001",
+    "actor": "user",
+    "occurred_at": "2026-08-31T05:00:00.000Z",
+    "mapping_status": "PENDING_C_CONFIRMATION"
+  }
+}

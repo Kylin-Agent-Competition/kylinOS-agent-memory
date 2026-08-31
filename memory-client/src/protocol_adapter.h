@@ -119,6 +119,10 @@ extern const QString kPreferenceCreate;   // "preference.create"
 extern const QString kPreferenceUpdate;   // "preference.update"
 extern const QString kPreferenceRollback; // "preference.rollback"
 extern const QString kPreferenceHistory;  // "preference.history"
+// D8C 候选 IPC 方法（CANDIDATE / pending ADR；生产默认不注册）
+extern const QString kKnowledgeDetail;    // "knowledge.detail"
+extern const QString kConflictCompare;    // "conflict.compare"
+extern const QString kLifecycleStatus;    // "lifecycle.status"
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）。
