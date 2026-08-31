@@ -88,6 +88,27 @@ class MemoryViewModel : public QObject {
     // Post-Turn 当前阶段：idle / sending / timeout / sent / failed
     Q_PROPERTY(QString postTurnStage READ postTurnStage NOTIFY postTurnStageChanged)
 
+    // ── D7C 偏好编辑（版本历史与回滚）────────────────────────────────
+    // preference.list 结果：条目列表（每项含 current 版本投影）。
+    Q_PROPERTY(QVariantList preferenceItems READ preferenceItems
+                   NOTIFY preferenceItemsChanged)
+    // preference.history 结果：单个 (key,scope) 的完整版本链（含 superseded）。
+    Q_PROPERTY(QVariantList preferenceHistory READ preferenceHistory
+                   NOTIFY preferenceHistoryChanged)
+    Q_PROPERTY(bool preferenceBusy READ preferenceBusy
+                   NOTIFY preferenceBusyChanged)
+    Q_PROPERTY(QString preferenceError READ preferenceError
+                   NOTIFY preferenceErrorChanged)
+    // preference 阶段：idle / loading / saving / rolled_back / ready / failed
+    Q_PROPERTY(QString preferenceStage READ preferenceStage
+                   NOTIFY preferenceStageChanged)
+    // 最近一次写响应 action：create / update / rollback / no_op / 空
+    Q_PROPERTY(QString lastPreferenceAction READ lastPreferenceAction
+                   NOTIFY lastPreferenceActionChanged)
+    // 最近一次写响应 item（版本投影）。
+    Q_PROPERTY(QJsonObject lastPreferenceItem READ lastPreferenceItem
+                   NOTIFY lastPreferenceItemChanged)
+
     // ── D5-C 原文隔离验证辅助 ───────────────────────────────────────────
     // 是否验证通过：originalUserText 不含 injectedContextText 任意标记子串。
     // 若 injectedContextText 为空（无记忆），该属性为 true。
@@ -120,6 +141,15 @@ public:
     [[nodiscard]] QString lastTurnFinalizedEvent() const { return lastTurnFinalizedEvent_; }
     [[nodiscard]] QString postTurnStage() const { return postTurnStage_; }
     [[nodiscard]] bool textIsolationVerified() const;
+
+    // D7C Getter
+    [[nodiscard]] QVariantList preferenceItems() const { return preferenceItems_; }
+    [[nodiscard]] QVariantList preferenceHistory() const { return preferenceHistory_; }
+    [[nodiscard]] bool preferenceBusy() const { return preferenceBusy_; }
+    [[nodiscard]] QString preferenceError() const { return preferenceError_; }
+    [[nodiscard]] QString preferenceStage() const { return preferenceStage_; }
+    [[nodiscard]] QString lastPreferenceAction() const { return lastPreferenceAction_; }
+    [[nodiscard]] QJsonObject lastPreferenceItem() const { return lastPreferenceItem_; }
 
     // QML 可调用动作。
     Q_INVOKABLE void connectToService();
@@ -164,6 +194,36 @@ public:
     // 原文隔离验证
     Q_INVOKABLE bool verifyOriginalTextIsolation() const;
 
+    // ── D7C 偏好编辑（版本历史与回滚）────────────────────────────────
+    // 加载当前用户偏好列表（preference.list）。
+    Q_INVOKABLE void loadPreferences(const QString& userId);
+    // 加载单个 (key,scope) 的完整版本链（preference.history）。
+    Q_INVOKABLE void loadPreferenceHistory(
+        const QString& userId, const QString& key, const QString& scope);
+    // 创建/追加偏好版本（preference.create）。
+    Q_INVOKABLE void createPreference(
+        const QString& userId,
+        const QString& key,
+        const QString& scope,
+        const QString& value,
+        bool isTemporary,
+        bool shouldPersist,
+        const QString& idempotencyKey);
+    // 更新偏好值（preference.update）。
+    Q_INVOKABLE void updatePreference(
+        const QString& userId,
+        const QString& key,
+        const QString& scope,
+        const QString& newValue,
+        const QString& idempotencyKey);
+    // 回滚到历史版本（preference.rollback）。
+    Q_INVOKABLE void rollbackPreference(
+        const QString& userId,
+        const QString& key,
+        const QString& scope,
+        int targetVersion,
+        const QString& idempotencyKey);
+
 signals:
     void socketPathChanged();
     void connectionStateChanged();
@@ -182,6 +242,15 @@ signals:
     void lastTurnFinalizedEventChanged();
     void postTurnStageChanged();
     void textIsolationVerifiedChanged();
+
+    // D7C 信号
+    void preferenceItemsChanged();
+    void preferenceHistoryChanged();
+    void preferenceBusyChanged();
+    void preferenceErrorChanged();
+    void preferenceStageChanged();
+    void lastPreferenceActionChanged();
+    void lastPreferenceItemChanged();
 
     void requestFailed(const QString& requestId, const QString& errorCode, const QString& safeMessage);
     void connectionError(const QString& safeMessage);
@@ -206,6 +275,25 @@ private:
     void setPostTurnStage(const QString& value);
     void setPreChatBusy(bool value);
     void setPostTurnBusy(bool value);
+
+    // D7C 偏好请求类型（响应路由用）
+    enum class PreferenceKind { None, List, History, Create, Update, Rollback };
+
+    // D7C 私有 setter
+    void setPreferenceItems(const QVariantList& value);
+    void setPreferenceHistory(const QVariantList& value);
+    void setPreferenceBusy(bool value);
+    void setPreferenceError(const QString& value);
+    void setPreferenceStage(const QString& value);
+    void setLastPreferenceAction(const QString& value);
+    void setLastPreferenceItem(const QJsonObject& value);
+
+    // D7C 响应路由与投影
+    void startPreferenceRequest(const QString& method, PreferenceKind kind,
+                                const QJsonObject& payload, const QString& stage);
+    void handlePreferenceResponse(const QString& requestId, const QJsonObject& envelope);
+    [[nodiscard]] QVariantList projectPreferenceItems(const QJsonArray& items) const;
+    [[nodiscard]] QVariantList projectPreferenceHistory(const QJsonArray& items) const;
 
     // 问题1修复：解析 envelope → ResponseParts；若 status=="error"，提取
     // errorCode/message 并返回 false。输出参数返回 parseResponse 结果引用。
@@ -261,6 +349,17 @@ private:
     // key = 规范化参数哈希（此处简单用 "user+session+turn+trace+msg+reason+stop"）。
     QJsonObject cachedTurnEvent_;
     QStringList cachedTurnEventKey_;
+
+    // ── D7C 偏好编辑状态 ─────────────────────────────────────────────
+    QVariantList preferenceItems_;
+    QVariantList preferenceHistory_;
+    bool preferenceBusy_ = false;
+    QString preferenceError_;
+    QString preferenceStage_ = QStringLiteral("idle");
+    QString lastPreferenceAction_;
+    QJsonObject lastPreferenceItem_;
+    QString pendingPreferenceRequestId_;
+    PreferenceKind pendingPreferenceKind_ = PreferenceKind::None;
 };
 
 }  // namespace kylin::memory::client::v1

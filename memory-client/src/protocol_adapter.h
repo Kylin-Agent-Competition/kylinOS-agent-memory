@@ -113,6 +113,12 @@ extern const QString kHealth;            // "health"
 extern const QString kMemoryRetrieve;   // "memory.retrieve"
 extern const QString kMemoryStore;      // "memory.store"（未实现，服务端返回 UNSUPPORTED_METHOD）
 extern const QString kTurnFinalized;    // "turn.finalized"（ADR-010 新增，写链路）
+// D7C 偏好 IPC 方法（D 轨契约变更，随 D7C PR #87 落地）
+extern const QString kPreferenceList;     // "preference.list"
+extern const QString kPreferenceCreate;   // "preference.create"
+extern const QString kPreferenceUpdate;   // "preference.update"
+extern const QString kPreferenceRollback; // "preference.rollback"
+extern const QString kPreferenceHistory;  // "preference.history"
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）。

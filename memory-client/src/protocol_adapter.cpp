@@ -31,6 +31,11 @@ const QString kHealth = QStringLiteral("health");
 const QString kMemoryRetrieve = QStringLiteral("memory.retrieve");
 const QString kMemoryStore = QStringLiteral("memory.store");  // 未实现
 const QString kTurnFinalized = QStringLiteral("turn.finalized");  // ADR-010 新增写链路
+const QString kPreferenceList = QStringLiteral("preference.list");      // D7C 偏好 IPC
+const QString kPreferenceCreate = QStringLiteral("preference.create");  // D7C 偏好 IPC
+const QString kPreferenceUpdate = QStringLiteral("preference.update");  // D7C 偏好 IPC
+const QString kPreferenceRollback = QStringLiteral("preference.rollback");  // D7C 偏好 IPC
+const QString kPreferenceHistory = QStringLiteral("preference.history");  // D7C 偏好 IPC
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）

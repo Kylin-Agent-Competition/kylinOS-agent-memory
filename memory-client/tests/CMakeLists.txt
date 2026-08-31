@@ -85,3 +85,35 @@ add_test(
     NAME d5_vertical_link_demo
     COMMAND test_d5_vertical_link_demo
 )
+
+# ============================================================================
+# D7C 偏好编辑 L0 Mock 契约测试（preference.list/create/update/rollback/history）
+# 范围：MemoryViewModel 偏好 IPC payload 形状 + 响应路由（preferenceItems /
+#       preferenceHistory / lastPreferenceAction / 失败路径）。
+# 注意：L0 Mock 契约验证，不代表麒麟宿主真实交互（L2 另行在 VM 验证）。
+# ============================================================================
+add_executable(test_d7c_preference_editor
+    /src/protocol_adapter.cpp
+    /src/memory_client.cpp
+    /src/view_models/memory_view_model.cpp
+    mock_gateway_server.cpp
+    test_d7c_preference_editor.cpp
+)
+target_link_libraries(test_d7c_preference_editor
+    PRIVATE
+        Qt5::Core
+        Qt5::Network
+        Qt5::Test
+)
+target_include_directories(test_d7c_preference_editor
+    PRIVATE
+        /src
+)
+target_compile_definitions(test_d7c_preference_editor
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR=""
+)
+add_test(
+    NAME d7c_preference_editor
+    COMMAND test_d7c_preference_editor
+)

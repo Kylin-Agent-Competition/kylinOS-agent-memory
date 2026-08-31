@@ -242,6 +242,31 @@ QString MemoryClient::sendTurnFinalizedEvent(const QJsonObject& eventJson)
     return requestId;
 }
 
+QString MemoryClient::sendPreferenceListRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kPreferenceList, payload);
+}
+
+QString MemoryClient::sendPreferenceCreateRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kPreferenceCreate, payload);
+}
+
+QString MemoryClient::sendPreferenceUpdateRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kPreferenceUpdate, payload);
+}
+
+QString MemoryClient::sendPreferenceRollbackRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kPreferenceRollback, payload);
+}
+
+QString MemoryClient::sendPreferenceHistoryRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kPreferenceHistory, payload);
+}
+
 void MemoryClient::handleSocketConnected()
 {
     setConnectionState(ConnectionState::Connected);
