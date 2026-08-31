@@ -359,14 +359,13 @@ class CandidateGovernanceService:
         - source_event_id 直接相等，不重新生成/覆盖（R3）；
         - user_id 来自 ctx（可信归属）；
         - memory_status 恒 candidate，requires_embedding=True（候选将来需嵌入）；
-        - 结构化承载缺口（TD-017，Medium/Open）如实声明：KnowledgeCandidate 六类
-          扩展结构字段（conditions / evidence / steps / expected_result / problem /
-          outcome / reproducible / template_body / parameters / priority /
-          failure_reason / avoid_condition / alternative，共 13 个 Optional[str]）
-          当前尚未无损进入 Domain——content_summary 仅承载 fact 文本、
-          primary_category 为开放分类标签，不得宣称已完整保留结构化语义；
-          正式结构化承载契约（字段级映射或 content_ref 存储形态）待 D 设计
-          （Domain content_ref DEFERRED）。
+        - Day8 结构化承载（TD-017 实现完成/技术关闭候选，待 D Reviewer 确认后
+          正式关闭）：KnowledgeCandidate 六类扩展结构字段
+          （conditions / evidence / steps / expected_result / problem / outcome /
+          reproducible / template_body / parameters / priority / failure_reason /
+          avoid_condition / alternative，共 13 个 Optional[str]）逐字段无损映射进
+          Knowledge Domain（1:1 同名直传、无转换、无改写）；content_summary 仍仅
+          承载 fact 文本，不拼接结构化字段伪装无损承载。
         """
         return Knowledge(
             knowledge_id=entity_id,
@@ -381,6 +380,20 @@ class CandidateGovernanceService:
             is_outdated=False,  # 过渡字段
             created_at=ts,
             updated_at=ts,
+            # ── Day8 结构化承载（TD-017 实现完成/技术关闭候选：六类结构化字段无损映射，1:1 同名直传） ──
+            conditions=candidate.conditions,
+            evidence=candidate.evidence,
+            steps=candidate.steps,
+            expected_result=candidate.expected_result,
+            problem=candidate.problem,
+            outcome=candidate.outcome,
+            reproducible=candidate.reproducible,
+            template_body=candidate.template_body,
+            parameters=candidate.parameters,
+            priority=candidate.priority,
+            failure_reason=candidate.failure_reason,
+            avoid_condition=candidate.avoid_condition,
+            alternative=candidate.alternative,
         )
 
 
