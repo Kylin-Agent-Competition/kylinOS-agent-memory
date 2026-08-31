@@ -93,9 +93,9 @@ add_test(
 # 注意：L0 Mock 契约验证，不代表麒麟宿主真实交互（L2 另行在 VM 验证）。
 # ============================================================================
 add_executable(test_d7c_preference_editor
-    /src/protocol_adapter.cpp
-    /src/memory_client.cpp
-    /src/view_models/memory_view_model.cpp
+    ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+    ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
     mock_gateway_server.cpp
     test_d7c_preference_editor.cpp
 )
@@ -107,11 +107,11 @@ target_link_libraries(test_d7c_preference_editor
 )
 target_include_directories(test_d7c_preference_editor
     PRIVATE
-        /src
+        ${CMAKE_SOURCE_DIR}/src
 )
 target_compile_definitions(test_d7c_preference_editor
     PRIVATE
-        QT_TESTCLIENT_SOURCE_DIR=""
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 add_test(
     NAME d7c_preference_editor
