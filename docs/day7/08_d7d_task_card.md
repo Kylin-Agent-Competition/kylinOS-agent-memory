@@ -6,7 +6,7 @@
 | 责任轨道 | D（SQLite、Repository、Migration、事务与部署） |
 | 基线 | `origin/main` 的 `8ab369b`；创建实现前必须重新同步远端主线 |
 | Reviewer | E（非作者 Reviewer） |
-| 当前状态 | `PREPARING`：本任务卡只定义施工范围，不包含持久化实现 |
+| 当前状态 | `IMPLEMENTED_PENDING_REVIEW`：Migration、Repository 与 L0/L1 定向验证已完成，待独立审查与麒麟 L2 证据 |
 
 ## 目标与完成定义
 
@@ -19,7 +19,7 @@
 - D4D 已提供 Alembic、`001_initial_schema`、`20260826_add_trace_id` 与 SQLite WAL / `busy_timeout` 配置；后续脚本必须遵循 `YYYYMMDD_<description>.py` 命名且实现 `downgrade()`。
 - 基线的 `memory_entries` 是既有记忆实体表；D7D 在此基础上演进，不手工修改用户数据库，也不重写已存在的迁移。
 - `Preference` 领域模型已冻结 `version` / `previous_version_id` 校验：首版无前驱，后续版本必须指向前版；领域校验不等同于数据库持久化已完成。
-- D7B 检索融合层要求每个 `(user_id, memory_id)` 的偏好只有一个 `is_current=true` 真值。D7D 必须用数据库约束和事务保证此不变量，不能依赖调用方约定。
+- D7B 检索融合层要求每个偏好版本链只有一个 `is_current=true` 真值。D7D 必须用数据库约束和事务保证此不变量，不能依赖调用方约定。
 - `user_id`、版本编号、时间戳、当前指针和幂等键均由受信任服务端路径写入，模型不得生成或覆盖。
 
 ## 计划修改范围
@@ -43,7 +43,7 @@
 |---|---|---|
 | 1 | 冻结字段到列的映射与不变量 | 任务卡和实现 Diff 对照：用户隔离、版本链、状态、证据、时间和 current 语义完整 |
 | 2 | 编写可逆 Migration | 空库及已有 D4D 数据库分别执行 `upgrade head` 与 `downgrade base`；Schema 和数据策略可核验 |
-| 3 | 写入唯一性约束 | 数据库拒绝同一 `(user_id, memory_id)` 多个 current 版本，且 Repository 对异常失败关闭 |
+| 3 | 写入唯一性约束 | 数据库拒绝同一偏好版本链存在多个 current 版本，且 Repository 对异常失败关闭 |
 | 4 | 实现版本 Repository 事务 | 创建、更新和回滚后版本历史连续；任一 SQL 失败不遗留半更新 |
 | 5 | 实现幂等与去重 | 相同幂等键或相同证据重放不创建新版本；冲突输入有结构化失败结果 |
 | 6 | 实现回滚 | 回滚生成可追溯的新 current 版本或等价审计版本，不覆盖既有历史 |
@@ -61,5 +61,4 @@
 
 - 首次实现提交前，展示完整 Diff、测试结果、Migration 升级/回退结果和已知风险，取得单独的 `commit` 授权。
 - 推送与创建或更新 PR 需分别取得授权。
-- Draft PR 仅表示施工进行中；只有非作者 E Reviewer 审查完成且 L2 证据齐全，才可声明 D7D 验收完成。
-
+- Draft PR 仅表示施工进行中；当前已完成本地定向验证，只有非作者 E Reviewer 审查完成且 L2 证据齐全，才可声明 D7D 验收完成。

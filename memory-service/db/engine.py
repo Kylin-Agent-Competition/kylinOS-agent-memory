@@ -17,7 +17,7 @@ from typing import Optional
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.exc import OperationalError
 
-from db.schema import FTS_TRIGGERS_DDL, FTS5_DDL, metadata
+from db.schema import FTS_TRIGGERS_DDL, FTS5_DDL, VERSION_TRIGGERS_DDL, metadata
 
 logger = logging.getLogger(__name__)
 
@@ -105,9 +105,11 @@ def is_locked_error(exc: BaseException) -> bool:
 def init_schema(engine: Engine, *, fts: bool = True) -> None:
     """建表 + FTS5 + 触发器（测试/开发快速建库；生产走 Alembic 迁移）。"""
     metadata.create_all(engine)
-    if not fts:
-        return
     with engine.begin() as conn:
+        for trigger_ddl in VERSION_TRIGGERS_DDL:
+            conn.exec_driver_sql(trigger_ddl)
+        if not fts:
+            return
         exists = conn.exec_driver_sql(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts'"
         ).first()
