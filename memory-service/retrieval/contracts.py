@@ -176,6 +176,33 @@ class UTCBaseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class RerankPolicy(UTCBaseModel):
+    """`weighted-rrf/v1` 的显式应用层融合策略。"""
+
+    version: Literal["weighted-rrf/v1"]
+    channel_weights: dict[Channel, float] = Field(min_length=1)
+
+    @field_validator("channel_weights", mode="before")
+    @classmethod
+    def _strict_weight_values(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or any(
+            type(weight) not in (int, float) for weight in value.values()
+        ):
+            raise ValueError("重排通道权重必须为有限正数")
+        return value
+
+    @field_validator("channel_weights")
+    @classmethod
+    def _positive_finite_weights(
+        cls, value: dict[Channel, float]
+    ) -> dict[Channel, float]:
+        if any(not math.isfinite(weight) or weight <= 0 for weight in value.values()):
+            raise ValueError("重排通道权重必须为有限正数")
+        if set(value) != {Channel.FTS5, Channel.VECTOR}:
+            raise ValueError("weighted-rrf/v1 必须显式提供 FTS5 与 Vector 权重")
+        return value
+
+
 # ── 5.6.1 canonical-json/v1 与 Digest ──
 
 
@@ -430,6 +457,35 @@ class VectorCapabilities(UTCBaseModel):
 # ── 6.3 Upsert ──
 
 
+class KnowledgeIndexMetadata(UTCBaseModel):
+    """FTS5/Vector 共用的 Knowledge 逻辑索引元数据。"""
+
+    knowledge_type: str = Field(min_length=1)
+    primary_category: Optional[str] = Field(default=None, min_length=1)
+    source_event_id: str = Field(min_length=1)
+    memory_status: str = Field(min_length=1)
+    relation_ids: List[str] = Field(default_factory=list)
+
+    @field_validator(
+        "knowledge_type",
+        "primary_category",
+        "source_event_id",
+        "memory_status",
+    )
+    @classmethod
+    def _reject_blank_strings(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not value.strip():
+            raise ValueError("Knowledge 索引元数据不得为空")
+        return value
+
+    @field_validator("relation_ids")
+    @classmethod
+    def _normalize_relation_ids(cls, value: list[str]) -> list[str]:
+        if any(not item.strip() for item in value):
+            raise ValueError("Knowledge 关系 ID 不得为空")
+        return sorted(set(value))
+
+
 class VectorRecord(UTCBaseModel):
     memory_id: str = Field(min_length=1)
     version_id: str = Field(min_length=1)
@@ -439,7 +495,14 @@ class VectorRecord(UTCBaseModel):
     memory_type: Optional[str] = None
     scene_id: Optional[str] = None
     scope_terms: dict[str, List[str]] = Field(default_factory=dict)
+    knowledge: Optional[KnowledgeIndexMetadata] = None
     index_text_hash: Digest
+
+    @model_validator(mode="after")
+    def _knowledge_metadata_matches_object_type(self) -> "VectorRecord":
+        if self.knowledge is not None and self.object_type is not ObjectType.KNOWLEDGE:
+            raise ValueError("Knowledge 索引元数据只能用于 knowledge 对象")
+        return self
 
 
 class VectorUpsertRequest(UTCBaseModel):
@@ -488,10 +551,34 @@ class SceneFilter(UTCBaseModel):
         return sorted(set(value))
 
 
+class KnowledgeFilter(UTCBaseModel):
+    """Knowledge 专用的索引预过滤与 SQLite 回源查询条件。"""
+
+    knowledge_types: List[str] = Field(default_factory=list)
+    primary_categories: List[str] = Field(default_factory=list)
+    source_event_ids: List[str] = Field(default_factory=list)
+    version_ids: List[str] = Field(default_factory=list)
+    required_relation_ids: List[str] = Field(default_factory=list)
+
+    @field_validator(
+        "knowledge_types",
+        "primary_categories",
+        "source_event_ids",
+        "version_ids",
+        "required_relation_ids",
+    )
+    @classmethod
+    def _dedupe_sorted(cls, value: list[str]) -> list[str]:
+        if any(not item.strip() for item in value):
+            raise ValueError("Knowledge 查询元数据不得为空")
+        return sorted(set(value))
+
+
 class RetrievalFilter(UTCBaseModel):
     user_id: str = Field(min_length=1)
     scene: SceneFilter = Field(default_factory=SceneFilter)
     scope_terms: dict[str, List[str]] = Field(default_factory=dict)
+    knowledge: KnowledgeFilter = Field(default_factory=KnowledgeFilter)
     object_types: List[ObjectType] = Field(min_length=1)
     memory_types: List[str] = Field(default_factory=list)
     allowed_memory_statuses: List[str] = Field(default_factory=list)
@@ -503,6 +590,13 @@ class RetrievalFilter(UTCBaseModel):
     @classmethod
     def _utc(cls, value: datetime) -> datetime:
         return _ensure_utc(value)
+
+    @model_validator(mode="after")
+    def _knowledge_scope_matches_object_type(self) -> "RetrievalFilter":
+        has_knowledge_query = any(self.knowledge.model_dump().values())
+        if has_knowledge_query and ObjectType.KNOWLEDGE not in self.object_types:
+            raise ValueError("Knowledge 查询条件要求 object_types 包含 knowledge")
+        return self
 
 
 # ── 8 RetrievalHit / 9 RetrievalCandidate ──
@@ -544,6 +638,7 @@ class RetrievalCandidate(UTCBaseModel):
     memory_status: str = Field(min_length=1)
     scene_id: Optional[str] = None
     scope_terms: dict[str, List[str]] = Field(default_factory=dict)
+    knowledge: Optional[KnowledgeIndexMetadata] = None
     content: str = Field(min_length=1)
     content_source: ContentSource
     channels: List[Channel] = Field(min_length=1)
@@ -791,11 +886,13 @@ __all__ = [
     "RetrievalError",
     "ProviderResult",
     "VectorCapabilities",
+    "KnowledgeIndexMetadata",
     "VectorRecord",
     "VectorUpsertRequest",
     "VectorUpsertRejection",
     "VectorUpsertResult",
     "SceneFilter",
+    "KnowledgeFilter",
     "RetrievalFilter",
     "RetrievalHit",
     "RetrievalCandidate",

@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from domain.enums import PreferenceScope
 from retrieval.contracts import (
     Channel,
+    KnowledgeIndexMetadata,
     ObjectType,
+    RerankPolicy,
     RetrievalFilter,
     RetrievalHit,
+    SceneFilter,
     ScoreSemantics,
 )
-from retrieval.fusion import TruthRecord, fuse_retrieval
+from retrieval.fusion import TruthRecord, fuse_retrieval, retrieve_graceful
 from retrieval.fts5 import Fts5Index
 
 NOW = datetime(2026, 8, 22, 12, 0, 0, tzinfo=timezone.utc)
@@ -34,7 +38,30 @@ def _hit(memory_id, version_id, channel, rank, user_id="alice", raw_score=0.0):
     )
 
 
-def _truth(memory_id, version_id="v1", user_id="alice", status="active", sensitivity="internal", content="x", object_type=ObjectType.KNOWLEDGE, conflict_state="resolved", is_current=True):
+def _truth(
+    memory_id,
+    version_id="v1",
+    user_id="alice",
+    status="active",
+    sensitivity="internal",
+    content="x",
+    object_type=ObjectType.KNOWLEDGE,
+    conflict_state="resolved",
+    is_current=True,
+    scene_id=None,
+    scope_terms=None,
+    preference_scope=None,
+    valid_from=None,
+    valid_to=None,
+):
+    validity = {}
+    if valid_from is not None:
+        validity["valid_from"] = valid_from
+    if valid_to is not None:
+        validity["valid_to"] = valid_to
+    scope_identity = {}
+    if preference_scope is not None:
+        scope_identity["preference_scope"] = preference_scope
     return TruthRecord(
         memory_id=memory_id,
         version_id=version_id,
@@ -46,18 +73,561 @@ def _truth(memory_id, version_id="v1", user_id="alice", status="active", sensiti
         sensitivity=sensitivity,
         conflict_state=conflict_state,
         is_current=is_current,
+        scene_id=scene_id,
+        scope_terms=scope_terms,
+        knowledge=(
+            KnowledgeIndexMetadata(
+                knowledge_type="legacy",
+                source_event_id="legacy-fixture",
+                memory_status=status,
+            )
+            if object_type is ObjectType.KNOWLEDGE
+            else None
+        ),
+        **scope_identity,
+        **validity,
     )
 
 
-def _flt(statuses=None, sensitivity=None):
+def _flt(
+    statuses=None,
+    sensitivity=None,
+    object_types=None,
+    allowed_scene_ids=None,
+    include_unscoped=False,
+    scope_terms=None,
+):
     return RetrievalFilter(
         user_id="alice",
-        object_types=[ObjectType.KNOWLEDGE],
+        scene=SceneFilter(
+            allowed_scene_ids=allowed_scene_ids or [],
+            include_unscoped=include_unscoped,
+        ),
+        scope_terms=scope_terms or {},
+        object_types=object_types or [ObjectType.KNOWLEDGE],
         allowed_memory_statuses=statuses or ["active"],
         allowed_sensitivity=sensitivity or ["internal"],
         conflict_policy="resolve",
         as_of=NOW,
     )
+
+
+def test_preference_validity_interval_is_half_open_at_as_of():
+    hits = [
+        _hit("effective", "v1", Channel.FTS5, 1),
+        _hit("expired-at-boundary", "v1", Channel.FTS5, 2),
+        _hit("future", "v1", Channel.FTS5, 3),
+    ]
+    truth = {
+        ("alice", "effective", "v1"): _truth(
+            "effective",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+            valid_from=NOW,
+            valid_to=NOW + timedelta(seconds=1),
+        ),
+        ("alice", "expired-at-boundary", "v1"): _truth(
+            "expired-at-boundary",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+            valid_to=NOW,
+        ),
+        ("alice", "future", "v1"): _truth(
+            "future",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+            valid_from=NOW + timedelta(seconds=1),
+        ),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=hits,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            include_unscoped=True,
+        ),
+    )
+
+    assert [candidate.memory_id for candidate in out] == ["effective"]
+
+
+def test_preference_validity_requires_timezone_and_normalizes_to_utc():
+    with pytest.raises(ValueError, match="valid_from 必须带时区"):
+        _truth(
+            "naive",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+            valid_from=datetime(2026, 8, 22, 12, 0, 0),
+        )
+
+    offset_time = datetime(
+        2026, 8, 22, 20, 0, 0, tzinfo=timezone(timedelta(hours=8))
+    )
+    truth = {
+        ("alice", "normalized", "v1"): _truth(
+            "normalized",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+            valid_from=offset_time,
+        )
+    }
+    out = fuse_retrieval(
+        fts5_hits=[_hit("normalized", "v1", Channel.FTS5, 1)],
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            include_unscoped=True,
+        ),
+    )
+
+    assert out[0].valid_from == NOW
+    assert out[0].valid_from.tzinfo is timezone.utc
+
+
+def test_preference_with_multiple_current_versions_fails_closed():
+    hits = [
+        _hit("pref", "v1", Channel.FTS5, 1),
+        _hit("pref", "v2", Channel.FTS5, 2),
+    ]
+    truth = {
+        ("alice", "pref", "v1"): _truth(
+            "pref",
+            version_id="v1",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+        ),
+        ("alice", "pref", "v2"): _truth(
+            "pref",
+            version_id="v2",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+        ),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=hits,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            include_unscoped=True,
+        ),
+    )
+
+    assert out == []
+
+
+def test_multiple_current_versions_fail_closed_for_knowledge():
+    hits = [
+        _hit("knowledge", "v1", Channel.FTS5, 1),
+        _hit("knowledge", "v2", Channel.FTS5, 2),
+    ]
+    truth = {
+        ("alice", "knowledge", "v1"): _truth(
+            "knowledge", version_id="v1"
+        ),
+        ("alice", "knowledge", "v2"): _truth(
+            "knowledge", version_id="v2"
+        ),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=hits,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(),
+    )
+
+    assert out == []
+
+
+def test_preference_scene_match_honors_allowed_scenes_and_unscoped_policy():
+    hits = [
+        _hit("work", "v1", Channel.FTS5, 1),
+        _hit("global", "v1", Channel.FTS5, 2),
+        _hit("home", "v1", Channel.FTS5, 3),
+    ]
+    truth = {
+        ("alice", "work", "v1"): _truth(
+            "work",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+            scene_id="work",
+        ),
+        ("alice", "global", "v1"): _truth(
+            "global",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+        ),
+        ("alice", "home", "v1"): _truth(
+            "home",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+            scene_id="home",
+        ),
+    }
+
+    scoped_only = fuse_retrieval(
+        fts5_hits=hits,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            allowed_scene_ids=["work"],
+            include_unscoped=False,
+        ),
+    )
+    with_global = fuse_retrieval(
+        fts5_hits=hits,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            allowed_scene_ids=["work"],
+            include_unscoped=True,
+        ),
+    )
+
+    assert [candidate.memory_id for candidate in scoped_only] == ["work"]
+    assert [candidate.memory_id for candidate in with_global] == ["work", "global"]
+
+
+def test_preference_scope_terms_require_each_key_and_an_intersecting_value():
+    hits = [
+        _hit("topic-a", "v1", Channel.FTS5, 1),
+        _hit("topic-b", "v1", Channel.FTS5, 2),
+        _hit("missing-tool-context", "v1", Channel.FTS5, 3),
+        _hit("global", "v1", Channel.FTS5, 4),
+    ]
+    truth = {
+        ("alice", "topic-a", "v1"): _truth(
+            "topic-a",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.TOPIC,
+            scope_terms={"topic": ["project-a"]},
+        ),
+        ("alice", "topic-b", "v1"): _truth(
+            "topic-b",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.TOPIC,
+            scope_terms={"topic": ["project-b"]},
+        ),
+        ("alice", "missing-tool-context", "v1"): _truth(
+            "missing-tool-context",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.TOOL,
+            scope_terms={"tool": ["terminal"]},
+        ),
+        ("alice", "global", "v1"): _truth(
+            "global",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+        ),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=hits,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            include_unscoped=True,
+            scope_terms={"topic": ["project-a"]},
+        ),
+    )
+
+    assert [candidate.memory_id for candidate in out] == ["topic-a", "global"]
+
+
+def test_preference_without_explicit_scope_identity_fails_closed():
+    truth = {
+        ("alice", "missing-scope", "v1"): _truth(
+            "missing-scope",
+            object_type=ObjectType.PREFERENCE,
+        )
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=[_hit("missing-scope", "v1", Channel.FTS5, 1)],
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            include_unscoped=True,
+        ),
+    )
+
+    assert out == []
+
+
+def test_preference_scope_identity_reuses_frozen_domain_enum():
+    rec = _truth(
+        "topic-pref",
+        object_type=ObjectType.PREFERENCE,
+        preference_scope="topic",
+        scope_terms={"topic": ["project-a"]},
+    )
+
+    assert rec.preference_scope is PreferenceScope.TOPIC
+    with pytest.raises(ValueError, match="preference_scope 必须使用冻结五值"):
+        _truth(
+            "invalid",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope="project",
+        )
+
+
+@pytest.mark.parametrize(
+    "preference_scope,scope_terms",
+    [
+        (PreferenceScope.TOPIC, {}),
+        (PreferenceScope.TOOL, {}),
+        (PreferenceScope.SESSION, {}),
+        (PreferenceScope.TIME_WINDOW, {}),
+        (PreferenceScope.TOPIC, {"tool": ["terminal"]}),
+    ],
+)
+def test_non_global_preference_requires_its_mapped_scope_term(
+    preference_scope, scope_terms
+):
+    truth = {
+        ("alice", "topic-pref", "v1"): _truth(
+            "topic-pref",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=preference_scope,
+            scope_terms=scope_terms,
+        )
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=[_hit("topic-pref", "v1", Channel.FTS5, 1)],
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            include_unscoped=True,
+            scope_terms={"topic": ["project-a"], "tool": ["terminal"]},
+        ),
+    )
+
+    assert out == []
+
+
+@pytest.mark.parametrize(
+    "preference_scope,term_key",
+    [
+        (PreferenceScope.TOPIC, "topic"),
+        (PreferenceScope.TOOL, "tool"),
+        (PreferenceScope.SESSION, "session"),
+        (PreferenceScope.TIME_WINDOW, "time_window"),
+    ],
+)
+def test_each_non_global_preference_scope_accepts_its_mapped_term(
+    preference_scope, term_key
+):
+    truth = {
+        ("alice", "scoped", "v1"): _truth(
+            "scoped",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=preference_scope,
+            scope_terms={term_key: ["expected"]},
+        )
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=[_hit("scoped", "v1", Channel.FTS5, 1)],
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            include_unscoped=True,
+            scope_terms={term_key: ["expected"]},
+        ),
+    )
+
+    assert [candidate.memory_id for candidate in out] == ["scoped"]
+
+
+def test_unknown_query_scope_key_is_rejected():
+    truth = {
+        ("alice", "global", "v1"): _truth(
+            "global",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+        )
+    }
+
+    with pytest.raises(ValueError, match="invalid_argument"):
+        fuse_retrieval(
+            fts5_hits=[_hit("global", "v1", Channel.FTS5, 1)],
+            vector_hits=[],
+            truth=truth,
+            flt=_flt(
+                object_types=[ObjectType.PREFERENCE],
+                include_unscoped=True,
+                scope_terms={"unknown_scope": ["x"]},
+            ),
+        )
+
+
+def test_unknown_truth_scope_key_fails_closed():
+    truth = {
+        ("alice", "topic-pref", "v1"): _truth(
+            "topic-pref",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.TOPIC,
+            scope_terms={"topic": ["project-a"], "unknown_scope": ["x"]},
+        )
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=[_hit("topic-pref", "v1", Channel.FTS5, 1)],
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            include_unscoped=True,
+            scope_terms={"topic": ["project-a"]},
+        ),
+    )
+
+    assert out == []
+
+
+def test_preference_scope_is_and_across_keys_and_or_within_values():
+    truth = {
+        ("alice", "scoped", "v1"): _truth(
+            "scoped",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.TOPIC,
+            scope_terms={
+                "topic": ["project-a", "project-b"],
+                "tool": ["terminal"],
+            },
+        )
+    }
+    hit = _hit("scoped", "v1", Channel.FTS5, 1)
+
+    matched = fuse_retrieval(
+        fts5_hits=[hit],
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            include_unscoped=True,
+            scope_terms={
+                "topic": ["project-b", "project-c"],
+                "tool": ["terminal"],
+            },
+        ),
+    )
+    one_key_missed = fuse_retrieval(
+        fts5_hits=[hit],
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            include_unscoped=True,
+            scope_terms={
+                "topic": ["project-b"],
+                "tool": ["browser"],
+            },
+        ),
+    )
+
+    assert [candidate.memory_id for candidate in matched] == ["scoped"]
+    assert one_key_missed == []
+
+
+def test_empty_scene_allowlist_only_allows_unscoped_when_explicitly_enabled():
+    hits = [
+        _hit("scoped", "v1", Channel.FTS5, 1),
+        _hit("unscoped", "v1", Channel.FTS5, 2),
+    ]
+    truth = {
+        ("alice", "scoped", "v1"): _truth(
+            "scoped",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+            scene_id="work",
+        ),
+        ("alice", "unscoped", "v1"): _truth(
+            "unscoped",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.GLOBAL,
+        ),
+    }
+
+    none_visible = fuse_retrieval(
+        fts5_hits=hits,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            allowed_scene_ids=[],
+            include_unscoped=False,
+        ),
+    )
+    unscoped_only = fuse_retrieval(
+        fts5_hits=hits,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            allowed_scene_ids=[],
+            include_unscoped=True,
+        ),
+    )
+
+    assert none_visible == []
+    assert [candidate.memory_id for candidate in unscoped_only] == ["unscoped"]
+
+
+def test_preference_candidate_explains_rrf_and_passed_hard_filters():
+    truth = {
+        ("alice", "pref", "v2"): _truth(
+            "pref",
+            version_id="v2",
+            object_type=ObjectType.PREFERENCE,
+            preference_scope=PreferenceScope.TOPIC,
+            scene_id="work",
+            scope_terms={"topic": ["project-a"]},
+            valid_from=NOW,
+        )
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=[_hit("pref", "v2", Channel.FTS5, 1)],
+        vector_hits=[_hit("pref", "v2", Channel.VECTOR, 2)],
+        truth=truth,
+        flt=_flt(
+            object_types=[ObjectType.PREFERENCE],
+            allowed_scene_ids=["work"],
+            scope_terms={"topic": ["project-a"]},
+        ),
+        k=10,
+    )
+
+    assert len(out) == 1
+    assert out[0].explanation == {
+        "algorithm_version": "rrf-v1",
+        "rrf_k": 10,
+        "rrf_terms": pytest.approx({"fts5": 1 / 11, "vector": 1 / 12}),
+        "degraded_channels": [],
+        "rerank_version": None,
+        "hard_filter": {
+            "policy_version": "preference-filter/v2",
+            "scope_schema_version": "preference-scope-terms/v1",
+            "current_version": "passed",
+            "validity": "passed",
+            "scene": "allowed_scene",
+            "preference_scope": "topic",
+            "scope": "terms_matched",
+        },
+    }
 
 
 def test_adr001_golden_ordering():
@@ -163,6 +733,199 @@ def test_top_k_truncation():
     }
     out = fuse_retrieval(fts5_hits=fts5, vector_hits=[], truth=truth, flt=_flt(), top_k=1)
     assert [c.memory_id for c in out] == ["mem-a"]
+
+
+def test_token_budget_keeps_ranked_candidates_without_exceeding_budget():
+    fts5 = [
+        _hit("mem-a", "v1", Channel.FTS5, 1),
+        _hit("mem-b", "v1", Channel.FTS5, 2),
+    ]
+    truth = {
+        ("alice", "mem-a", "v1"): _truth("mem-a", content="four"),
+        ("alice", "mem-b", "v1"): _truth("mem-b", content="sixsix"),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=fts5,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(),
+        token_budget=5,
+    )
+
+    assert [candidate.memory_id for candidate in out] == ["mem-a"]
+    assert out[0].estimated_tokens == 4
+    assert out[0].explanation["token_budget"] == {
+        "policy_version": "token-budget/v1",
+        "budget": 5,
+        "used": 4,
+        "decision": "included",
+        "estimator_version": "character-count/v1",
+        "estimator_semantics": "Unicode code point count; not a model tokenizer",
+    }
+
+
+def test_weighted_rerank_uses_versioned_channel_weights():
+    fts5 = [_hit("fts5-first", "v1", Channel.FTS5, 1)]
+    vector = [_hit("vector-first", "v1", Channel.VECTOR, 1)]
+    truth = {
+        ("alice", "fts5-first", "v1"): _truth("fts5-first"),
+        ("alice", "vector-first", "v1"): _truth("vector-first"),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=fts5,
+        vector_hits=vector,
+        truth=truth,
+        flt=_flt(),
+        rerank_policy=RerankPolicy(
+            version="weighted-rrf/v1",
+            channel_weights={Channel.FTS5: 0.5, Channel.VECTOR: 2.0},
+        ),
+    )
+
+    assert [candidate.memory_id for candidate in out] == [
+        "vector-first",
+        "fts5-first",
+    ]
+    assert out[0].rrf_score == pytest.approx(1 / 61)
+    assert out[0].final_score == pytest.approx(2 / 61)
+    assert out[0].explanation["algorithm_version"] == "weighted-rrf/v1"
+    assert out[0].explanation["rerank_version"] is None
+    assert out[0].explanation["weighted_rrf"] == {
+        "policy_version": "weighted-rrf/v1",
+        "channel_weights": {"fts5": 0.5, "vector": 2.0},
+        "formula": "sum(channel_weight[channel] * 1 / (rrf_k + rank[channel]))",
+        "direction": "higher final_score first",
+        "rrf_score": pytest.approx(1 / 61),
+        "final_score": pytest.approx(2 / 61),
+    }
+
+
+def test_token_budget_scans_past_oversized_top_rank_until_top_k_is_filled():
+    fts5 = [
+        _hit("too-large", "v1", Channel.FTS5, 1),
+        _hit("fits", "v1", Channel.FTS5, 2),
+        _hit("also-fits", "v1", Channel.FTS5, 3),
+    ]
+    truth = {
+        ("alice", "too-large", "v1"): _truth("too-large", content="abcdef"),
+        ("alice", "fits", "v1"): _truth("fits", content="four"),
+        ("alice", "also-fits", "v1"): _truth("also-fits", content="five"),
+    }
+
+    out = fuse_retrieval(
+        fts5_hits=fts5,
+        vector_hits=[],
+        truth=truth,
+        flt=_flt(),
+        top_k=1,
+        token_budget=5,
+    )
+
+    assert [candidate.memory_id for candidate in out] == ["fits"]
+
+
+def test_token_budget_zero_exact_and_cumulative_selection():
+    fts5 = [
+        _hit("four", "v1", Channel.FTS5, 1),
+        _hit("two", "v1", Channel.FTS5, 2),
+        _hit("later", "v1", Channel.FTS5, 3),
+    ]
+    truth = {
+        ("alice", "four", "v1"): _truth("four", content="four"),
+        ("alice", "two", "v1"): _truth("two", content="xx"),
+        ("alice", "later", "v1"): _truth("later", content="x"),
+    }
+
+    assert fuse_retrieval(
+        fts5_hits=fts5, vector_hits=[], truth=truth, flt=_flt(), token_budget=0
+    ) == []
+    exact = fuse_retrieval(
+        fts5_hits=fts5, vector_hits=[], truth=truth, flt=_flt(), token_budget=4
+    )
+    assert [candidate.memory_id for candidate in exact] == ["four"]
+    cumulative = fuse_retrieval(
+        fts5_hits=fts5, vector_hits=[], truth=truth, flt=_flt(), token_budget=6
+    )
+    assert [candidate.memory_id for candidate in cumulative] == ["four", "two"]
+
+
+def test_top_k_none_and_token_budget_none_keep_normal_rank_order():
+    fts5 = [
+        _hit("first", "v1", Channel.FTS5, 1),
+        _hit("second", "v1", Channel.FTS5, 2),
+    ]
+    truth = {
+        ("alice", "first", "v1"): _truth("first", content="abcdef"),
+        ("alice", "second", "v1"): _truth("second", content="x"),
+    }
+    out = fuse_retrieval(
+        fts5_hits=fts5, vector_hits=[], truth=truth, flt=_flt(), top_k=None
+    )
+    assert [candidate.memory_id for candidate in out] == ["first", "second"]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"k": True}, "k 必须是正整数"),
+        ({"k": 1.5}, "k 必须是正整数"),
+        ({"top_k": -1}, "top_k 必须是正整数或 None"),
+        ({"top_k": True}, "top_k 必须是正整数或 None"),
+        ({"top_k": 1.5}, "top_k 必须是正整数或 None"),
+        ({"token_budget": "5"}, "token_budget 必须是非负整数或 None"),
+        ({"token_budget": 5.5}, "token_budget 必须是非负整数或 None"),
+        ({"token_budget": True}, "token_budget 必须是非负整数或 None"),
+    ],
+)
+def test_query_options_require_exact_integer_contracts(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        fuse_retrieval(fts5_hits=[], vector_hits=[], truth={}, flt=_flt(), **kwargs)
+
+
+def test_weighted_policy_requires_fixed_version_and_both_channel_weights():
+    with pytest.raises(ValueError, match="weighted-rrf/v1"):
+        RerankPolicy(
+            version="rrf-v1",
+            channel_weights={Channel.FTS5: 0.5, Channel.VECTOR: 2.0},
+        )
+    with pytest.raises(ValueError, match="FTS5 与 Vector"):
+        RerankPolicy(version="weighted-rrf/v1", channel_weights={Channel.FTS5: 1.0})
+    with pytest.raises(ValueError, match="有限正数"):
+        RerankPolicy(
+            version="weighted-rrf/v1",
+            channel_weights={Channel.FTS5: "1", Channel.VECTOR: 1.0},
+        )
+
+
+def test_retrieve_graceful_records_selection_diagnostics_without_content():
+    outcome = retrieve_graceful(
+        fts5_search=lambda: [
+            _hit("too-large", "v1", Channel.FTS5, 1),
+            _hit("fits", "v1", Channel.FTS5, 2),
+        ],
+        vector_search=lambda: [],
+        truth={
+            ("alice", "too-large", "v1"): _truth("too-large", content="abcdef"),
+            ("alice", "fits", "v1"): _truth("fits", content="four"),
+        },
+        flt=_flt(),
+        top_k=1,
+        token_budget=5,
+    )
+    assert [candidate.memory_id for candidate in outcome.candidates] == ["fits"]
+    assert outcome.selection_diagnostics == {
+        "policy_version": "token-budget/v1",
+        "requested_top_k": 1,
+        "token_budget": 5,
+        "selected_count": 1,
+        "skipped_budget_count": 1,
+        "budget_used": 4,
+        "budget_remaining": 1,
+        "estimator_version": "character-count/v1",
+        "estimator_semantics": "Unicode code point count; not a model tokenizer",
+    }
 
 
 def test_fts5_index_returns_ranked_hits():
