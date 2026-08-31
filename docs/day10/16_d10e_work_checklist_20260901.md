@@ -8,8 +8,8 @@
 | 本次代行 | B 轨在取得 E 轨负责人授权后，代行 E 轨限定范围 |
 | 工作类型 | 新增功能：业务规则、状态机、安全测试 |
 | 分支 | `feature/d10-e-forgetting-governance`（基于 `main`：`c1ee840`） |
-| Draft PR 标题 | `B轨代替E轨：D10 精准遗忘业务与安全 Gate` |
-| 初始进度 | 1/7（14%）：本任务卡已提交；其余实现尚未开始 |
+| Draft PR 标题 | `B轨代替E轨：D10E 精准遗忘业务与安全 Gate` |
+| 当前进度 | 2/7（29%）：任务卡与输入安全边界已完成；预确认状态机已失败关闭，确认/执行接线仍有跨轨依赖 |
 
 ## 目标与边界
 
@@ -20,13 +20,15 @@
 ## 工作清单
 
 1. [x] **建立本工作清单**：确定 D10E 范围、验收、依赖、分支与 Draft PR 标题。
-2. [ ] **冻结请求与 Plan 输入边界**：每种 `forget_mode` 仅接受对应 selector；`full_reset` 仅允许 `target_type=all`，默认拒绝级联。
+2. [x] **冻结请求与 Plan 输入边界**：每种具有专属 selector 的 `forget_mode` 仅接受对应 selector。
 
-   验证：模式正向、跨模式 selector、空白 ID/selector 的负向用例；关闭 TD-015 的实现部分。
+   验证：模式正向、跨模式 selector（包括 `full_reset`）、空白 ID/selector、重复/计数不一致的解析 ID 均有负向用例；TD-015 的实现部分已覆盖。`full_reset` 的类型/级联细节仍由 E/D 联合确认，未被本次实现冻结。
 3. [ ] **目标解析与精准范围**：以请求 `user_id` 作为强制过滤键；规则引擎生成去重且稳定排序的 `resolved_target_ids`、`affected_count` 和脱敏预览。
 
    验证：单条、会话、主题、时间窗、全量重置的快照；误删、漏删均为零。
-4. [ ] **预览—确认—执行状态机**：仅允许 `pending → previewing → awaiting_confirmation → executing → completed/failed/rolled_back`。
+4. [ ] **预览—确认—执行状态机**：已实现 `pending → previewing → awaiting_confirmation` 的不可跳步推进；确认令牌校验与进入 `executing` 的适配器由 D 轨接线，接线前失败关闭。
+
+   D 接线门槛：令牌必须绑定 `user_id`、`forget_plan_id` 与解析目标快照，校验过期和重放，并与写入 `executing` 在同一事务内完成。
 
    验证：逐边迁移、过期/错配确认、幂等重放、失败与回滚路径。
 5. [ ] **软/硬删除业务语义**：软删除立即从标准检索与 MemoryContext 排除；硬删除后 SQLite、Vector、FTS5、日志、导出和备份中不得有可检索明文。
@@ -46,12 +48,12 @@
 | 确认令牌、SQLite 事务、Outbox、最小审计持久化 | D | 仅定义接口和验收，不实现 |
 | Vector/FTS5 精确删除、重建、残留率 | B | 仅消费删除结果，不改 B 轨实现 |
 | 预览、确认、重试 UI | C | 仅提供 DTO/状态，不做 QML |
-| `full_reset` 与级联边界 | E/D | 保守拒绝，待书面联合确认 |
+| `full_reset` 与级联边界 | E/D | 仅承载、不可执行；具体类型与级联边界待书面联合确认 |
 | 麒麟宿主 Runtime 证据 | C/D/E | 保持 `UNVERIFIED`，不以本地测试替代 |
 
 ## Draft PR 要点
 
-- 标题使用：`B轨代替E轨：D10 精准遗忘业务与安全 Gate`。
+- 标题使用：`B轨代替E轨：D10E 精准遗忘业务与安全 Gate`。
 - 正文须说明本次由 B 轨代行 E 轨授权范围，并明确 D、B、C 的未实现依赖。
 - 验证部分需分别列出本地测试、`git diff --check`、D 轨非作者审查和麒麟宿主证据状态；不得将本地结果写为宿主通过。
 
