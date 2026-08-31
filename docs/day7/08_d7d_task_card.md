@@ -6,7 +6,7 @@
 | 责任轨道 | D（SQLite、Repository、Migration、事务与部署） |
 | 基线 | 起始基线为 `origin/main@8ab369b`；已通过 merge 同步至 `origin/main@31b5279` |
 | Reviewer | E（非作者 Reviewer） |
-| 当前状态 | `REVIEW_REWORK_PENDING_COMMIT`：独立 Reviewer 提出的 D7D 数据一致性问题已在本地修复并通过 L0/L1，待提交、复审与麒麟 L2 证据 |
+| 当前状态 | `REVIEW_REWORK_PENDING_APPROVAL`：独立 Reviewer 提出的 D7D 数据一致性问题已修复、提交、推送，并通过 L0/L1 与麒麟 L2；待最新提交的独立复审 |
 
 ## 目标与完成定义
 
@@ -28,7 +28,7 @@
 2. 在 `memory-service/db/` 或现有 D 轨 DAO 接缝实现版本 Repository：创建、读取 current、读取历史、更新、回滚与幂等回查。
 3. 将版本更新纳入单一事务：旧 current 失效、新版本插入、版本链写入、审计/索引事件（如已存在的接缝允许）必须一起成功或一起回滚。
 4. 新增 Repository 与 Migration 测试，覆盖升级、回退、唯一性、跨用户隔离、并发竞争、重复证据、事务异常与回滚。
-5. 补充 L0/L1 证据；在银河麒麟前台虚拟机执行 L2 迁移与回归，记录真实结果。
+5. 补充 L0/L1 证据；在银河麒麟前台虚拟机执行 L2 迁移与回归，记录真实结果（已完成）。
 
 ## 禁止扩张范围
 
@@ -50,6 +50,14 @@
 | 7 | 运行 L0/L1 测试 | 迁移、Repository、并发和回归测试全绿；`git diff --check` 通过 |
 | 8 | 执行麒麟 L2 | 前台虚拟机真实执行迁移链和相关回归；保存命令、提交、结果和失败信息 |
 
+## 麒麟 L2 证据
+
+- 环境：由基础快照 `20-btrack-test-deps-20260821` 创建的前台可见麒麟 V11 链接克隆 `Kylin-V11-2603-D7D-48a2bea-Test`，Python 3.12.3。
+- 传输与提交：通过 SSH 传输仅包含 D7D 分支和 `main` 基线的 Git bundle；来宾中校验的 `HEAD` 为 `48a2beacadd3e39b86e1fe96a21c98b30054751b`。
+- 依赖：离线安装项目声明范围内的 pytest 9.1.1、SQLAlchemy 2.0.52、Alembic 1.19.1 与 Pydantic 2.12.5。
+- 命令：`cd memory-service && python3 -m pytest tests/test_migrations_d4d.py tests/test_migrations_trace_id_pr2.py tests/test_migrations_d7d.py tests/test_preference_version_repository_d7d.py -q`。
+- 结果：`30 passed in 20.56s`，退出码 `0`。
+
 ## 风险与跨轨依赖
 
 - SQLite 部分唯一索引与迁移回退的数据保留策略需先由测试锁定；不允许以删除历史换取唯一性通过。
@@ -61,4 +69,4 @@
 
 - 首次实现提交前，展示完整 Diff、测试结果、Migration 升级/回退结果和已知风险，取得单独的 `commit` 授权。
 - 推送与创建或更新 PR 需分别取得授权。
-- Draft PR 仅表示施工进行中；当前已完成本地定向验证，只有非作者 E Reviewer 审查完成且 L2 证据齐全，才可声明 D7D 验收完成。
+- 当前 PR 已进入 Ready for review；只有非作者 E Reviewer 对最新提交审查完成且 L2 证据齐全，才可声明 D7D 验收完成。
