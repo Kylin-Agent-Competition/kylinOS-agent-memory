@@ -271,20 +271,28 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
 
     const QString now = nowIso8601UtcMs();
 
-    QJsonObject event{
+    // ADR-010 IPC 映射契约：payload 分为 metadata（嵌套对象）+ 事件字段（顶层）。
+    // metadata 包含 schema_version / event_id / user_id / session_id / turn_id /
+    // idempotency_key / trace_id? / occurred_at / collected_at / source_reference。
+    // 事件层包含 is_final / finalized_at / final_message_id? /
+    // finalization_reason? / stop_reason? / tool_call_ids?。
+    QJsonObject metadata{
         {QStringLiteral("schema_version"), QStringLiteral("1.0")},
         {QStringLiteral("event_id"), eventId},
         {QStringLiteral("user_id"), userId},
         {QStringLiteral("session_id"), sessionId},
         {QStringLiteral("turn_id"), turnId},
+        {QStringLiteral("idempotency_key"), idempotencyKey},
         {QStringLiteral("occurred_at"), now},
         {QStringLiteral("collected_at"), now},
         {QStringLiteral("source_reference"), srcRef},
-        {QStringLiteral("idempotency_key"), idempotencyKey},
-        {QStringLiteral("is_final"), true},
-        {QStringLiteral("finalized_at"), now},
     };
-    if (!traceId.isEmpty())        event.insert(QStringLiteral("trace_id"), traceId);
+    if (!traceId.isEmpty()) metadata.insert(QStringLiteral("trace_id"), traceId);
+
+    QJsonObject event;
+    event.insert(QStringLiteral("metadata"), metadata);
+    event.insert(QStringLiteral("is_final"), true);
+    event.insert(QStringLiteral("finalized_at"), now);
     if (!finalMessageId.isEmpty()) event.insert(QStringLiteral("final_message_id"), finalMessageId);
     if (!finalizationReason.isEmpty()) event.insert(QStringLiteral("finalization_reason"), finalizationReason);
     if (!stopReason.isEmpty())     event.insert(QStringLiteral("stop_reason"), stopReason);

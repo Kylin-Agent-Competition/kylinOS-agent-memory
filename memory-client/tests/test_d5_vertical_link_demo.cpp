@@ -215,32 +215,75 @@ void D5VerticalLinkDemoTest::turnFinalizedWithUnsupportedMethodRoutesPostTurnToF
     // 不再包装 memory.store → {event_type, event_body}。
     mock.setHandler([](const client::EnvelopeParts& parts) -> QJsonObject {
         if (parts.method == client::methods::kTurnFinalized) {
-            // ADR-010：payload 必须是 TurnFinalizedEvent JSON 本身，不能再出现
-            // event_type / event_body wrapper（旧路径，ADR-010 冲突）；
-            // 并必须包含 schema_version / idempotency_key / is_final 字段。
+            // ADR-010 IPC 映射契约校验：
+            // 1) 不得出现 {event_type,event_body} legacy wrapper
             const bool hasWrapper =
                 parts.payload.contains(QStringLiteral("event_type"))
                 || parts.payload.contains(QStringLiteral("event_body"));
-            const bool missingRequired =
-                !parts.payload.contains(QStringLiteral("schema_version"))
-                || !parts.payload.contains(QStringLiteral("idempotency_key"))
-                || !parts.payload.contains(QStringLiteral("is_final"));
+
+            // 2) payload 必须有嵌套 metadata 对象
+            const QJsonValue metaVal = parts.payload.value(QStringLiteral("metadata"));
+            const bool hasMetadata = metaVal.isObject();
+            const QJsonObject metadata = hasMetadata ? metaVal.toObject() : QJsonObject{};
+
+            // 3) metadata 必填字段
+            const bool missingMetaRequired =
+                !metadata.contains(QStringLiteral("schema_version"))
+                || !metadata.contains(QStringLiteral("event_id"))
+                || !metadata.contains(QStringLiteral("user_id"))
+                || !metadata.contains(QStringLiteral("session_id"))
+                || !metadata.contains(QStringLiteral("turn_id"))
+                || !metadata.contains(QStringLiteral("idempotency_key"))
+                || !metadata.contains(QStringLiteral("occurred_at"))
+                || !metadata.contains(QStringLiteral("collected_at"))
+                || !metadata.contains(QStringLiteral("source_reference"));
+
+            // 4) 事件层必填字段
+            const bool missingEventRequired =
+                !parts.payload.contains(QStringLiteral("is_final"))
+                || !parts.payload.contains(QStringLiteral("finalized_at"));
+
+            // 5) 不应出现顶层 legacy flat 字段（schema_version 等应在 metadata 内）
+            const bool hasFlatLeak =
+                parts.payload.contains(QStringLiteral("schema_version"))
+                || parts.payload.contains(QStringLiteral("event_id"))
+                || parts.payload.contains(QStringLiteral("idempotency_key"));
+
             if (hasWrapper) {
-                // 直接以 INVALID_REQUEST 失败替代 QFAIL（测试宏在返回 QJsonObject
-                // 的 lambda 内不可用；会产生 no-value return 的编译错误）。
                 return client::buildErrorResponse(
                     parts.requestId, parts.traceId,
                     client::error_codes::kInvalidRequest,
                     QStringLiteral("ADR-010 violation: turn.finalized payload still "
                                    "carries legacy {event_type,event_body} wrapper."));
             }
-            if (missingRequired) {
+            if (!hasMetadata || missingMetaRequired || missingEventRequired) {
                 return client::buildErrorResponse(
                     parts.requestId, parts.traceId,
                     client::error_codes::kInvalidRequest,
                     QStringLiteral("ADR-010 violation: turn.finalized payload missing "
-                                   "schema_version / idempotency_key / is_final."));
+                                   "required nested metadata or event fields."));
             }
+            if (hasFlatLeak) {
+                return client::buildErrorResponse(
+                    parts.requestId, parts.traceId,
+                    client::error_codes::kInvalidRequest,
+                    QStringLiteral("ADR-010 violation: metadata fields leaked to "
+                                   "payload top level (should be inside metadata)."));
+            }
+
+            // 6) trace_id 唯一真源：envelope.trace_id == metadata.trace_id
+            //    （若 metadata 提供了 trace_id）
+            if (metadata.contains(QStringLiteral("trace_id"))) {
+                const QString metaTrace = metadata.value(QStringLiteral("trace_id")).toString();
+                if (metaTrace != parts.traceId) {
+                    return client::buildErrorResponse(
+                        parts.requestId, parts.traceId,
+                        client::error_codes::kInvalidRequest,
+                        QStringLiteral("ADR-010 violation: trace_id inconsistent — "
+                                       "envelope.trace_id != metadata.trace_id."));
+                }
+            }
+
             // 正常路径：生产默认 turn.finalized 未注册，返回 UNSUPPORTED_METHOD。
             return client::buildErrorResponse(
                 parts.requestId, parts.traceId,
@@ -553,19 +596,24 @@ void D5VerticalLinkDemoTest::previewAndSendReuseSameEventIdTimestamp()
         "final text", "completed", "stop");
 
     QCOMPARE(a, b);
-    QCOMPARE(a.value(QStringLiteral("event_id")).toString(),
-             b.value(QStringLiteral("event_id")).toString());
-    QCOMPARE(a.value(QStringLiteral("occurred_at")).toString(),
-             b.value(QStringLiteral("occurred_at")).toString());
-    QCOMPARE(a.value(QStringLiteral("collected_at")).toString(),
-             b.value(QStringLiteral("collected_at")).toString());
+    // ADR-010: event_id 现在嵌套在 metadata 内
+    const QJsonObject aMeta = a.value(QStringLiteral("metadata")).toObject();
+    const QJsonObject bMeta = b.value(QStringLiteral("metadata")).toObject();
+    QVERIFY(!aMeta.isEmpty());
+    QCOMPARE(aMeta.value(QStringLiteral("event_id")).toString(),
+             bMeta.value(QStringLiteral("event_id")).toString());
+    QCOMPARE(aMeta.value(QStringLiteral("occurred_at")).toString(),
+             bMeta.value(QStringLiteral("occurred_at")).toString());
+    QCOMPARE(aMeta.value(QStringLiteral("collected_at")).toString(),
+             bMeta.value(QStringLiteral("collected_at")).toString());
 
     // 参数变化 → 缓存失效 → 不同对象（至少 event_id 不同）
     const QJsonObject c = vm.buildTurnFinalizedEventJson(
         "u2", "s2", "t2", "tr2", "m2",
         "final text 2", "completed", "stop");
-    QVERIFY(a.value(QStringLiteral("event_id")).toString()
-            != c.value(QStringLiteral("event_id")).toString());
+    const QJsonObject cMeta = c.value(QStringLiteral("metadata")).toObject();
+    QVERIFY(aMeta.value(QStringLiteral("event_id")).toString()
+            != cMeta.value(QStringLiteral("event_id")).toString());
 }
 
 QTEST_MAIN(D5VerticalLinkDemoTest)

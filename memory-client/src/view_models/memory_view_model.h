@@ -29,8 +29,9 @@ namespace kylin::memory::client::v1 {
 //   (1) Pre-Chat Demo：用户输入 → MemoryQuery → 按正式 MemoryContext 契约
 //       解析 envelope.data.context → 注入模型请求文本；严格保证 originalUserText
 //       与注入片段分离；空 context / error context 不产生伪 Context。
-//   (2) Post-Turn Demo：构造 TurnFinalizedEvent 并以 memory.store 发送；
-//       **业务** status=error（例如 UNSUPPORTED_METHOD）显式进入 failed 阶段。
+//   (2) Post-Turn Demo：构造 TurnFinalizedEvent（ADR-010 嵌套 metadata 结构）
+//       并以 turn.finalized 发送；**业务** status=error（例如
+//       UNSUPPORTED_METHOD）显式进入 failed 阶段。
 //   (3) 原文隔离验证：三路独立 QString 提供给 QML。
 //
 // REWORK 关键修复（对照 Reviewer 4 类主问题）：
@@ -45,8 +46,10 @@ namespace kylin::memory::client::v1 {
 //     - 新增 per-request deadline QTimer（kDefaultDeadlineMs=5000），超时失败
 //     - 拆 busy_ → preChatBusy_ + postTurnBusy_，避免多请求竞态
 //     - injection failure 落实 injection_status=failed（见 data.context 解析）
-//     - sendTurnFinalizedEvent 按 ADR-010 路由 turn.finalized；移除
-//       旧 {event_type,event_body} wrapper；memory.store 保持 UNSUPPORTED
+//     - sendTurnFinalizedEvent 按 ADR-010 路由 turn.finalized；payload 按
+//       ADR-010 嵌套 metadata + 事件字段；移除旧 {event_type,event_body} wrapper；
+//       trace_id 唯一真源：envelope.trace_id == metadata.trace_id；
+//       memory.store 保持 UNSUPPORTED
 //     - 移除超出 C-D5 范围的 sendToolExecutionEvent
 // ============================================================================
 

@@ -92,11 +92,12 @@ public:
     // 路由：turn.finalized（ADR-010 冻结；CANDIDATE / BLOCKED_BY_HOST_MAPPING；
     // 生产默认不注册；Demo/测试可注册）。
     // payload = eventJson，字段严格对齐 ADR-010 IPC 映射契约：
-    //   metadata(schema_version,event_id,user_id,session_id,turn_id,
-    //     idempotency_key,trace_id?,occurred_at,collected_at,source_reference)
+    //   metadata{schema_version,event_id,user_id,session_id,turn_id,
+    //     idempotency_key,trace_id?,occurred_at,collected_at,source_reference}
     //   事件(is_final,finalized_at,final_message_id?,finalization_reason?,
     //     stop_reason?,retry_of_turn_id?,tool_call_ids?)
-    // 注：不再使用旧 {event_type,event_body} wrapper。
+    // ADR-010 trace_id 唯一真源：envelope.trace_id 取 metadata.trace_id
+    // （若提供）；不再使用旧 {event_type,event_body} wrapper。
     Q_INVOKABLE QString sendTurnFinalizedEvent(const QJsonObject& eventJson);
 
 signals:
@@ -133,9 +134,12 @@ private:
     QPointer<QLocalSocket> socket_;
     QByteArray receiveBuffer_;
 
-    // request_id -> method（用于响应关联与诊断）。本骨架不依赖服务端回传 request_id，
-    // 但保留映射以便 L1 联调时验证关联正确性。
-    std::unordered_map<std::string, QString> pendingRequests_;
+    // request_id -> {method, trace_id}（用于响应关联与 trace_id 一致性校验）。
+    struct PendingRequest {
+        QString method;
+        QString traceId;
+    };
+    std::unordered_map<std::string, PendingRequest> pendingRequests_;
 };
 
 }  // namespace kylin::memory::client::v1
