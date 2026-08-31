@@ -27,6 +27,7 @@ from db.schema import (
     idempotency_cache,
     memory_entries,
     memory_items,
+    memory_version_receipts,
     memory_versions,
     outbox,
     turns,
@@ -459,16 +460,24 @@ def _latest_version_number(conn, *, memory_item_id: int) -> int:
     return int(value or 0)
 
 
+def _receipt_version(
+    conn, *, receipt: Dict[str, Any], user_id: str
+) -> Dict[str, Any]:
+    version = _version_row(conn, version_id=int(receipt["memory_version_id"]), user_id=user_id)
+    assert version is not None
+    return {**version, "created": False}
+
+
 def _return_existing_idempotent(
     conn, *, memory_item_id: int, idempotency_key: Optional[str], request_fingerprint: str
 ) -> Optional[Dict[str, Any]]:
     if idempotency_key is None:
         return None
     row = conn.execute(
-        select(memory_versions).where(
+        select(memory_version_receipts).where(
             and_(
-                memory_versions.c.memory_item_id == memory_item_id,
-                memory_versions.c.idempotency_key == idempotency_key,
+                memory_version_receipts.c.memory_item_id == memory_item_id,
+                memory_version_receipts.c.idempotency_key == idempotency_key,
             )
         )
     ).mappings().first()
@@ -477,7 +486,7 @@ def _return_existing_idempotent(
     existing = dict(row)
     if existing["request_fingerprint"] != request_fingerprint:
         raise PreferenceVersionIdempotencyConflictError("同一幂等键对应的请求指纹不一致")
-    return {**existing, "created": False}
+    return existing
 
 
 def _return_existing_evidence_or_fail(
@@ -489,14 +498,13 @@ def _return_existing_evidence_or_fail(
     memory_status: str,
 ) -> Optional[Dict[str, Any]]:
     row = conn.execute(
-        select(memory_versions)
+        select(memory_version_receipts)
         .where(
             and_(
-                memory_versions.c.memory_item_id == memory_item_id,
-                memory_versions.c.evidence_fingerprint == evidence_fingerprint,
+                memory_version_receipts.c.memory_item_id == memory_item_id,
+                memory_version_receipts.c.evidence_fingerprint == evidence_fingerprint,
             )
         )
-        .order_by(memory_versions.c.version.desc())
     ).mappings().first()
     if row is None:
         return None
@@ -508,7 +516,35 @@ def _return_existing_evidence_or_fail(
         raise PreferenceVersionEvidenceConflictError(
             "同一证据指纹不能写入不同的偏好值或生命周期状态"
         )
-    return {**existing, "created": False}
+    return existing
+
+
+def _record_operation_receipt(
+    conn,
+    *,
+    memory_item_id: int,
+    memory_version_id: int,
+    operation_kind: str,
+    preference_value: str,
+    memory_status: str,
+    evidence_fingerprint: str,
+    idempotency_key: Optional[str],
+    request_fingerprint: str,
+    created_at: str,
+) -> None:
+    conn.execute(
+        insert(memory_version_receipts).values(
+            memory_item_id=memory_item_id,
+            memory_version_id=memory_version_id,
+            operation_kind=operation_kind,
+            preference_value=preference_value,
+            memory_status=memory_status,
+            evidence_fingerprint=evidence_fingerprint,
+            idempotency_key=idempotency_key,
+            request_fingerprint=request_fingerprint,
+            created_at=created_at,
+        )
+    )
 
 
 def _append_preference_version(
@@ -530,18 +566,17 @@ def _append_preference_version(
         request_fingerprint=request_fingerprint,
     )
     if replay is not None:
-        return replay
+        return _receipt_version(conn, receipt=replay, user_id=_item_owner(conn, memory_item_id))
 
-    if rollback_of_version_id is None:
-        evidence_replay = _return_existing_evidence_or_fail(
-            conn,
-            memory_item_id=memory_item_id,
-            evidence_fingerprint=evidence_fingerprint,
-            preference_value=preference_value,
-            memory_status=memory_status,
-        )
-        if evidence_replay is not None:
-            return evidence_replay
+    evidence_replay = _return_existing_evidence_or_fail(
+        conn,
+        memory_item_id=memory_item_id,
+        evidence_fingerprint=evidence_fingerprint,
+        preference_value=preference_value,
+        memory_status=memory_status,
+    )
+    if evidence_replay is not None:
+        return _receipt_version(conn, receipt=evidence_replay, user_id=_item_owner(conn, memory_item_id))
 
     current = _current_version_for_item(conn, memory_item_id=memory_item_id)
     if (
@@ -550,19 +585,21 @@ def _append_preference_version(
         and current["preference_value"] == preference_value
         and current["memory_status"] == memory_status
     ):
+        _record_operation_receipt(
+            conn,
+            memory_item_id=memory_item_id,
+            memory_version_id=int(current["id"]),
+            operation_kind="no_op",
+            preference_value=preference_value,
+            memory_status=memory_status,
+            evidence_fingerprint=evidence_fingerprint,
+            idempotency_key=idempotency_key,
+            request_fingerprint=request_fingerprint,
+            created_at=_now_iso(),
+        )
         return {**current, "created": False}
 
     previous_version_id = int(current["id"]) if current is not None else None
-    if current is not None:
-        try:
-            conn.execute(
-                update(memory_versions)
-                .where(memory_versions.c.id == current["id"])
-                .values(is_current=0, memory_status="superseded")
-            )
-        except OperationalError as exc:
-            raise _wrap_locked(exc) from exc
-
     now = _now_iso()
     try:
         result = conn.execute(
@@ -576,13 +613,24 @@ def _append_preference_version(
                 evidence_fingerprint=evidence_fingerprint,
                 idempotency_key=idempotency_key,
                 request_fingerprint=request_fingerprint,
-                is_current=1,
+                # 既有 current 时先追加非 current 后继；触发器据此仅允许旧版本
+                # 原子转为 superseded，再激活该后继，防止直接 SQL 清空 current。
+                is_current=0 if current is not None else 1,
                 created_at=now,
             )
         )
     except OperationalError as exc:
         raise _wrap_locked(exc) from exc
     version_id = int(result.lastrowid)
+    if current is not None:
+        try:
+            conn.execute(
+                update(memory_versions)
+                .where(memory_versions.c.id == current["id"])
+                .values(is_current=0, memory_status="superseded")
+            )
+        except OperationalError as exc:
+            raise _wrap_locked(exc) from exc
     conn.execute(
         update(memory_items)
         .where(memory_items.c.id == memory_item_id)
@@ -590,6 +638,18 @@ def _append_preference_version(
     )
     version = _version_row(conn, version_id=version_id, user_id=_item_owner(conn, memory_item_id))
     assert version is not None
+    _record_operation_receipt(
+        conn,
+        memory_item_id=memory_item_id,
+        memory_version_id=version_id,
+        operation_kind="rollback" if rollback_of_version_id is not None else "write",
+        preference_value=preference_value,
+        memory_status=memory_status,
+        evidence_fingerprint=evidence_fingerprint,
+        idempotency_key=idempotency_key,
+        request_fingerprint=request_fingerprint,
+        created_at=now,
+    )
     return {**version, "created": True}
 
 

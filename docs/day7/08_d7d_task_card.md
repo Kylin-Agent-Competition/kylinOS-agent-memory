@@ -6,7 +6,7 @@
 | 责任轨道 | D（SQLite、Repository、Migration、事务与部署） |
 | 基线 | 起始基线为 `origin/main@8ab369b`；已通过 merge 同步至 `origin/main@31b5279` |
 | Reviewer | E（非作者 Reviewer） |
-| 当前状态 | `IMPLEMENTED_PENDING_REVIEW`：Migration、Repository 与 L0/L1 定向验证已完成，待独立审查与麒麟 L2 证据 |
+| 当前状态 | `REVIEW_REWORK_PENDING_COMMIT`：独立 Reviewer 提出的 D7D 数据一致性问题已在本地修复并通过 L0/L1，待提交、复审与麒麟 L2 证据 |
 
 ## 目标与完成定义
 

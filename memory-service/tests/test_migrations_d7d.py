@@ -47,16 +47,27 @@ def test_upgrade_head_creates_version_tables_and_current_unique_index(db_path):
     item_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_items)")}
     conn.close()
 
-    assert {"memory_items", "memory_versions"} <= tables
-    assert {"uq_memory_versions_item_version", "uq_memory_versions_current"} <= indexes
+    assert {"memory_items", "memory_versions", "memory_version_receipts"} <= tables
+    assert {
+        "uq_memory_versions_item_version",
+        "uq_memory_versions_current",
+        "uq_memory_version_receipts_idempotency",
+        "uq_memory_version_receipts_evidence",
+        "idx_memory_versions_status",
+    } <= indexes
     assert {
         "memory_versions_bi_chain",
         "memory_versions_bu_chain",
+        "memory_versions_bu_immutable",
+        "memory_versions_bd_immutable",
         "memory_items_bi_current_pointer",
         "memory_items_bu_current_pointer",
         "memory_versions_ai_current_pointer",
         "memory_versions_au_current_pointer_on",
         "memory_versions_au_current_pointer_off",
+        "memory_version_receipts_bi_consistency",
+        "memory_version_receipts_bu_immutable",
+        "memory_version_receipts_bd_immutable",
     } <= triggers
     assert {
         "memory_item_id", "version", "previous_version_id", "rollback_of_version_id",
@@ -76,6 +87,7 @@ def test_empty_schema_can_downgrade_to_previous_revision_and_reupgrade(db_path):
     conn.close()
     assert "memory_items" not in tables
     assert "memory_versions" not in tables
+    assert "memory_version_receipts" not in tables
     assert revision == "20260826_add_trace_id"
     assert _run_alembic(db_path, "upgrade", "head").returncode == 0
 
