@@ -20,6 +20,7 @@
 | `01_sdk_model_abi_baseline.md` | SDK / 模型 / ABI 基线清单（旧） |
 | `03_defensive_checklist.md` | 防御性检查清单 |
 | `v2-20260816/` | 新环境基线（v2）及基于其的能力边界调查工作区 |
+| `Kylin-runtime-knowledge/VERSION_MAP.md` | **VM 运行时接口真源**（版本对照表 v2，2026-08-17：9 项仓库版本对照 + 关键路径/接口 + Agent 使用规则） |
 
 ## 说明
 
