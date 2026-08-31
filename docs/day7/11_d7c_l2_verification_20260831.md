@@ -22,7 +22,7 @@
 | D7C 定向（handler+D7D+迁移+协议） | `pytest tests/test_preference_handlers_d7c.py tests/test_preference_version_repository_d7d.py tests/test_migrations_d7d.py tests/test_protocol.py -q` | **66 passed in 7.40s** |
 | memory-service 全量 | `pytest -q` | **1281 passed, 49 skipped in 41.08s**（49 skip = A 轨 `kylin_embedding` 缺失，与 D4B 记录一致） |
 | memory-client L0 ctest | `cmake ... && ctest --test-dir memory-client/build` | **100% tests passed, 0 failed out of 4**（含 `d7c_preference_editor` P1–P6） |
-| 网关级真实 IPC 冒烟 | 启动 `python3 -m app --socket /tmp/d7c-memory.sock --db ~/d7c-gateway.db --no-outbox` + FRZ-IPC 客户端 | **9/9 PASS**（create v1/v2、history、rollback v3 current、list、跨用户隔离、INVALID_REQUEST 错误映射） |
+| 网关级真实 IPC 冒烟 | 启动 `python3 -m app --socket /tmp/d7c-memory.sock --db ~/d7c-gateway.db --no-outbox --register-preference-handlers`（候选契约显式激活 profile）+ FRZ-IPC 客户端 | **9/9 PASS**（create v1/v2、history、rollback v3 current、list、跨用户隔离、INVALID_REQUEST 错误映射） |
 
 ## 四、证据
 
@@ -34,4 +34,5 @@
 ## 五、未完成
 
 - **工作项 6 宿主侧**：`kylin-aiassistant` 宿主 GUI 的跨会话行为输入联调未执行（本克隆未含宿主集成；网关级 preference.* 真实链路已验证）。
+- 契约状态：preference.* 为 `CANDIDATE_SYNC`（ADR-016 待立项），production 默认不注册；上述 IPC 冒烟在 `--register-preference-handlers` 显式激活 profile 下执行。
 - 不声明「麒麟宿主真实交互验收」完成：需另行把修改版 MemoryClient/偏好 IPC 部署到宿主应用后联调。

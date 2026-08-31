@@ -20,7 +20,7 @@
 | 核对项 | 结论 | 证据 |
 |--------|------|------|
 | 基线（本文件初版）活跃方法仅 `echo / health / memory.retrieve` | 是（初版结论，`c1ee840` 复核） | `memory-service/gateway/handlers.py::register_default_handlers` 仅注册 `echo / health / memory.retrieve`；`memory.store` 返回 `UNSUPPORTED_METHOD` |
-| 是否有偏好增改/历史/回滚方法 | **已由 D7C PR #87 实现**（原唯一硬依赖已解除） | 新增 `memory-service/gateway/preference_handlers.py`：`preference.list / create / update / rollback / history` 五个活跃方法（production 默认注册，`app.py` 注入 `uow_factory`）；`protocol_adapter.h/.cpp` 同步新增方法常量；`db/repositories.py` 新增 `list_preference_items` |
+| 是否有偏好增改/历史/回滚方法 | **已由 D7C PR #87 实现**（原唯一硬依赖已解除；契约冻结前条件注册） | 新增 `memory-service/gateway/preference_handlers.py`：`preference.list / create / update / rollback / history` 五个方法（`CANDIDATE_SYNC`/ADR-016 待立项，**production 默认不注册→UNSUPPORTED_METHOD，仅 `--register-preference-handlers` 显式激活**，HIGH-1 返工）；`protocol_adapter.h/.cpp` 同步新增方法常量；`db/repositories.py` 新增 `list_preference_items` |
 | `memory.retrieve` 是否已接主链 | 否 | handlers.py `memory_retrieve_handler` 返回“真实空上下文（检索主链后续接入，禁止假数据）” |
 
 ## 三、客户端（C 轨）现状（随 D7C PR #87 更新）

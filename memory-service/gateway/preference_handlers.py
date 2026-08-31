@@ -100,9 +100,12 @@ def _resolve_memory_status(payload: Dict[str, Any]) -> str:
         if raw not in ALLOWED_MEMORY_STATUS:
             raise RequestValidationError("invalid memory_status")
         return raw
-    # D3 §7.9 安全默认：临时/不持久化要求不得晋升正式长期偏好
-    is_temporary = bool(payload.get("is_temporary", False))
-    should_persist = bool(payload.get("should_persist", True))
+    # D3 §7.9 安全默认：临时/不持久化要求不得晋升正式长期偏好。
+    # [I-1] 显式类型校验：字符串 "false" 不得被 bool() 自动转为 True（MEDIUM-2 返工）。
+    is_temporary = payload.get("is_temporary", False)
+    should_persist = payload.get("should_persist", True)
+    if not isinstance(is_temporary, bool) or not isinstance(should_persist, bool):
+        raise RequestValidationError("is_temporary/should_persist must be boolean")
     return "candidate" if (is_temporary or not should_persist) else "active"
 
 

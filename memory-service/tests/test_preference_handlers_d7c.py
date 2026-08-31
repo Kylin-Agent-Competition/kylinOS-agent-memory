@@ -7,9 +7,10 @@ import pytest
 from db import repositories as repo
 from db.engine import create_db_engine, init_schema
 from db.uow import UnitOfWork
+from gateway.handlers import register_default_handlers
 from gateway.preference_handlers import register_preference_handlers
 from gateway.protocol import RequestValidationError
-from gateway.registry import HandlerRegistry, RequestContext
+from gateway.registry import HandlerRegistry, RequestContext, UnsupportedMethodError
 
 
 @pytest.fixture()
@@ -248,6 +249,42 @@ def test_temporary_preference_defaults_to_candidate(engine, registry):
         idempotency_key="idem-1",
     )
     assert data["item"]["memory_status"] == "candidate"
+
+
+def test_string_boolean_flags_rejected(engine, registry):
+    """[MEDIUM-2] is_temporary/should_persist 传字符串 "false" 必须拒绝，不得被 bool() 转为 True。"""
+    with pytest.raises(RequestValidationError):
+        _call(
+            registry,
+            "preference.create",
+            {"user_id": "u1", "preference_key": "k", "preference_scope": "global",
+             "preference_value": "v", "is_temporary": "false"},
+        )
+    with pytest.raises(RequestValidationError):
+        _call(
+            registry,
+            "preference.create",
+            {"user_id": "u1", "preference_key": "k", "preference_scope": "global",
+             "preference_value": "v", "should_persist": "false"},
+        )
+    with pytest.raises(RequestValidationError):
+        _call(
+            registry,
+            "preference.create",
+            {"user_id": "u1", "preference_key": "k", "preference_scope": "global",
+             "preference_value": "v", "is_temporary": 1},
+        )
+
+
+def test_default_registry_does_not_register_preference_methods():
+    """[HIGH-1] 契约冻结前（CANDIDATE_SYNC/ADR-016 待立项）production 默认注册表不得包含 preference.*；
+    未注册方法路由 → UNSUPPORTED_METHOD。"""
+    reg = HandlerRegistry()
+    register_default_handlers(reg)
+    assert "preference.create" not in reg.methods()
+    assert "preference.list" not in reg.methods()
+    with pytest.raises(UnsupportedMethodError):
+        reg.route("preference.create")
 
 
 def test_validation_errors(engine, registry):
