@@ -6,7 +6,7 @@
 | 任务标题 | 完成偏好手动配置与版本 QML 组件；联调跨会话行为输入；展示当前版本、历史版本和回滚入口 |
 | 责任轨道 | C（刘承恩）；当前暂由 B（高翌哲）代替实施，C 轨 Review 由 D/E 完成 |
 | Reviewer | D 主审；用户交互与安全由 E 补审 |
-| 基线 | `origin/main` `8ab369b`（2026-08-31 同步） |
+| 基线 | 初始 `origin/main@8ab369b`；截至本次校对（2026-08-31）`origin/main` 已含 D7D 偏好版本持久化（`c1ee840`，`feat: D7D 偏好版本持久化 (#90)`），实现阶段建议以该最新基线重新对齐 |
 | 分支 | `feat/C-d7-preference-version-ui`（新增，未包含 `codex`，按命名规则以 `feat/` 前缀） |
 | 工作类型 | 新增功能（feature） |
 | 完成定义（台账 D7-C） | 用户可添加、修改、查看历史并发起回滚 |
@@ -58,10 +58,20 @@
 
 以下均为实现前需要先对齐的依赖，本任务卡先记录不掩盖：
 
-- **D 轨版本持久化未合入默认分支**：`origin/main` 尚无 `current_version` 指针与 `previous_version_id` 版本链；D7-C 的 ROLLBACK / UPDATE 用户可观察结果依赖该持久化语义。
-- **IPC 路由表活跃方法有限**：FRZ-IPC-007 仅 `echo / health / memory.retrieve` 三项活跃；无偏好增改 / 历史 / 回滚方法。需先确认是扩展方法（走 D 轨契约变更）还是复用 `memory.retrieve` + 既有路径。
+- **D 轨版本持久化已合入默认分支（本次校对解除）**：`origin/main@c1ee840` 已含 D7D #90 的 `memory_items / memory_versions / preference_version_operations` 表与 `save_preference_version / get_preference_version / get_current_preference_version / list_preference_versions / rollback_preference_version` Repository 接口；D7-C 的 ROLLBACK / UPDATE 用户可观察结果所需的持久化语义已具备（实现阶段仍需与 D7D 对列名/语义确认，因其以 `memory_items`（user_id+key+scope）为聚合键，而非 `Preference` domain 的 `preference_id`）。
+- **IPC 路由表仍无偏好方法（当前硬依赖 / 阻塞）**：FRZ-IPC-007 仅 `echo / health / memory.retrieve` 三项活跃，另含 `memory.store`（未实现）/ `turn.finalized`（候选，BLOCKED_BY_HOST_MAPPING）；无 `preference.list / create / update / rollback / history` 方法。需先确认是扩展方法（走 D 轨契约变更）还是复用既有路径。
 - **现有客户端能力不足**：`MemoryViewModel` 目前只有 `connect / disconnect / sendHealth / sendMemoryQuery`，无偏好读写能力。
 - **TD-008**：真实 MemoryContext 注入被阻断；TD-022 / TD-023：客户端超时 / 响应字段归一化待关闭。
+
+### Review 结论与对齐（Ducknesses，PR #87，APPROVE）
+
+独立 Reviewer `Ducknesses` 已对当前准备产物给出 **APPROVE**，明确结论为：作为 D7-C 施工准备产物合格、可合入；**实际 QML/C++/协议实现需在后续提交中按任务卡逐项落地并另行审查**。同时给出以下非阻断建议，本任务卡在本次校对中已吸纳或如实登记：
+
+1. **基线重对齐**：任务卡原写 `origin/main@8ab369b`，但 main 已推进；建议实现开始时以最新 main 重新对齐基线，避免续后 diff 混入无关变更。→ 本任务卡「基线」行已更新为 `origin/main@c1ee840`。
+2. **编号风格**：`08_d7c_task_card.md` 与 D7D 的 `08_d7d_task_card.md`（PR #90）共用 `08_` 前缀，可考虑按台账序号重排避免引用歧义。→ 因牵连跨文档引用，本批次不直接重命名，登记为后续命名整理项。
+3. **契约节奏**：工作项 2「确定偏好 CRUD/历史/回滚 IPC 方法」建议与 D6-D 契约（ADR-012/013，PR #83）及 D7D 持久化（PR #90）保持同一 ADR 评审节奏，避免 C 轨实现等待期间契约再次变动。→ 见 `10_d7c_preference_ipc_contract_draft.md`，其已与 `origin/main` 上 D7D 落库 API 对齐（`CANDIDATE_SYNC`，不冻结）。
+
+**E 轨补审关切（非阻断但实现阶段必须双层落实）**：验收 5.7 跨用户历史不可见、不可回滚、不可修改，不能在 UI 层仅做隐藏；必须在 Repository（`user_id` 强制过滤）与 UI 双层落实。实际实现时将在保留 D7D Repository 的 `user_id` 过滤语义前提下，再由 UI 层做显示隔离。
 
 ## 五、工作清单（初始进度）
 
@@ -75,7 +85,17 @@
 | 6 | 跨会话行为输入联调 | 联调 | 5 | 宿主链路日志 | 待开始 |
 | 7 | 本地回归（L0/L1 可用部分）+ 麒麟宿主 L2 验证 | 验证 | 3–6 | pytest / ctest / VM 后真实交互 | 待开始 |
 
-总进度：0/7（0%）。工作项 1–2 为前置契约对齐，3–6 为实现与联调，7 为验证。
+总进度：1/7（14%）。工作项 1 已完成现状核对（见 `09_d7c_prerequisite_audit.md`）。本次校对确认 **D 轨版本持久化已合入 `origin/main@c1ee840`**（D7D #90），因此原先「持久化未达标」的阻塞已解除；工作项 2–7 当前唯一的硬依赖为 **偏好 IPC 方法（`preference.*`）尚未合入默认分支**，需先走 D 轨契约变更或明确复用路径后，方可进入 item 3–7 的实现/联调/验证。
+
+> 前置核对结论（本次已更新）：D7D #90 已合入，默认分支已具 `memory_items / memory_versions` 版本链与 `save/get_current/list/rollback_preference_version` Repository；但 IPC 路由表仍仅 `echo / health / memory.retrieve` 活跃，无偏好增改/历史/回滚方法。详见 `docs/day7/09_d7c_prerequisite_audit.md`。
+
+### 工作项状态补充（同步自前置核对）
+
+| 工作项 | 状态 | 依赖 |
+|--------|------|------|
+| 1 现状核对 | 已完成（本提交） | 无 |
+| 2 确定 IPC 方法/payload 契约 | **待 D 轨**（契约未冻结） | D 轨偏好 IPC 方法扩展或复用路径确认 |
+| 3–7 实现/联调/验证 | **待 D 轨**（唯一硬前置：偏好 IPC 方法） | D 轨偏好 IPC 方法合入；D7D 持久化已就绪 |
 
 ## 六、风险与说明
 
@@ -88,3 +108,4 @@
 | 版本 | 日期 | 作者 | 变更说明 |
 |------|------|------|----------|
 | v1 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 初稿：基于 15 天 75 项台账 D7-C 口径与 E 轨 `day7-e-ui-version-acceptance-v1.md` 建立任务卡与工作清单；标记跨轨依赖（D 轨版本持久化、IPC 方法、TD-008/022/023）；不包含实现代码 |
+| v2 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 按 PR #87 Reviewer（Ducknesses）非阻断建议与当前事实校对：基线重对齐至 `origin/main@c1ee840`（D7D #90 已合并、持久化阻塞解除）；将剩余唯一硬依赖修正为「偏好 IPC 方法未合入」；纳入编号风格、契约节奏与 5.7 双层落实意见；新增 `09_d7c_prerequisite_audit.md` 与 `10_d7c_preference_ipc_contract_draft.md` 两份配套产物 |
