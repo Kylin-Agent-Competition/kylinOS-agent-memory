@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Vector bridge CLI: JSON-in / JSON-out subprocess bridge to the Vector SDK.
-// Supports create_collection, insert, search, drop_collection. Python side
-// spawns this binary per operation (no pybind11 / python3-dev required).
+// Vector bridge CLI：通过 JSON 输入/输出调用 Vector SDK 的子进程桥接器。
+// 支持 create_collection、insert、search、delete、drop_collection；Python
+// 每次操作启动此二进制，无需 pybind11 或 python3-dev。
 
 #include <cmath>
 #include <cstdint>
@@ -100,6 +100,22 @@ void ValidateFilterKeys(const json& filter) {
             key != "exclude_deleted") {
             Fail("unknown filter key: " + key);
         }
+    }
+}
+
+void ValidateDeleteKeys(const json& input) {
+    if (!input.is_object()) {
+        Fail("删除请求必须是对象");
+    }
+    for (auto it = input.begin(); it != input.end(); ++it) {
+        const std::string& key = it.key();
+        if (key != "user_id" && key != "ids" && key != "version_ids") {
+            Fail("删除请求含未知字段: " + key);
+        }
+    }
+    if (!input.contains("user_id") || !input.contains("ids") ||
+        !input.contains("version_ids")) {
+        Fail("删除请求必须包含 user_id、ids 和 version_ids");
     }
 }
 
@@ -317,11 +333,58 @@ void DropCollection(const std::string& name) {
     Out(StatusJson(st));
 }
 
+void Delete(const std::string& name, const json& input) {
+    ValidateDeleteKeys(input);
+    const json& user_value = input.at("user_id");
+    const json& ids_value = input.at("ids");
+    const json& versions_value = input.at("version_ids");
+    if (!user_value.is_string() || user_value.get<std::string>().empty()) {
+        Fail("删除用户必须非空字符串");
+    }
+    if (!ids_value.is_array() || ids_value.empty()) {
+        Fail("删除 ID 必须是非空数组");
+    }
+    if (!versions_value.is_array() || versions_value.size() != ids_value.size()) {
+        Fail("版本 ID 必须与删除 ID 一一对应");
+    }
+
+    const std::string user_id = user_value.get<std::string>();
+    std::string pair_expression;
+    for (std::size_t index = 0; index < ids_value.size(); ++index) {
+        const json& id_value = ids_value.at(index);
+        const json& version_value = versions_value.at(index);
+        if ((!id_value.is_number_integer() && !id_value.is_number_unsigned()) ||
+            id_value.get<std::int64_t>() <= 0) {
+            Fail("删除 ID 必须是正整数");
+        }
+        if (!version_value.is_string() || version_value.get<std::string>().empty()) {
+            Fail("版本 ID 必须是非空字符串");
+        }
+        if (index != 0) {
+            pair_expression += " || ";
+        }
+        pair_expression += "(" + std::string(kIdField) + " == " +
+            std::to_string(id_value.get<std::int64_t>()) + " && " +
+            std::string(kVersionIdField) + " == \"" +
+            EscapeExpressionString(version_value.get<std::string>()) + "\")";
+    }
+
+    const std::string expression = std::string(kUserIdField) + " == \"" +
+        EscapeExpressionString(user_id) + "\" && (" + pair_expression + ")";
+    VectorDB::DmlResults results;
+    const VectorDB::Status st = g_client->Delete(name, expression, results);
+    json output = StatusJson(st);
+    if (st.IsOk()) {
+        output["requested_count"] = ids_value.size();
+    }
+    Out(output);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        Fail("usage: vector_cli <create_collection|insert|search|drop_collection> ...");
+        Fail("用法: vector_cli <create_collection|insert|search|delete|drop_collection> ...");
     }
     const std::string op = argv[1];
     try {
@@ -362,6 +425,11 @@ int main(int argc, char** argv) {
         } else if (op == "drop_collection") {
             if (argc < 3) Fail("drop_collection <name>");
             DropCollection(argv[2]);
+        } else if (op == "delete") {
+            if (argc < 3) Fail("delete <name>（stdin: {user_id,ids,version_ids}）");
+            json in;
+            std::cin >> in;
+            Delete(argv[2], in);
         } else {
             Fail("unknown op: " + op);
         }
