@@ -1,17 +1,19 @@
 # ADR-013：新增 `source_events` 表持久化多源事件（FRZ-DB-001 / D6-D 扩展）
 
-- **状态**：✅ D 已决策（2026-08-31，方案 A）；REWORK 修订 v4（按 Review #83 Reviewer E 第四轮意见重冻结）；待 Reviewer E 签署
-- **日期**：2026-08-31（v4 修订同日）
+- **状态**：✅ D 已决策（2026-08-31，方案 A）；REWORK 修订 v5（按 Review #83 Reviewer E 第五轮意见重冻结）；待 Reviewer E 签署
+- **日期**：2026-08-31（v5 修订同日）
 - **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
 - **责任轨道**：D（DB）为主，A/E 协作（消费现有 pipeline / admission 模型，不复制真源）
-- **决策版本**：`source-events-table-v4`
-- **适用范围**：FRZ-DB-001 表定义扩展；关联 `docs/day6/day6-d-01-event-persistence-contract-plan-v0.4.md`、`memory-service/pipeline/schemas.py`（MemorySourceEvent / NormalizedEvent）、`memory-service/security/source_admission.py`（SourceAdmissionResult）、`memory-service/pipeline/fingerprint.py`、ADR-007（迁移命名）、ADR-011（扩展先例）、ADR-014（event.ingest 路由）、FRZ-IPC-005、FRZ-DB-004（Dead Letter 策略）
+- **决策版本**：`source-events-table-v5`
+- **适用范围**：FRZ-DB-001 表定义扩展；关联 `docs/day6/day6-d-01-event-persistence-contract-plan-v0.5.md`、`memory-service/pipeline/schemas.py`（MemorySourceEvent / NormalizedEvent）、`memory-service/security/source_admission.py`（SourceAdmissionResult）、`memory-service/pipeline/fingerprint.py`、ADR-007（迁移命名）、ADR-011（扩展先例）、ADR-014（event.ingest 路由）、FRZ-IPC-005、FRZ-DB-004（Dead Letter 策略）
 
 > **v2 修订摘要（Review #83 REWORK 第一轮处置）**：① 敏感命中事件 content_summary/raw_payload_ref 强制 NULL；② event_id 唯一键改全局 `UNIQUE(event_id)` 对齐 D3 冻结语义；③ 指纹去重改为"保留事件 + 标记去重"（新增 dedup_group/duplicate_of 列）；④ 补齐 NormalizedEvent 投影列（含 requires_embedding/has_structured_payload/language_tag）+ 2 去重标记列 = **35 列**（组成口径以 DDL 实际列清单为准）；⑤ consent_scope=none 由 D 轨 handler 前置 REJECT（不依赖 E 轨）；⑥ processing_status 不写 `extracted`（如实停在 `extracting`）；⑦ ADR 编号从 012 重排为 013。
 
 > **v3 修订摘要（Review #83 Reviewer E 第三轮意见处置）**：① event_id 冲突处置改为「immutable identity 一致 = 幂等重放（返回首次持久化 admission 结果）/ 不一致 = `EventIdentityConflict` → INVALID_REQUEST」，删除「跨 session 复用一律 EventOwnershipError」与「同 event_id 一律返回既有记录」的冲突口径（HIGH-01）；② processing_status 首次落库一律 `pending`，REJECT/AUDIT_ONLY/指纹重复事件不落 `extracting`（admission_decision 为正交字段），杜绝永久「抽取处理中」假状态（MEDIUM-01）；③ `dedup_group` 增加 user scope（组键含 `user_id`，索引改 `(user_id, dedup_group)` 复合）（MEDIUM-05）；④ 敏感摘要清空规则收紧为「仅敏感/安全类强制 NULL」，普通质量型 AUDIT_ONLY 保留已脱敏摘要（MEDIUM-07）。
 
 > **v4 修订摘要（Review #83 Reviewer E 第四轮意见处置）**：① immutable event identity **重定义**为独立稳定字段集 + 派生 `event_identity_fingerprint`——**禁止复用现有 `content_fingerprint`**（其无正文时 fallback 到 `event_id+idempotency_key+session_id`，会把请求级幂等键/会话间接塞回事件身份）；冻结 `user_id + actor_id + source_type + event_type + occurred_at(UTC 规范化) + event_content_identity(正文存在性稳定内容身份)`，**不包含 `idempotency_key` / `session_id`**，正文有无不影响组成（HIGH-01）；② **敏感/security reject/consent reject 事件持久化 `content_fingerprint = NULL`**——普通确定性 SHA-256 对低熵敏感值可离线枚举，不等价于不可恢复脱敏；未授权/敏感事件不参与内容级指纹去重（HIGH-03）；③ 事件碰撞处置固定顺序统一为「schema precheck → Pipeline 纯计算（normalization/fingerprint，无副作用）→ event identity compare → replay 跳过 consent/admission/persistence」（MEDIUM-01）；④ `processing_status='pending'` 消费资格谓词冻结：仅 `pending + admission_decision='allow_extraction' + duplicate_of IS NULL` 可进抽取调度（MEDIUM-02）；⑤ 跨用户 event_id `IntegrityError` fail-close 回查路径明确：不回读/不返回其他用户旧事件（MEDIUM-03）；⑥ dedup head 查找与插入同 **UoW / 单写锁 / 事务** 原子绑定（MEDIUM-04）。
+
+> **v5 修订摘要（Review #83 Reviewer E 第五轮意见处置，HIGH-01 协调）**：① **固定顺序重排（与 ADR-014 v5 严格一致）**——`payload 结构预检 → trusted identity precheck（先于任何 user-scoped idempotency_cache lookup，cache-bypass 防护）→ EventPipeline.process(raw) 纯计算（仅一次，无 DB 副作用，是 request_fingerprint 的唯一敏感判定真源）→ privacy-safe request_fingerprint（sensitive/security reject/consent reject 事件内容身份取固定安全占位 `<SENSITIVE-OMITTED>`）→ UoW.execute_idempotent 单事务（business_fn：event identity compare → consent → admission → dedup → source_event 落库 → response cache）`；② **敏感 hash 旁路防护**——除 `source_events.content_fingerprint` 置 NULL（HIGH-03）外，敏感低熵内容**不得经 `idempotency_cache._request_fingerprint` 派生落盘**（ADR-014 v5 privacy-safe 占位规则），正文/摘要/内容指纹/请求指纹四路均不持久化敏感派生值；③ cache replay 允许纯计算 pipeline、禁止重复业务副作用（与 ADR-014 v5 对齐）；④ 补充 L1 用例：高敏 request_fingerprint 安全占位 + trusted identity cache-bypass（见 ADR-014 评测影响）。
 
 ---
 
@@ -62,7 +64,7 @@
 
 ## 决策
 
-选择方案 A：`source-events-table-v4`。**新增 `source_events` 表（35 字段 + 5 索引，含去重自关联列），经迁移 `20260831_add_source_events.py` 落地；`db/schema.py` 同步为单一真相；不修改既有 5 张表/索引/触发器/FTS5；不扩展 `outbox` CHECK 约束；事件落库与既有业务写链路互不耦合。**
+选择方案 A：`source-events-table-v5`。**新增 `source_events` 表（35 字段 + 5 索引，含去重自关联列），经迁移 `20260831_add_source_events.py` 落地；`db/schema.py` 同步为单一真相；不修改既有 5 张表/索引/触发器/FTS5；不扩展 `outbox` CHECK 约束；事件落库与既有业务写链路互不耦合。**（v5 协调：与 ADR-014 v5 同固定顺序；敏感保留字 hash 旁路防护见「授权与安全」。）
 
 ### DDL 定义（草案）
 
@@ -144,7 +146,7 @@ CREATE TABLE source_events (
       6. **`event_content_identity`**：稳定内容身份 —— 取**归一化 `content_summary`**（不存在则取**归一化 `raw_payload_ref`**；两者皆无 → 固定空占位 `<no-content>`，**使定义不受"正文有无"影响**）。**敏感/security reject/consent reject 事件因正文强制 NULL（见「授权与安全」HIGH-03），其 content 不参与 identity 比对**（此类事件 identity = 前 5 项非内容字段；文档显式标注该简并）。
     - **明确排除**：`idempotency_key`、`session_id`、`trace_id`、`content_fingerprint`（现有 `fingerprint.py` 无正文时 fallback 到 `event_id+idempotency_key+session_id`，**属请求级/会话级污染，禁止复用为事件身份**）。
     - **派生 `event_identity_fingerprint`**（比较用，**本版不新增存储列**，DDL 保持 35 列）：= `SHA256(规范化拼接 上述适用 identity 字段)`，handler 在比较时计算两侧以做确定性比对（避免逐列字符串比较的规范化差异）。
-  - **实现顺序（固定，统一 ADR-013/ADR-014，MEDIUM-01）**：`schema precheck` → `EventPipeline.process(raw)` **纯计算**（normalization + fingerprint，**无 DB 副作用**）→ `event identity compare`（replay 时**跳过** consent/admission/persistence）→ 非 replay 继续 `consent 前置 → admission → 落库`。**不再采用「先点查既有行再决定是否跑 pipeline」的旧表述**——immutable identity 的 `event_content_identity/occurred_at` 须 pipeline 规范化后方可比较；replay 允许重跑一次性无副作用 pipeline 用于 identity 比对，但不得重跑准入与写入副作用（同一个 UoW 内）。
+  - **实现顺序（固定，统一 ADR-013/ADR-014 v5，MEDIUM-01 + HIGH-01 v5 协调）**：`payload 结构预检` → **`trusted identity precheck`（先于任何 user-scoped idempotency_cache lookup，cache-bypass 防护，见 ADR-014 v5 Handler 步骤 2）** → `EventPipeline.process(raw)` **纯计算**（normalization + fingerprint，**无 DB 副作用**；是 request_fingerprint 的唯一敏感判定真源）→ `privacy-safe request_fingerprint`（sensitive/security reject/consent reject 事件内容身份取固定安全占位 `<SENSITIVE-OMITTED>`，见 ADR-014 v5）→ `UoW.execute_idempotent(...)` 单事务（`business_fn` 内：event identity compare → consent 前置 → admission → dedup → source_event 落库 → response cache）。replay 允许重跑一次性无副作用 pipeline 用于 identity 比对，但不得重跑准入与写入副作用（同一 UoW 内）。**不再采用「先点查既有行再决定是否跑 pipeline」的旧表述**——immutable identity 的 `event_content_identity/occurred_at` 须 pipeline 规范化后方可比较。
   - **跨用户 event_id IntegrityError fail-close 回查（MEDIUM-03）**：`get_source_event_by_event_id` 按 `user_id` 限定回查——1) 当前 user 下查得 → 同用户并发，走正常 identity compare；2) 当前 user 下查不到，但 `INSERT` 触发 `UNIQUE(event_id)` IntegrityError → 判定「event_id 已被其他 ownership 占用」→ **直接 `EventIdentityConflict` → INVALID_REQUEST**；**不回查、不读取、不返回其他用户旧事件内容**（保持跨用户读取边界，`[02 §16.6]`）。
 - **请求级幂等**：FRZ-IPC-005 三元组 `(user_id, session_id, idempotency_key)` 走既有 `idempotency_cache`（ADR-006），由 `event.ingest` handler 层执行（见 ADR-014 §幂等）；**事件级 `event_id` identity 与请求级幂等为两层正交语义**——同一 `idempotency_key` 携带不同业务 payload 属 **请求指纹冲突**（`IdempotencyConflictError`，见 ADR-014），与 `event_id` identity collision 分开处置；`event_id` **不替代** `idempotency_key`。
 - **指纹去重（保留事件 + 标记；MEDIUM-04 原子性）**：同 `user_id` + 同 `content_fingerprint` + 同 `source_type` 且 `captured_at >= now - 24h` → **仍插入新事件行**（event_id 必不相同），但标记：
@@ -171,6 +173,7 @@ CREATE TABLE source_events (
   - `admission_decision = reject`（security / consent 类 reject）；
   - `consent_scope = none`（D 轨前置 REJECT）。
   - 若未来确有敏感内容判重需求，**须另设计 keyed HMAC / 隐私保护型指纹**，并经独立 ADR；本版不允许直接持久化普通确定性 SHA-256 于敏感/未授权事件。
+  - **敏感 hash 旁路防护（v5，HIGH-01 协调）**：除 `source_events.content_fingerprint` 置 NULL 外，敏感低熵内容**不得经 `idempotency_cache._request_fingerprint` 派生落盘**——handler 的 `request_fingerprint` 对敏感/未授权事件内容身份取固定安全占位 `<SENSITIVE-OMITTED>`（ADR-014 v5）；由此保证正文 / `content_summary` / `content_fingerprint` / `request_fingerprint` **四路均不持久化敏感派生值**，杜绝低熵 SHA-256 可离线枚举的同类风险在幂等缓存旁路复现。
 - **跨用户隔离**：Repository 层所有查询强制 `user_id` 过滤 + `UNIQUE(event_id)` 阻止跨用户同名复用，identity 不一致按 `EventIdentityConflict` 拒绝（`[02 §16.6]`）；跨用户 `IntegrityError` 按 fail-close 回查规则处置，**不回读/不返回他人事件内容**（MEDIUM-03）。
 - 日志脱敏复用 D5-D observability PII filter；事件正文/summary 不入日志
 
@@ -201,6 +204,7 @@ CREATE TABLE source_events (
 - **v2 契约变更已按 Review #83 第一轮处置**：UNIQUE 唯一键改全局、指纹去重改保留+标记（新增 2 列 = 35 字段）、33 列 NormalizedEvent 投影补齐、敏感命中强制 NULL、processing_status 不写 extracted——均属本 ADR 冻结范围，回写 FRZ-DB-001 扩展节时一并记录。
 - **v3 契约变更已按 Review #83 第三轮处置**：event_id identity collision 契约（幂等重放 vs `EventIdentityConflict`）、processing_status 首次一律 `pending`、dedup_group 含 user scope、敏感摘要清空规则收紧——均属本 ADR 冻结范围，回写 FRZ-DB-001 扩展节时一并记录。
 - **v4 契约变更已按 Review #83 第四轮处置**：immutable identity 重定义（独立稳定字段集 + `event_identity_fingerprint`，排除 idempotency_key/session_id/pipeline 脆弱 content_fingerprint，纳入 actor_id，occurred_at 统一 canonicalization）、敏感/未授权事件 `content_fingerprint` 持久化 NULL（HIGH-03）、固定「schema precheck → pipeline 纯计算 → identity compare → replay 跳过准入」统一顺序（MEDIUM-01）、`pending` 消费资格三条件谓词（MEDIUM-02）、跨用户 IntegrityError fail-close 回查（MEDIUM-03）、dedup head 与插入同 UoW/单写锁原子绑定（MEDIUM-04）——均属本 ADR 冻结范围，回写 FRZ-DB-001 扩展节与 `event_identity_fingerprint` 说明时一并记录。
+- **v5 契约变更已按 Review #83 第五轮处置（与 ADR-014 v5 协调）**：固定顺序重排（payload 结构预检 → trusted identity precheck → pipeline 纯计算 → privacy-safe request_fingerprint → `UoW.execute_idempotent` 单事务）、敏感 hash 旁路防护（request_fingerprint 对敏感/未授权事件用固定安全占位，四路均不持久化敏感派生值）、cache replay 允许纯计算但禁止重复业务副作用（HIGH-01）——均属本 ADR 冻结范围，回写 FRZ-DB-001 扩展节时一并记录。
 
 ---
 
@@ -248,6 +252,6 @@ CREATE TABLE source_events (
 - `memory-service/pipeline/schemas.py`（NormalizedEvent / 枚举值域 / 33 列投影来源 + 2 去重标记列，D6-D 输入真源）
 - `memory-service/security/source_admission.py`（SourceAdmissionResult，准入落库来源）
 - `memory-service/pipeline/fingerprint.py`（content_fingerprint / event_duplicate_key）
-- `docs/day6/day6-d-01-event-persistence-contract-plan-v0.4.md`（D6-D 契约规划，D-1/D-4/D-5/D-6/D-8/D-9/D-10/D-11/D-12 决策）
+- `docs/day6/day6-d-01-event-persistence-contract-plan-v0.5.md`（D6-D 契约规划，D-1/D-4/D-5/D-6/D-8/D-9/D-10/D-11/D-12 决策）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-31 决策选方案 A，v2 按 Review #83 第一轮重冻结，v3 按第三轮意见修订，v4 按第四轮意见修订**；**Reviewer E（谢嘉然）待签署**；签署后回写 `D4_DB_INITIAL_DESIGN_FREEZE_20260817.md`（FRZ-DB-001 扩展节）。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-31 决策选方案 A，v2 按 Review #83 第一轮重冻结，v3 按第三轮意见修订，v4 按第四轮意见修订，v5 按第五轮意见修订**；**Reviewer E（谢嘉然）待签署**；签署后回写 `D4_DB_INITIAL_DESIGN_FREEZE_20260817.md`（FRZ-DB-001 扩展节）。
