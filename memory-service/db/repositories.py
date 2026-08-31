@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -558,6 +559,7 @@ def _append_preference_version(
     request_fingerprint: str,
     rollback_of_version_id: Optional[int] = None,
     no_op_on_same_value: bool = True,
+    deduplicate_evidence: bool = True,
 ) -> Dict[str, Any]:
     replay = _return_existing_idempotent(
         conn,
@@ -568,15 +570,16 @@ def _append_preference_version(
     if replay is not None:
         return _receipt_version(conn, receipt=replay, user_id=_item_owner(conn, memory_item_id))
 
-    evidence_replay = _return_existing_evidence_or_fail(
-        conn,
-        memory_item_id=memory_item_id,
-        evidence_fingerprint=evidence_fingerprint,
-        preference_value=preference_value,
-        memory_status=memory_status,
-    )
-    if evidence_replay is not None:
-        return _receipt_version(conn, receipt=evidence_replay, user_id=_item_owner(conn, memory_item_id))
+    if deduplicate_evidence:
+        evidence_replay = _return_existing_evidence_or_fail(
+            conn,
+            memory_item_id=memory_item_id,
+            evidence_fingerprint=evidence_fingerprint,
+            preference_value=preference_value,
+            memory_status=memory_status,
+        )
+        if evidence_replay is not None:
+            return _receipt_version(conn, receipt=evidence_replay, user_id=_item_owner(conn, memory_item_id))
 
     current = _current_version_for_item(conn, memory_item_id=memory_item_id)
     if (
@@ -750,11 +753,15 @@ def rollback_preference_version(
         # 历史版本在被替换后状态为 superseded；回滚把其值追加为新的 current，
         # 新版本按 D7E 版本计划恢复 active，而不是复制历史标记。
         memory_status="active",
-        evidence_fingerprint=f"rollback:{target['id']}",
+        # rollback 的业务目标可以重复选择；它不是普通写入证据的跨操作唯一身份。
+        # 每次新请求使用独立回执证据，真正重放仍由 idempotency_key +
+        # request_fingerprint 决定，避免旧 rollback 回执吞掉后续合法 rollback。
+        evidence_fingerprint=f"rollback:{target['id']}:{uuid.uuid4().hex}",
         idempotency_key=idempotency_key,
         request_fingerprint=request_fingerprint,
         rollback_of_version_id=int(target["id"]),
         no_op_on_same_value=False,
+        deduplicate_evidence=False,
     )
 
 

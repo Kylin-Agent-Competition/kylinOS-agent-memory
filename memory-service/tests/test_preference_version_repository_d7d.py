@@ -173,6 +173,65 @@ def test_rollback_appends_new_current_without_overwriting_history(engine):
     assert [(row["version"], row["is_current"]) for row in history] == [(1, 0), (2, 0), (3, 1)]
 
 
+def test_repeated_rollback_to_same_target_appends_once_per_new_idempotency_request(engine):
+    first = _save(engine)
+    _save(
+        engine,
+        preference_value="英文",
+        evidence_fingerprint="ev-2",
+        idempotency_key="idem-2",
+        request_fingerprint="req-2",
+    )
+    with UnitOfWork(engine) as uow:
+        first_rollback = repo.rollback_preference_version(
+            uow.conn,
+            user_id="u1",
+            preference_version_id=first["id"],
+            idempotency_key="idem-3",
+            request_fingerprint="req-3",
+        )
+    fourth = _save(
+        engine,
+        preference_value="日文",
+        evidence_fingerprint="ev-4",
+        idempotency_key="idem-4",
+        request_fingerprint="req-4",
+    )
+    with UnitOfWork(engine) as uow:
+        second_rollback = repo.rollback_preference_version(
+            uow.conn,
+            user_id="u1",
+            preference_version_id=first["id"],
+            idempotency_key="idem-5",
+            request_fingerprint="req-5",
+        )
+    with UnitOfWork(engine) as uow:
+        replay = repo.rollback_preference_version(
+            uow.conn,
+            user_id="u1",
+            preference_version_id=first["id"],
+            idempotency_key="idem-5",
+            request_fingerprint="req-5",
+        )
+
+    assert first_rollback["created"] is True
+    assert second_rollback["created"] is True
+    assert second_rollback["version"] == 5
+    assert second_rollback["previous_version_id"] == fourth["id"]
+    assert second_rollback["rollback_of_version_id"] == first["id"]
+    assert second_rollback["is_current"] == 1
+    assert second_rollback["preference_value"] == "中文"
+    assert replay["created"] is False
+    assert replay["id"] == second_rollback["id"]
+
+    with engine.connect() as conn:
+        history = repo.list_preference_versions(
+            conn, user_id="u1", preference_key="response.language", preference_scope="global"
+        )
+    assert [row["version"] for row in history] == [1, 2, 3, 4, 5]
+    assert history[-1]["is_current"] == 1
+
+
 def test_cross_user_read_and_rollback_are_rejected(engine):
     first = _save(engine)
 
