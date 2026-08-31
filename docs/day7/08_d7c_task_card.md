@@ -82,10 +82,10 @@
 | 3 | 客户端 `MemoryClient` / `MemoryViewModel` 增加偏好读/写/历史/回滚接口 | 实现 | 2 | L0 编译 + Mock 契约测试 | 已实现（L0 编译待 CI ctest） |
 | 4 | `PreferenceEditorPage.qml` 手动添加/编辑 + 当前/历史版本 + 回滚入口 | 实现 | 3 | QML 启动 + 交互链路证据 | 已实现（麒麟宿主交互待 L2） |
 | 5 | 临时/长期偏好展示区分 + 跨用户隔离渲染 | 实现 | 4 | 验收 5.6 / 5.7 | 已实现（UI + Repository 双层） |
-| 6 | 跨会话行为输入联调 | 联调 | 5 | 宿主链路日志 | 待 L2（需麒麟宿主） |
-| 7 | 本地回归（L0/L1 可用部分）+ 麒麟宿主 L2 验证 | 验证 | 3–6 | pytest / ctest / VM 后真实交互 | 部分完成（服务端 L0 已过；客户端 ctest 待 CI；L2 待执行） |
+| 6 | 跨会话行为输入联调 | 联调 | 5 | 宿主链路日志 | 部分完成（网关级真实 IPC 已验证；宿主 AI 助手跨会话待联调） |
+| 7 | 本地回归（L0/L1 可用部分）+ 麒麟宿主 L2 验证 | 验证 | 3–6 | pytest / ctest / VM 后真实交互 | 已完成（VM L2：pytest 1281 passed/49 skipped；ctest 4/4；真实 IPC 9/9，见 11 号文档） |
 
-总进度：5/7（71%）。工作项 1–5 已在 D7C PR #87 中落地：D 轨偏好 IPC 方法（`preference.*`，用户授权）实现并注册；服务端 L0 handler 测试 10/10 通过、相关回归 201/201 通过；客户端 `MemoryClient / MemoryViewModel / PreferenceEditorPage.qml` 与 L0 Mock 测试已写入（C++ 编译由 CI `memory-client L0 ctest` 验证，本机无 Qt 无法编译）。工作项 6（跨会话行为输入联调）与工作项 7 的麒麟 L2 真实交互验证依赖银河麒麟 VM，需在 L2 环境执行后补充证据。
+总进度：6/7（86%）。工作项 7（麒麟 L2 验证）已完成，见 `docs/day7/11_d7c_l2_verification_20260831.md`；工作项 6 宿主 AI 助手跨会话联调仍未执行。工作项 1–5 已在 D7C PR #87 中落地：D 轨偏好 IPC 方法（`preference.*`，用户授权）实现并注册；服务端 L0 handler 测试 10/10 通过、相关回归 201/201 通过；客户端 `MemoryClient / MemoryViewModel / PreferenceEditorPage.qml` 与 L0 Mock 测试已写入（C++ 编译由 CI `memory-client L0 ctest` 验证，本机无 Qt 无法编译）。工作项 7 的麒麟 L2（pytest/ctest/真实 IPC）已执行并归档证据；工作项 6 的宿主 AI 助手跨会话联调仍需另行联调。
 
 > 前置核对结论（v3 更新）：D7D #90 已合入，默认分支已具 `memory_items / memory_versions / memory_version_receipts` 版本链与 `save/get_current/list/rollback_preference_version` Repository；偏好 IPC 方法已由 D7C PR #87 实现（`memory-service/gateway/preference_handlers.py`，production 默认注册），不再是阻塞。详见 `docs/day7/09_d7c_prerequisite_audit.md`。
 
@@ -114,3 +114,4 @@
 | v1 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 初稿：基于 15 天 75 项台账 D7-C 口径与 E 轨 `day7-e-ui-version-acceptance-v1.md` 建立任务卡与工作清单；标记跨轨依赖（D 轨版本持久化、IPC 方法、TD-008/022/023）；不包含实现代码 |
 | v2 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 按 PR #87 Reviewer（Ducknesses）非阻断建议与当前事实校对：基线重对齐至 `origin/main@c1ee840`（D7D #90 已合并、持久化阻塞解除）；将剩余唯一硬依赖修正为「偏好 IPC 方法未合入」；纳入编号风格、契约节奏与 5.7 双层落实意见；新增 `09_d7c_prerequisite_audit.md` 与 `10_d7c_preference_ipc_contract_draft.md` 两份配套产物 |
 | v3 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 实现批次：修正 MEDIUM-1 表名（`preference_version_operations` → `memory_version_receipts`，3 文件 5 处）与 LOW-1 描述（09 MemoryViewModel）；用户授权跨轨依赖，新增 D 轨偏好 IPC 方法 `preference.list/create/update/rollback/history`（`gateway/preference_handlers.py` + `repositories.list_preference_items` + app 注册 + L0 测试 10 项）；客户端 `MemoryClient`/`MemoryViewModel`/`PreferenceEditorPage.qml` 与 L0 Mock 测试；工作清单更新为 5/7（6–7 待麒麟 L2） |
+| v4 | 2026-08-31 | 高翌哲（代 C 轨 D7-C） | 麒麟 L2 验证批次：D7C 克隆（`Kylin-V11-2603-D7C-aaed155-Test`）上执行 memory-service 全量 pytest（1281 passed/49 skipped）、memory-client L0 ctest（4/4，含 d7c_preference_editor）、网关级真实 IPC 冒烟（9/9 PASS）；新增 `11_d7c_l2_verification_20260831.md`；工作项 7 完成，工作项 6 宿主 AI 助手跨会话联调待做 |
