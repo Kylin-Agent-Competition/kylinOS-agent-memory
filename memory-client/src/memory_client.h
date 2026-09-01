@@ -126,6 +126,16 @@ public:
     Q_INVOKABLE QString sendManualConfigEvent(const QJsonObject& eventJson);
     Q_INVOKABLE QString sendBehaviorEvent(const QJsonObject& eventJson);
 
+    // D8C 候选 IPC 便捷方法（CANDIDATE / pending ADR；生产默认返回
+    // UNSUPPORTED_METHOD；Demo / 测试态 Mock Gateway 可注册 handler）。
+    //   - knowledge.detail:   payload 必填 memory_id；返回 evidence/conditions/...
+    //   - conflict.compare:   payload 必填 memory_id；返回 candidates[]
+    //   - lifecycle.status:   payload 必填 user_id，memory_id/memory_status 可选
+    // 三者直接复用 sendRequest() 共享 envelope 编码与 pending 跟踪链路。
+    Q_INVOKABLE QString sendKnowledgeDetailRequest(const QJsonObject& payload);
+    Q_INVOKABLE QString sendConflictCompareRequest(const QJsonObject& payload);
+    Q_INVOKABLE QString sendLifecycleStatusRequest(const QJsonObject& payload);
+
 signals:
     void socketPathChanged();
     void connectionStateChanged();

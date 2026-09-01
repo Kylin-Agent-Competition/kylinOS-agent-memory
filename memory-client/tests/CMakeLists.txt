@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.16)
 
 # L0 Mock 契约测试：协议编解码 + MemoryClient ↔ MockGateway
 
