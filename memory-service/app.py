@@ -18,7 +18,11 @@ from typing import Optional
 from config import load_config
 from db.engine import create_db_engine, has_alembic_version, init_schema
 from db.uow import UnitOfWork
-from gateway.handlers import register_default_handlers, register_turn_finalized_handler
+from gateway.handlers import (
+    register_default_handlers,
+    register_event_ingest_handler,
+    register_turn_finalized_handler,
+)
 from gateway.preference_handlers import register_preference_handlers
 from gateway.registry import HandlerRegistry
 from gateway.server import UDSGatewayServer
@@ -51,6 +55,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="（候选契约 CANDIDATE_SYNC，ADR-016 待立项）显式注册偏好 IPC 方法 "
         "preference.list/create/update/rollback/history；production 默认不注册"
         "（未注册 → UNSUPPORTED_METHOD），与 turn.finalized seam 及 #93 候选路线一致",
+    )
+    p.add_argument(
+        "--register-event-ingest",
+        action="store_true",
+        help="（仅 test/validation profile）显式注册 event.ingest（ADR-014 activation 方案 A+B）；"
+        "production 默认不注册（未注册 → UNSUPPORTED_METHOD）",
     )
     p.add_argument(
         "--validation-sources",
@@ -139,6 +149,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         register_preference_handlers(registry, uow_factory=_uow_factory)
         logger.warning(
             "preference.* 已注册（候选契约显式激活 profile）。production 默认不注册（ADR-016 待立项）"
+        )
+
+    # ADR-014 activation 方案 A+B：production 默认不注册 event.ingest；
+    # 仅 test/validation profile（--register-event-ingest）显式注册。
+    # trusted_identity=None = 仅声明内部自洽，非宿主认证证据（L2 HOST_VERIFIED 前保持如此）。
+    if args.register_event_ingest:
+        register_event_ingest_handler(registry, uow_factory=_uow_factory)
+        logger.warning(
+            "event.ingest 已注册（test/validation profile，trusted_identity=None）。"
+            "production 禁止使用此参数（BLOCKED_BY_HOST_MAPPING）"
         )
 
     worker: Optional[OutboxWorker] = None
