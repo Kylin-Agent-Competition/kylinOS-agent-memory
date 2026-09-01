@@ -165,6 +165,43 @@ class MemoryViewModel : public QObject {
     Q_PROPERTY(QString lifecycleStatusError READ lifecycleStatusError
                    NOTIFY lifecycleStatusErrorChanged)
 
+    // ── D9C Memory Context 组装 Pipeline（Demo / Prototype） ────────────
+    // context.assemble 返回的组装 MemoryContext 投影（含可解释字段与 Token 预算校验）。
+    // 注：响应严格按 envelope.data 解析；空 context / status=error / malformed
+    // 一律不产生伪 assembledContext（沿用 D5 Pre-Chat 防伪 Context 模式）。
+    Q_PROPERTY(bool contextAssembleBusy READ contextAssembleBusy
+                   NOTIFY contextAssembleBusyChanged)
+    Q_PROPERTY(QString contextAssembleStage READ contextAssembleStage
+                   NOTIFY contextAssembleStageChanged)
+    // 组装结果整体 JSON（含 selected_memory_ids / recall_sources / memory_types /
+    // conflict_hints / uncertainty_hints / token_budget / actual_token_count /
+    // budget_exceeded / injection_status）。
+    Q_PROPERTY(QJsonObject assembledContext READ assembledContext
+                   NOTIFY assembledContextChanged)
+    // 召回来源（通道）列表：fts5 / vector / rrf 等。
+    Q_PROPERTY(QVariantList contextRecallSources READ contextRecallSources
+                   NOTIFY contextRecallSourcesChanged)
+    // 记忆类型分布列表（每项为 type 字符串或 {type,count} 对象，由 Mock 提供形状）。
+    Q_PROPERTY(QVariantList contextMemoryTypes READ contextMemoryTypes
+                   NOTIFY contextMemoryTypesChanged)
+    // 冲突提示列表（候选中带未解决/已解决冲突的 memory_id 与 conflict_state）。
+    Q_PROPERTY(QVariantList contextConflictHints READ contextConflictHints
+                   NOTIFY contextConflictHintsChanged)
+    // 不确定性提示列表（降级通道 / 陈旧索引 / score_semantics 未验证等）。
+    Q_PROPERTY(QVariantList contextUncertaintyHints READ contextUncertaintyHints
+                   NOTIFY contextUncertaintyHintsChanged)
+    // Token 预算校验：actual_token_count / token_budget / budget_exceeded。
+    Q_PROPERTY(int contextTokenBudget READ contextTokenBudget
+                   NOTIFY contextTokenBudgetChanged)
+    Q_PROPERTY(int contextActualTokenCount READ contextActualTokenCount
+                   NOTIFY contextActualTokenCountChanged)
+    Q_PROPERTY(bool contextBudgetExceeded READ contextBudgetExceeded
+                   NOTIFY contextBudgetExceededChanged)
+    Q_PROPERTY(QString contextInjectionStatus READ contextInjectionStatus
+                   NOTIFY contextInjectionStatusChanged)
+    Q_PROPERTY(QString contextAssembleError READ contextAssembleError
+                   NOTIFY contextAssembleErrorChanged)
+
 public:
     explicit MemoryViewModel(QObject* parent = nullptr);
     ~MemoryViewModel() override;
@@ -183,10 +220,12 @@ public:
     [[nodiscard]] bool postTurnBusy() const { return postTurnBusy_; }
     // D6-C 扩展：四 busy 合并兼容属性（PreChat / PostTurn / Tool / ManualConfig / Behavior）
     // D8-C 进一步扩展：包含 KnowledgeDetail / ConflictCompare / LifecycleStatus
+    // D9-C 进一步扩展：包含 ContextAssemble
     [[nodiscard]] bool busy() const {
         return preChatBusy_ || postTurnBusy_
             || toolBusy_ || manualConfigBusy_ || behaviorBusy_
-            || knowledgeDetailBusy_ || conflictCompareBusy_ || lifecycleStatusBusy_;
+            || knowledgeDetailBusy_ || conflictCompareBusy_ || lifecycleStatusBusy_
+            || contextAssembleBusy_;
     }
 
     // D5-C Getter
@@ -223,6 +262,20 @@ public:
     [[nodiscard]] QString lifecycleStatusStage() const { return lifecycleStatusStage_; }
     [[nodiscard]] QVariantList lifecycleItems() const { return lifecycleItems_; }
     [[nodiscard]] QString lifecycleStatusError() const { return lifecycleStatusError_; }
+
+    // ── D9C getters ─────────────────────────────────────────────────────
+    [[nodiscard]] bool contextAssembleBusy() const { return contextAssembleBusy_; }
+    [[nodiscard]] QString contextAssembleStage() const { return contextAssembleStage_; }
+    [[nodiscard]] QJsonObject assembledContext() const { return assembledContext_; }
+    [[nodiscard]] QVariantList contextRecallSources() const { return contextRecallSources_; }
+    [[nodiscard]] QVariantList contextMemoryTypes() const { return contextMemoryTypes_; }
+    [[nodiscard]] QVariantList contextConflictHints() const { return contextConflictHints_; }
+    [[nodiscard]] QVariantList contextUncertaintyHints() const { return contextUncertaintyHints_; }
+    [[nodiscard]] int contextTokenBudget() const { return contextTokenBudget_; }
+    [[nodiscard]] int contextActualTokenCount() const { return contextActualTokenCount_; }
+    [[nodiscard]] bool contextBudgetExceeded() const { return contextBudgetExceeded_; }
+    [[nodiscard]] QString contextInjectionStatus() const { return contextInjectionStatus_; }
+    [[nodiscard]] QString contextAssembleError() const { return contextAssembleError_; }
 
     // D7C Getter
     [[nodiscard]] QVariantList preferenceItems() const { return preferenceItems_; }
@@ -390,6 +443,24 @@ public:
         const QString& memoryId,
         const QString& memoryStatus);
 
+    // ── D9C Memory Context 组装 Pipeline ──────────────────────────────
+    // context.assemble：userId + queryText 必填；tokenBudget 必填且 > 0；
+    // scene / candidatesJson（B 轨 RetrievalCandidateSample[] 的 JSON 字符串）
+    // 由调用方提供；ViewModel 构造 context.assemble payload 并发送。
+    // 响应投影到 assembledContext 及子字段（recall_sources / memory_types /
+    // conflict_hints / uncertainty_hints / token_budget / actual_token_count /
+    // budget_exceeded / injection_status）。
+    // 预算校验：actual_token_count > token_budget → budget_exceeded=true，
+    //           injection_status=degraded（Mock 决定截断策略；客户端不伪造截断）。
+    // 防伪 Context：空 data / status=error / injection_status=failed/skipped
+    //              一律不填充 assembledContext（保持空对象）。
+    Q_INVOKABLE void runContextAssemblePipeline(
+        const QString& userId,
+        const QString& queryText,
+        int tokenBudget,
+        const QString& scene,
+        const QString& candidatesJson);
+
     // 原文隔离验证
     Q_INVOKABLE bool verifyOriginalTextIsolation() const;
 
@@ -446,6 +517,20 @@ signals:
     void lifecycleItemsChanged();
     void lifecycleStatusErrorChanged();
 
+    // D9C 信号
+    void contextAssembleBusyChanged();
+    void contextAssembleStageChanged();
+    void assembledContextChanged();
+    void contextRecallSourcesChanged();
+    void contextMemoryTypesChanged();
+    void contextConflictHintsChanged();
+    void contextUncertaintyHintsChanged();
+    void contextTokenBudgetChanged();
+    void contextActualTokenCountChanged();
+    void contextBudgetExceededChanged();
+    void contextInjectionStatusChanged();
+    void contextAssembleErrorChanged();
+
     void requestFailed(const QString& requestId, const QString& errorCode, const QString& safeMessage);
     void connectionError(const QString& safeMessage);
 
@@ -496,8 +581,29 @@ private:
     void setLifecycleItems(const QVariantList& value);
     void setLifecycleStatusError(const QString& value);
 
+    // D9C 私有 setter
+    void setContextAssembleBusy(bool value);
+    void setContextAssembleStage(const QString& value);
+    void setAssembledContext(const QJsonObject& value);
+    void setContextRecallSources(const QVariantList& value);
+    void setContextMemoryTypes(const QVariantList& value);
+    void setContextConflictHints(const QVariantList& value);
+    void setContextUncertaintyHints(const QVariantList& value);
+    void setContextTokenBudget(int value);
+    void setContextActualTokenCount(int value);
+    void setContextBudgetExceeded(bool value);
+    void setContextInjectionStatus(const QString& value);
+    void setContextAssembleError(const QString& value);
+    // D9C 响应投影：把 data 解析为 assembledContext + 子字段。
+    void projectAssembledContext(const QJsonObject& data);
+    // D9C 防伪 Context 统一清空（失败路径 / 请求前置调用，I-2 修复）。
+    void resetContextProjection();
+
     // D8C 响应投影辅助
     [[nodiscard]] QVariantList projectJsonArray(const QJsonArray& items) const;
+    // D9C 响应投影辅助：保留字符串与对象元素（recall_sources / uncertainty_hints
+    // 契约允许字符串元素如 "fts5" / "vector_score_unverified"；C-1 修复）。
+    [[nodiscard]] QVariantList projectJsonArrayMixed(const QJsonArray& items) const;
 
     // D7C 偏好请求类型（响应路由用）
     enum class PreferenceKind { None, List, History, Create, Update, Rollback };
@@ -615,6 +721,23 @@ private:
     QVariantList lifecycleItems_;
     QString lifecycleStatusError_;
     QString pendingLifecycleStatusRequestId_;
+
+    // ── D9C Memory Context 组装 ───────────────────────────────────────
+    bool contextAssembleBusy_ = false;
+    QString contextAssembleStage_ = QStringLiteral("idle");
+    QJsonObject assembledContext_;
+    QVariantList contextRecallSources_;
+    QVariantList contextMemoryTypes_;
+    QVariantList contextConflictHints_;
+    QVariantList contextUncertaintyHints_;
+    int contextTokenBudget_ = 0;
+    int contextActualTokenCount_ = 0;
+    bool contextBudgetExceeded_ = false;
+    QString contextInjectionStatus_;
+    QString contextAssembleError_;
+    QString pendingContextAssembleRequestId_;
+    // M-2 修复：记录本次请求的 token_budget，响应缺失时回退（避免显示 250/0）。
+    int requestedTokenBudget_ = 0;
 
     // 问题4修复：per-request deadline timer（超时→ requestFailed TIMEOUT）
     // key = requestId；超时后由单例 QTimer 回调，统一在 onRequestFailed 路径处理。
