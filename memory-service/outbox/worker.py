@@ -60,6 +60,10 @@ class OutboxWorker:
         self._lock = get_write_lock()
         self._processed = 0
         self._dead_letters = 0
+        # D9D D-REQ-06：最近一次成功消费的 outbox.created_at（index_sync_lag 口径）。
+        # 成功消费后 outbox 行被删除，故用内存追踪最近成功 created_at（无持久化；
+        # 不做 Schema 变更，重启后为 None——缺数据返回 None，不伪造 0）。
+        self._last_indexed_ts: Optional[str] = None
 
     # ── 生命周期 ──
 
@@ -84,14 +88,39 @@ class OutboxWorker:
     def metrics(self) -> Dict[str, Any]:
         """诊断指标（FR-FB-003：backlog / oldest_pending_age / index_sync_lag）。"""
         now_iso = datetime.now(timezone.utc).isoformat()
+        index_sync_lag = None
+        index_sync_lag_seconds = None
         try:
             with self._engine.connect() as conn:
                 backlog = repo.outbox_backlog(conn, now_iso=now_iso)
+                latest_memory = repo.latest_memory_change_ts(conn)
         except OperationalError as exc:
             if is_locked_error(exc):
                 logger.warning("metrics busy 降级")
             backlog = {"backlog": -1, "dead_letter": -1, "oldest_pending_created_at": None}
-        return {**backlog, "processed": self._processed, "dead_letters": self._dead_letters}
+        # D9D D-REQ-06：index_sync_lag = latest committed memory change −
+        # latest successfully indexed（最近成功消费的 outbox.created_at）。
+        # 任一侧缺数据 → None（不伪造 0）；同库时间戳自洽，backlog=0 时收敛。
+        if latest_memory and self._last_indexed_ts:
+            try:
+                mem_ts = datetime.fromisoformat(str(latest_memory))
+                idx_ts = datetime.fromisoformat(self._last_indexed_ts)
+                if mem_ts.tzinfo is None:
+                    mem_ts = mem_ts.replace(tzinfo=timezone.utc)
+                if idx_ts.tzinfo is None:
+                    idx_ts = idx_ts.replace(tzinfo=timezone.utc)
+                index_sync_lag = idx_ts.isoformat()
+                index_sync_lag_seconds = round((mem_ts - idx_ts).total_seconds(), 3)
+            except (ValueError, TypeError):
+                index_sync_lag = None
+                index_sync_lag_seconds = None
+        return {
+            **backlog,
+            "processed": self._processed,
+            "dead_letters": self._dead_letters,
+            "index_sync_lag": index_sync_lag,
+            "index_sync_lag_seconds": index_sync_lag_seconds,
+        }
 
     # ── 内部实现 ──
 
@@ -169,6 +198,8 @@ class OutboxWorker:
             # 成功（附录 B 4a）
             repo.mark_outbox_success(conn, outbox_id=event_id)
             self._processed += 1
+            # D9D D-REQ-06：记录最近成功消费的 outbox.created_at（index_sync_lag）。
+            self._last_indexed_ts = str(event.get("created_at") or "") or self._last_indexed_ts
             logger.info(
                 "Outbox 事件完成 id=%d type=%s agg=%s", event_id, event_type, aggregate_id
             )

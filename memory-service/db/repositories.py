@@ -1374,3 +1374,20 @@ def outbox_backlog(conn, *, now_iso: str) -> Dict[str, Any]:
         "dead_letter": int(dead or 0),
         "oldest_pending_created_at": oldest,
     }
+
+
+def latest_memory_change_ts(conn) -> Optional[str]:
+    """memory_entries 最新变更时间戳（updated_at/created_at 最大值）。
+
+    index_sync_lag 口径（D9D 任务卡 §4.2 冻结）：latest committed memory change
+    timestamp = memory_entries 最新 updated_at/created_at 的最大值。
+    空表返回 None。
+    """
+    latest_created = conn.execute(
+        select(func.max(memory_entries.c.created_at))
+    ).scalar()
+    latest_updated = conn.execute(
+        select(func.max(memory_entries.c.updated_at))
+    ).scalar()
+    candidates = [ts for ts in (latest_created, latest_updated) if ts is not None]
+    return max(candidates) if candidates else None
