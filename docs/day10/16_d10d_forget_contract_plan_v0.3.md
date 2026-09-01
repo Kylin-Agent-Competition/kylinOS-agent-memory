@@ -1,9 +1,9 @@
 # D10-D 精准遗忘持久化契约规划（草案 v0.3）
 
-- **编制日期**：2026-09-01（v0.3 按 Review #99 Reviewer E REWORK 意见修订）
+- **编制日期**：2026-09-01（v0.3 按 Review #99 Reviewer E 第一、二轮 REWORK 意见修订）
 - **编制人**：opencode（D 轨开发 Agent）
-- **状态**：DRAFT v0.3 — 按 Review #99 Reviewer E REWORK 意见修订（HIGH-01 / MEDIUM-01~04 / 非阻断 2 项全部闭合），并吸收 PR #98 冻结回复（`APPROVED_WITH_STAGED_RUNTIME`，2026-09-01）；**仍待 ADR-015/016 立项 + D 决策 + Reviewer E 签署**后转正式契约
-- **对照基线**：main @ `829950a`（PR #94 D10E B 轨合并后；PR #99 已 rebase 同步）；`docs/architecture/D3_MEMORY_BUSINESS_CONTRACT_V1.md`（§5.5 ForgetPlan，`CANDIDATE_FOR_FREEZE`）；`deliverables/D4_DB_INITIAL_DESIGN_FREEZE_20260817.md`（FRZ-DB-001）；`deliverables/D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（FRZ-IPC-007）；`docs/adr/013-source-events-table.md`、`014-event-ingest-method.md`（D6-D 契约 v5，编号占用先例）；PR #94（D10-E B 轨代行，selector 边界/状态机前置）；PR #82（D10-B Vector 删除工作计划）
+- **状态**：DRAFT v0.3 — 按 Review #99 Reviewer E 第一、二轮 REWORK 意见修订（第一轮 HIGH-01 / MEDIUM-01~04 / 非阻断 2 项；第二轮 MEDIUM-01 / MEDIUM-02 / LOW-1 / LOW-2 全部闭合），并吸收 PR #98 冻结回复（`APPROVED_WITH_STAGED_RUNTIME`，2026-09-01）；**仍待 ADR-015/016 立项 + D 决策 + Reviewer E 签署**后转正式契约
+- **对照基线**：main @ `0cdada7`（PR #88 E 轨检索治理合并后，含 PR #94 D10E B 轨；PR #99 已 rebase 同步）；`docs/architecture/D3_MEMORY_BUSINESS_CONTRACT_V1.md`（§5.5 ForgetPlan，`CANDIDATE_FOR_FREEZE`）；`deliverables/D4_DB_INITIAL_DESIGN_FREEZE_20260817.md`（FRZ-DB-001）；`deliverables/D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（FRZ-IPC-007）；`docs/adr/013-source-events-table.md`、`014-event-ingest-method.md`（D6-D 契约 v5，编号占用先例）；PR #94（D10-E B 轨代行，selector 边界/状态机前置）；PR #82（D10-B Vector 删除工作计划）
 
 ---
 
@@ -29,6 +29,17 @@ E 轨对 D10-D 精准遗忘冻结申请的正式回复（PR #98 评论区，love
 | **MEDIUM-04** `delete_mode` 门禁 | §四.9：`delete_mode` 可信来源由 ADR-016 冻结；Repository 不得按 `target_selector` 自行推导；LLM 不得终判 soft/hard；接线前 Hard Delete Runtime fail-closed |
 | 非阻断 1 | PR body 表述修正为「基于前置 v0.1 修订后首次入库 v0.2」 |
 | 非阻断 2 | §四.2：`forget_audit` 的 `forget_mode` / `target_type` / `status` SQL CHECK 注明留待 ADR-015 Schema 定稿时补充 |
+
+### REWORK 第二轮处置摘要（Review #99 Reviewer E，2026-09-01，基于 HEAD `b8740ac`）
+
+上一轮 5 项已全部闭合，本轮为第二轮最小修订（MEDIUM 2 + LOW 2）：
+
+| REWORK 项 | 处置（对应章节） |
+|---|---|
+| **MEDIUM-01** Preview 后清除 selector 与 `ForgetPlan` 必填契约冲突 | §三：明确 `forget_plan` persistence row 属 **D 轨持久化实体**，`ForgetPlan` 仅用于创建 / Preview 前业务输入校验；Preview 完成并清理原始 selector 后**不要求持久化记录再次完整反序列化为 E 轨 `ForgetPlan`**；Execute 阶段只消费已确认执行快照（`user_id + forget_plan_id + resolved_target_ids + selection_hash + confirmation state`），**不得重新依赖 selector 做范围解析**；§四.8 同步呼应 |
+| **MEDIUM-02** `executed_count` 归属错误 | §三.1：`executed_count` 移出「ForgetPlan 复用字段」，明确为 **D 轨持久化 / Execute 结果字段**（数据库 `forget_plan.executed_count` 可保留）；删除「审计用」表述，是否进最终 `forget_audit` 由 ADR-015 定稿时决定 |
+| **LOW-1** 文档基线 SHA 未同步 | 文档头：同步为当前真实基线 `main @ 0cdada7` |
+| **LOW-2** PR body rename 描述 | PR body：调整为与 aggregate Diff 一致（git mv 升版 + 修订，GitHub aggregate 显示为新增文件） |
 
 ---
 
@@ -73,6 +84,8 @@ D6-D（R35）已规划多源事件持久化（`source_events`，ADR-013/014 已�
 
 遗忘执行输入 = **`ForgetPlan`**（`memory-service/domain/forgetting.py`，D3 §5.5 字段落地）+ **确认凭据**（本层新增，见 §五）。复用约束：不复制 ForgetMode/ForgetPlanStatus/TargetType 枚举，不重建业务校验器。
 
+> **persistence 边界（v0.3/第二轮 MEDIUM-01）**：`forget_plan` persistence row 属于 **D 轨持久化实体**。`ForgetPlan` 用于**创建 / Preview 前**业务输入校验；Preview 完成并清理原始 selector 后，**不要求持久化记录再次完整反序列化为 E 轨 `ForgetPlan`**（现有 Domain 的 `target_selector: NonEmptyStr` 必填、模式条件字段必填与 `ConfigDict(extra="forbid")` 仅约束创建 / Preview 前输入，不再约束已清理的持久化记录）。Execute 阶段只消费已确认的执行快照（`user_id + forget_plan_id + resolved_target_ids + selection_hash + confirmation state`），**不得重新依赖 selector 做范围解析**。
+
 ### 3.1 复用字段（ForgetPlan，D3 §5.5）+ v0.3 冻结修订
 
 | 字段 | 类型 | 说明（v0.3 冻结） |
@@ -86,10 +99,11 @@ D6-D（R35）已规划多源事件持久化（`source_events`，ADR-013/014 已�
 | `requires_confirmation` | bool | **禁止模型生成**（D3 §7.10） |
 | `resolved_target_ids` | Optional[List[str]] | **禁止模型生成**（D3 §7.6）；**必须由系统规则引擎生成**；Preview 时刻生成的、限定当前 `user_id`、已去重、确定且可重放的业务对象 ID 快照；`[]` 且 `affected_count=0` 为合法 Preview（精准解析零命中），不得强行转错误、不得解释为扩大删除范围 |
 | `affected_count` | Optional[int] | **禁止模型生成**；**统一语义（v0.3/MEDIUM-03）**：= Preview 时确定并经确认的目标数量 = `len(resolved_target_ids)`，**不是** execute 才产生的字段；进入 `awaiting_confirmation` 前必须满足 `resolved_target_ids is not None` 且 `affected_count == len(resolved_target_ids)`；`[]` / `0` 为合法零命中 |
-| `executed_count` | Optional[int] | 可选（v0.3/MEDIUM-03）：实际执行成功数量（execute 结果，审计用）；Execute 必须完整消费确认快照，`executed_count != affected_count` 时不得进入 `completed`（闭合「漏删不得报完成」） |
 | `is_cascade` | bool | **冻结：默认 `false` 为安全语义**；`true` 仅允许沿明确、可验证的业务 provenance/evidence 派生关系扩展目标，且扩展后全部对象**必须进入 `resolved_target_ids` 与 Preview**，不得在执行阶段隐式增加目标；**禁止跨 Consent Scope 自动传播**（不得自动删除宿主聊天历史/Recollect 原始数据/截图 OCR/外部来源实体） |
 | `target_id` / `target_session_id` / `target_topic` / `target_time_range` | Optional | 模式条件字段（互斥见上） |
 | `executed_at` / `created_at` | AwareDatetime | 时间一致性已由 Domain 校验 |
+
+> **`executed_count` 归属（v0.3/第二轮 MEDIUM-02）**：`executed_count` 为 **D 轨持久化 / Execute 结果字段**，**不属于当前 E 轨 `ForgetPlan` Domain**（现有 `ForgetPlan` 无该字段，且 `extra="forbid"` 无法传入）；数据库 `forget_plan.executed_count` 可保留。其语义不变：Execute 必须完整消费确认快照，`executed_count != affected_count` 时不得进入 `completed`（闭合「漏删不得报完成」）。该字段**不用于审计**；若确需进入最终审计，由 **ADR-015 定稿时**再决定是否加入 `forget_audit`。
 
 ### 3.2 本层新增概念（不属 E 轨 Domain）
 
@@ -236,6 +250,7 @@ Hard Delete 冻结语义要求「SQLite / FTS5 / Vector / Cache / 日志 / 导�
 4. **执行与审计不依赖明文**：execute 仅消费已确认的 `resolved_target_ids`；审计只存 `selection_hash + affected_count` 等结构化引用（§四.2 红线）。
 5. **Schema**：`forget_plan.target_selector` 改为**可空列**（TEXT，不设 NOT NULL），以承载「已清除」状态；`selection_hash` 为长期持久化真源之一。
 6. **Sentinel 验收扩展（§九）**：覆盖 `forget_plan`、`forget_audit`、Outbox payload、服务日志、导出 / 临时输出——带唯一 Sentinel 的合成敏感正文执行遗忘后，上述全部范围 0 命中。
+7. **persistence 反序列化边界（v0.3/第二轮 MEDIUM-01）**：清理后的持久化记录属于 **D 轨实体**，**不要求再完整反序列化为 E 轨 `ForgetPlan`**（Domain 的 `target_selector` 必填与模式条件必填仅约束创建 / Preview 前输入，见 §三）；Execute 仅消费已确认执行快照（`user_id + forget_plan_id + resolved_target_ids + selection_hash + confirmation state`），不因清理后字段置空而违反任何输入校验、也不重新依赖 selector 做范围解析。
 
 ### 4.9 `delete_mode` 可信决策来源门禁（v0.3/MEDIUM-04 处置）
 
@@ -362,7 +377,7 @@ Schema 已含 `delete_mode = soft / hard`，但 `ForgetPlan` 输入不含该字�
 
 ## 十一、签署与落地流程（v0.3 更新）
 
-1. **本文件（契约规划 v0.3）入库** ← 本 PR：吸收 Reviewer E 冻结回复（APPROVED_WITH_STAGED_RUNTIME）并闭合 Review #99 REWORK（HIGH-01 / MEDIUM-01~04 / 非阻断 2 项），作为 ADR-015/016 前置
+1. **本文件（契约规划 v0.3）入库** ← 本 PR：吸收 Reviewer E 冻结回复（APPROVED_WITH_STAGED_RUNTIME）并闭合 Review #99 第一、二轮 REWORK（第一轮 HIGH-01 / MEDIUM-01~04 / 非阻断 2 项；第二轮 MEDIUM-01 / MEDIUM-02 / LOW-1 / LOW-2），作为 ADR-015/016 前置
 2. **ADR-015**（forget_plan/forget_audit 表 + outbox priority，FRZ-DB-001 扩展）+ **ADR-016**（forget.preview/forget.execute，FRZ-IPC-007 扩展）提交 D 决策
 3. Reviewer E（谢嘉然）签署 ADR
 4. 回写冻结文档（FRZ-DB-001 / FRZ-IPC-007）
