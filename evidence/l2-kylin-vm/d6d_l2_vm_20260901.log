@@ -1,0 +1,554 @@
+
+========================================================================
+[2026-09-01T14:48:20] [sync]
+$ === D6-D PR#98 L2 麒麟 VM 验证（tested_commit=d721badf3be1afeb7ce5daead51d5344ca546acb）===
+
+
+========================================================================
+[2026-09-01T14:48:20] [sync]
+$ mkdir -p /tmp/d6d-l2
+
+
+========================================================================
+[2026-09-01T14:48:20] [sync]
+$ ls -la /tmp/d6d-l2/d6d_d721bad.bundle
+-rw-rw-r-- 1 kylin-agent kylin-agent 6108036  9月 1日 14:48 /tmp/d6d-l2/d6d_d721bad.bundle
+
+========================================================================
+[2026-09-01T14:48:20] [sync]
+$ systemctl --user stop kylin-memory (旧代码服务)
+RC=0
+
+========================================================================
+[2026-09-01T14:48:21] [sync]
+$ git fetch bundle
+来自 /tmp/d6d-l2/d6d_d721bad.bundle
+ * [新分支]          feat/d6d-event-persistence-impl -> origin/l2-d6d-sync
+FETCH_RC=0
+
+========================================================================
+[2026-09-01T14:48:21] [sync]
+$ git checkout d721bad
+切换到一个新分支 'feat/d6d-event-persistence-impl'
+分支 'feat/d6d-event-persistence-impl' 设置为跟踪 'origin/l2-d6d-sync'。
+CO_RC=0
+
+========================================================================
+[2026-09-01T14:48:21] [sync]
+$ git rev-parse HEAD / status
+d721badf3be1afeb7ce5daead51d5344ca546acb
+
+========================================================================
+[2026-09-01T14:48:22] [sync]
+$ 依赖版本确认
+sqlalchemy 2.0.52
+alembic 1.19.1
+pydantic 2.13.4
+
+========================================================================
+[2026-09-01T14:48:22] [sync]
+$ migrations/versions 列表
+001_initial_schema.py
+20260826_add_trace_id.py
+20260831_add_source_events.py
+20260831_preference_versions.py
+__pycache__
+
+========================================================================
+[2026-09-01T14:48:47] [l2_1]
+$ ### L2-1 迁移升级 + schema 对照（source_events）
+
+
+========================================================================
+[2026-09-01T14:48:49] [l2_1]
+$ alembic upgrade head (exit 见下)
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 001_initial_schema, 001_initial_schema — D4D 基线迁移（ADR-007 命名：001_initial_schema.py）
+INFO  [alembic.runtime.migration] Running upgrade 001_initial_schema -> 20260826_add_trace_id, 20260826_add_trace_id — ADR-011：turns/memory_entries 新增 nullable trace_id/host_turn_id 列
+INFO  [alembic.runtime.migration] Running upgrade 20260826_add_trace_id -> 20260831_preference_versions, 20260831_preference_versions — D7D 偏好版本真源与不可变历史。
+INFO  [alembic.runtime.migration] Running upgrade 20260831_preference_versions -> 20260831_add_source_events, 20260831_add_source_events — ADR-013：多源事件持久化表 source_events（FRZ-DB-001 扩展）
+
+========================================================================
+[2026-09-01T14:48:49] [l2_1]
+$ alembic_version 版本链
+alembic_version= [('20260831_add_source_events',)]
+heads_check= ['20260831_add_source_events']
+
+========================================================================
+[2026-09-01T14:48:49] [l2_1]
+$ alembic heads (单 head)
+20260831_add_source_events (head)
+
+========================================================================
+[2026-09-01T14:48:49] [l2_1]
+$ PRAGMA table_info/index_list/foreign_key_check
+COL_COUNT= 35
+COLS= ['actor_id', 'admission_decision', 'admission_reason_code', 'captured_at', 'consent_scope', 'content_fingerprint', 'content_summary', 'created_at', 'dedup_group', 'duplicate_of', 'event_id', 'event_type', 'has_structured_payload', 'id', 'idempotency_key', 'is_sensitive_matched', 'language_tag', 'memory_type', 'occurred_at', 'payload_security_checked', 'processing_status', 'raw_payload_ref', 'requires_embedding', 'schema_version', 'sensitivity', 'session_id', 'should_ignore', 'source_business_status', 'source_reference', 'source_type', 'tool_call_id', 'trace_id', 'turn_id', 'updated_at', 'user_id']
+INDEX_COUNT= 5
+INDEXES= ['idx_source_events_dedup_group', 'idx_source_events_fingerprint', 'idx_source_events_status', 'idx_source_events_user_created', 'uq_source_events_event']
+CHECK_COUNT= 5
+CHECK_LINE= CONSTRAINT ck_source_events_consent_scope CHECK (consent_scope IN ('memory_only','memory_and_analytics','none')),
+CHECK_LINE= CONSTRAINT ck_source_events_source_business_status CHECK (source_business_status IN ('raw','completed','success','partial','failed','cancelled','timeout','ignored')),
+CHECK_LINE= CONSTRAINT ck_source_events_sensitivity CHECK (sensitivity IN ('none','low','medium','high','critical')),
+CHECK_LINE= CONSTRAINT ck_source_events_admission_decision CHECK (admission_decision IN ('allow_extraction','audit_only','reject')),
+CHECK_LINE= CONSTRAINT ck_source_events_processing_status CHECK (processing_status IN ('pending','extracting','extracted','embedded','stored'))
+FK_CHECK_COUNT= 0
+FK_RESULTS= []
+
+========================================================================
+[2026-09-01T14:48:49] [l2_1]
+$ schema 逐列断言（35 列/5 索引/5 CHECK/FK 空）
+GLOBAL_UNIQUE_MISSING
+SCHEMA_ASSERT= FAIL
+
+========================================================================
+[2026-09-01T14:48:51] [l2_1]
+$ alembic downgrade (回滚 source_events)
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running downgrade 20260831_add_source_events -> 20260831_preference_versions, 20260831_add_source_events — ADR-013：多源事件持久化表 source_events（FRZ-DB-001 扩展）
+DOWN_RC=0
+
+========================================================================
+[2026-09-01T14:48:51] [l2_1]
+$ downgrade 后 source_events 已 DROP
+has_source_events_after_down= []
+
+========================================================================
+[2026-09-01T14:48:51] [l2_1]
+$ alembic upgrade head (重建)
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 20260831_preference_versions -> 20260831_add_source_events, 20260831_add_source_events — ADR-013：多源事件持久化表 source_events（FRZ-DB-001 扩展）
+UP_RC=0
+
+========================================================================
+[2026-09-01T14:48:51] [l2_1]
+$ 往返后版本链 + source_events 重建
+version_after_roundtrip= [('20260831_add_source_events',)]
+table_after_roundtrip= [('source_events',)]
+
+========================================================================
+[l2_1] [补充校验] 全局 UNIQUE(event_id) 确认
+$ /home/kylin-agent/d4d-venv/bin/python /tmp/d6d-l2/l2_1_assert2.py
+
+
+========================================================================
+[l2_1] [补充校验] 全局 UNIQUE(event_id) 确认
+$ /home/kylin-agent/d4d-venv/bin/python /tmp/d6d-l2/l2_1_assert2.py
+
+
+========================================================================
+[l2_1] [补充校验] 全局 UNIQUE(event_id) 确认
+$ /home/kylin-agent/d4d-venv/bin/python /tmp/d6d-l2/l2_1_assert2.py
+
+
+========================================================================
+[l2_1] [补充校验] 全局 UNIQUE(event_id) 确认
+$ /home/kylin-agent/d4d-venv/bin/python /tmp/d6d-l2/l2_1_assert2.py
+GLOBAL_UNIQUE_INDEX_SQL= CREATE UNIQUE INDEX uq_source_events_event ON source_events (event_id)
+PRAGMA_INDEX_LIST= [(0, 'idx_source_events_status', 0, 'c', 0), (1, 'idx_source_events_dedup_group', 0, 'c', 0), (2, 'idx_source_events_fingerprint', 0, 'c', 0), (3, 'idx_source_events_user_created', 0, 'c', 0), (4, 'uq_source_events_event', 1, 'c', 0)]
+SCHEMA_ASSERT_CORRECTED= PASS
+
+========================================================================
+
+========================================================================
+
+========================================================================
+
+========================================================================
+[2026-09-01T15:07:37] [l2_2]
+$ ### L2-2 event.ingest 真实 CLI 端到端（validation profile 显式注册 seam）
+
+
+========================================================================
+[2026-09-01T15:07:38] [l2_2]
+$ 生成 payloads.json
+PAYLOADS_WRITTEN ['pos', 'replay', 'replay_b', 'collision', 'consent_none', 'sensitive', 'cross_user', 'dedup', 'dedup2', 'no_schema', 'wrong_schema']
+
+========================================================================
+[2026-09-01T15:07:39] [l2_2]
+$ event.ingest 测试库 alembic upgrade head
+INFO  [alembic.runtime.migration] Running upgrade 001_initial_schema -> 20260826_add_trace_id, 20260826_add_trace_id — ADR-011：turns/memory_entries 新增 nullable trace_id/host_turn_id 列
+INFO  [alembic.runtime.migration] Running upgrade 20260826_add_trace_id -> 20260831_preference_versions, 20260831_preference_versions — D7D 偏好版本真源与不可变历史。
+INFO  [alembic.runtime.migration] Running upgrade 20260831_preference_versions -> 20260831_add_source_events, 20260831_add_source_events — ADR-013：多源事件持久化表 source_events（FRZ-DB-001 扩展）
+RC=0
+
+========================================================================
+[2026-09-01T15:07:39] [l2_2]
+$ 启动 validation server (event.ingest 注册)
+SERVER_PID=66162
+
+========================================================================
+[2026-09-01T15:07:42] [l2_2]
+$ server 启动输出 + socket
+2026-09-01T15:07:40+0800 INFO gateway.server [Thread-1 (start)] IPC Gateway 启动: /tmp/d6d-l2/l2-2.sock
+D6D_VALIDATION_SERVER_READY
+---
+srw------- 1 kylin-agent kylin-agent 0  9月 1日 15:07 /tmp/d6d-l2/l2-2.sock
+
+========================================================================
+[2026-09-01T15:07:43] [l2_2]
+$ 正向写入 event.ingest (L2A-E1)
+{"protocol_version": "1.0", "request_id": "req-l2a-1", "trace_id": "L2A-tr-1", "status": "ok", "data": {"source_event_id": 1, "event_id": "L2A-E1", "admission_decision": "allow_extraction", "admission_reason_code": "ok", "duplicate": false, "duplicate_reason": null, "duplicate_of": null}, "server_ts": "2026-09-01T07:07:43.446314+00:00"}
+
+========================================================================
+[2026-09-01T15:07:43] [l2_2]
+$ 首投 L2A-E2
+{"protocol_version": "1.0", "request_id": "req-l2a-2", "trace_id": "L2A-tr-2", "status": "ok", "data": {"source_event_id": 2, "event_id": "L2A-E2", "admission_decision": "allow_extraction", "admission_reason_code": "ok", "duplicate": false, "duplicate_reason": null, "duplicate_of": null}, "server_ts": "2026-09-01T07:07:43.606586+00:00"}
+
+========================================================================
+[2026-09-01T15:07:43] [l2_2]
+$ 同 envelope 幂等重放 L2A-E2（cache replay，同响应）
+{"protocol_version": "1.0", "request_id": "req-l2a-2b", "trace_id": "L2A-tr-2", "status": "ok", "data": {"source_event_id": 2, "event_id": "L2A-E2", "admission_decision": "allow_extraction", "admission_reason_code": "ok", "duplicate": false, "duplicate_reason": null, "duplicate_of": null}, "server_ts": "2026-09-01T07:07:43.689411+00:00"}
+
+========================================================================
+[2026-09-01T15:07:43] [l2_2]
+$ 换 idempotency_key 重投同 event_id → idempotent_replay
+{"protocol_version": "1.0", "request_id": "req-l2a-2c", "trace_id": "L2A-tr-2", "status": "ok", "data": {"source_event_id": 2, "event_id": "L2A-E2", "admission_decision": "allow_extraction", "admission_reason_code": "ok", "duplicate": true, "duplicate_reason": "idempotent_replay", "duplicate_of": null}, "server_ts": "2026-09-01T07:07:43.820838+00:00"}
+
+========================================================================
+[2026-09-01T15:07:43] [l2_2]
+$ identity collision (L2A-E2 换 actor_id)
+{"protocol_version": "1.0", "request_id": "req-l2a-3", "trace_id": "L2A-tr-3", "status": "error", "data": {}, "server_ts": "2026-09-01T07:07:43.919521+00:00", "error_code": "INVALID_REQUEST", "message": "event_id reused with different immutable identity"}
+
+========================================================================
+[2026-09-01T15:07:43] [l2_2]
+$ consent_scope=none → REJECT
+{"protocol_version": "1.0", "request_id": "req-l2a-4", "trace_id": "L2A-tr-4", "status": "ok", "data": {"source_event_id": 3, "event_id": "L2A-E3", "admission_decision": "reject", "admission_reason_code": "consent_not_granted", "duplicate": false, "duplicate_reason": null, "duplicate_of": null}, "server_ts": "2026-09-01T07:07:44.033427+00:00"}
+
+========================================================================
+[2026-09-01T15:07:43] [l2_2]
+$ 高敏事件 (L2A-E4)
+{"protocol_version": "1.0", "request_id": "req-l2a-5", "trace_id": "L2A-tr-5", "status": "ok", "data": {"source_event_id": 4, "event_id": "L2A-E4", "admission_decision": "reject", "admission_reason_code": "event_should_ignore", "duplicate": false, "duplicate_reason": null, "duplicate_of": null}, "server_ts": "2026-09-01T07:07:44.154794+00:00"}
+
+========================================================================
+[2026-09-01T15:07:43] [l2_2]
+$ 跨用户复用 event_id (uB→L2A-E1)
+{"protocol_version": "1.0", "request_id": "req-l2a-6", "trace_id": "L2A-tr-6", "status": "error", "data": {}, "server_ts": "2026-09-01T07:07:44.254607+00:00", "error_code": "INVALID_REQUEST", "message": "event_id already owned by another identity"}
+
+========================================================================
+[2026-09-01T15:07:44] [l2_2]
+$ 指纹去重 head (L2A-E5)
+{"protocol_version": "1.0", "request_id": "req-l2a-7", "trace_id": "L2A-tr-7", "status": "ok", "data": {"source_event_id": 5, "event_id": "L2A-E5", "admission_decision": "allow_extraction", "admission_reason_code": "ok", "duplicate": false, "duplicate_reason": null, "duplicate_of": null}, "server_ts": "2026-09-01T07:07:44.373290+00:00"}
+
+========================================================================
+[2026-09-01T15:07:44] [l2_2]
+$ 指纹去重 duplicate (L2A-E6)
+{"protocol_version": "1.0", "request_id": "req-l2a-8", "trace_id": "L2A-tr-8", "status": "ok", "data": {"source_event_id": 6, "event_id": "L2A-E6", "admission_decision": "allow_extraction", "admission_reason_code": "ok", "duplicate": true, "duplicate_reason": "content_duplicate", "duplicate_of": 5}, "server_ts": "2026-09-01T07:07:44.492781+00:00"}
+
+========================================================================
+[2026-09-01T15:07:44] [l2_2]
+$ schema_version 缺失 → INVALID_REQUEST
+{"protocol_version": "1.0", "request_id": "req-l2a-9", "trace_id": "L2A-tr-9", "status": "error", "data": {}, "server_ts": "2026-09-01T07:07:44.609376+00:00", "error_code": "INVALID_REQUEST", "message": "missing required field: schema_version"}
+
+========================================================================
+[2026-09-01T15:07:44] [l2_2]
+$ schema_version=0.2 → INVALID_REQUEST
+{"protocol_version": "1.0", "request_id": "req-l2a-10", "trace_id": "L2A-tr-10", "status": "error", "data": {}, "server_ts": "2026-09-01T07:07:44.702205+00:00", "error_code": "INVALID_REQUEST", "message": "unsupported_schema_version"}
+
+========================================================================
+[2026-09-01T15:07:44] [l2_2]
+$ source_events / idempotency_cache 落库核对
+{
+  "uA": [
+    {
+      "event_id": "L2A-E1",
+      "processing_status": "pending",
+      "admission_decision": "allow_extraction",
+      "admission_reason_code": "ok",
+      "sensitivity": "none",
+      "is_sensitive_matched": 0,
+      "content_summary": "L2A 正向事件脱敏摘要",
+      "raw_payload_ref": null,
+      "content_fingerprint": "5a87898603a7a00b342aaf15f18d97a116282883e4cad193197cfc503694d553",
+      "dedup_group": "dedup:uA:5a87898603a7a00b342aaf15f18d97a116282883e4cad193197cfc503694d553:chat",
+      "duplicate_of": null,
+      "consent_scope": "memory_only"
+    },
+    {
+      "event_id": "L2A-E2",
+      "processing_status": "pending",
+      "admission_decision": "allow_extraction",
+      "admission_reason_code": "ok",
+      "sensitivity": "none",
+      "is_sensitive_matched": 0,
+      "content_summary": "L2A 幂等回放事件摘要",
+      "raw_payload_ref": null,
+      "content_fingerprint": "e606af1ae1d23a4bb1b9161489764c1e3b22438d15e7638d9ccc3ea0e7e5f8cc",
+      "dedup_group": "dedup:uA:e606af1ae1d23a4bb1b9161489764c1e3b22438d15e7638d9ccc3ea0e7e5f8cc:chat",
+      "duplicate_of": null,
+      "consent_scope": "memory_only"
+    },
+    {
+      "event_id": "L2A-E3",
+      "processing_status": "pending",
+      "admission_decision": "reject",
+      "admission_reason_code": "consent_not_granted",
+      "sensitivity": "none",
+      "is_sensitive_matched": 0,
+      "content_summary": null,
+      "raw_payload_ref": null,
+      "content_fingerprint": null,
+      "dedup_group": null,
+      "duplicate_of": null,
+      "consent_scope": "none"
+    },
+    {
+      "event_id": "L2A-E4",
+      "processing_status": "pending",
+      "admission_decision": "reject",
+      "admission_reason_code": "event_should_ignore",
+      "sensitivity": "critical",
+      "is_sensitive_matched": 1,
+      "content_summary": null,
+      "raw_payload_ref": null,
+      "content_fingerprint": null,
+      "dedup_group": null,
+      "duplicate_of": null,
+      "consent_scope": "memory_only"
+    },
+    {
+      "event_id": "L2A-E5",
+      "processing_status": "pending",
+      "admission_decision": "allow_extraction",
+      "admission_reason_code": "ok",
+      "sensitivity": "none",
+      "is_sensitive_matched": 0,
+      "content_summary": "L2A 指纹去重相同摘要",
+      "raw_payload_ref": null,
+      "content_fingerprint": "91a47bf1046c21e616ae01464b2fe89b279b5be954118c3d64551ae7cc0fab15",
+      "dedup_group": "dedup:uA:91a47bf1046c21e616ae01464b2fe89b279b5be954118c3d64551ae7cc0fab15:chat",
+      "duplicate_of": null,
+      "consent_scope": "memory_only"
+    },
+    {
+      "event_id": "L2A-E6",
+      "processing_status": "pending",
+      "admission_decision": "allow_extraction",
+      "admission_reason_code": "ok",
+      "sensitivity": "none",
+      "is_sensitive_matched": 0,
+      "content_summary": "L2A 指纹去重相同摘要",
+      "raw_payload_ref": null,
+      "content_fingerprint": "91a47bf1046c21e616ae01464b2fe89b279b5be954118c3d64551ae7cc0fab15",
+      "dedup_group": "dedup:uA:91a47bf1046c21e616ae01464b2fe89b279b5be954118c3d64551ae7cc0fab15:chat",
+      "duplicate_of": 5,
+      "consent_scope": "memory_only"
+    }
+  ],
+  "uB": [],
+  "idem_cache": [
+    {
+      "user_id": "uA",
+      "idem_key": "L2A-idem-1",
+      "request_fingerprint": "a936cf98ebba96686ffb7ea5ceccad2382cd5f2c74dd6ad81581961bc77cb5a9"
+    },
+    {
+      "user_id": "uA",
+      "idem_key": "L2A-idem-2",
+      "request_fingerprint": "43d29e73767947084cb38ec6b70556e5ec3abe54d221db7ac427fd3d2afaad8b"
+    },
+    {
+      "user_id": "uA",
+      "idem_key": "L2A-idem-2b",
+      "request_fingerprint": "43d29e73767947084cb38ec6b70556e5ec3abe54d221db7ac427fd3d2afaad8b"
+    },
+    {
+      "user_id": "uA",
+      "idem_key": "L2A-idem-4",
+      "request_fingerprint": "30c6c19e2e28e5e4d06c7bfee2d723d422f38ffbf33524091f55c8470b301fcc"
+    },
+    {
+      "user_id": "uA",
+      "idem_key": "L2A-idem-5",
+      "request_fingerprint": "d9428f566565102ef6074575ecf8b99becb09ff9b93702566446606c922155d2"
+    },
+    {
+      "user_id": "uA",
+      "idem_key": "L2A-idem-7",
+      "request_fingerprint": "159217a08013a3e52e30726e4649e316ad9b88d82b62683a0cf11f42e9a75356"
+    },
+    {
+      "user_id": "uA",
+      "idem_key": "L2A-idem-8",
+      "request_fingerprint": "b3e6f2cf5a6a53372858f6662ddf3d7b0a6e86fd12ef6de7dbd9061ff6cf7ea0"
+    }
+  ]
+}
+
+========================================================================
+[2026-09-01T15:07:45] [l2_2]
+$ 启动 production profile app.py（默认不注册 event.ingest）
+PROD_PID=66214
+
+========================================================================
+[2026-09-01T15:07:49] [l2_2]
+$ production profile → UNSUPPORTED_METHOD
+{"protocol_version": "1.0", "request_id": "req-prod-1", "trace_id": "PROD-tr-1", "status": "error", "data": {}, "server_ts": "2026-09-01T07:07:49.427654+00:00", "error_code": "UNSUPPORTED_METHOD", "message": "unsupported method: event.ingest"}
+
+========================================================================
+[2026-09-01T15:07:49] [l2_2]
+$ production server 启动输出
+配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+2026-09-01T15:07:46+0800 INFO __main__ [MainThread] schema 就绪: /tmp/d6d-l2/prod.db
+2026-09-01T15:07:46+0800 WARNING __main__ [MainThread] 开发模式建库（init_schema=create_all，绕过 Alembic）。生产环境必须先 `alembic upgrade head`，再以 `--no-migrate` 启动，避免两套建表路径 default 语义分叉（PR#52 Issue 6）。
+2026-09-01T15:07:46+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/tmp/d6d-l2/prod.sock）
+2026-09-01T15:07:46+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /tmp/d6d-l2/prod.sock
+
+========================================================================
+[2026-09-01T15:07:49] [l2_2]
+$ 清理测试 server 进程
+
+========================================================================
+[l2_2] [补充] 高敏 request_fingerprint 安全占位核对（HIGH-01）
+$ /home/kylin-agent/d4d-venv/bin/python /tmp/d6d-l2/l2_2_sens_fp.py
+STORED_FP= d9428f566565102ef6074575ecf8b99becb09ff9b93702566446606c922155d2
+SAFE_PLACEHOLDER_FP= d9428f566565102ef6074575ecf8b99becb09ff9b93702566446606c922155d2
+RAW_SENSITIVE_SHA256= c1b8fe03e4185c08a1ddf7bdfaa389bd7f74ee48111e374f2cfe93a3ccfd0a3e
+MATCHES_SAFE_FP= True
+NO_SENSITIVE_DERIVED_SHA= True
+CANONICAL_CONTAINS_PLACEHOLDER= True
+CANONICAL_CONTAINS_RAW_CONTENT= False
+
+========================================================================
+
+========================================================================
+
+========================================================================
+[2026-09-01T15:13:25] [l2_3]
+$ ### L2-3 服务日志（event_id + PII 零泄漏）
+
+
+========================================================================
+[2026-09-01T15:13:27] [l2_3]
+$ 启动 validation server --json-logs
+PID=67178
+
+========================================================================
+[2026-09-01T15:13:30] [l2_3]
+$ 发送 event.ingest（正向/敏感/非法 schema，JSON 日志观察）
+POS: {"protocol_version": "1.0", "request_id": "req-l2j-1", "trace_id": "L2J-tr-1", "status": "ok", "data": {"source_event_id": 1, "event_id": "L2A-E1", "admission_decision": "allow_extraction", "admission_reason_code": "ok", "duplicate": false, "duplicate_reason": null, "duplicate_of": null}, "server_ts": "2026-09-01T07:13:30.880652+00:00"}
+SENS: {"protocol_version": "1.0", "request_id": "req-l2j-2", "trace_id": "L2J-tr-2", "status": "ok", "data": {"source_event_id": 2, "event_id": "L2A-E4", "admission_decision": "reject", "admission_reason_code": "event_should_ignore", "duplicate": false, "duplicate_reason": null, "duplicate_of": null}, "server_ts": "2026-09-01T07:13:30.917038+00:00"}
+ERR: {"protocol_version": "1.0", "request_id": "req-l2j-3", "trace_id": "L2J-tr-3", "status": "error", "data": {}, "server_ts": "2026-09-01T07:13:30.919594+00:00", "error_code": "INVALID_REQUEST", "message": "unsupported_schema_version"}
+RETR: {"protocol_version": "1.0", "request_id": "req-l2j-4", "trace_id": "L2J-tr-4", "status": "ok", "data": {"context": [], "degraded": false, "reason": "retrieval main chain pending"}, "server_ts": "2026-09-01T07:13:30.921563+00:00"}
+
+========================================================================
+[2026-09-01T15:13:31] [l2_3]
+$ JSON 日志全文
+3 /tmp/d6d-l2/l2-3.log
+{"ts": "2026-09-01T15:13:28+0800", "level": "INFO", "logger": "gateway.server", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "IPC Gateway 启动: /tmp/d6d-l2/l2-3.sock"}
+D6D_VALIDATION_SERVER_READY
+{"ts": "2026-09-01T15:13:30+0800", "level": "INFO", "logger": "gateway.handlers", "trace_id": "L2J-tr-4", "request_id": "req-l2j-4", "method": "memory.retrieve", "event_id": "", "message": "memory.retrieve method=memory.retrieve request_id=req-l2j-4（主链未接入，返回空上下文）"}
+
+========================================================================
+[2026-09-01T15:13:31] [l2_3]
+$ JSON 格式 + PII 零泄漏 + 请求关联扫描
+JSON_LINES_OK= 2
+NONLOG_MARKER_LINES= 1
+JSON_BAD= []
+PII_HITS= []
+TRACE_HITS= [(2, 'L2J-tr-4', 'req-l2j-4', '', 'memory.retrieve')]
+PII_ZERO_LEAK= PASS
+JSON_FORMAT= PASS
+REQUEST_CORRELATION_OBSERVED= PASS
+
+========================================================================
+[2026-09-01T15:13:31] [l2_3]
+$ 清理 JSON server
+
+
+========================================================================
+[2026-09-01T15:14:52] [l2_4]
+$ ### L2-4 systemd 部署
+
+
+========================================================================
+[2026-09-01T15:14:53] [l2_4]
+$ 停止并禁用旧 kylin-memory 服务
+Removed "/home/kylin-agent/.config/systemd/user/default.target.wants/kylin-memory.service".
+RC=0
+
+========================================================================
+[2026-09-01T15:14:54] [l2_4]
+$ 安装 kylin-memory.service unit
+UNIT_INSTALLED
+
+========================================================================
+[2026-09-01T15:14:55] [l2_4]
+$ 默认库 alembic upgrade head
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 20260826_add_trace_id -> 20260831_preference_versions, 20260831_preference_versions — D7D 偏好版本真源与不可变历史。
+INFO  [alembic.runtime.migration] Running upgrade 20260831_preference_versions -> 20260831_add_source_events, 20260831_add_source_events — ADR-013：多源事件持久化表 source_events（FRZ-DB-001 扩展）
+ALEMBIC_RC=0
+
+========================================================================
+[2026-09-01T15:14:55] [l2_4]
+$ stat 数据目录/DB 权限
+700 kylin-agent kylin-agent /home/kylin-agent/.local/share/kylin-memory
+644 kylin-agent kylin-agent /home/kylin-agent/.local/share/kylin-memory/kylin_memory.db
+
+========================================================================
+[2026-09-01T15:14:55] [l2_4]
+$ systemctl --user enable --now kylin-memory
+Created symlink /home/kylin-agent/.config/systemd/user/default.target.wants/kylin-memory.service → /home/kylin-agent/.config/systemd/user/kylin-memory.service.
+RC=0
+
+========================================================================
+[2026-09-01T15:14:58] [l2_4]
+$ socket 可达性
+总计 0
+drwxr-xr-x  2 kylin-agent kylin-agent  60  9月 1日 15:14 .
+drwx------ 13 kylin-agent kylin-agent 400  9月 1日 15:14 ..
+srw-------  1 kylin-agent kylin-agent   0  9月 1日 15:14 memory.sock
+
+========================================================================
+[2026-09-01T15:14:58] [l2_4]
+$ systemd 运行态 health
+{"protocol_version": "1.0", "request_id": "req-sys-1", "trace_id": "SYS-tr-1", "status": "ok", "data": {"status": "ok", "db": "ok", "methods": ["echo", "health", "memory.retrieve", "memory.store"], "outbox": {"backlog": 0, "dead_letter": 0, "oldest_pending_created_at": null, "processed": 0, "dead_letters": 0}}, "server_ts": "2026-09-01T07:14:58.947360+00:00"}
+
+========================================================================
+[2026-09-01T15:14:58] [l2_4]
+$ 默认库 schema 状态（restart 前）
+alembic_version= [('20260831_add_source_events',)]
+source_events_tables= [('source_events',)]
+
+========================================================================
+[2026-09-01T15:14:58] [l2_4]
+$ systemctl --user restart
+RC=0
+
+========================================================================
+[2026-09-01T15:15:01] [l2_4]
+$ restart 后 is-active
+active
+ACTIVE_RC=0
+
+========================================================================
+[2026-09-01T15:15:01] [l2_4]
+$ restart 后默认库 alembic_version/source_events 仍在
+version_after_restart= [('20260831_add_source_events',)]
+source_events_exists= True
+
+========================================================================
+[2026-09-01T15:15:02] [l2_4]
+$ 恢复 enable --now（保持运行）
+RC=0
+
+========================================================================
+[l2_4] [补充] restart 后数据存在（落库行仍可查）
+$ /home/kylin-agent/d4d-venv/bin/python /tmp/d6d-l2/l2_4_insert.py
+INSERT_RC=0
+ROW_BEFORE_RESTART= 1
+$ systemctl --user restart kylin-memory
+RC=0
+$ /home/kylin-agent/d4d-venv/bin/python -c 'SELECT count(*) FROM source_events WHERE event_id=L2A-SYSD-1'
+ROW_AFTER_RESTART= 1
+IS_ACTIVE= active
+
+========================================================================
+[2026-09-01T15:16:44] [finalize]
+$ VM 最终 HEAD 核对
+d721badf3be1afeb7ce5daead51d5344ca546acb

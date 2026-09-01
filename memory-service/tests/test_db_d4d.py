@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import text
 
 from db import repositories as repo
 from db.engine import create_db_engine, has_alembic_version, init_schema, is_locked_error
-from db.schema import FTS5_DDL, memory_entries
+from db.schema import memory_entries
 from db.uow import UnitOfWork
 
 
@@ -29,6 +30,24 @@ def test_wal_mode(engine):
     with engine.connect() as conn:
         mode = conn.exec_driver_sql("PRAGMA journal_mode").scalar()
     assert mode == "wal"
+
+
+def test_db_file_permission_0600(tmp_path):
+    """D6-D MEDIUM-02：DB 创建后显式收紧 0600（仅属主可读写）。
+
+    任务卡红线：不修改 chmod 失败不阻断语义（无权限环境仅 warning）；
+    本用例验证正常路径下 DB 文件权限为 0600（POSIX；Windows 平台无 posix 权限跳过）。
+    """
+    if not hasattr(os, "chmod") or os.name == "nt":
+        pytest.skip("POSIX file mode 不适用于当前平台")
+    db_path = tmp_path / "perm_check.db"
+    eng = create_db_engine(str(db_path))
+    # SQLite 惰性建文件：首次连接触发 connect 事件（其中收紧 0600）
+    with eng.connect():
+        pass
+    eng.dispose()
+    mode = stat.S_IMODE(os.stat(db_path).st_mode)
+    assert mode == 0o600
 
 
 def test_foreign_keys_on(engine):
