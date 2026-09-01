@@ -67,7 +67,6 @@
 | TD-D4D-001 | Outbox consumer 未接线（Vector 接入 R-9 待确认），无 consumer 事件按真实失败退避/进 DL | memory-service/outbox/worker.py | Technical Debt | Medium | Open | D 轨成员 | D 主审 | Day5+ 接线 | 注册真实 Vector/Embedding consumer（process_event）后按 Embedding→Vector INSERT 消费；无 consumer 时保持真实失败（退避/DL）而非假成功；代码注释已引用（outbox/worker.py） | PR #52 |
 | TD-D4D-002 | IPC deadline 为事后判定非抢占式（handler 跑完才检查，不打断慢 handler） | memory-service/gateway/server.py | Technical Debt | Medium | Open | D 轨成员 | D 主审 | Day5+ 接线慢 handler 前 | 慢 handler（embedding/检索）接线前将 deadline 改为抢占式（带超时的独立执行线程或等效中断），保证超时 handler 不长期占用连接线程；当前 Gate 0 内置 handler 均快速，docstring 已如实标注「非抢占」 | PR #52 |
 | TD-D4D-003 | Outbox Worker 单事务批量处理 + consumer I/O 期间持写锁不释放（阻塞业务写） | memory-service/outbox/worker.py | Technical Debt | Medium | Open | D 轨成员 | D 主审 | Day5+ 接线真实 consumer 前 | 重构为 claim→commit→事务外 process→新事务 mark（经典 Outbox 模式），consumer 网络 I/O 期间不持写锁；当前无 consumer 时整批快速失败，不影响 Gate 0 | PR #52 |
-| TD-D6D-001 | 事件指纹窗口阈值硬编码（`dedup.fingerprint_window_hours` 默认 24h，未参数化） | memory-service/config.py（D6-D 新增可选键）/ ADR-013 / day6-d-01（v0.4 §九） | Technical Debt | Low | Open | D 轨成员 | D 主审 | D6-D 实现 PR 落地后（如 R35 实测写路径开销超标则提前） | 将 `dedup.fingerprint_window_hours` 走 FRZ-CFG-001 扩展登记为可选配置键（默认 24h；置 0 关闭窗口退化为仅 event_id 幂等）；验收：配置键生效并覆盖 ADR-013 指纹重复测试与性能红线降级路径 | PR #83（契约先行，登记 TD，不落配置代码） |
 
 ## 管理规则
 
