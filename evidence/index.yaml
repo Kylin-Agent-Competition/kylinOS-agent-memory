@@ -1164,6 +1164,29 @@ entries:
       L2-4 systemd: unit 安装 + 默认库 alembic upgrade head ALEMBIC_RC=0（alembic_version=20260831_add_source_events）；数据目录 700 PASS；enable --now RC=0 active；socket /run/user/1000/kylin-memory/memory.sock srw-------；health status ok/db ok/backlog 0；restart active；插入 L2A-SYSD-1 → restart → 行仍在（数据存在 PASS）；但 DB 文件 644 ≠ 0600（发现②，测试后已清理测试行）。
       证据: 完整日志 evidence/l2-kylin-vm/d6d_l2_vm_20260901.log（SHA-256 以 git 仓库 LF 归一化 blob 为准，与 Windows 工作树 CRLF 副本哈希可能不同）。
 
+  - id: "D11D-L2-DIAGNOSTICS-PERM-EVIDENCE"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2——日志与诊断（health/echo/retrieve + JSON 日志 + trace_id + 脱敏）+ 权限与安全（UDS/DB 0600、用户隔离）+ DB/trace 证据汇总"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_diagnostics_l2_20260902.log"
+    tested_commit: "47af2fa42edf45ab4dc227453c47ed784bf46e16"
+    evidence_commit: "pending"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "KYSEC 生产规则本 VM 不可见（/sys/kernel/security/kylin 不存在），保持 UNVERIFIED；OS 整机重启自启归第 7 项；检索/删除端到端待 B/C 输入；embedding 性能为 A 轨 D11A 证据引用"
+    checksum_sha256: "569afe12e5003f7b18eaccb2df46ab8f8ade5162f633981d4971de390307023a"
+    details: |
+      health=ok/db=ok/outbox backlog 0；echo=ok；memory.retrieve 返回真实空上下文（degraded=false, reason=retrieval main chain pending）。
+      JSON 日志每行 ts/level/logger/trace_id/request_id/method/event_id/message；memory.retrieve 日志行 trace_id/request_id 与客户端一致（trace 关联成立）。
+      PII 扫描（sk-demo/password/secret/api_key/token）0 命中。
+      memory.sock srw-------(0600)；DB 0600（含 -shm/-wal）；服务以 uid1000 运行；unit RestrictAddressFamilies=AF_UNIX + NoNewPrivileges。
+      KYSEC /sys/kernel/security/kylin 不存在 → UNVERIFIED。
+      DB：alembic head=20260901_d10b_vector_ledger；outbox/source_events/memory_entries/vector_index_entries/turns 均 0 行。
+      性能：引用 A 轨 D11A 实测 avg=41.3ms p99=44.2ms（<180ms 预算）。
   - id: "D11D-L2-SERVICE-LIFECYCLE"
     task_id: "D11D"
     description: "D11D 麒麟 VM L2——kylin-memory 服务安装/重启/回退/重装 + systemd --user 生命周期验证（install_kylin_memory.sh）"
