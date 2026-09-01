@@ -3,7 +3,7 @@
 > ⚠️ **本文件为旧基线，部分版本信息已被 2026-08-16 环境基线 v2 更新取代。**
 > 更新项：Embedding 包版本 → 1.2.0.0-0k0.4；Vector Engine 服务端 → 1.2.0.1-0k1.0；麒灵助手 → 5.0.3。
 > 最新完整基线见 `v2-20260816/02_kylin_vm_environment_baseline_20260816.md`；能力边界重评见 `v2-20260816/05_*.md`。
-> 版本对照真源见 `Kylin-runtime-knowledge/VERSION_MAP.md`（2026-08-17）。
+> 版本对照索引（Agent 速查入口）见 `Kylin-runtime-knowledge/VERSION_MAP.md`（2026-08-17）；VM 实际版本/ABI 仍以本基线及 L2/L3 evidence 为最终事实依据。
 
 ## 系统信息
 
