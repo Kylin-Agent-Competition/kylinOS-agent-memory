@@ -267,21 +267,6 @@ QString MemoryClient::sendPreferenceHistoryRequest(const QJsonObject& payload)
     return sendRequest(methods::kPreferenceHistory, payload);
 }
 
-QString MemoryClient::sendKnowledgeDetailRequest(const QJsonObject& payload)
-{
-    return sendRequest(methods::kKnowledgeDetail, payload);
-}
-
-QString MemoryClient::sendConflictCompareRequest(const QJsonObject& payload)
-{
-    return sendRequest(methods::kConflictCompare, payload);
-}
-
-QString MemoryClient::sendLifecycleStatusRequest(const QJsonObject& payload)
-{
-    return sendRequest(methods::kLifecycleStatus, payload);
-}
-
 QString MemoryClient::sendToolExecutionEvent(const QJsonObject& eventJson)
 {
     // tool.execution：对齐 ToolExecutionEvent v1（D3 已冻结）。

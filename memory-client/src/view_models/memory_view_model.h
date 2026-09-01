@@ -135,35 +135,6 @@ class MemoryViewModel : public QObject {
     Q_PROPERTY(QJsonObject lastPreferenceItem READ lastPreferenceItem
                    NOTIFY lastPreferenceItemChanged)
 
-    // ── D8C 知识详情 / 冲突对比 / 生命周期状态 Pipeline（Demo / Prototype）──
-    // 知识详情：knowledge.detail 返回的单条记忆证据/适用条件投影
-    Q_PROPERTY(bool knowledgeDetailBusy READ knowledgeDetailBusy
-                   NOTIFY knowledgeDetailBusyChanged)
-    Q_PROPERTY(QString knowledgeDetailStage READ knowledgeDetailStage
-                   NOTIFY knowledgeDetailStageChanged)
-    Q_PROPERTY(QJsonObject knowledgeDetail READ knowledgeDetail
-                   NOTIFY knowledgeDetailChanged)
-    Q_PROPERTY(QString knowledgeDetailError READ knowledgeDetailError
-                   NOTIFY knowledgeDetailErrorChanged)
-    // 冲突对比：conflict.compare 返回的候选列表投影
-    Q_PROPERTY(bool conflictCompareBusy READ conflictCompareBusy
-                   NOTIFY conflictCompareBusyChanged)
-    Q_PROPERTY(QString conflictCompareStage READ conflictCompareStage
-                   NOTIFY conflictCompareStageChanged)
-    Q_PROPERTY(QVariantList conflictCandidates READ conflictCandidates
-                   NOTIFY conflictCandidatesChanged)
-    Q_PROPERTY(QString conflictCompareError READ conflictCompareError
-                   NOTIFY conflictCompareErrorChanged)
-    // 生命周期状态：lifecycle.status 返回的条目列表投影
-    Q_PROPERTY(bool lifecycleStatusBusy READ lifecycleStatusBusy
-                   NOTIFY lifecycleStatusBusyChanged)
-    Q_PROPERTY(QString lifecycleStatusStage READ lifecycleStatusStage
-                   NOTIFY lifecycleStatusStageChanged)
-    Q_PROPERTY(QVariantList lifecycleItems READ lifecycleItems
-                   NOTIFY lifecycleItemsChanged)
-    Q_PROPERTY(QString lifecycleStatusError READ lifecycleStatusError
-                   NOTIFY lifecycleStatusErrorChanged)
-
 public:
     explicit MemoryViewModel(QObject* parent = nullptr);
     ~MemoryViewModel() override;
@@ -180,12 +151,10 @@ public:
     [[nodiscard]] QJsonObject lastResponse() const { return lastResponse_; }
     [[nodiscard]] bool preChatBusy() const { return preChatBusy_; }
     [[nodiscard]] bool postTurnBusy() const { return postTurnBusy_; }
-    // D6-C 扩展：四 busy 合并兼容属性（PreChat / PostTurn / Tool / ManualConfig / Behavior）
-    // D8-C 进一步扩展：包含 KnowledgeDetail / ConflictCompare / LifecycleStatus
+    // D6-C 扩展：busy 合并兼容属性（PreChat / PostTurn / Tool / ManualConfig / Behavior）
     [[nodiscard]] bool busy() const {
         return preChatBusy_ || postTurnBusy_
-            || toolBusy_ || manualConfigBusy_ || behaviorBusy_
-            || knowledgeDetailBusy_ || conflictCompareBusy_ || lifecycleStatusBusy_;
+            || toolBusy_ || manualConfigBusy_ || behaviorBusy_;
     }
 
     // D5-C Getter
@@ -207,20 +176,6 @@ public:
     [[nodiscard]] QString lastBehaviorEvent() const { return lastBehaviorEvent_; }
     [[nodiscard]] QString behaviorStage() const { return behaviorStage_; }
     [[nodiscard]] bool behaviorBusy() const { return behaviorBusy_; }
-
-    // ── D8C getters ─────────────────────────────────────────────────────
-    [[nodiscard]] bool knowledgeDetailBusy() const { return knowledgeDetailBusy_; }
-    [[nodiscard]] QString knowledgeDetailStage() const { return knowledgeDetailStage_; }
-    [[nodiscard]] QJsonObject knowledgeDetail() const { return knowledgeDetail_; }
-    [[nodiscard]] QString knowledgeDetailError() const { return knowledgeDetailError_; }
-    [[nodiscard]] bool conflictCompareBusy() const { return conflictCompareBusy_; }
-    [[nodiscard]] QString conflictCompareStage() const { return conflictCompareStage_; }
-    [[nodiscard]] QVariantList conflictCandidates() const { return conflictCandidates_; }
-    [[nodiscard]] QString conflictCompareError() const { return conflictCompareError_; }
-    [[nodiscard]] bool lifecycleStatusBusy() const { return lifecycleStatusBusy_; }
-    [[nodiscard]] QString lifecycleStatusStage() const { return lifecycleStatusStage_; }
-    [[nodiscard]] QVariantList lifecycleItems() const { return lifecycleItems_; }
-    [[nodiscard]] QString lifecycleStatusError() const { return lifecycleStatusError_; }
 
     // D7C Getter
     [[nodiscard]] QVariantList preferenceItems() const { return preferenceItems_; }
@@ -366,27 +321,6 @@ public:
         int targetVersion,
         const QString& idempotencyKey);
 
-    // ── D8C 知识详情 / 冲突对比 / 生命周期状态 Pipeline ─────────────────
-    // 知识详情：memory_id 必填；include_evidence/include_conditions 默认 true。
-    // 响应投影到 knowledgeDetail（含 evidence/conditions 列表）。
-    Q_INVOKABLE void runKnowledgeDetailPipeline(
-        const QString& memoryId,
-        bool includeEvidence,
-        bool includeConditions);
-
-    // 冲突对比：memory_id 必填；include_resolved 默认 false（仅未解决冲突）。
-    // 响应投影到 conflictCandidates。
-    Q_INVOKABLE void runConflictComparePipeline(
-        const QString& memoryId,
-        bool includeResolved);
-
-    // 生命周期状态：user_id 必填；memory_id/memory_status 可选过滤。
-    // 响应投影到 lifecycleItems。
-    Q_INVOKABLE void runLifecycleStatusPipeline(
-        const QString& userId,
-        const QString& memoryId,
-        const QString& memoryStatus);
-
     // 原文隔离验证
     Q_INVOKABLE bool verifyOriginalTextIsolation() const;
 
@@ -429,20 +363,6 @@ signals:
     void lastPreferenceActionChanged();
     void lastPreferenceItemChanged();
 
-    // D8C 信号
-    void knowledgeDetailBusyChanged();
-    void knowledgeDetailStageChanged();
-    void knowledgeDetailChanged();
-    void knowledgeDetailErrorChanged();
-    void conflictCompareBusyChanged();
-    void conflictCompareStageChanged();
-    void conflictCandidatesChanged();
-    void conflictCompareErrorChanged();
-    void lifecycleStatusBusyChanged();
-    void lifecycleStatusStageChanged();
-    void lifecycleItemsChanged();
-    void lifecycleStatusErrorChanged();
-
     void requestFailed(const QString& requestId, const QString& errorCode, const QString& safeMessage);
     void connectionError(const QString& safeMessage);
 
@@ -477,23 +397,6 @@ private:
     void setLastBehaviorEvent(const QString& value);
     void setBehaviorStage(const QString& value);
     void setBehaviorBusy(bool value);
-
-    // D8C 私有 setter
-    void setKnowledgeDetailBusy(bool value);
-    void setKnowledgeDetailStage(const QString& value);
-    void setKnowledgeDetail(const QJsonObject& value);
-    void setKnowledgeDetailError(const QString& value);
-    void setConflictCompareBusy(bool value);
-    void setConflictCompareStage(const QString& value);
-    void setConflictCandidates(const QVariantList& value);
-    void setConflictCompareError(const QString& value);
-    void setLifecycleStatusBusy(bool value);
-    void setLifecycleStatusStage(const QString& value);
-    void setLifecycleItems(const QVariantList& value);
-    void setLifecycleStatusError(const QString& value);
-
-    // D8C 响应投影辅助
-    [[nodiscard]] QVariantList projectJsonArray(const QJsonArray& items) const;
 
     // D7C 偏好请求类型（响应路由用）
     enum class PreferenceKind { None, List, History, Create, Update, Rollback };
@@ -591,25 +494,6 @@ private:
     QJsonObject lastPreferenceItem_;
     QString pendingPreferenceRequestId_;
     PreferenceKind pendingPreferenceKind_ = PreferenceKind::None;
-
-    // ── D8C 知识详情 / 冲突对比 / 生命周期状态 ───────────────────────
-    bool knowledgeDetailBusy_ = false;
-    QString knowledgeDetailStage_ = QStringLiteral("idle");
-    QJsonObject knowledgeDetail_;
-    QString knowledgeDetailError_;
-    QString pendingKnowledgeDetailRequestId_;
-
-    bool conflictCompareBusy_ = false;
-    QString conflictCompareStage_ = QStringLiteral("idle");
-    QVariantList conflictCandidates_;
-    QString conflictCompareError_;
-    QString pendingConflictCompareRequestId_;
-
-    bool lifecycleStatusBusy_ = false;
-    QString lifecycleStatusStage_ = QStringLiteral("idle");
-    QVariantList lifecycleItems_;
-    QString lifecycleStatusError_;
-    QString pendingLifecycleStatusRequestId_;
 
     // 问题4修复：per-request deadline timer（超时→ requestFailed TIMEOUT）
     // key = requestId；超时后由单例 QTimer 回调，统一在 onRequestFailed 路径处理。

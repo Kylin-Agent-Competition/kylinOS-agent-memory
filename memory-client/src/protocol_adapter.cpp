@@ -39,9 +39,6 @@ const QString kPreferenceHistory = QStringLiteral("preference.history");  // D7C
 const QString kToolExecution = QStringLiteral("tool.execution");          // D6-C 候选写方法
 const QString kManualConfigIngest = QStringLiteral("manual.config.ingest"); // D6-C 候选写方法
 const QString kBehaviorObserve = QStringLiteral("behavior.observe");      // D6-C 候选写方法
-const QString kKnowledgeDetail = QStringLiteral("knowledge.detail");  // D8C 候选
-const QString kConflictCompare = QStringLiteral("conflict.compare");  // D8C 候选
-const QString kLifecycleStatus = QStringLiteral("lifecycle.status");  // D8C 候选
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）

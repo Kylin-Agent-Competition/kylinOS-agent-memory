@@ -123,10 +123,6 @@ extern const QString kPreferenceHistory;  // "preference.history"
 extern const QString kToolExecution;        // "tool.execution"
 extern const QString kManualConfigIngest;   // "manual.config.ingest"
 extern const QString kBehaviorObserve;      // "behavior.observe"
-// D8C 候选 IPC 方法（CANDIDATE / pending ADR；生产默认不注册）
-extern const QString kKnowledgeDetail;    // "knowledge.detail"
-extern const QString kConflictCompare;    // "conflict.compare"
-extern const QString kLifecycleStatus;    // "lifecycle.status"
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）。
