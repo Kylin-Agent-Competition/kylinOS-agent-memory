@@ -267,6 +267,70 @@ QString MemoryClient::sendPreferenceHistoryRequest(const QJsonObject& payload)
     return sendRequest(methods::kPreferenceHistory, payload);
 }
 
+QString MemoryClient::sendToolExecutionEvent(const QJsonObject& eventJson)
+{
+    // tool.execution：对齐 ToolExecutionEvent v1（D3 已冻结）。
+    // 生产 Gateway 默认不注册 → UNSUPPORTED_METHOD（符合预期）。
+    return sendEventEnvelope(methods::kToolExecution, eventJson);
+}
+
+QString MemoryClient::sendManualConfigEvent(const QJsonObject& eventJson)
+{
+    // manual.config.ingest：候选 schema（manual_config_event.v1.json）。
+    // ViewModel 客户端侧预检敏感内容；本层仅做协议级发送。
+    return sendEventEnvelope(methods::kManualConfigIngest, eventJson);
+}
+
+QString MemoryClient::sendBehaviorEvent(const QJsonObject& eventJson)
+{
+    // behavior.observe：候选 schema（behavior_event.v1.json）。
+    // mapping_status=PENDING_C_CONFIRMATION 由 ViewModel 在事件 JSON 中注入。
+    return sendEventEnvelope(methods::kBehaviorObserve, eventJson);
+}
+
+QString MemoryClient::sendEventEnvelope(const QString& method, const QJsonObject& eventJson)
+{
+    // 共享写链路：trace_id 唯一真源 = payload.metadata.trace_id（若提供），
+    // 否则回退到 request_id。与 ADR-010 §trace_id 唯一真源一致。
+    if (connectionState_ != ConnectionState::Connected) {
+        emit requestFailed({}, kErrNotConnected, QStringLiteral("Client is not connected."));
+        return {};
+    }
+
+    const QString requestId = generateRequestId();
+
+    QString traceId = requestId;
+    const QJsonValue metadataValue = eventJson.value(QStringLiteral("metadata"));
+    if (metadataValue.isObject()) {
+        const QString metaTrace = metadataValue.toObject()
+            .value(QStringLiteral("trace_id")).toString();
+        if (!metaTrace.isEmpty()) {
+            traceId = metaTrace;
+        }
+    }
+
+    const QJsonObject envelope = buildEnvelope(
+        method, eventJson, requestId, traceId, kDefaultDeadlineMs);
+    const auto packet = encodeEnvelope(envelope);
+    if (!packet.has_value()) {
+        emit requestFailed(requestId, kErrEncodeFailed,
+                           QStringLiteral("Failed to encode request envelope."));
+        return {};
+    }
+
+    const qint64 written = socket_->write(*packet);
+    if (written != packet->size()) {
+        emit requestFailed(requestId, kErrEncodeFailed,
+                           QStringLiteral("Failed to write request to socket."));
+        return {};
+    }
+    socket_->flush();
+
+    pendingRequests_.emplace(requestId.toStdString(),
+                              PendingRequest{method, traceId});
+    return requestId;
+}
+
 void MemoryClient::handleSocketConnected()
 {
     setConnectionState(ConnectionState::Connected);

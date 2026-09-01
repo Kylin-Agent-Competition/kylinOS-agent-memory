@@ -1,4 +1,4 @@
-#include "view_models/memory_view_model.h"
+﻿#include "view_models/memory_view_model.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -368,13 +368,14 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
     const QString& finalMessageId,
     const QString& finalAssistantText,
     const QString& finalizationReason,
-    const QString& stopReason)
+    const QString& stopReason,
+    const QString& retryOfTurnId)
 {
     Q_UNUSED(finalAssistantText)
 
     // 非阻断项修复：Preview → Send 复用同一事件对象，避免 event_id / timestamp 漂移。
     const QStringList key{userId, sessionId, turnId, traceId,
-                          finalMessageId, finalizationReason, stopReason};
+                          finalMessageId, finalizationReason, stopReason, retryOfTurnId};
     if (!cachedTurnEvent_.isEmpty() && cachedTurnEventKey_ == key) {
         return cachedTurnEvent_;
     }
@@ -406,6 +407,10 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
         {QStringLiteral("source_reference"), srcRef},
     };
     if (!traceId.isEmpty()) metadata.insert(QStringLiteral("trace_id"), traceId);
+    // TB-D6C-04：finalization_reason=retry 时必须携带 retry_of_turn_id，
+    // 且 retry_of_turn_id != turn_id（调用方保证）。
+    if (!retryOfTurnId.isEmpty())
+        metadata.insert(QStringLiteral("retry_of_turn_id"), retryOfTurnId);
 
     QJsonObject event;
     event.insert(QStringLiteral("metadata"), metadata);
@@ -419,6 +424,236 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
     cachedTurnEventKey_ = key;
     cachedTurnEvent_ = event;
     return event;
+}
+
+// ── D6-C 多源 Adapter Pipeline ─────────────────────────────────────────────
+
+QJsonObject MemoryViewModel::buildEventMetadata(
+    const QString& userId,
+    const QString& sessionId,
+    const QString& turnId,
+    const QString& traceId,
+    const QString& idempotencyKey,
+    const QString& sourceReference) const
+{
+    // 共享 metadata 构造：对齐 ADR-010 IPC 映射契约的 metadata 嵌套对象。
+    // trace_id 若提供则写入；occurred_at / collected_at 取同一 UTC 毫秒时间戳。
+    const QString now = nowIso8601UtcMs();
+    QJsonObject metadata{
+        {QStringLiteral("schema_version"), QStringLiteral("1.0")},
+        {QStringLiteral("event_id"), QStringLiteral("evt-%1").arg(
+            QUuid::createUuid().toString(QUuid::WithoutBraces))},
+        {QStringLiteral("user_id"), userId},
+        {QStringLiteral("session_id"), sessionId},
+        {QStringLiteral("turn_id"), turnId},
+        {QStringLiteral("idempotency_key"), idempotencyKey},
+        {QStringLiteral("occurred_at"), now},
+        {QStringLiteral("collected_at"), now},
+        {QStringLiteral("source_reference"), sourceReference},
+    };
+    if (!traceId.isEmpty()) metadata.insert(QStringLiteral("trace_id"), traceId);
+    return metadata;
+}
+
+QJsonObject MemoryViewModel::buildToolExecutionEventJson(
+    const QString& userId,
+    const QString& sessionId,
+    const QString& turnId,
+    const QString& toolCallId,
+    const QString& toolName,
+    const QString& executionStatus,
+    const QString& argumentsRef,
+    const QString& resultRef,
+    const QString& errorType,
+    const QString& errorMessageSafe,
+    bool sideEffect,
+    bool rollbackRequired)
+{
+    // 对齐 contracts/examples/tool_execution_event.v1.json（D3 已冻结）。
+    // rollback_status 默认 not_applicable；rollbackRequired=true 时为 required。
+    const QString idempotencyKey = QStringLiteral("tool-execution:%1:%2")
+                                       .arg(sessionId, toolCallId);
+    const QString srcRef = QStringLiteral("ref:tool-event:%1").arg(toolCallId);
+
+    QJsonObject metadata = buildEventMetadata(
+        userId, sessionId, turnId, /*traceId=*/QStringLiteral(""),
+        idempotencyKey, srcRef);
+
+    const QString now = nowIso8601UtcMs();
+    QJsonObject event;
+    event.insert(QStringLiteral("metadata"), metadata);
+    event.insert(QStringLiteral("tool_call_id"), toolCallId);
+    event.insert(QStringLiteral("tool_name"), toolName);
+    event.insert(QStringLiteral("arguments_ref"), argumentsRef);
+    event.insert(QStringLiteral("started_at"), now);
+    event.insert(QStringLiteral("finished_at"), now);
+    event.insert(QStringLiteral("execution_status"), executionStatus);
+    if (!resultRef.isEmpty()) event.insert(QStringLiteral("result_ref"), resultRef);
+    if (!errorType.isEmpty()) event.insert(QStringLiteral("error_type"), errorType);
+    if (!errorMessageSafe.isEmpty())
+        event.insert(QStringLiteral("error_message_safe"), errorMessageSafe);
+    event.insert(QStringLiteral("side_effect"), sideEffect);
+    event.insert(QStringLiteral("rollback_required"), rollbackRequired);
+    event.insert(QStringLiteral("rollback_status"),
+                 rollbackRequired ? QStringLiteral("required")
+                                  : QStringLiteral("not_applicable"));
+    return event;
+}
+
+void MemoryViewModel::runToolPipeline(
+    const QString& userId,
+    const QString& sessionId,
+    const QString& turnId,
+    const QString& toolCallId,
+    const QString& toolName,
+    const QString& executionStatus,
+    const QString& argumentsRef,
+    const QString& resultRef,
+    const QString& errorType,
+    const QString& errorMessageSafe,
+    bool sideEffect,
+    bool rollbackRequired)
+{
+    setToolStage(QStringLiteral("sending"));
+
+    const QJsonObject event = buildToolExecutionEventJson(
+        userId, sessionId, turnId, toolCallId, toolName, executionStatus,
+        argumentsRef, resultRef, errorType, errorMessageSafe,
+        sideEffect, rollbackRequired);
+
+    const QJsonDocument doc(event);
+    setLastToolEvent(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)));
+
+    setToolBusy(true);
+    const QString requestId = client_.sendToolExecutionEvent(event);
+    if (requestId.isEmpty()) {
+        setToolBusy(false);
+        setToolStage(QStringLiteral("failed"));
+        return;
+    }
+    pendingToolRequestId_ = requestId;
+    setLastRequestId(requestId);
+    armDeadlineTimer(requestId, kDefaultDeadlineMs);
+}
+
+void MemoryViewModel::runManualConfigPipeline(
+    const QString& userId,
+    const QString& sessionId,
+    const QString& scope,
+    const QString& key,
+    const QString& value,
+    bool isTemporary,
+    bool shouldPersist,
+    const QString& sensitivityLevel,
+    double confidence)
+{
+    // 客户端侧敏感预检：high / critical 等级（大小写归一）拒绝构造事件、拒绝发送。
+    // 完整敏感识别在 A 轨 pipeline/sensitive.py；此处为客户端侧第一道防线。
+    const QString sl = sensitivityLevel.trimmed().toLower();
+    if (sl == QStringLiteral("high") || sl == QStringLiteral("critical")) {
+        setLastManualConfigEvent({});
+        setManualConfigStage(QStringLiteral("failed"));
+        emit connectionError(QStringLiteral(
+            "sensitive_content_blocked: manual config rejected at client"));
+        return;
+    }
+
+    setManualConfigStage(QStringLiteral("sending"));
+
+    const QString idempotencyKey = QStringLiteral("manual-config:%1:%2:%3")
+        .arg(sessionId, scope, key);
+    const QString srcRef = QStringLiteral("ref:manual-config:%1:%2").arg(scope, key);
+
+    QJsonObject metadata = buildEventMetadata(
+        userId, sessionId, /*turnId=*/QStringLiteral(""),
+        /*traceId=*/QStringLiteral(""), idempotencyKey, srcRef);
+
+    QJsonObject config;
+    config.insert(QStringLiteral("scope"), scope);
+    config.insert(QStringLiteral("key"), key);
+    config.insert(QStringLiteral("value"), value);
+    config.insert(QStringLiteral("is_temporary"), isTemporary);
+    config.insert(QStringLiteral("should_persist"), shouldPersist);
+    config.insert(QStringLiteral("confidence"), confidence);
+    config.insert(QStringLiteral("sensitivity_level"), sensitivityLevel);
+    // TB-D6C-08：与 Behavior 对称，候选手动配置事件也标记 PENDING_C_CONFIRMATION
+    // （C 轨未冻结 manual.config.ingest → 正式 schema / SourceType）。
+    config.insert(QStringLiteral("mapping_status"),
+                  QStringLiteral("PENDING_C_CONFIRMATION"));
+    // TB-D6C-12：删除 config.source_reference 重复字段
+    // （metadata.source_reference 已承载同一值）。
+
+    QJsonObject event;
+    event.insert(QStringLiteral("metadata"), metadata);
+    event.insert(QStringLiteral("config"), config);
+
+    const QJsonDocument doc(event);
+    setLastManualConfigEvent(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)));
+
+    setManualConfigBusy(true);
+    const QString requestId = client_.sendManualConfigEvent(event);
+    if (requestId.isEmpty()) {
+        setManualConfigBusy(false);
+        setManualConfigStage(QStringLiteral("failed"));
+        return;
+    }
+    pendingManualConfigRequestId_ = requestId;
+    setLastRequestId(requestId);
+    armDeadlineTimer(requestId, kDefaultDeadlineMs);
+}
+
+void MemoryViewModel::runBehaviorPipeline(
+    const QString& userId,
+    const QString& sessionId,
+    const QString& behaviorKind,
+    const QString& observedAction,
+    const QString& contextRef,
+    const QString& actor)
+{
+    setBehaviorStage(QStringLiteral("sending"));
+
+    const QString idempotencyKey = QStringLiteral("behavior:%1:%2:%3")
+        .arg(sessionId, behaviorKind,
+             QUuid::createUuid().toString(QUuid::WithoutBraces));
+    const QString srcRef = QStringLiteral("ref:behavior:%1:%2")
+        .arg(sessionId, behaviorKind);
+
+    QJsonObject metadata = buildEventMetadata(
+        userId, sessionId, /*turnId=*/QStringLiteral(""),
+        /*traceId=*/QStringLiteral(""), idempotencyKey, srcRef);
+
+    // TB-D6C-05：behavior.occurred_at 复用 metadata.occurred_at，避免双源时间戳漂移。
+    const QString metaOccurredAt =
+        metadata.value(QStringLiteral("occurred_at")).toString();
+
+    QJsonObject behavior;
+    behavior.insert(QStringLiteral("behavior_kind"), behaviorKind);
+    behavior.insert(QStringLiteral("observed_action"), observedAction);
+    behavior.insert(QStringLiteral("context_ref"), contextRef);
+    behavior.insert(QStringLiteral("actor"), actor);
+    behavior.insert(QStringLiteral("occurred_at"), metaOccurredAt);
+    // C 轨未冻结 behavior → MemorySourceEvent.source_type 映射；
+    // 显式注入 PENDING_C_CONFIRMATION 字段，不擅自新增 SourceType 枚举。
+    behavior.insert(QStringLiteral("mapping_status"),
+                    QStringLiteral("PENDING_C_CONFIRMATION"));
+
+    QJsonObject event;
+    event.insert(QStringLiteral("metadata"), metadata);
+    event.insert(QStringLiteral("behavior"), behavior);
+
+    const QJsonDocument doc(event);
+    setLastBehaviorEvent(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)));
+
+    setBehaviorBusy(true);
+    const QString requestId = client_.sendBehaviorEvent(event);
+    if (requestId.isEmpty()) {
+        setBehaviorBusy(false);
+        setBehaviorStage(QStringLiteral("failed"));
+        return;
+    }
+    pendingBehaviorRequestId_ = requestId;
+    setLastRequestId(requestId);
+    armDeadlineTimer(requestId, kDefaultDeadlineMs);
 }
 
 // ── 信号槽：问题1核心修复 onResponseReceived ─────────────────────────────────
@@ -522,6 +757,26 @@ void MemoryViewModel::onResponseReceived(
         setPostTurnStage(QStringLiteral("sent"));
     }
 
+    // ── D6-C 多源 Adapter 路由（四 busy 独立 pending，沿用 §C1 模式） ──────
+    if (!pendingToolRequestId_.isEmpty()
+        && requestId == pendingToolRequestId_) {
+        pendingToolRequestId_.clear();
+        setToolBusy(false);
+        setToolStage(QStringLiteral("sent"));
+    }
+    if (!pendingManualConfigRequestId_.isEmpty()
+        && requestId == pendingManualConfigRequestId_) {
+        pendingManualConfigRequestId_.clear();
+        setManualConfigBusy(false);
+        setManualConfigStage(QStringLiteral("sent"));
+    }
+    if (!pendingBehaviorRequestId_.isEmpty()
+        && requestId == pendingBehaviorRequestId_) {
+        pendingBehaviorRequestId_.clear();
+        setBehaviorBusy(false);
+        setBehaviorStage(QStringLiteral("sent"));
+    }
+
     // D7C 偏好请求（preference.list/create/update/rollback/history）。
     if (!pendingPreferenceRequestId_.isEmpty()
         && requestId == pendingPreferenceRequestId_) {
@@ -553,6 +808,32 @@ void MemoryViewModel::onRequestFailed(
         pendingPostTurnRequestId_.clear();
         setPostTurnBusy(false);
         setPostTurnStage(errorCode == QString::fromUtf8(kErrClientTimeout)
+                             ? QStringLiteral("timeout")
+                             : QStringLiteral("failed"));
+    }
+
+    // ── D6-C 多源 Adapter pending 命中 ───────────────────────────────────
+    if (!pendingToolRequestId_.isEmpty()
+        && requestId == pendingToolRequestId_) {
+        pendingToolRequestId_.clear();
+        setToolBusy(false);
+        setToolStage(errorCode == QString::fromUtf8(kErrClientTimeout)
+                         ? QStringLiteral("timeout")
+                         : QStringLiteral("failed"));
+    }
+    if (!pendingManualConfigRequestId_.isEmpty()
+        && requestId == pendingManualConfigRequestId_) {
+        pendingManualConfigRequestId_.clear();
+        setManualConfigBusy(false);
+        setManualConfigStage(errorCode == QString::fromUtf8(kErrClientTimeout)
+                                 ? QStringLiteral("timeout")
+                                 : QStringLiteral("failed"));
+    }
+    if (!pendingBehaviorRequestId_.isEmpty()
+        && requestId == pendingBehaviorRequestId_) {
+        pendingBehaviorRequestId_.clear();
+        setBehaviorBusy(false);
+        setBehaviorStage(errorCode == QString::fromUtf8(kErrClientTimeout)
                              ? QStringLiteral("timeout")
                              : QStringLiteral("failed"));
     }
@@ -638,20 +919,91 @@ void MemoryViewModel::setPostTurnStage(const QString& value)
 
 void MemoryViewModel::setPreChatBusy(bool value)
 {
-    const bool oldBusy = preChatBusy_ || postTurnBusy_;
+    const bool oldBusy = busy();
     if (preChatBusy_ == value) { return; }
     preChatBusy_ = value;
     emit preChatBusyChanged();
-    if (oldBusy != (preChatBusy_ || postTurnBusy_)) { emit busyChanged(); }
+    if (oldBusy != busy()) { emit busyChanged(); }
 }
 
 void MemoryViewModel::setPostTurnBusy(bool value)
 {
-    const bool oldBusy = preChatBusy_ || postTurnBusy_;
+    const bool oldBusy = busy();
     if (postTurnBusy_ == value) { return; }
     postTurnBusy_ = value;
     emit postTurnBusyChanged();
-    if (oldBusy != (preChatBusy_ || postTurnBusy_)) { emit busyChanged(); }
+    if (oldBusy != busy()) { emit busyChanged(); }
+}
+
+// ── D6-C 多源 Adapter 私有 setters ─────────────────────────────────────────
+
+void MemoryViewModel::setLastToolEvent(const QString& value)
+{
+    if (lastToolEvent_ == value) return;
+    lastToolEvent_ = value;
+    emit lastToolEventChanged();
+}
+
+void MemoryViewModel::setToolStage(const QString& value)
+{
+    if (toolStage_ == value) return;
+    toolStage_ = value;
+    emit toolStageChanged();
+}
+
+void MemoryViewModel::setToolBusy(bool value)
+{
+    const bool oldBusy = busy();
+    if (toolBusy_ == value) { return; }
+    toolBusy_ = value;
+    emit toolBusyChanged();
+    if (oldBusy != busy()) { emit busyChanged(); }
+}
+
+void MemoryViewModel::setLastManualConfigEvent(const QString& value)
+{
+    if (lastManualConfigEvent_ == value) return;
+    lastManualConfigEvent_ = value;
+    emit lastManualConfigEventChanged();
+}
+
+void MemoryViewModel::setManualConfigStage(const QString& value)
+{
+    if (manualConfigStage_ == value) return;
+    manualConfigStage_ = value;
+    emit manualConfigStageChanged();
+}
+
+void MemoryViewModel::setManualConfigBusy(bool value)
+{
+    const bool oldBusy = busy();
+    if (manualConfigBusy_ == value) { return; }
+    manualConfigBusy_ = value;
+    emit manualConfigBusyChanged();
+    if (oldBusy != busy()) { emit busyChanged(); }
+}
+
+void MemoryViewModel::setLastBehaviorEvent(const QString& value)
+{
+    if (lastBehaviorEvent_ == value) return;
+    lastBehaviorEvent_ = value;
+    emit lastBehaviorEventChanged();
+}
+
+void MemoryViewModel::setBehaviorStage(const QString& value)
+{
+    if (behaviorStage_ == value) return;
+    behaviorStage_ = value;
+    emit behaviorStageChanged();
+}
+
+void MemoryViewModel::setBehaviorBusy(bool value)
+{
+    const bool oldBusy = busy();
+    if (behaviorBusy_ == value) { return; }
+    behaviorBusy_ = value;
+    emit behaviorBusyChanged();
+    if (oldBusy != busy()) { emit busyChanged(); }
 }
 
 // ── D7C 偏好编辑：setter / 响应路由 / 投影 ─────────────────────────────────

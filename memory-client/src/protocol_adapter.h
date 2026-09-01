@@ -119,6 +119,10 @@ extern const QString kPreferenceCreate;   // "preference.create"
 extern const QString kPreferenceUpdate;   // "preference.update"
 extern const QString kPreferenceRollback; // "preference.rollback"
 extern const QString kPreferenceHistory;  // "preference.history"
+// D6-C 候选写方法（不冻结，登记在 methods 命名空间以便客户端 / Mock 复用）
+extern const QString kToolExecution;        // "tool.execution"
+extern const QString kManualConfigIngest;   // "manual.config.ingest"
+extern const QString kBehaviorObserve;      // "behavior.observe"
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）。
