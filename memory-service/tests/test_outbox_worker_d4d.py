@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 
 from db import repositories as repo
 from db.engine import create_db_engine, init_schema
-from outbox.worker import OutboxWorker
+from outbox.worker import OutboxWorker, _is_schema_missing
 
 
 @pytest.fixture()
@@ -133,3 +133,32 @@ def test_worker_start_stop_lifecycle(engine):
         time.sleep(0.1)
     w.stop()
     assert _count(engine) == 0
+
+
+def test_worker_schema_missing_stops_not_deadloop(tmp_path):
+    """表缺失（无 outbox schema）时 Worker 应停止并置 fatal_error，而非无限重试死循环。
+
+    对应 A-REQ-01 死循环：对空库启动 Worker 会撞 `no such table: idempotency_cache`，
+    若不处理会对该持久性错误无限重试。修复后应设置 fatal_error 并停止线程。
+    """
+    assert _is_schema_missing(
+        RuntimeError("(sqlite3.OperationalError) no such table: outbox")
+    )
+    assert not _is_schema_missing(
+        RuntimeError("(sqlite3.OperationalError) database is locked")
+    )
+
+    # 建一个空库（不 init_schema → 无 outbox/idempotency_cache 表）
+    eng = create_db_engine(str(tmp_path / "empty.db"))
+    import time
+
+    w2 = OutboxWorker(eng, poll_interval_s=1, max_retries=3)
+    w2.start()
+    deadline = time.time() + 5
+    while w2._thread.is_alive() and time.time() < deadline:
+        time.sleep(0.1)
+    assert not w2._thread.is_alive(), "schema 缺失时 Worker 应停止（防死循环）"
+    assert w2._fatal_error is not None
+    assert w2.metrics()["fatal_error"] is not None
+    w2.stop()
+    eng.dispose()
