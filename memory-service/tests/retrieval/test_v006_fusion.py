@@ -928,6 +928,49 @@ def test_retrieve_graceful_records_selection_diagnostics_without_content():
     }
 
 
+def test_retrieve_graceful_exposes_redacted_filter_diagnostics():
+    """D11B：联调诊断只汇总过滤原因计数，绝不暴露正文或候选标识。"""
+    sentinel = "D11B-SENSITIVE-SENTINEL"
+    outcome = retrieve_graceful(
+        fts5_search=lambda: [
+            _hit("kept", "v1", Channel.FTS5, 1),
+            _hit("removed", "v1", Channel.FTS5, 2),
+            _hit("conflict", "v1", Channel.FTS5, 3),
+            _hit("other-user", "v1", Channel.FTS5, 4, user_id="bob"),
+            _hit("stale", "v1", Channel.FTS5, 5),
+        ],
+        vector_search=lambda: [],
+        truth={
+            ("alice", "kept", "v1"): _truth("kept", content=sentinel),
+            ("alice", "removed", "v1"): _truth("removed", status="removed"),
+            ("alice", "conflict", "v1"): _truth(
+                "conflict", conflict_state="unresolved"
+            ),
+            ("bob", "other-user", "v1"): _truth("other-user", user_id="bob"),
+            ("alice", "stale", "v1"): _truth("stale", is_current=False),
+            ("alice", "stale", "v2"): _truth("stale", version_id="v2"),
+        },
+        flt=_flt(),
+    )
+
+    assert [candidate.memory_id for candidate in outcome.candidates] == ["kept"]
+    assert outcome.filter_diagnostics == {
+        "policy_version": "retrieval-filter-diagnostics/v1",
+        "input_hit_count": 5,
+        "deduplicated_hit_count": 5,
+        "hard_filter_passed_hit_count": 2,
+        "current_version_passed_hit_count": 1,
+        "dropped_by_reason": {
+            "cross_user": 1,
+            "memory_status": 1,
+            "unresolved_conflict": 1,
+            "not_current_version": 1,
+        },
+    }
+    assert sentinel not in repr(outcome.filter_diagnostics)
+    assert "kept" not in repr(outcome.filter_diagnostics)
+
+
 def test_fts5_index_returns_ranked_hits():
     idx = Fts5Index()
     idx.upsert("mem-a", "v1", "apple banana cherry", "alice")
