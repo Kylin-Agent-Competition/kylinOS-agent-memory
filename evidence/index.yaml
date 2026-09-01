@@ -1164,6 +1164,29 @@ entries:
       L2-4 systemd: unit 安装 + 默认库 alembic upgrade head ALEMBIC_RC=0（alembic_version=20260831_add_source_events）；数据目录 700 PASS；enable --now RC=0 active；socket /run/user/1000/kylin-memory/memory.sock srw-------；health status ok/db ok/backlog 0；restart active；插入 L2A-SYSD-1 → restart → 行仍在（数据存在 PASS）；但 DB 文件 644 ≠ 0600（发现②，测试后已清理测试行）。
       证据: 完整日志 evidence/l2-kylin-vm/d6d_l2_vm_20260901.log（SHA-256 以 git 仓库 LF 归一化 blob 为准，与 Windows 工作树 CRLF 副本哈希可能不同）。
 
+  - id: "D11D-L2-SERVICE-LIFECYCLE"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2——kylin-memory 服务安装/重启/回退/重装 + systemd --user 生命周期验证（install_kylin_memory.sh）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_service_l2_20260902.log"
+    tested_commit: "47af2fa42edf45ab4dc227453c47ed784bf46e16"
+    evidence_commit: "pending"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "正式发行环境 systemd 未验证；OS 整机重启自启复测归入工作项 7；Kaiming 包安装未实现；本证据仅覆盖服务生命周期"
+    checksum_sha256: "cd0bb83f1f99cdc55d05055ac37f003ebf49083d20d85164579d7fe1408fb298"
+    details: |
+      VM=Kylin-V11-2603-D11D-47af2fa-Test（链接克隆，基础快照 20-btrack-test-deps-20260821）；被测生产代码 origin/main@47af2fa。
+      环境实测定案：Kylin V11 / 6.6.0-63-generic / Python 3.12.3 / sqlalchemy 2.0.52 / alembic 1.19.1 / pydantic 2.13.5 / pytest 9.1.1；
+      vector-engine 1.2.0.1-0k0.11 + client 1.2.0.0-0k0.7（D11B 与 VERSION_MAP 分歧以本实测为准）。
+      alembic upgrade head exit=0，current=20260901_d10b_vector_ledger（head），表齐。
+      install_kylin_memory.sh install exit=0：enabled+active；socket /run/user/1000/kylin-memory/memory.sock srw-------；
+      journal「生产模式：alembic_version 校验通过」「Outbox Worker 启动」「Memory Service 就绪」「IPC Gateway 启动」。
+      restart 复验 active；rollback exit=0（inactive，wrapper/unit 删除）；重装 exit=0 active（可重复、可回退）。
   - id: "D11A-L2-VERIFY"
     task_id: "D11A"
     description: "D11A 麒麟 VM 全功能联调验证——health 增强（model/errors/lifecycle）+ Outbox 桥接 + VM 检测 + 全量测试"
