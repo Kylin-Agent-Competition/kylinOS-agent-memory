@@ -1140,6 +1140,30 @@ entries:
       tested_commit 说明: 完整 L1/L2 执行于 fac5411；946eb3d 后续代码修复（Outbox event_id + resolver miss 日志）经定向测试 30+23 passed；证据文件随 PR #65 合并 main @ 4926345 入库（evidence_commit）。checksum 以 git 仓库 LF 归一化 blob 为准（sha256sum over committed bytes），与 Windows 工作树 CRLF 副本哈希不同，勿混用。
 
 
+  - id: "D6D-L2-VM-20260901"
+    task_id: "D6-D"
+    description: "PR #98（D6-D 事件持久化）麒麟 VM L2 验证 L2-1~L2-5（2026-09-01）：source_events 迁移 upgrade/schema 对照/全局 UNIQUE/5 索引/5 CHECK/FK/往返；event.ingest 真实 CLI 端到端（正向/幂等回放/identity collision/consent 前置/高敏四路不落/跨用户 fail-close/指纹去重/schema_version/production UNSUPPORTED_METHOD）；JSON 日志格式 + PII 零泄漏；systemd 部署（迁移/health/restart/数据存在）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d6d_l2_vm_20260901.log"
+    report: "docs/day10/16_d6d_l2_verification_checklist_20260901.md"
+    tested_commit: "d721bad"
+    runtime_result: "PARTIAL"
+    review_status: "PENDING"
+    merge_qualified: false
+    date: "2026-09-01"
+    reviewer: "待签（Reviewer E）"
+    limitations: "两个诚实发现（不影响 event.ingest 核心功能正确性）：① L2-3 event.ingest 成功路径无应用日志点（handler 在 set_request_context(event_id) 后无 INFO/DEBUG 日志），请求关联 trace_id+event_id 不可观察（JSON Formatter/request_context 链路经 memory.retrieve 正对照 PASS）；② L2-4 默认库 DB 文件权限 644 ≠ 0600（数据目录 0700 已挡越权，未达契约 0600）。L2-1/L2-2 全 PASS；L2-3 JSON 格式/PII 零泄漏 PASS；L2-4 迁移/health/restart/数据存在 PASS"
+    checksum_sha256: "9110b72e55bce732001bef90f1dd3fb73ffe8e384d330c101b1873cfac46b650"
+    details: |
+      执行环境: 银河麒麟桌面 V11 x86_64，SSH 127.0.0.1:2222，用户 kylin-agent，venv sqlalchemy 2.0.52 / alembic 1.19.1 / pydantic 2.13.4。
+      同步: VM 无法直连 GitHub，用 git bundle（d6d_d721bad.bundle）fetch + checkout 后核对 git rev-parse HEAD = d721badf3be1afeb7ce5daead51d5344ca546acb。
+      L2-1 迁移: alembic upgrade head exit=0，版本链 001_initial_schema→20260826_add_trace_id→20260831_preference_versions→20260831_add_source_events，alembic heads 单 head；source_events 35 列 + 5 索引（uq_source_events_event 为 CREATE UNIQUE INDEX，PRAGMA unique=1）+ 5 CHECK 全落位；PRAGMA foreign_key_check 空；downgrade→upgrade 往返 exit=0。
+      L2-2 event.ingest（真实 UDS CLI，validation profile 显式注册 seam）: 正向 L2A-E1 allow_extraction/ok/pending/保留 content_fingerprint；幂等回放同 envelope 相同响应 + 换 idem_key 重投 duplicate_reason=idempotent_replay（行数不变）；identity collision（换 actor_id）→ INVALID_REQUEST；consent_scope=none → REJECT(consent_not_granted)/pending/NULL 指纹；高敏 L2A-E4 sensitivity=critical，content_summary/raw_payload_ref/content_fingerprint 三路 NULL，idempotency_cache request_fingerprint = <SENSITIVE-OMITTED> 占位（≠敏感正文 SHA-256，canonical 不含原文）；跨用户 uB 复用 uA event_id → INVALID_REQUEST（UNIQUE IntegrityError fail-close），uB 零副作用；指纹去重 L2A-E6 duplicate_of=5/content_duplicate/dedup_group 同值保留真实事件；schema_version 缺失/0.2 → INVALID_REQUEST；production app.py 默认不注册 → UNSUPPORTED_METHOD。
+      L2-3 日志: --json-logs 每行含 ts/level/logger/trace_id/request_id/method/event_id/message（JSON_FORMAT PASS）；PII 零泄漏 PASS（L2A_SENSITIVE_MARKER/sk-demo-…/高敏载荷零命中）；请求关联正对照 memory.retrieve PASS（L2J-tr-4+req-l2j-4）；但 event.ingest 成功路径无应用日志行 → event_id 关联不可观察（发现①）。
+      L2-4 systemd: unit 安装 + 默认库 alembic upgrade head ALEMBIC_RC=0（alembic_version=20260831_add_source_events）；数据目录 700 PASS；enable --now RC=0 active；socket /run/user/1000/kylin-memory/memory.sock srw-------；health status ok/db ok/backlog 0；restart active；插入 L2A-SYSD-1 → restart → 行仍在（数据存在 PASS）；但 DB 文件 644 ≠ 0600（发现②，测试后已清理测试行）。
+      证据: 完整日志 evidence/l2-kylin-vm/d6d_l2_vm_20260901.log（SHA-256 以 git 仓库 LF 归一化 blob 为准，与 Windows 工作树 CRLF 副本哈希可能不同）。
+
   - id: "D11A-L2-VERIFY"
     task_id: "D11A"
     description: "D11A 麒麟 VM 全功能联调验证——health 增强（model/errors/lifecycle）+ Outbox 桥接 + VM 检测 + 全量测试"
