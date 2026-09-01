@@ -49,7 +49,8 @@ def test_worker_consumes_success(engine):
 
     w = OutboxWorker(engine, poll_interval_s=1, max_retries=3, consumer=consumer)
     w._poll_once()
-    assert seen == [{"turn_id": "1"}]
+    # worker 会将 outbox 行的 event_type 注入 payload，供 consumer 识别事件类型
+    assert seen == [{"turn_id": "1", "event_type": "turn.finalized"}]
     assert _count(engine) == 0  # 成功 → DELETE
     w.stop()
 
@@ -162,3 +163,29 @@ def test_worker_schema_missing_stops_not_deadloop(tmp_path):
     assert w2.metrics()["fatal_error"] is not None
     w2.stop()
     eng.dispose()
+
+
+def test_worker_injects_event_type_for_deletion_consumer(engine):
+    """[A-REQ-01] worker 将 outbox 行 event_type（forget.executed）注入 payload，
+    使删除 consumer 能识别并触发 CacheInvalidator 失效。"""
+    # 入队一条 forget.executed 删除事件（payload 不含 event_type，模拟 D 轨 Forget Executor）
+    with engine.begin() as conn:
+        repo.enqueue_outbox(
+            conn,
+            aggregate_type="memory",
+            aggregate_id="m1",
+            event_type=repo.EVENT_FORGET_EXECUTED,
+            payload={
+                "event_id": "del_001", "user_id": "u1",
+                "target_type": "event", "forget_mode": "single_item",
+                "content_hashes": ["abc123def456"],
+            },
+        )
+    seen = []
+    # 模拟 deletion consumer：仅记录收到的 event_type，确认 worker 已注入
+    w = OutboxWorker(engine, poll_interval_s=1, max_retries=3,
+                     consumer=lambda p: seen.append(p.get("event_type")))
+    w._poll_once()
+    assert seen == ["forget.executed"], "worker 应将 forget.executed 注入 payload"
+    assert _count(engine) == 0  # 消费成功 → DELETE
+    w.stop()

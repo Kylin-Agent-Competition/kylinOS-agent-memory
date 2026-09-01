@@ -191,6 +191,10 @@ class OutboxWorker:
                     last_error="no consumer registered (vector integration pending, R-9)",
                 )
                 return
+            # 将 outbox 行的 event_type 注入 payload，供 consumer 识别事件类型
+            # （consumer 依赖 payload["event_type"] 分发；event_type 存于 outbox 独立列）。
+            if isinstance(payload, dict) and "event_type" not in payload:
+                payload = {**payload, "event_type": event_type}
             self._consumer(payload)
 
             # 成功（附录 B 4a）
