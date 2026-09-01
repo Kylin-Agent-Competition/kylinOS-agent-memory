@@ -12,7 +12,7 @@
 
 | 路径 | 内容 | 状态 |
 |---|---|---|
-| `packaging/systemd/kylin-memory.service` | Memory Service systemd 单元（user 级、`--no-migrate` fail-fast、`RuntimeDirectory`、最小加固） | 设计冻结骨架；unit 注释明确：正式发行环境 systemd 测试未执行前不得写“成品通过”，需在麒麟 VM 完成 L2（安装/重启/回退） |
+| `packaging/systemd/kylin-memory.service` | Memory Service systemd 单元（user 级、`--no-migrate` fail-fast、`RuntimeDirectory`、最小加固） | 设计冻结骨架；D4D 麒麟 VM L2（2026-08-21，commit `ed9949c`）已首次验证启动/重启/回退/日志/socket 五过；正式发行环境（生产 Kylin）仍未验证；D11D 同一提交需复测 |
 | `packaging/systemd/kylin-memory-echo.service` | Echo UDS 最小验证服务单元（`__USERNAME__` 占位符） | `UNVERIFIED`：直实验证通过，正式发行环境未验证 |
 | `packaging/systemd/README.md` | 目录与职责边界 | 无生产实现 |
 | `packaging/kaiming/README.md` | Kaiming 打包目录与职责边界 | 无生产实现 |
@@ -45,7 +45,7 @@
 
 ## 5. 盘点结论与影响
 
-- 仓库侧基线清晰：D 轨部署/服务产物处于“骨架 / UNVERIFIED”状态；`kylin-memory.service` 未在任何 VM 完成 L2（安装/重启/回退）。
+- 仓库侧基线清晰：D 轨部署/服务产物多为“骨架 / UNVERIFIED”；`kylin-memory.service` 已于 D4D 麒麟 VM L2 首次验证（2026-08-21，commit `ed9949c`，启动/重启/回退/日志/socket 五过），正式发行环境未验证，D11D 同一提交需复测。
 - 进入工作项 3（服务与安装）前，需先确认/创建 D11D 专用 VM（建议基于 `20-btrack-test-deps-20260821` 或 D11B 克隆派生，部署 `origin/main@47af2fa`）。
 - 服务重启、OS 重启、正式 health/index state、KYSEC 生产规则均保持 `UNVERIFIED`；不把 D11A/D11B/D2 历史证据表述为 D11D 同一提交的证明。
 - Vector Engine 版本在 D11B 与 VERSION_MAP 间不一致（`0k0.11` vs `0k1.0`），须在工作项 2 统一环境冻结时以 D11D 专用 VM 实测定案。
