@@ -80,6 +80,50 @@ memory_entries = Table(
     CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_memory_entries_confidence"),
 )
 
+# D10-B：Vector 代次与索引项账本。SQLite 是删除结果、重建激活和幂等回执的
+# 持久化真源；Vector Engine 仅承载可重建的派生向量，不承担业务授权判断。
+vector_index_generations = Table(
+    "vector_index_generations",
+    metadata,
+    Column("scope_id", String, primary_key=True),
+    Column("generation", String, primary_key=True),
+    Column("collection_name", String, nullable=False, unique=True),
+    Column("status", String, nullable=False),
+    Column("schema_version", String, nullable=True),
+    Column("source_snapshot_id", String, nullable=True),
+    Column("source_watermark", Text, nullable=True),
+    Column("record_digest", String, nullable=True),
+    Column("record_count", Integer, nullable=False, server_default="0"),
+    Column("is_serving", Integer, nullable=False, server_default="0"),
+    Column("last_error", String, nullable=True),
+    Column("created_at", String, nullable=True),
+    Column("activated_at", String, nullable=True),
+)
+
+vector_index_entries = Table(
+    "vector_index_entries",
+    metadata,
+    Column("scope_id", String, primary_key=True),
+    Column("generation", String, primary_key=True),
+    Column("user_id", String, primary_key=True),
+    Column("memory_entry_id", Integer, primary_key=True),
+    Column("version_id", String, primary_key=True),
+    Column("is_active", Integer, nullable=False, server_default="1"),
+)
+
+vector_index_receipts = Table(
+    "vector_index_receipts",
+    metadata,
+    Column("scope_id", String, primary_key=True),
+    Column("user_id", String, primary_key=True),
+    Column("operation", String, primary_key=True),
+    Column("generation", String, primary_key=True),
+    Column("idempotency_key", String, primary_key=True),
+    Column("payload_hash", String, nullable=False),
+    Column("result_json", Text, nullable=False),
+    Column("created_at", String, nullable=False),
+)
+
 # D7D：稳定记忆项与不可变版本历史。`memory_entries` 保持既有通用记忆表职责；
 # 偏好版本链使用独立表，避免以 UPDATE 覆盖历史正文。一个 item 对应一个
 # (user_id, preference_key, preference_scope) 链，版本表的部分唯一索引保证只有一个
@@ -192,6 +236,19 @@ idx_turns_host_turn_id = Index(
 )
 idx_memory_user_type = Index("idx_memory_user_type", memory_entries.c.user_id, memory_entries.c.entry_type)
 idx_memory_deleted = Index("idx_memory_deleted", memory_entries.c.is_deleted)
+uq_vector_generation_serving_scope = Index(
+    "uq_vector_generation_serving_scope",
+    vector_index_generations.c.scope_id,
+    unique=True,
+    sqlite_where=vector_index_generations.c.is_serving == 1,
+)
+idx_vector_index_entries_active = Index(
+    "idx_vector_index_entries_active",
+    vector_index_entries.c.scope_id,
+    vector_index_entries.c.generation,
+    vector_index_entries.c.user_id,
+    vector_index_entries.c.is_active,
+)
 uq_memory_items_user_key_scope = Index(
     "uq_memory_items_user_key_scope",
     memory_items.c.user_id,
