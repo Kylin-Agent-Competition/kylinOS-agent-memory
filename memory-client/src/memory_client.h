@@ -136,6 +136,16 @@ public:
     Q_INVOKABLE QString sendConflictCompareRequest(const QJsonObject& payload);
     Q_INVOKABLE QString sendLifecycleStatusRequest(const QJsonObject& payload);
 
+    // D9C 候选 IPC 便捷方法（CANDIDATE / pending ADR；生产默认返回
+    // UNSUPPORTED_METHOD；Demo / 测试态 Mock Gateway 可注册 handler）。
+    //   - context.assemble: payload 必填 user_id + query_text；token_budget 必填
+    //     （>0）；可选 candidates[]（B 轨 RetrievalCandidateSample[]）/ scene /
+    //     session_id / turn_id。
+    //   返回 data 投影到 assembledContext：含 selected_memory_ids / recall_sources[] /
+    //     memory_types[] / conflict_hints[] / uncertainty_hints[] / token_budget /
+    //     actual_token_count / budget_exceeded / injection_status。
+    Q_INVOKABLE QString sendContextAssembleRequest(const QJsonObject& payload);
+
 signals:
     void socketPathChanged();
     void connectionStateChanged();

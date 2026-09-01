@@ -185,3 +185,38 @@ add_test(
     NAME d8c_knowledge_conflict_lifecycle
     COMMAND test_d8c_knowledge_conflict_lifecycle
 )
+
+# ============================================================================
+# D9C Memory Context 组装 L0 Mock 契约测试
+# （context.assemble，候选方法 pending ADR）
+# 范围：MemoryViewModel context.assemble payload 形状 + 响应路由 +
+#       可解释字段投影（recall_sources / memory_types / conflict_hints /
+#       uncertainty_hints）+ Token 预算校验 + 防伪 Context（injection=failed/
+#       skipped 不产生伪 Context）+ 独立 pending + 空参数 / 未连接拒绝。
+# 注意：L0 Mock 契约验证，不代表麒麟宿主真实交互（L2 另行在 VM 验证）。
+# ============================================================================
+add_executable(test_d9c_context_assemble
+    ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+    ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
+    mock_gateway_server.cpp
+    test_d9c_context_assemble.cpp
+)
+target_link_libraries(test_d9c_context_assemble
+    PRIVATE
+        Qt5::Core
+        Qt5::Network
+        Qt5::Test
+)
+target_include_directories(test_d9c_context_assemble
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_d9c_context_assemble
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME d9c_context_assemble
+    COMMAND test_d9c_context_assemble
+)

@@ -127,6 +127,10 @@ extern const QString kBehaviorObserve;      // "behavior.observe"
 extern const QString kKnowledgeDetail;    // "knowledge.detail"
 extern const QString kConflictCompare;    // "conflict.compare"
 extern const QString kLifecycleStatus;    // "lifecycle.status"
+// D9C 候选 IPC 方法（CANDIDATE / pending ADR；生产默认不注册）。
+// context.assemble：把召回候选（B 轨混合检索输出）组装为受 Token 预算控制的
+// MemoryContext，返回可解释字段（召回来源、记忆类型、冲突/不确定性提示）。
+extern const QString kContextAssemble;   // "context.assemble"
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）。

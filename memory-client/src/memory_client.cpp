@@ -345,6 +345,11 @@ QString MemoryClient::sendLifecycleStatusRequest(const QJsonObject& payload)
     return sendRequest(methods::kLifecycleStatus, payload);
 }
 
+QString MemoryClient::sendContextAssembleRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kContextAssemble, payload);
+}
+
 void MemoryClient::handleSocketConnected()
 {
     setConnectionState(ConnectionState::Connected);
