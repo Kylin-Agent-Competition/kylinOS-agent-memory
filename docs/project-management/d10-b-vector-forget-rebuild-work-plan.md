@@ -31,7 +31,7 @@
 
 ## 原子工作清单
 
-总进度：0/5（0%）。
+总进度：3/5（60%）；第 4 项 L1 口径已完成，L2 重建残留率待真实宿主；第 5 项待提交授权。
 
 1. **精确删除 bridge**：为 C++ CLI 增加受控 `delete` 请求；仅接受解析后的用户、记忆 ID、版本/代次条件，构造不可放宽用户边界的 SDK 表达式；未知 JSON 键、空/通配选择器、跨用户和服务端失败均失败关闭。
 2. **SQLite 重建快照边界**：定义 B 轨只读快照读取器，固定 `snapshot_id`、水位、用户/作用域、排序和记录摘要；软删除、非当前版本或无法生成合法向量的记录不得进入目标 Collection，并被计入明确的拒绝原因。
@@ -52,6 +52,24 @@
 | 代次重建与残留率 | 阻塞 | 仍依赖 D 轨提供逻辑记忆 ID 到 Vector 数值主键映射、版本真源、serving generation、水位与幂等结果接线，以及 A 轨可调用的真实 Embedding 输入；当前不得用固定向量或模拟成功代替。 |
 
 本节仅更新实际执行状态，不改变既有契约、验收标准或跨轨责任边界。
+
+## 2026-09-01 执行状态（本轮：正式适配、代次重建与残留率口径）
+
+> 在 D 轨、A 轨授权下，于 `feature/d10-b-vector-forget-rebuild` 直接实现并验证；仅更新实际执行状态，不改变既有契约、验收标准或跨轨责任边界。
+
+| 项目 | 状态 | 已有证据 / 限制 |
+| --- | --- | --- |
+| 冻结 `VectorDeleteRequest` 正式适配 | 已实现并完成 L1，删除 bridge 麒麟 L2 通过 | 新增 `SqliteVectorProvider.delete`：D 轨确认 selector 经 SQLite 真源映射为数值 PK 与 `v{version}`，幂等回执落库，不伪造 `requested_count`。映射约定冻结：`memory_id == str(memory_entries.id)`、`version_id == "v" + memory_entries.version`。 |
+| 代次重建与激活 | 已实现并完成 L1 | `SqliteVectorProvider.rebuild`：事务快照 → A 轨 Embedding → 新 Collection → 校验摘要/水位 → 原子切换 serving；构建/写入失败保留旧代次并清理目标代次；重放与幂等、截止超时、重启恢复均有测试。`get_index_state` 从 SQLite 账本返回可查询状态。 |
+| 残留率评测口径 | 已实现并完成 L1 | `evaluate_forget_residual` 输出数据集版本、快照标识、水位、样本/观测/残留数与残留率；L2 重建残留率仍待真实宿主。 |
+| Vector 账本迁移 | 已实现并完成 L1 | `20260901_d10b_vector_ledger`：generations/entries/receipts 三张表 + 每作用域至多一个 serving 的部分唯一索引；回退拒绝有数据的账本。 |
+| 麒麟 L2（删除协议） | 已通过 | 克隆 VM `Kylin-V11-2603-D10B-c15866d-Test`（基快照 `20-btrack-test-deps-20260821`）；`run_d10b_vector_delete_l2.sh` 15/15 通过，tested_commit=`c15866d`；engine `1.2.0.1-0k0.11`，client `1.2.0.0-0k0.7`；日志 SHA-256 见 `辅助生成文件/文本整理/d10b-l2-evidence-20260901`。 |
+
+L1 验证：D10B 定向 57 passed；`tests/retrieval` + 迁移 311 passed；`git diff --check`、`py_compile` 通过。全量 suite 中 24 failed / 36 errors 均为 Windows 无 `AF_UNIX` 的既有环境问题（主基线同样复现），与本批改动无关。
+
+仍未完成（不改变既有结论）：
+- 代次重建与残留率的麒麟 L2：依赖 D 轨确认请求 DTO 接入运行服务、A 轨真实 Embedding 输入，本轮未执行，保持 `UNVERIFIED`；不得以本地测试或模拟成功替代。
+- 本批代码尚未提交；提交、推送与 PR #82 更新待用户单独授权。
 
 ## 依赖与阻塞边
 
