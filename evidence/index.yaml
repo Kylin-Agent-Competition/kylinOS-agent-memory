@@ -1164,6 +1164,24 @@ entries:
       L2-4 systemd: unit 安装 + 默认库 alembic upgrade head ALEMBIC_RC=0（alembic_version=20260831_add_source_events）；数据目录 700 PASS；enable --now RC=0 active；socket /run/user/1000/kylin-memory/memory.sock srw-------；health status ok/db ok/backlog 0；restart active；插入 L2A-SYSD-1 → restart → 行仍在（数据存在 PASS）；但 DB 文件 644 ≠ 0600（发现②，测试后已清理测试行）。
       证据: 完整日志 evidence/l2-kylin-vm/d6d_l2_vm_20260901.log（SHA-256 以 git 仓库 LF 归一化 blob 为准，与 Windows 工作树 CRLF 副本哈希可能不同）。
 
+  - id: "D11D-L2-REBOOT-STARTUP"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2——OS 整机重启后 kylin-memory.service 自动启动 + 同 Commit 全模块（memory-service/Runtime/vector-engine）启动可追踪"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_reboot_l2_20260902.log"
+    tested_commit: "47af2fa42edf45ab4dc227453c47ed784bf46e16"
+    evidence_commit: "pending"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "正式发行环境 systemd 未验证；KYSEC 生产规则本 VM 不可见；检索/删除端到端依赖 B/C/D10D 输入跨轨 pending"
+    checksum_sha256: "50431c4c0f87a2c4277e2ad62970bea3e0f5ddca8abd8ba16cb530e91f888e45"
+    details: |
+      sudo reboot 后 SSH 恢复（up 1 min）；用户会话 active；kylin-memory.service 自动启动 active (running) Main PID 1925；
+      socket srw-------(0600)；UDS health status=ok/db=ok/backlog=0；Vector/Runtime UDS 存在；screensaver lock=false/idle=0 持久。
   - id: "D11D-L2-DIAGNOSTICS-PERM-EVIDENCE"
     task_id: "D11D"
     description: "D11D 麒麟 VM L2——日志与诊断（health/echo/retrieve + JSON 日志 + trace_id + 脱敏）+ 权限与安全（UDS/DB 0600、用户隔离）+ DB/trace 证据汇总"
