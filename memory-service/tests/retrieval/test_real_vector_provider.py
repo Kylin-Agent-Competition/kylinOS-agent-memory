@@ -226,6 +226,129 @@ def test_insert_forwards_filterable_metadata(monkeypatch):
     }
 
 
+def test_delete_forwards_user_bound_id_version_pairs(monkeypatch):
+    """D10-B：删除桥只能接收同一用户的已解析 ID/版本对。"""
+    calls = []
+
+    def fake_run(cmd, input=None, text=None, capture_output=None, timeout=None):
+        calls.append((cmd, input))
+        return _FakeCompleted(json.dumps({"ok": True, "code": 0}))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = VectorCliClient(cli_path="vector_cli").delete(
+        "d10_collection",
+        [7, 9],
+        user_id="alice",
+        version_ids=["v3", "v5"],
+    )
+
+    assert result == {"ok": True, "code": 0}
+    assert calls[0][0] == ["vector_cli", "delete", "d10_collection"]
+    assert json.loads(calls[0][1]) == {
+        "user_id": "alice",
+        "ids": [7, 9],
+        "version_ids": ["v3", "v5"],
+    }
+
+
+def test_delete_rejects_empty_ids_before_invoking_cli(monkeypatch):
+    """D10-B：空选择器不得抵达 Vector CLI。"""
+    def unexpected_cli(*args, **kwargs):
+        raise AssertionError("空 ID 不得抵达 vector_cli")
+
+    monkeypatch.setattr(subprocess, "run", unexpected_cli)
+
+    with pytest.raises(ValueError, match="删除 ID 不能为空"):
+        VectorCliClient(cli_path="vector_cli").delete(
+            "d10_collection", [], user_id="alice", version_ids=[]
+        )
+
+
+def test_delete_rejects_more_than_500_pairs_before_invoking_cli(monkeypatch):
+    """D10-B：超长删除选择器不得生成过长的 Vector 表达式。"""
+    def unexpected_cli(*args, **kwargs):
+        raise AssertionError("超长删除选择器不得抵达 vector_cli")
+
+    monkeypatch.setattr(subprocess, "run", unexpected_cli)
+    ids = list(range(1, 502))
+    version_ids = [f"v{item}" for item in ids]
+
+    with pytest.raises(ValueError, match="单次删除最多 500 对 ID/版本"):
+        VectorCliClient(cli_path="vector_cli").delete(
+            "d10_collection", ids, user_id="alice", version_ids=version_ids
+        )
+
+
+def test_delete_allows_exactly_500_pairs(monkeypatch):
+    """D10-B：边界内的删除选择器仍应完整转发。"""
+    calls = []
+
+    def fake_run(cmd, input=None, text=None, capture_output=None, timeout=None):
+        calls.append((cmd, input))
+        return _FakeCompleted(json.dumps({"ok": True, "code": 0}))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    ids = list(range(1, 501))
+    version_ids = [f"v{item}" for item in ids]
+
+    VectorCliClient(cli_path="vector_cli").delete(
+        "d10_collection", ids, user_id="alice", version_ids=version_ids
+    )
+
+    assert len(json.loads(calls[0][1])["ids"]) == 500
+
+
+def test_delete_rejects_unpaired_version_ids_before_invoking_cli(monkeypatch):
+    """D10-B：每个删除 ID 必须有同位置的版本 ID。"""
+    def unexpected_cli(*args, **kwargs):
+        raise AssertionError("未配对版本不得抵达 vector_cli")
+
+    monkeypatch.setattr(subprocess, "run", unexpected_cli)
+
+    with pytest.raises(ValueError, match="版本 ID 必须与删除 ID 一一对应"):
+        VectorCliClient(cli_path="vector_cli").delete(
+            "d10_collection", [7, 9], user_id="alice", version_ids=["v3"]
+        )
+
+
+@pytest.mark.parametrize(
+    ("ids", "user_id", "version_ids", "message"),
+    [
+        ([7], "", ["v3"], "删除用户必须非空"),
+        ([True], "alice", ["v3"], "删除 ID 必须是正整数"),
+        ([0], "alice", ["v3"], "删除 ID 必须是正整数"),
+        ([7], "alice", [""], "版本 ID 必须非空"),
+    ],
+)
+def test_delete_rejects_invalid_selector_before_invoking_cli(
+    monkeypatch, ids, user_id, version_ids, message
+):
+    """D10-B：桥接层不能把未受控选择器传给 SDK。"""
+    def unexpected_cli(*args, **kwargs):
+        raise AssertionError("非法选择器不得抵达 vector_cli")
+
+    monkeypatch.setattr(subprocess, "run", unexpected_cli)
+
+    with pytest.raises(ValueError, match=message):
+        VectorCliClient(cli_path="vector_cli").delete(
+            "d10_collection", ids, user_id=user_id, version_ids=version_ids
+        )
+
+
+def test_delete_fails_closed_when_cli_reports_an_error(monkeypatch):
+    """D10-B：CLI 返回失败状态时，删除不得被误报为成功。"""
+    def fake_run(cmd, input=None, text=None, capture_output=None, timeout=None):
+        return _FakeCompleted(json.dumps({"ok": False, "code": 9, "message": "SDK 删除失败"}))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(VectorCliError, match="SDK 删除失败"):
+        VectorCliClient(cli_path="vector_cli").delete(
+            "d10_collection", [7], user_id="alice", version_ids=["v3"]
+        )
+
+
 def test_insert_rejects_empty_vector_before_invoking_cli(monkeypatch):
     """D6-B：空向量不是可写入的索引记录，必须在桥接前拒绝。"""
     def unexpected_cli(*args, **kwargs):
