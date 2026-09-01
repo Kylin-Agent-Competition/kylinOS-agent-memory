@@ -1,6 +1,6 @@
 # ADR-013：新增 `source_events` 表持久化多源事件（FRZ-DB-001 / D6-D 扩展）
 
-- **状态**：✅ D 已决策（2026-08-31，方案 A）；REWORK 修订 v5（按 Review #83 Reviewer E 第五轮意见重冻结）；待 Reviewer E 签署
+- **状态**：✅ D 已决策（2026-08-31，方案 A）；REWORK 修订 v5（按 Review #83 Reviewer E 第五轮意见重冻结）；已签署（Reviewer E，2026-08-31，PASS_WITH_DEBT，TD-D6D-002）
 - **日期**：2026-08-31（v5 修订同日）
 - **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
 - **责任轨道**：D（DB）为主，A/E 协作（消费现有 pipeline / admission 模型，不复制真源）
@@ -254,4 +254,4 @@ CREATE TABLE source_events (
 - `memory-service/pipeline/fingerprint.py`（content_fingerprint / event_duplicate_key）
 - `docs/day6/day6-d-01-event-persistence-contract-plan-v0.5.md`（D6-D 契约规划，D-1/D-4/D-5/D-6/D-8/D-9/D-10/D-11/D-12 决策）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-31 决策选方案 A，v2 按 Review #83 第一轮重冻结，v3 按第三轮意见修订，v4 按第四轮意见修订，v5 按第五轮意见修订**；**Reviewer E（谢嘉然）待签署**；签署后回写 `D4_DB_INITIAL_DESIGN_FREEZE_20260817.md`（FRZ-DB-001 扩展节）。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-31 决策选方案 A，v2 按 Review #83 第一轮重冻结，v3 按第三轮意见修订，v4 按第四轮意见修订，v5 按第五轮意见修订**；**Reviewer E（谢嘉然）2026-08-31 终局签署 PASS_WITH_DEBT**（0 BLOCKER / 0 HIGH；唯一债务 TD-D6D-002）；签署后回写 `D4_DB_INITIAL_DESIGN_FREEZE_20260817.md`（FRZ-DB-001 扩展节，见下）。

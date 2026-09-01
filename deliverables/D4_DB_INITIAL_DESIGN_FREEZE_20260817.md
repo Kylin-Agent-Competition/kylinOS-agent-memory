@@ -26,6 +26,8 @@
 | FRZ-DB-001 | 核心表 5 张 + 4 项索引 + FTS5 `memory_fts` | 冻结文档 §2.2-2.4；需求 v1.3 §二 FR-DB-001 | ✅ | R-6 已采纳（ADR-006，复合 PK）；**2026-08-27 ADR-011 扩展已采纳** |
 
 > **2026-08-27 扩展（ADR-011 批准，D 决策 + Reviewer E 签署）**：FRZ-DB-001 在既有列定义**不变**前提下扩展——`turns` 增 nullable `trace_id` / `host_turn_id`，`memory_entries` 增 nullable `trace_id`；新增部分唯一索引 `idx_turns_host_turn_id`（`UNIQUE(session_id, host_turn_id) WHERE host_turn_id IS NOT NULL`，ADR-010 Upsert 匹配键）；落库迁移 `20260826_add_trace_id.py`（upgrade ADD COLUMN / downgrade 表重建，ADR-007 命名合规）；outbox 不改表。详见 `docs/adr/011-trace-id-columns.md` 与冻结文档 §2.2/§2.3（已回写）。
+
+> **2026-08-31 扩展（ADR-013 批准，D 决策 + Reviewer E 终局签署 PASS_WITH_DEBT，TD-D6D-002）**：FRZ-DB-001 新增第 6 张表 `source_events`（35 列 + 5 索引 + 5 CHECK），承载多源事件持久化真源（溯源 / 审计 / 去重 / 准入留痕）。既有 5 表 / 索引 / 触发器 / FTS5 定义**不变**，`outbox` CHECK 不扩展；全局 `UNIQUE(event_id)`（事件级幂等）；敏感 / security reject / consent reject 事件 `content_fingerprint` 持久化 NULL（HIGH-03）；`processing_status` 首次落库一律 `pending`。落库迁移 `20260831_add_source_events.py`（upgrade CREATE TABLE + 5 索引 / downgrade DROP TABLE，ADR-007 命名合规）。详见 `docs/adr/013-source-events-table.md`。
 | FRZ-DB-002 | 失败路由 5 条路径 | 冻结文档 §3.1；需求 v1.3 §三 FR-FB-001（映射表） | ✅ | R-5 已采纳（ADR-005，冻结枚举/envelope） |
 | FRZ-DB-003 | 降级层级 L0-L3+Fatal | 冻结文档 §3.2；需求 v1.3 §三 FR-FB-001 | ✅ | 无 |
 | FRZ-DB-004 | Dead Letter 策略 | 冻结文档 §3.4；需求 v1.3 §三 FR-FB-003 + §二 FR-DB-004 | ✅ | 无 |
