@@ -226,6 +226,25 @@ class EmbeddingUDSServer:
         self.stop()
 
 
+def _ensure_outbox_schema(engine) -> None:
+    """A-REQ-01 前置校验：目标 DB 必须已含 outbox / idempotency_cache 表。
+
+    该 schema（含 outbox 表）由主 Memory Service（app.py）或 Alembic 管理
+    （FR-DB-002 单一真源），本进程不 init_schema。若表缺失，OutboxWorker 会在
+    轮询时对 `no such table` 无限重试（死循环），故在此 fail-fast 给出清晰指引。
+    """
+    from sqlalchemy import inspect
+
+    insp = inspect(engine)
+    missing = [t for t in ("outbox", "idempotency_cache") if not insp.has_table(t)]
+    if missing:
+        raise RuntimeError(
+            "A-REQ-01 目标 DB 缺少表 %s：请先由主 Memory Service 建库 "
+            "（app.py 或 `alembic upgrade head`）再启动删除 consumer。db=%s"
+            % (", ".join(missing), engine.url)
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Day5 最小垂直链路 UDS 服务器")
     parser.add_argument("--socket", default=_default_socket_path(),
@@ -269,6 +288,13 @@ def main() -> None:
         # 注意：不在此 init_schema/create_all——schema（含 outbox 表）由主
         # Memory Service（app.py）或 Alembic 管理（FR-DB-002 单一真源），
         # 避免双 schema truth source 分叉（PR#52 Issue 6）。
+        # 但需校验 outbox/idempotency_cache 表已存在，否则 Worker 会对
+        # `no such table` 无限重试（死循环）→ fail-fast 给清晰指引。
+        try:
+            _ensure_outbox_schema(engine)
+        except RuntimeError as exc:
+            print(f"[A-REQ-01] {exc}", flush=True)
+            return 2
         # 接线 ExtractionProvider（创建 CacheInvalidator）：
         # 用最小可用的 ExtractionProvider 以提供抽取缓存（无 LLM 凭证时仅规则路径）
         try:
