@@ -21,7 +21,13 @@ from embedding.embedding_service import EmbeddingService
 logger = logging.getLogger(__name__)
 
 # Outbox 事件类型常量
+# 权威生产事件类型为 D 轨 Forget Executor 入队的 `forget.executed`
+# （memory-service/db/repositories.py EVENT_FORGET_EXECUTED）；
+# `memory.deletion` / `deletion` 为向后兼容的别名（D10A 早期契约）。
 EVENT_DELETION = "memory.deletion"
+EVENT_FORGET_EXECUTED = "forget.executed"
+# 合法删除事件类型集合（跨版本兼容）
+DELETION_EVENT_TYPES = frozenset({EVENT_DELETION, EVENT_FORGET_EXECUTED, "deletion"})
 
 # Outbox 消费回调类型：payload dict → 成功返回 None，失败抛异常
 EventConsumer = Callable[[Dict[str, Any]], None]
@@ -60,7 +66,7 @@ def build_deletion_consumer(
 
     def _consumer(payload: Dict[str, Any]) -> None:
         event_type = payload.get("event_type", "")
-        if event_type == EVENT_DELETION or event_type == "deletion":
+        if event_type in DELETION_EVENT_TYPES:
             _handle_deletion_payload(payload, embedding_service)
         else:
             raise ValueError(f"unknown outbox event_type: {event_type!r}")
