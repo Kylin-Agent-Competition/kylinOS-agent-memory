@@ -680,6 +680,14 @@ def register_event_ingest_handler(
                 )
         except repo.EventIdentityConflict as exc:
             raise RequestValidationError(str(exc)) from exc
+        # LOW-03：成功路径安全结构化 INFO 日志（JSON formatter 自动注入 trace_id/
+        # event_id/method；此处只补关联键，不记录正文/摘要/内容指纹等敏感派生值）
+        logger.info(
+            "event.ingest success source_event_id=%s event_id=%s admission_decision=%s",
+            response.get("source_event_id"),
+            response.get("event_id"),
+            response.get("admission_decision"),
+        )
         return response
 
     registry.register("event.ingest", handler)

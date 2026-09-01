@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 import subprocess
@@ -687,3 +688,25 @@ def test_migration_check_constraints_source_events(mig_db):
             base.replace("'pending'", "'bogus_status'").replace("'evt-check-ok'", "'evt-check-bad'")
         )
     conn.close()
+
+
+def test_event_ingest_success_emits_safe_info_log(env, caplog):
+    """LOW-03：成功路径补安全结构化 INFO 日志（含关联键，不含正文/摘要/敏感内容）。
+
+    复用 observability JSON 链路（JsonFormatter 自动注入 trace_id/event_id/method）；
+    此处用 caplog 捕获 handler logger 的 record message，断言：
+    - 命中 `event.ingest success` 且含 source_event_id / event_id / admission_decision；
+    - message 不含 payload 正文/摘要（content_summary 等敏感派生值不落日志）。
+    """
+    with caplog.at_level(logging.INFO, logger="gateway.handlers"):
+        resp = env["invoke"](_payload(content_summary="用户偏好深色主题"))
+
+    assert resp["admission_decision"] == "allow_extraction"
+    records = [r for r in caplog.records if r.getMessage().startswith("event.ingest success")]
+    assert len(records) == 1
+    msg = records[0].getMessage()
+    assert f"source_event_id={resp['source_event_id']}" in msg
+    assert f"event_id={resp['event_id']}" in msg
+    assert "admission_decision=allow_extraction" in msg
+    # 安全断言：正文/摘要不落日志
+    assert "深色主题" not in msg
