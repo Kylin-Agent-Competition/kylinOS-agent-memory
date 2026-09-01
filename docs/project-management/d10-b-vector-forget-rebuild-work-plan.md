@@ -63,7 +63,7 @@
 | 代次重建与激活 | 已实现并完成 L1 | `SqliteVectorProvider.rebuild`：事务快照 → A 轨 Embedding → 新 Collection → 校验摘要/水位 → 原子切换 serving；构建/写入失败保留旧代次并清理目标代次；重放与幂等、截止超时、重启恢复均有测试。`get_index_state` 从 SQLite 账本返回可查询状态。 |
 | 残留率评测口径 | 已实现并完成 L1 | `evaluate_forget_residual` 输出数据集版本、快照标识、水位、样本/观测/残留数与残留率；L2 重建残留率仍待真实宿主。 |
 | Vector 账本迁移 | 已实现并完成 L1 | `20260901_d10b_vector_ledger`：generations/entries/receipts 三张表 + 每作用域至多一个 serving 的部分唯一索引；回退拒绝有数据的账本。 |
-| 麒麟 L2（删除协议） | 已通过 | 克隆 VM `Kylin-V11-2603-D10B-c15866d-Test`（基快照 `20-btrack-test-deps-20260821`）；`run_d10b_vector_delete_l2.sh` 15/15 通过，tested_commit=`c15866d`；engine `1.2.0.1-0k0.11`，client `1.2.0.0-0k0.7`；日志 SHA-256 见 `辅助生成文件/文本整理/d10b-l2-evidence-20260901`。 |
+| 麒麟 L2（删除协议） | 已通过 | 克隆 VM `Kylin-V11-2603-D10B-c15866d-Test`（基快照 `20-btrack-test-deps-20260821`）；`run_d10b_vector_delete_l2.sh` 在最终 HEAD 上重跑 **15/15 通过**，tested_commit=`4675e60`（桥接/运行器哈希与 c15866d 一致，证明 L2 主题零差异）；engine `1.2.0.1-0k0.11`，client `1.2.0.0-0k0.7`；证据见 `evidence/l2-kylin-vm/d10b_vector_delete_l2_20260901.md`（原始日志 SHA-256 见该文档）。 |
 
 L1 验证：D10B 定向 57 passed；`tests/retrieval` + 迁移 311 passed；`git diff --check`、`py_compile` 通过。全量 suite 中 24 failed / 36 errors 均为 Windows 无 `AF_UNIX` 的既有环境问题（主基线同样复现），与本批改动无关。
 
