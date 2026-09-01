@@ -411,3 +411,7 @@ class EmbeddingProvider:
             ondevice=True,
             loaded=True,
         )
+
+    def lifecycle(self) -> str:
+        """返回当前 Provider 生命周期状态名（health 可观测性用）。"""
+        return self._lifecycle.name

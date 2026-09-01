@@ -93,7 +93,7 @@ void embedding_result_destroy(EmbeddingResult** result);
 
 /** 显式初始化指定模型 */
 int text_embedding_init_model(TextEmbeddingSession* session, const char* model_name);
-/* SOURCE_VERIFIED | ABI_VERIFIED | HOST_UNTESTED ⚠️ nm 确认符号存在，参数/返回类型由头文件推断，宿主未完整实测 */
+/* SOURCE_VERIFIED | ABI_VERIFIED | HOST_UNTESTED ⚠️ nm 确认符号存在；SDK 日志警告 Model was not initialized explicitly（自动加载默认模型），未真实调用 */
 
 /* ── 模型管理（ABI_VERIFIED 仅 nm 确认） ── */
 

@@ -1138,3 +1138,34 @@ entries:
       L2-5 systemd: 默认库 alembic 迁移 ALEMBIC_EXIT=0；enable/start RC=0；socket /run/user/1000/kylin-memory/memory.sock 可达；health ok；restart active；stop inactive+socket 清理；enable --now 回退恢复 active。
       归档: 完整日志 evidence/l2-kylin-vm/pr65_l2_vm_20260828.log；L1 全量 1003 passed/49 skipped @ fac5411（evidence/l1/pr65_l1_vm_checklist_20260828.log）。
       tested_commit 说明: 完整 L1/L2 执行于 fac5411；946eb3d 后续代码修复（Outbox event_id + resolver miss 日志）经定向测试 30+23 passed；证据文件随 PR #65 合并 main @ 4926345 入库（evidence_commit）。checksum 以 git 仓库 LF 归一化 blob 为准（sha256sum over committed bytes），与 Windows 工作树 CRLF 副本哈希不同，勿混用。
+
+
+  - id: "D11A-L2-VERIFY"
+    task_id: "D11A"
+    description: "D11A 麒麟 VM 全功能联调验证——health 增强（model/errors/lifecycle）+ Outbox 桥接 + VM 检测 + 全量测试"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11a_evidence_20260831_204650_vm_verify.log"
+    tested_commit: "b16b00fb4a2a2cdd345704f1e3f20e80c3d4480a"  # 被测生产代码 branch tip（日志头声明一致；rebase 后对应 60a9ff9，生产代码零差异）
+    evidence_commit: "7991e70"  # 证据文件最终形态入库 commit（rebase 后为分支 tip，仅 evidence/脚本新行修正）
+    date: "2026-08-31"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "ABI 符号 `embedding_result_get_vector_data` 因 SDK 导出名与头文件不完全一致标记为 warn-not-fail（embed 功能已验证正常，bridge_loaded=True，dim=768）；`text_embedding_init_model` 仍为 HOST_UNTESTED（SDK 自动加载默认模型，未显式调用）；全链路 Vector 消费（R-9）pending，consumer 当前仅处理 memory.deletion 事件类型"
+    checksum_sha256: "a7caa9a55d78b3a588597dc089a38543c63532a01bede3344dd4845e892a5002"
+    details: |
+      VM 检测结果: 14/14 ALL PASS
+      全量测试结果: 50/50 ALL PASS
+      SDK: kylin-coreai-embedding 1.2.0.0-0k0.4, Runtime 1.3.0
+      模型: ensemble-embd_gte-base_uint8-text
+      Bridge: loaded=True, has_session=True
+      health() D11A 字段: model/errors/lifecycle ALL PASS
+      lifecycle: READY（完整状态名）
+      延迟: avg=41.3ms p99=44.2ms < 架构预算 180ms
+      缓存命中延迟: 0.1ms（5次）
+      ABI 符号: 62 个导出（grep -wq 精确匹配，1 个 warn-not-fail）
+      日志: 无正文残留
+      日志: evidence/l2-kylin-vm/d11a_evidence_20260831_204650_vm_verify.log
+      全量测试: evidence/l2-kylin-vm/d11a_evidence_20260831_204650_test_all.log
