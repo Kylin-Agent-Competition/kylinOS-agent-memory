@@ -40,6 +40,11 @@ RRF_DEFAULT_K = 60
 TOKEN_ESTIMATOR_VERSION = "character-count/v1"
 TOKEN_ESTIMATOR_SEMANTICS = "Unicode code point count; not a model tokenizer"
 FILTER_DIAGNOSTICS_POLICY_VERSION = "retrieval-filter-diagnostics/v1"
+# 公共 filter_diagnostics 的安全泛化原因码：跨用户命中在普通检索结果中记为
+# security_filtered；精确 cross_user 计数仅存在于可信内部 telemetry/debug 边界
+# （REWORK #111 MEDIUM-01，方案 A）。
+PUBLIC_SECURITY_FILTERED_REASON = "security_filtered"
+INTERNAL_CROSS_USER_REASON = "cross_user"
 
 
 def _final_score(
@@ -513,9 +518,38 @@ def _fuse_retrieval_with_diagnostics(
 
 
 
+def _to_public_filter_diagnostics(
+    precise: dict[str, object],
+) -> dict[str, object]:
+    """把内部精确过滤诊断泛化为普通检索 consumer 可见的版本。
+
+    MEDIUM-01（REWORK #111 方案 A）：精确 ``cross_user`` 计数是跨用户存在性
+    oracle，普通检索 consumer 可通过 ``cross_user > 0`` 反推召回命中过他人数据，
+    因此公共 ``RetrievalOutcome.filter_diagnostics`` 将其泛化为
+    ``security_filtered``。精确计数仅保留在可信内部 telemetry/debug 边界
+    （``_retrieve_graceful_with_internal_diagnostics``），不进入公共返回。
+    """
+    dropped_by_reason = dict(precise.get("dropped_by_reason", {}))
+    cross_user_count = dropped_by_reason.pop(INTERNAL_CROSS_USER_REASON, 0)
+    if cross_user_count:
+        dropped_by_reason[PUBLIC_SECURITY_FILTERED_REASON] = (
+            dropped_by_reason.get(PUBLIC_SECURITY_FILTERED_REASON, 0)
+            + cross_user_count
+        )
+    return {
+        **precise,
+        "dropped_by_reason": dict(sorted(dropped_by_reason.items())),
+    }
+
+
 @dataclass
 class RetrievalOutcome:
-    """检索结果 + 降级通道说明（服务故障时单路降级不中断整体）。"""
+    """检索结果 + 降级通道说明（服务故障时单路降级不中断整体）。
+
+    filter_diagnostics 为普通检索 consumer 可见的聚合过滤诊断：只含计数与泛化
+    原因码（如 ``security_filtered``），不含正文、候选标识、用户标识或查询内容；
+    精确 ``cross_user`` 等内部原因仅存在于可信内部 telemetry/debug 边界。
+    """
 
     candidates: list[RetrievalCandidate]
     degraded_channels: dict[str, str] = field(default_factory=dict)
@@ -527,22 +561,24 @@ class RetrievalOutcome:
         return bool(self.degraded_channels)
 
 
-def retrieve_graceful(
+def _retrieve_graceful_impl(
     *,
     fts5_search,
     vector_search,
     truth: dict[tuple[str, str, str], TruthRecord],
     flt: RetrievalFilter,
-    k: int = RRF_DEFAULT_K,
-    top_k: Optional[int] = None,
-    token_budget: Optional[int] = None,
-    rerank_policy: Optional[RerankPolicy] = None,
-) -> RetrievalOutcome:
-    """执行两路召回并融合；单路故障时降级为空命中的该路，不抛未捕获异常。
+    k: int,
+    top_k: Optional[int],
+    token_budget: Optional[int],
+    rerank_policy: Optional[RerankPolicy],
+) -> tuple[RetrievalOutcome, dict[str, object]]:
+    """执行两路召回并融合，返回普通结果与精确内部过滤诊断。
 
     - fts5_search / vector_search 均为无参可调用对象，返回 list[RetrievalHit]。
     - 某路抛出异常时，该路命中记为空，并把错误登记到 degraded_channels。
     - 正常那路命中仍参与融合，保证服务故障时可解释降级而非整体崩溃。
+    - 返回的精确过滤诊断（含 cross_user 计数）仅供可信内部调用方使用；公共
+      RetrievalOutcome.filter_diagnostics 已泛化（cross_user → security_filtered）。
     """
     _validate_preference_filter(flt)
     _validate_query_options(
@@ -564,7 +600,7 @@ def retrieve_graceful(
         vector_hits = []
         degraded["vector"] = f"{type(exc).__name__}: {exc}"
 
-    candidates, selection_diagnostics, filter_diagnostics = _fuse_retrieval_with_diagnostics(
+    candidates, selection_diagnostics, precise_filter_diagnostics = _fuse_retrieval_with_diagnostics(
         fts5_hits=fts5_hits,
         vector_hits=vector_hits,
         truth=truth,
@@ -584,9 +620,72 @@ def retrieve_graceful(
         })
         for candidate in candidates
     ]
-    return RetrievalOutcome(
+    outcome = RetrievalOutcome(
         candidates=candidates,
         degraded_channels=degraded,
         selection_diagnostics=selection_diagnostics,
-        filter_diagnostics=filter_diagnostics,
+        filter_diagnostics=_to_public_filter_diagnostics(precise_filter_diagnostics),
+    )
+    return outcome, precise_filter_diagnostics
+
+
+def retrieve_graceful(
+    *,
+    fts5_search,
+    vector_search,
+    truth: dict[tuple[str, str, str], TruthRecord],
+    flt: RetrievalFilter,
+    k: int = RRF_DEFAULT_K,
+    top_k: Optional[int] = None,
+    token_budget: Optional[int] = None,
+    rerank_policy: Optional[RerankPolicy] = None,
+) -> RetrievalOutcome:
+    """执行两路召回并融合；单路故障时降级为空命中的该路，不抛未捕获异常。
+
+    - fts5_search / vector_search 均为无参可调用对象，返回 list[RetrievalHit]。
+    - 某路抛出异常时，该路命中记为空，并把错误登记到 degraded_channels。
+    - 正常那路命中仍参与融合，保证服务故障时可解释降级而非整体崩溃。
+    - filter_diagnostics 为普通检索 consumer 可见的泛化聚合诊断（不含 cross_user
+      等内部原因码；跨用户命中记为 security_filtered）。
+    """
+    outcome, _ = _retrieve_graceful_impl(
+        fts5_search=fts5_search,
+        vector_search=vector_search,
+        truth=truth,
+        flt=flt,
+        k=k,
+        top_k=top_k,
+        token_budget=token_budget,
+        rerank_policy=rerank_policy,
+    )
+    return outcome
+
+
+def _retrieve_graceful_with_internal_diagnostics(
+    *,
+    fts5_search,
+    vector_search,
+    truth: dict[tuple[str, str, str], TruthRecord],
+    flt: RetrievalFilter,
+    k: int = RRF_DEFAULT_K,
+    top_k: Optional[int] = None,
+    token_budget: Optional[int] = None,
+    rerank_policy: Optional[RerankPolicy] = None,
+) -> tuple[RetrievalOutcome, dict[str, object]]:
+    """可信内部 telemetry/debug 专用入口（internal-only 边界）。
+
+    仅限可信内部 diagnostics/observability 消费者调用：返回的精确过滤诊断
+    （含 ``cross_user`` 计数）绝不进入 IPC、C 轨/客户端或用户可观察返回；
+    公共 ``RetrievalOutcome.filter_diagnostics`` 仍为泛化版本（cross_user →
+    security_filtered）。
+    """
+    return _retrieve_graceful_impl(
+        fts5_search=fts5_search,
+        vector_search=vector_search,
+        truth=truth,
+        flt=flt,
+        k=k,
+        top_k=top_k,
+        token_budget=token_budget,
+        rerank_policy=rerank_policy,
     )
