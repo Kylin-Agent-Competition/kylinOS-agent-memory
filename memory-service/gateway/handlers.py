@@ -21,6 +21,14 @@ from db.uow import UnitOfWork
 from gateway.protocol import ERROR_CODE_UNSUPPORTED_METHOD, RequestValidationError
 from gateway.registry import HandlerRegistry, RequestContext
 from observability.request_context import set_request_context
+from pipeline.pipeline import EventPipeline
+from pipeline.schemas import (
+    ConsentScope,
+    EventValidationError,
+    SensitivityLevel,
+)
+from security.source_admission import SourceAdmissionPolicy
+from service.contracts import ServiceRequestContext
 from service.source_resolver import ResolvedContent, SourceResolver
 
 logger = logging.getLogger(__name__)
@@ -381,3 +389,297 @@ def register_turn_finalized_handler(
         return response
 
     registry.register("turn.finalized", handler)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# event.ingest（ADR-014：FRZ-IPC-007 写方法，CANDIDATE/BLOCKED_BY_HOST_MAPPING）
+# ═══════════════════════════════════════════════════════════════════
+
+_SCHEMA_VERSION_EVENT_INGEST = "0.1"
+
+# 安全类 REJECT reason_code（安全/consent 类，内容强制 NULL；lifecycle reject 不在此列）
+_SECURITY_CLASS_REJECT_REASONS = frozenset(
+    {
+        "event_should_ignore",
+        "event_status_ignored",
+        "security_gate_triggered",
+        "event_sensitive_high",
+        "event_sensitive_critical",
+        "tool_payload_unchecked",
+        "consent_not_granted",
+    }
+)
+
+
+def _event_ingest_content_suppressed(
+    event,
+    result,
+    *,
+    admission_decision: str,
+    admission_reason_code: str,
+) -> bool:
+    """内容（content_summary/raw_payload_ref/content_fingerprint）是否强制 NULL。
+
+    ADR-013/014 HIGH-03：is_sensitive_matched / high|critical / security reject /
+    consent_scope=none；普通质量型 AUDIT_ONLY 与 lifecycle reject（cancelled/timeout）
+    不强制清空（保留已脱敏摘要，MEDIUM-07）。
+    """
+    if event.consent_scope == ConsentScope.NONE:
+        return True
+    if event.is_sensitive_matched:
+        return True
+    if event.sensitivity in (SensitivityLevel.HIGH, SensitivityLevel.CRITICAL):
+        return True
+    if event.should_ignore or result.security_gate_triggered:
+        return True
+    if admission_decision == "reject" and admission_reason_code in _SECURITY_CLASS_REJECT_REASONS:
+        return True
+    return False
+
+
+def _event_ingest_request_fingerprint(*, method: str, event, result) -> str:
+    """ADR-014 v5 privacy-safe request_fingerprint（PipelineResult 后置计算）。
+
+    业务语义字段：event_id/user_id/actor_id/session_id/source_type/event_type/
+    occurred_at(UTC ms)/event_content_identity/consent_scope/source_business_status。
+    sensitive/security reject/consent none → 内容身份取固定安全占位 <SENSITIVE-OMITTED>
+    （不由敏感正文派生确定性 SHA-256，HIGH-01）。
+    """
+    sensitive = (
+        event.is_sensitive_matched
+        or event.sensitivity in (SensitivityLevel.HIGH, SensitivityLevel.CRITICAL)
+        or event.consent_scope == ConsentScope.NONE
+        or result.security_gate_triggered
+    )
+    if sensitive:
+        content_identity = repo.SENSITIVE_OMITTED
+    else:
+        content_identity = repo.event_content_identity(
+            content_summary=event.content_summary,
+            raw_payload_ref=event.raw_payload_ref,
+        )
+    fields: Dict[str, Any] = {
+        "event_id": event.event_id,
+        "user_id": event.user_id,
+        "actor_id": event.actor_id,
+        "session_id": event.session_id,
+        "source_type": event.source_type.value,
+        "event_type": event.event_type.value,
+        "occurred_at": _canonical_ts(event.occurred_at.isoformat()),
+        "event_content_identity": content_identity,
+        "consent_scope": event.consent_scope.value,
+        "source_business_status": event.source_business_status.value,
+    }
+    canon = {k: (v if v is not None else "<absent>") for k, v in fields.items()}
+    canonical = json.dumps(canon, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(f"{method}\n{canonical}".encode("utf-8")).hexdigest()
+
+
+def register_event_ingest_handler(
+    registry: HandlerRegistry,
+    *,
+    uow_factory: Callable[[], UnitOfWork],
+    trusted_identity: Optional[Any] = None,
+    pipeline: Optional[EventPipeline] = None,
+) -> None:
+    """显式注册 `event.ingest`（ADR-014 activation 方案 A+B 测试态 seam）。
+
+    production `register_default_handlers` 不含它；test/validation profile 调用本函数
+    注册。trusted_identity 为 None（test/validation：仅声明内部自洽，非宿主认证证据）；
+    提供时（production ACTIVE 硬门禁模拟）在幂等缓存查找前执行 fail-close 比对。
+
+    handler 固定顺序（ADR-014 v5，严禁重排）：
+    payload 结构预检 → trusted identity precheck（先于幂等查找）→ EventPipeline.process
+    纯计算（仅一次）→ privacy-safe request_fingerprint → UoW.execute_idempotent 单事务
+    （business_fn：event identity compare → consent 前置 → admission → dedup → 落库）。
+    """
+    pipeline = pipeline or EventPipeline()
+
+    def handler(payload: Dict[str, Any], ctx: RequestContext) -> Dict[str, Any]:
+        # 1. payload 结构预检（MEDIUM-04）：schema_version 显式必填且精确 "0.1"
+        if not isinstance(payload, dict):
+            raise RequestValidationError("payload must be object")
+        if "schema_version" not in payload:
+            raise RequestValidationError("missing required field: schema_version")
+        if payload["schema_version"] != _SCHEMA_VERSION_EVENT_INGEST:
+            raise RequestValidationError("unsupported_schema_version")
+
+        declared_user_id = payload.get("user_id")
+
+        # 2. trusted identity precheck（v5 前移，HIGH-01：先于任何 user-scoped idempotency lookup）
+        if trusted_identity is not None:
+            ti_user_id = (
+                trusted_identity.user_id
+                if hasattr(trusted_identity, "user_id")
+                else trusted_identity()
+            )
+            if ti_user_id != declared_user_id:
+                raise RequestValidationError("trusted identity mismatch")
+
+        # 3. EventPipeline.process(raw) 纯计算（仅一次，无 DB 副作用；敏感判定唯一真源）
+        try:
+            result = pipeline.process(payload)
+        except EventValidationError as exc:
+            raise RequestValidationError("event validation failed") from exc
+
+        event = result.event
+        user_id = event.user_id
+        session_id = event.session_id
+        event_id = event.event_id
+        trace_id = ctx.trace_id  # envelope 顶级（唯一真源，ADR-014）
+
+        # trace_id 一致性（payload 若带 trace_id 必须等于 envelope）
+        if event.trace_id is not None and event.trace_id != trace_id:
+            raise RequestValidationError("inconsistent_value: trace_id")
+
+        # idempotency_key 权威合并（ADR-014）：envelope 顶级 → payload；不一致 → INVALID_REQUEST
+        env_key = ctx.idempotency_key
+        payload_key = event.idempotency_key
+        if env_key is not None and env_key != payload_key:
+            raise RequestValidationError("inconsistent_value: idempotency_key")
+        idem_key = env_key if env_key is not None else payload_key
+
+        set_request_context(
+            request_id=ctx.request_id,
+            trace_id=trace_id,
+            method=ctx.method,
+            event_id=event_id,
+        )
+
+        # 4. privacy-safe request_fingerprint（PipelineResult 之后计算）
+        fp = _event_ingest_request_fingerprint(method="event.ingest", event=event, result=result)
+
+        # Context Adapter（D-9/MEDIUM-02）：RequestContext → ServiceRequestContext
+        ctx_svc = ServiceRequestContext(
+            user_id=event.user_id,
+            actor_id=event.actor_id,
+            trace_id=trace_id,
+            session_id=event.session_id,
+        )
+
+        def _business(uow: UnitOfWork) -> Dict[str, Any]:
+            # 事件级冲突处置（HIGH-01/MEDIUM-01）：pipeline 纯计算在前、identity 比较在后
+            existing = repo.get_source_event_by_event_id(
+                uow.conn, user_id=user_id, event_id=event_id
+            )
+            if existing is not None:
+                sensitive = (
+                    event.is_sensitive_matched
+                    or event.sensitivity in (SensitivityLevel.HIGH, SensitivityLevel.CRITICAL)
+                    or event.consent_scope == ConsentScope.NONE
+                    or event.should_ignore
+                )
+                incoming_fp = repo.compute_event_identity(event, sensitive=sensitive)
+                existing_fp = repo.compute_row_identity(existing)
+                if incoming_fp == existing_fp:
+                    # 幂等重放：返回首次完整结果，不重跑准入/落库
+                    return {
+                        "source_event_id": existing["id"],
+                        "event_id": event_id,
+                        "admission_decision": existing["admission_decision"],
+                        "admission_reason_code": existing["admission_reason_code"],
+                        "duplicate": True,
+                        "duplicate_reason": "idempotent_replay",
+                        "duplicate_of": None,
+                    }
+                raise repo.EventIdentityConflict(
+                    "event_id reused with different immutable identity"
+                )
+
+            # D 轨 consent 前置判定（D-8，handler 层实现，不改 security/）
+            if event.consent_scope == ConsentScope.NONE:
+                admission_decision = "reject"
+                admission_reason_code = "consent_not_granted"
+            else:
+                admission = SourceAdmissionPolicy().evaluate(result, ctx_svc)
+                admission_decision = admission.decision.value
+                admission_reason_code = admission.reason_code
+
+            suppressed = _event_ingest_content_suppressed(
+                event,
+                result,
+                admission_decision=admission_decision,
+                admission_reason_code=admission_reason_code,
+            )
+            content_fingerprint = None if suppressed else event.content_fingerprint
+
+            # 指纹去重（保留事件 + 标记；find_dedup_group_head + insert 同事务，MEDIUM-04）。
+            # dedup_group 为组聚合键（含 user scope），head 与 duplicate 同值；仅 head 的
+            # duplicate_of IS NULL（D9-D 消费资格谓词，MEDIUM-02）。
+            dedup_group: Optional[str] = None
+            duplicate_of: Optional[int] = None
+            if content_fingerprint is not None:
+                dedup_group = f"dedup:{user_id}:{content_fingerprint}:{event.source_type.value}"
+                head = repo.find_dedup_group_head(
+                    uow.conn,
+                    user_id=user_id,
+                    content_fingerprint=content_fingerprint,
+                    source_type=event.source_type.value,
+                )
+                if head is not None:
+                    duplicate_of = int(head["id"])
+
+            now = datetime.now(timezone.utc).isoformat()
+            source_event_id = repo.insert_source_event(
+                uow.conn,
+                user_id=user_id,
+                event_id=event_id,
+                actor_id=event.actor_id,
+                session_id=session_id,
+                turn_id=event.turn_id,
+                tool_call_id=event.tool_call_id,
+                source_type=event.source_type.value,
+                event_type=event.event_type.value,
+                schema_version=event.schema_version,
+                trace_id=trace_id,
+                source_reference=event.source_reference,
+                raw_payload_ref=None if suppressed else event.raw_payload_ref,
+                content_summary=None if suppressed else event.content_summary,
+                idempotency_key=idem_key,
+                consent_scope=event.consent_scope.value,
+                source_business_status=event.source_business_status.value,
+                sensitivity=event.sensitivity.value,
+                is_sensitive_matched=1 if event.is_sensitive_matched else 0,
+                should_ignore=1 if event.should_ignore else 0,
+                payload_security_checked=1 if event.payload_security_checked else 0,
+                memory_type=event.memory_type.value if event.memory_type else None,
+                requires_embedding=1 if event.requires_embedding else 0,
+                has_structured_payload=1 if event.has_structured_payload else 0,
+                language_tag=event.language_tag,
+                occurred_at=_canonical_ts(event.occurred_at.isoformat()),
+                captured_at=_canonical_ts(event.captured_at.isoformat()),
+                content_fingerprint=content_fingerprint,
+                dedup_group=dedup_group,
+                duplicate_of=duplicate_of,
+                admission_decision=admission_decision,
+                admission_reason_code=admission_reason_code,
+                processing_status="pending",
+                created_at=now,
+                updated_at=now,
+            )
+
+            is_duplicate = duplicate_of is not None
+            return {
+                "source_event_id": source_event_id,
+                "event_id": event_id,
+                "admission_decision": admission_decision,
+                "admission_reason_code": admission_reason_code,
+                "duplicate": is_duplicate,
+                "duplicate_reason": "content_duplicate" if is_duplicate else None,
+                "duplicate_of": duplicate_of,
+            }
+
+        try:
+            with uow_factory() as uow:
+                response, _from_cache = uow.execute_idempotent(
+                    user_id=user_id,
+                    session_id=session_id,
+                    idempotency_key=idem_key,
+                    business_fn=lambda: _business(uow),
+                    request_fingerprint=fp,
+                )
+        except repo.EventIdentityConflict as exc:
+            raise RequestValidationError(str(exc)) from exc
+        return response
+
+    registry.register("event.ingest", handler)
