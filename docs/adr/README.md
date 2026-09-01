@@ -35,6 +35,8 @@
 | [ADR-010：新增 `turn.finalized` IPC 方法](010-turn-finalized-method.md) | ✅ 已采纳（2026-08-27，D 决策 + Reviewer E 签署） | 方案 A1：FRZ-IPC-007 新增写方法；payload 对齐 C 轨 `TurnFinalizedEvent` 候选契约形成 D 轨 IPC 映射；Upsert 落库 + host/db turn_id 区分 + envelope 唯一真源 + 幂等冲突语义 |
 | [ADR-011：新增 nullable trace_id / host_turn_id 列](011-trace-id-columns.md) | ✅ 已采纳（2026-08-27，D 决策 + Reviewer E 签署） | 方案 B1：turns 增 trace_id + host_turn_id（部分唯一索引），memory_entries 增 trace_id；迁移 `20260826_add_trace_id.py`（ADR-007 命名，downgrade 表重建合规） |
 | [ADR-012：`weighted-rrf/v1` 显式加权融合](012-weighted-rrf-v1.md) | 提议 | 仅显式策略可用；独立算法身份、解释与评测配置留痕，不替换 `rrf-v1` 默认值 |
+| [ADR-013：新增 `source_events` 表持久化多源事件](013-source-events-table.md) | ✅ D 已决策（2026-08-31，v5 按 Review #83 第五轮重冻结），待 Reviewer E 签署 | 方案 A：FRZ-DB-001 新增第 6 张表（35 字段 + 5 索引）；event_id 全局唯一 + identity collision 契约（v4：独立稳定 identity 字段集，排除 idempotency_key/session_id，纳入 actor_id）；指纹"保留事件+标记去重"（dedup_group 含 user scope，dedup head 与插入同 UoW 原子）；敏感命中 content_summary/content_fingerprint 强制 NULL；processing_status 首次 pending + 三条件消费谓词；v5：与 ADR-014 统一固定顺序 + 敏感 hash 四路旁路防护（含 idempotency_cache request_fingerprint 安全占位） |
+| [ADR-014：新增 `event.ingest` IPC 写方法](014-event-ingest-method.md) | ✅ D 已决策（2026-08-31，v5 按 Review #83 第五轮重冻结），待 Reviewer E 签署 | 方案 A：FRZ-IPC-007 新增写方法；flat payload；schema_version IPC required override；consent 前置 REJECT；Context Adapter 与宿主注入身份（payload 身份仅属声明）；duplicate_reason 区分；request_fingerprint 幂等冲突 + UoW.execute_idempotent 单事务；v5：trusted identity precheck 前置于幂等查找（cache-bypass 防护）+ Pipeline 后置计算 privacy-safe request_fingerprint（敏感事件固定安全占位）+ cache replay 仅纯计算；CANDIDATE/BLOCKED_BY_HOST_MAPPING |
 
 **ADR-001 已形成 D3-B 冻结候选；独立审查前不得将状态改为“已采纳”。**
 
