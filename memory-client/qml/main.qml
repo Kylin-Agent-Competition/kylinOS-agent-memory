@@ -123,6 +123,25 @@ ApplicationWindow {
                 text: qsTr("D6 Behavior Observe")
                 onClicked: stack.replace(behaviorObservePage)
             }
+            // D8-C 知识详情 / 冲突对比 / 生命周期状态（Demo / Prototype）
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                text: qsTr("Knowledge Detail")
+                onClicked: stack.replace(knowledgeDetailPage)
+            }
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                text: qsTr("Conflict Compare")
+                onClicked: stack.replace(conflictComparePage)
+            }
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                text: qsTr("Lifecycle Status")
+                onClicked: stack.replace(lifecycleStatusPage)
+            }
             Item { Layout.fillHeight: true }
             Button {
                 Layout.fillWidth: true
@@ -149,6 +168,10 @@ ApplicationWindow {
     Component { id: toolAdapterPage; ToolAdapterPage { viewModel: window.viewModel } }
     Component { id: manualConfigPage; ManualConfigPage { viewModel: window.viewModel } }
     Component { id: behaviorObservePage; BehaviorObservePage { viewModel: window.viewModel } }
+    // D8-C 知识详情 / 冲突对比 / 生命周期状态 Demo 页面
+    Component { id: knowledgeDetailPage; KnowledgeDetailPage { viewModel: window.viewModel } }
+    Component { id: conflictComparePage; ConflictComparisonPage { viewModel: window.viewModel } }
+    Component { id: lifecycleStatusPage; LifecycleStatusPage { viewModel: window.viewModel } }
 
     // 连接错误与请求失败统一弹出提示（不展示原始正文/凭据）。
     // Qt 5.12 风格：信号参数按名直接可见。

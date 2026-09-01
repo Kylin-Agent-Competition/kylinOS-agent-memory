@@ -83,6 +83,32 @@ Chat DB / ChatRecord / model\_request / TurnExtractionAdapter）。**
 
 * `memory_items` 展示作为 Demo 扩展暂存，待正式契约决策
 
+### D8-C 知识详情 / 冲突对比 / 生命周期状态（Demo / Prototype）
+
+**D8-C Demo / Prototype（CANDIDATE / pending ADR；未接入真实知识 / 冲突 / 生命周期后端；
+C-D8 保持 OPEN）。**
+
+* 候选 IPC 方法（`protocol_adapter.{h,cpp}`）：`knowledge.detail` / `conflict.compare` /
+  `lifecycle.status`，标记 `CANDIDATE / pending ADR`；生产默认返回 `UNSUPPORTED_METHOD`，
+  Demo / 测试态 Mock Gateway 可注册 handler。
+
+* MemoryClient 便捷方法：`sendKnowledgeDetailRequest()` / `sendConflictCompareRequest()` /
+  `sendLifecycleStatusRequest()`，复用 `sendRequest()` 共享 envelope 编码与 pending 跟踪。
+
+* ViewModel Pipeline：`runKnowledgeDetailPipeline()` / `runConflictComparePipeline()` /
+  `runLifecycleStatusPipeline()`；三组独立 busy / stage / error / pending，沿用 D5 REWORK §C1
+  模式避免多请求竞态；响应投影到 `knowledgeDetail` / `conflictCandidates` / `lifecycleItems`。
+
+* QML 页面：`KnowledgeDetailPage.qml` / `ConflictComparisonPage.qml` /
+  `LifecycleStatusPage.qml`（目标 Qt 5.12，ScrollView 防 960×640 溢出）。
+
+* L0 测试：`test_d8c_knowledge_conflict_lifecycle.cpp`（14 用例：K1-K3 / C1-C3 / L1-L3 /
+  E1-E3 / R1-R2）。
+
+**关键声明（D8-C）**：本实现仅为 memory-client 侧 Demo / Prototype；不关闭 C-D8；
+不接入真实 AI Assistant Hook / Chat DB / 知识 / 冲突 / 生命周期持久化后端；
+三个候选方法 pending ADR 立项；L2 宿主验证需在麒麟 VM 上另行执行。
+
 ## 明确不负责的内容
 
 * 不实现 Python 侧服务逻辑
@@ -114,13 +140,17 @@ memory-client/
 │       ├── StatusPage.qml
 │       ├── MemoryQueryPage.qml
 │       ├── PreferenceEditorPage.qml   # 占位（待 E 轨 Schema）
-│       └── VerticalLinkPage.qml       # 新增：D5-C Demo（Pre/Post + 原文隔离）
+│       ├── VerticalLinkPage.qml       # 新增：D5-C Demo（Pre/Post + 原文隔离）
+│       ├── KnowledgeDetailPage.qml    # D8-C 知识详情 Demo
+│       ├── ConflictComparisonPage.qml # D8-C 冲突对比 Demo
+│       └── LifecycleStatusPage.qml   # D8-C 生命周期状态 Demo
 └── tests/
     ├── CMakeLists.txt
     ├── mock_gateway_server.{h,cpp}    # QLocalServer Mock
     ├── test_protocol_adapter.cpp      # L0 协议单元测试
     ├── test_memory_client_mock.cpp    # L0 Client ↔ Mock Gateway
-    └── test_d5_vertical_link_demo.cpp # L0 D5-C Demo（§A/B/C 10 用例）
+    ├── test_d5_vertical_link_demo.cpp # L0 D5-C Demo（§A/B/C 10 用例）
+    └── test_d8c_knowledge_conflict_lifecycle.cpp # L0 D8-C Demo（14 用例）
 ```
 
 ## 构建
@@ -150,7 +180,8 @@ cmake --build memory-client/build
 
 * **步骤**：cmake configure（QML OFF / tests ON）→ cmake --build → `ctest --output-on-failure --verbose`
 
-* **覆盖 3 个 ctest**：`protocol_adapter` / `memory_client_mock` / `d5_vertical_link_demo`
+* **覆盖 ctest 目标**：`protocol_adapter` / `memory_client_mock` / `d5_vertical_link_demo` /
+  `d6c_multi_source_adapters` / `d7c_preference_editor` / `d8c_knowledge_conflict_lifecycle`
 
 ## 验收要求
 
