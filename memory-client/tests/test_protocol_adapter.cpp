@@ -71,6 +71,8 @@ private slots:
     void decodeRejectsHighBitSetLength();
     void decodeRejectsMaxUint32Length();
     void decodeRejectsJustOverLimit();
+    // D7C 偏好 IPC 方法常量（随 D7C PR #87 落地）
+    void d7cPreferenceMethodConstantsRegistered();
 };
 
 void ProtocolAdapterTest::encodeDecodeRoundTrips()
@@ -757,6 +759,19 @@ void ProtocolAdapterTest::parseResponseRejectsBareTimestampServerTs()
     const auto [parts, error] = client::parseResponse(response);
     QCOMPARE(error.kind, client::ProtocolErrorKind::InvalidServerTs);
     QVERIFY(!parts.has_value());
+}
+
+// D7C：偏好 IPC 方法常量注册（与 memory-service/gateway/preference_handlers.py 对齐）
+void ProtocolAdapterTest::d7cPreferenceMethodConstantsRegistered()
+{
+    QCOMPARE(client::methods::kPreferenceList, QStringLiteral("preference.list"));
+    QCOMPARE(client::methods::kPreferenceCreate, QStringLiteral("preference.create"));
+    QCOMPARE(client::methods::kPreferenceUpdate, QStringLiteral("preference.update"));
+    QCOMPARE(client::methods::kPreferenceRollback, QStringLiteral("preference.rollback"));
+    QCOMPARE(client::methods::kPreferenceHistory, QStringLiteral("preference.history"));
+
+    // 新方法不改变既有冻结错误码枚举（FRZ-IPC-002 5 项）
+    QVERIFY(client::isValidErrorCode(client::error_codes::kInvalidRequest));
 }
 
 QTEST_APPLESS_MAIN(ProtocolAdapterTest)

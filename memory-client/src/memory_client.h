@@ -83,6 +83,49 @@ public:
     // 便捷方法：memory.health 请求，无 payload。
     Q_INVOKABLE QString sendHealthRequest();
 
+    // D5-C 便捷方法：memory.store 请求（记忆条目写入骨架）。
+    // ⚠️  D 轨 FRZ-IPC-007 持续返回 UNSUPPORTED_METHOD（ADR-010 §决策明确
+    //     memory.store 保持未实现，不动）。仅保留常量 / 入口方便对比测试。
+    Q_INVOKABLE QString sendMemoryStoreRequest(const QJsonObject& payload);
+
+    // D5-C 便捷方法：发送 TurnFinalizedEvent（Post-Turn 写链路 Demo）。
+    // 路由：turn.finalized（ADR-010 冻结；CANDIDATE / BLOCKED_BY_HOST_MAPPING；
+    // 生产默认不注册；Demo/测试可注册）。
+    // payload = eventJson，字段严格对齐 ADR-010 IPC 映射契约：
+    //   metadata{schema_version,event_id,user_id,session_id,turn_id,
+    //     idempotency_key,trace_id?,occurred_at,collected_at,source_reference}
+    //   事件(is_final,finalized_at,final_message_id?,finalization_reason?,
+    //     stop_reason?,retry_of_turn_id?,tool_call_ids?)
+    // ADR-010 trace_id 唯一真源：envelope.trace_id 取 metadata.trace_id
+    // （若提供）；不再使用旧 {event_type,event_body} wrapper。
+    Q_INVOKABLE QString sendTurnFinalizedEvent(const QJsonObject& eventJson);
+
+    // D7C 偏好 IPC 便捷方法（D 轨契约变更，随 D7C PR #87 落地）。
+    // payload 字段与 memory-service/gateway/preference_handlers.py 对齐：
+    //   - list:     user_id / preference_key? / preference_scope? / include_history?
+    //   - create:   user_id / preference_key / preference_scope / preference_value /
+    //               memory_status? / is_temporary? / should_persist? / evidence_event_ids?
+    //   - update:   user_id / preference_key / preference_scope / new_value /
+    //               memory_status? / evidence_event_ids?
+    //   - rollback: user_id / preference_key / preference_scope / target_version(int)
+    //   - history:  user_id / preference_key / preference_scope
+    // idempotency_key 可在 payload 内提供（服务端亦接受 envelope 顶层）。
+    Q_INVOKABLE QString sendPreferenceListRequest(const QJsonObject& payload);
+    Q_INVOKABLE QString sendPreferenceCreateRequest(const QJsonObject& payload);
+    Q_INVOKABLE QString sendPreferenceUpdateRequest(const QJsonObject& payload);
+    Q_INVOKABLE QString sendPreferenceRollbackRequest(const QJsonObject& payload);
+    Q_INVOKABLE QString sendPreferenceHistoryRequest(const QJsonObject& payload);
+
+    // D6-C 候选写方法（不冻结，ADR-013/014/015 待立项）。
+    //   - tool.execution:      eventJson 含 metadata{...} + execution_status + ...
+    //   - manual.config.ingest: eventJson 含 metadata{...} + config{...}
+    //   - behavior.observe:    eventJson 含 metadata{...} + mapping_status=PENDING_C_CONFIRMATION
+    // trace_id 唯一真源：envelope.trace_id 取 metadata.trace_id（若提供）。
+    // 生产 Gateway 默认不注册 → UNSUPPORTED_METHOD（符合预期）。
+    Q_INVOKABLE QString sendToolExecutionEvent(const QJsonObject& eventJson);
+    Q_INVOKABLE QString sendManualConfigEvent(const QJsonObject& eventJson);
+    Q_INVOKABLE QString sendBehaviorEvent(const QJsonObject& eventJson);
+
 signals:
     void socketPathChanged();
     void connectionStateChanged();
@@ -110,6 +153,10 @@ private:
     void failInFlightRequests(const QString& errorCode, const QString& safeMessage);
     QString generateRequestId() const;
 
+    // 共享写链路：供 sendTurnFinalizedEvent / sendToolExecutionEvent /
+    //     sendManualConfigEvent / sendBehaviorEvent 复用。
+    QString sendEventEnvelope(const QString& method, const QJsonObject& eventJson);
+
     QString socketPath_;
     ConnectionState connectionState_ = ConnectionState::Disconnected;
     QString lastError_;
@@ -117,9 +164,12 @@ private:
     QPointer<QLocalSocket> socket_;
     QByteArray receiveBuffer_;
 
-    // request_id -> method（用于响应关联与诊断）。本骨架不依赖服务端回传 request_id，
-    // 但保留映射以便 L1 联调时验证关联正确性。
-    std::unordered_map<std::string, QString> pendingRequests_;
+    // request_id -> {method, trace_id}（用于响应关联与 trace_id 一致性校验）。
+    struct PendingRequest {
+        QString method;
+        QString traceId;
+    };
+    std::unordered_map<std::string, PendingRequest> pendingRequests_;
 };
 
 }  // namespace kylin::memory::client::v1

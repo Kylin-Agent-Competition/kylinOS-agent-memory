@@ -1112,3 +1112,60 @@ entries:
       以记录的 g++ 命令从 vector_bridge_cli.cpp (SHA256 28ca63509d1c4f6af2ef410bf3a9e1a4cb05236e2514e5d6885f1597f3c3b281) 构建，exit code 0。
       CLI runner 与 Provider runner 均 exit code 0；两套 d6b_ Collection cleanup=PASS。
       原始输出同时记录两条实际子 runner 命令、环境、包版本、CLI/runner/provider SHA 与逐项 PASS 结果。
+
+  - id: "D5D-L2-VM-20260828"
+    task_id: "D5-D"
+    description: "PR-2（PR #65）麒麟 VM L2 验证 L2-1~L2-5（2026-08-28）：迁移 upgrade/schema 对照/FK/往返/FTS 软删过滤；turn.finalized 真实 CLI 端到端（正向/幂等/跨用户/空映射/production UNSUPPORTED_METHOD）；health degraded；JSON 日志 event_id+PII；systemd --user 部署"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/pr65_l2_vm_20260828.log"
+    evidence_commit: "49263457593037d5f01fdd0e0799d422a62e84a5"
+    report: "docs/day10/15_pr3_l2_verification_checklist.md"
+    tested_commit: "fac5411"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    date: "2026-08-28"
+    reviewer: "待签（Reviewer E）"
+    limitations: "L2 完整执行于 fac5411；946eb3d 修改 Outbox event_id 传递与 resolver miss 日志后未重跑完整 L2（定向 30+23 passed）；health DB 不可达/metrics 哨兵由 VM L1 handler 单测覆盖（SELECT 1 对存活池化连接无页 I/O，无法外部伪造）"
+    checksum_sha256: "FF78527139A2B52CE784A5CB3D88B1D053B7E10F4F50EE82EBBE1BEA144B3416"
+    details: |
+      执行环境: 银河麒麟桌面 V11 x86_64，SSH 127.0.0.1:2222，用户 kylin-agent，venv sqlalchemy 2.0.52 / alembic 1.19.1。
+      L2-1 迁移: upgrade head exit=0；turns.trace_id/host_turn_id、memory_entries.trace_id、idx_turns_host_turn_id(唯一+WHERE host_turn_id IS NOT NULL)、memory_fts+4 触发器、alembic_version 全落位；PRAGMA foreign_key_check 空；downgrade->upgrade 往返 exit=0；MATCH 麒麟 insert=1 / 软删后=0。
+      L2-2 turn.finalized: 正向写 status ok（db_turn_id=1, host_turn_id=H-1）+ original_user_text 落库；Outbox 入队 payload 含 trace_id/host_turn_id/UTC 毫秒；幂等回放相同响应；跨用户毒素（B 复用 A 的 s1/H-1）-> INVALID_REQUEST 固定英文 + B 零副作用；空映射 resolver miss -> INTERNAL_ERROR 零副作用；production -> UNSUPPORTED_METHOD。
+      L2-3 health: 全绿 data.status=ok/db=ok/backlog=0；--no-outbox -> data.status=degraded；DB 不可达/metrics 哨兵分支 VM L1 handler 单测 3 passed。
+      L2-4 JSON 日志: 单行 JSON 含 trace_id/request_id/method/event_id；memory.retrieve 日志含 trace_id=L2R-1+request_id=req-r-1；Worker 日志含 trace_id=L2W-1+event_id=evt-W1（跨线程）；resolver 正文/source_reference 无 PII 泄漏。
+      L2-5 systemd: 默认库 alembic 迁移 ALEMBIC_EXIT=0；enable/start RC=0；socket /run/user/1000/kylin-memory/memory.sock 可达；health ok；restart active；stop inactive+socket 清理；enable --now 回退恢复 active。
+      归档: 完整日志 evidence/l2-kylin-vm/pr65_l2_vm_20260828.log；L1 全量 1003 passed/49 skipped @ fac5411（evidence/l1/pr65_l1_vm_checklist_20260828.log）。
+      tested_commit 说明: 完整 L1/L2 执行于 fac5411；946eb3d 后续代码修复（Outbox event_id + resolver miss 日志）经定向测试 30+23 passed；证据文件随 PR #65 合并 main @ 4926345 入库（evidence_commit）。checksum 以 git 仓库 LF 归一化 blob 为准（sha256sum over committed bytes），与 Windows 工作树 CRLF 副本哈希不同，勿混用。
+
+
+  - id: "D11A-L2-VERIFY"
+    task_id: "D11A"
+    description: "D11A 麒麟 VM 全功能联调验证——health 增强（model/errors/lifecycle）+ Outbox 桥接 + VM 检测 + 全量测试"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11a_evidence_20260831_204650_vm_verify.log"
+    tested_commit: "b16b00fb4a2a2cdd345704f1e3f20e80c3d4480a"  # 被测生产代码 branch tip（日志头声明一致；rebase 后对应 60a9ff9，生产代码零差异）
+    evidence_commit: "7991e70"  # 证据文件最终形态入库 commit（rebase 后为分支 tip，仅 evidence/脚本新行修正）
+    date: "2026-08-31"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "ABI 符号 `embedding_result_get_vector_data` 因 SDK 导出名与头文件不完全一致标记为 warn-not-fail（embed 功能已验证正常，bridge_loaded=True，dim=768）；`text_embedding_init_model` 仍为 HOST_UNTESTED（SDK 自动加载默认模型，未显式调用）；全链路 Vector 消费（R-9）pending，consumer 当前仅处理 memory.deletion 事件类型"
+    checksum_sha256: "a7caa9a55d78b3a588597dc089a38543c63532a01bede3344dd4845e892a5002"
+    details: |
+      VM 检测结果: 14/14 ALL PASS
+      全量测试结果: 50/50 ALL PASS
+      SDK: kylin-coreai-embedding 1.2.0.0-0k0.4, Runtime 1.3.0
+      模型: ensemble-embd_gte-base_uint8-text
+      Bridge: loaded=True, has_session=True
+      health() D11A 字段: model/errors/lifecycle ALL PASS
+      lifecycle: READY（完整状态名）
+      延迟: avg=41.3ms p99=44.2ms < 架构预算 180ms
+      缓存命中延迟: 0.1ms（5次）
+      ABI 符号: 62 个导出（grep -wq 精确匹配，1 个 warn-not-fail）
+      日志: 无正文残留
+      日志: evidence/l2-kylin-vm/d11a_evidence_20260831_204650_vm_verify.log
+      全量测试: evidence/l2-kylin-vm/d11a_evidence_20260831_204650_test_all.log

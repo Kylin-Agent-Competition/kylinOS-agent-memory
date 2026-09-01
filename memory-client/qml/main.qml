@@ -96,6 +96,33 @@ ApplicationWindow {
                 text: qsTr("Preferences")
                 onClicked: stack.replace(prefPage)
             }
+            // D5-C 首个真实垂直链路：Pre-Chat + Post-Turn + 原文隔离验证
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                highlighted: true
+                text: qsTr("D5 Vertical Link")
+                onClicked: stack.replace(verticalLinkPage)
+            }
+            // D6-C 多源 Adapter Demo（Tool / Manual Config / Behavior）
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                text: qsTr("D6 Tool Adapter")
+                onClicked: stack.replace(toolAdapterPage)
+            }
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                text: qsTr("D6 Manual Config")
+                onClicked: stack.replace(manualConfigPage)
+            }
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                text: qsTr("D6 Behavior Observe")
+                onClicked: stack.replace(behaviorObservePage)
+            }
             Item { Layout.fillHeight: true }
             Button {
                 Layout.fillWidth: true
@@ -117,6 +144,11 @@ ApplicationWindow {
     Component { id: statusPage; StatusPage { viewModel: window.viewModel } }
     Component { id: queryPage; MemoryQueryPage { viewModel: window.viewModel } }
     Component { id: prefPage; PreferenceEditorPage { viewModel: window.viewModel } }
+    Component { id: verticalLinkPage; VerticalLinkPage { viewModel: window.viewModel } }
+    // D6-C 多源 Adapter Demo 页面
+    Component { id: toolAdapterPage; ToolAdapterPage { viewModel: window.viewModel } }
+    Component { id: manualConfigPage; ManualConfigPage { viewModel: window.viewModel } }
+    Component { id: behaviorObservePage; BehaviorObservePage { viewModel: window.viewModel } }
 
     // 连接错误与请求失败统一弹出提示（不展示原始正文/凭据）。
     // Qt 5.12 风格：信号参数按名直接可见。

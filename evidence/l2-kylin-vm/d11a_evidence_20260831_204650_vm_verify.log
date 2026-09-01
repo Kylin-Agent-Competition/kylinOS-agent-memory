@@ -1,0 +1,115 @@
+==============================================
+ D11A VM 全功能联调检测
+ 时间: 2026-08-31T12:46:50Z
+ 提交: b16b00fb4a2a2cdd345704f1e3f20e80c3d4480a
+==============================================
+
+=== 1. 系统环境 ===
+  Python 版本: Python 3.12.3
+  [PASS] Python 可用
+  SDK 包检测:   [PASS] SDK 包检测
+  SDK .so 路径: -rw-r--r-- 1 root root 366624  3月27日 19:48 /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0
+  [PASS] SDK .so 存在
+  ldd 解析:   [PASS] SDK 动态库可解析
+  pytest 可用: pytest 9.1.1
+  [PASS] pytest 可用
+  Pydantic 版本: 2.13.5
+  [PASS] pydantic 可用
+
+=== 2. Embedding Service 健康检查 ===
+[1788180412207] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1788180412207] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
+[1788180412259] [32minfo [0m Proxy init success,sessionId is: 812397975 
+[1788180412260] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
+[1788180412260] [32minfo [0m Try to get default model 
+[1788180412274] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
+[1788180412274] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
+[1788180412276] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 812397975 
+[1788180412276] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
+  service: ok
+  provider: ready
+  bridge_loaded: True
+  bridge_has_session: True
+  degraded: False
+  sdk_missing: False
+  backlog: {'backlog': 0, 'oldest_pending_age_seconds': 0.0, 'backlog_alert': False, 'oldest_alert': False, 'thresholds': {'backlog_warn': 32, 'oldest_warn_seconds': 0.2}}
+  cache: {'size': 0, 'hits': 0, 'misses': 0, 'evictions': 0}
+  cache_invalidator: {}
+  model: {'name': 'ensemble-embd_gte-base_uint8-text', 'dimension': 768, 'loaded': True, 'ondevice': True}
+  errors: {'count': 0, 'last_code': '', 'last_message': '', 'last_time_seconds_ago': -1.0}
+  provider_lifecycle: READY
+  [WARN] cache_invalidator 未接线（set_extraction_provider() 未调用）
+  D11A 字段验证: ALL PASS
+  [PASS] health() 接口正常
+
+=== 3. Embedding 功能测试 ===
+[1788180413250] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1788180413250] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
+[1788180413566] [32minfo [0m Proxy init success,sessionId is: 699808377 
+[1788180413567] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
+[1788180413567] [32minfo [0m Try to get default model 
+[1788180413596] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
+[1788180413597] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
+[1788180413601] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 699808377 
+[1788180413601] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
+  embed 单条: ok=True degraded=None dim=768
+  缓存命中: True
+  embed_batch: ok=True count=3
+  [PASS] embed/embed_batch/缓存正常
+
+=== 4. CacheInvalidator 接线验证 ===
+[1788180414818] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1788180414818] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
+[1788180414871] [32minfo [0m Proxy init success,sessionId is: 1003605931 
+[1788180414871] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
+[1788180414871] [32minfo [0m Try to get default model 
+[1788180414886] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
+[1788180414886] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
+[1788180414890] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 1003605931 
+[1788180414890] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
+  CacheInvalidator: events_processed=1
+  embedding_invalidated=1
+  extraction_invalidated=0
+  幂等去重: True
+  Service 接线: invalidator 已连接
+  health.cache_invalidator: {'embedding_invalidated': 0, 'extraction_invalidated': 0, 'events_processed': 0, 'processed_events': 0, 'tracked_users': 0}
+  ALL PASS
+  [PASS] CacheInvalidator 接线验证
+
+=== 5. Outbox 就绪状态 ===
+  OutboxWorker 模块可导入
+  [PASS] Outbox 模块导入
+
+=== 6. 性能基准 ===
+[1788180416390] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1788180416390] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
+[1788180416419] [32minfo [0m Proxy init success,sessionId is: 1146304529 
+[1788180416419] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
+[1788180416420] [32minfo [0m Try to get default model 
+[1788180416471] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
+[1788180416471] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
+[1788180416480] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 1146304529 
+[1788180416480] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
+  延迟: avg=41.3ms p99=44.2ms samples=10
+  架构预算: ≤180ms — OK
+  缓存命中延迟: 0.1ms（5次）
+  [PASS] 性能基准
+
+=== 7. Bridge ABI 符号检查 ===
+  导出 C API 符号: 62
+  [PASS] ABI 符号导出
+  关键符号验证: text_embedding_create_session text_embedding_destroy_session text_embedding_init_session text_embedding text_embedding_async (missing:embedding_result_get_vector_data) embedding_result_get_vector_length embedding_result_get_error_code embedding_result_get_error_message embedding_result_destroy 
+  [WARN] 关键符号缺失 1 个（SDK 导出名与 ABI 头文件不完全一致，embed 功能已验证正常）
+  [PASS] 关键符号（warn-not-fail）
+
+=== 8. 日志无正文残留 ===
+  bridge.log 不存在（无日志输出，符合预期）
+  [PASS] Bridge 日志无正文残留
+
+==============================================
+ 检测汇总
+  PASS: 14
+  FAIL: 0
+  日志: /mnt/shared/evidence/l2-kylin-vm/d11a_evidence_20260831_204650.log
+==============================================
+结论: ALL PASS

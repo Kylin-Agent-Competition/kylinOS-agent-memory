@@ -24,6 +24,7 @@ Day9 增强（台账 R47）：
 
 from __future__ import annotations
 
+import threading
 import time
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
@@ -38,6 +39,7 @@ from providers import (
 from embedding.embedding_cache import EmbeddingCoalescer, EmbeddingQueryCache
 from embedding.cache_invalidator import CacheInvalidator, DeletionEvent, ForgetMode, TargetType
 from embedding.embedding_metrics import EmbeddingBacklogTracker
+from observability.json_logging import sanitize_message
 from embedding.protocol import (
     PROTOCOL_VERSION,
     ProtocolError,
@@ -189,6 +191,12 @@ class EmbeddingService:
         # embed，直接返回结构化降级（避免长文本拖慢整个队列）。
         # 默认 256 字符：覆盖绝大部分短查询场景。
         self._max_short_text_length = 256
+        # D11A：错误追踪（health 分项返回）
+        self._error_lock = threading.Lock()
+        self._last_error: Optional[str] = None
+        self._last_error_code: Optional[str] = None
+        self._last_error_time: Optional[float] = None
+        self._error_count = 0
 
     # ── 生命周期 ──
 
@@ -312,28 +320,65 @@ class EmbeddingService:
         Day9 增强：新增 backlog / oldest_pending_age / 告警状态 + 缓存统计
         （架构 TABLE 36 可观测性 + 台账 D9 backlog 告警阈值）。
 
+        D11A 增强：新增 model_info / provider_lifecycle / error_details
+        （台账 D11A 任务②：Embedding 健康状态与错误详情）。
+
         Returns:
             {"ok": true, "result": {"service": "ok|stopped",
                                      "provider": "ready|stopped",
+                                     "provider_lifecycle": str,
                                      "bridge_loaded": bool,
                                      "bridge_has_session": bool,
-"backlog": {"backlog": int,
-                                                   "oldest_pending_age_seconds": float,
-                                                   "backlog_alert": bool,
-                                                   "oldest_alert": bool,
-                                                   "thresholds": {...}},
-                                      "cache": {"size": int, "hits": int,
-                                                 "misses": int, "evictions": int},
+"backlog": {...},
+                                      "cache": {...},
+                                      "cache_invalidator": {...},
+                                      "model": {"name": str, "dimension": int,
+                                                 "loaded": bool, "ondevice": bool},
+                                      "errors": {"count": int, "last_code": str,
+                                                  "last_message": str, "last_time_seconds_ago": float},
                                       "degraded": bool,
                                       "sdk_missing": bool}}
         """
         bridge = getattr(self._provider, "_bridge", None)
         backlog = self._backlog.snapshot()
+
+        model_info = {}
+        try:
+            mi = getattr(self._provider, "model_info", None)
+            if callable(mi):
+                m = mi()
+                model_info = {
+                    "name": m.name,
+                    "dimension": m.dimension,
+                    "loaded": m.loaded,
+                    "ondevice": m.ondevice,
+                }
+        except Exception:
+            model_info = {"name": "", "dimension": 0, "loaded": False, "ondevice": False}
+
+        lifecycle_name = "N/A"
+        try:
+            lc = getattr(self._provider, "lifecycle", None)
+            if callable(lc):
+                lifecycle_name = lc()
+        except Exception:
+            lifecycle_name = "N/A"
+
+        with self._error_lock:
+            err_count = self._error_count
+            err_code = self._last_error_code or ""
+            err_msg = (self._last_error or "")[:200]
+            err_time = self._last_error_time
+        last_error_time_ago = -1.0
+        if err_time is not None:
+            last_error_time_ago = round(time.monotonic() - err_time, 2)
+
         return {
             "ok": True,
             "result": {
                 "service": "ok" if self._started else "stopped",
                 "provider": "ready" if self._started else "stopped",
+                "provider_lifecycle": lifecycle_name,
                 "bridge_loaded": bool(getattr(bridge, "loaded", False))
                 if bridge is not None else False,
                 "bridge_has_session": bool(getattr(bridge, "has_session", False))
@@ -345,6 +390,13 @@ class EmbeddingService:
                 "cache": self._cache.stats,
                 "cache_invalidator": self._invalidator.stats
                 if self._invalidator is not None else {},
+                "model": model_info,
+                "errors": {
+                    "count": err_count,
+                    "last_code": err_code,
+                    "last_message": err_msg,
+                    "last_time_seconds_ago": last_error_time_ago,
+                },
                 # [Review #7 已修复] degraded 反映 SDK 缺失状态（不再恒 false）
                 "degraded": bool(getattr(self, "_sdk_missing", False)),
                 "sdk_missing": bool(getattr(self, "_sdk_missing", False)),
@@ -398,11 +450,16 @@ class EmbeddingService:
                 try:
                     result = existing.result(timeout=timeout_ms / 1000.0 + 1.0)
                 except FutureTimeout:
+                    self._track_error(ProviderErrorCode.ERR_TIMEOUT,
+                                      "embed coalesced wait timed out")
                     return self._error(ProviderErrorCode.ERR_TIMEOUT.name,
                                        "embed coalesced wait timed out")
                 except ProviderError as exc:
+                    self._track_error(exc.code, f"coalesced embed failed: {exc}")
                     return self._degrade(exc.code, f"coalesced embed failed: {exc}")
                 except Exception as exc:
+                    self._track_error(ProviderErrorCode.ERR_UNKNOWN,
+                                      f"coalesced embed failed: {type(exc).__name__}: {exc}")
                     return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
                                          f"coalesced embed failed: {type(exc).__name__}: {exc}")
                 result_dict = {
@@ -412,6 +469,8 @@ class EmbeddingService:
                 }
                 write_ok = self._cache.set(cache_key, result_dict, generation=gen)
                 if not write_ok:
+                    self._track_error(ProviderErrorCode.ERR_UNKNOWN,
+                                      "stale coalesced result discarded after deletion")
                     return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
                                          "stale coalesced result discarded after deletion")
                 return {"ok": True, "result": result_dict, "coalesced": True}
@@ -423,11 +482,11 @@ class EmbeddingService:
         backlog_snap = self._backlog.snapshot()
         if (backlog_snap.get("backlog_alert") or backlog_snap.get("oldest_alert")):
             if len(text) > self._max_short_text_length:
-                return self._degrade(
-                    ProviderErrorCode.ERR_TIMEOUT.name,
-                    f"text too long ({len(text)} > {self._max_short_text_length}) "
-                    f"in degraded mode (backlog={backlog_snap['backlog']}, "
-                    f"oldest={backlog_snap['oldest_pending_age_seconds']:.2f}s)")
+                reason = (f"text too long ({len(text)} > {self._max_short_text_length}) "
+                          f"in degraded mode (backlog={backlog_snap['backlog']}, "
+                          f"oldest={backlog_snap['oldest_pending_age_seconds']:.2f}s)")
+                self._track_error(ProviderErrorCode.ERR_TIMEOUT, reason)
+                return self._degrade(ProviderErrorCode.ERR_TIMEOUT.name, reason)
 
         # Day9 积压追踪：进入队列（处理完成/失败/超时后 leave）
         seq = self._backlog.enter()
@@ -453,13 +512,17 @@ class EmbeddingService:
                 result = fut.result(timeout=timeout_ms / 1000.0 + 1.0)
             except FutureTimeout:
                 fut.cancel()
+                self._track_error(ProviderErrorCode.ERR_TIMEOUT,
+                                  "embed timed out (Bridge 未返回)")
                 return self._error(ProviderErrorCode.ERR_TIMEOUT.name,
                                    "embed timed out (Bridge 未返回)")
         except ProviderError as exc:
+            self._track_error(exc.code, str(exc))
             return self._degrade(exc.code, str(exc))
         except Exception as exc:
-            return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
-                                 f"unexpected error: {type(exc).__name__}: {exc}")
+            msg = f"unexpected error: {type(exc).__name__}: {exc}"
+            self._track_error(ProviderErrorCode.ERR_UNKNOWN, msg)
+            return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name, msg)
         finally:
             if fut is not None:
                 self._coalescer.release(coalesce_key, fut)
@@ -471,6 +534,8 @@ class EmbeddingService:
         }
         write_ok = self._cache.set(cache_key, result_dict, generation=generation)
         if not write_ok:
+            self._track_error(ProviderErrorCode.ERR_UNKNOWN,
+                              "stale embed result discarded after deletion")
             return self._degrade(ProviderErrorCode.ERR_UNKNOWN.name,
                                  "stale embed result discarded after deletion")
         return {"ok": True, "result": result_dict}
@@ -496,6 +561,16 @@ class EmbeddingService:
         return {"ok": True, "result": {"vectors": results}}
 
     # ── 辅助 ──
+
+    def _track_error(self, code: Any, message: str) -> None:
+        """记录错误追踪信息（health 分项返回）。线程安全。"""
+        code_str = code.name if isinstance(code, ProviderErrorCode) else str(code)
+        safe_msg = sanitize_message(message)
+        with self._error_lock:
+            self._last_error = safe_msg
+            self._last_error_code = code_str
+            self._last_error_time = time.monotonic()
+            self._error_count += 1
 
     @staticmethod
     def _envelope(body: Dict[str, Any],

@@ -430,6 +430,176 @@ def test_forget_plan_single_item_missing_target_rejected():
         ForgetPlan(**base_forget_plan(target_id=None))
 
 
+@pytest.mark.parametrize(
+    "mode, matching_field",
+    [
+        (ForgetMode.SINGLE_ITEM, "target_id"),
+        (ForgetMode.SESSION, "target_session_id"),
+        (ForgetMode.TOPIC, "target_topic"),
+        (ForgetMode.TIME_WINDOW, "target_time_range"),
+    ],
+)
+def test_forget_plan_rejects_empty_matching_selector(mode, matching_field):
+    """精准遗忘的模式 selector 不能以空串绕过必填检查。"""
+    selectors = {
+        "target_id": None,
+        "target_session_id": None,
+        "target_topic": None,
+        "target_time_range": None,
+    }
+    selectors[matching_field] = ""
+    with pytest.raises(ValidationError):
+        ForgetPlan(**base_forget_plan(forget_mode=mode, **selectors))
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"target_selector": " \t "},
+        {"target_id": " \n "},
+        {"resolved_target_ids": ["  "], "affected_count": 1},
+    ],
+)
+def test_forget_plan_rejects_whitespace_only_selectors_and_resolved_ids(overrides):
+    """精准遗忘 selector 与解析 ID 不得以纯空白伪装为有效值。"""
+    with pytest.raises(ValidationError):
+        ForgetPlan(**base_forget_plan(**overrides))
+
+
+def test_forget_plan_single_item_cross_mode_selector_rejected():
+    """TD-015：单条遗忘不得携带会话 selector 以扩大删除范围。"""
+    with pytest.raises(ValidationError):
+        ForgetPlan(**base_forget_plan(target_session_id="session_d10e_other"))
+
+
+@pytest.mark.parametrize(
+    "mode, target_type, matching_field, matching_value",
+    [
+        (ForgetMode.SINGLE_ITEM, TargetType.PREFERENCE, "target_id", "pref_d10e_01"),
+        (ForgetMode.SESSION, TargetType.ALL, "target_session_id", "session_d10e_01"),
+        (ForgetMode.TOPIC, TargetType.KNOWLEDGE, "target_topic", "演示主题"),
+        (ForgetMode.TIME_WINDOW, TargetType.EVENT, "target_time_range", "2026-09-01/2026-09-02"),
+    ],
+)
+def test_forget_plan_accepts_only_its_matching_selector(
+    mode, target_type, matching_field, matching_value
+):
+    """TD-015：每种具有专属 selector 的模式只接受自己的 selector。"""
+    selectors = {
+        "target_id": None,
+        "target_session_id": None,
+        "target_topic": None,
+        "target_time_range": None,
+    }
+    if matching_field is not None:
+        selectors[matching_field] = matching_value
+    plan = ForgetPlan(
+        **base_forget_plan(
+            forget_mode=mode,
+            target_type=target_type,
+            **selectors,
+        )
+    )
+    assert plan.forget_mode is mode
+
+
+@pytest.mark.parametrize(
+    "mode, required_field, required_value, extra_field",
+    [
+        (ForgetMode.SINGLE_ITEM, "target_id", "pref_d10e_01", "target_session_id"),
+        (ForgetMode.SESSION, "target_session_id", "session_d10e_01", "target_topic"),
+        (ForgetMode.TOPIC, "target_topic", "演示主题", "target_time_range"),
+        (ForgetMode.TIME_WINDOW, "target_time_range", "2026-09-01/2026-09-02", "target_id"),
+    ],
+)
+def test_forget_plan_rejects_every_cross_mode_selector(
+    mode, required_field, required_value, extra_field
+):
+    """TD-015：任意额外 selector 都会拒绝，不能悄然扩大精准删除范围。"""
+    selectors = {
+        "target_id": None,
+        "target_session_id": None,
+        "target_topic": None,
+        "target_time_range": None,
+    }
+    selectors[required_field] = required_value
+    selectors[extra_field] = "unexpected_d10e_selector"
+    with pytest.raises(ValidationError):
+        ForgetPlan(**base_forget_plan(forget_mode=mode, **selectors))
+
+
+@pytest.mark.parametrize(
+    "target_type",
+    [
+        TargetType.ALL,
+        TargetType.PREFERENCE,
+    ],
+)
+def test_forget_plan_preserves_unresolved_full_reset_type_boundary(target_type):
+    """HD-SCHEMA-06：E/D 未书面确认前，不由 Domain 冻结 full_reset 类型细节。"""
+    plan = ForgetPlan(
+        **base_forget_plan(
+            forget_mode=ForgetMode.FULL_RESET,
+            target_type=target_type,
+            target_id=None,
+        )
+    )
+    assert plan.forget_mode is ForgetMode.FULL_RESET
+
+
+@pytest.mark.parametrize(
+    "selector_field",
+    ["target_id", "target_session_id", "target_topic", "target_time_range"],
+)
+def test_forget_plan_full_reset_rejects_every_concrete_selector(selector_field):
+    """TD-015：没有专属 selector 的 full_reset 不得夹带局部目标。"""
+    selectors = {
+        "target_id": None,
+        "target_session_id": None,
+        "target_topic": None,
+        "target_time_range": None,
+    }
+    selectors[selector_field] = "unexpected_d10e_selector"
+    with pytest.raises(ValidationError):
+        ForgetPlan(
+            **base_forget_plan(
+                forget_mode=ForgetMode.FULL_RESET,
+                **selectors,
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "resolved_target_ids, affected_count",
+    [
+        ([""], 1),
+        (["pref_d10e_01", "pref_d10e_01"], 2),
+        (["pref_d10e_01"], 2),
+        (["pref_d10e_01"], None),
+    ],
+)
+def test_forget_plan_resolved_targets_require_precise_preview_metadata(
+    resolved_target_ids, affected_count
+):
+    """SEC-FORGET-01：解析结果必须无空/重复 ID，并与预览计数一一对应。"""
+    with pytest.raises(ValidationError):
+        ForgetPlan(
+            **base_forget_plan(
+                resolved_target_ids=resolved_target_ids,
+                affected_count=affected_count,
+            )
+        )
+
+
+def test_forget_plan_empty_resolution_has_zero_affected_count():
+    """空解析结果可预览，但必须明确记为零影响。"""
+    plan = ForgetPlan(
+        **base_forget_plan(resolved_target_ids=[], affected_count=0)
+    )
+    assert plan.resolved_target_ids == []
+    assert plan.affected_count == 0
+
+
 def test_forget_plan_session_missing_target_rejected():
     with pytest.raises(ValidationError):
         ForgetPlan(

@@ -15,17 +15,21 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, delete, func, insert, select, update
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from db.engine import DatabaseLockedError, is_locked_error
 from db.schema import (
     conversations,
     idempotency_cache,
     memory_entries,
+    memory_items,
+    memory_version_receipts,
+    memory_versions,
     outbox,
     turns,
 )
@@ -53,6 +57,18 @@ class ConversationOwnershipError(Exception):
     或 turn（[02 §16.6] 跨用户隔离）。UoW 回滚 → 无 Turn/Outbox/幂等缓存残留，
     由 handler 层转 RequestValidationError → INVALID_REQUEST（不回显标识）。
     """
+
+
+class PreferenceVersionIdempotencyConflictError(Exception):
+    """同一版本链重用幂等键但请求指纹不一致，拒绝静默覆盖。"""
+
+
+class PreferenceVersionEvidenceConflictError(Exception):
+    """同一版本链复用证据指纹却试图写入不同值，拒绝制造矛盾历史。"""
+
+
+class PreferenceVersionNotFoundError(Exception):
+    """版本不存在、非本用户所有，或不是允许回滚的历史版本。"""
 
 # outbox 事件类型（业务入队用）
 EVENT_TURN_FINALIZED = "turn.finalized"
@@ -335,6 +351,448 @@ def list_memory_entries(
     except OperationalError as exc:
         raise _wrap_locked(exc) from exc
     return [dict(r) for r in rows]
+
+
+# ── D7D preference version persistence ──
+
+
+def _require_nonempty(**fields: str) -> None:
+    """拒绝空白标识和值，避免把无归属或无语义的记录写入版本真源。"""
+    invalid = [name for name, value in fields.items() if not isinstance(value, str) or not value.strip()]
+    if invalid:
+        raise ValueError(f"D7D required fields must be non-empty: {', '.join(sorted(invalid))}")
+
+
+def _get_preference_item(
+    conn, *, user_id: str, preference_key: str, preference_scope: str
+) -> Optional[Dict[str, Any]]:
+    row = conn.execute(
+        select(memory_items).where(
+            and_(
+                memory_items.c.user_id == user_id,
+                memory_items.c.preference_key == preference_key,
+                memory_items.c.preference_scope == preference_scope,
+            )
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _get_or_create_preference_item(
+    conn, *, user_id: str, preference_key: str, preference_scope: str
+) -> Dict[str, Any]:
+    item = _get_preference_item(
+        conn, user_id=user_id, preference_key=preference_key, preference_scope=preference_scope
+    )
+    if item is not None:
+        return item
+
+    now = _now_iso()
+    try:
+        result = conn.execute(
+            insert(memory_items).values(
+                user_id=user_id,
+                preference_key=preference_key,
+                preference_scope=preference_scope,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    except IntegrityError:
+        item = _get_preference_item(
+            conn, user_id=user_id, preference_key=preference_key, preference_scope=preference_scope
+        )
+        if item is not None:
+            return item
+        raise
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+    return {
+        "id": int(result.lastrowid),
+        "user_id": user_id,
+        "preference_key": preference_key,
+        "preference_scope": preference_scope,
+        "current_version_id": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def _item_owner(conn, memory_item_id: int) -> str:
+    owner = conn.execute(
+        select(memory_items.c.user_id).where(memory_items.c.id == memory_item_id)
+    ).scalar_one()
+    return str(owner)
+
+
+def _version_row(conn, *, version_id: int, user_id: str) -> Optional[Dict[str, Any]]:
+    row = conn.execute(
+        select(memory_versions)
+        .join(memory_items, memory_versions.c.memory_item_id == memory_items.c.id)
+        .where(and_(memory_versions.c.id == version_id, memory_items.c.user_id == user_id))
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _current_version_for_item(conn, *, memory_item_id: int) -> Optional[Dict[str, Any]]:
+    current_version_id = conn.execute(
+        select(memory_items.c.current_version_id).where(memory_items.c.id == memory_item_id)
+    ).scalar_one()
+    if current_version_id is None:
+        return None
+    row = conn.execute(
+        select(memory_versions).where(
+            and_(
+                memory_versions.c.id == current_version_id,
+                memory_versions.c.memory_item_id == memory_item_id,
+                memory_versions.c.is_current == 1,
+            )
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _latest_version_number(conn, *, memory_item_id: int) -> int:
+    value = conn.execute(
+        select(func.max(memory_versions.c.version)).where(
+            memory_versions.c.memory_item_id == memory_item_id
+        )
+    ).scalar()
+    return int(value or 0)
+
+
+def _receipt_version(
+    conn, *, receipt: Dict[str, Any], user_id: str
+) -> Dict[str, Any]:
+    version = _version_row(conn, version_id=int(receipt["memory_version_id"]), user_id=user_id)
+    assert version is not None
+    return {**version, "created": False}
+
+
+def _return_existing_idempotent(
+    conn, *, memory_item_id: int, idempotency_key: Optional[str], request_fingerprint: str
+) -> Optional[Dict[str, Any]]:
+    if idempotency_key is None:
+        return None
+    row = conn.execute(
+        select(memory_version_receipts).where(
+            and_(
+                memory_version_receipts.c.memory_item_id == memory_item_id,
+                memory_version_receipts.c.idempotency_key == idempotency_key,
+            )
+        )
+    ).mappings().first()
+    if row is None:
+        return None
+    existing = dict(row)
+    if existing["request_fingerprint"] != request_fingerprint:
+        raise PreferenceVersionIdempotencyConflictError("同一幂等键对应的请求指纹不一致")
+    return existing
+
+
+def _return_existing_evidence_or_fail(
+    conn,
+    *,
+    memory_item_id: int,
+    evidence_fingerprint: str,
+    preference_value: str,
+    memory_status: str,
+) -> Optional[Dict[str, Any]]:
+    row = conn.execute(
+        select(memory_version_receipts)
+        .where(
+            and_(
+                memory_version_receipts.c.memory_item_id == memory_item_id,
+                memory_version_receipts.c.evidence_fingerprint == evidence_fingerprint,
+            )
+        )
+    ).mappings().first()
+    if row is None:
+        return None
+    existing = dict(row)
+    if (
+        existing["preference_value"] != preference_value
+        or existing["memory_status"] != memory_status
+    ):
+        raise PreferenceVersionEvidenceConflictError(
+            "同一证据指纹不能写入不同的偏好值或生命周期状态"
+        )
+    return existing
+
+
+def _record_operation_receipt(
+    conn,
+    *,
+    memory_item_id: int,
+    memory_version_id: int,
+    operation_kind: str,
+    preference_value: str,
+    memory_status: str,
+    evidence_fingerprint: str,
+    idempotency_key: Optional[str],
+    request_fingerprint: str,
+    created_at: str,
+) -> None:
+    conn.execute(
+        insert(memory_version_receipts).values(
+            memory_item_id=memory_item_id,
+            memory_version_id=memory_version_id,
+            operation_kind=operation_kind,
+            preference_value=preference_value,
+            memory_status=memory_status,
+            evidence_fingerprint=evidence_fingerprint,
+            idempotency_key=idempotency_key,
+            request_fingerprint=request_fingerprint,
+            created_at=created_at,
+        )
+    )
+
+
+def _append_preference_version(
+    conn,
+    *,
+    memory_item_id: int,
+    preference_value: str,
+    memory_status: str,
+    evidence_fingerprint: str,
+    idempotency_key: Optional[str],
+    request_fingerprint: str,
+    rollback_of_version_id: Optional[int] = None,
+    no_op_on_same_value: bool = True,
+    deduplicate_evidence: bool = True,
+) -> Dict[str, Any]:
+    replay = _return_existing_idempotent(
+        conn,
+        memory_item_id=memory_item_id,
+        idempotency_key=idempotency_key,
+        request_fingerprint=request_fingerprint,
+    )
+    if replay is not None:
+        return _receipt_version(conn, receipt=replay, user_id=_item_owner(conn, memory_item_id))
+
+    if deduplicate_evidence:
+        evidence_replay = _return_existing_evidence_or_fail(
+            conn,
+            memory_item_id=memory_item_id,
+            evidence_fingerprint=evidence_fingerprint,
+            preference_value=preference_value,
+            memory_status=memory_status,
+        )
+        if evidence_replay is not None:
+            return _receipt_version(conn, receipt=evidence_replay, user_id=_item_owner(conn, memory_item_id))
+
+    current = _current_version_for_item(conn, memory_item_id=memory_item_id)
+    if (
+        no_op_on_same_value
+        and current is not None
+        and current["preference_value"] == preference_value
+        and current["memory_status"] == memory_status
+    ):
+        _record_operation_receipt(
+            conn,
+            memory_item_id=memory_item_id,
+            memory_version_id=int(current["id"]),
+            operation_kind="no_op",
+            preference_value=preference_value,
+            memory_status=memory_status,
+            evidence_fingerprint=evidence_fingerprint,
+            idempotency_key=idempotency_key,
+            request_fingerprint=request_fingerprint,
+            created_at=_now_iso(),
+        )
+        return {**current, "created": False}
+
+    previous_version_id = int(current["id"]) if current is not None else None
+    now = _now_iso()
+    try:
+        result = conn.execute(
+            insert(memory_versions).values(
+                memory_item_id=memory_item_id,
+                version=_latest_version_number(conn, memory_item_id=memory_item_id) + 1,
+                previous_version_id=previous_version_id,
+                rollback_of_version_id=rollback_of_version_id,
+                preference_value=preference_value,
+                memory_status=memory_status,
+                evidence_fingerprint=evidence_fingerprint,
+                idempotency_key=idempotency_key,
+                request_fingerprint=request_fingerprint,
+                # 既有 current 时先追加非 current 后继；触发器据此仅允许旧版本
+                # 原子转为 superseded，再激活该后继，防止直接 SQL 清空 current。
+                is_current=0 if current is not None else 1,
+                created_at=now,
+            )
+        )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+    version_id = int(result.lastrowid)
+    if current is not None:
+        try:
+            conn.execute(
+                update(memory_versions)
+                .where(memory_versions.c.id == current["id"])
+                .values(is_current=0, memory_status="superseded")
+            )
+        except OperationalError as exc:
+            raise _wrap_locked(exc) from exc
+    conn.execute(
+        update(memory_items)
+        .where(memory_items.c.id == memory_item_id)
+        .values(updated_at=now)
+    )
+    version = _version_row(conn, version_id=version_id, user_id=_item_owner(conn, memory_item_id))
+    assert version is not None
+    _record_operation_receipt(
+        conn,
+        memory_item_id=memory_item_id,
+        memory_version_id=version_id,
+        operation_kind="rollback" if rollback_of_version_id is not None else "write",
+        preference_value=preference_value,
+        memory_status=memory_status,
+        evidence_fingerprint=evidence_fingerprint,
+        idempotency_key=idempotency_key,
+        request_fingerprint=request_fingerprint,
+        created_at=now,
+    )
+    return {**version, "created": True}
+
+
+def save_preference_version(
+    conn,
+    *,
+    user_id: str,
+    preference_key: str,
+    preference_scope: str,
+    preference_value: str,
+    memory_status: str,
+    evidence_fingerprint: str,
+    idempotency_key: Optional[str],
+    request_fingerprint: str,
+) -> Dict[str, Any]:
+    """创建或更新偏好版本，不原地覆盖历史。"""
+    _require_nonempty(
+        user_id=user_id,
+        preference_key=preference_key,
+        preference_scope=preference_scope,
+        preference_value=preference_value,
+        memory_status=memory_status,
+        evidence_fingerprint=evidence_fingerprint,
+        request_fingerprint=request_fingerprint,
+    )
+    if idempotency_key is not None:
+        _require_nonempty(idempotency_key=idempotency_key)
+    item = _get_or_create_preference_item(
+        conn, user_id=user_id, preference_key=preference_key, preference_scope=preference_scope
+    )
+    return _append_preference_version(
+        conn,
+        memory_item_id=int(item["id"]),
+        preference_value=preference_value,
+        memory_status=memory_status,
+        evidence_fingerprint=evidence_fingerprint,
+        idempotency_key=idempotency_key,
+        request_fingerprint=request_fingerprint,
+    )
+
+
+def get_preference_version(
+    conn, *, user_id: str, preference_version_id: int
+) -> Optional[Dict[str, Any]]:
+    """按用户读取单个版本；跨用户 ID 不可枚举读取。"""
+    return _version_row(conn, version_id=preference_version_id, user_id=user_id)
+
+
+def get_current_preference_version(
+    conn, *, user_id: str, preference_key: str, preference_scope: str
+) -> Optional[Dict[str, Any]]:
+    item = _get_preference_item(
+        conn, user_id=user_id, preference_key=preference_key, preference_scope=preference_scope
+    )
+    if item is None:
+        return None
+    return _current_version_for_item(conn, memory_item_id=int(item["id"]))
+
+
+def list_preference_versions(
+    conn, *, user_id: str, preference_key: str, preference_scope: str
+) -> List[Dict[str, Any]]:
+    item = _get_preference_item(
+        conn, user_id=user_id, preference_key=preference_key, preference_scope=preference_scope
+    )
+    if item is None:
+        return []
+    rows = conn.execute(
+        select(memory_versions)
+        .where(memory_versions.c.memory_item_id == item["id"])
+        .order_by(memory_versions.c.version)
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def list_preference_items(
+    conn,
+    *,
+    user_id: str,
+    preference_key: Optional[str] = None,
+    preference_scope: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """按用户列出偏好条目（可选按 key / scope 过滤），供 UI 枚举当前偏好。
+
+    D7C preference.list 消费：只返回当前用户（user_id 强制过滤）的
+    memory_items 行，跨用户不可见。每个条目附带 current_version_id 指针；
+    current 版本详情 / 全版本链由 get_current_preference_version /
+    list_preference_versions 提供。
+    """
+    _require_nonempty(user_id=user_id)
+    conditions = [memory_items.c.user_id == user_id]
+    if preference_key is not None:
+        _require_nonempty(preference_key=preference_key)
+        conditions.append(memory_items.c.preference_key == preference_key)
+    if preference_scope is not None:
+        _require_nonempty(preference_scope=preference_scope)
+        conditions.append(memory_items.c.preference_scope == preference_scope)
+    rows = conn.execute(
+        select(memory_items)
+        .where(and_(*conditions))
+        .order_by(memory_items.c.preference_key, memory_items.c.preference_scope)
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def rollback_preference_version(
+    conn,
+    *,
+    user_id: str,
+    preference_version_id: int,
+    idempotency_key: Optional[str],
+    request_fingerprint: str,
+) -> Dict[str, Any]:
+    """将历史版本的值追加为新 current 版本，不覆盖旧版本。"""
+    _require_nonempty(user_id=user_id, request_fingerprint=request_fingerprint)
+    if idempotency_key is not None:
+        _require_nonempty(idempotency_key=idempotency_key)
+    target = _version_row(conn, version_id=preference_version_id, user_id=user_id)
+    if target is None:
+        raise PreferenceVersionNotFoundError("目标版本不存在或不属于当前用户")
+    current = _current_version_for_item(conn, memory_item_id=int(target["memory_item_id"]))
+    if current is None or int(target["id"]) == int(current["id"]) or target["version"] >= current["version"]:
+        raise PreferenceVersionNotFoundError("只能回滚到同一版本链中的历史版本")
+    return _append_preference_version(
+        conn,
+        memory_item_id=int(target["memory_item_id"]),
+        preference_value=str(target["preference_value"]),
+        # 历史版本在被替换后状态为 superseded；回滚把其值追加为新的 current，
+        # 新版本按 D7E 版本计划恢复 active，而不是复制历史标记。
+        memory_status="active",
+        # rollback 的业务目标可以重复选择；它不是普通写入证据的跨操作唯一身份。
+        # 每次新请求使用独立回执证据，真正重放仍由 idempotency_key +
+        # request_fingerprint 决定，避免旧 rollback 回执吞掉后续合法 rollback。
+        evidence_fingerprint=f"rollback:{target['id']}:{uuid.uuid4().hex}",
+        idempotency_key=idempotency_key,
+        request_fingerprint=request_fingerprint,
+        rollback_of_version_id=int(target["id"]),
+        no_op_on_same_value=False,
+        deduplicate_evidence=False,
+    )
 
 
 # ── outbox ──

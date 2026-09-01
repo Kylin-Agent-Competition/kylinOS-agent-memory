@@ -179,13 +179,156 @@ QString MemoryClient::sendRequest(const QString& method, const QJsonObject& payl
     }
     socket_->flush();
 
-    pendingRequests_.emplace(requestId.toStdString(), method);
+    pendingRequests_.emplace(requestId.toStdString(),
+                              PendingRequest{method, requestId});
     return requestId;
 }
 
 QString MemoryClient::sendHealthRequest()
 {
     return sendRequest(methods::kHealth, QJsonObject{});
+}
+
+QString MemoryClient::sendMemoryStoreRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kMemoryStore, payload);
+}
+
+QString MemoryClient::sendTurnFinalizedEvent(const QJsonObject& eventJson)
+{
+    // D5-C Demo / Route B：按 ADR-010 路由 turn.finalized；payload 直接复用
+    // TurnFinalizedEvent JSON（metadata + event 字段），不再包装
+    // {event_type, event_body} wrapper（该旧形状与 ADR-010 冲突）。
+    //
+    // ADR-010 trace_id 唯一真源：envelope.trace_id 必须取
+    // payload.metadata.trace_id（若提供），否则回退到 request_id。
+    if (connectionState_ != ConnectionState::Connected) {
+        emit requestFailed({}, kErrNotConnected, QStringLiteral("Client is not connected."));
+        return {};
+    }
+
+    const QString requestId = generateRequestId();
+
+    // 从 payload.metadata.trace_id 提取唯一真源 trace_id。
+    QString traceId = requestId;
+    const QJsonValue metadataValue = eventJson.value(QStringLiteral("metadata"));
+    if (metadataValue.isObject()) {
+        const QString metaTrace = metadataValue.toObject()
+            .value(QStringLiteral("trace_id")).toString();
+        if (!metaTrace.isEmpty()) {
+            traceId = metaTrace;
+        }
+    }
+
+    const QJsonObject envelope = buildEnvelope(
+        methods::kTurnFinalized, eventJson, requestId, traceId, kDefaultDeadlineMs);
+    const auto packet = encodeEnvelope(envelope);
+    if (!packet.has_value()) {
+        emit requestFailed(requestId, kErrEncodeFailed,
+                           QStringLiteral("Failed to encode request envelope."));
+        return {};
+    }
+
+    const qint64 written = socket_->write(*packet);
+    if (written != packet->size()) {
+        emit requestFailed(requestId, kErrEncodeFailed,
+                           QStringLiteral("Failed to write request to socket."));
+        return {};
+    }
+    socket_->flush();
+
+    pendingRequests_.emplace(requestId.toStdString(),
+                              PendingRequest{methods::kTurnFinalized, traceId});
+    return requestId;
+}
+
+QString MemoryClient::sendPreferenceListRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kPreferenceList, payload);
+}
+
+QString MemoryClient::sendPreferenceCreateRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kPreferenceCreate, payload);
+}
+
+QString MemoryClient::sendPreferenceUpdateRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kPreferenceUpdate, payload);
+}
+
+QString MemoryClient::sendPreferenceRollbackRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kPreferenceRollback, payload);
+}
+
+QString MemoryClient::sendPreferenceHistoryRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kPreferenceHistory, payload);
+}
+
+QString MemoryClient::sendToolExecutionEvent(const QJsonObject& eventJson)
+{
+    // tool.execution：对齐 ToolExecutionEvent v1（D3 已冻结）。
+    // 生产 Gateway 默认不注册 → UNSUPPORTED_METHOD（符合预期）。
+    return sendEventEnvelope(methods::kToolExecution, eventJson);
+}
+
+QString MemoryClient::sendManualConfigEvent(const QJsonObject& eventJson)
+{
+    // manual.config.ingest：候选 schema（manual_config_event.v1.json）。
+    // ViewModel 客户端侧预检敏感内容；本层仅做协议级发送。
+    return sendEventEnvelope(methods::kManualConfigIngest, eventJson);
+}
+
+QString MemoryClient::sendBehaviorEvent(const QJsonObject& eventJson)
+{
+    // behavior.observe：候选 schema（behavior_event.v1.json）。
+    // mapping_status=PENDING_C_CONFIRMATION 由 ViewModel 在事件 JSON 中注入。
+    return sendEventEnvelope(methods::kBehaviorObserve, eventJson);
+}
+
+QString MemoryClient::sendEventEnvelope(const QString& method, const QJsonObject& eventJson)
+{
+    // 共享写链路：trace_id 唯一真源 = payload.metadata.trace_id（若提供），
+    // 否则回退到 request_id。与 ADR-010 §trace_id 唯一真源一致。
+    if (connectionState_ != ConnectionState::Connected) {
+        emit requestFailed({}, kErrNotConnected, QStringLiteral("Client is not connected."));
+        return {};
+    }
+
+    const QString requestId = generateRequestId();
+
+    QString traceId = requestId;
+    const QJsonValue metadataValue = eventJson.value(QStringLiteral("metadata"));
+    if (metadataValue.isObject()) {
+        const QString metaTrace = metadataValue.toObject()
+            .value(QStringLiteral("trace_id")).toString();
+        if (!metaTrace.isEmpty()) {
+            traceId = metaTrace;
+        }
+    }
+
+    const QJsonObject envelope = buildEnvelope(
+        method, eventJson, requestId, traceId, kDefaultDeadlineMs);
+    const auto packet = encodeEnvelope(envelope);
+    if (!packet.has_value()) {
+        emit requestFailed(requestId, kErrEncodeFailed,
+                           QStringLiteral("Failed to encode request envelope."));
+        return {};
+    }
+
+    const qint64 written = socket_->write(*packet);
+    if (written != packet->size()) {
+        emit requestFailed(requestId, kErrEncodeFailed,
+                           QStringLiteral("Failed to write request to socket."));
+        return {};
+    }
+    socket_->flush();
+
+    pendingRequests_.emplace(requestId.toStdString(),
+                              PendingRequest{method, traceId});
+    return requestId;
 }
 
 void MemoryClient::handleSocketConnected()
@@ -259,9 +402,10 @@ void MemoryClient::handleSocketReadyRead()
                 continue;
             }
 
-            // trace_id 关联校验：客户端发送时 trace_id 复用 request_id，
-            // 响应应回显相同的 trace_id。
-            if (responseParts->traceId != requestId) {
+            // trace_id 关联校验：响应应回显发送时的 trace_id。
+            // ADR-010: turn.finalized 的 envelope.trace_id 可能 == metadata.trace_id
+            //         （不一定 == request_id），因此用 pendingRequests_ 存储的值。
+            if (responseParts->traceId != it->second.traceId) {
                 // trace_id 不匹配：可能是伪造响应，丢弃。
                 pendingRequests_.erase(it);
                 emit requestFailed(requestId, kErrProtocol,
@@ -298,7 +442,7 @@ void MemoryClient::failInFlightRequests(const QString& errorCode, const QString&
     if (pendingRequests_.empty()) {
         return;
     }
-    for (const auto& [id, _] : pendingRequests_) {
+    for (const auto& [id, req] : pendingRequests_) {
         emit requestFailed(QString::fromStdString(id), errorCode, safeMessage);
     }
     pendingRequests_.clear();
