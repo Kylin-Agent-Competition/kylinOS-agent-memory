@@ -12,7 +12,7 @@ from sqlalchemy import Column, Integer, String, Text, text
 
 
 revision = "20260901_d10b_vector_ledger"
-down_revision = "20260831_preference_versions"
+down_revision = "20260831_add_source_events"
 branch_labels = None
 depends_on = None
 
