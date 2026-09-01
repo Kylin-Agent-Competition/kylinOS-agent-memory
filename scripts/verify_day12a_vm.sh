@@ -21,12 +21,35 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 EVIDENCE_DIR="$REPO_DIR/evidence/l2-kylin-vm"
 RUN_ID="${RUN_ID:-day12a_verify_$(date +%Y%m%d_%H%M%S)}"
 LOG_FILE="$EVIDENCE_DIR/${RUN_ID}.log"
+# 选择 Python：优先使用项目 pydantic v2 venv（/tmp/day10-venv 或 .venv）。
+# 项目要求 pydantic>=2,<3（memory-service/requirements.txt）；系统 python3.12
+# 常带 pydantic v1（无 model_validator），直接用会 ImportError。故做 pydantic
+# 版本探测，找不到合格解释器时给出明确建 venv 指引，而非静默用系统 python 失败。
 if [ -f "/tmp/day10-venv/bin/python" ]; then
     PYTHON="${PYTHON:-/tmp/day10-venv/bin/python}"
+elif [ -f "$REPO_DIR/.venv/bin/python" ]; then
+    PYTHON="${PYTHON:-$REPO_DIR/.venv/bin/python}"
 else
     PYTHON="${PYTHON:-python3.12}"
 fi
 PYTHONPATH="${PYTHONPATH:-$REPO_DIR/memory-service}"
+
+# pydantic v2 探测（项目硬性依赖）
+_py_pydantic_ok="$($PYTHON -c 'import pydantic; print("1" if pydantic.VERSION.startswith("2") else "0")' 2>/dev/null || echo "0")"
+if [ "$_py_pydantic_ok" != "1" ]; then
+    echo ""
+    echo "=============================================================="
+    echo " [环境] $PYTHON 未提供 pydantic v2（项目要求 pydantic>=2,<3）。"
+    echo " 当前 $($PYTHON -c 'import pydantic; print("pydantic "+pydantic.VERSION)' 2>/dev/null || echo '无 pydantic')"
+    echo ""
+    echo " 请先创建 pydantic v2 虚拟环境，再重跑本脚本："
+    echo "   sudo apt install -y python3.12-venv   # 若缺 venv 模块"
+    echo "   python3.12 -m venv /tmp/day10-venv"
+    echo "   /tmp/day10-venv/bin/pip install -r memory-service/requirements.txt"
+    echo "   bash scripts/verify_day12a_vm.sh"
+    echo "=============================================================="
+    exit 2
+fi
 
 mkdir -p "$EVIDENCE_DIR"
 exec > >(tee -a "$LOG_FILE") 2>&1
