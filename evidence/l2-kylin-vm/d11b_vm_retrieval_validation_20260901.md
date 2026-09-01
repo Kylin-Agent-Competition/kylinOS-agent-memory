@@ -1,6 +1,6 @@
 # D11B 麒麟 VM 检索验证证据（2026-09-01）
 
-> 被测提交：`38318562111bca482bb0a716fbdf73b29ce9e792`（`fix: 补齐D11B检索过滤诊断`）。
+> 被测提交：`e9dba4f38dbc310854b19647d84067e5fbe6a0bc`（REWORK #111 复审后的最终 HEAD）；首轮实测基线 `3831856` 见 §二/§三 历史记录。
 >
 > 本文只记录本轮真实执行结果。未具备 D/C 端到端入口或 `kylin-memory.service` 的项目保持 `UNVERIFIED`。
 
@@ -50,5 +50,25 @@
 
 - MEDIUM-01 方案 A：公共 `RetrievalOutcome.filter_diagnostics` 将 `cross_user` 泛化为 `security_filtered`；精确 `cross_user` 计数仅保留在可信内部 telemetry/debug 边界（`_retrieve_graceful_with_internal_diagnostics`），不进入普通检索 consumer。
 - 该改动为 Python 层诊断输出改造，不触及 Vector bridge/运行器源码；上文 VM 实测仍绑定 `tested_commit=3831856`。
-- 新行为的宿主回归：`tests/retrieval + tests/test_migrations_d10b.py` → **313 passed**（含新增 internal-only 边界测试 `test_internal_filter_diagnostics_keeps_precise_cross_user_internal_only`）；D9 Gold 契约 **68 passed**；`git diff --check` 通过。
-- 新提交在麒麟 VM 上的 L0/L1 复测待 VM 可用后执行；在此之前不宣称新提交已获 VM 实测。
+- 新行为的宿主回归：`tests/retrieval + tests/test_migrations_d10b.py + tests/test_config_d4d.py` → **324 passed**（含新增 internal-only 边界测试）；D9 Gold 契约 **68 passed**；`git diff --check` 通过。
+- 最终 HEAD `e9dba4f` 已在同一麒麟 VM 完成复测（见 §七），MEDIUM-01 证据绑定闭环。
+
+
+## 七、REWORK 复审 VM 复测（2026-09-02，最终 HEAD e9dba4f）
+
+> 目的：按 D 轨复审 MEDIUM-01（证据绑定）要求，在最终 HEAD `e9dba4f` 于同一麒麟 VM 重跑 L0/L1 检索回归与真实 Vector 删除运行器，回填证据绑定。
+
+- 被测提交：`e9dba4f38dbc310854b19647d84067e5fbe6a0bc`（REWORK #111 最终 HEAD）；以受控 Git bundle（SHA-256 `ec0d1086…`）部署，`git rev-parse HEAD` 校验一致，部署工作树由 `git archive e9dba4f` 重建。
+- VM 同前（`Kylin-V11-2603-D11B-ffd20b9-Test`，GUI 前台）；来宾 Kylin V11 / 6.6.0-63 / Python 3.12.3；Vector Engine 1.2.0.1 与 UDS 可用；`vector_bridge_cli` SHA-256 仍为 `2ff6ed3c…`。
+
+| 命令 | 结果 | 覆盖 |
+|---|---:|---|
+| `PYTHONPATH=~/d11b-pylibs:<memory-service> python3 -m pytest tests/retrieval tests/test_migrations_d10b.py tests/test_config_d4d.py -q` | **324 passed in 8.54s** | MEDIUM-01 泛化后检索回归 + D10B migration + D4D 配置（含新增 internal-only 边界测试） |
+| `python3 -m pytest tests/retrieval/test_v006_fusion.py -q` | **52 passed in 0.35s** | fusion 定向：filter_diagnostics 脱敏与 internal-only 边界 |
+| `PYTHONPATH=~/d11b-pylibs python3 -m pytest test_d9_retrieval_gold_spec.py -q` | **68 passed in 0.12s** | D9 Gold/评测参数契约 |
+
+- Vector 删除运行器（从 git 仓库 `kylinOS-agent-memory-d11b-git` 执行以保证元数据绑定）：`bash tests/vector-engine/run_d10b_vector_delete_l2.sh --binary ~/.local/d11b-sdk/bin/vector_bridge_cli`
+  - 元数据：`tested_commit=e9dba4f38dbc310854b19647d84067e5fbe6a0bc`、桥接源码 `5f0e1310…`、运行器 `cf820947…`（与首轮一致，源码零变化）。
+  - **15/15 通过，退出码 0，临时 `d10b_` Collection 清理完成**。
+- 日志：`evidence/l2-kylin-vm/d11b_l2_session_e9dba4f.log`（SHA-256 `c6a61f2c…`）、`evidence/l2-kylin-vm/d11b_vector_delete_l2_e9dba4f.log`（SHA-256 `378867b3…`）。
+- 本复测将 D11B 检索回归 / D9 Gold / Vector 删除协议的证据绑定到最终 HEAD `e9dba4f`；服务/OS 重启与 D/C 端到端仍保持 `UNVERIFIED`。
