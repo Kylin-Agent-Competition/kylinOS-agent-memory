@@ -47,8 +47,8 @@ def _insert_memory(engine, *, user_id="u1", created_at=None, updated_at=None):
 
 
 def _upsert_payload(event_id="evt_1"):
+    # HIGH-01：payload 不携带 event_type（DB 列是真源），模拟真实 Outbox envelope
     return {
-        "event_type": repo.EVENT_MEMORY_UPSERTED,
         "event_id": event_id,
         "trace_id": "trc",
         "memory_id": "mem_1",
@@ -184,3 +184,20 @@ def test_repositories_latest_memory_change_ts(engine):
     _insert_memory(engine, created_at="2026-09-01T10:00:00+00:00")
     with engine.connect() as conn:
         assert repo.latest_memory_change_ts(conn) == "2026-09-01T10:00:00+00:00"
+
+
+def test_metrics_busy_degrade_does_not_raise(engine, monkeypatch):
+    """MEDIUM-01：SQLITE_BUSY 降级路径不再 UnboundLocalError，返回降级指标。"""
+    from sqlalchemy.exc import OperationalError
+
+    def _boom(*args, **kwargs):
+        raise OperationalError("stmt", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(repo, "outbox_backlog", _boom)
+    monkeypatch.setattr(repo, "latest_memory_change_ts", _boom)
+    w = OutboxWorker(engine, poll_interval_s=1, max_retries=3)
+    m = w.metrics()  # 不抛异常
+    assert m["backlog"] == -1
+    assert m["index_sync_lag"] is None
+    assert m["index_sync_lag_seconds"] is None
+    w.stop()

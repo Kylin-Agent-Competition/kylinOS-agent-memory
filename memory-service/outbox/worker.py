@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 # 退避基数（附录 B：next_retry_at = now + 2^attempts * 30s）
 RETRY_BASE_SECONDS = 30
 
-# 消费回调类型：payload dict → 成功返回 None，失败抛异常
-EventConsumer = Callable[[Dict[str, Any]], None]
+# 消费回调类型：(event_type, payload) → 成功返回 None，失败抛异常（HIGH-01 路由真源）
+EventConsumer = Callable[[str, Dict[str, Any]], None]
 
 
 class OutboxWorker:
@@ -90,6 +90,7 @@ class OutboxWorker:
         now_iso = datetime.now(timezone.utc).isoformat()
         index_sync_lag = None
         index_sync_lag_seconds = None
+        latest_memory = None  # MEDIUM-01：busy 降级路径也必须已赋值（防 UnboundLocalError）
         try:
             with self._engine.connect() as conn:
                 backlog = repo.outbox_backlog(conn, now_iso=now_iso)
@@ -193,13 +194,16 @@ class OutboxWorker:
                     last_error="no consumer registered (vector integration pending, R-9)",
                 )
                 return
-            self._consumer(payload)
+            # HIGH-01：路由真源 = outbox.event_type 独立列，显式传给 consumer
+            self._consumer(event_type, payload)
 
             # 成功（附录 B 4a）
             repo.mark_outbox_success(conn, outbox_id=event_id)
             self._processed += 1
-            # D9D D-REQ-06：记录最近成功消费的 outbox.created_at（index_sync_lag）。
-            self._last_indexed_ts = str(event.get("created_at") or "") or self._last_indexed_ts
+            # D9D D-REQ-06：index_sync_lag 水位只允许索引事件（memory.upserted）推进
+            # （MEDIUM-02：非索引事件如 forget.executed 成功后不得前移水位，避免假健康指标）
+            if event_type == repo.EVENT_MEMORY_UPSERTED:
+                self._last_indexed_ts = str(event.get("created_at") or "") or self._last_indexed_ts
             logger.info(
                 "Outbox 事件完成 id=%d type=%s agg=%s", event_id, event_type, aggregate_id
             )

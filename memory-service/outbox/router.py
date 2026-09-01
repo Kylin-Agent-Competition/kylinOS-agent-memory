@@ -9,7 +9,12 @@
 路由表使用冻结常量（repositories.EVENT_MEMORY_UPSERTED / EVENT_FORGET_EXECUTED）
 与 D11A EVENT_DELETION 对齐，不新增 event_type 枚举值（红线：契约不变）。
 
-Router 本身是可调用对象（route(payload)），可直接作为 OutboxWorker.consumer 注入。
+HIGH-01（路由真源）：路由真源是 Outbox 独立列 `outbox.event_type`，而非 payload 内嵌
+`event_type`（`repo.enqueue_outbox()` 写入独立列，payload 不自动携带）。因此
+`route(event_type, payload)` 显式接收 DB 列事件类型；若 payload 同时含 `event_type`，
+则与 DB 列做一致性校验，不一致抛 ValueError fail-closed（防路由错乱）。
+
+Router 本身可调用（route(event_type, payload)），可直接作为 OutboxWorker.consumer 注入。
 """
 
 from __future__ import annotations
@@ -19,8 +24,12 @@ from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-# Outbox 消费回调类型：payload dict → 成功返回 None，失败抛异常
-EventConsumer = Callable[[Dict[str, Any]], None]
+# Outbox 消费回调类型：(event_type, payload) → 成功返回 None，失败抛异常
+EventConsumer = Callable[[str, Dict[str, Any]], None]
+
+# 摘要签名密钥默认（注入参数默认值，仅用于 L1 测试；真实接线由调用方注入受控 key）
+_DEFAULT_KEY_ID = "d9d-internal"
+_DEFAULT_DIGEST_KEY = b"kylin-memory-d9d-internal"
 
 
 class UnknownEventTypeError(Exception):
@@ -41,7 +50,7 @@ class OutboxRouter:
 
         Args:
             event_type: Outbox 事件类型（冻结常量，如 memory.upserted）。
-            consumer: 回调（payload dict → None/异常）。
+            consumer: 回调（(event_type, payload) → None/异常）。
 
         Raises:
             ValueError: event_type 为空或重复注册（覆盖注册会掩盖既有消费语义，
@@ -59,27 +68,35 @@ class OutboxRouter:
     def registered_types(self) -> frozenset[str]:
         return frozenset(self._routes)
 
-    def route(self, payload: Dict[str, Any]) -> None:
-        """按 payload 的 event_type 分发到对应消费者。
+    def route(self, event_type: str, payload: Dict[str, Any]) -> None:
+        """按 event_type（DB 列真源）分发到对应消费者。
 
         Args:
-            payload: Outbox 事件 payload（必须含 event_type 字段）。
+            event_type: Outbox 事件类型（来自 `outbox.event_type` 独立列，真源）。
+            payload: Outbox 事件 payload（不要求含 event_type 字段）。
 
         Raises:
-            UnknownEventTypeError: event_type 缺失或未注册。
+            UnknownEventTypeError: event_type 未注册。
+            ValueError: payload 内嵌 event_type 与 DB 列不一致（fail-closed）。
         """
-        event_type = payload.get("event_type", "")
+        embedded = payload.get("event_type")
+        if embedded is not None and str(embedded) != event_type:
+            raise ValueError(
+                f"outbox event_type 与 payload 不一致: db={event_type!r} payload={embedded!r}"
+            )
         consumer = self._routes.get(event_type)
         if consumer is None:
             raise UnknownEventTypeError(f"unknown outbox event_type: {event_type!r}")
         logger.info("Outbox 路由分发 type=%s", event_type)
-        consumer(payload)
+        consumer(event_type, payload)
 
 
 def build_outbox_router(
     *,
     vector_provider: Optional[Any] = None,
     embedding_service: Optional[Any] = None,
+    digest_key_id: str = _DEFAULT_KEY_ID,
+    digest_key: bytes = _DEFAULT_DIGEST_KEY,
 ) -> OutboxRouter:
     """构造生产 Outbox 路由（app.py 注入点）。
 
@@ -87,8 +104,12 @@ def build_outbox_router(
     → Worker 失败/重试/DL（真实结果，不假装成功；producer 由 D8D 接线后补齐）。
 
     Args:
-        vector_provider: VectorProvider 实现（memory.upserted → index consumer）。
-        embedding_service: EmbeddingService 实例（forget.executed → deletion consumer）。
+        vector_provider: VectorProvider 实现（memory.upserted → index consumer；
+            forget.executed → deletion consumer 组合消费中的 Vector delete）。
+        embedding_service: EmbeddingService 实例（forget.executed → cache invalidation）。
+        digest_key_id / digest_key: 请求摘要签名密钥（注入参数，默认值仅用于 L1 测试；
+            真实接线时必须由调用方注入受控 key，与 provider 的 digest_keys 对齐，
+            否则真实 SqliteVectorProvider 将稳定返回 DIGEST_KEY_UNAVAILABLE）。
     """
     from db import repositories as repo
     from outbox.deletion_consumer import build_forget_consumer
@@ -96,7 +117,22 @@ def build_outbox_router(
 
     router = OutboxRouter()
     if vector_provider is not None:
-        router.register(repo.EVENT_MEMORY_UPSERTED, build_index_consumer(vector_provider))
+        router.register(
+            repo.EVENT_MEMORY_UPSERTED,
+            build_index_consumer(
+                vector_provider,
+                digest_key_id=digest_key_id,
+                digest_key=digest_key,
+            ),
+        )
     if embedding_service is not None:
-        router.register(repo.EVENT_FORGET_EXECUTED, build_forget_consumer(embedding_service))
+        router.register(
+            repo.EVENT_FORGET_EXECUTED,
+            build_forget_consumer(
+                embedding_service,
+                vector_provider=vector_provider,
+                digest_key_id=digest_key_id,
+                digest_key=digest_key,
+            ),
+        )
     return router

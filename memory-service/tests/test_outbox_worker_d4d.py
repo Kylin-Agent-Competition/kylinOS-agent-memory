@@ -44,7 +44,7 @@ def test_worker_consumes_success(engine):
     _enqueue(engine)
     seen = []
 
-    def consumer(payload):
+    def consumer(event_type, payload):
         seen.append(payload)
 
     w = OutboxWorker(engine, poll_interval_s=1, max_retries=3, consumer=consumer)
@@ -122,7 +122,7 @@ def test_worker_metrics_backlog(engine):
 
 def test_worker_start_stop_lifecycle(engine):
     _enqueue(engine)
-    w = OutboxWorker(engine, poll_interval_s=1, max_retries=3, consumer=lambda p: None)
+    w = OutboxWorker(engine, poll_interval_s=1, max_retries=3, consumer=lambda et, p: None)
     w.start()
     w.start()  # 幂等：已启动忽略
     # 等待消费

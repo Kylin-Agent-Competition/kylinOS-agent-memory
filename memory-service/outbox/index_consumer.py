@@ -38,8 +38,8 @@ from retrieval.provider import VectorProvider
 
 logger = logging.getLogger(__name__)
 
-# Outbox 消费回调类型：payload dict → 成功返回 None，失败抛异常
-EventConsumer = Callable[[Dict[str, Any]], None]
+# Outbox 消费回调类型：(event_type, payload) → 成功返回 None，失败抛异常
+EventConsumer = Callable[[str, Dict[str, Any]], None]
 
 # 未显式提供时使用的派生元数据默认（骨架注入点，host 接线后可覆盖）
 _DEFAULT_INDEX_GENERATION = "d9d-skeleton"
@@ -107,15 +107,21 @@ def build_index_consumer(
         consumer 回调（payload dict → None/异常）。
     """
 
-    def _consumer(payload: Dict[str, Any]) -> None:
-        event_type = payload.get("event_type", "")
+    def _consumer(event_type: str, payload: Dict[str, Any]) -> None:
+        # HIGH-01：路由真源 = DB 列 event_type（显式传入），payload 内嵌值仅做一致性校验
+        embedded = payload.get("event_type")
+        if embedded is not None and str(embedded) != event_type:
+            raise ValueError(
+                f"index consumer event_type 不一致: db={event_type!r} payload={embedded!r}"
+            )
         if event_type != repo.EVENT_MEMORY_UPSERTED:
             raise ValueError(
                 f"index consumer expected {repo.EVENT_MEMORY_UPSERTED!r}, got {event_type!r}"
             )
 
-        trace_id = str(payload.get("trace_id", ""))
         event_id = str(payload.get("event_id", ""))
+        # 非阻断 1：trace_id 契约统一——payload 缺省时确定性 fallback（VectorUpsertRequest.trace_id 必填）
+        trace_id = str(payload.get("trace_id") or f"outbox:{event_id}")
 
         user_id = payload.get("user_id")
         memory_id = payload.get("memory_id")

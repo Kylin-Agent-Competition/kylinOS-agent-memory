@@ -464,7 +464,7 @@ def test_migration_upgrade_creates_source_events(mig_db):
         "idx_source_events_status",
     } <= indexes
     assert {"id", "event_id", "content_fingerprint", "dedup_group", "duplicate_of"} <= cols
-    assert revision == "20260831_add_source_events"
+    assert revision == "20260901_d10b_vector_ledger"  # main 链 head（含 D10-B 迁移）
 
 
 def test_migration_downgrade_rolls_back_source_events(mig_db):
