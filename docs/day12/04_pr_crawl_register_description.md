@@ -40,8 +40,9 @@
 
 - 注册表 12 列结构合法；TD-047~052 均唯一存在。
 - `server.py`/`outbox_consumer.py` `py_compile` 通过；`bash -n` 通过（verify 脚本）。
-- A 轨回归：`test_embedding_service + d9 + d10 + d12a` = 80 passed（含 forget.executed 对齐测试）。
-- A-REQ-01 L2 麒麟 VM 证据待 VM 运行后回填。
+- A-REQ-01 事件类型对齐：`DELETION_EVENT_TYPES = {forget.executed, memory.deletion, deletion}`，`forget.executed`（权威）与兼容别名均被消费、`turn.finalized` 拒绝——本分支行为验证通过。
+- A-REQ-01/02 相关 L1 测试（`test_embedding_d12a.py::test_regression_deletion_event_type_aligned_forget_executed`）位于 PR #100（D12A 文件），两 PR 合并后统一回归 80 passed。
+- A-REQ-01 L2 麒麟 VM 证据待 VM 运行后回填（`--register-deletion-consumer --db <db>`）。
 
 ## 五、关联
 
