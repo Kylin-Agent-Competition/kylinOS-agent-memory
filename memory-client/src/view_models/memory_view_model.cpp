@@ -1,4 +1,4 @@
-﻿#include "view_models/memory_view_model.h"
+#include "view_models/memory_view_model.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -807,6 +807,41 @@ void MemoryViewModel::onResponseReceived(
         setLifecycleStatusBusy(false);
         setLifecycleStatusStage(QStringLiteral("ready"));
     }
+
+    // ── D9C Memory Context 组装 路由 ───────────────────────────────
+    // 防伪 Context：仅当 data 为非空对象且 injection_status 非 failed/skipped
+    // 时投影；空 data / injection_status=failed/skipped 保持 assembledContext_ 空。
+    if (!pendingContextAssembleRequestId_.isEmpty()
+        && requestId == pendingContextAssembleRequestId_) {
+        pendingContextAssembleRequestId_.clear();
+        const QString injectionStatus =
+            parts.data.value(QStringLiteral("injection_status")).toString();
+        const bool contextInvalid =
+            parts.data.isEmpty()
+            || injectionStatus == QStringLiteral("failed")
+            || injectionStatus == QStringLiteral("skipped");
+        if (contextInvalid) {
+            // 空 data / failed / skipped：清空投影，stage=failed（防伪 Context）
+            setAssembledContext(QJsonObject{});
+            setContextRecallSources({});
+            setContextMemoryTypes({});
+            setContextConflictHints({});
+            setContextUncertaintyHints({});
+            setContextTokenBudget(0);
+            setContextActualTokenCount(0);
+            setContextBudgetExceeded(false);
+            setContextInjectionStatus(injectionStatus.isEmpty()
+                ? QStringLiteral("skipped") : injectionStatus);
+            setContextAssembleError(QStringLiteral(
+                "Context assembly returned no usable context."));
+            setContextAssembleBusy(false);
+            setContextAssembleStage(QStringLiteral("failed"));
+        } else {
+            projectAssembledContext(parts.data);
+            setContextAssembleBusy(false);
+            setContextAssembleStage(QStringLiteral("ready"));
+        }
+    }
 }
 
 void MemoryViewModel::onRequestFailed(
@@ -900,6 +935,27 @@ void MemoryViewModel::onRequestFailed(
         setLifecycleStatusBusy(false);
         setLifecycleStatusError(safeMessage);
         setLifecycleStatusStage(errorCode == QString::fromUtf8(kErrClientTimeout)
+                                    ? QStringLiteral("timeout")
+                                    : QStringLiteral("failed"));
+    }
+
+    // ── D9C Memory Context 组装 pending 命中 ───────────────────────
+    // 错误响应绝不参与 Context 拼接：清空 assembledContext 防伪注入。
+    if (!pendingContextAssembleRequestId_.isEmpty()
+        && requestId == pendingContextAssembleRequestId_) {
+        pendingContextAssembleRequestId_.clear();
+        setAssembledContext(QJsonObject{});
+        setContextRecallSources({});
+        setContextMemoryTypes({});
+        setContextConflictHints({});
+        setContextUncertaintyHints({});
+        setContextTokenBudget(0);
+        setContextActualTokenCount(0);
+        setContextBudgetExceeded(false);
+        setContextInjectionStatus(QStringLiteral("failed"));
+        setContextAssembleBusy(false);
+        setContextAssembleError(safeMessage);
+        setContextAssembleStage(errorCode == QString::fromUtf8(kErrClientTimeout)
                                     ? QStringLiteral("timeout")
                                     : QStringLiteral("failed"));
     }
@@ -1516,6 +1572,224 @@ void MemoryViewModel::setLifecycleStatusError(const QString& value)
     if (lifecycleStatusError_ == value) return;
     lifecycleStatusError_ = value;
     emit lifecycleStatusErrorChanged();
+}
+
+// ── D9C Memory Context 组装 Pipeline ────────────────────────────────────────
+
+void MemoryViewModel::runContextAssemblePipeline(
+    const QString& userId,
+    const QString& queryText,
+    int tokenBudget,
+    const QString& scene,
+    const QString& candidatesJson)
+{
+    if (contextAssembleBusy_) {
+        setContextAssembleError(QStringLiteral(
+            "A context.assemble request is already in flight."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        return;
+    }
+    if (userId.isEmpty()) {
+        setContextAssembleError(QStringLiteral("user_id must not be empty."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        return;
+    }
+    if (queryText.isEmpty()) {
+        setContextAssembleError(QStringLiteral("query_text must not be empty."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        return;
+    }
+    if (tokenBudget <= 0) {
+        setContextAssembleError(QStringLiteral(
+            "token_budget must be a positive integer."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        return;
+    }
+    if (client_.connectionState() != MemoryClient::ConnectionState::Connected) {
+        setContextAssembleError(QStringLiteral("Client is not connected."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        return;
+    }
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("schema_version"), QStringLiteral("1.0"));
+    payload.insert(QStringLiteral("user_id"), userId);
+    payload.insert(QStringLiteral("query_text"), queryText);
+    payload.insert(QStringLiteral("token_budget"), tokenBudget);
+    if (!scene.isEmpty()) {
+        payload.insert(QStringLiteral("scene"), scene);
+    }
+    // candidatesJson：可选 B 轨 RetrievalCandidateSample[] JSON 字符串。
+    // 解析失败时静默忽略（不阻塞 Context 组装；Mock 可自行生成候选）。
+    if (!candidatesJson.isEmpty()) {
+        const QJsonDocument doc = QJsonDocument::fromJson(
+            candidatesJson.toUtf8());
+        if (doc.isArray()) {
+            payload.insert(QStringLiteral("candidates"), doc.array());
+        }
+    }
+
+    const QString id = client_.sendContextAssembleRequest(payload);
+    if (id.isEmpty()) {
+        setContextAssembleError(QStringLiteral(
+            "Failed to send context.assemble request."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        return;
+    }
+    pendingContextAssembleRequestId_ = id;
+    setContextAssembleBusy(true);
+    setContextAssembleError({});
+    setContextAssembleStage(QStringLiteral("querying"));
+    // 清空上一轮投影，避免 stale Context 残留。
+    setAssembledContext(QJsonObject{});
+    setContextRecallSources({});
+    setContextMemoryTypes({});
+    setContextConflictHints({});
+    setContextUncertaintyHints({});
+    setContextTokenBudget(0);
+    setContextActualTokenCount(0);
+    setContextBudgetExceeded(false);
+    setContextInjectionStatus(QStringLiteral("querying"));
+    setLastRequestId(id);
+    armDeadlineTimer(id, kDefaultDeadlineMs);
+}
+
+void MemoryViewModel::projectAssembledContext(const QJsonObject& data)
+{
+    // 整体投影（保留全部字段供 QML 渲染完整 JSON）。
+    setAssembledContext(data);
+
+    // 召回来源（通道）：recall_sources[]（字符串或 {channel,provider} 对象）。
+    setContextRecallSources(projectJsonArray(
+        data.value(QStringLiteral("recall_sources")).toArray()));
+
+    // 记忆类型分布：memory_types[]（字符串或 {type,count} 对象）。
+    setContextMemoryTypes(projectJsonArray(
+        data.value(QStringLiteral("memory_types")).toArray()));
+
+    // 冲突提示：conflict_hints[]（含 memory_id / conflict_state 等）。
+    setContextConflictHints(projectJsonArray(
+        data.value(QStringLiteral("conflict_hints")).toArray()));
+
+    // 不确定性提示：uncertainty_hints[]（降级通道 / 陈旧索引 / score_semantics 未验证等）。
+    setContextUncertaintyHints(projectJsonArray(
+        data.value(QStringLiteral("uncertainty_hints")).toArray()));
+
+    // Token 预算校验：actual_token_count / token_budget / budget_exceeded。
+    // 客户端独立计算 budget_exceeded 以防服务端遗漏；同时回填服务端值（若提供）。
+    const int budget = data.value(QStringLiteral("token_budget")).toInt(
+        contextTokenBudget_);
+    const int actual = data.value(QStringLiteral("actual_token_count")).toInt(
+        contextActualTokenCount_);
+    const bool serverExceeded =
+        data.value(QStringLiteral("budget_exceeded")).toBool(false);
+    const bool clientExceeded = (budget > 0 && actual > budget);
+    setContextTokenBudget(budget);
+    setContextActualTokenCount(actual);
+    setContextBudgetExceeded(serverExceeded || clientExceeded);
+
+    // injection_status：prepared / degraded / failed / skipped。
+    // 注意：failed / skipped 已在路由阶段拦截到 failed stage；
+    //       此处仅处理 prepared / degraded（非空 Context）。
+    const QString injectionStatus =
+        data.value(QStringLiteral("injection_status")).toString();
+    if (!injectionStatus.isEmpty()) {
+        setContextInjectionStatus(injectionStatus);
+    } else {
+        // 缺省回退：有 selected_memory_ids 即视为 prepared，否则 degraded。
+        const auto selectedIds = data.value(
+            QStringLiteral("selected_memory_ids")).toArray();
+        setContextInjectionStatus(selectedIds.isEmpty()
+            ? QStringLiteral("degraded") : QStringLiteral("prepared"));
+    }
+}
+
+// ── D9C 私有 setters ─────────────────────────────────────────────────────────
+
+void MemoryViewModel::setContextAssembleBusy(bool value)
+{
+    const bool oldBusy = busy();
+    if (contextAssembleBusy_ == value) { return; }
+    contextAssembleBusy_ = value;
+    emit contextAssembleBusyChanged();
+    if (oldBusy != busy()) { emit busyChanged(); }
+}
+
+void MemoryViewModel::setContextAssembleStage(const QString& value)
+{
+    if (contextAssembleStage_ == value) return;
+    contextAssembleStage_ = value;
+    emit contextAssembleStageChanged();
+}
+
+void MemoryViewModel::setAssembledContext(const QJsonObject& value)
+{
+    if (assembledContext_ == value) return;
+    assembledContext_ = value;
+    emit assembledContextChanged();
+}
+
+void MemoryViewModel::setContextRecallSources(const QVariantList& value)
+{
+    if (contextRecallSources_ == value) return;
+    contextRecallSources_ = value;
+    emit contextRecallSourcesChanged();
+}
+
+void MemoryViewModel::setContextMemoryTypes(const QVariantList& value)
+{
+    if (contextMemoryTypes_ == value) return;
+    contextMemoryTypes_ = value;
+    emit contextMemoryTypesChanged();
+}
+
+void MemoryViewModel::setContextConflictHints(const QVariantList& value)
+{
+    if (contextConflictHints_ == value) return;
+    contextConflictHints_ = value;
+    emit contextConflictHintsChanged();
+}
+
+void MemoryViewModel::setContextUncertaintyHints(const QVariantList& value)
+{
+    if (contextUncertaintyHints_ == value) return;
+    contextUncertaintyHints_ = value;
+    emit contextUncertaintyHintsChanged();
+}
+
+void MemoryViewModel::setContextTokenBudget(int value)
+{
+    if (contextTokenBudget_ == value) return;
+    contextTokenBudget_ = value;
+    emit contextTokenBudgetChanged();
+}
+
+void MemoryViewModel::setContextActualTokenCount(int value)
+{
+    if (contextActualTokenCount_ == value) return;
+    contextActualTokenCount_ = value;
+    emit contextActualTokenCountChanged();
+}
+
+void MemoryViewModel::setContextBudgetExceeded(bool value)
+{
+    if (contextBudgetExceeded_ == value) return;
+    contextBudgetExceeded_ = value;
+    emit contextBudgetExceededChanged();
+}
+
+void MemoryViewModel::setContextInjectionStatus(const QString& value)
+{
+    if (contextInjectionStatus_ == value) return;
+    contextInjectionStatus_ = value;
+    emit contextInjectionStatusChanged();
+}
+
+void MemoryViewModel::setContextAssembleError(const QString& value)
+{
+    if (contextAssembleError_ == value) return;
+    contextAssembleError_ = value;
+    emit contextAssembleErrorChanged();
 }
 
 }  // namespace kylin::memory::client::v1

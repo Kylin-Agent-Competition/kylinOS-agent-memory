@@ -11,5 +11,6 @@
         <file>pages/KnowledgeDetailPage.qml</file>
         <file>pages/ConflictComparisonPage.qml</file>
         <file>pages/LifecycleStatusPage.qml</file>
+        <file>pages/ContextAssemblePage.qml</file>
     </qresource>
 </RCC>

@@ -20,7 +20,7 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 
 ## 当前状态
 
-**Memory Client L0（D5 / D6 / D7 / D8 原型链；L0\_COMPLETE — ctest 6/6 PASS + QML
+**Memory Client L0（D5 / D6 / D7 / D8 / D9 原型链；L0\_COMPLETE — ctest 7/7 PASS + QML
 build-smoke green；C 角色各天 Demo 保持 OPEN；SEC-CTX-01 Runtime Evidence 未生成；
 未接入真实 AI Assistant Hook / Chat DB / ChatRecord / model\_request /
 TurnExtractionAdapter / 知识治理 / 冲突仲裁持久化后端）。**
@@ -110,6 +110,46 @@ C-D8 保持 OPEN）。**
 不接入真实 AI Assistant Hook / Chat DB / 知识 / 冲突 / 生命周期持久化后端；
 三个候选方法 pending ADR 立项；L2 宿主验证需在麒麟 VM 上另行执行。
 
+### D9-C Memory Context 组装（Demo / Prototype）
+
+**D9-C Demo / Prototype（CANDIDATE / pending ADR；未接入真实 Context 组装后端；
+C-D9 保持 OPEN）。**
+
+* 候选 IPC 方法（`protocol_adapter.{h,cpp}`）：`context.assemble`，标记
+  `CANDIDATE / pending ADR`；生产默认返回 `UNSUPPORTED_METHOD`，Demo / 测试态
+  Mock Gateway 可注册 handler。方法语义：把召回候选（B 轨混合检索输出）组装为
+  受 Token 预算控制的 MemoryContext，返回可解释字段（召回来源、记忆类型、
+  冲突 / 不确定性提示、`injection_status`）。
+
+* MemoryClient 便捷方法：`sendContextAssembleRequest()`，复用 `sendRequest()`
+  共享 envelope 编码与 pending 跟踪。
+
+* ViewModel Pipeline：`runContextAssemblePipeline()`；独立 `contextAssembleBusy_` /
+  `pendingContextAssembleRequestId_`，沿用 D5 REWORK §C1 模式避免与 D5/D6/D7/D8
+  Pipeline 竞态；响应投影到 `assembledContext` / `contextRecallSources` /
+  `contextMemoryTypes` / `contextConflictHints` / `contextUncertaintyHints` /
+  `contextTokenBudget` / `contextActualTokenCount` / `contextBudgetExceeded` /
+  `contextInjectionStatus`。
+
+* 防伪 Context：`injection_status` 为 `failed` / `skipped` 或 `status=error` /
+  空响应时，一律不产生伪 `assembledContext`（沿用 D5 Pre-Chat 防伪 Context 模式），
+  所有投影字段清零。
+
+* Token 预算校验：客户端独立计算 `budget_exceeded = (actual_token_count >
+  token_budget)`，覆盖服务端可能漏返回该字段的场景。
+
+* QML 页面：`ContextAssemblePage.qml`（目标 Qt 5.12，ScrollView 防 960×640
+  溢出；输入区 user\_id / query\_text / token\_budget / scene / candidates；
+  输出区展示组装结果与可解释字段）。
+
+* L0 测试：`test_d9c_context_assemble.cpp`（16 用例：S1-S4 成功路径 /
+  B1-B4 预算校验 / F1-F4 失败 / 防伪路径 / I1-I4 独立性 / 与 D8C 不串扰）。
+
+**关键声明（D9-C）**：本实现仅为 memory-client 侧 Demo / Prototype；不关闭 C-D9；
+不接入真实 AI Assistant Hook / Chat DB / SourceResolver / Token Budget 服务端
+实现；`context.assemble` 候选方法 pending ADR 立项；L2 宿主验证需在麒麟 VM 上
+另行执行。
+
 ## 明确不负责的内容
 
 * 不实现 Python 侧服务逻辑
@@ -144,14 +184,16 @@ memory-client/
 │       ├── VerticalLinkPage.qml       # 新增：D5-C Demo（Pre/Post + 原文隔离）
 │       ├── KnowledgeDetailPage.qml    # D8-C 知识详情 Demo
 │       ├── ConflictComparisonPage.qml # D8-C 冲突对比 Demo
-│       └── LifecycleStatusPage.qml   # D8-C 生命周期状态 Demo
+│       ├── LifecycleStatusPage.qml   # D8-C 生命周期状态 Demo
+│       └── ContextAssemblePage.qml   # D9-C Memory Context 组装 Demo
 └── tests/
     ├── CMakeLists.txt
     ├── mock_gateway_server.{h,cpp}    # QLocalServer Mock
     ├── test_protocol_adapter.cpp      # L0 协议单元测试
     ├── test_memory_client_mock.cpp    # L0 Client ↔ Mock Gateway
     ├── test_d5_vertical_link_demo.cpp # L0 D5-C Demo（§A/B/C 10 用例）
-    └── test_d8c_knowledge_conflict_lifecycle.cpp # L0 D8-C Demo（14 用例）
+    ├── test_d8c_knowledge_conflict_lifecycle.cpp # L0 D8-C Demo（14 用例）
+    └── test_d9c_context_assemble.cpp # L0 D9-C Demo（16 用例）
 ```
 
 ## 构建
@@ -180,19 +222,21 @@ cmake --build memory-client/build
 * **环境**：ubuntu-22.04（qtbase5-dev / qt5-qmake / qtdeclarative5-dev / Qt Quick 模块）
 
 * **Job 1 / L0 ctest**：cmake configure（QML OFF / tests ON）→ cmake --build → `ctest --output-on-failure --verbose`
-  * 覆盖 ctest 目标（共 6 个）：`protocol_adapter` / `memory_client_mock` / `d5_vertical_link_demo` /
-    `d6c_multi_source_adapters` / `d7c_preference_editor` / `d8c_knowledge_conflict_lifecycle`
+  * 覆盖 ctest 目标（共 7 个）：`protocol_adapter` / `memory_client_mock` / `d5_vertical_link_demo` /
+    `d6c_multi_source_adapters` / `d7c_preference_editor` / `d8c_knowledge_conflict_lifecycle` /
+    `d9c_context_assemble`
 
 * **Job 2 / QML build smoke**：cmake configure（QML ON / tests OFF）→ cmake --build → 产物存在校验
   * 验证 `resources.qrc` 可处理、`main.qml` Component 引用无误、
-    `KnowledgeDetailPage.qml` / `ConflictComparisonPage.qml` / `LifecycleStatusPage.qml` 可参与 Qt Quick 构建
+    `KnowledgeDetailPage.qml` / `ConflictComparisonPage.qml` / `LifecycleStatusPage.qml` /
+    `ContextAssemblePage.qml` 可参与 Qt Quick 构建
   * 运行态（VM L2）不在本 job 范围
 
 ## 验收要求
 
 | 层级                 | 要求                                                                                | 状态                                                                                                                                                                                   |
 | ------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **L0**             | 编译通过、Mock 协议测试 + QML build smoke                              | **L0\_COMPLETE** — ctest **6/6**（protocol / mock / D5 / D6 / D7 / D8）覆盖全部 Demo Pipeline + Mock 契约；QML\_APP=ON 构建 smoke job 验证 QRC / main.qml / 三 Page 可编译 |
+| **L0**             | 编译通过、Mock 协议测试 + QML build smoke                              | **L0\_COMPLETE** — ctest **7/7**（protocol / mock / D5 / D6 / D7 / D8 / D9）覆盖全部 Demo Pipeline + Mock 契约；QML\_APP=ON 构建 smoke job 验证 QRC / main.qml / 四 Page 可编译 |
 | **L1**             | QLocalSocket 连接真实 Gateway / Echo；turn.finalized 测试态 handler；真实 MemoryContext 返回非空 | 待联调                                                                                                                                                                                  |
 | **L2**             | 银河麒麟 VM 中真实 AI Assistant Hook / ChatRecord / Chat DB / SourceResolver 打通          | **未实现**（属后续真实 C-D5 关闭工作）                                                                                                                                                             |
 | **HOST\_VERIFIED** | SEC-CTX-01 原文隔离宿主级证据                                                              | **RUNTIME\_UNVERIFIED**                                                                                                                                                              |

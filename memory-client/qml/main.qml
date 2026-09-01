@@ -142,6 +142,14 @@ ApplicationWindow {
                 text: qsTr("Lifecycle Status")
                 onClicked: stack.replace(lifecycleStatusPage)
             }
+            // D9-C Memory Context 组装（Demo / Prototype）
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                highlighted: true
+                text: qsTr("D9 Context Assemble")
+                onClicked: stack.replace(contextAssemblePage)
+            }
             Item { Layout.fillHeight: true }
             Button {
                 Layout.fillWidth: true
@@ -172,6 +180,8 @@ ApplicationWindow {
     Component { id: knowledgeDetailPage; KnowledgeDetailPage { viewModel: window.viewModel } }
     Component { id: conflictComparePage; ConflictComparisonPage { viewModel: window.viewModel } }
     Component { id: lifecycleStatusPage; LifecycleStatusPage { viewModel: window.viewModel } }
+    // D9-C Memory Context 组装 Demo 页面
+    Component { id: contextAssemblePage; ContextAssemblePage { viewModel: window.viewModel } }
 
     // 连接错误与请求失败统一弹出提示（不展示原始正文/凭据）。
     // Qt 5.12 风格：信号参数按名直接可见。
