@@ -277,7 +277,6 @@ QString MemoryClient::sendToolExecutionEvent(const QJsonObject& eventJson)
 QString MemoryClient::sendManualConfigEvent(const QJsonObject& eventJson)
 {
     // manual.config.ingest：候选 schema（manual_config_event.v1.json）。
-    // ViewModel 客户端侧预检敏感内容；本层仅做协议级发送。
     return sendEventEnvelope(methods::kManualConfigIngest, eventJson);
 }
 
@@ -329,6 +328,21 @@ QString MemoryClient::sendEventEnvelope(const QString& method, const QJsonObject
     pendingRequests_.emplace(requestId.toStdString(),
                               PendingRequest{method, traceId});
     return requestId;
+}
+
+QString MemoryClient::sendKnowledgeDetailRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kKnowledgeDetail, payload);
+}
+
+QString MemoryClient::sendConflictCompareRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kConflictCompare, payload);
+}
+
+QString MemoryClient::sendLifecycleStatusRequest(const QJsonObject& payload)
+{
+    return sendRequest(methods::kLifecycleStatus, payload);
 }
 
 void MemoryClient::handleSocketConnected()
