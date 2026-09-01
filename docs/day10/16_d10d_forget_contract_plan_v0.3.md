@@ -26,7 +26,7 @@ E 轨对 D10-D 精准遗忘冻结申请的正式回复（PR #98 评论区，love
 | **MEDIUM-01** `forget_audit` 补 `executed_at` | §四.2：补 `executed_at` 字段并明确 execute / terminal audit 填写语义（与 `created_at` 不等价） |
 | **MEDIUM-02** 迁移链修正 | §四.3：迁移规则改为「以实现时 `alembic heads` 真实链路为准」；PR #98（`20260831_add_source_events`）未合并前不得预先引用；禁止产生多 head |
 | **MEDIUM-03** `affected_count` 语义 | §三.1 / §四.1：统一为 Preview 时确定并经确认的目标数量 = `len(resolved_target_ids)`；另设 `executed_count`，实际处理数量与 `affected_count` 不一致时不得进入 `completed` |
-| **MEDIUM-04** `delete_mode` 门禁 | §四.9：`delete_mode` 可信来源由 ADR-016 冻结；Repository 不得按 `target_selector` 自行推导；LLM 不得终判 soft/hard；接线前 Hard Delete Runtime fail-closed |
+| **MEDIUM-04** `delete_mode` 门禁 | §四.9：`delete_mode` 可信来源由 ADR-017 冻结；Repository 不得按 `target_selector` 自行推导；LLM 不得终判 soft/hard；接线前 Hard Delete Runtime fail-closed |
 | 非阻断 1 | PR body 表述修正为「基于前置 v0.1 修订后首次入库 v0.2」 |
 | 非阻断 2 | §四.2：`forget_audit` 的 `forget_mode` / `target_type` / `status` SQL CHECK 注明留待 ADR-015 Schema 定稿时补充 |
 
@@ -70,7 +70,7 @@ D6-D（R35）已规划多源事件持久化（`source_events`，ADR-013/014 已�
 - 契约文档（本文档 + ADR-015/016 + 冻结文档回写）
 
 ### 禁止修改（红线）
-- 不修改冻结 FRZ-IPC-001~007 既有字段/错误码/envelope（forget 方法走 ADR-016 新增）
+- 不修改冻结 FRZ-IPC-001~007 既有字段/错误码/envelope（forget 方法走 ADR-017 新增）
 - 不修改 FRZ-DB-001 既有 5 张表定义（forget 表为新增，走 ADR-015）
 - 不修改 `pipeline/`、`providers/`、`security/`、`service/candidate_governance.py`、`gateway/`、`embedding/`、`retrieval/`、`observability/` 既有实现
 - **不接 Vector 清理**（TD-033 未完成；`has_vector_cleanup` 字段仅承载标记，不实现清理）
@@ -111,7 +111,7 @@ D6-D（R35）已规划多源事件持久化（`source_events`，ADR-013/014 已�
 |---|---|
 | **确认凭据（confirmation credential）** | preview → execute 之间的一次性凭据；execute 必须携带；**至少绑定**：`user_id` + `forget_plan_id` + 目标快照（或其稳定 Hash）+ 有效期 + 防重放信息；**必须拒绝**：用户不匹配 / 计划 ID 不匹配 / Preview 已变化 / 目标快照不匹配 / 过期 / 重放（`[02 §10.1]`） |
 | **幂等键复用** | 复用 FRZ-IPC-005 三元组 `(user_id, session_id, idempotency_key)` 语义（idempotency_cache，TTL 24h），**不新建**遗忘专用幂等表 |
-| **delete_mode 决策来源（v0.3/MEDIUM-04）** | ForgetPlan **本版不新增** `delete_mode` 字段（最终 IPC 字段形态由 ADR-016 冻结）；可信来源门禁：`delete_mode` 的可信输入由 **ADR-016 冻结**；**Repository 不得根据 `target_selector` 自行推导 soft/hard**；**LLM 不得决定最终 soft/hard 执行模式**；可信来源冻结与接线前，Hard Delete Runtime 继续 **fail-closed**（详见 §四.9） |
+| **delete_mode 决策来源（v0.3/MEDIUM-04）** | ForgetPlan **本版不新增** `delete_mode` 字段（最终 IPC 字段形态由 ADR-017 冻结）；可信来源门禁：`delete_mode` 的可信输入由 **ADR-017 冻结**；**Repository 不得根据 `target_selector` 自行推导 soft/hard**；**LLM 不得决定最终 soft/hard 执行模式**；可信来源冻结与接线前，Hard Delete Runtime 继续 **fail-closed**（详见 §四.9） |
 
 ### 3.3 状态机（v0.2 冻结，替换 v0.1 七值）
 
@@ -256,7 +256,7 @@ Hard Delete 冻结语义要求「SQLite / FTS5 / Vector / Cache / 日志 / 导�
 
 Schema 已含 `delete_mode = soft / hard`，但 `ForgetPlan` 输入不含该字段，须明确「谁决定最终 soft/hard」。契约规则：
 
-1. **可信来源由 ADR-016 冻结**：`delete_mode`（含 hard 触发的显式信号）最终可信输入来源由 ADR-016 冻结；本 PR 为前置草案，不预先锁定 IPC 字段形态。
+1. **可信来源由 ADR-017 冻结**：`delete_mode`（含 hard 触发的显式信号）最终可信输入来源由 ADR-017 冻结；本 PR 为前置草案，不预先锁定 IPC 字段形态。
 2. **Repository 不得根据 `target_selector` 自行推导**：禁止从自然语言 selector 推断 soft/hard。
 3. **LLM 不得决定最终 soft/hard 执行模式**：soft/hard 属执行模式决策，禁止交由 LLM 终判。
 4. **接线前 fail-closed**：在可信输入来源冻结并接线前，Hard Delete Runtime Execute 继续 **fail-closed**（不得自动降级软删后报「硬删除成功」）；软删主路径不受影响。
@@ -297,13 +297,13 @@ Schema 已含 `delete_mode = soft / hard`，但 `ForgetPlan` 输入不含该字�
 | F-3 | 凭据 TTL | 5 分钟（可调参数） | 与幂等 TTL（24h）分离：凭据短时确认，幂等重放保护 |
 | F-4 | Outbox 优先级实现 | **新增 nullable `priority` 列**（方案 A） | 见 §六 |
 | F-5 | forget_audit 正文 | **零正文冻结**：不落任何正文/摘要/selector 原文，只落结构化 ID 引用（selection_hash/confirmation_ref）+ 计数 | 验收含 Sentinel 扫描（§九） |
-| F-6 | IPC 方法形态 | `forget.preview` / `forget.execute` 两个写方法（ADR-016） | preview/execute 分离是 `[02 §10.1]` 红线，必须两方法 |
+| F-6 | IPC 方法形态 | `forget.preview` / `forget.execute` 两个写方法（ADR-017） | preview/execute 分离是 `[02 §10.1]` 红线，必须两方法 |
 | F-7 | 与 E 轨 D10-E 时序 | **已确认并行（路径 A，冻结回复）**：D 轨可先行开发 Preview/ID 快照/软删/FTS 退出/最小审计/Outbox/幂等/fail-closed；Hard Delete/Cascade/Full Reset/Vector 全量清理不阻塞开发但不得提前宣称完成 | 冻结回复 §11 |
 | F-8 | 状态机 | **v0.2 冻结**：`pending → previewing → awaiting_confirmation → executing → completed / failed / rolled_back`；`awaiting_confirmation → executing` 接线前 fail-closed | 冻结回复 §2 |
 | F-9 | full_reset | **语义冻结**：当前用户 Agent Memory 自有数据域全量重置 + 最高级确认 + 绑定 selection_hash；Runtime Execute fail-closed 至跨轨闭环 | 冻结回复 §6 |
 | F-10 | is_cascade | **冻结**：默认 false；true 仅业务 provenance 派生且目标全进 Preview；禁止跨 Consent Scope 传播 | 冻结回复 §5 |
 | F-11 | time_window canonical 时间口径 | **DEFERRED（待 D/E 书面补充冻结）**：业务时间字段 / 时区规则 / 区间开闭（建议半开区间 `[start_at, end_at)`）；**不得由 Repository/SQL 实现侧自行决定** | 冻结回复 §12 |
-| F-12 | delete_mode 可信决策来源 | **由 ADR-016 冻结（v0.3/MEDIUM-04）**：Repository 不得按 `target_selector` 推导；LLM 不得终判 soft/hard；可信来源接线前 Hard Delete Runtime fail-closed | Review #99 MEDIUM-04 + 冻结回复 §4 |
+| F-12 | delete_mode 可信决策来源 | **由 ADR-017 冻结（v0.3/MEDIUM-04）**：Repository 不得按 `target_selector` 推导；LLM 不得终判 soft/hard；可信来源接线前 Hard Delete Runtime fail-closed | Review #99 MEDIUM-04 + 冻结回复 §4 |
 | F-13 | target_selector 明文生命周期 | **仅短期存在（v0.3/HIGH-01）**：Preview 后 / Hard Delete 完成前清除或置安全占位；持久层仅存结构化 selector + `selection_hash`；`target_topic` 等同纳入 | Review #99 HIGH-01 |
 | F-14 | affected_count 语义 | **统一为 Preview 确定并经确认的目标数量 = `len(resolved_target_ids)`（v0.3/MEDIUM-03）**；另设 `executed_count`，实际数量不一致不得进入 `completed` | Review #99 MEDIUM-03 + 冻结回复 §1.2 |
 
@@ -378,7 +378,7 @@ Schema 已含 `delete_mode = soft / hard`，但 `ForgetPlan` 输入不含该字�
 ## 十一、签署与落地流程（v0.3 更新）
 
 1. **本文件（契约规划 v0.3）入库** ← 本 PR：吸收 Reviewer E 冻结回复（APPROVED_WITH_STAGED_RUNTIME）并闭合 Review #99 第一、二轮 REWORK（第一轮 HIGH-01 / MEDIUM-01~04 / 非阻断 2 项；第二轮 MEDIUM-01 / MEDIUM-02 / LOW-1 / LOW-2），作为 ADR-015/016 前置
-2. **ADR-015**（forget_plan/forget_audit 表 + outbox priority，FRZ-DB-001 扩展）+ **ADR-016**（forget.preview/forget.execute，FRZ-IPC-007 扩展）提交 D 决策
+2. **ADR-015**（forget_plan/forget_audit 表 + outbox priority，FRZ-DB-001 扩展）+ **ADR-017**（forget.preview/forget.execute，FRZ-IPC-007 扩展；编号说明：ADR-016 已由 D7C `preference.*` IPC 契约预留占用，Forget IPC 顺延至 ADR-017）提交 D 决策
 3. Reviewer E（谢嘉然）签署 ADR
 4. 回写冻结文档（FRZ-DB-001 / FRZ-IPC-007）
 5. 任务卡定稿 → 代码实现（按 F-7 并行：Preview/ID 快照/软删/FTS 退出/最小审计/Outbox/幂等/fail-closed）
