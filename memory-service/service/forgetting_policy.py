@@ -58,6 +58,15 @@ class ForgetPlanStateMachine:
             raise ForgetPlanTransitionError("execution_transition_owned_by_d")
         if next_status not in _ALLOWED_TRANSITIONS[plan.status]:
             raise ForgetPlanTransitionError("invalid_forget_plan_transition")
+        if (
+            plan.status is ForgetPlanStatus.PREVIEWING
+            and next_status is ForgetPlanStatus.AWAITING_CONFIRMATION
+            and (
+                plan.resolved_target_ids is None
+                or plan.affected_count is None
+            )
+        ):
+            raise ForgetPlanTransitionError("preview_snapshot_required")
         if executed_at is not None:
             raise ForgetPlanTransitionError("pre_confirmation_transition_forbids_executed_at")
 

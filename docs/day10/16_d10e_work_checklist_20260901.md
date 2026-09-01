@@ -26,7 +26,7 @@
 3. [ ] **目标解析与精准范围**：以请求 `user_id` 作为强制过滤键；规则引擎生成去重且稳定排序的 `resolved_target_ids`、`affected_count` 和脱敏预览。
 
    验证：单条、会话、主题、时间窗、全量重置的快照；误删、漏删均为零。
-4. [ ] **预览—确认—执行状态机**：已实现 `pending → previewing → awaiting_confirmation` 的不可跳步推进；确认令牌校验与进入 `executing` 的适配器由 D 轨接线，接线前失败关闭。
+4. [ ] **预览—确认—执行状态机**：已实现 `pending → previewing → awaiting_confirmation` 的不可跳步推进；进入确认等待前必须存在 `resolved_target_ids` 与 `affected_count` 的精准预览快照（允许零结果）；确认令牌校验与进入 `executing` 的适配器由 D 轨接线，接线前失败关闭。
 
    D 接线门槛：令牌必须绑定 `user_id`、`forget_plan_id` 与解析目标快照，校验过期和重放，并与写入 `executing` 在同一事务内完成。
 

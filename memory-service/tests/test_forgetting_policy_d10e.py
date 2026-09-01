@@ -58,15 +58,48 @@ def test_pending_plan_can_enter_preview_for_its_owner():
 
 def _advance_to_awaiting_confirmation(
     policy: ForgetPlanStateMachine,
+    **plan_overrides,
 ) -> ForgetPlan:
     previewing = policy.transition(
-        make_pending_plan(), ForgetPlanStatus.PREVIEWING, actor_user_id=USER
+        make_pending_plan(**plan_overrides),
+        ForgetPlanStatus.PREVIEWING,
+        actor_user_id=USER,
     )
     return policy.transition(
         previewing,
         ForgetPlanStatus.AWAITING_CONFIRMATION,
         actor_user_id=USER,
     )
+
+
+@pytest.mark.parametrize(
+    "plan_overrides",
+    [
+        {},
+        {"affected_count": 0},
+    ],
+)
+def test_awaiting_confirmation_requires_a_resolved_target_snapshot(plan_overrides):
+    """SEC-FORGET-01/02：未产生精准预览快照时不得请求用户确认。"""
+    with pytest.raises(ForgetPlanTransitionError, match="preview_snapshot_required"):
+        _advance_to_awaiting_confirmation(ForgetPlanStateMachine(), **plan_overrides)
+
+
+@pytest.mark.parametrize(
+    "plan_overrides",
+    [
+        {"resolved_target_ids": [], "affected_count": 0},
+        {"resolved_target_ids": ["pref_d10e_01"], "affected_count": 1},
+    ],
+)
+def test_awaiting_confirmation_accepts_zero_or_nonempty_resolved_target_snapshot(
+    plan_overrides,
+):
+    """零结果和非空结果都是可供用户确认的精准预览。"""
+    plan = _advance_to_awaiting_confirmation(
+        ForgetPlanStateMachine(), **plan_overrides
+    )
+    assert plan.status is ForgetPlanStatus.AWAITING_CONFIRMATION
 
 
 def test_transition_rejects_cross_user_actor():
@@ -96,7 +129,11 @@ def test_transition_cannot_skip_preview_or_confirmation():
 def test_execution_is_fail_closed_until_d_confirmation_adapter_is_integrated():
     """SEC-FORGET-02：公共 E 轨 seam 不得以调用方输入绕过确认进入执行。"""
     policy = ForgetPlanStateMachine()
-    awaiting_confirmation = _advance_to_awaiting_confirmation(policy)
+    awaiting_confirmation = _advance_to_awaiting_confirmation(
+        policy,
+        resolved_target_ids=[],
+        affected_count=0,
+    )
 
     with pytest.raises(ForgetPlanTransitionError, match="invalid_forget_plan_transition"):
         policy.transition(
