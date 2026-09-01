@@ -31,6 +31,7 @@ D11（同一虚拟机全功能联调，PR #84）已合并。D12 进入功能冻�
 - 任务卡：`docs/day12/01_task_card.md`
 - 关联：TD-A-005-01（Wontfix，本 PR 补强）、TD-A-D7-LLM-HANG-DEGRADE（模式复用）
 - 新增候选：测试顺序依赖问题登记技术债
+- 本次爬取历史 PR 补登未记录技术债：TD-047（A-REQ-01 生产组装缺口）、TD-048（A-REQ-02 治理不一致）、TD-049（PR#57 TD-1~3 未入账）、TD-050（PR#36 implicit 未实现）、TD-051（PR#42 cmake 未入账）、TD-052（本 PR 挂死阈值未参数化）——见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`
 
 ## 架构与能力边界依据
 
@@ -86,7 +87,7 @@ test_embedding_service.py + d9 + d10 + d12a: 79 passed
 ## 已知限制
 
 - 挂死恢复是调用方超时保护的第二层保障（SDK 无主动中断能力，TD-A-005-01 Wontfix 保持）
-- `_embed_hang_threshold_ms` 默认 60s，为进程级全局配置（未参数化到 config.toml，如需可后续登记）
+- `_embed_hang_threshold_ms` 默认 60s，为进程级全局配置（未参数化到 config.toml，已登记 TD-052）
 - L2 证据待 VM 运行后回填
 
 ## 回滚方式
