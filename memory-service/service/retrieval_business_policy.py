@@ -32,13 +32,16 @@ retrieval_business_policy.py — Day9E 标准 Memory Context 检索业务策略�
       放宽通道（options extra="forbid"，不暴露 status/conflict/object_types）。
 
 负向状态口径来源：
-- candidate / superseded / expired / removed 与 unresolved conflict 的拒绝语义
-  直接来自任务卡 day9-e-03 与 evaluation/D9_RETRIEVAL_GOLD_SPEC_V1.md
-  negative_guardrail（removed/expired/superseded/candidate/unresolved_conflict/
-  cross_user/sensitive_recall_prohibited）七类边界；
-- deprecated 在 D9 Gold 中列为 boundary（检索语义待 B 轨确认），本策略按任务卡
-  要求负向拒绝，属 E 轨业务策略层的进一步约束，不改动 B 轨行为；后续 B 轨冻结
-  deprecated 检索语义时通过 POLICY_VERSION 升版调整，不改 B 轨。
+- candidate / superseded / expired / removed / deprecated 与 unresolved conflict
+  的拒绝语义直接来自任务卡 day9-e-03 与 evaluation/D9_RETRIEVAL_GOLD_SPEC_V2.md
+  negative_guardrail 八类边界（removed_or_forgotten / expired / superseded /
+  deprecated / candidate / unresolved_conflict / cross_user /
+  sensitive_recall_prohibited）；
+- deprecated 已由 B 轨 2026-08-31 PR #88 裁决归入 Gold v2 negative_guardrail：
+  standard Memory Context 检索 fail-closed 禁召回、不进入标准 M2 正式分母，
+  仅显式 history/audit 模式可作为非标准访问路径使用（审计与回溯用途，本模块
+  不提供该入口）；本策略负向拒绝与该裁决一致，POLICY_VERSION 维持
+  knowledge-context-policy/v1，v2 升版由 Business Policy v2 任务另行执行。
 
 不读正文红线：
 - ContextStatusDecision 仅承载 memory_status / admitted / reason_code /
