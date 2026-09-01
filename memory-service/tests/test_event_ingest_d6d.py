@@ -495,3 +495,195 @@ def test_migration_global_unique_event_id(mig_db):
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute(base.replace("'u1'", "'u2'"))
     conn.close()
+
+
+# ── 冻结 L1 验收补充（Review #98 REWORK MEDIUM-01：请求级重放 / 同事务回滚 / 并发 dedup head / CHECK 对照） ──
+
+
+def test_request_idempotency_same_fingerprint_cache_replay(env):
+    """同三元组 + 同 request_fingerprint → cache replay，且不得重复业务副作用（ADR-014 v5）。
+
+    冻结场景 1：same triple + same request fingerprint → 命中 idempotency_cache 返回首次结果，
+    business_fn 不再执行 → source_events 行数不变、幂等缓存仍仅一行。
+    """
+    payload = _payload(event_id="evt-replay-fp", idempotency_key="idem-fp")
+    r1 = env["invoke"](payload)
+    assert r1["duplicate"] is False
+    assert len(_rows(env["engine"])) == 1
+
+    # 同 payload 再次提交（同三元组 + 同 fingerprint）→ 命中缓存，返回首次结果
+    r2 = env["invoke"](payload)
+    assert r2["source_event_id"] == r1["source_event_id"]
+    assert r2["admission_decision"] == r1["admission_decision"]
+    assert r2["admission_reason_code"] == r1["admission_reason_code"]
+    assert r2["duplicate"] is False
+    assert r2["duplicate_reason"] is None
+    assert len(_rows(env["engine"])) == 1  # 未重复业务副作用
+
+    # 缓存仅一行，且存储的指纹 = 同 payload 重算的 privacy-safe request_fingerprint
+    with env["engine"].connect() as conn:
+        cached = repo.get_idempotency_cache(
+            conn, user_id="u1", session_id="s1", idempotency_key="idem-fp"
+        )
+        assert cached is not None
+        wrapped = json.loads(cached["response"])
+        assert "_request_fingerprint" in wrapped
+        cached_fp = wrapped["_request_fingerprint"]
+        assert isinstance(cached_fp, str) and len(cached_fp) == 64
+
+        result = EventPipeline().process(payload)
+        fp = _event_ingest_request_fingerprint(method="event.ingest", event=result.event, result=result)
+        assert fp == cached_fp
+
+
+def test_event_ingest_atomic_rollback_with_idempotency_cache(env):
+    """source_events 写入与 idempotency_cache 写入同事务：business 失败 → 整体回滚（ADR-013 HIGH-02）。
+
+    冻结场景 2：UoW.execute_idempotent 单事务内，source_event INSERT 后业务失败 → 事务回滚，
+    source_events 与 idempotency_cache 均不得残留（不拆两个事务）。
+    """
+    eng = env["engine"]
+
+    def _insert_then_fail(uow):
+        repo.insert_source_event(
+            uow.conn,
+            user_id="u1",
+            event_id="evt-atomic",
+            actor_id="a1",
+            session_id="s1",
+            turn_id=None,
+            tool_call_id=None,
+            source_type="chat",
+            event_type="user_message",
+            schema_version="0.1",
+            trace_id="trc-atomic",
+            source_reference=None,
+            raw_payload_ref=None,
+            content_summary="用户偏好深色主题",
+            idempotency_key="idem-atomic",
+            consent_scope="memory_only",
+            source_business_status="raw",
+            sensitivity="none",
+            is_sensitive_matched=0,
+            should_ignore=0,
+            payload_security_checked=1,
+            memory_type=None,
+            requires_embedding=1,
+            has_structured_payload=0,
+            language_tag=None,
+            occurred_at="2026-08-31T10:00:00+00:00",
+            captured_at="2026-08-31T10:00:01+00:00",
+            content_fingerprint="fp-atomic",
+            dedup_group=None,
+            duplicate_of=None,
+            admission_decision="allow_extraction",
+            admission_reason_code="ok",
+            processing_status="pending",
+            created_at="2026-08-31T10:00:02+00:00",
+            updated_at="2026-08-31T10:00:02+00:00",
+        )
+        raise RuntimeError("simulated downstream failure")
+
+    with pytest.raises(RuntimeError):
+        with UnitOfWork(eng) as uow:
+            uow.execute_idempotent(
+                user_id="u1",
+                session_id="s1",
+                idempotency_key="idem-atomic",
+                business_fn=lambda: _insert_then_fail(uow),
+                request_fingerprint="fp-req-atomic",
+            )
+
+    with eng.connect() as conn:
+        # 业务写入已回滚：source_events 无行
+        assert repo.get_source_event_by_event_id(conn, user_id="u1", event_id="evt-atomic") is None
+        # 幂等缓存未写入：同事务回滚
+        assert repo.get_idempotency_cache(
+            conn, user_id="u1", session_id="s1", idempotency_key="idem-atomic"
+        ) is None
+
+
+def test_dedup_head_concurrent_atomic(env):
+    """两个不同 event_id、同 fingerprint 并发提交 → 仅一个 dedup head（ADR-013 MEDIUM-04）。
+
+    冻结场景 3：find_dedup_group_head + insert_source_event 同 UoW / 单写锁 / 事务原子绑定，
+    并发下 `duplicate_of IS NULL` 仅一行，另一行 duplicate_of = 首次行 id。
+    """
+    import threading
+
+    content = "并发去重：仅一个组首事件"
+    results: dict = {}
+    errors: list = []
+
+    def _worker(event_id: str, idem_key: str) -> None:
+        try:
+            results[event_id] = env["invoke"](
+                _payload(event_id=event_id, idempotency_key=idem_key, content_summary=content)
+            )
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=_worker, args=("evt-c1", "idem-c1")),
+        threading.Thread(target=_worker, args=("evt-c2", "idem-c2")),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, errors
+    rows = _rows(env["engine"])
+    assert len(rows) == 2  # 两行均存在（保留事件 + 标记去重）
+
+    heads = [r for r in rows if r["duplicate_of"] is None]
+    dups = [r for r in rows if r["duplicate_of"] is not None]
+    assert len(heads) == 1  # 仅一个 dedup head
+    assert len(dups) == 1
+    assert dups[0]["duplicate_of"] == heads[0]["id"]
+    assert heads[0]["dedup_group"] == dups[0]["dedup_group"]
+    # 消费资格谓词：仅 head 可进抽取（D9-D MEDIUM-02）
+    with env["engine"].connect() as conn:
+        eligible = {e["event_id"] for e in repo.find_pending_eligible(conn, user_id="u1")}
+    assert eligible == {heads[0]["event_id"]}
+
+
+def test_migration_check_constraints_source_events(mig_db):
+    """migration schema 对照覆盖冻结 CHECK 约束（ADR-013：5 CHECK 值域 + 强制执行）。
+
+    冻结场景 4：upgrade 后 CREATE TABLE 包含 5 个冻结 CHECK 值域；非法值插入被拒绝，
+    合法值可插入（CHECK 非仅文档声明）。
+    """
+    assert _run_alembic(mig_db, "upgrade", "head").returncode == 0
+    conn = sqlite3.connect(str(mig_db))
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='source_events'"
+    ).fetchone()
+    create_sql = row[0]
+
+    # 5 个冻结 CHECK 值域（ADR-013 DDL 草案 §决策）
+    assert "consent_scope IN ('memory_only','memory_and_analytics','none')" in create_sql
+    assert (
+        "source_business_status IN "
+        "('raw','completed','success','partial','failed','cancelled','timeout','ignored')" in create_sql
+    )
+    assert "sensitivity IN ('none','low','medium','high','critical')" in create_sql
+    assert "admission_decision IN ('allow_extraction','audit_only','reject')" in create_sql
+    assert "processing_status IN ('pending','extracting','extracted','embedded','stored')" in create_sql
+
+    # 强制执行：合法值可插入；非法 processing_status → CHECK 拒绝（IntegrityError）
+    base = (
+        "INSERT INTO source_events (user_id, event_id, actor_id, session_id, source_type, "
+        "event_type, schema_version, idempotency_key, consent_scope, source_business_status, "
+        "sensitivity, occurred_at, captured_at, admission_decision, admission_reason_code, "
+        "processing_status, created_at, updated_at) VALUES "
+        "('u1', 'evt-check-ok', 'a1', 's1', 'chat', 'user_message', '0.1', 'idem-ok', "
+        "'memory_only', 'raw', 'none', '2026-08-31T10:00:00+00:00', '2026-08-31T10:00:01+00:00', "
+        "'allow_extraction', 'ok', 'pending', '2026-08-31T10:00:02+00:00', '2026-08-31T10:00:02+00:00')"
+    )
+    conn.execute(base)
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            base.replace("'pending'", "'bogus_status'").replace("'evt-check-ok'", "'evt-check-bad'")
+        )
+    conn.close()
