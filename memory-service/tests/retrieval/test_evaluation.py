@@ -10,7 +10,10 @@ import pytest
 from retrieval.evaluation import (
     ChannelMode,
     EvalConfig,
+    ForgetResidualPhase,
+    ForgetResidualSample,
     QueryEvalResult,
+    evaluate_forget_residual,
     evaluate_queries,
     ndcg_at_k,
     percentile,
@@ -18,6 +21,7 @@ from retrieval.evaluation import (
     reciprocal_rank,
     report_to_dict,
 )
+from retrieval.contracts import Watermark, WatermarkDomain, WatermarkKind
 
 
 def _q(rid, ranked, relevant, latency=None):
@@ -92,6 +96,37 @@ def test_weighted_rrf_evaluation_records_algorithm_and_weight_configuration():
     assert data["channel_mode"] == "weighted_rrf_v1"
     assert data["algorithm_version"] == "weighted-rrf/v1"
     assert data["channel_weights"] == {"fts5": 0.5, "vector": 2.0}
+
+
+def test_forget_residual_rate_counts_confirmed_targets_seen_in_retrieval_results():
+    """D10-B：残留率按确认目标观测值计算，并绑定重建快照与数据集版本。"""
+    watermark = Watermark(
+        domain=WatermarkDomain(
+            scope_id="scope-alice",
+            stream="forget-outbox",
+            partition="alice",
+            source_generation="sqlite-d10",
+        ),
+        kind=WatermarkKind.MONOTONIC_INT,
+        value=7,
+    )
+    report = evaluate_forget_residual(
+        [
+            ForgetResidualSample("before-rebuild", ("42", "43"), ("11", "42")),
+            ForgetResidualSample("after-rebuild", ("44",), ("11", "12")),
+        ],
+        phase=ForgetResidualPhase.REBUILD,
+        dataset_version="forget-gold-v1",
+        source_snapshot_id="snapshot-2",
+        source_watermark=watermark,
+    )
+
+    assert report.target_observation_count == 3
+    assert report.residual_target_count == 1
+    assert report.residual_rate == pytest.approx(1 / 3)
+    assert report.phase is ForgetResidualPhase.REBUILD
+    assert report.dataset_version == "forget-gold-v1"
+    assert report.source_snapshot_id == "snapshot-2"
 
 
 def test_v007_eval_keeps_each_channel_algorithm_metadata_separate():

@@ -1,0 +1,9 @@
+VM=yanmouren778-pc
+OS=Linux 6.6.0-63-generic x86_64 GNU/Linux
+kernel=6.6.0-63-generic
+engine=1.2.0.1-0k0.11
+client_sdk=1.2.0.0-0k0.7
+bridge_sha256=c9909ee596959e14b184e41c730982b53fc539d14c748da7106d5b65e8a59b33
+engine_socket=/tmp/kylin-ai-vector-engine-1000.sock
+engine_proc=   1855 /usr/bin/kylin-ai-vector-engine /home/yanmouren778/.local/share/kylin-ai-vector-engine/default.db unix:/tmp/kylin-ai-vector-engine-1000.sock ERROR
+repo_head=4675e60de5e80bed1caf83092b5d862040825d4b

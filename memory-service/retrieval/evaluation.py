@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
+from retrieval.contracts import Watermark
+
 
 class ChannelMode(str, Enum):
     """评测通道：FTS5-only / Vector-only / rrf-v1 / weighted-rrf-v1。"""
@@ -22,6 +24,44 @@ class ChannelMode(str, Enum):
     VECTOR_ONLY = "vector"
     RRF_V1 = "rrf_v1"
     WEIGHTED_RRF_V1 = "weighted_rrf_v1"
+
+
+class ForgetResidualPhase(str, Enum):
+    """遗忘清理后的评测时点。"""
+
+    REALTIME_DELETE = "realtime_delete"
+    REBUILD = "rebuild"
+
+
+@dataclass(frozen=True)
+class ForgetResidualSample:
+    """一次受控检索中，确认目标与实际返回逻辑 ID 的独立观测。"""
+
+    query_id: str
+    confirmed_target_ids: tuple[str, ...]
+    ranked_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.query_id.strip():
+            raise ValueError("query_id 不得为空")
+        if any(not item.strip() for item in self.confirmed_target_ids):
+            raise ValueError("确认目标 ID 不得为空")
+        if any(not item.strip() for item in self.ranked_ids):
+            raise ValueError("检索结果 ID 不得为空")
+
+
+@dataclass(frozen=True)
+class ForgetResidualReport:
+    """绑定数据集和真源水位的遗忘残留率结果。"""
+
+    phase: ForgetResidualPhase
+    dataset_version: str
+    source_snapshot_id: str
+    source_watermark: Watermark
+    sample_count: int
+    target_observation_count: int
+    residual_target_count: int
+    residual_rate: float
 
 
 @dataclass(frozen=True)
@@ -248,6 +288,49 @@ def evaluate_queries(
         implementation_commit=config.implementation_commit,
         environment=config.environment,
         evidence_reference=config.evidence_reference,
+    )
+
+
+def evaluate_forget_residual(
+    samples: list[ForgetResidualSample],
+    *,
+    phase: ForgetResidualPhase,
+    dataset_version: str,
+    source_snapshot_id: str,
+    source_watermark: Watermark,
+) -> ForgetResidualReport:
+    """计算确认遗忘目标在实际检索结果中的残留率。
+
+    每条确认目标在每次检索观测中只计一次；因此排序重复项不会夸大残留率。
+    数据集版本、快照标识与水位由调用方显式绑定，避免跨样本静默比较。
+    """
+    if not isinstance(phase, ForgetResidualPhase):
+        raise ValueError("phase 必须是 ForgetResidualPhase")
+    if not isinstance(dataset_version, str) or not dataset_version.strip():
+        raise ValueError("dataset_version 不得为空")
+    if not isinstance(source_snapshot_id, str) or not source_snapshot_id.strip():
+        raise ValueError("source_snapshot_id 不得为空")
+    if not isinstance(source_watermark, Watermark):
+        raise TypeError("source_watermark 必须是 Watermark")
+
+    target_observation_count = 0
+    residual_target_count = 0
+    for sample in samples:
+        confirmed = set(sample.confirmed_target_ids)
+        target_observation_count += len(confirmed)
+        residual_target_count += len(confirmed.intersection(sample.ranked_ids))
+
+    return ForgetResidualReport(
+        phase=phase,
+        dataset_version=dataset_version,
+        source_snapshot_id=source_snapshot_id,
+        source_watermark=source_watermark,
+        sample_count=len(samples),
+        target_observation_count=target_observation_count,
+        residual_target_count=residual_target_count,
+        residual_rate=(residual_target_count / target_observation_count)
+        if target_observation_count
+        else 0.0,
     )
 
 

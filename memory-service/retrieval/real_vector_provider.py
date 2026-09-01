@@ -15,6 +15,8 @@ from typing import Optional
 
 from retrieval.contracts import Channel, RetrievalFilter, RetrievalHit, ScoreSemantics
 
+MAX_DELETE_PAIRS = 500
+
 
 class VectorCliError(RuntimeError):
     """vector_cli 执行失败或返回错误状态。"""
@@ -181,6 +183,46 @@ class VectorCliClient:
         # drop 已不存在的 collection 是幂等成功（已经是目标状态），不视为错误。
         if not result.get("ok") and result.get("code") == 1002 and "not found" in result.get("message", "").lower():
             return result
+        self._require_ok(result)
+        return result
+
+    def delete(
+        self,
+        name: str,
+        ids: list[int],
+        *,
+        user_id: str,
+        version_ids: list[str],
+    ) -> dict:
+        """向 Vector CLI 转发已解析的同用户 ID/版本删除对。"""
+        if not isinstance(user_id, str) or not user_id:
+            raise ValueError("删除用户必须非空")
+        if not isinstance(ids, list) or not ids:
+            raise ValueError("删除 ID 不能为空")
+        if len(ids) > MAX_DELETE_PAIRS:
+            raise ValueError("单次删除最多 500 对 ID/版本")
+        if any(
+            isinstance(memory_id, bool)
+            or not isinstance(memory_id, int)
+            or memory_id <= 0
+            for memory_id in ids
+        ):
+            raise ValueError("删除 ID 必须是正整数")
+        if not isinstance(version_ids, list) or len(version_ids) != len(ids):
+            raise ValueError("版本 ID 必须与删除 ID 一一对应")
+        if any(not isinstance(version_id, str) or not version_id for version_id in version_ids):
+            raise ValueError("版本 ID 必须非空")
+        result = self._run(
+            "delete",
+            name,
+            stdin=json.dumps(
+                {
+                    "user_id": user_id,
+                    "ids": ids,
+                    "version_ids": version_ids,
+                }
+            ),
+        )
         self._require_ok(result)
         return result
 
