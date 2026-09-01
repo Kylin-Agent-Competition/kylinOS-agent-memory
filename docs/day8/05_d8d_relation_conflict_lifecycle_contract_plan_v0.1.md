@@ -1,9 +1,10 @@
-# D8-D 知识关系/冲突/生命周期持久化契约规划（草案 v0.2）
+# D8-D 知识关系/冲突/生命周期持久化契约规划（草案 v0.3）
 
 - **编制日期**：2026-09-01
 - **编制人**：opencode（D 轨开发 Agent）
-- **状态**：DRAFT v0.2 — 按 PR #101 Review（REWORK，lovezy0730-create）处置修订，待 D 决策 + Reviewer E 确认后转正式契约（ADR-017/018 流程）
+- **状态**：DRAFT v0.3 — 按 PR #101 二轮 Review（REWORK，lovezy0730-create）处置修订，待 D 决策 + Reviewer E 确认后转正式契约（ADR-017/018 流程）
 - **版本变更（v0.1 → v0.2）**：①生命周期执行语义对齐 `LifecyclePolicy.decide()→LifecycleDecision`（PROMOTE/DEMOTE→memory_type、EXPIRE→memory_status=expired、ARCHIVE_REQUEST→disposition、HOLD/REJECT 无迁移）并补 `memory_type` 真源；②`memory_conflict` 补 `memory_conflict_member` 多成员表 + 完整性责任边界；③relation/conflict endpoint ownership 跨用户校验入错误语义与测试；④D-6 依赖 `knowledge_id ↔ memory_id/version_id` 映射冻结；⑤迁移 backfill/downgrade 数据保护 + Outbox Producer/Consumer 边界
+- **版本变更（v0.2 → v0.3，PR #101 二轮 REWORK 处置）**：①补 `LifecycleSnapshot` 完整真源——方案 A 增列 `evidence_tier`（六档 CHECK）并明确 Worker 构造快照只读 SQLite、禁止猜测/默认生成；②修正 legacy backfill——`entry_type='knowledge' AND is_deleted=1` → `memory_status='removed'`（不覆盖已有删除事实，禁止 backfill 为 active），迁移后 `memory_status` 接管生命周期最终真源（`is_deleted` 降级为 legacy 软删除字段）；③D-4 声明 `knowledge_id ↔ memory_id/version_id` production mapping 冻结为 Worker 前置依赖；④`memory_conflict` SQL 补 `resolution_confidence ∈[0,1]` 与 `is_auto_resolvable IN (0,1)` 两个 DB CHECK，与完整性责任表一致；⑤跨用户 read 语义对齐 D7D scoped not-found（write / endpoint ownership 违例仍 `INVALID_REQUEST`）；⑥PR Body 与 D-8 Outbox 措辞同步（outbox 既有 CHECK 仅约束 `aggregate_type`，`event_type` 无既有 CHECK）
 - **对照基线**：main @ `79411f1`（PR #98 D6-D 合并后）；`docs/day8/day8-e-business-acceptance-v1.md`（D8E，Conflict/ConflictResolutionPolicy/LifecyclePolicy 均 `NOT_PERSISTENCE / NOT_EXECUTION`）；`docs/day8/03_d8b_task_card.md`（D8B，SQLite 为关系/状态/版本/冲突真源）；`deliverables/D4_DB_INITIAL_DESIGN_FREEZE_20260817.md`（FRZ-DB-001）；`deliverables/D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（FRZ-IPC-007）；`docs/adr/013-source-events-table.md`、`014-event-ingest-method.md`（D6-D 契约，编号占用先例）；`docs/day10/16_d10d_forget_contract_plan_v0.3.md`（D10-D 契约，ADR-015/016 预留）；Day11 跨轨需求清单（D-REQ-02/03/04，P0）
 
 ---
@@ -48,7 +49,7 @@
 
 ### 禁止修改（红线）
 - 不修改冻结 FRZ-IPC-001~007 既有字段/错误码/envelope（如需 IPC 方法走 ADR-018 新增）
-- 不修改 FRZ-DB-001 既有 5 张表定义：**不删除/不改既有列语义**；新表与 additive column（memory_status/memory_type/last_accessed_at/access_count 等）均通过 ADR-017 受控扩展 FRZ-DB-001
+- 不修改 FRZ-DB-001 既有 5 张表定义：**不删除/不改既有列语义**；新表与 additive column（memory_status/memory_type/evidence_tier/last_accessed_at/access_count 等）均通过 ADR-017 受控扩展 FRZ-DB-001
 - 不修改 `pipeline/`、`providers/`、`security/`、`service/candidate_governance.py`、`service/conflict_resolution_policy.py`、`service/lifecycle_policy.py`、`gateway/`、`embedding/`、`retrieval/`、`observability/` 既有实现
 - **不实现冲突检测算法**（contradiction/temporal_inconsistency 判定阈值属 B/上游能力，HD-SCHEMA-04；本版只持久化已判定/已决策结果）
 - **不重写/复制** E 轨 Domain/Policy（`Conflict`/`ConflictResolutionPolicy`/`LifecyclePolicy`/枚举均复用）
@@ -92,6 +93,8 @@
 | `PolicyConfig` | model | promote/demote/expire/archive 阈值（全部必填，无默认值；正式冻结值由部署侧注入） |
 
 > **边界**：D 轨执行 Worker **消费** `LifecyclePolicy(config).decide(snapshot, now=...) → LifecycleDecision`，按决策语义持久化（见下表）；不修改 Policy 本身、不把 7/30/90 天等阈值硬编码为业务常量。
+
+> **Snapshot 真源要求（HIGH-01 处置）**：`LifecycleSnapshot` 的 `memory_status` / `memory_type` / `evidence_tier` / `confidence_score` / `access_count` / `last_accessed_at` 必须由 SQLite 确定性回源（§4.3 方案 A 增列；`confidence_score` 复用既有 `memory_entries.confidence`）；Worker 构造快照时**禁止猜测/临时默认生成**。`knowledge_id` 依赖 `knowledge_id ↔ memory_id/version_id` production mapping 冻结（D-4/D-6 共同前置，映射冻结前不得默认 `knowledge_id == memory_id == memory_entries.id`）。
 
 **LifecycleDecision → 持久化映射（执行语义真源）**：
 
@@ -154,7 +157,9 @@ CREATE TABLE memory_conflict (
     updated_at            TEXT    NOT NULL,
     CHECK (conflict_type IN ('contradiction','temporal_inconsistency','source_conflict','preference_conflict','scope_ambiguity')),
     CHECK (resolution_status IN ('detected','analyzing','resolved_auto','resolved_manual','deferred','unresolvable')),
-    CHECK (decision_action IN ('keep_left','keep_right','coexist','defer','reject'))
+    CHECK (decision_action IN ('keep_left','keep_right','coexist','defer','reject')),
+    CHECK (is_auto_resolvable IN (0, 1)),
+    CHECK (resolution_confidence IS NULL OR (resolution_confidence >= 0 AND resolution_confidence <= 1))
 );
 ```
 
@@ -194,7 +199,7 @@ CREATE TABLE memory_conflict_member (
 
 ### 4.3 生命周期状态承载（D-3 决策，二选一）
 
-**方案 A（推荐）**：`memory_entries` 增 nullable `memory_status` 列（六值 CHECK）+ `memory_type` 列（四值 CHECK，复用 `pipeline.schemas.MemoryType`：short_term/medium_term/long_term/ephemeral，作为 PROMOTE/DEMOTE 的正式持久化真源）+ `last_accessed_at`/`access_count`（可空观察事实）+ 索引 `(user_id, memory_status)`、`(user_id, memory_type)`。
+**方案 A（推荐）**：`memory_entries` 增 nullable `memory_status` 列（六值 CHECK）+ `memory_type` 列（四值 CHECK，复用 `pipeline.schemas.MemoryType`：short_term/medium_term/long_term/ephemeral，作为 PROMOTE/DEMOTE 的正式持久化真源）+ `evidence_tier` 列（六档 CHECK，复用 `service.conflict_resolution_policy.EvidenceTier`：user_explicit_config_latest/user_confirmed/tool_execution_result/consistent_behavior_multiple/behavior_inference_single/model_inference，作为 `LifecycleSnapshot.evidence_tier` 确定性回源）+ `last_accessed_at`/`access_count`（可空观察事实）+ 索引 `(user_id, memory_status)`、`(user_id, memory_type)`。
 - 优点：与 B 轨 `memory_status` 检索直接对齐；PROMOTE/DEMOTE 无需第三方 JOIN 即可原子更新 `memory_type`；D8B 回源复核即查即用
 - 需走 ADR-017 变更控制（FRZ-DB-001 扩展）
 
@@ -207,12 +212,14 @@ CREATE TABLE memory_conflict_member (
 ### 4.4 迁移
 - 文件：`migrations/versions/YYYYMMDD_add_memory_relation_conflict.py`（ADR-007 命名，独立 revision）
 - 版本链：`... → 20260831_add_source_events（D6-D）→ YYYYMMDD_add_memory_relation_conflict`（**以实现时 `alembic heads` 真实链路为准，禁止多 head**，参照 D6-D/D10-D 先例）
-- upgrade：新增 `memory_relation` / `memory_conflict` / `memory_conflict_member` 表（含索引 + CHECK）；方案 A 同时为 `memory_entries` 增列 `memory_status` / `memory_type` / `last_accessed_at` / `access_count` + 对应索引
-- **backfill 语义（方案 A）**：
-  - 已有 knowledge/通用记忆行的 `memory_status` 初始值：由迁移为 knowledge 行填充 `'active'`（`knowledge_id` 映射冻结后与 B 轨语义一致），非 knowledge entry（preference/tool_result/behavior）允许 NULL（检索过滤仅在 knowledge 场景消费）；
+- upgrade：新增 `memory_relation` / `memory_conflict` / `memory_conflict_member` 表（含索引 + CHECK）；方案 A 同时为 `memory_entries` 增列 `memory_status` / `memory_type` / `evidence_tier` / `last_accessed_at` / `access_count` + 对应索引
+- **backfill 语义（方案 A，HIGH-01 处置）**：
+  - 已有 knowledge 行的 `memory_status` 初始值：**由既有删除事实确定性派生**——`entry_type='knowledge' AND is_deleted=1` → `memory_status='removed'`（终态，保留已有删除事实，**禁止** backfill 为 `active`）；`is_deleted=0` 的 knowledge 行初始策略（保守倾向 `candidate`，与 E 轨 fail-closed 一致——CANDIDATE 不因高置信度自动恢复/提升）由 D-3/ADR-017 定稿；非 knowledge entry（preference/tool_result/behavior）允许 NULL（检索过滤仅在 knowledge 场景消费）；
   - `memory_type` 初始值：`'short_term'`（等待首个 LifecycleDecision 演进）；
-  - `memory_status`/`memory_type` 对 knowledge entry 为 NOT NULL（Repository 写入门禁，迁移阶段先以可空列 + backfill + 迁移后 CHECK 固化）；具体初始值与 NOT NULL 门禁在 D-3/ADR-017 定稿
-- downgrade：DROP `memory_conflict_member` / `memory_conflict` / `memory_relation`；方案 A 同时移除 `memory_entries.memory_status` / `memory_type` / `last_accessed_at` / `access_count` 列与对应索引。**已产生生命周期/关系/冲突数据后 downgrade 拒绝执行**（`data_loss_guard`：表内存在行或增列存在非空值时抛错，不做隐式丢数据）
+  - `evidence_tier` 初始值：由实现 PR 定义**确定性回源**（候选：按 D6-D `source_events.source_type/source_business_status` 派生，或保守初始档），**禁止迁移脚本猜测/默认生成非确定值**；知识行 NOT NULL；
+  - `memory_status`/`memory_type`/`evidence_tier` 对 knowledge entry 为 NOT NULL（Repository 写入门禁，迁移阶段先以可空列 + backfill + 迁移后 CHECK 固化）；具体初始值与 NOT NULL 门禁在 D-3/ADR-017 定稿；
+  - **迁移后 `memory_status` 接管生命周期最终真源**（D-REQ-04：不依赖遗留布尔字段作为最终真源）；`is_deleted` 保留为 legacy 软删除字段、不再作为生命周期真源，迁移完成一次性对齐后由 Repository 门禁维持两字段一致
+- downgrade：DROP `memory_conflict_member` / `memory_conflict` / `memory_relation`；方案 A 同时移除 `memory_entries.memory_status` / `memory_type` / `evidence_tier` / `last_accessed_at` / `access_count` 列与对应索引。**已产生生命周期/关系/冲突数据后 downgrade 拒绝执行**（`data_loss_guard`：表内存在行或增列存在非空值时抛错，不做隐式丢数据）
 
 ---
 
@@ -222,12 +229,12 @@ CREATE TABLE memory_conflict_member (
 |---|---|---|---|---|
 | D-1 | `relation_type` 值域与知识版本链 | **version/evidence/derived 三值**；知识版本链复用 D7D `memory_items/memory_versions` 模式（独立 `knowledge_versions`）或 `memory_relation(relation_type='version')` 承载，待 D/E 冻结 | 更多 relation_type / JSON 列 | 对齐 B 轨 `relation_ids`/`version_id` 消费；版本真源须唯一 current（D7D 先例） |
 | D-2 | conflict 落库字段 | **E 轨 Conflict 全字段 + Decision 结果列**（decision_action/reason_code/winner_id）＋ 多成员 `memory_conflict_member` 表承载 `involved_knowledge_ids`（Domain→SQLite 无损往返） | 仅存 Conflict 不含 Decision / 受控 JSON | 决策结果必须可审计回源（D8E 要求「E conflict policy 可以产生可持久化决策结果」）；多知识冲突须无损落库 |
-| D-3 | 生命周期状态承载 | **方案 A：`memory_entries` 增 `memory_status` + `memory_type` 列** | 独立 `memory_lifecycle` 表 | 与 B 轨检索直接对齐、无 JOIN；`memory_type` 为 PROMOTE/DEMOTE 持久化真源；ADR-017 扩展 |
-| D-4 | 执行 Worker 范围 | **本版实现消费 LifecycleDecision 的执行 Worker**：PROMOTE/DEMOTE → 原子更新 `memory_type`=target_memory_type；EXPIRE → 原子更新 `memory_status`=expired；ARCHIVE_REQUEST → 归档 disposition；HOLD/REJECT → 无状态修改，均记录 reason_code；TTL 阈值经 PolicyConfig 注入 | 仅持久化不执行（登记 TD） | D-REQ-04 要求「执行 Worker」；PolicyConfig 注入避免硬编码 |
+| D-3 | 生命周期状态承载 | **方案 A：`memory_entries` 增 `memory_status` + `memory_type` + `evidence_tier` 列** | 独立 `memory_lifecycle` 表 | 与 B 轨检索直接对齐、无 JOIN；`memory_type` 为 PROMOTE/DEMOTE 持久化真源；`evidence_tier` 为 `LifecycleSnapshot` 确定性回源（六档）；ADR-017 扩展 |
+| D-4 | 执行 Worker 范围 | **本版实现消费 LifecycleDecision 的执行 Worker**：PROMOTE/DEMOTE → 原子更新 `memory_type`=target_memory_type；EXPIRE → 原子更新 `memory_status`=expired；ARCHIVE_REQUEST → 归档 disposition；HOLD/REJECT → 无状态修改，均记录 reason_code；TTL 阈值经 PolicyConfig 注入。**前置依赖**：`knowledge_id ↔ memory_id/version_id` production mapping 必须先行冻结（同 D-6，当前 `PENDING_D_CONFIRMATION`），映射冻结前不得默认 `knowledge_id == memory_id == memory_entries.id`——`LifecycleSnapshot.knowledge_id` 构造依赖该映射 | 仅持久化不执行（登记 TD） | D-REQ-04 要求「执行 Worker」；PolicyConfig 注入避免硬编码；Worker 构造 Snapshot 只读 SQLite、禁止猜测/默认生成 |
 | D-5 | 查询 API 形态 | **Repository 函数优先**（`get_relations`/`get_conflicts`/`get_lifecycle_status`，user 隔离 + fail-closed）；IPC 方法（knowledge.detail/conflict.compare/lifecycle.status）若需走 ADR-018，对齐 C 轨 D8-C 候选（PR #97） | 仅 Repository | 契约先行本版冻结 Repository 边界；IPC 形态与 C 轨 D8-C 对齐后由 ADR-018 立项 |
 | D-6 | 与 B 轨检索接线 | **本版提供 SQLite 回源真值查询**（`resolve_conflict_state(knowledge_id)` 等），B 轨 `TruthRecord`（键 `(user_id, memory_id, version_id)`）接缝消费；unresolved conflict 默认排除由 B 轨 filter 执行。**前置依赖**：`knowledge_id ↔ memory_id/version_id` production mapping 必须先行冻结（当前 `PENDING_D_CONFIRMATION`；`memory_entries` 无 `knowledge_id` 列），映射冻结前不得默认 `knowledge_id == memory_id == memory_entries.id` | 本版不接 | D8B 已声明「SQLite 为真源、B 不实现 D 轨表」→ 接线是 D8D 验收项；缺身份映射则回源查询无法成立 |
 | D-7 | `conflict_summary` 脱敏 | **只落脱敏摘要/结构化引用，禁止用户原文**（Sentinel 验收，参照 D10-D） | 落原文 | 安全红线（D3 §4.1 原文隔离 + 冲突摘要可能含敏感正文） |
-| D-8 | Outbox 接线范围 | **本版接 Outbox Producer**（关系/冲突/生命周期状态变更与业务数据同事务写入 `outbox` 表，aggregate_type/event_type 按既有 CHECK 值域扩展走 ADR-017）；**不接 Outbox Consumer**（TD-D4D-001 保持 Open，D9D D-REQ-05 统一消费并同步 Vector/FTS/index） | 本版不产生 Outbox event | D-REQ-02/04 含 Outbox/index sync；Producer 与业务数据同事务保证可恢复，Consumer 阻塞不等于不产生事件 |
+| D-8 | Outbox 接线范围 | **本版接 Outbox Producer**（关系/冲突/生命周期状态变更与业务数据同事务写入 `outbox` 表；新 aggregate 值域经 ADR-017 受控扩展——**outbox 既有 CHECK 仅约束 `aggregate_type IN ('turn','memory')`，`event_type` 无既有 CHECK**）；**不接 Outbox Consumer**（TD-D4D-001 保持 Open，D9D D-REQ-05 统一消费并同步 Vector/FTS/index） | 本版不产生 Outbox event | D-REQ-02/04 含 Outbox/index sync；Producer 与业务数据同事务保证可恢复，Consumer 阻塞不等于不产生事件 |
 
 ---
 
@@ -235,8 +242,8 @@ CREATE TABLE memory_conflict_member (
 
 | 场景 | 行为 | 映射 |
 |---|---|---|
-| 跨用户访问 relation/conflict/lifecycle | 拒绝 | `INVALID_REQUEST`（Repository user 过滤 + UNIQUE(user_id, x_id)） |
-| relation/conflict 端点指向其他用户 knowledge（endpoint ownership 违例） | 拒绝写入 | `INVALID_REQUEST`（Repository 写入同事务校验 `relation/conflict.user_id == 所有 knowledge/source_event endpoint owner`；`memory_conflict_member` 成员 user_id 与主表一致） |
+| 跨用户访问 relation/conflict/lifecycle（**read**） | 返回 scoped 空结果 | `None / []`（不暴露其他用户对象存在性，对齐 D7D Repository read 语义；不通过 ID 可枚举性泄露对象存在） |
+| 跨用户访问 relation/conflict/lifecycle（**write**）及端点指向其他用户 knowledge（endpoint ownership 违例） | 拒绝写入 | `INVALID_REQUEST`（Repository user 过滤 + UNIQUE(user_id, x_id)；写入同事务校验 `relation/conflict.user_id == 所有 knowledge/source_event endpoint owner`；`memory_conflict_member` 成员 user_id 与主表一致） |
 | 关系/冲突不存在 | 返回空结果（真实） | 正常路径，不假装 |
 | 非法 relation_type / conflict_type / resolution_status | 拒绝写入 | `INVALID_REQUEST`（Schema CHECK + Repository 校验） |
 | 冲突双方同 knowledge_id | 拒绝 | `INVALID_REQUEST`（D3 §5.4 no_self_conflict，Domain 已校验，D 不重复实现但落库前复验） |
@@ -259,6 +266,7 @@ CREATE TABLE memory_conflict_member (
 | conflict 全生命周期落库：detected → resolved_auto/manual（含 Decision 结果列 + involved 成员行） | 冲突持久化 |
 | unresolved conflict 查询（B 轨排除路径：`resolution_status != resolved_*`） | 冲突消费 |
 | cross-user conflict 不可构造（UNIQUE(user_id, conflict_id) + Repository 隔离） | 隔离 |
+| **cross-user relation/conflict read 返回 scoped 空**（`None / []`，不拒绝、不暴露对象存在性） | 隔离（read 语义） |
 | **cross-user relation endpoint reject**（user-A relation 指向 user-B knowledge） | 隔离（endpoint ownership） |
 | **cross-user conflict endpoint reject**（user-A conflict left/right 混入 user-B knowledge） | 隔离（endpoint ownership） |
 | **cross-user knowledge↔source_event evidence relation reject** | 隔离（endpoint ownership） |
@@ -289,8 +297,8 @@ CREATE TABLE memory_conflict_member (
 
 ## 九、签署与落地流程
 
-1. **本文件（契约规划 v0.2）入库** ← 本 PR：跨轨需求 D-REQ-02/03/04 前置
-2. **ADR-017**（memory_relation/memory_conflict/memory_conflict_member 表 + memory_entries.memory_status/memory_type 扩展，FRZ-DB-001 扩展）+ **ADR-018**（如需 IPC 查询方法，FRZ-IPC-007 扩展，对齐 C 轨 D8-C 候选）提交 D 决策
+1. **本文件（契约规划 v0.3）入库** ← 本 PR：跨轨需求 D-REQ-02/03/04 前置
+2. **ADR-017**（memory_relation/memory_conflict/memory_conflict_member 表 + memory_entries.memory_status/memory_type/evidence_tier 扩展，FRZ-DB-001 扩展）+ **ADR-018**（如需 IPC 查询方法，FRZ-IPC-007 扩展，对齐 C 轨 D8-C 候选）提交 D 决策
 3. Reviewer E（谢嘉然）签署 ADR
 4. 回写冻结文档（FRZ-DB-001 / FRZ-IPC-007）
 5. 任务卡定稿 → 代码实现（Schema/Migration/Repository/执行 Worker/查询 API/L1 测试）
@@ -304,4 +312,4 @@ CREATE TABLE memory_conflict_member (
 2. **D-5 IPC 方法形态**：knowledge.detail / conflict.compare / lifecycle.status（C 轨 D8-C 候选，PR #97）是否在本版 ADR-018 立项为受控 handler，还是仅 Repository API
 3. **生命周期执行 Worker 触发方式**：轮询（复用 OutboxWorker 调度）vs 事件驱动；TTL 阈值默认值（PolicyConfig 注入，不硬编码）
 4. **conflict 检测上游**：本版只持久化已判定/已决策结果；B 轨冲突检测（HD-SCHEMA-04）时序与 D8D 写入口对齐
-5. **`knowledge_id ↔ memory_id/version_id` production mapping**：当前 `PENDING_D_CONFIRMATION`；`memory_entries` 无 `knowledge_id` 列，D-6 回源查询与 conflict/relation 端点 owner 校验依赖该映射冻结。映射冻结前不得默认 `knowledge_id == memory_id == memory_entries.id`（若有对应 D-REQ / TD，实现 PR 直接引用）
+5. **`knowledge_id ↔ memory_id/version_id` production mapping**：当前 `PENDING_D_CONFIRMATION`；`memory_entries` 无 `knowledge_id` 列，D-4（Worker 构造 `LifecycleSnapshot`）、D-6 回源查询与 conflict/relation 端点 owner 校验均依赖该映射冻结。映射冻结前不得默认 `knowledge_id == memory_id == memory_entries.id`（若有对应 D-REQ / TD，实现 PR 直接引用）
