@@ -13,8 +13,10 @@
 #   - D4D 麒麟 VM L2 人工验证第 3 步: evidence/l2-kylin-vm/d4d_vm_verify_20260821/d4d_vm_l2_manual_verify_20260821.md（commit ed9949c）
 #   - unit 冻结骨架: packaging/systemd/kylin-memory.service（本脚本不修改）
 #
-# ⚠️ 状态: UNVERIFIED —— 本脚本为 D11D 草案，尚未在 D11D 专用麒麟 VM 上执行验证；
-#    本脚本存在/通过 bash -n 不等同于部署验证通过；正式发行环境（生产 Kylin）systemd 测试仍未执行。
+# ✅ 状态: HOST_VERIFIED —— 已在 D11D 专用麒麟 VM（Kylin-V11-2603-D11D-47af2fa-Test，
+#    origin/main@47af2fa）执行 L2 通过：install/restart/rollback/reinstall/socket/journal，
+#    证据见 evidence/l2-kylin-vm/d11d_vm_service_l2_20260902.md（index.yaml: D11D-L2-SERVICE-LIFECYCLE）。
+#    正式发行环境（生产 Kylin）systemd 仍未验证。
 # =============================================================================
 
 set -euo pipefail

@@ -30,6 +30,8 @@
 - journal 关键行：`生产模式：alembic_version 校验通过，schema 由 Alembic 管理`；`Outbox Worker 启动（poll=1s, max_retries=3）`；`Memory Service 就绪`；`IPC Gateway 启动`。
 - `config.toml` 不存在时按全部默认值启动（预期行为，不视为缺陷）。
 
+> 被测脚本 commit：`install_kylin_memory.sh` 由 `df5df7f` 引入，自引入后零变化（`git diff df5df7f..HEAD -- packaging/systemd/install_kylin_memory.sh` 为空），脚本版本与 HEAD 一致。
+>
 ## 限制 / UNVERIFIED
 
 - 正式发行环境（生产 Kylin）systemd 行为未验证（仅本链接克隆）。
