@@ -8,7 +8,7 @@
 - **配套文件**：
   - `D9_RETRIEVAL_CORPUS_V2.jsonl`（检索语料候选行，62 行）
   - `D9_RETRIEVAL_QUERYSET_CANDIDATE_V2.jsonl`（查询候选行，33 条）
-  - `D9_RETRIEVAL_DATASET_README_V1.md`（v1 候选说明，保留为构造输入与 Git 过渡，正式 PR 前由人工 `git rm`，见「十、与 V1 的关系与人工清理」）
+  - `D9_RETRIEVAL_DATASET_README_V1.md`（v1 候选说明，已随 V1 三件经 `git rm` 清理提交从当前 PR HEAD 删除，Git 历史保留演进，见「十、与 V1 的关系与清理状态」）
   - `test_d9_retrieval_dataset.py`（候选集验证测试，只验证 V2 契约）
 - **任务性质声明**：本任务为纯数据集 + 文档 + 标准库测试任务（`runtime_required=false`、`runtime_commands=[]`），不产生 Runtime 结论，不更新 `evidence/index.yaml`，不声明任何评测结果。
 
@@ -225,11 +225,10 @@
 
 ---
 
-## 十、与 V1 的关系与人工清理
+## 十、与 V1 的关系与清理状态
 
-1. **V2 取代 V1 为正式候选集**：V1 三件（`D9_RETRIEVAL_CORPUS_V1.jsonl`、`D9_RETRIEVAL_QUERYSET_CANDIDATE_V1.jsonl`、`D9_RETRIEVAL_DATASET_README_V1.md`）在本任务执行期间**暂时保留**，仅作为 V2 构造输入和 Git 历史过渡，本任务**未删除、未移动、未改写** V1 三件（Implementer 沙箱禁止 `rm`/`git rm`）。
-2. **人工清理步骤（任务完成后执行）**：正式 PR 提交前由人工执行 `git rm evaluation/D9_RETRIEVAL_CORPUS_V1.jsonl evaluation/D9_RETRIEVAL_QUERYSET_CANDIDATE_V1.jsonl evaluation/D9_RETRIEVAL_DATASET_README_V1.md` 并重跑 L1 回归；**V1 三件的删除不属于本数据集任务完成判据**。
-3. 重写后的 `test_d9_retrieval_dataset.py` 只验证 V2 契约，**不新增**「V1 文件必须不存在」断言，也不读取 V1 文件，保证人工删除 V1 后测试不受影响。
+1. **当前 PR 仅保留 V2 Dataset**：V2 为当前 PR 唯一保留的检索候选 Dataset；V1 三件（`D9_RETRIEVAL_CORPUS_V1.jsonl`、`D9_RETRIEVAL_QUERYSET_CANDIDATE_V1.jsonl`、`D9_RETRIEVAL_DATASET_README_V1.md`）已通过 `git rm` 清理提交序列从当前分支 HEAD（Reviewer D 审查基线 a6456fd 对应的清理序列）删除。
+2. **删除为已提交状态**：V1 三件的删除已随清理提交进入当前 PR HEAD，不再存在于 PR 树；Git 历史保留 V1 演进记录，可追溯。`test_d9_retrieval_dataset.py` 只验证 V2 契约，**不读取 V1 文件**、不新增「V1 文件必须不存在」断言，V1 删除后测试不受影响。
 
 ---
 
@@ -264,7 +263,8 @@
 
 | 版本 | 日期 | 变更说明 | 作者 |
 |------|------|----------|------|
-| v2 | 2026-08-31 | 升级检索 Corpus/Query 候选集为版本级 retrieval_ref（relevant_refs / forbidden_refs / semantic_near_miss_refs，每个 ref 含 memory_id + version_id），落地 B 轨 2026-08-31 PR #88 裁决：d9q-001/010 stale v1 与 current v2 拆分、d9q-003/016 问法改写、d9q-007 d9c-038-v2 不入 forbidden、删除 d9q-033/034/035/036；新增 deprecated 干扰行 d9c-057 与全新 query_id d9q-037 护栏样本；knowledge_id 改为独立合成标识 `d9k-{NNN}` 并声明生产映射 `formal_mapping_status=PENDING_D_CONFIRMATION`；覆盖配额改由真实样本决定（boundary 无配额、不得用治理问题填充检索 Gold）。V1 三件保留为构造输入与 Git 过渡，人工清理步骤另行执行。产物为候选，未人工双人复核、未封存、未锁定哈希、不含评测结果。 | E 轨道 |
+| v2 | 2026-08-31 | 升级检索 Corpus/Query 候选集为版本级 retrieval_ref（relevant_refs / forbidden_refs / semantic_near_miss_refs，每个 ref 含 memory_id + version_id），落地 B 轨 2026-08-31 PR #88 裁决：d9q-001/010 stale v1 与 current v2 拆分、d9q-003/016 问法改写、d9q-007 d9c-038-v2 不入 forbidden、删除 d9q-033/034/035/036；新增 deprecated 干扰行 d9c-057 与全新 query_id d9q-037 护栏样本；knowledge_id 改为独立合成标识 `d9k-{NNN}` 并声明生产映射 `formal_mapping_status=PENDING_D_CONFIRMATION`；覆盖配额改由真实样本决定（boundary 无配额、不得用治理问题填充检索 Gold）。创建 v2 时 V1 三件尚保留为构造输入与 Git 过渡（当时状态）；其后已由 `git rm` 清理提交从当前 PR HEAD 删除。产物为候选，未人工双人复核、未封存、未锁定哈希、不含评测结果。 | E 轨道 |
+| v2 文档同步 | 2026-09-01 | 关闭 Reviewer D 二轮 MEDIUM-2：§10/配套文件/结束声明由执行前过渡表述同步为当前 HEAD 已清理状态（V1 三件已删除、V2 为当前 PR 唯一候选 Dataset）；不改动 V2 数据、Gold v2 契约与评测语义。 | E 轨道 |
 | v1 | 2026-08-31 | 初稿：建立检索 Corpus 与 Query 候选集（Corpus 61 行、Query 36 条），引用键为 memory_id-only 候选约定（relevant_ids / near_miss_refs），knowledge_id≡memory_id 1:1 同值为候选约定，deprecated 当时列为 boundary 待 B 确认；以上均已在 v2 按 B 轨裁决与 Policy v2 升级。对应文件 `D9_RETRIEVAL_DATASET_README_V1.md` 由人工清理步骤移除（Git 历史保留演进）。 | E 轨道 |
 
 ---
@@ -275,5 +275,5 @@
 2. 本候选集未人工双人复核、未语义确认、未切分、未封存、未锁定哈希；`annotation_status` 仅 `candidate`/`pending_review`。
 3. 消费 Gold Policy/Spec v2 契约（含 B 轨 2026-08-31 PR #88 裁决），不重新定义任何 Gold 规则；`knowledge_id ↔ memory_id` 生产映射仍 `PENDING_D_CONFIRMATION`，不宣称 equality。
 4. 本候选集仅复用 D6 的错误归因思想（LIFE-002/003/004 等），条目独立构造；D6 与本候选集均保持非 Gold。
-5. V1 三件保留为构造输入与 Git 过渡，正式 PR 前由人工 `git rm` 清理；V1 删除不构成本数据集任务完成判据。
+5. V1 三件已通过 `git rm` 清理提交序列从当前 PR HEAD 删除，当前 PR 仅保留 V2 Dataset；Git 历史保留 V1 演进记录。
 6. 本任务不产生任何银河麒麟 Runtime 验证结论（`RUNTIME_NOT_REQUIRED`）。
