@@ -1140,7 +1140,7 @@ entries:
       tested_commit 说明: 完整 L1/L2 执行于 fac5411；946eb3d 后续代码修复（Outbox event_id + resolver miss 日志）经定向测试 30+23 passed；证据文件随 PR #65 合并 main @ 4926345 入库（evidence_commit）。checksum 以 git 仓库 LF 归一化 blob 为准（sha256sum over committed bytes），与 Windows 工作树 CRLF 副本哈希不同，勿混用。
 
 
-- id: "D11A-L2-VERIFY"
+  - id: "D11A-L2-VERIFY"
     task_id: "D11A"
     description: "D11A 麒麟 VM 全功能联调验证——health 增强（model/errors/lifecycle）+ Outbox 桥接 + VM 检测 + 全量测试"
     status: "HOST_VERIFIED"
