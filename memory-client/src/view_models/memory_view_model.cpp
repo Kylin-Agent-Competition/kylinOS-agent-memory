@@ -1990,7 +1990,7 @@ void MemoryViewModel::runForgetPreviewPipeline(
         payload.insert(QStringLiteral("target_selector"), targetSelector);
     }
     // 模式条件字段（互斥）：仅写入对应模式那一个（full_reset 全跳过）。
-    const QLatin1String m(forgetMode);
+    const QString& m = forgetMode;
     if      (m == QLatin1String("single_item")) {
         payload.insert(QStringLiteral("target_id"), targetId);
     } else if (m == QLatin1String("session")) {
