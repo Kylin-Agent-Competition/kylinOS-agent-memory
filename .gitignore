@@ -72,5 +72,6 @@ evidence/_*.py
 evidence/ssh_transfer_diagnosis/kylin_transfer.py
 deliverables/PR18_ROUND2_REMEDIATION_CHECKLIST.md
 packaging/deploy-package/
-Kylin-runtime-knowledge/
+Kylin-runtime-knowledge/*
+!Kylin-runtime-knowledge/VERSION_MAP.md
 AGENTS.md

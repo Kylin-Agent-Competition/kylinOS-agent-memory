@@ -1,5 +1,6 @@
 # 01 SDK / 模型 / ABI 基线清单（v2 · 2026-08-16）
 
+> **版本对照索引（Agent 速查入口）**：`Kylin-runtime-knowledge/VERSION_MAP.md`（2026-08-17，VM 运行时接口版本对照表）；VM 实际版本/ABI 仍以本基线及 L2/L3 evidence 为最终事实依据。
 > **版本**：v2，基于 `02_kylin_vm_environment_baseline_20260816.md`（环境基线 v2 实测）与
 > `05_capability_boundary_reevaluation_20260816.md`（能力边界重评估 v1.2）更新。
 > **证据性质**：本文件为 **ABI / 包 / Schema 级** 结论（nm -D、dpkg、readelf、sha256sum、sqlite .schema、路径探查），
