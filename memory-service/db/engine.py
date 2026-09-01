@@ -11,8 +11,8 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
-from typing import Optional
 
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.exc import OperationalError
@@ -67,6 +67,22 @@ def get_write_lock() -> WriteLock:
     return _write_lock
 
 
+def _restrict_db_file_permissions(db_path: str) -> None:
+    """显式收紧 DB 文件权限为 0600（D6-D L2 权限契约，MEDIUM-02）。
+
+    SQLite 以默认 umask 创建文件（通常 0644）；DB 含敏感用户数据，需在
+    创建/初始化后显式收紧为仅属主可读写。`-wal`/`-shm` 伴随文件随连接
+    生命周期动态重建，不强制收紧（以 DB 主文件为准）。
+
+    `chmod` 失败仅 warning 不阻断启动——避免只读文件系统/无权限环境崩溃，
+    权限问题由部署/权限检查兜底发现。
+    """
+    try:
+        os.chmod(db_path, 0o600)
+    except OSError as exc:
+        logger.warning("收紧 DB 文件权限 0600 失败（不阻断启动）: %s (%s)", db_path, exc)
+
+
 def create_db_engine(db_path: str, *, busy_timeout_ms: int = _BUSY_TIMEOUT_MS) -> Engine:
     """创建 SQLite 引擎并应用 PRAGMA（WAL / busy_timeout / foreign_keys）。
 
@@ -89,6 +105,12 @@ def create_db_engine(db_path: str, *, busy_timeout_ms: int = _BUSY_TIMEOUT_MS) -
         cur.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
         cur.execute(f"PRAGMA foreign_keys={_FOREIGN_KEYS}")
         cur.close()
+        # D6-D MEDIUM-02：每次连接建立后 DB 文件已存在，显式收紧 0600
+        # （SQLite 惰性建文件，chmod 必须待文件创建后执行；幂等，失败仅 warning）
+        _restrict_db_file_permissions(db_path)
+
+    # 既有文件路径也立即收紧（幂等；若文件尚未创建则仅 warning，由 connect 事件补）
+    _restrict_db_file_permissions(db_path)
 
     return engine
 

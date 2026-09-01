@@ -13,8 +13,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -31,6 +33,7 @@ from db.schema import (
     memory_version_receipts,
     memory_versions,
     outbox,
+    source_events,
     turns,
 )
 
@@ -69,6 +72,14 @@ class PreferenceVersionEvidenceConflictError(Exception):
 
 class PreferenceVersionNotFoundError(Exception):
     """版本不存在、非本用户所有，或不是允许回滚的历史版本。"""
+
+
+class EventIdentityConflict(Exception):
+    """同 event_id 但 immutable identity 不一致（ADR-013/014 HIGH-01）。
+
+    语义：同 event_id + immutable identity 不一致（含跨用户复用 event_id）→
+    handler 转 INVALID_REQUEST，不回显标识、不回读他人事件（MEDIUM-03）。
+    """
 
 # outbox 事件类型（业务入队用）
 EVENT_TURN_FINALIZED = "turn.finalized"
@@ -1039,6 +1050,302 @@ def execute_idempotent(
         response=_wrap_response(response, request_fingerprint),
     )
     return response, False
+
+
+# ── source_events（ADR-013，D6-D 多源事件持久化） ──
+
+SENSITIVE_OMITTED = "<SENSITIVE-OMITTED>"
+NO_CONTENT = "<no-content>"
+_IDENTITY_WS = re.compile(r"\s+")
+
+# 指纹去重窗口（ADR-013：默认 24h；参数化登记 TD-D6D-001，本版硬编码）
+DEDUP_FINGERPRINT_WINDOW_HOURS = 24
+
+
+def _normalize_identity_text(text: Optional[str]) -> Optional[str]:
+    """内容身份归一化（去首尾空白、折叠内部空白、Unicode 大小写折叠）。"""
+    if text is None:
+        return None
+    return _IDENTITY_WS.sub(" ", str(text).strip()).casefold()
+
+
+def event_content_identity(
+    *, content_summary: Optional[str], raw_payload_ref: Optional[str]
+) -> str:
+    """归一化 event_content_identity（ADR-013 v4）：content_summary → raw_payload_ref → <no-content>。
+
+    不含敏感判定——敏感事件是否纳入身份由调用方决定（immutable identity 排除 content；
+    request_fingerprint 用 <SENSITIVE-OMITTED> 占位）。
+    """
+    norm = _normalize_identity_text(content_summary)
+    if norm:
+        return norm
+    norm = _normalize_identity_text(raw_payload_ref)
+    if norm:
+        return norm
+    return NO_CONTENT
+
+
+def _canonical_utc_ms(value: Any) -> str:
+    """时间戳统一 canonicalization：aware UTC ISO8601 毫秒（ADR-013 身份组成）。"""
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return value  # 不可解析原样（仅防御；正常路径已被 Pydantic 校验）
+    else:
+        return str(value)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds")
+
+
+def event_identity_fingerprint(
+    *,
+    user_id: str,
+    actor_id: str,
+    source_type: str,
+    event_type: str,
+    occurred_at: str,
+    content_identity: Optional[str],
+) -> str:
+    """派生 immutable event identity 指纹（ADR-013 v4，比较用，不落库）。
+
+    字段集：user_id + actor_id + source_type + event_type + occurred_at(UTC ms) +
+    event_content_identity（content_identity=None 时排除，敏感事件简并为非内容字段）。
+    """
+    parts = [user_id, actor_id, source_type, event_type, occurred_at]
+    if content_identity is not None:
+        parts.append(content_identity)
+    canonical = "\x1f".join(parts)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def compute_event_identity(event, *, sensitive: bool) -> str:
+    """从 NormalizedEvent 计算 immutable identity 指纹（敏感事件 content 不参与）。"""
+    content_identity = None
+    if not sensitive:
+        content_identity = event_content_identity(
+            content_summary=event.content_summary,
+            raw_payload_ref=event.raw_payload_ref,
+        )
+    return event_identity_fingerprint(
+        user_id=event.user_id,
+        actor_id=event.actor_id,
+        source_type=event.source_type.value,
+        event_type=event.event_type.value,
+        occurred_at=_canonical_utc_ms(event.occurred_at),
+        content_identity=content_identity,
+    )
+
+
+def compute_row_identity(row: Dict[str, Any]) -> str:
+    """从 source_events 行计算 immutable identity 指纹（敏感事件 content 不参与）。"""
+    sensitive = (
+        bool(row["is_sensitive_matched"])
+        or row["sensitivity"] in ("high", "critical")
+        or row["consent_scope"] == "none"
+        or bool(row["should_ignore"])
+    )
+    content_identity = None
+    if not sensitive:
+        content_identity = event_content_identity(
+            content_summary=row.get("content_summary"),
+            raw_payload_ref=row.get("raw_payload_ref"),
+        )
+    return event_identity_fingerprint(
+        user_id=str(row["user_id"]),
+        actor_id=str(row["actor_id"]),
+        source_type=str(row["source_type"]),
+        event_type=str(row["event_type"]),
+        occurred_at=_canonical_utc_ms(row["occurred_at"]),
+        content_identity=content_identity,
+    )
+
+
+def get_source_event_by_event_id(
+    conn, *, user_id: str, event_id: str
+) -> Optional[Dict[str, Any]]:
+    """按 user_id + event_id 点查（跨用户隔离，Repository 层强制过滤）。"""
+    row = conn.execute(
+        select(source_events).where(
+            and_(source_events.c.user_id == user_id, source_events.c.event_id == event_id)
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def find_dedup_group_head(
+    conn,
+    *,
+    user_id: str,
+    content_fingerprint: str,
+    source_type: str,
+    now_iso: Optional[str] = None,
+    window_hours: int = DEDUP_FINGERPRINT_WINDOW_HOURS,
+) -> Optional[Dict[str, Any]]:
+    """指纹点查：同 user + fingerprint + source_type 且 captured_at 在窗口内的首次同指纹事件。
+
+    索引点查 O(logN+k)（ADR-013 性能红线）；窗口关闭（window_hours=0）→ 返回 None
+    （退化为仅 event_id 幂等）。敏感事件 content_fingerprint=NULL 不入本查询（HIGH-03）。
+    """
+    if content_fingerprint is None or window_hours <= 0:
+        return None
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat(
+        timespec="milliseconds"
+    )
+    row = conn.execute(
+        select(source_events)
+        .where(
+            and_(
+                source_events.c.user_id == user_id,
+                source_events.c.content_fingerprint == content_fingerprint,
+                source_events.c.source_type == source_type,
+                source_events.c.captured_at >= cutoff,
+            )
+        )
+        .order_by(source_events.c.id.asc())
+        .limit(1)
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def insert_source_event(
+    conn,
+    *,
+    user_id: str,
+    event_id: str,
+    actor_id: str,
+    session_id: str,
+    turn_id: Optional[str],
+    tool_call_id: Optional[str],
+    source_type: str,
+    event_type: str,
+    schema_version: str,
+    trace_id: Optional[str],
+    source_reference: Optional[str],
+    raw_payload_ref: Optional[str],
+    content_summary: Optional[str],
+    idempotency_key: str,
+    consent_scope: str,
+    source_business_status: str,
+    sensitivity: str,
+    is_sensitive_matched: int,
+    should_ignore: int,
+    payload_security_checked: int,
+    memory_type: Optional[str],
+    requires_embedding: int,
+    has_structured_payload: int,
+    language_tag: Optional[str],
+    occurred_at: str,
+    captured_at: str,
+    content_fingerprint: Optional[str],
+    dedup_group: Optional[str],
+    duplicate_of: Optional[int],
+    admission_decision: str,
+    admission_reason_code: str,
+    processing_status: str,
+    created_at: str,
+    updated_at: str,
+) -> int:
+    """插入 source_events 行，返回 id。
+
+    跨用户 event_id IntegrityError（当前 user 未查到，但 INSERT 触发 UNIQUE(event_id)）
+    → 直接 EventIdentityConflict（fail-close，不回查/不返回他人事件，MEDIUM-03）。
+    """
+    try:
+        res = conn.execute(
+            insert(source_events).values(
+                user_id=user_id,
+                event_id=event_id,
+                actor_id=actor_id,
+                session_id=session_id,
+                turn_id=turn_id,
+                tool_call_id=tool_call_id,
+                source_type=source_type,
+                event_type=event_type,
+                schema_version=schema_version,
+                trace_id=trace_id,
+                source_reference=source_reference,
+                raw_payload_ref=raw_payload_ref,
+                content_summary=content_summary,
+                idempotency_key=idempotency_key,
+                consent_scope=consent_scope,
+                source_business_status=source_business_status,
+                sensitivity=sensitivity,
+                is_sensitive_matched=is_sensitive_matched,
+                should_ignore=should_ignore,
+                payload_security_checked=payload_security_checked,
+                memory_type=memory_type,
+                requires_embedding=requires_embedding,
+                has_structured_payload=has_structured_payload,
+                language_tag=language_tag,
+                occurred_at=occurred_at,
+                captured_at=captured_at,
+                content_fingerprint=content_fingerprint,
+                dedup_group=dedup_group,
+                duplicate_of=duplicate_of,
+                admission_decision=admission_decision,
+                admission_reason_code=admission_reason_code,
+                processing_status=processing_status,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+        )
+    except IntegrityError:
+        # UNIQUE(event_id) 冲突：当前 user 下已查不到，判定被其它 ownership 占用 → fail-close
+        raise EventIdentityConflict(
+            "event_id already owned by another identity"
+        ) from None
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+    return int(res.lastrowid)
+
+
+def list_source_events(
+    conn,
+    *,
+    user_id: str,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    """按 user + 时间线（id 升序）分页列出事件（审计用，跨用户隔离）。"""
+    stmt = (
+        select(source_events)
+        .where(source_events.c.user_id == user_id)
+        .order_by(source_events.c.id.asc())
+        .limit(limit)
+    )
+    try:
+        rows = conn.execute(stmt).mappings().all()
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+    return [dict(r) for r in rows]
+
+
+def find_pending_eligible(conn, *, user_id: str) -> List[Dict[str, Any]]:
+    """D9-D 消费资格谓词（ADR-013 MEDIUM-02）：pending + allow_extraction + duplicate_of IS NULL。
+
+    仅满足三条件的事件可进入 Extraction 调度；REJECT/AUDIT_ONLY/content duplicate 不返回。
+    """
+    stmt = (
+        select(source_events)
+        .where(
+            and_(
+                source_events.c.user_id == user_id,
+                source_events.c.processing_status == "pending",
+                source_events.c.admission_decision == "allow_extraction",
+                source_events.c.duplicate_of.is_(None),
+            )
+        )
+        .order_by(source_events.c.id.asc())
+    )
+    try:
+        rows = conn.execute(stmt).mappings().all()
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+    return [dict(r) for r in rows]
 
 
 # ── 指标（诊断页：backlog / oldest_pending_age / index_sync_lag） ──

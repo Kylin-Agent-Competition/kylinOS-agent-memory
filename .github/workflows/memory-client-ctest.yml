@@ -11,7 +11,7 @@ on:
     paths:
       - 'memory-client/**'
       - '.github/workflows/memory-client-ctest.yml'
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 jobs:
   ctest:
@@ -38,9 +38,49 @@ jobs:
             -DKYLIN_MEMORY_CLIENT_BUILD_QML_APP=OFF \
             -DKYLIN_MEMORY_CLIENT_BUILD_TESTS=ON
 
-      - name: Build
+      - name: Build tests
         run: cmake --build memory-client/build -j"$(nproc)"
 
       - name: Run ctest
         working-directory: memory-client/build
         run: ctest --output-on-failure --verbose
+
+  qml-build-smoke:
+    name: memory-client QML app smoke build
+    runs-on: ubuntu-22.04
+    # 仅验证 QML resources.qrc / main.qml / 新增 Page 可参与
+    # Qt Quick 构建（不运行 QML；运行态需 L2 VM）。
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt5 & build tools (含 Qt Quick)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            qtbase5-dev \
+            qt5-qmake \
+            qtdeclarative5-dev \
+            qtquickcontrols2-5-dev \
+            qml-module-qtquick2 \
+            qml-module-qtquick-controls2 \
+            qml-module-qtquick-layouts \
+            qml-module-qtquick-window2 \
+            qml-module-qtquick-dialogs \
+            qml-module-qt-labs-folderlistmodel \
+            qml-module-qt-labs-settings
+
+      - name: Configure CMake (QML app ON, tests OFF)
+        run: |
+          cmake -B memory-client/build-qml -S memory-client \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DKYLIN_MEMORY_CLIENT_BUILD_QML_APP=ON \
+            -DKYLIN_MEMORY_CLIENT_BUILD_TESTS=OFF
+
+      - name: Build QML app
+        run: cmake --build memory-client/build-qml -j"$(nproc)"
+
+      - name: Confirm binary exists
+        run: test -x memory-client/build-qml/kylin-memory-client

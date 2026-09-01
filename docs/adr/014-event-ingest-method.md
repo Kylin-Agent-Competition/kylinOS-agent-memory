@@ -1,8 +1,8 @@
 # ADR-014：新增 `event.ingest` IPC 写方法（FRZ-IPC-007 / D6-D 扩展）
 
-- **状态**：✅ D 已决策（2026-08-31，方案 A）；REWORK 修订 v5（按 Review #83 Reviewer E 第五轮意见重冻结）；待 Reviewer E 签署
+- **状态**：✅ D 已决策（2026-08-31，方案 A）；REWORK 修订 v5（按 Review #83 Reviewer E 第五轮意见重冻结）；已签署（Reviewer E，2026-08-31，PASS_WITH_DEBT，TD-D6D-002）
 - **日期**：2026-08-31（v5 修订同日）
-- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
+- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，已签，2026-08-31，PASS_WITH_DEBT，TD-D6D-002）
 - **责任轨道**：D（IPC）为主，A/E 协作（编排现有 pipeline / admission，不复制真源）
 - **决策版本**：`event-ingest-method-v5`
 - **适用范围**：FRZ-IPC-007 顶层方法路由表；关联 `docs/adr/013-source-events-table.md`（落库表）、`memory-service/pipeline/schemas.py`（MemorySourceEvent 输入真源）、`memory-service/security/source_admission.py`（准入）、FRZ-IPC-002/005/006、ADR-010（turn.finalized 先例）、ADR-013
@@ -246,4 +246,4 @@ FRZ-IPC-007 路由表新增写方法 `event.ingest`，payload 对齐 A 轨 `Memo
 - `memory-service/service/contracts.py`（ServiceRequestContext 结构）
 - `docs/day6/day6-d-01-event-persistence-contract-plan-v0.5.md`（D6-D 契约规划，D-7/D-8/D-9/D-10/D-11/D-12 决策：本版含 handler + consent 前置 + Context Adapter + request_fingerprint；v0.5 按第五轮修订固定顺序与 privacy-safe 指纹）
 
-本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-31 决策选方案 A，v2 按 Review #83 第一轮重冻结，v3 按第三轮意见修订，v4 按第四轮意见修订，v5 按第五轮意见修订**；**Reviewer E（谢嘉然）待签署**；签署后回写 `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（FRZ-IPC-007 路由表）。
+本 ADR 为文档/契约决策，不新增 Runtime 事实。批准记录：**D（周子腾）2026-08-31 决策选方案 A，v2 按 Review #83 第一轮重冻结，v3 按第三轮意见修订，v4 按第四轮意见修订，v5 按第五轮意见修订**；**Reviewer E（谢嘉然）2026-08-31 终局签署 PASS_WITH_DEBT**（0 BLOCKER / 0 HIGH；唯一债务 TD-D6D-002）；签署后回写 `D4_IPC_PROTOCOL_FORMAL_FREEZE_20260817.md`（FRZ-IPC-007 路由表，见下）。

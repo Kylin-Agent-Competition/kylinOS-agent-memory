@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.16)
 
 # L0 Mock 契约测试：协议编解码 + MemoryClient ↔ MockGateway
 
@@ -151,4 +151,37 @@ target_compile_definitions(test_d6c_multi_source_adapters
 add_test(
     NAME d6c_multi_source_adapters
     COMMAND test_d6c_multi_source_adapters
+)
+
+# ============================================================================
+# D8C 知识详情 / 冲突对比 / 生命周期状态 L0 Mock 契约测试
+# （knowledge.detail / conflict.compare / lifecycle.status，候选方法 pending ADR）
+# 范围：MemoryViewModel 三个候选 IPC payload 形状 + 响应路由 + 独立 pending +
+#       空参数 / 未连接拒绝 / status=error 失败路径。
+# 注意：L0 Mock 契约验证，不代表麒麟宿主真实交互（L2 另行在 VM 验证）。
+# ============================================================================
+add_executable(test_d8c_knowledge_conflict_lifecycle
+    ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+    ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
+    mock_gateway_server.cpp
+    test_d8c_knowledge_conflict_lifecycle.cpp
+)
+target_link_libraries(test_d8c_knowledge_conflict_lifecycle
+    PRIVATE
+        Qt5::Core
+        Qt5::Network
+        Qt5::Test
+)
+target_include_directories(test_d8c_knowledge_conflict_lifecycle
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_d8c_knowledge_conflict_lifecycle
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME d8c_knowledge_conflict_lifecycle
+    COMMAND test_d8c_knowledge_conflict_lifecycle
 )
