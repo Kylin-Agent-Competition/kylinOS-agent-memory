@@ -5,6 +5,7 @@
 // 每次操作启动此二进制，无需 pybind11 或 python3-dev。
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -30,6 +31,7 @@ constexpr char kKnowledgeTypeField[] = "knowledge_type";
 constexpr char kPrimaryCategoryField[] = "primary_category";
 constexpr char kSourceEventIdField[] = "source_event_id";
 constexpr char kIsDeletedField[] = "is_deleted";
+constexpr std::size_t kMaxDeletePairs = 500;
 
 std::shared_ptr<VectorDB::Database> g_client;
 
@@ -343,6 +345,9 @@ void Delete(const std::string& name, const json& input) {
     }
     if (!ids_value.is_array() || ids_value.empty()) {
         Fail("删除 ID 必须是非空数组");
+    }
+    if (ids_value.size() > kMaxDeletePairs) {
+        Fail("单次删除最多 500 对 ID/版本");
     }
     if (!versions_value.is_array() || versions_value.size() != ids_value.size()) {
         Fail("版本 ID 必须与删除 ID 一一对应");

@@ -265,6 +265,40 @@ def test_delete_rejects_empty_ids_before_invoking_cli(monkeypatch):
         )
 
 
+def test_delete_rejects_more_than_500_pairs_before_invoking_cli(monkeypatch):
+    """D10-B：超长删除选择器不得生成过长的 Vector 表达式。"""
+    def unexpected_cli(*args, **kwargs):
+        raise AssertionError("超长删除选择器不得抵达 vector_cli")
+
+    monkeypatch.setattr(subprocess, "run", unexpected_cli)
+    ids = list(range(1, 502))
+    version_ids = [f"v{item}" for item in ids]
+
+    with pytest.raises(ValueError, match="单次删除最多 500 对 ID/版本"):
+        VectorCliClient(cli_path="vector_cli").delete(
+            "d10_collection", ids, user_id="alice", version_ids=version_ids
+        )
+
+
+def test_delete_allows_exactly_500_pairs(monkeypatch):
+    """D10-B：边界内的删除选择器仍应完整转发。"""
+    calls = []
+
+    def fake_run(cmd, input=None, text=None, capture_output=None, timeout=None):
+        calls.append((cmd, input))
+        return _FakeCompleted(json.dumps({"ok": True, "code": 0}))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    ids = list(range(1, 501))
+    version_ids = [f"v{item}" for item in ids]
+
+    VectorCliClient(cli_path="vector_cli").delete(
+        "d10_collection", ids, user_id="alice", version_ids=version_ids
+    )
+
+    assert len(json.loads(calls[0][1])["ids"]) == 500
+
+
 def test_delete_rejects_unpaired_version_ids_before_invoking_cli(monkeypatch):
     """D10-B：每个删除 ID 必须有同位置的版本 ID。"""
     def unexpected_cli(*args, **kwargs):

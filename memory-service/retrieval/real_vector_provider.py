@@ -15,6 +15,8 @@ from typing import Optional
 
 from retrieval.contracts import Channel, RetrievalFilter, RetrievalHit, ScoreSemantics
 
+MAX_DELETE_PAIRS = 500
+
 
 class VectorCliError(RuntimeError):
     """vector_cli 执行失败或返回错误状态。"""
@@ -197,6 +199,8 @@ class VectorCliClient:
             raise ValueError("删除用户必须非空")
         if not isinstance(ids, list) or not ids:
             raise ValueError("删除 ID 不能为空")
+        if len(ids) > MAX_DELETE_PAIRS:
+            raise ValueError("单次删除最多 500 对 ID/版本")
         if any(
             isinstance(memory_id, bool)
             or not isinstance(memory_id, int)

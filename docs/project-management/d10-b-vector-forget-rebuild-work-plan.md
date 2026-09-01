@@ -45,8 +45,8 @@
 
 | 项目 | 状态 | 已有证据 / 限制 |
 | --- | --- | --- |
-| 受控 Vector CLI `delete` 协议 | 已实现并完成 L1 | C++ bridge 只接受用户、数值主键和同位置版本 ID；未知键、空选择器、未配对版本与 SDK 错误均失败关闭。Python 桥接测试和完整 retrieval 测试通过。 |
-| 宿主删除运行器 | 已提供，待麒麟验证 | 运行器覆盖目标删除、跨用户 ID、版本不匹配、重复删除与非法输入，并仅清理本次成功创建的 `d10b_` 临时集合。当前工作区没有受信任 `vector_bridge_cli` 二进制，不能将静态检查或模拟运行表述为 L2。 |
+| 受控 Vector CLI `delete` 协议 | 已实现并完成 L1 | C++ bridge 只接受用户、数值主键和同位置版本 ID，单次至多 500 对；未知键、空选择器、超长选择器、未配对版本与 SDK 错误均失败关闭。Python 桥接测试和完整 retrieval 测试通过。 |
+| 宿主删除运行器 | 已提供，待麒麟验证 | 运行器覆盖目标删除、跨用户 ID、版本不匹配、重复删除、超长选择器与其他非法输入，并仅清理本次成功创建的 `d10b_` 临时集合。当前工作区没有受信任 `vector_bridge_cli` 二进制，不能将静态检查或模拟运行表述为 L2。 |
 | 冻结 `VectorDeleteRequest` 正式适配 | 阻塞 | 缺少 D 轨提供的逻辑记忆 ID 到 Vector 数值主键映射、serving generation、水位与幂等结果接线；不得用 CLI 的 `requested_count` 伪造 `VectorDeleteResult`。 |
 | SQLite 重建快照读取器 | 已实现并完成 L1 | `SqliteVectorSnapshotReader` 仅在调用方已开启的 SQLite 读事务中，按用户和主键顺序读取未软删除的 `memory_entries`；保留调用方提供的快照标识与水位，无法解析索引文本或版本非法的记录以明确原因拒绝。它不消费 D 轨版本真源、不激活代次，也不调用 Embedding。 |
 | 代次重建与残留率 | 阻塞 | 仍依赖 D 轨提供逻辑记忆 ID 到 Vector 数值主键映射、版本真源、serving generation、水位与幂等结果接线，以及 A 轨可调用的真实 Embedding 输入；当前不得用固定向量或模拟成功代替。 |

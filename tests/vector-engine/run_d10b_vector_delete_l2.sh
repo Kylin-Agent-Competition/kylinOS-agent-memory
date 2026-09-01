@@ -164,10 +164,18 @@ unknown_field_output="$({ printf '%s\n' '{"user_id":"user-a","ids":[101],"versio
 unknown_field_status=$?
 unpaired_version_output="$({ printf '%s\n' '{"user_id":"user-a","ids":[101,102],"version_ids":["v1"]}'; } | "$binary" delete "$collection" 2>&1)"
 unpaired_version_status=$?
+oversize_selector_payload="$(python3 -c '
+import json
+ids = list(range(1, 502))
+print(json.dumps({"user_id": "user-a", "ids": ids, "version_ids": [f"v{item}" for item in ids]}))
+')"
+oversize_selector_output="$(printf '%s\n' "$oversize_selector_payload" | "$binary" delete "$collection" 2>&1)"
+oversize_selector_status=$?
 set -e
 assert_fail_closed "空选择器" "$empty_selector_output" "$empty_selector_status"
 assert_fail_closed "未知字段" "$unknown_field_output" "$unknown_field_status"
 assert_fail_closed "未配对版本" "$unpaired_version_output" "$unpaired_version_status"
+assert_fail_closed "超长删除选择器" "$oversize_selector_output" "$oversize_selector_status"
 
 trap - EXIT
 "$binary" drop_collection "$collection" >/dev/null || fail "清理失败"
