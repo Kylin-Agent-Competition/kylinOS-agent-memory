@@ -1,4 +1,4 @@
-#include "view_models/memory_view_model.h"
+﻿#include "view_models/memory_view_model.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -822,14 +822,8 @@ void MemoryViewModel::onResponseReceived(
             || injectionStatus == QStringLiteral("skipped");
         if (contextInvalid) {
             // 空 data / failed / skipped：清空投影，stage=failed（防伪 Context）
-            setAssembledContext(QJsonObject{});
-            setContextRecallSources({});
-            setContextMemoryTypes({});
-            setContextConflictHints({});
-            setContextUncertaintyHints({});
-            setContextTokenBudget(0);
-            setContextActualTokenCount(0);
-            setContextBudgetExceeded(false);
+            // I-2 修复：统一使用 resetContextProjection() 避免 stale Context 残留。
+            resetContextProjection();
             setContextInjectionStatus(injectionStatus.isEmpty()
                 ? QStringLiteral("skipped") : injectionStatus);
             setContextAssembleError(QStringLiteral(
@@ -941,17 +935,11 @@ void MemoryViewModel::onRequestFailed(
 
     // ── D9C Memory Context 组装 pending 命中 ───────────────────────
     // 错误响应绝不参与 Context 拼接：清空 assembledContext 防伪注入。
+    // I-2 修复：统一使用 resetContextProjection() 避免 stale Context 残留。
     if (!pendingContextAssembleRequestId_.isEmpty()
         && requestId == pendingContextAssembleRequestId_) {
         pendingContextAssembleRequestId_.clear();
-        setAssembledContext(QJsonObject{});
-        setContextRecallSources({});
-        setContextMemoryTypes({});
-        setContextConflictHints({});
-        setContextUncertaintyHints({});
-        setContextTokenBudget(0);
-        setContextActualTokenCount(0);
-        setContextBudgetExceeded(false);
+        resetContextProjection();
         setContextInjectionStatus(QStringLiteral("failed"));
         setContextAssembleBusy(false);
         setContextAssembleError(safeMessage);
@@ -1482,6 +1470,24 @@ QVariantList MemoryViewModel::projectJsonArray(const QJsonArray& items) const
     return out;
 }
 
+// D9C 专用投影：recall_sources / uncertainty_hints 契约允许字符串元素
+// （如 "fts5" / "vector_score_unverified"）或对象元素（{channel,provider} /
+// {memory_id,conflict_state}）。projectJsonArray 仅保留 isObject()，会丢弃
+// 字符串元素导致投影恒空（CI 实证 A2/A5 失败）。本函数同时保留字符串与对象。
+QVariantList MemoryViewModel::projectJsonArrayMixed(const QJsonArray& items) const
+{
+    QVariantList out;
+    for (const QJsonValue& value : items) {
+        if (value.isObject()) {
+            out.append(value.toObject().toVariantMap());
+        } else if (value.isString()) {
+            out.append(QVariant(value.toString()));
+        }
+        // 其它类型（数字/bool/null）静默忽略，与 D8C projectJsonArray 保持一致。
+    }
+    return out;
+}
+
 // ── D8C 私有 setters ───────────────────────────────────────────────────────
 
 void MemoryViewModel::setKnowledgeDetailBusy(bool value)
@@ -1587,27 +1593,32 @@ void MemoryViewModel::runContextAssemblePipeline(
         setContextAssembleError(QStringLiteral(
             "A context.assemble request is already in flight."));
         setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
         return;
     }
     if (userId.isEmpty()) {
         setContextAssembleError(QStringLiteral("user_id must not be empty."));
         setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
         return;
     }
     if (queryText.isEmpty()) {
         setContextAssembleError(QStringLiteral("query_text must not be empty."));
         setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
         return;
     }
     if (tokenBudget <= 0) {
         setContextAssembleError(QStringLiteral(
             "token_budget must be a positive integer."));
         setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
         return;
     }
     if (client_.connectionState() != MemoryClient::ConnectionState::Connected) {
         setContextAssembleError(QStringLiteral("Client is not connected."));
         setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
         return;
     }
 
@@ -1634,21 +1645,17 @@ void MemoryViewModel::runContextAssemblePipeline(
         setContextAssembleError(QStringLiteral(
             "Failed to send context.assemble request."));
         setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
         return;
     }
     pendingContextAssembleRequestId_ = id;
+    // 记录本次请求的 token_budget 用于响应缺失时的回退（M-2 修复）。
+    requestedTokenBudget_ = tokenBudget;
     setContextAssembleBusy(true);
     setContextAssembleError({});
     setContextAssembleStage(QStringLiteral("querying"));
-    // 清空上一轮投影，避免 stale Context 残留。
-    setAssembledContext(QJsonObject{});
-    setContextRecallSources({});
-    setContextMemoryTypes({});
-    setContextConflictHints({});
-    setContextUncertaintyHints({});
-    setContextTokenBudget(0);
-    setContextActualTokenCount(0);
-    setContextBudgetExceeded(false);
+    // 清空上一轮投影，避免 stale Context 残留（防伪 Context 统一口径）。
+    resetContextProjection();
     setContextInjectionStatus(QStringLiteral("querying"));
     setLastRequestId(id);
     armDeadlineTimer(id, kDefaultDeadlineMs);
@@ -1660,25 +1667,31 @@ void MemoryViewModel::projectAssembledContext(const QJsonObject& data)
     setAssembledContext(data);
 
     // 召回来源（通道）：recall_sources[]（字符串或 {channel,provider} 对象）。
-    setContextRecallSources(projectJsonArray(
+    // 使用 projectJsonArrayMixed 保留字符串元素（fts5/vector/rrf 等）。
+    setContextRecallSources(projectJsonArrayMixed(
         data.value(QStringLiteral("recall_sources")).toArray()));
 
     // 记忆类型分布：memory_types[]（字符串或 {type,count} 对象）。
-    setContextMemoryTypes(projectJsonArray(
+    setContextMemoryTypes(projectJsonArrayMixed(
         data.value(QStringLiteral("memory_types")).toArray()));
 
     // 冲突提示：conflict_hints[]（含 memory_id / conflict_state 等）。
-    setContextConflictHints(projectJsonArray(
+    setContextConflictHints(projectJsonArrayMixed(
         data.value(QStringLiteral("conflict_hints")).toArray()));
 
     // 不确定性提示：uncertainty_hints[]（降级通道 / 陈旧索引 / score_semantics 未验证等）。
-    setContextUncertaintyHints(projectJsonArray(
+    // 使用 projectJsonArrayMixed 保留字符串元素（vector_score_unverified 等）。
+    setContextUncertaintyHints(projectJsonArrayMixed(
         data.value(QStringLiteral("uncertainty_hints")).toArray()));
 
     // Token 预算校验：actual_token_count / token_budget / budget_exceeded。
     // 客户端独立计算 budget_exceeded 以防服务端遗漏；同时回填服务端值（若提供）。
+    // M-2 修复：响应缺失 token_budget 时回退到本次请求的 requestedTokenBudget_，
+    // 避免 UI 显示 "250 / 0" 且无法触发超预算（请求前已清零投影）。
+    const int fallbackBudget = (requestedTokenBudget_ > 0)
+        ? requestedTokenBudget_ : contextTokenBudget_;
     const int budget = data.value(QStringLiteral("token_budget")).toInt(
-        contextTokenBudget_);
+        fallbackBudget);
     const int actual = data.value(QStringLiteral("actual_token_count")).toInt(
         contextActualTokenCount_);
     const bool serverExceeded =
@@ -1702,6 +1715,21 @@ void MemoryViewModel::projectAssembledContext(const QJsonObject& data)
         setContextInjectionStatus(selectedIds.isEmpty()
             ? QStringLiteral("degraded") : QStringLiteral("prepared"));
     }
+}
+
+// D9C 防伪 Context 统一清空辅助：所有失败路径与请求前置清空调用本函数，
+// 确保 stale Context 不残留在投影字段中（I-2 修复）。
+void MemoryViewModel::resetContextProjection()
+{
+    setAssembledContext(QJsonObject{});
+    setContextRecallSources({});
+    setContextMemoryTypes({});
+    setContextConflictHints({});
+    setContextUncertaintyHints({});
+    setContextTokenBudget(0);
+    setContextActualTokenCount(0);
+    setContextBudgetExceeded(false);
+    // injection_status 由调用方决定（querying / failed / skipped）。
 }
 
 // ── D9C 私有 setters ─────────────────────────────────────────────────────────

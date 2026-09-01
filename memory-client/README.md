@@ -20,8 +20,9 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 
 ## 当前状态
 
-**Memory Client L0（D5 / D6 / D7 / D8 / D9 原型链；L0\_COMPLETE — ctest 7/7 PASS + QML
-build-smoke green；C 角色各天 Demo 保持 OPEN；SEC-CTX-01 Runtime Evidence 未生成；
+**Memory Client L0（D5 / D6 / D7 / D8 / D9 原型链；L0\_PENDING CI — ctest 预期 7/7
+（d9c REWORK 后待 CI 重跑）+ QML build-smoke green；C 角色各天 Demo 保持 OPEN；
+SEC-CTX-01 Runtime Evidence 未生成；
 未接入真实 AI Assistant Hook / Chat DB / ChatRecord / model\_request /
 TurnExtractionAdapter / 知识治理 / 冲突仲裁持久化后端）。**
 
@@ -142,8 +143,12 @@ C-D9 保持 OPEN）。**
   溢出；输入区 user\_id / query\_text / token\_budget / scene / candidates；
   输出区展示组装结果与可解释字段）。
 
-* L0 测试：`test_d9c_context_assemble.cpp`（16 用例：S1-S4 成功路径 /
-  B1-B4 预算校验 / F1-F4 失败 / 防伪路径 / I1-I4 独立性 / 与 D8C 不串扰）。
+* L0 测试：`test_d9c_context_assemble.cpp`（17 用例 A/E/S/R 命名：
+  A1-A11 组装成功 / recall\_sources 字符串投影 / memory\_types 对象投影 /
+  conflict\_hints 对象投影 / uncertainty\_hints 字符串投影 / 预算内 / 超预算 /
+  空 user\_id / 空 query\_text / 非正 budget / candidates 转发；
+  E1-E2 status=error / UNSUPPORTED\_METHOD；S1-S2 injection=skipped/failed 防伪；
+  R1-R2 与 D8C 独立 pending / 未连接拒绝）。
 
 **关键声明（D9-C）**：本实现仅为 memory-client 侧 Demo / Prototype；不关闭 C-D9；
 不接入真实 AI Assistant Hook / Chat DB / SourceResolver / Token Budget 服务端
@@ -193,7 +198,7 @@ memory-client/
     ├── test_memory_client_mock.cpp    # L0 Client ↔ Mock Gateway
     ├── test_d5_vertical_link_demo.cpp # L0 D5-C Demo（§A/B/C 10 用例）
     ├── test_d8c_knowledge_conflict_lifecycle.cpp # L0 D8-C Demo（14 用例）
-    └── test_d9c_context_assemble.cpp # L0 D9-C Demo（16 用例）
+    └── test_d9c_context_assemble.cpp # L0 D9-C Demo（17 用例 A/E/S/R）
 ```
 
 ## 构建
@@ -236,7 +241,7 @@ cmake --build memory-client/build
 
 | 层级                 | 要求                                                                                | 状态                                                                                                                                                                                   |
 | ------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **L0**             | 编译通过、Mock 协议测试 + QML build smoke                              | **L0\_COMPLETE** — ctest **7/7**（protocol / mock / D5 / D6 / D7 / D8 / D9）覆盖全部 Demo Pipeline + Mock 契约；QML\_APP=ON 构建 smoke job 验证 QRC / main.qml / 四 Page 可编译 |
+| **L0**             | 编译通过、Mock 协议测试 + QML build smoke                              | **L0\_PENDING CI** — ctest 预期 **7/7**（protocol / mock / D5 / D6 / D7 / D8 / D9，d9c REWORK 后待 CI 重跑）；上一轮 CI d9c 15/17 passed（A2/A5 字符串投影失败已修复）；QML\_APP=ON 构建 smoke job 验证 QRC / main.qml / 四 Page 可编译 |
 | **L1**             | QLocalSocket 连接真实 Gateway / Echo；turn.finalized 测试态 handler；真实 MemoryContext 返回非空 | 待联调                                                                                                                                                                                  |
 | **L2**             | 银河麒麟 VM 中真实 AI Assistant Hook / ChatRecord / Chat DB / SourceResolver 打通          | **未实现**（属后续真实 C-D5 关闭工作）                                                                                                                                                             |
 | **HOST\_VERIFIED** | SEC-CTX-01 原文隔离宿主级证据                                                              | **RUNTIME\_UNVERIFIED**                                                                                                                                                              |

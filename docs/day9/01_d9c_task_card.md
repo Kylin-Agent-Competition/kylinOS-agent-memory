@@ -42,14 +42,14 @@
   - `candidates`（array，B 轨混合检索输出的候选列表）
 - 响应 `data` 投影：
   - `context`（object）→ `assembledContext`
-  - `recall_sources[]` → `contextRecallSources`
+  - `recall_sources[]` → `contextRecallSources`（字符串或对象元素均保留）
   - `memory_types[]` → `contextMemoryTypes`
   - `conflict_hints[]` → `contextConflictHints`
-  - `uncertainty_hints[]` → `contextUncertaintyHints`
-  - `token_budget` → `contextTokenBudget`
+  - `uncertainty_hints[]` → `contextUncertaintyHints`（字符串或对象元素均保留）
+  - `token_budget` → `contextTokenBudget`（响应缺失时回退到请求值）
   - `actual_token_count` → `contextActualTokenCount`
   - `budget_exceeded`（bool）→ `contextBudgetExceeded`（客户端独立复核）
-  - `injection_status`（string：`injected` / `failed` / `skipped`）→ `contextInjectionStatus`
+  - `injection_status`（string：`prepared` / `degraded` / `failed` / `skipped`）→ `contextInjectionStatus`
 
 方法直接复用 `MemoryClient::sendRequest()` 共享 envelope 编码与 pending 跟踪链路，
 envelope 遵循 FRZ-IPC-006 长度前缀 JSON 规范，客户端死线 `5000ms`。
@@ -74,19 +74,21 @@ envelope 遵循 FRZ-IPC-006 长度前缀 JSON 规范，客户端死线 `5000ms`�
 ### 3.2 防伪 Context（关键约束）
 
 沿用 D5 Pre-Chat 防伪 Context 模式，以下情况一律不产生伪 `assembledContext`，
-所有投影字段清零：
+所有投影字段通过 `resetContextProjection()` 统一清零：
 
 - `injection_status` 为 `failed` 或 `skipped`；
 - `status=error`；
 - 空响应 / malformed envelope；
-- 超时 / 未连接 / 空参数。
+- 超时 / 未连接 / 空参数 / busy / send 失败（I-2 修复：本地校验失败路径统一清空投影）。
 
 ### 3.3 客户端 Token 预算校验
 
 - 即使服务端未返回 `budget_exceeded`，客户端也独立计算
   `budget_exceeded = (actual_token_count > token_budget)`；
 - 覆盖服务端可能漏返回该字段的场景；
-- `actual_token_count` 缺失时视为 0，不触发超预算。
+- `actual_token_count` 缺失时视为 0，不触发超预算；
+- M-2 修复：响应缺失 `token_budget` 时回退到本次请求的 `requestedTokenBudget_`，
+  避免 UI 显示 "250 / 0" 且无法触发超预算。
 
 ### 3.4 QML 页面
 
@@ -99,26 +101,27 @@ envelope 遵循 FRZ-IPC-006 长度前缀 JSON 规范，客户端死线 `5000ms`�
 
 ## 四、测试矩阵（L0 Mock Gateway）
 
-`test_d9c_context_assemble.cpp` 覆盖 16 个用例：
+`test_d9c_context_assemble.cpp` 覆盖 17 个用例（A/E/S/R 命名）：
 
-| 用例 | 验证点 |
-|---|---|
-| S1 组装成功 | payload 含 schema\_version/user\_id/query\_text/token\_budget；assembledContext 填充 |
-| S2 召回来源投影 | recall\_sources\[\] 正确投影 |
-| S3 记忆类型投影 | memory\_types\[\] 正确投影 |
-| S4 injection\_status=injected | injection\_status 字段投影 |
-| B1 超预算指示 | actual\_token\_count > token\_budget → budget\_exceeded=true |
-| B2 预算内 | actual\_token\_count <= token\_budget → budget\_exceeded=false |
-| B3 服务端漏返回 budget\_exceeded | 客户端独立计算 |
-| B4 actual\_token\_count 缺失 | 视为 0，不触发超预算 |
-| F1 status=error 路由 failed | stage=failed + error + requestFailed |
-| F2 injection\_status=failed 防伪 | assembledContext 为空，所有投影清零 |
-| F3 injection\_status=skipped 防伪 | assembledContext 为空，所有投影清零 |
-| F4 空响应 / malformed | stage=failed，不产生伪 Context |
-| I1 独立 pending | 与 D5 Pre-Chat 并发不串台 |
-| I2 独立 pending | 与 D6-C Tool Adapter 并发不串台 |
-| I3 独立 pending | 与 D8-C KnowledgeDetail 并发不串台 |
-| I4 未连接拒绝 | stage=failed |
+| 用例 | 函数名 | 验证点 |
+|---|---|---|
+| A1 | assembleSuccessPopulatesContext | payload 含 schema\_version/user\_id/query\_text/token\_budget；assembledContext 填充 |
+| A2 | assembleProjectsRecallSources | recall\_sources\[\] 字符串元素正确投影（fts5/vector/rrf） |
+| A3 | assembleProjectsMemoryTypes | memory\_types\[\] 对象元素正确投影（type/count） |
+| A4 | assembleProjectsConflictHints | conflict\_hints\[\] 对象元素正确投影（memory\_id/conflict\_state） |
+| A5 | assembleProjectsUncertaintyHints | uncertainty\_hints\[\] 字符串元素正确投影（vector\_score\_unverified） |
+| A6 | assembleWithinBudgetNotExceeded | actual <= budget → budget\_exceeded=false |
+| A7 | assembleOverBudgetExceeded | actual > budget → budget\_exceeded=true |
+| A8 | assembleEmptyUserIdRoutesToFailed | 空 user\_id → stage=failed + 清空投影 |
+| A9 | assembleEmptyQueryTextRoutesToFailed | 空 query\_text → stage=failed + 清空投影 |
+| A10 | assembleNonPositiveBudgetRoutesToFailed | token\_budget<=0 → stage=failed + 清空投影 |
+| A11 | assembleForwardsCandidatesJson | candidates JSON 正确转发到 payload |
+| E1 | assembleErrorResponseRoutesToFailed | status=error → stage=failed + 清空投影 |
+| E2 | assembleUnsupportedMethodRoutesToFailed | UNSUPPORTED\_METHOD → stage=failed + 清空投影 |
+| S1 | assembleSkippedStatusKeepsContextEmpty | injection\_status=skipped → 防伪 Context（投影清零） |
+| S2 | assembleFailedStatusKeepsContextEmpty | injection\_status=failed → 防伪 Context（投影清零） |
+| R1 | contextAssembleIndependentFromD8c | 与 D8C KnowledgeDetail 并发独立 pending 不串台 |
+| R2 | contextAssembleRejectsWhenDisconnected | 未连接 → stage=failed + 清空投影 |
 
 ## 五、非修改范围（Demo / Prototype 声明）
 
@@ -132,7 +135,8 @@ envelope 遵循 FRZ-IPC-006 长度前缀 JSON 规范，客户端死线 `5000ms`�
 
 - [x] C++ 层（protocol_adapter / memory_client / memory_view_model）扩展完成
 - [x] ContextAssemblePage.qml 新增 + main.qml 导航 + resources.qrc 注册
-- [x] L0 测试新增并注册到 tests/CMakeLists.txt
+- [x] L0 测试新增并注册到 tests/CMakeLists.txt（17 用例 A/E/S/R 命名）
 - [x] README.md 增加 D9-C 段落
 - [x] PR 描述落盘 docs/day9/03_d9c_pr_description.md
-- [ ] CI ctest 全绿（待 CI 执行）
+- [x] REWORK 修复：C-1 字符串投影 / I-2 失败路径清空 / M-2 budget 回退
+- [ ] CI ctest 全绿（待 CI 执行，预期 7/7 含 d9c_context_assemble 17/17）

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <QJsonObject>
 #include <QObject>
@@ -596,9 +596,14 @@ private:
     void setContextAssembleError(const QString& value);
     // D9C 响应投影：把 data 解析为 assembledContext + 子字段。
     void projectAssembledContext(const QJsonObject& data);
+    // D9C 防伪 Context 统一清空（失败路径 / 请求前置调用，I-2 修复）。
+    void resetContextProjection();
 
     // D8C 响应投影辅助
     [[nodiscard]] QVariantList projectJsonArray(const QJsonArray& items) const;
+    // D9C 响应投影辅助：保留字符串与对象元素（recall_sources / uncertainty_hints
+    // 契约允许字符串元素如 "fts5" / "vector_score_unverified"；C-1 修复）。
+    [[nodiscard]] QVariantList projectJsonArrayMixed(const QJsonArray& items) const;
 
     // D7C 偏好请求类型（响应路由用）
     enum class PreferenceKind { None, List, History, Create, Update, Rollback };
@@ -731,6 +736,8 @@ private:
     QString contextInjectionStatus_;
     QString contextAssembleError_;
     QString pendingContextAssembleRequestId_;
+    // M-2 修复：记录本次请求的 token_budget，响应缺失时回退（避免显示 250/0）。
+    int requestedTokenBudget_ = 0;
 
     // 问题4修复：per-request deadline timer（超时→ requestFailed TIMEOUT）
     // key = requestId；超时后由单例 QTimer 回调，统一在 onRequestFailed 路径处理。
