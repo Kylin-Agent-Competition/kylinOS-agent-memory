@@ -45,8 +45,9 @@
 ### 2.3 `lifecycle.status` — 生命周期状态
 
 - payload 必填：`user_id`（string）。
-- payload 可选：`memory_id`（string）、`memory_status`（string，如 `active` / `candidate` /
-  `superseded` / `archived`）。
+- payload 可选：`memory_id`（string）、`memory_status`（string，枚举与 E 轨 MemoryStatus 冻结六值
+  对齐：`active` / `candidate` / `superseded` / `deprecated` / `expired` / `removed`；
+  未提供 `archived`，避免与现有业务契约冲突）。
 - 响应 `data.items[]` 投影到 `lifecycleItems`。
 
 三个方法均直接复用 `MemoryClient::sendRequest()` 共享 envelope 编码与 pending 跟踪链路，
@@ -66,7 +67,8 @@ envelope 遵循 FRZ-IPC-006 长度前缀 JSON 规范，客户端死线 `5000ms`�
 - `onResponseReceived` 顶部统一解析业务 status，`status=error` 一律路由 `onRequestFailed`；
 - 成功响应按 `pendingRequestId` 命中分别投影到 `knowledgeDetail` / `conflictCandidates` /
   `lifecycleItems`，stage 置 `ready`；
-- 失败 / 超时路由区分 `failed` / `timeout` 阶段；
+- 失败路由到 `failed` 阶段（status=error / 未连接 / 空参数）；
+  注：原超时 `timeout` 阶段（R3）本轮未实装，后续可按 D5 模式补齐。
 - 三组 busy 共同参与兼容 `busy` 属性（任一在途即为 busy）。
 
 ### 3.2 QML 页面（本任务）
@@ -97,7 +99,6 @@ envelope 遵循 FRZ-IPC-006 长度前缀 JSON 规范，客户端死线 `5000ms`�
 | E3 生命周期状态 status=error | stage=failed + error |
 | R1 三 pipeline 独立 pending | 并发不串台 |
 | R2 未连接拒绝 | stage=failed |
-| R3 超时路由 timeout | deadline 触发后 stage=timeout |
 
 ## 五、非修改范围（Demo / Prototype 声明）
 

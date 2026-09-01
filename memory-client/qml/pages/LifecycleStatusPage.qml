@@ -86,7 +86,7 @@ Page {
                 ComboBox {
                     id: statusCombo
                     Layout.fillWidth: true
-                    model: ["", "active", "candidate", "superseded", "archived"]
+                    model: ["", "active", "candidate", "superseded", "deprecated", "expired", "removed"]
                 }
                 Button {
                     text: viewModel.lifecycleStatusBusy ? qsTr("…") : qsTr("查询")

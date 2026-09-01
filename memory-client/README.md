@@ -20,9 +20,10 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 
 ## 当前状态
 
-**D5-C Demo / Prototype（Route B；L0\_COMPLETE；ctest 3/3 全部子用例 PASS；
-C-D5 保持 OPEN；SEC-CTX-01 Runtime Evidence 未生成；未接入真实 AI Assistant Hook /
-Chat DB / ChatRecord / model\_request / TurnExtractionAdapter）。**
+**Memory Client L0（D5 / D6 / D7 / D8 原型链；L0\_COMPLETE — ctest 6/6 PASS + QML
+build-smoke green；C 角色各天 Demo 保持 OPEN；SEC-CTX-01 Runtime Evidence 未生成；
+未接入真实 AI Assistant Hook / Chat DB / ChatRecord / model\_request /
+TurnExtractionAdapter / 知识治理 / 冲突仲裁持久化后端）。**
 
 * 协议编解码 `protocol_adapter.{h,cpp}`：4 字节大端长度前缀 + UTF-8 JSON envelope
   （对齐 D 轨 FRZ-IPC-001\~007 + ADR-010 turn.finalized，`deliverables/D4_IPC_PROTOCOL_*FREEZE_20260817.md`）
@@ -176,18 +177,22 @@ cmake --build memory-client/build
 
 * **路径过滤**：`memory-client/**` + 工作流文件本身
 
-* **环境**：ubuntu-22.04（qtbase5-dev/qt5-qmake/build-essential）
+* **环境**：ubuntu-22.04（qtbase5-dev / qt5-qmake / qtdeclarative5-dev / Qt Quick 模块）
 
-* **步骤**：cmake configure（QML OFF / tests ON）→ cmake --build → `ctest --output-on-failure --verbose`
+* **Job 1 / L0 ctest**：cmake configure（QML OFF / tests ON）→ cmake --build → `ctest --output-on-failure --verbose`
+  * 覆盖 ctest 目标（共 6 个）：`protocol_adapter` / `memory_client_mock` / `d5_vertical_link_demo` /
+    `d6c_multi_source_adapters` / `d7c_preference_editor` / `d8c_knowledge_conflict_lifecycle`
 
-* **覆盖 ctest 目标**：`protocol_adapter` / `memory_client_mock` / `d5_vertical_link_demo` /
-  `d6c_multi_source_adapters` / `d7c_preference_editor` / `d8c_knowledge_conflict_lifecycle`
+* **Job 2 / QML build smoke**：cmake configure（QML ON / tests OFF）→ cmake --build → 产物存在校验
+  * 验证 `resources.qrc` 可处理、`main.qml` Component 引用无误、
+    `KnowledgeDetailPage.qml` / `ConflictComparisonPage.qml` / `LifecycleStatusPage.qml` 可参与 Qt Quick 构建
+  * 运行态（VM L2）不在本 job 范围
 
 ## 验收要求
 
 | 层级                 | 要求                                                                                | 状态                                                                                                                                                                                   |
 | ------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **L0**             | 编译通过、Mock 协议测试                                                                    | **L0\_COMPLETE** — ctest **3/3**（test\_protocol\_adapter / test\_memory\_client\_mock / test\_d5\_vertical\_link\_demo），覆盖 Reviewer §A/B/C 共 10 个 D5-Demo 用例；QML\_APP=ON 构建闭环待 CI 扩展 |
+| **L0**             | 编译通过、Mock 协议测试 + QML build smoke                              | **L0\_COMPLETE** — ctest **6/6**（protocol / mock / D5 / D6 / D7 / D8）覆盖全部 Demo Pipeline + Mock 契约；QML\_APP=ON 构建 smoke job 验证 QRC / main.qml / 三 Page 可编译 |
 | **L1**             | QLocalSocket 连接真实 Gateway / Echo；turn.finalized 测试态 handler；真实 MemoryContext 返回非空 | 待联调                                                                                                                                                                                  |
 | **L2**             | 银河麒麟 VM 中真实 AI Assistant Hook / ChatRecord / Chat DB / SourceResolver 打通          | **未实现**（属后续真实 C-D5 关闭工作）                                                                                                                                                             |
 | **HOST\_VERIFIED** | SEC-CTX-01 原文隔离宿主级证据                                                              | **RUNTIME\_UNVERIFIED**                                                                                                                                                              |
