@@ -119,6 +119,10 @@ extern const QString kPreferenceCreate;   // "preference.create"
 extern const QString kPreferenceUpdate;   // "preference.update"
 extern const QString kPreferenceRollback; // "preference.rollback"
 extern const QString kPreferenceHistory;  // "preference.history"
+// D6-C 候选写方法（不冻结，登记在 methods 命名空间以便客户端 / Mock 复用）
+extern const QString kToolExecution;        // "tool.execution"
+extern const QString kManualConfigIngest;   // "manual.config.ingest"
+extern const QString kBehaviorObserve;      // "behavior.observe"
 // D8C 候选 IPC 方法（CANDIDATE / pending ADR；生产默认不注册）
 extern const QString kKnowledgeDetail;    // "knowledge.detail"
 extern const QString kConflictCompare;    // "conflict.compare"

@@ -116,6 +116,16 @@ public:
     Q_INVOKABLE QString sendPreferenceRollbackRequest(const QJsonObject& payload);
     Q_INVOKABLE QString sendPreferenceHistoryRequest(const QJsonObject& payload);
 
+    // D6-C 候选写方法（不冻结，ADR-013/014/015 待立项）。
+    //   - tool.execution:      eventJson 含 metadata{...} + execution_status + ...
+    //   - manual.config.ingest: eventJson 含 metadata{...} + config{...}
+    //   - behavior.observe:    eventJson 含 metadata{...} + mapping_status=PENDING_C_CONFIRMATION
+    // trace_id 唯一真源：envelope.trace_id 取 metadata.trace_id（若提供）。
+    // 生产 Gateway 默认不注册 → UNSUPPORTED_METHOD（符合预期）。
+    Q_INVOKABLE QString sendToolExecutionEvent(const QJsonObject& eventJson);
+    Q_INVOKABLE QString sendManualConfigEvent(const QJsonObject& eventJson);
+    Q_INVOKABLE QString sendBehaviorEvent(const QJsonObject& eventJson);
+
     // D8C 候选 IPC 便捷方法（CANDIDATE / pending ADR；生产默认返回
     // UNSUPPORTED_METHOD；Demo / 测试态 Mock Gateway 可注册 handler）。
     //   - knowledge.detail:   payload 必填 memory_id；返回 evidence/conditions/...
@@ -152,6 +162,10 @@ private:
     void setLastError(const QString& message);
     void failInFlightRequests(const QString& errorCode, const QString& safeMessage);
     QString generateRequestId() const;
+
+    // 共享写链路：供 sendTurnFinalizedEvent / sendToolExecutionEvent /
+    //     sendManualConfigEvent / sendBehaviorEvent 复用。
+    QString sendEventEnvelope(const QString& method, const QJsonObject& eventJson);
 
     QString socketPath_;
     ConnectionState connectionState_ = ConnectionState::Disconnected;
