@@ -19,7 +19,7 @@
 | # | 工作项 | 依赖 | 验证方式 | 状态 |
 |---|---|---|---|---|
 | 1 | 基线与环境盘点：记录 `origin/main`、既有 D 轨产物（`packaging/systemd`、`os-agent-integration/echo`、`docs/deployment`）、VM 快照、Vector/UDS/KYSEC 状态与 VERSION_MAP | 可用的 `origin/main` 基线；D11 集成基础（已合并 PR #84） | `git status`、仓库审阅、VM 实测核对 | 已完成（仓库与既有证据侧；记录见 `docs/day11/02_d11d_baseline_environment_inventory_20260901.md`；VM 实测待 D11D 专用环境复核） |
-| 2 | 冻结统一环境：统一 VM 内 Commit、依赖版本、配置与数据目录；更新环境基线/VERSION_MAP 证据 | 工作项 1 | 版本/哈希/配置核对、证据落盘 | 待开始 |
+| 2 | 冻结统一环境：统一 VM 内 Commit、依赖版本、配置与数据目录；更新环境基线/VERSION_MAP 证据 | 工作项 1 | 版本/哈希/配置核对、证据落盘 | 进行中（草案见 `docs/day11/03_d11d_unified_env_freeze_draft_20260901.md`；VM 实测定案待 D11D 专用环境） |
 | 3 | 服务与安装：部署并验证 `kylin-memory.service` 等 systemd 单元；安装流程（依赖、Kaiming 包、运行时）可重复、可回退 | 工作项 2 | `systemctl start/stop/restart`、安装/回退脚本复跑 | 待开始 |
 | 4 | 日志与诊断页：JSON 日志、`trace_id` 贯穿、health/诊断端点（含 D11A 已增强分项）与诊断命令；禁止记录正文/敏感内容 | 工作项 3；A 轨 health 增强（已合并 PR #84） | 真实日志断言、脱敏断言、诊断输出核对 | 待开始 |
 | 5 | 权限与安全：UDS socket 权限、KYSEC 授权（`kysec_authorize.sh`）、用户/组边界，失败关闭 | 工作项 3 | KYSEC 授权实测、越权/失败路径测试 | 待开始 |
@@ -49,5 +49,6 @@
 
 - 准备阶段：已完成基线确认（`origin/main@47af2fa`）与本工作清单；分支 `feat/D11D-vm-integration` 已创建。
 - 已完成第 1 项（基线与环境盘点）：记录见 `docs/day11/02_d11d_baseline_environment_inventory_20260901.md`；Vector Engine 版本（D11B `0k0.11` vs VERSION_MAP `0k1.0`）不一致已标记，待工作项 2 实测定案。
-- 尚未取得：D 轨负责人指定的最晚停止时间；D11D 专用麒麟 VM 联调环境（需确认复用 D11B 克隆 `Kylin-V11-2603-D11B-ffd20b9-Test` 或新建同 Commit 环境）；A/B/C 轨端到端输入。
+- 第 2 项：统一环境冻结草案已产出（见 `docs/day11/03_d11d_unified_env_freeze_draft_20260901.md`），VM 依赖值待 D11D 专用环境实测定案。
+- 尚未取得：D 轨负责人指定的最晚停止时间；D11D 专用麒麟 VM 联调环境（需确认复用 D11B 克隆 Kylin-V11-2603-D11B-ffd20b9-Test 或新建同 Commit 环境）；A/B/C 轨端到端输入。
 - 上述事项未满足前，不将准备清单表述为已完成的联调能力。
