@@ -51,6 +51,17 @@ from embedding.protocol import (
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="embed-bridge")
 _executor_shutdown = False  # shutdown 标记：submit 前若已关闭则惰性重建
 
+# [D12A 挂死恢复] Bridge 线程池挂死恢复机制（镜像 TD-A-D7-LLM-HANG-DEGRADE）：
+# 真实 SDK 调用超时后 fut.cancel() 无法中断已运行的 worker（SDK 无 cancel API，
+# 见 TD-A-005-01 Wontfix）——若 2 个 worker 被挂死调用占满，后续所有 embed 将
+# 排队并永久超时（性能抖动归零）直到进程重启。因此跟踪 in-flight future 的
+# 开始时间，一旦超过 hang 阈值仍未完成，判定为永久挂死并重建 executor
+# （释放挂死 worker），恢复 Embedding 路径。
+_executor_lock = threading.Lock()  # 保护 executor 重建 + in-flight 跟踪
+_in_flight: Dict[Any, float] = {}  # future -> start time (monotonic)
+_embed_hang_threshold_ms = 60000.0  # 默认 60s：远大于单次超时（5s），只针对真正挂死
+_embed_hang_recovered = 0  # 统计：挂死恢复次数（可观测性）
+
 
 def shutdown_executor() -> None:
     """关闭 Bridge 线程池（进程/服务停止时释放资源，审查报告 #3）。
@@ -58,20 +69,79 @@ def shutdown_executor() -> None:
     幂等；关闭后再 submit 会惰性重建（见 _submit_bridge），保持进程级单例语义。
     """
     global _executor, _executor_shutdown
-    if _executor_shutdown:
-        return
-    _executor.shutdown(wait=False)
-    _executor_shutdown = True
+    with _executor_lock:
+        if _executor_shutdown:
+            return
+        _executor.shutdown(wait=False)
+        _executor_shutdown = True
+        _in_flight.clear()
+
+
+def _maybe_recover_hung_executor() -> bool:
+    """[D12A 挂死恢复] 检测 in-flight 是否挂死超过阈值 → 重建 executor。
+
+    调用方须持有 _executor_lock。返回是否发生重建。
+
+    - 清理已完成的 future（慢任务完成/异常结束的释放 in-flight 槽位）；
+    - 若任一 in-flight future 超过 hang 阈值仍未完成 → 判定永久挂死，
+      重建 executor（释放挂死 worker）恢复 Embedding 路径；
+    - 重建后 in-flight 清空（挂死 future 被遗弃，其结果已被调用方超时丢弃）。
+    """
+    global _executor, _executor_shutdown, _embed_hang_recovered
+    now = time.monotonic()
+    for fut in list(_in_flight):
+        if fut.done():
+            _in_flight.pop(fut, None)
+    for fut, started in list(_in_flight.items()):
+        if (now - started) * 1000.0 > _embed_hang_threshold_ms:
+            try:
+                _executor.shutdown(wait=False)
+            except Exception:  # noqa: BLE001 - 重建路径尽力而为
+                pass
+            _executor = ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="embed-bridge")
+            _executor_shutdown = False
+            _in_flight.clear()
+            _embed_hang_recovered += 1
+            return True
+    return False
 
 
 def _submit_bridge(fn, *args, **kwargs):
-    """提交 Bridge 调用到线程池；若已 shutdown 则重建后提交（幂等重启语义）。"""
+    """提交 Bridge 调用到线程池；若已 shutdown 或挂死则重建后提交。
+
+    [D12A 挂死恢复] 提交前检测 in-flight 挂死（超过 hang 阈值）→ 重建 executor，
+    避免挂死 worker 永久占满线程池导致后续 embed 全部超时。
+    """
     global _executor, _executor_shutdown
-    if _executor_shutdown:
-        _executor = ThreadPoolExecutor(
-            max_workers=2, thread_name_prefix="embed-bridge")
-        _executor_shutdown = False
-    return _executor.submit(fn, *args, **kwargs)
+    with _executor_lock:
+        _maybe_recover_hung_executor()
+        if _executor_shutdown:
+            _executor = ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="embed-bridge")
+            _executor_shutdown = False
+        fut = _executor.submit(fn, *args, **kwargs)
+        _in_flight[fut] = time.monotonic()
+        return fut
+
+
+def _mark_future_complete(fut) -> None:
+    """[D12A] 从 in-flight 跟踪中移除已完成的 future（慢任务继续保留待挂死检测）。"""
+    if fut is None:
+        return
+    with _executor_lock:
+        if fut.done():
+            _in_flight.pop(fut, None)
+
+
+def recover_hung_bridge_executor() -> bool:
+    """[D12A] 线程安全入口：检测 in-flight 是否挂死超过阈值并重建 executor。
+
+    供 EmbeddingService.embed() 在每次请求入口调用（含合并等待路径），
+    确保挂死 worker 在被占满前被释放，恢复 Embedding 路径。
+    """
+    with _executor_lock:
+        return _maybe_recover_hung_executor()
 
 # 架构 4.4 方法名（总体架构文档 TABLE 15 风格：memory.*）
 # ALIGN-004：embedding 子服务方法域（memory.embed/embed_batch/ping/health）与
@@ -400,6 +470,13 @@ class EmbeddingService:
                 # [Review #7 已修复] degraded 反映 SDK 缺失状态（不再恒 false）
                 "degraded": bool(getattr(self, "_sdk_missing", False)),
                 "sdk_missing": bool(getattr(self, "_sdk_missing", False)),
+                # [D12A 挂死恢复] Bridge 线程池状态（可观测性：挂死恢复次数 / in-flight）
+                "executor": {
+                    "max_workers": 2,
+                    "in_flight": len(_in_flight),
+                    "hang_recovered": _embed_hang_recovered,
+                    "hang_threshold_ms": _embed_hang_threshold_ms,
+                },
             },
         }
 
@@ -417,6 +494,10 @@ class EmbeddingService:
         if not isinstance(text, str):
             return self._error(ProviderErrorCode.ERR_INVALID_TEXT.name,
                                f"text must be str, got {type(text).__name__}")
+
+        # [D12A 挂死恢复] 每次请求入口检测挂死 worker（含合并等待路径），
+        # 挂死超过阈值后重建 executor 恢复 Embedding 路径。
+        recover_hung_bridge_executor()
 
         # Day9 查询缓存：键 = 模型维度 + 原文确定性哈希（维度变化自动失效）
         # 维度获取：真实 EmbeddingProvider 有 get_dimension()；D5 既有测试的
@@ -526,6 +607,7 @@ class EmbeddingService:
         finally:
             if fut is not None:
                 self._coalescer.release(coalesce_key, fut)
+                _mark_future_complete(fut)
 
         result_dict = {
             "vector": result.vector,
