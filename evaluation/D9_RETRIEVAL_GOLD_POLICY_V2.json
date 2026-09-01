@@ -1,0 +1,170 @@
+{
+  "policy": "d9_retrieval_gold",
+  "policy_version": "v2",
+  "status": "CANDIDATE_FOR_FREEZE",
+  "baseline_ref": "evaluation/D3_GOLD_LABEL_AND_METRICS_SPEC_V1.md",
+  "spec_ref": "evaluation/D9_RETRIEVAL_GOLD_SPEC_V2.md",
+  "supersedes": "evaluation/D9_RETRIEVAL_GOLD_POLICY_V1.json",
+  "adjudication_ref": "B 轨 2026-08-31 对 PR #88 的正式裁决（经任务卡 day9-e-rw-01-gold-policy-v2-b-adjudication-v1 传入；裁决文档不在仓库内，本任务不虚构其路径）",
+  "tech_debt_refs": [
+    "TD-036"
+  ],
+  "pr_refs": [
+    "PR #76",
+    "Issue #79",
+    "PR #88"
+  ],
+  "retrieval_ref_schema": {
+    "serialization_key": [
+      "memory_id",
+      "version_id"
+    ],
+    "full_validation_key": [
+      "user_id",
+      "memory_id",
+      "version_id"
+    ],
+    "applies_to": [
+      "relevant_refs",
+      "forbidden_refs",
+      "semantic_near_miss_refs",
+      "retrieval_returned_results"
+    ],
+    "forbidden_semantics": "正式 Gold v2 契约：Gold 正解、near-miss 与检索返回结果的全部序列化判定键冻结为 retrieval_ref=(memory_id, version_id)，完整校验键为 (user_id, memory_id, version_id)；relevant_ids / near_miss_refs 的 memory_id-only 语义不再作为正式 Gold v2 契约。"
+  },
+  "roles": {
+    "positive_retrieval": {
+      "description": "正式检索查询：query 的 relevant_refs 非空且至少含一条有效正解（可检索、已验证的事实知识条目，ref 键为 retrieval_ref=(memory_id, version_id)），是 Recall/MRR/nDCG 三项指标的正式评测样本。",
+      "in_m2_formal_denominator": true,
+      "reporting": "进入 Recall/MRR/nDCG 正式分母与聚合，并按 knowledge_type、primary_category 拆分子集报告。"
+    },
+    "negative_guardrail": {
+      "description": "无正解（relevant_refs 为空）的 no-answer/拒绝类查询，以及命中业务/安全边界的样本（removed_or_forgotten / expired / superseded / deprecated / candidate / unresolved_conflict / cross_user / sensitive_recall_prohibited 八类），用于防伪与行为护栏。",
+      "in_m2_formal_denominator": false,
+      "reporting": "单列 negative_guardrail 子集报告（计数、guardrail violation 统计与剔除原因），不得混入正式分母，不得计为满分。"
+    },
+    "boundary": {
+      "description": "标注规范 §4.1 争议裁决前，或 PENDING_* 待确认项（含 PENDING_B_CONFIRMATION 等）相关样本；语义未定不得参与正式评测。deprecated 已由 B 轨 2026-08-31 PR #88 裁决脱离 boundary，归入 negative_guardrail。",
+      "in_m2_formal_denominator": false,
+      "reporting": "单列 boundary 子集报告，待语义确认后重新归类。"
+    }
+  },
+  "empty_gold_rule": {
+    "rule_id": "D9-EMPTY-GOLD-01",
+    "definition": "查询 relevant_refs 为空（Gold Label 判定为「不应形成记忆」/无正解）时，该查询不得进入 Recall/MRR/nDCG 三项指标的任何正式分母与分子，也不得解释为满分或其他默认值。",
+    "recall_denominator": "excluded",
+    "mrr_denominator": "excluded",
+    "ndcg_denominator": "excluded",
+    "forbidden_interpretations": [
+      "不得将 empty relevant_refs 查询计为 Recall=1.0 或 nDCG=1.0 满分，也不得计为 MRR 等效最高分",
+      "不得将 empty relevant_refs 查询计入 Recall/MRR/nDCG 任一正式分母与聚合"
+    ],
+    "required_report_fields": [
+      "valid_query_count（进入正式分母的有效查询数）",
+      "excluded_query_count（剔除查询数量）",
+      "exclusion_reason（剔除原因，按 negative_guardrail / boundary / 环境异常分类）"
+    ],
+    "d3_alignment": "无正解（Gold Label 判定为「不应形成记忆」）的查询不进入分母"
+  },
+  "negative_guardrail_scope": [
+    {
+      "category_id": "removed_or_forgotten",
+      "basis": "memory_status=removed；精准遗忘执行后（D3 第九章 9.4）已遗忘条目不得再被检索返回。",
+      "guardrail_expectation": "已遗忘/removed 条目不得作为查询正解；相关查询按 negative_guardrail 单列并记录剔除原因，不得进入正式分母。"
+    },
+    {
+      "category_id": "expired",
+      "basis": "memory_status=expired；临时偏好/临时知识过期后不再作为有效记忆（D3 第六章 6.3）。",
+      "guardrail_expectation": "expired 条目不得作为正解；仅含过期正解的查询不得进入 Recall/MRR/nDCG 正式分母。"
+    },
+    {
+      "category_id": "superseded",
+      "basis": "memory_status=superseded；被替代条目保留仅用于审计与回溯（D3 第八章 8.2）。",
+      "guardrail_expectation": "superseded 条目不得作为当前知识正解；相关查询单列排除。"
+    },
+    {
+      "category_id": "deprecated",
+      "basis": "B 轨 2026-08-31 对 PR #88 的正式裁决：memory_status=deprecated 在 standard Memory Context 中归入 negative_guardrail，不再作为 boundary / PENDING_B_CONFIRMATION 待确认项。",
+      "guardrail_expectation": "deprecated 条目在 standard Memory Context 检索中不得被召回为正解（归入 negative_guardrail，不进入标准 M2 正式分母）；仅显式 history/audit 模式可访问（审计与回溯）；相关查询按 guardrail 单列并记录剔除原因。"
+    },
+    {
+      "category_id": "candidate",
+      "basis": "memory_status=candidate；未经人工复核/证据确认（模型自述、LLM 候选）不得升级为已验证正解（D3 第七章 7.3、标注规范 §4.1/§4.2）。",
+      "guardrail_expectation": "candidate 条目不得进入正式检索正解集合；相关查询排除并单列。"
+    },
+    {
+      "category_id": "unresolved_conflict",
+      "basis": "标注规范 §4.1 争议裁决前冲突双方保持 memory_status=candidate（D3 第八章 8.2）。",
+      "guardrail_expectation": "未裁决冲突条目不得作为正解；相关查询单列，待裁决后处置。"
+    },
+    {
+      "category_id": "cross_user",
+      "basis": "跨 user_id 读取/检索一律拒绝并标记 isolation_violation=true、sensitivity=critical（S-08、SEC-UI-05、D3 第九章 9.2 / 第十章）。",
+      "guardrail_expectation": "跨用户条目不得作为任何用户查询的正解；相关查询单列并记录隔离边界；violation query/item count 与 rate 必须为 0。"
+    },
+    {
+      "category_id": "sensitive_recall_prohibited",
+      "basis": "命中 S-01..S-09 强制不形成记忆（D3 第七章/第十章、SEC-SENS）；敏感原文不得出现在评测记录。",
+      "guardrail_expectation": "敏感内容不得被召回为正解；相关查询剔除并单列，记录仅用脱敏占位或 ID 引用；violation query/item count 与 rate 必须为 0。"
+    }
+  ],
+  "guardrail_violation_accounting": {
+    "trigger_definition": "Top-K 检索返回结果中出现任一 forbidden ref（命中 negative_guardrail_scope 中任一类别对应的 retrieval_ref / memory_id）时，该 query 计 1 次 guardrail_violation_query_count；逐条累计 guardrail_violation_item_count，同一 query 内重复命中不重复累计 query 计数。",
+    "query_count_field": "guardrail_violation_query_count",
+    "item_count_field": "guardrail_violation_item_count",
+    "query_rate_field": "guardrail_violation_query_rate",
+    "item_rate_field": "guardrail_violation_item_rate",
+    "per_category_breakdown_required": true,
+    "critical_zero_categories": [
+      "cross_user",
+      "sensitive_recall_prohibited"
+    ],
+    "zero_target_rule": "cross_user 与 sensitive_recall_prohibited 两类的 guardrail violation query/item count 与 rate 必须为 0，任一非零必须标记为 critical；其余禁止类别（removed_or_forgotten / expired / superseded / deprecated / candidate / unresolved_conflict）的 violation count/rate 目标值同样为 0。",
+    "denominator_note": "本统计独立于 Recall/MRR/nDCG 正式分母（仅 positive_retrieval 进入正式分母），不改变 empty_gold_rule；rate 分母建议口径（待 Reviewer 确认后随本契约冻结）：query rate = guardrail_violation_query_count / 参与护栏统计的查询总数；item rate = guardrail_violation_item_count / 同批 Top-K 返回条目总数。"
+  },
+  "evaluation_config": {
+    "config_version": "d9-retrieval-eval-config/v1",
+    "k": 10,
+    "top_k": 10,
+    "rrf_k": 60,
+    "top_k_equals_recall_k": true,
+    "origin": "TEAM_DEFINED",
+    "official_requirement": false,
+    "note": "团队约定的检索评测配置（TEAM_DEFINED）：Recall@K 的 K=10（Recall@10）、Top-K 检索窗口 top_k=10 且 top_k == Recall@K、RRF k=60；本配置为团队约定，不得描述为比赛官方要求。"
+  },
+  "conflict_state_semantics": {
+    "values": [
+      "none",
+      "resolved",
+      "unresolved"
+    ],
+    "scope": "evaluation normalization field（评测归一化字段）",
+    "production_shared_enum": false,
+    "production_retrieval_note": "conflict_state={none,resolved,unresolved} 仅属 evaluation normalization，NOT production shared enum，不新增生产 Enum；生产检索继续依赖既有 unresolved 硬过滤（memory-service/retrieval 既有行为，本任务不修改 B 轨实现）。",
+    "normalization_note": "评测记录中的 conflict_state 仅用于评测归一化与统计归类，不改变生产检索的 conflict 过滤语义。"
+  },
+  "team_defined_params": {
+    "statistics_method": {
+      "origin": "TEAM_DEFINED",
+      "current_value": "PENDING",
+      "d3_ref": "D3 第五章 TD-01 统计口径（p50/p95/mean/max 等，责任 B/D）",
+      "frozen": false
+    },
+    "dataset_split": {
+      "origin": "TEAM_DEFINED",
+      "current_value": "PENDING",
+      "d3_ref": "D3 第五章 TD-07 数据集切分比例与抽样种子（责任 B/E）",
+      "frozen": false
+    }
+  },
+  "evaluation_metadata": {
+    "case_id": "PENDING",
+    "dataset_version": "PENDING",
+    "gold_label_version": "PENDING",
+    "implementation_commit": "PENDING",
+    "environment": "PENDING",
+    "metric_result": "PENDING",
+    "evidence_reference": "PENDING",
+    "policy_version": "PENDING"
+  }
+}
