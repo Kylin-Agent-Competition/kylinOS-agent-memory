@@ -2,7 +2,7 @@
 
 - **状态**：✅ D 已决策（2026-08-31，方案 A）；REWORK 修订 v5（按 Review #83 Reviewer E 第五轮意见重冻结）；已签署（Reviewer E，2026-08-31，PASS_WITH_DEBT，TD-D6D-002）
 - **日期**：2026-08-31（v5 修订同日）
-- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
+- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，已签，2026-08-31，PASS_WITH_DEBT，TD-D6D-002）
 - **责任轨道**：D（IPC）为主，A/E 协作（编排现有 pipeline / admission，不复制真源）
 - **决策版本**：`event-ingest-method-v5`
 - **适用范围**：FRZ-IPC-007 顶层方法路由表；关联 `docs/adr/013-source-events-table.md`（落库表）、`memory-service/pipeline/schemas.py`（MemorySourceEvent 输入真源）、`memory-service/security/source_admission.py`（准入）、FRZ-IPC-002/005/006、ADR-010（turn.finalized 先例）、ADR-013

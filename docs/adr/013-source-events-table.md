@@ -2,7 +2,7 @@
 
 - **状态**：✅ D 已决策（2026-08-31，方案 A）；REWORK 修订 v5（按 Review #83 Reviewer E 第五轮意见重冻结）；已签署（Reviewer E，2026-08-31，PASS_WITH_DEBT，TD-D6D-002）
 - **日期**：2026-08-31（v5 修订同日）
-- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，待签）
+- **决策人**：周子腾（D）｜**Reviewer**：E（谢嘉然，已签，2026-08-31，PASS_WITH_DEBT，TD-D6D-002）
 - **责任轨道**：D（DB）为主，A/E 协作（消费现有 pipeline / admission 模型，不复制真源）
 - **决策版本**：`source-events-table-v5`
 - **适用范围**：FRZ-DB-001 表定义扩展；关联 `docs/day6/day6-d-01-event-persistence-contract-plan-v0.5.md`、`memory-service/pipeline/schemas.py`（MemorySourceEvent / NormalizedEvent）、`memory-service/security/source_admission.py`（SourceAdmissionResult）、`memory-service/pipeline/fingerprint.py`、ADR-007（迁移命名）、ADR-011（扩展先例）、ADR-014（event.ingest 路由）、FRZ-IPC-005、FRZ-DB-004（Dead Letter 策略）
@@ -127,7 +127,7 @@ CREATE TABLE source_events (
 
 - 文件：`migrations/versions/20260831_add_source_events.py`
 - **命名**：`YYYYMMDD_<description>.py`（ADR-007 红线）
-- **revision**：`revision = "20260831_add_source_events"`，`down_revision = "20260826_add_trace_id"`（版本链 `001_initial_schema → 20260826_add_trace_id → 20260831_add_source_events`）
+- **revision**：`revision = "20260831_add_source_events"`，`down_revision = "20260831_preference_versions"`（**实施时对齐当前唯一 Alembic head**：main 已含 D7D 迁移 `20260831_preference_versions`（PR #90 合并），版本链为 `001_initial_schema → 20260826_add_trace_id → 20260831_preference_versions → 20260831_add_source_events`；契约先行 v5 草案标注 `down_revision="20260826_add_trace_id"` 系未计入 D7D 迁移，实现 PR 对齐真实 head 以避免多 head 破坏 `alembic upgrade head` 线性链）
 - **upgrade**：CREATE TABLE + 5 索引（`IF NOT EXISTS` 幂等，与 init_schema 契约一致）
 - **downgrade**：DROP TABLE（新表无既有数据依赖，可整表回滚；无列删除红线问题）
 
