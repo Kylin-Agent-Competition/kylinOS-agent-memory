@@ -2084,6 +2084,20 @@ void MemoryViewModel::runForgetExecutePipeline(
         setForgetStage(QStringLiteral("failed"));
         return;
     }
+    // HIGH-01: TTL 过期 fail-closed（客户端侧门禁 + 服务端权威校验）。
+    // deadline=0 代表未签发有效 credential（理论上已被前面 credential 非空检查挡住）。
+    // 当前时刻 >= deadline 视为过期：不发送 forget.execute，直接 failed，
+    // 并清空过期的 credential（不可重用于后续请求）。
+    if (forgetCredentialDeadlineMs_ > 0
+        && QDateTime::currentMSecsSinceEpoch() >= forgetCredentialDeadlineMs_) {
+        setForgetConfirmationCredential({});
+        forgetCredentialDeadlineMs_ = 0;
+        setForgetExecuteError(QStringLiteral(
+            "forget.execute: confirmation_credential has expired (TTL exceeded)."
+            " Client-side TTL gate: fail-closed, forget.execute NOT sent."));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
 
     QJsonObject payload;
     payload.insert(QStringLiteral("schema_version"), QStringLiteral("1.0"));
@@ -2242,6 +2256,7 @@ void MemoryViewModel::handleForgetExecuteResponse(
     setForgetStage(QStringLiteral("completed"));
     // 消费一次性凭据：成功 Execute 后立即清空，杜绝重放攻击（D10 v0.3 §F-2）。
     setForgetConfirmationCredential({});
+    forgetCredentialDeadlineMs_ = 0;  // HIGH-01: 消费后 deadline 同步清零
     emit forgetHasMissingDeletesChanged();
 }
 
@@ -2267,9 +2282,16 @@ void MemoryViewModel::projectForgetPreview(const QJsonObject& data)
     // confirmation_credential：Preview 生成的一次性确认凭据（D10 v0.3 冻结）。
     // 绑定 user_id + forget_plan_id + selection_hash，具备 TTL；Execute 必须
     // 传入完全匹配值，错误/过期/重放必须 fail-closed。
+    // HIGH-01: 记录 monotonic deadline (ms since epoch)。
     const QString cred = data.value(QStringLiteral("confirmation_credential")).toString();
     if (!cred.isEmpty()) {
         setForgetConfirmationCredential(cred);
+        const qint64 ttlMs = static_cast<qint64>(forgetCredentialTtlSeconds_ > 0
+                                 ? forgetCredentialTtlSeconds_ : 0)
+                            * 1000;
+        forgetCredentialDeadlineMs_ = QDateTime::currentMSecsSinceEpoch() + ttlMs;
+    } else {
+        forgetCredentialDeadlineMs_ = 0;
     }
 
     // resolved_target_ids：预览命中目标 ID 切片（仅 ID；不含正文；含 cascade 扩展目标）。
@@ -2324,6 +2346,7 @@ void MemoryViewModel::resetForgetProjection()
     setForgetAffectedCount(0);
     setForgetCredentialTtlSeconds(0);
     setForgetConfirmationCredential({});  // 预览投影的一部分：新 Preview 会重置
+    forgetCredentialDeadlineMs_ = 0;      // HIGH-01: 重置 credential deadline
     setForgetResolvedTargets({});
     setForgetMode({});
     setForgetTargetType({});

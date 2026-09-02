@@ -938,6 +938,11 @@ private:
     int forgetAffectedCount_ = 0;
     int forgetCredentialTtlSeconds_ = 0;
     QString forgetConfirmationCredential_;
+    // HIGH-01: Preview 成功时记录 credential 的 monotonic deadline
+    // （ms since epoch）= current + forgetCredentialTtlSeconds_ * 1000。
+    // Execute 前校验：非空 + 匹配 + 当前时刻 < deadline。
+    // 过期 credential = fail-closed（不发送 forget.execute）。
+    qint64 forgetCredentialDeadlineMs_ = 0;
     QVariantList forgetResolvedTargets_;
     QString forgetMode_;
     QString forgetTargetType_;
