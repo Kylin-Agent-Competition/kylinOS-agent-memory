@@ -39,6 +39,23 @@ RETRY_BASE_SECONDS = 30
 # 消费回调类型：payload dict → 成功返回 None，失败抛异常
 EventConsumer = Callable[[Dict[str, Any]], None]
 
+# SQLite "no such table" 属于持久性 schema 错误：表缺失不会随重试恢复，
+# Worker 对其无限重试会形成死循环。识别后应停止线程而非继续轮询。
+_SCHEMA_MISSING_MARKERS = (
+    "no such table",
+    "no such column",
+)
+
+
+def _is_schema_missing(exc: BaseException) -> bool:
+    """判定异常是否为持久性 schema 缺失（表/列不存在）。
+
+    这类错误不会因重试而恢复（非 transient），Worker 应 fail-fast 停止，
+    而非对 `no such table` 无限重试（死循环）。
+    """
+    msg = str(exc).lower()
+    return any(marker in msg for marker in _SCHEMA_MISSING_MARKERS)
+
 
 class OutboxWorker:
     """Outbox Worker（独立线程，单写锁串行化，不引入额外消息队列）。"""
@@ -60,6 +77,7 @@ class OutboxWorker:
         self._lock = get_write_lock()
         self._processed = 0
         self._dead_letters = 0
+        self._fatal_error: Optional[str] = None  # 持久性 schema 缺失等致命错误（防死循环）
 
     # ── 生命周期 ──
 
@@ -91,7 +109,8 @@ class OutboxWorker:
             if is_locked_error(exc):
                 logger.warning("metrics busy 降级")
             backlog = {"backlog": -1, "dead_letter": -1, "oldest_pending_created_at": None}
-        return {**backlog, "processed": self._processed, "dead_letters": self._dead_letters}
+        return {**backlog, "processed": self._processed, "dead_letters": self._dead_letters,
+                "fatal_error": self._fatal_error}
 
     # ── 内部实现 ──
 
@@ -102,6 +121,14 @@ class OutboxWorker:
             except DatabaseLockedError:
                 logger.warning("Worker 轮询遇 SQLITE_BUSY（busy_timeout 到期），跳过本轮")
             except Exception as exc:  # noqa: BLE001
+                if _is_schema_missing(exc):
+                    # 持久性 schema 缺失：重试不会恢复 → 停止线程防死循环
+                    self._fatal_error = f"schema missing: {exc}"
+                    logger.error(
+                        "Worker 轮询致命错误（schema 缺失，停止线程防死循环）: %s", exc
+                    )
+                    self._stop.set()
+                    break
                 logger.error("Worker 轮询异常: %s", exc)
             self._stop.wait(self._poll_interval_s)
 
@@ -164,6 +191,10 @@ class OutboxWorker:
                     last_error="no consumer registered (vector integration pending, R-9)",
                 )
                 return
+            # 将 outbox 行的 event_type 注入 payload，供 consumer 识别事件类型
+            # （consumer 依赖 payload["event_type"] 分发；event_type 存于 outbox 独立列）。
+            if isinstance(payload, dict) and "event_type" not in payload:
+                payload = {**payload, "event_type": event_type}
             self._consumer(payload)
 
             # 成功（附录 B 4a）
