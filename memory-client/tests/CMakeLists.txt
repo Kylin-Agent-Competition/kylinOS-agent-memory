@@ -2,6 +2,28 @@ cmake_minimum_required(VERSION 3.16)
 
 # L0 Mock 契约测试：协议编解码 + MemoryClient ↔ MockGateway
 
+# d11c_qml_load 需要 QGuiApplication + QQmlEngine/QQmlComponent +
+# Qt Quick 运行时 import（D11DemoOrchestratorPage.qml 依赖
+# QtQuick.Controls 2.12 / QtQuick.Layouts 1.12）。
+# 环境若未安装 qtdeclarative5-dev / qtquickcontrols2-5-dev 及其运行时
+# QML 模块（L0 CI 在修复 PR #116 前仅 qtbase5-dev），为避免
+# target_link_libraries(Qt5::Qml/Quick/Gui) 阶段以 "IMPORTED target
+# not found" 报错而让整套 tests CMake Configure 失败、其它 9 个
+# ctest 目标也全部跳过，这里先显式 find_package 并在缺包时发 WARNING
+# 且不注册该目标，保证其余 L0 契约测试仍可编译运行。
+find_package(Qt5 5.12 QUIET COMPONENTS Gui Qml Quick)
+set(D11C_QML_LOAD_AVAILABLE FALSE)
+if(Qt5Gui_FOUND AND Qt5Qml_FOUND AND Qt5Quick_FOUND)
+    set(D11C_QML_LOAD_AVAILABLE TRUE)
+endif()
+if(NOT D11C_QML_LOAD_AVAILABLE)
+    message(WARNING "d11c_qml_load L0 测试跳过：Qt5::Gui/Qt5::Qml/Qt5::Quick "
+                    "IMPORTED targets 缺失。请在构建环境安装 qtdeclarative5-dev、"
+                    "qtquickcontrols2-5-dev 及对应运行时 QML 模块，以获得 Reviewer "
+                    "E HIGH-01 的真实 QQmlComponent 加载验证。其余 9 个 L0 ctest "
+                    "目标不受影响。")
+endif()
+
 # 协议编解码单元测试（无事件循环，APPLESS）
 add_executable(test_protocol_adapter
     ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
@@ -307,32 +329,53 @@ add_test(
 #       重复实例化无泄漏；替代原有只验证 qrc 打包的 smoke build。
 # 注意：headless 运行（QT_QPA_PLATFORM=offscreen），不启动 Window；
 #       不代表真实 Runtime + D11B VM 已接线（L2 另行归档）。
+# 环境保护：仅当 Qt5::Gui/Qml/Quick IMPORTED target 可发现时才注册，
+#           缺包时发 WARNING 并跳过，避免其余 L0 目标因 Configure
+#           失败而全部不编译。
 # ============================================================================
-add_executable(test_d11c_qml_load
-    ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
-    ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
-    ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
-    mock_gateway_server.cpp
-    test_d11c_qml_load.cpp
-)
-target_link_libraries(test_d11c_qml_load
-    PRIVATE
-        Qt5::Core
-        Qt5::Gui
-        Qt5::Network
-        Qt5::Qml
-        Qt5::Quick
-        Qt5::Test
-)
-target_include_directories(test_d11c_qml_load
-    PRIVATE
-        ${CMAKE_SOURCE_DIR}/src
-)
-target_compile_definitions(test_d11c_qml_load
-    PRIVATE
-        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-)
-add_test(
-    NAME d11c_qml_load
-    COMMAND test_d11c_qml_load
-)
+if(D11C_QML_LOAD_AVAILABLE)
+    # test_d11c_qml_load 需要 QML 资源被打包进可执行文件的 qrc，
+    # 否则 QUrl("qrc:/qt/qml/memory_client/pages/D11DemoOrchestratorPage.qml")
+    # 在纯 tests ON / QML OFF 的 ctest 配置下找不到资源。
+    # 使用 qt5_add_resources 把 resources.qrc 编进该测试可执行文件。
+    if(COMMAND qt5_add_resources)
+        qt5_add_resources(D11C_QML_LOAD_QRC_FILES
+            ${CMAKE_SOURCE_DIR}/qml/resources.qrc
+        )
+    else()
+        # 兼容极端环境：即便 qt5_add_resources 宏未暴露，也保证剩余
+        # 源文件可以编译；resources.qrc 缺失会让 L0 用例明确 QVERIFY 失败，
+        # 比链接期 undefined reference 更易诊断。
+        set(D11C_QML_LOAD_QRC_FILES "")
+    endif()
+
+    add_executable(test_d11c_qml_load
+        ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+        ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+        ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
+        mock_gateway_server.cpp
+        test_d11c_qml_load.cpp
+        ${D11C_QML_LOAD_QRC_FILES}
+    )
+    target_link_libraries(test_d11c_qml_load
+        PRIVATE
+            Qt5::Core
+            Qt5::Gui
+            Qt5::Network
+            Qt5::Qml
+            Qt5::Quick
+            Qt5::Test
+    )
+    target_include_directories(test_d11c_qml_load
+        PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+    )
+    target_compile_definitions(test_d11c_qml_load
+        PRIVATE
+            QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    )
+    add_test(
+        NAME d11c_qml_load
+        COMMAND test_d11c_qml_load
+    )
+endif()
