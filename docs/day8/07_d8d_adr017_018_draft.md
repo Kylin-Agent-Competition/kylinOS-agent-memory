@@ -149,7 +149,7 @@ SQLite 既有表无法直接追加跨列 conditional NOT NULL CHECK。迁移采�
 - 非 knowledge 行仅允许 knowledge 专属列（`knowledge_id/knowledge_type/conditions/lifecycle_eligibility/memory_status/memory_type/evidence_tier/last_accessed_at/access_count`）为 NULL；既有 `version` 与新增 `row_revision` 对所有 entry_type 始终 required positive；
 - `is_deleted=1` 与 `memory_status!='removed'` 的新写入拒绝；进入 `removed` 时同步置 `is_deleted=1`。迁移后 `memory_status` 是生命周期最终真源，`is_deleted` 仅为兼容字段。
 
-触发器/Repository 必须覆盖 direct SQL 负路径：迁移后任意新行缺/非法 `row_revision`、新 knowledge 缺 `knowledge_id/knowledge_type`、`version/row_revision < 1`、伪造 `legacy_unmapped`、`eligible + evidence_tier=NULL`、`evidence_unmapped + evidence_tier!=NULL` 均 MUST FAIL。迁移后现有 `soft_delete_memory_entry` 等 optimistic write 必须从 `version` CAS 切换到 `row_revision`；遗漏任何 writer 视为 Gate fail。`knowledge.detail.knowledge_type/conditions` 只读取上述结构化列；禁止用 `json.loads(memory_entries.content).get(...)` 作为这两个响应字段的真源。
+触发器/Repository 必须覆盖 direct SQL 负路径：迁移后任意新行缺/非法 `row_revision`、新 knowledge 缺 `knowledge_id/knowledge_type`、`version/row_revision < 1`、伪造 `legacy_unmapped`、`eligible + evidence_tier=NULL`、`evidence_unmapped + evidence_tier!=NULL` 均 MUST FAIL。迁移后现有 `soft_delete_memory_entry` 等 optimistic write 必须从 `version` CAS 切换到 `row_revision`；遗漏任何 writer 视为 Gate fail——含 main@d7972f1（PR #120）新增的 `soft_delete_resolved_targets() → soft_delete_memory_entry(current_version=...)` 调用链，L1 必须逐 writer 扫描确认。`knowledge.detail.knowledge_type/conditions` 只读取上述结构化列；禁止用 `json.loads(memory_entries.content).get(...)` 作为这两个响应字段的真源。
 
 ### 3.1.1 Knowledge ingress 与 `evidence_tier` 唯一映射（含 E 轨 `allowed_extraction_kinds` 对象类型门禁）
 
@@ -451,6 +451,7 @@ Producer 与业务 mutation 同事务提交。Consumer 不在 ADR-017 范围；�
 - `include_evidence/include_conditions` 默认 true；
 - `relation_limit` 为 strict integer（bool/float/string 均拒绝），默认 25，范围 1..25；relation cursor 两字段必须同时缺失或同时提供；排序固定为 `memory_relation.created_at ASC, relation_id ASC`，cursor 为 exclusive；
 - scoped not-found 响应：`data = {"found": false}`（保持 FRZ-IPC-006 `data` 为 object）。
+- 可见性按 `lifecycle_eligibility` 冻结，与 resolver 一致：`legacy_unmapped`（含未映射 `knowledge_id` 的 legacy 行）→ scoped not-found，不进入 ADR-018 受控投影，必须先经 reconciliation 认领；`evidence_unmapped` 是合法持久化 Knowledge（如 `failed + failure_experience`），**允许** `knowledge.detail` 受控只读，返回 `found=true, evidence_tier=null`，但不得进入 Lifecycle Worker、`lifecycle.status`、ConflictResolutionPolicy 自动裁决或 conflict truth。
 
 成功 `data`：
 
@@ -474,6 +475,8 @@ Producer 与业务 mutation 同事务提交。Consumer 不在 ADR-017 范围；�
   "updated_at": "2026-09-02T00:00:00+00:00"
 }
 ```
+
+`evidence_tier` 响应字段为 **nullable**（`EvidenceTier | null`）：`eligible` Knowledge 返回六档值之一；`evidence_unmapped`（含 `failed + failure_experience`）必须显式返回 `null`（字段存在，不省略）；`legacy_unmapped` 行根本不命中本方法。响应字段不得因 tier 为 null 而静默省略。
 
 字段转换固定为：
 
@@ -612,7 +615,9 @@ legacy/evidence-unmapped lifecycle-ineligible 行不出现在列表中。仅过�
 
 - migration single-head、upgrade/downgrade data-loss guard、schema/metadata 一致；
 - canonical ID 正/负/边界测试（`1/v1` 合法，`01/+1/v01/v0` 拒绝），并断言 lifecycle row_revision 变化不改变 `memory_entries.version`/`version_id`；迁移把旧 version 复制到 row_revision，所有既有 CAS writer 改用 row_revision；
-- direct SQL 门禁：新行缺 knowledge_type、伪造 `legacy_unmapped`、eligibility/evidence 不一致 MUST FAIL；legacy/evidence-unmapped 不进入 Worker/IPC/conflict truth；
+- direct SQL 门禁：新行缺 knowledge_type、伪造 `legacy_unmapped`、eligibility/evidence 不一致 MUST FAIL；`legacy_unmapped` 不进入 ADR-018 详情查询/Worker/conflict truth；`evidence_unmapped` 不进入 Worker/`lifecycle.status`/conflict truth，但允许 `knowledge.detail` 受控只读；
+- ADR-018 可见性 L1：`failed + failure_experience → evidence_unmapped` 时 `knowledge.detail` 必须 `found=true, evidence_tier=null`（字段存在不省略），conditions/evidence 正常受控投影，`lifecycle.status` 不返回该项；`legacy_unmapped` 的 `knowledge.detail` 必须 `found=false`；
+- optimistic writer 迁移扫描：main@d7972f1（PR #120）新增 `soft_delete_resolved_targets() → soft_delete_memory_entry(current_version=...)` 调用链与全部既有 writer 均必须以 `row_revision` 比较/递增；任一 writer 仍用 `version` 做 CAS 视为 Gate fail；
 - evidence_tier ingress admission：仅同 user + `allow_extraction` 可继续映射；`tool_result + success + reject`、`manual_config + completed + audit_only`、缺失/跨用户/未知 decision 均 MUST NOT 写 Knowledge；payload/LLM 不得覆盖；
 - allowed-extraction-kind 对象类型门禁：`failed + allow_extraction + knowledge_type='failure_experience'` MUST 持久化且 MUST NOT 被改写为成功知识/eligible（evidence_tier=NULL、evidence_unmapped）；`failed + allow_extraction + knowledge_type='fact'/'workflow'/…` MUST reject；`partial + allow_extraction + Knowledge` MUST reject；cancelled/timeout/ignored 拒绝；
 - evidence_tier 正路与其余：manual_config/tool_result 的 success/completed 两条 eligible 正路；其余已准入组合（经对象类型门禁）为 evidence_unmapped；payload/LLM 不得覆盖；
