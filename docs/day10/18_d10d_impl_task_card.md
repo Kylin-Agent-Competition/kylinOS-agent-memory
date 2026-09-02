@@ -7,8 +7,8 @@
 | 责任轨道 | D（周子腾）；Reviewer：E（谢嘉然） |
 | 基线分支 | `feat/d10d-impl`（基于 main @ `ffd20b9`，已切换） |
 | 基线 Commit | `ffd20b9` |
-| 对照文档版本 | 权威契约 `docs/day10/16_d10d_forget_contract_plan_v0.3.md`（Reviewer E 冻结回复 **APPROVED_WITH_STAGED_RUNTIME** + Review #99 REWORK 全闭合）；ADR-015/016 草案 `docs/day10/17_d10d_adr015_016_draft.md`（本任务前置，签署后实施）；ADR-005/006/007/010/011/013/014；FRZ-IPC-001~007 / FRZ-DB-001~005；技术栈基线 `[02 §2.1]`；VERSION_MAP 真源 |
-| 前置 | ADR-015/016 经 D 决策 + Reviewer E 签署（Phase 2 开工条件）；契约 v0.3 已冻结业务语义（§〇~§五），**本任务卡定稿不改变契约** |
+| 对照文档版本 | 权威契约 `docs/day10/16_d10d_forget_contract_plan_v0.3.md`（Reviewer E 冻结回复 **APPROVED_WITH_STAGED_RUNTIME** + Review #99 REWORK 全闭合）；ADR-015/019 草案 `docs/day10/17_d10d_adr015_016_draft.md`（本任务前置，签署后实施）；ADR-005/006/007/010/011/013/014；FRZ-IPC-001~007 / FRZ-DB-001~005；技术栈基线 `[02 §2.1]`；VERSION_MAP 真源 |
+| 前置 | ADR-015/019 经 D 决策 + Reviewer E 签署（Phase 2 开工条件）；契约 v0.3 已冻结业务语义（§〇~§五），**本任务卡定稿不改变契约** |
 | 交付边界 | **遗忘持久化层**（表 + 迁移 + Repository + 事务/令牌语义 + 测试 + outbox 优先级 + gateway 接线 seam）；**不接 Vector 清理**（TD-033，`has_vector_cleanup` 仅标记）；不改 IPC envelope |
 
 ---
@@ -41,7 +41,7 @@
 
 ### 1.6 delete_mode 门禁（契约 §四.9 / F-12 / MEDIUM-04）
 
-`delete_mode` 可信输入由 ADR-017 冻结（可信宿主显式提供，默认 soft）；Repository **不得**按 `target_selector` 推导；LLM 不得终判；hard Runtime 跨轨闭环前 fail-closed。
+`delete_mode` 可信输入由 ADR-019 冻结（可信宿主显式提供，默认 soft）；Repository **不得**按 `target_selector` 推导；LLM 不得终判；hard Runtime 跨轨闭环前 fail-closed。
 
 ### 1.7 target_selector 明文生命周期（契约 §四.8 / F-13 / HIGH-01）
 
@@ -59,14 +59,14 @@
 | 4 | `migrations/versions/20260901_add_forget_plan.py` | 新增迁移（ADR-007 命名；down_revision=`20260901_d10b_vector_ledger`，见 §三） | 新增 |
 | 5 | `memory-service/domain/forgetting.py` | **如需要**：D 轨持久化辅助（默认不改；若需 `delete_mode` 常量/占位符等，优先放 D 轨实体或复用 `enums.py`；**不新增 `ForgetPlan.delete_mode` 字段**） | 修改（如需） |
 | 6 | `memory-service/outbox/worker.py` | Worker 取数顺序改为优先级驱动（消费 `claim_pending_outbox` 新排序，无需其他逻辑改动；短事务单写协调不变） | 修改 |
-| 7 | `memory-service/app.py` | **如需要（依赖 ADR-017 签署）**：新增 `--register-forget-handlers` seam（默认不注册 → `UNSUPPORTED_METHOD`，对齐 ADR-010/014 activation 方案 A+B） | 修改（如需） |
-| 8 | `memory-service/gateway/forget_handlers.py` | **新增（依赖 ADR-017 签署）**：`forget.preview` / `forget.execute` handler（固定编排顺序见 ADR-017 草案 §4.9）；**不修改**既有 handler 模块；**范围说明（MEDIUM-02，方案 2）**：v0.3/ADR 允许 ADR-017 签署后实施 forget_handlers.py + app.py activation seam，与「遗忘持久化层」主体同 PR 交付，不无谓拆分 | 新增（如需） |
+| 7 | `memory-service/app.py` | **如需要（依赖 ADR-019 签署）**：新增 `--register-forget-handlers` seam（默认不注册 → `UNSUPPORTED_METHOD`，对齐 ADR-010/014 activation 方案 A+B） | 修改（如需） |
+| 8 | `memory-service/gateway/forget_handlers.py` | **新增（依赖 ADR-019 签署）**：`forget.preview` / `forget.execute` handler（固定编排顺序见 ADR-019 草案 §4.9）；**不修改**既有 handler 模块；**范围说明（MEDIUM-02，方案 2）**：v0.3/ADR 允许 ADR-019 签署后实施 forget_handlers.py + app.py activation seam，与「遗忘持久化层」主体同 PR 交付，不无谓拆分 | 新增（如需） |
 | 9 | `memory-service/service/forgetting.py` | **新增（Preview 规则引擎 seam）**：scoped 真实解析（single_item / session 确定性解析；topic 复用既有只读检索或 fail-closed；time_window/full_reset fail-closed）；非 Mock、非固定返回 | 新增（如需，D6 决策后） |
 | 10 | `memory-service/tests/test_forget_persistence_d10d.py` | 新增 L0/L1 测试（契约 §九 逐项，见 §五） | 新增 |
 
 ## 三、禁止修改清单（红线，两个阶段都适用）
 
-- 不修改冻结 FRZ-IPC-001~007 既有字段/错误码/envelope（forget 方法走 ADR-017 新增，未签署前不接线）。
+- 不修改冻结 FRZ-IPC-001~007 既有字段/错误码/envelope（forget 方法走 ADR-019 新增，未签署前不接线）。
 - 不修改 FRZ-DB-001 既有表定义既有列（forget 表为新增；outbox 仅允许本任务卡的只增变更，且须 D1 决策通过）。
 - 不修改 `pipeline/`、`providers/`、`security/`、`service/candidate_governance.py`、`gateway/`（既有实现）、`embedding/`、`retrieval/`、`observability/` 既有实现。
 - **不接 Vector 清理**（TD-033 未完成；`has_vector_cleanup` 仅承载标记，不实现清理）。
@@ -133,11 +133,11 @@
 - `aggregate_type` CHECK 扩展后允许 `aggregate_type='forget'` 入队（D1）。
 - **验证**：L1 Outbox priority 用例（§五 D 组）：堆积普通任务 + 后入 forget 事件 → 优先消费 forget。
 
-### Step 7（依赖 ADR-017 签署）：Gateway seam + app.py 接线
+### Step 7（依赖 ADR-019 签署）：Gateway seam + app.py 接线
 
-- `gateway/forget_handlers.py` 新增 `forget.preview` / `forget.execute`（固定编排顺序，ADR-017 草案 §4.9；trusted identity precheck 先于幂等查找）。
-- `app.py` 新增 `--register-forget-handlers`（默认不注册 → `UNSUPPORTED_METHOD`）；production 禁止注册。
-- **范围（MEDIUM-02，方案 2）**：本任务卡已获 D 批准将 Gateway seam 纳入 Phase 2（v0.3 允许 ADR-017 签署后实施），与持久化层同 PR 交付；`forget.execute` 幂等键以 envelope 顶级字段为唯一真源（非阻断 1，payload 不携带）。
+- `gateway/forget_handlers.py` 新增 `forget.preview` / `forget.execute`（固定编排顺序，ADR-019 草案 §4.9；trusted identity precheck 先于幂等查找）。
+- `app.py` 新增 `--register-forget-handlers`（production 默认不注册 → `UNSUPPORTED_METHOD`）；仅在 ADR-019 签署且可信宿主身份映射/安全 gate 满足后条件激活。
+- **范围（MEDIUM-02，方案 2）**：本任务卡已获 D 批准将 Gateway seam 纳入 Phase 2（v0.3 允许 ADR-019 签署后实施），与持久化层同 PR 交付；`forget.execute` 幂等键以 envelope 顶级字段为唯一真源（非阻断 1，payload 不携带）。
 - **验证**：L1 Gateway 端到端（uds_client preview→execute）+ 未注册时 UNSUPPORTED_METHOD（§五 G 组）。
 
 ### Step 8：自检 + 报告
@@ -193,7 +193,7 @@ $ alembic -c migrations/alembic.ini history
 | 17 | **Gate 验收**：误删=0（不在确认快照中的对象不受影响）；跨用户 affected_count=0；已报告成功的遗忘目标不重新进入标准检索/MemoryContext/重启后不恢复 | Gate 硬要求 | S5 |
 | 18 | Hard Delete / Cascade / Full Reset 未闭环前执行 → fail-closed（不得自动降级软删后报成功） | 红线 | S5 |
 | 19 | **request_fingerprint 敏感占位**：preview 携带敏感 selector 时 idempotency_cache 不落敏感派生 hash（`<SENSITIVE-OMITTED>`） | 安全（ADR-014 v5 对齐） | S4 |
-| 20 | **trusted identity cache-bypass**：身份不匹配不得被 cache replay 绕过（ADR-017 seam 场景） | 隔离（ADR-014 v5 对齐） | S7 |
+| 20 | **trusted identity cache-bypass**：身份不匹配不得被 cache replay 绕过（ADR-019 seam 场景） | 隔离（ADR-014 v5 对齐） | S7 |
 
 ### L0（契约 §九 L0）
 
@@ -221,14 +221,14 @@ $ alembic -c migrations/alembic.ini history
 ## 八、交付物
 
 - 修改：`db/schema.py`、`db/repositories.py`、`db/uow.py`、`outbox/worker.py`、`migrations/versions/20260901_add_forget_plan.py`（新增）、`tests/test_forget_persistence_d10d.py`（新增）、（如需）`domain/forgetting.py`、`service/forgetting.py`、`gateway/forget_handlers.py`、`app.py`。
-- 文档：本任务卡 + ADR-015/016 草案 + Plan 摘要（17_/19_）。
+- 文档：本任务卡 + ADR-015/019 草案 + Plan 摘要（17_/19_）。
 - 禁止：push、创建 PR（orchestrator 审查后处理）。
 
 ## 九、验收标准
 
 - L0 全绿 + L1（§六 20 项）全通过（含失败路径/幂等/并发/边界，禁止删测试换取通过）。
 - 迁移单 head；`.schema` 与 ADR-015 DDL 逐列一致；upgrade/downgrade 往返通过。
-- 契约零偏离：FRZ-IPC/FRZ-DB 既有条目不动；forget 表走 ADR-015/016。
+- 契约零偏离：FRZ-IPC/FRZ-DB 既有条目不动；forget 表走 ADR-015，forget IPC 走 ADR-019。
 - 无假实现：preview resolver 真实 scoped 解析；fail-closed 不降级报成功；TODO/FIXME 引用 TD 编号。
 - 开发报告按输出格式（修改清单/契约变化/设计说明/测试结果/待 L2 项/技术债/风险与回滚）。
 
@@ -246,4 +246,4 @@ $ alembic -c migrations/alembic.ini history
 | TD-E（event 目标软删，D2 决策前 fail-closed） | 新增候选；source_events 无 is_deleted，staged |
 
 ---
-*任务卡编制：opencode（D 轨，Phase 1 / Plan，2026-09-01）｜依据契约 v0.3 + ADR-015/016 草案；红线遵守，无 push、无 PR。*
+*任务卡编制：opencode（D 轨，Phase 1 / Plan，2026-09-01）｜依据契约 v0.3 + ADR-015/019 草案；红线遵守，无 push、无 PR。*

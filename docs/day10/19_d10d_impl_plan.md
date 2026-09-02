@@ -4,7 +4,7 @@
 - **日期**：2026-09-01
 - **状态**：Plan（**D 已决策（D1~D6 全部采用推荐方案），待 Reviewer E 签署**后进入 Phase 2 / Build）
 - **基线**：分支 `feat/d10d-impl` @ `ffd20b9`（已确认）
-- **对照**：契约 `docs/day10/16_d10d_forget_contract_plan_v0.3.md`（§〇~§十二）；ADR-015/016 草案 `docs/day10/17_d10d_adr015_016_draft.md`；任务卡 `docs/day10/18_d10d_impl_task_card.md`
+- **对照**：契约 `docs/day10/16_d10d_forget_contract_plan_v0.3.md`（§〇~§十二）；ADR-015/019 草案 `docs/day10/17_d10d_adr015_016_draft.md`；任务卡 `docs/day10/18_d10d_impl_task_card.md`
 - **产出**：本文档 + 17_（ADR 草案）+ 18_（任务卡）
 
 ---
@@ -35,7 +35,7 @@ $ alembic -c migrations/alembic.ini history
 | 契约节 | 契约要点（冻结） | Plan 落地（任务卡 Step） | 状态 |
 |---|---|---|---|
 | §三.1 | 复用 E 轨 `ForgetPlan`；五值 forget_mode + selector 互斥；`resolved_target_ids`/`affected_count`/`requires_confirmation` 禁止模型生成；`affected_count = len(resolved_target_ids)`（MEDIUM-03） | S1/S3/S4：Repository/UoW 落库 + Domain 校验复用；Preview 完整性断言 | 落地 |
-| §三.2 | 确认凭据（一次性，绑定 user+plan+hash+TTL+防重放）；幂等复用 FRZ-IPC-005（不新建表）；`delete_mode` 可信来源由 ADR-017 冻结（MEDIUM-04） | S3/S4 + ADR-017 §4.2/§4.7；request_fingerprint 敏感占位（对齐 ADR-014 v5） | 落地（D3/D4 已决策） |
+| §三.2 | 确认凭据（一次性，绑定 user+plan+hash+TTL+防重放）；幂等复用 FRZ-IPC-005（不新建表）；`delete_mode` 可信来源由 ADR-019 冻结（MEDIUM-04） | S3/S4 + ADR-019 §4.2/§4.7；request_fingerprint 敏感占位（对齐 ADR-014 v5） | 落地（D3/D4 已决策） |
 | §三.3 | 状态机冻结七值；`awaiting_confirmation → executing` 接线前 fail-closed | S3/S4 终态迁移 + fail-closed | 落地 |
 | §四.1 | `forget_plan` 表（DDL + UNIQUE(user_id, forget_plan_id) + (user_id, created_at)） | S1 Schema + 迁移 | 落地 |
 | §四.2 | `forget_audit` 零正文 + `executed_at` 填写语义（MEDIUM-01） | S1 + S3 审计写入（terminal 必填 executed_at） | 落地 |
@@ -45,13 +45,13 @@ $ alembic -c migrations/alembic.ini history
 | §四.6 | full_reset 语义冻结；Runtime fail-closed 至闭环 | S5 fail-closed | 落地 |
 | §四.7 | 高敏感批量删除确认门槛语义；绝对拒绝清单 | S4 凭据校验 + fail-closed | 落地 |
 | §四.8 | selector 明文生命周期（HIGH-01）：短期存在、Preview 后清除/占位、`target_topic` 同纳入、Sentinel 验收 | S3 清理 + S6/L1 用例 11/16 | 落地 |
-| §四.9 | delete_mode 门禁：ADR-017 冻结可信来源；Repository 不推导；LLM 不终判；hard 接线前 fail-closed | ADR-017 §4.2 + S5 fail-closed | 落地（D3 已决策） |
+| §四.9 | delete_mode 门禁：ADR-019 冻结可信来源；Repository 不推导；LLM 不终判；hard 接线前 fail-closed | ADR-019 §4.2 + S5 fail-closed | 落地（D3 已决策） |
 | §五.1 | preview：规则引擎生成 resolved/affected/selection_hash → 凭据（32B，只存 SHA-256）→ 返回 {preview_result, selection_hash, credential_ttl}；Preview 后清 selector | S3/S4 + S9（resolver seam，D6） | 落地（D6 已决策） |
 | §五.2 | execute：校验绑定+未过期+未使用 → 只消费已确认 ID 软删 → 标记凭据已消费 → executed_count → 审计；`executed_count != affected_count` 不进 completed | S4/S5 | 落地 |
 | §五.3 | 幂等重放返回首次结果 | S4（execute_idempotent 复用） | 落地 |
 | §五.4 | 凭据失败 → INVALID_REQUEST；事务失败整体回滚凭据保留 | S3/S4 错误映射 | 落地 |
 | §六 | Outbox 高优先级：方案 A（nullable priority + 部分索引 + worker ORDER BY priority DESC, next_retry_at ASC + CHECK 扩展 'forget'） | S1/S6 | 落地（D1 已决策） |
-| §七 | 关键决策 F-1~F-14 全部采纳 | 任务卡 §一.1~§一.7 + ADR-015/016 | 落地（F-11 DEFERRED 不实现） |
+| §七 | 关键决策 F-1~F-14 全部采纳 | 任务卡 §一.1~§一.7 + ADR-015/019 | 落地（F-11 DEFERRED 不实现） |
 | §八 | 错误语义复用冻结域，不新增错误码 | S4 映射表（任务卡 §一.3） | 落地 |
 | §九 | L0/L1/L2 测试规划（逐项） | 任务卡 §六（20 项 L1 + L0 + L2 清单） | 落地 |
 
@@ -77,8 +77,8 @@ $ alembic -c migrations/alembic.ini history
 |---|--------|------|---------|
 | D1 | outbox `aggregate_type` CHECK 值域扩展（SQLite 重建） | **采用方案 A**：扩展（重建迁移，保留数据） | 迁移 + outbox/worker + 入队 |
 | D2 | event 目标（source_events）软删机制 | **fail-closed + 登记 TD-E**（staged）；不本任务内改 source_events（红线） | S5 dispatcher + executed_count 语义 |
-| D3 | `delete_mode` 可信输入来源冻结 | **ADR-017 冻结**为「可信宿主显式提供，默认 soft」；接线前 hard fail-closed | ADR-017 + S7 |
-| D4 | Preview 凭据明文回传信道 | **响应回传一次明文**（服务端只存哈希；已冻结 `confirmation_token` 字段） | ADR-017 + handler |
+| D3 | `delete_mode` 可信输入来源冻结 | **ADR-019 冻结**为「可信宿主显式提供，默认 soft」；接线前 hard fail-closed | ADR-019 + S7 |
+| D4 | Preview 凭据明文回传信道 | **响应回传一次明文**（服务端只存哈希；已冻结 `confirmation_token` 字段） | ADR-019 + handler |
 | D5 | selection_hash 派生域 | **仅由结构化 `resolved_target_ids` 派生** | S3 + 安全用例 |
 | D6 | Preview 规则引擎 seam 归属与范围 | **D 轨新增 `service/forgetting.py`**；single_item/session 确定性；topic/time_window/full_reset fail-closed | S9 新增文件 + 测试 |
 
@@ -86,7 +86,7 @@ $ alembic -c migrations/alembic.ini history
 
 ## 五、Phase 2（Build）范围预授权边界
 
-- Build 将严格限定在任务卡（18_）批准范围内：schema/迁移/Repository/UoW/outbox 优先级/软删主路径/fail-closed/测试 +（ADR-017 签署后）gateway seam（MEDIUM-02 方案 2：与持久化层同 PR 交付）。
+- Build 将严格限定在任务卡（18_）批准范围内：schema/迁移/Repository/UoW/outbox 优先级/软删主路径/fail-closed/测试 +（ADR-019 签署后）gateway seam（MEDIUM-02 方案 2：与持久化层同 PR 交付）。
 - 红线不随 Phase 2 解除：不修改冻结契约与既有实现、不接 Vector 清理、不实现 hard/cascade/full_reset（**方案 A：full_reset Preview/Execute 本期均 fail-closed，MEDIUM-04**）/time_window/回滚完整逻辑、不 push/不创建 PR、WSL 结果不作宿主证据。
 - Build 完成后按 skill 输出格式出开发报告，L2 只列麒麟人工操作清单。
 
