@@ -60,6 +60,11 @@ class MemoryViewModel : public QObject {
     Q_PROPERTY(QString connectionState READ connectionState
                    NOTIFY connectionStateChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    // D12-C：重连统计 + Retry 按钮支持
+    Q_PROPERTY(int reconnectAttempts READ reconnectAttempts
+                   NOTIFY reconnectAttemptsChanged)
+    Q_PROPERTY(bool autoReconnectEnabled READ autoReconnectEnabled
+                   WRITE setAutoReconnectEnabled NOTIFY autoReconnectEnabledChanged)
     Q_PROPERTY(QString lastRequestId READ lastRequestId NOTIFY lastRequestIdChanged)
     Q_PROPERTY(QJsonObject lastResponse READ lastResponse NOTIFY lastResponseChanged)
     Q_PROPERTY(bool preChatBusy READ preChatBusy NOTIFY preChatBusyChanged)
@@ -275,6 +280,10 @@ public:
 
     [[nodiscard]] QString connectionState() const;
     [[nodiscard]] QString lastError() const;
+    // D12-C：重连相关
+    [[nodiscard]] int reconnectAttempts() const;
+    [[nodiscard]] bool autoReconnectEnabled() const;
+    void setAutoReconnectEnabled(bool v);
     [[nodiscard]] QString lastRequestId() const { return lastRequestId_; }
     [[nodiscard]] QJsonObject lastResponse() const { return lastResponse_; }
     [[nodiscard]] bool preChatBusy() const { return preChatBusy_; }
@@ -379,6 +388,8 @@ public:
     // QML 可调用动作。
     Q_INVOKABLE void connectToService();
     Q_INVOKABLE void disconnectFromService();
+    // D12-C：显式 Retry（Stop+Cleanup+Connect），供 UI "Retry" 按钮使用
+    Q_INVOKABLE void retryConnectService();
     Q_INVOKABLE void sendHealth();
     // 发送 memory.retrieve 请求。payload 由调用方构造，本骨架不做业务校验。
     Q_INVOKABLE void sendMemoryQuery(const QJsonObject& payload);
@@ -607,6 +618,9 @@ signals:
     void socketPathChanged();
     void connectionStateChanged();
     void lastErrorChanged();
+    // D12-C：重连相关信号
+    void reconnectAttemptsChanged();
+    void autoReconnectEnabledChanged();
     void lastRequestIdChanged();
     void lastResponseChanged();
     void preChatBusyChanged();

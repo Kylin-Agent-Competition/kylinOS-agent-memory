@@ -38,6 +38,11 @@ MemoryViewModel::MemoryViewModel(QObject* parent)
             this, &MemoryViewModel::onRequestFailed);
     connect(&client_, &MemoryClient::connectionError,
             this, &MemoryViewModel::onConnectionError);
+    // D12-C：重连相关外推信号
+    connect(&client_, &MemoryClient::reconnectAttemptsChanged,
+            this, &MemoryViewModel::reconnectAttemptsChanged);
+    connect(&client_, &MemoryClient::autoReconnectEnabledChanged,
+            this, &MemoryViewModel::autoReconnectEnabledChanged);
 }
 
 MemoryViewModel::~MemoryViewModel()
@@ -70,14 +75,35 @@ QString MemoryViewModel::connectionState() const
     case MemoryClient::ConnectionState::Connecting:   return QStringLiteral("connecting");
     case MemoryClient::ConnectionState::Connected:    return QStringLiteral("connected");
     case MemoryClient::ConnectionState::Closing:      return QStringLiteral("closing");
+    case MemoryClient::ConnectionState::Reconnecting: return QStringLiteral("reconnecting");
     }
     return QStringLiteral("unknown");
 }
 
 QString MemoryViewModel::lastError() const { return client_.lastError(); }
+int MemoryViewModel::reconnectAttempts() const { return client_.reconnectAttempts(); }
+bool MemoryViewModel::autoReconnectEnabled() const { return client_.autoReconnectEnabled(); }
+void MemoryViewModel::setAutoReconnectEnabled(bool v)
+{
+    if (v != client_.autoReconnectEnabled()) {
+        client_.setAutoReconnectEnabled(v);
+        emit autoReconnectEnabledChanged();
+    }
+}
 
 void MemoryViewModel::connectToService() { client_.connectToService(); }
-void MemoryViewModel::disconnectFromService() { client_.disconnectFromService(); }
+void MemoryViewModel::disconnectFromService()
+{
+    // D12-C：Stop 语义 —— 断开前重置所有 pipeline stage/busy
+    resetAllPipelines();
+    client_.disconnectFromService();
+}
+// D12-C：Stop + Cleanup + Connect（UI "Retry" 按钮入口）。
+void MemoryViewModel::retryConnectService()
+{
+    resetAllPipelines();
+    client_.retryConnect();
+}
 
 void MemoryViewModel::sendHealth()
 {
@@ -661,6 +687,17 @@ void MemoryViewModel::runBehaviorPipeline(
 void MemoryViewModel::onConnectionStateChanged()
 {
     emit connectionStateChanged();
+    emit reconnectAttemptsChanged();
+    // D12-C：连接中断 → 所有 pipeline 立即显式 busy=false / stage=idle，
+    //        保证空状态下 UI 不挂起在 "querying/sending" 的假 busy 状态。
+    const QString s = connectionState();
+    if (s == QStringLiteral("disconnected") || s == QStringLiteral("closing")) {
+        if (preChatBusy())    setPreChatStage(QStringLiteral("idle"));
+        if (postTurnBusy())   setPostTurnStage(QStringLiteral("idle"));
+        // busy flags fail-closed
+        setPreChatBusy(false);
+        setPostTurnBusy(false);
+    }
 }
 
 void MemoryViewModel::onLastErrorChanged()

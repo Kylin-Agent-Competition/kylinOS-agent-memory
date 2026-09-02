@@ -15,6 +15,7 @@
 #include "memory_client.h"
 #include "mock_gateway_server.h"
 
+#include <QFile>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QtTest>
@@ -33,6 +34,14 @@ private slots:
     void malformedServerPacketTriggersConnectionError();
     void healthResponseCarriesRequestIdForMatching();
     void unknownRequestIdResponseIsDropped();
+    // D12-C TD-022：客户端 deadline 超时 → TIMEOUT；迟到响应丢弃
+    void clientSideDeadlineTimeoutEmitsRequestFailedAndLateResponseDropped();
+    // D12-C TD-IPC-004：意外断开触发 3 次指数退避自动重连（最终失败）
+    void unexpectedDisconnectTriggersThreeReconnectBackoff();
+    // D12-C TD-IPC-004：显式 disconnect（Stop）不应触发自动重连
+    void intentionalStopDoesNotTriggerAutoReconnect();
+    // D12-C TD-IPC-004：重连成功时 reconnectAttempts 归零
+    void disconnectWhileAutoReconnectSuppressesFurtherRetries();
 
 private:
     QString uniqueSocketName(const QString& prefix);
@@ -265,6 +274,159 @@ void MemoryClientMockTest::unknownRequestIdResponseIsDropped()
     QTest::qWait(500);
     QCOMPARE(responseSpy.count(), 0);
     QCOMPARE(failedSpy.count(), 0);
+}
+
+// D12-C TD-022 §C-2：
+//   客户端级 deadline_ms + 100ms 超时后：
+//   (1) requestFailed(TIMEOUT) 必触发；
+//   (2) pendingRequests_ 同步 expire/cancel（mock 不会再响应 TIMEOUT）；
+//   (3) 迟到响应（过期后服务端才回）必须被丢弃，不再上抛 responseReceived。
+void MemoryClientMockTest::clientSideDeadlineTimeoutEmitsRequestFailedAndLateResponseDropped()
+{
+    test_support::MockGatewayServer mock;
+    // Mock：用 "__hold__" 后门暂不回包，让客户端侧先 deadline TIMEOUT；
+    //       测试再用 sendRawEnvelope 注入迟到响应验证丢弃逻辑。
+    mock.setHandler([](const client::EnvelopeParts&) -> QJsonObject {
+        return QJsonObject{{QStringLiteral("__hold__"), true}};
+    });
+    const QString socket = mock.listen(uniqueSocketName("timeout-late"));
+    QVERIFY(!socket.isEmpty());
+
+    client::MemoryClient client;
+    client.setSocketPath(socket);
+
+    QSignalSpy responseSpy(&client, &client::MemoryClient::responseReceived);
+    QSignalSpy failedSpy(&client, &client::MemoryClient::requestFailed);
+
+    client.connectToService();
+    QTRY_COMPARE_WITH_TIMEOUT(
+        client.connectionState(),
+        client::MemoryClient::ConnectionState::Connected,
+        5000);
+
+    const QString requestId = client.sendHealthRequest();
+    QVERIFY(!requestId.isEmpty());
+
+    // 等待客户端侧 deadline（默认 5000ms + 100ms 容差 → 5.1s）。
+    // 为了加速 L0，我们把等待设定为 5500ms，确保 timeout 必触发。
+    QTRY_COMPARE_WITH_TIMEOUT(failedSpy.count(), 1, 8000);
+    const auto args = failedSpy.takeFirst();
+    QCOMPARE(args.at(0).toString(), requestId);
+    QCOMPARE(args.at(1).toString(), QStringLiteral("TIMEOUT"));  // TD-022：对齐 FRZ-IPC-002
+    QCOMPARE(responseSpy.count(), 0);
+
+    // TD-022：迟到响应（late response）—— 过期后才到，必须丢弃。
+    // 伪造"已过 deadline"的成功 envelope，并通过 Mock::sendRawEnvelope 下发。
+    QJsonObject late = client::buildSuccessResponse(
+        requestId,
+        requestId,
+        QJsonObject{{QStringLiteral("echo"), QStringLiteral("late")}});
+    QVERIFY(mock.sendRawEnvelope(late));
+    QTest::qWait(300);  // 等待 readyRead 处理
+
+    QCOMPARE(responseSpy.count(), 0);   // 迟到响应不得上抛
+    QCOMPARE(failedSpy.count(), 0);     // 迟到响应不得产生新 TIMEOUT/失败
+}
+
+// D12-C TD-IPC-004 §C-1：意外断开后最多 3 次指数退避重连，达到上限后 reconnectFinished(false,3)。
+void MemoryClientMockTest::unexpectedDisconnectTriggersThreeReconnectBackoff()
+{
+    test_support::MockGatewayServer mock;
+    const QString socket = mock.listen(uniqueSocketName("auto-reconnect-max"));
+    QVERIFY(!socket.isEmpty());
+
+    client::MemoryClient client;
+    client.setSocketPath(socket);
+    QVERIFY(client.autoReconnectEnabled());
+
+    QSignalSpy stateSpy(&client, &client::MemoryClient::connectionStateChanged);
+    QSignalSpy reconnectFinishedSpy(&client, &client::MemoryClient::reconnectFinished);
+
+    client.connectToService();
+    QTRY_COMPARE_WITH_TIMEOUT(
+        client.connectionState(),
+        client::MemoryClient::ConnectionState::Connected,
+        5000);
+    QCOMPARE(client.reconnectAttempts(), 0);
+
+    // Mock 服务端关闭 socket（模拟意外断开），再关闭 server（让后续重连失败以便
+    // 验证"最多3次"行为与 reconnectFinished 信号）。
+    mock.close();
+
+    // 重连总窗口：500ms+1000ms+2000ms = 3500ms。给 8s 余量确保信号触发。
+    QTRY_COMPARE_WITH_TIMEOUT(reconnectFinishedSpy.count(), 1, 10000);
+    {
+        const auto args = reconnectFinishedSpy.takeFirst();
+        QCOMPARE(args.at(0).toBool(), false);
+        QCOMPARE(args.at(1).toInt(), 3);
+    }
+    QCOMPARE(client.reconnectAttempts(), 3);
+    QCOMPARE(client.connectionState(), client::MemoryClient::ConnectionState::Disconnected);
+
+    // 状态序列应含：Connecting→Connected→Disconnected→Reconnecting×3→Disconnected。
+    QVERIFY(stateSpy.count() >= 6);
+}
+
+// D12-C TD-IPC-004 §C-1：显式 disconnect（Stop）不计入意外断开，不触发自动重连。
+void MemoryClientMockTest::intentionalStopDoesNotTriggerAutoReconnect()
+{
+    test_support::MockGatewayServer mock;
+    const QString socket = mock.listen(uniqueSocketName("stop-no-reconnect"));
+    QVERIFY(!socket.isEmpty());
+
+    client::MemoryClient client;
+    client.setSocketPath(socket);
+    QVERIFY(client.autoReconnectEnabled());
+
+    QSignalSpy reconnectFinishedSpy(&client, &client::MemoryClient::reconnectFinished);
+
+    client.connectToService();
+    QTRY_COMPARE_WITH_TIMEOUT(
+        client.connectionState(),
+        client::MemoryClient::ConnectionState::Connected,
+        5000);
+
+    // 显式 Stop → 立即断开，不触发 auto-reconnect。
+    client.disconnectFromService();
+    QTRY_COMPARE_WITH_TIMEOUT(
+        client.connectionState(),
+        client::MemoryClient::ConnectionState::Disconnected,
+        5000);
+    QCOMPARE(client.reconnectAttempts(), 0);
+    // reconnectFinished 只在自动重连流程结束时才发射。
+    QCOMPARE(reconnectFinishedSpy.count(), 0);
+}
+
+// D12-C TD-IPC-004：autoReconnect 退避计时窗口中显式 disconnect → 停止重连、
+// reconnectAttempts 不再递增（Stop 语义优先）。
+void MemoryClientMockTest::disconnectWhileAutoReconnectSuppressesFurtherRetries()
+{
+    // 不启动任何 Mock server：connect 会直接失败 → 进入 auto-reconnect 窗口。
+    const QString nonexistent = uniqueSocketName("no-server");
+    // 确保路径不存在：QLocalServer 未启动 → socket 绝不存在。
+    QFile::remove(nonexistent);
+
+    client::MemoryClient client;
+    client.setSocketPath(nonexistent);
+    QVERIFY(client.autoReconnectEnabled());
+
+    QSignalSpy stateSpy(&client, &client::MemoryClient::connectionStateChanged);
+
+    client.connectToService();
+    // 等连接失败 → 进入 reconnecting（attempt 1 触发，此时会 start backoff）。
+    QTRY_COMPARE_WITH_TIMEOUT(client.reconnectAttempts() >= 1, true, 6000);
+    QVERIFY(client.reconnectAttempts() <= 3);
+
+    // 显式 Stop：退避窗口应立即停止，重连次数不再增加。
+    client.disconnectFromService();
+    QCOMPARE(client.connectionState(), client::MemoryClient::ConnectionState::Disconnected);
+    const int attemptsAtStop = client.reconnectAttempts();
+
+    // 再等待 3s（应覆盖 attempt2/3 的退避窗口总和 3000ms）；尝试次数必须不变。
+    QTest::qWait(3500);
+    QCOMPARE(client.reconnectAttempts(), attemptsAtStop);
+    QCOMPARE(client.connectionState(), client::MemoryClient::ConnectionState::Disconnected);
+    Q_UNUSED(stateSpy);
 }
 
 QTEST_MAIN(MemoryClientMockTest)

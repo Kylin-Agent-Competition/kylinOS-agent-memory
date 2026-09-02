@@ -38,6 +38,9 @@ private slots:
     void parseEnvelopeRejectsNonStringMethod();
     void parseEnvelopeRejectsEmptyMethod();
     void parseEnvelopeRejectsNonObjectPayload();
+    // D12-C TD-023：严格拒绝 payload=null / payload-missing
+    void parseEnvelopeRejectsNullPayload();
+    void parseEnvelopeRejectsMissingPayload();
     // FRZ-IPC-006 §6.1 必填字段校验（MEDIUM-01）
     void parseEnvelopeRejectsMissingRequestId();
     void parseEnvelopeRejectsMissingTraceId();
@@ -57,6 +60,10 @@ private slots:
     // error response 校验（MEDIUM-01）
     void parseResponseRejectsErrorWithoutErrorCode();
     void parseResponseRejectsErrorWithoutMessage();
+    // D12-C TD-023：错误 envelope 的 message 必须非空字符串（空白/null/missing 一律拒绝）
+    void parseResponseRejectsErrorWithEmptyMessage();
+    void parseResponseRejectsErrorWithWhitespaceOnlyMessage();
+    void parseResponseRejectsErrorWithNullMessage();
     void parseResponseRejectsErrorWithNonStringErrorCode();
     void parseResponseRejectsErrorWithNonStringMessage();
     // error_code 冻结枚举校验（HIGH-01: isValidErrorCode 接入生产 parser）
@@ -345,6 +352,37 @@ void ProtocolAdapterTest::parseEnvelopeRejectsNonObjectPayload()
     QCOMPARE(err.kind, client::ProtocolErrorKind::PayloadNotObject);
 }
 
+// D12-C TD-023 §C-3: payload=null → PayloadNotObject（旧版误判为{}）
+void ProtocolAdapterTest::parseEnvelopeRejectsNullPayload()
+{
+    QJsonObject envelope{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kMethodKey, client::methods::kHealth},
+        {client::kPayloadKey, QJsonValue::Null},
+    };
+    const auto [parts, err] = client::parseEnvelope(envelope);
+    QVERIFY(!parts.has_value());
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::PayloadNotObject);
+}
+
+// D12-C TD-023 §C-3: payload=missing → PayloadNotObject（旧版误判为{}）
+void ProtocolAdapterTest::parseEnvelopeRejectsMissingPayload()
+{
+    QJsonObject envelope{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kMethodKey, client::methods::kHealth},
+        // 故意不插入 payload
+        {client::kRequestIdKey, QStringLiteral("req-x")},
+        {client::kTraceIdKey, QStringLiteral("trc-x")},
+        {client::kDeadlineMsKey, 1000},
+    };
+    const auto [parts, err] = client::parseEnvelope(envelope);
+    QVERIFY(!parts.has_value());
+    QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::PayloadNotObject);
+}
+
 // MEDIUM-01: parseEnvelope 严格执行 FRZ-IPC-006 §6.1 必填字段校验
 void ProtocolAdapterTest::parseEnvelopeRejectsMissingRequestId()
 {
@@ -625,6 +663,55 @@ void ProtocolAdapterTest::parseResponseRejectsErrorWithNonStringMessage()
     };
     const auto [parts, err] = client::parseResponse(response);
     QVERIFY(!err.ok());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingErrorMessage);
+}
+
+// D12-C TD-023 §C-3: 错误 envelope 空 message 必须拒绝
+void ProtocolAdapterTest::parseResponseRejectsErrorWithEmptyMessage()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-err-e")},
+        {client::kTraceIdKey, QStringLiteral("trc-err-e")},
+        {client::kStatusKey, QStringLiteral("error")},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:15:00Z")},
+        {client::kErrorCodeKey, QStringLiteral("INVALID_REQUEST")},
+        {client::kMessageKey, QStringLiteral("")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!parts.has_value());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingErrorMessage);
+}
+
+void ProtocolAdapterTest::parseResponseRejectsErrorWithWhitespaceOnlyMessage()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-err-w")},
+        {client::kTraceIdKey, QStringLiteral("trc-err-w")},
+        {client::kStatusKey, QStringLiteral("error")},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:16:00Z")},
+        {client::kErrorCodeKey, QStringLiteral("INTERNAL_ERROR")},
+        {client::kMessageKey, QStringLiteral("   \t\n")},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!parts.has_value());
+    QCOMPARE(err.kind, client::ProtocolErrorKind::MissingErrorMessage);
+}
+
+void ProtocolAdapterTest::parseResponseRejectsErrorWithNullMessage()
+{
+    QJsonObject response{
+        {client::kProtocolVersionKey, QStringLiteral("1.0")},
+        {client::kRequestIdKey, QStringLiteral("req-err-n")},
+        {client::kTraceIdKey, QStringLiteral("trc-err-n")},
+        {client::kStatusKey, QStringLiteral("error")},
+        {client::kServerTsKey, QStringLiteral("2026-08-20T12:17:00Z")},
+        {client::kErrorCodeKey, QStringLiteral("PROTOCOL_ERROR")},
+        {client::kMessageKey, QJsonValue::Null},
+    };
+    const auto [parts, err] = client::parseResponse(response);
+    QVERIFY(!parts.has_value());
     QCOMPARE(err.kind, client::ProtocolErrorKind::MissingErrorMessage);
 }
 
