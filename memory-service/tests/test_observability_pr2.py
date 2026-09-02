@@ -290,7 +290,7 @@ def test_worker_restores_trace_event_and_clears(tmp_path):
 
     seen = {}
 
-    def _consumer(payload):
+    def _consumer(event_type, payload):
         # Worker 处理回调内读取线程上下文
         seen["ctx"] = dict(get_request_context())
         seen["payload"] = payload

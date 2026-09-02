@@ -43,6 +43,8 @@ const QString kKnowledgeDetail = QStringLiteral("knowledge.detail");  // D8C 候
 const QString kConflictCompare = QStringLiteral("conflict.compare");  // D8C 候选
 const QString kLifecycleStatus = QStringLiteral("lifecycle.status");  // D8C 候选
 const QString kContextAssemble = QStringLiteral("context.assemble");  // D9C 候选
+const QString kForgetPreview = QStringLiteral("forget.preview");  // D10C 候选（pending ADR）
+const QString kForgetExecute = QStringLiteral("forget.execute");  // D10C 候选（pending ADR）
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）

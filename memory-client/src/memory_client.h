@@ -146,6 +146,34 @@ public:
     //     actual_token_count / budget_exceeded / injection_status。
     Q_INVOKABLE QString sendContextAssembleRequest(const QJsonObject& payload);
 
+    // D10C 候选 IPC 便捷方法（CANDIDATE / pending ADR；生产默认返回
+    // UNSUPPORTED_METHOD；Demo / 测试态 Mock Gateway 可注册 handler）。
+    // ⚠️  业务契约已冻结，但 Runtime Execute 在跨轨（D SQLite/UoW/审计 +
+    //     B Vector/FTS5 物理删除 + E Gate）实现与麒麟 L2 证据闭环前保持
+    //     fail-closed（Hard Delete / Cascade / Full Reset 物理执行路径）。
+    //     软删主路径可先行 Demo，完整跨轨闭环前不得宣称 D10C DONE。
+    //   - forget.preview: payload = ForgetPlan（D3 §5.5 + §三）：
+    //       必填 user_id / forget_plan_id / forget_mode / target_type /
+    //       requires_confirmation；模式条件字段（互斥，SEC-FORGET-03）：
+    //         single_item→target_id，session→target_session_id，
+    //         topic→target_topic，time_window→target_time_range，
+    //         full_reset→无任何 target_*（携带一律 INVALID_REQUEST）。
+    //       target_selector 明文生命周期=Preview 完成后清除（§四.8）；
+    //       is_cascade 默认 false（§三.1 冻结）。
+    //     返回 data：{selection_hash, affected_count, credential_ttl_s,
+    //                 resolved_target_ids_preview_snippet, forget_mode, target_type,
+    //                 requires_confirmation, is_cascade, sensitivity_warning,
+    //                 selector_cleared:true}
+    //   - forget.execute: payload 必填 {user_id, forget_plan_id, confirmation_token,
+    //       idempotency_key?, delete_mode?}。
+    //     Runtime 校验：凭据有效/未过期/未重放 + selection_hash 一致 +
+    //       resolved_target_ids 未被篡改；executed_count != affected_count 时
+    //       不得进入 completed（v0.3/MEDIUM-03，漏删不报完成）。
+    //     Hard Delete / Cascade / Full Reset 在可信输入来源（ADR-016）冻结
+    //       与接线前 fail-closed（v0.3/MEDIUM-04，不得自动降级软删后报成功）。
+    Q_INVOKABLE QString sendForgetPreviewRequest(const QJsonObject& payload);
+    Q_INVOKABLE QString sendForgetExecuteRequest(const QJsonObject& payload);
+
 signals:
     void socketPathChanged();
     void connectionStateChanged();
