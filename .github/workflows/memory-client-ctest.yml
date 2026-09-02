@@ -65,6 +65,9 @@ jobs:
       - name: Run ctest
         working-directory: memory-client/build
         run: ctest --output-on-failure --verbose
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
 
   qml-build-smoke:
     name: memory-client QML app smoke build

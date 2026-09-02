@@ -328,10 +328,12 @@ add_test(
 
 # ============================================================================
 # D11-C QML 真实加载验证 L0 测试（Reviewer E HIGH-01 修复）
-# 范围：QQmlEngine + QQmlComponent 真实加载 resources.qrc 内的
+# 范围：QQuickView + QQmlEngine 真实加载 resources.qrc 内的
 #       D11DemoOrchestratorPage.qml，验证 QML parser 可解析、alias 正确、
-#       重复实例化无泄漏；替代原有只验证 qrc 打包的 smoke build。
-# 注意：headless 运行（QT_QPA_PLATFORM=offscreen），不启动 Window；
+#       重复实例化无泄漏、Step Card implicitHeight > 0；替代原有只验证
+#       qrc 打包的 smoke build。
+# 注意：headless 运行（QT_QPA_PLATFORM=offscreen + QT_QUICK_BACKEND=software），
+#       由 set_tests_properties ENVIRONMENT 和 CI workflow env 双重保障；
 #       不代表真实 Runtime + D11B VM 已接线（L2 另行归档）。
 # 环境保护：仅当 Qt5::Gui/Qml/Quick IMPORTED target 可发现时才注册，
 #           缺包时发 WARNING 并跳过，避免其余 L0 目标因 Configure
@@ -392,13 +394,17 @@ if(D11C_QML_LOAD_AVAILABLE)
         COMMAND test_d11c_qml_load
     )
     # CI headless 环境没有 X11 / display server，QGuiApplication 在 main()
-    # 阶段尝试加载 xcb 平台插件会以 "could not connect to display" 直接
-    # abort（先于 test 内 initTestCase 的 qputenv 执行）。
+    # 阶段（由 QTEST_MAIN 生成）尝试加载 xcb 平台插件会以
+    # "could not connect to display" 直接 abort（先于 test 内
+    # initTestCase 的 qputenv 执行）。
+    # set_tests_properties ENVIRONMENT 在进程启动前设置环境变量，
+    # QGuiApplication 构造时即可命中 offscreen 平台插件；
+    # CI workflow 的 env 也是同值备份。
     #
     # QT_QUICK_BACKEND=software：QQuickItem（D11 顶层是 ScrollView）
     # create() 时 Qt Quick SceneGraph 会尝试初始化默认的 OpenGL backend；
     # 即便 QT_QPA_PLATFORM=offscreen，offscreen 平台的 GL context 也
-    # 可能加载失败，导致 component.create() 阶段 SIGSEGV (signal 11)。
+    # 可能加载失败，导致 QQuickView 加载阶段 SIGSEGV (signal 11)。
     # 开启 software backend（Qt Quick 2D adaption）即可在无 GPU / 无
     # EGL 的 L0 CI runner 上安全完成 QQuickItem 实例化。
     set_tests_properties(d11c_qml_load PROPERTIES

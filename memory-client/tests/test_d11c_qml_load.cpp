@@ -22,8 +22,12 @@
 //   本测试仍为 Demo/Prototype L0，不代表真实 Runtime + D11B VM 已接。
 //
 // 实现要点（避免 CI 子进程崩溃 / 组件 Error）：
-//   * 使用 QTEST_GUILESS_MAIN（生成 QGuiApplication，Qt5）。
-//   * 通过 ctest ENVIRONMENT 设置 QT_QPA_PLATFORM=offscreen +
+//   * 使用 QTEST_MAIN（不链接 QtWidgets 时生成 QGuiApplication，Qt5）。
+//     QTEST_GUILESS_MAIN 生成 QCoreApplication，QQuickView/QQuickWindow
+//     无法在非 QGuiApplication 环境下工作（QGuiApplication::instance()
+//     返回 nullptr，测试失败）。
+//   * 通过 ctest set_tests_properties ENVIRONMENT 设置
+//     QT_QPA_PLATFORM=offscreen +
 //     QT_QUICK_BACKEND=software，进程启动时即命中 offscreen 平台 +
 //     software scene graph backend。
 //   * QQuickView 会自动创建 QQuickWindow 并初始化 scene graph（software），
@@ -90,7 +94,7 @@ void TestD11cQmlLoad::initTestCase()
     qputenv("QT_QUICK_BACKEND", "software");
 
     QVERIFY2(QGuiApplication::instance() != nullptr,
-             "需要 QGuiApplication（用 QTEST_GUILESS_MAIN 而非 QTEST_MAIN）");
+             "需要 QGuiApplication（用 QTEST_MAIN 而非 QTEST_GUILESS_MAIN）");
 
     engine_.reset(new QQmlEngine);
     QLoggingCategory::setFilterRules(QStringLiteral("qt.qml.binding.removal.info=true"));
@@ -391,8 +395,11 @@ void TestD11cQmlLoad::multipleInstantiationsDoNotLeak()
     }
 }
 
-// 使用 GUILESS：生成 QGuiApplication，QQmlEngine / QQuickItem 的 GUI 资源
-// 才能正确初始化；普通 QTEST_MAIN 只生成 QCoreApplication，CI 上会导致
-// QQmlComponent status 始终 Error 或析构 SEGFAULT。
-QTEST_GUILESS_MAIN(TestD11cQmlLoad)
+// 使用 QTEST_MAIN：不链接 QtWidgets 时生成 QGuiApplication，
+// QQmlEngine / QQuickItem / QQuickView 的 GUI 资源才能正确初始化。
+// QTEST_GUILESS_MAIN 只生成 QCoreApplication，QGuiApplication::instance()
+// 返回 nullptr，QQuickView 无法创建窗口，测试失败。
+// 环境变量由 CMakeLists.txt set_tests_properties ENVIRONMENT 在进程
+// 启动前设置（QT_QPA_PLATFORM=offscreen + QT_QUICK_BACKEND=software）。
+QTEST_MAIN(TestD11cQmlLoad)
 #include "test_d11c_qml_load.moc"
