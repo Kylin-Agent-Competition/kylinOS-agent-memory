@@ -27,6 +27,8 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from db.engine import DatabaseLockedError, is_locked_error
 from db.schema import (
     conversations,
+    forget_audit,
+    forget_plan,
     idempotency_cache,
     memory_entries,
     memory_items,
@@ -85,6 +87,51 @@ class EventIdentityConflict(Exception):
 EVENT_TURN_FINALIZED = "turn.finalized"
 EVENT_MEMORY_UPSERTED = "memory.upserted"
 EVENT_FORGET_EXECUTED = "forget.executed"
+
+
+# ── D10D 精准遗忘持久化（ADR-015/019） ──
+
+DELETE_MODE_SOFT = "soft"
+DELETE_MODE_HARD = "hard"
+# selector 明文生命周期（HIGH-01）：Preview 完成后清除/置安全占位
+CLEARED = "<CLEARED>"
+# 删除类事件 Outbox 优先级（ADR-015：0=普通 / 1=删除类 forget.* / 2=预留 urgent）
+FORGET_PRIORITY = 1
+# 确认凭据 TTL（ADR-019 §4.7：默认 300s；参数化登记 TD-D，本版硬编码）
+CONFIRMATION_TOKEN_TTL_SECONDS = 300
+
+
+class ForgetPlanNotFoundError(Exception):
+    """遗忘计划不存在或不属于当前用户 → INVALID_REQUEST（跨用户隔离）。"""
+
+
+class ConfirmationCredentialError(Exception):
+    """确认凭据无效/过期/已消费/绑定不符 → INVALID_REQUEST（零副作用）。"""
+
+
+class UnsupportedForgetScopeError(Exception):
+    """本期不支持的遗忘作用域/目标类别/执行模式 → fail-closed（INVALID_REQUEST）。"""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def hash_confirmation_token(token: str) -> str:
+    """确认凭据 SHA-256 哈希（明文不落库，ADR-019 §4.7）。"""
+    return _sha256(token)
+
+
+def compute_selection_hash(resolved_target_ids: List[str]) -> str:
+    """selection_hash 仅由结构化 resolved_target_ids 派生（D5 决策，非正文）。"""
+    canonical = json.dumps(
+        sorted(resolved_target_ids), ensure_ascii=False, separators=(",", ":")
+    )
+    return _sha256(f"selection:{canonical}")
 
 
 def _now_iso() -> str:
@@ -817,8 +864,12 @@ def enqueue_outbox(
     event_type: str,
     payload: Dict[str, Any],
     next_retry_at: Optional[str] = None,
+    priority: int = 0,
 ) -> int:
-    """Outbox 入队（必须在业务写同一事务内调用，UoW 保证原子性）。"""
+    """Outbox 入队（必须在业务写同一事务内调用，UoW 保证原子性）。
+
+    ADR-015：priority 可选（默认 0=普通索引任务；forget.* 删除类 = 1）。
+    """
     try:
         res = conn.execute(
             insert(outbox).values(
@@ -830,6 +881,7 @@ def enqueue_outbox(
                 next_retry_at=next_retry_at or _now_iso(),
                 last_error=None,
                 created_at=_now_iso(),
+                priority=priority,
             )
         )
     except OperationalError as exc:
@@ -838,7 +890,11 @@ def enqueue_outbox(
 
 
 def claim_pending_outbox(conn, *, now_iso: str, max_retries: int, limit: int = 100) -> List[Dict[str, Any]]:
-    """Worker 轮询：取 next_retry_at <= now 且 attempts <= max_retries 的事件。"""
+    """Worker 轮询：取 next_retry_at <= now 且 attempts <= max_retries 的事件。
+
+    ADR-015：按 priority DESC → next_retry_at ASC 取数（遗忘/撤回任务优先于
+    普通索引任务，[02 §11.3]）。
+    """
     try:
         rows = conn.execute(
             select(outbox)
@@ -848,7 +904,7 @@ def claim_pending_outbox(conn, *, now_iso: str, max_retries: int, limit: int = 1
                     outbox.c.attempts <= max_retries,
                 )
             )
-            .order_by(outbox.c.next_retry_at)
+            .order_by(outbox.c.priority.desc(), outbox.c.next_retry_at.asc())
             .limit(limit)
         ).mappings().all()
     except OperationalError as exc:
@@ -1391,3 +1447,361 @@ def latest_memory_change_ts(conn) -> Optional[str]:
     ).scalar()
     candidates = [ts for ts in (latest_created, latest_updated) if ts is not None]
     return max(candidates) if candidates else None
+
+
+# ── forget_plan / forget_audit（ADR-015/019：精准遗忘持久化） ──
+
+
+def insert_forget_plan(
+    conn,
+    *,
+    user_id: str,
+    forget_plan_id: str,
+    forget_mode: str,
+    target_selector: Optional[str],
+    target_type: str,
+    target_id: Optional[str],
+    target_session_id: Optional[str],
+    target_topic: Optional[str],
+    target_time_range: Optional[str],
+    requires_confirmation: bool,
+    is_cascade: bool,
+    delete_mode: str,
+) -> None:
+    """插入遗忘计划行（status='pending'；Preview 前明文 selector 仅短期存在）。"""
+    now = _now_iso()
+    try:
+        conn.execute(
+            insert(forget_plan).values(
+                user_id=user_id,
+                forget_plan_id=forget_plan_id,
+                forget_mode=forget_mode,
+                target_selector=target_selector,
+                target_type=target_type,
+                target_id=target_id,
+                target_session_id=target_session_id,
+                target_topic=target_topic,
+                target_time_range=target_time_range,
+                status="pending",
+                requires_confirmation=1 if requires_confirmation else 0,
+                is_cascade=1 if is_cascade else 0,
+                delete_mode=delete_mode,
+                has_vector_cleanup=0,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+
+
+def get_forget_plan_by_id(
+    conn, *, user_id: str, forget_plan_id: str
+) -> Optional[Dict[str, Any]]:
+    """按 user_id + forget_plan_id 点查（跨用户隔离，Repository 层强制过滤）。"""
+    row = conn.execute(
+        select(forget_plan).where(
+            and_(
+                forget_plan.c.user_id == user_id,
+                forget_plan.c.forget_plan_id == forget_plan_id,
+            )
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def update_forget_plan_preview(
+    conn,
+    *,
+    user_id: str,
+    forget_plan_id: str,
+    resolved_target_ids: List[str],
+    affected_count: int,
+    selection_hash: str,
+    confirmation_token_hash: str,
+    token_expires_at: str,
+) -> None:
+    """Preview 完成：写解析快照 + 凭据哈希 + 清除 selector 明文 + status→awaiting_confirmation。
+
+    HIGH-01：target_selector / target_topic 置 <CLEARED>，持久层仅存结构化
+    resolved_target_ids + selection_hash；凭据只存 SHA-256 哈希。
+    """
+    try:
+        conn.execute(
+            update(forget_plan)
+            .where(
+                and_(
+                    forget_plan.c.user_id == user_id,
+                    forget_plan.c.forget_plan_id == forget_plan_id,
+                )
+            )
+            .values(
+                resolved_target_ids=json.dumps(resolved_target_ids, ensure_ascii=False),
+                affected_count=affected_count,
+                selection_hash=selection_hash,
+                confirmation_token=confirmation_token_hash,
+                token_expires_at=token_expires_at,
+                target_selector=CLEARED,
+                target_topic=CLEARED,
+                status="awaiting_confirmation",
+                updated_at=_now_iso(),
+            )
+        )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+
+
+def consume_confirmation_token(
+    conn,
+    *,
+    user_id: str,
+    forget_plan_id: str,
+    confirmation_token_plaintext: str,
+    now_iso: str,
+) -> Dict[str, Any]:
+    """校验确认凭据绑定 + 过期 + 未消费；消费 = confirmation_token 置 NULL + status→executing（同事务）。
+
+    ADR-019 §4.7：绑定 user_id + forget_plan_id + selection_hash（凭据哈希存于
+    计划行，selection_hash 同行不可变，绑定天然成立）；拒绝用户不匹配/计划不匹配/
+    过期/已消费。失败零副作用（仅读取/校验）。
+    """
+    plan = get_forget_plan_by_id(conn, user_id=user_id, forget_plan_id=forget_plan_id)
+    if plan is None:
+        raise ConfirmationCredentialError("forget plan not found or not owned by user")
+    if plan["status"] != "awaiting_confirmation":
+        raise ConfirmationCredentialError("forget plan is not awaiting confirmation")
+    stored_hash = plan.get("confirmation_token")
+    if stored_hash is None:
+        raise ConfirmationCredentialError("confirmation credential already consumed")
+    if plan.get("token_expires_at") is None or plan["token_expires_at"] <= now_iso:
+        raise ConfirmationCredentialError("confirmation credential expired")
+    if hash_confirmation_token(confirmation_token_plaintext) != stored_hash:
+        raise ConfirmationCredentialError("confirmation credential mismatch")
+    try:
+        conn.execute(
+            update(forget_plan)
+            .where(
+                and_(
+                    forget_plan.c.user_id == user_id,
+                    forget_plan.c.forget_plan_id == forget_plan_id,
+                )
+            )
+            .values(confirmation_token=None, status="executing", updated_at=_now_iso())
+        )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+    return plan
+
+
+def update_forget_plan_terminal(
+    conn,
+    *,
+    user_id: str,
+    forget_plan_id: str,
+    status: str,
+    executed_count: int,
+    executed_at: str,
+    affected_count: int,
+) -> None:
+    """终态收口：executing→completed/failed/rolled_back。
+
+    MEDIUM-03 红线：executed_count != affected_count 禁止进入 completed（漏删不得报完成）。
+    """
+    if status == "completed" and executed_count != affected_count:
+        raise ValueError(
+            "executed_count must equal affected_count to enter completed (MEDIUM-03)"
+        )
+    try:
+        conn.execute(
+            update(forget_plan)
+            .where(
+                and_(
+                    forget_plan.c.user_id == user_id,
+                    forget_plan.c.forget_plan_id == forget_plan_id,
+                )
+            )
+            .values(
+                executed_count=executed_count,
+                executed_at=executed_at,
+                status=status,
+                updated_at=_now_iso(),
+            )
+        )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+
+
+def insert_forget_audit(
+    conn,
+    *,
+    audit_id: str,
+    forget_plan_id: str,
+    user_id: str,
+    forget_mode: str,
+    target_type: Optional[str],
+    delete_mode: str,
+    is_cascade: bool,
+    affected_count: Optional[int],
+    selection_hash: Optional[str],
+    confirmation_ref: Optional[str],
+    status: str,
+    result_code: Optional[str],
+    trace_id: Optional[str],
+    sensitivity_max: Optional[str],
+    executed_at: Optional[str],
+) -> int:
+    """最小审计（零正文）写入；terminal 必填 executed_at（v0.3/MEDIUM-01）。
+
+    红线：不含正文/摘要/原始 selector/Token 原文/敏感错误详情。
+    """
+    if status in ("completed", "failed", "rolled_back") and executed_at is None:
+        raise ValueError("terminal audit requires executed_at (MEDIUM-01)")
+    now = _now_iso()
+    try:
+        res = conn.execute(
+            insert(forget_audit).values(
+                audit_id=audit_id,
+                forget_plan_id=forget_plan_id,
+                user_id=user_id,
+                forget_mode=forget_mode,
+                target_type=target_type,
+                delete_mode=delete_mode,
+                is_cascade=1 if is_cascade else 0,
+                affected_count=affected_count,
+                selection_hash=selection_hash,
+                confirmation_ref=confirmation_ref,
+                status=status,
+                result_code=result_code,
+                trace_id=trace_id,
+                sensitivity_max=sensitivity_max,
+                created_at=now,
+                executed_at=executed_at,
+            )
+        )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+    return int(res.lastrowid)
+
+
+# ── 软删主路径 dispatcher（ADR-015 §4.4；契约 §四.4） ──
+
+
+def _get_memory_entry(
+    conn, *, entry_id: int, user_id: str
+) -> Optional[Dict[str, Any]]:
+    row = conn.execute(
+        select(memory_entries).where(
+            and_(
+                memory_entries.c.id == entry_id,
+                memory_entries.c.user_id == user_id,
+            )
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _get_preference_item_by_id(
+    conn, *, user_id: str, memory_item_id: int
+) -> Optional[Dict[str, Any]]:
+    row = conn.execute(
+        select(memory_items).where(
+            and_(
+                memory_items.c.id == memory_item_id,
+                memory_items.c.user_id == user_id,
+            )
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def soft_delete_preference_item(
+    conn, *, user_id: str, memory_item_id: int, forget_plan_id: str
+) -> Optional[int]:
+    """D7D memory_status='removed' 机制：追加 removed 版本（复用既有 Repository 语义）。
+
+    Returns:
+        新版本 id；目标不存在/跨用户/无 current 版本 → None（漏删，不计入 executed_count）。
+    """
+    item = _get_preference_item_by_id(
+        conn, user_id=user_id, memory_item_id=memory_item_id
+    )
+    if item is None:
+        return None
+    current = _current_version_for_item(conn, memory_item_id=memory_item_id)
+    if current is None:
+        return None
+    if current["memory_status"] == "removed":
+        return int(current["id"])  # 已是 removed（幂等）
+    preference_value = str(current["preference_value"])
+    fingerprint = _sha256(f"forget:{user_id}:{memory_item_id}:{forget_plan_id}")
+    result = _append_preference_version(
+        conn,
+        memory_item_id=memory_item_id,
+        preference_value=preference_value,
+        memory_status="removed",
+        evidence_fingerprint=fingerprint,
+        idempotency_key=None,
+        request_fingerprint=fingerprint,
+    )
+    return int(result["id"])
+
+
+def soft_delete_resolved_targets(
+    conn,
+    *,
+    user_id: str,
+    target_type: str,
+    resolved_target_ids: List[str],
+    forget_plan_id: str,
+) -> Tuple[int, List[str]]:
+    """软删主路径：按 target_type 分发到既有权威软删状态。
+
+    - knowledge → memory_entries.is_deleted=1（复用乐观锁；FTS 由触发器同步移除）
+    - preference → D7D memory_status='removed'
+    - event/all → Runtime fail-closed（source_events 无 is_deleted 列，消费者在 pipeline/）
+
+    Returns:
+        (executed_count, version_ids)。executed_count 反映真实处理数：目标不存在/
+        跨用户/版本冲突不计入（上层据此 executed_count != affected_count → 不进 completed）。
+    """
+    if target_type == "knowledge":
+        executed = 0
+        for raw in resolved_target_ids:
+            try:
+                entry_id = int(raw)
+            except (TypeError, ValueError):
+                continue
+            entry = _get_memory_entry(conn, entry_id=entry_id, user_id=user_id)
+            if entry is None:
+                continue  # 不存在/跨用户 → 漏删
+            if entry["is_deleted"] == 1:
+                executed += 1  # 已是删除态（幂等）
+                continue
+            executed += soft_delete_memory_entry(
+                conn,
+                entry_id=entry_id,
+                user_id=user_id,
+                current_version=int(entry["version"]),
+            )
+        return executed, []
+    if target_type == "preference":
+        executed = 0
+        version_ids: List[str] = []
+        for raw in resolved_target_ids:
+            try:
+                item_id = int(raw)
+            except (TypeError, ValueError):
+                continue
+            version_id = soft_delete_preference_item(
+                conn,
+                user_id=user_id,
+                memory_item_id=item_id,
+                forget_plan_id=forget_plan_id,
+            )
+            if version_id is not None:
+                executed += 1
+                version_ids.append(str(version_id))
+        return executed, version_ids
+    raise UnsupportedForgetScopeError(
+        f"soft delete not supported for target_type={target_type!r}"
+    )

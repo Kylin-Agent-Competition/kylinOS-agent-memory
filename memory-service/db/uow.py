@@ -9,9 +9,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import secrets
+import uuid
 from contextlib import AbstractContextManager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from sqlalchemy import Engine
@@ -210,3 +213,242 @@ class UnitOfWork(AbstractContextManager["UnitOfWork"]):
             "host_turn_id": host_turn_id,
             "refinalize": refinalize,
         }
+
+    # ── D10D 精准遗忘（ADR-015/019：preview/execute 单事务封装） ──
+
+    @staticmethod
+    def _assert_execute_supported(plan: Dict[str, Any]) -> None:
+        """Execute 前 fail-closed 门禁（契约 §四.4~§四.6；红线 §四）。
+
+        delete_mode=hard / is_cascade=true / topic / time_window / full_reset /
+        target_type in (event, all) → Runtime 未闭环，一律拒绝（不自动降级软删后报成功）。
+        """
+        if plan["delete_mode"] == repo.DELETE_MODE_HARD:
+            raise repo.UnsupportedForgetScopeError(
+                "hard delete runtime not implemented (fail-closed)"
+            )
+        if int(plan["is_cascade"]) == 1:
+            raise repo.UnsupportedForgetScopeError(
+                "cascade runtime not implemented (fail-closed)"
+            )
+        if plan["forget_mode"] in ("topic", "time_window", "full_reset"):
+            raise repo.UnsupportedForgetScopeError(
+                f"forget_mode={plan['forget_mode']} runtime fail-closed"
+            )
+        if plan["target_type"] in ("event", "all"):
+            raise repo.UnsupportedForgetScopeError(
+                f"target_type={plan['target_type']} runtime fail-closed"
+            )
+
+    def preview_forget_plan(
+        self,
+        *,
+        user_id: str,
+        idempotency_key: str,
+        request_fingerprint: str,
+        forget_plan_id: str,
+        forget_mode: str,
+        target_selector: str,
+        target_type: str,
+        target_id: Optional[str],
+        target_session_id: Optional[str],
+        target_topic: Optional[str],
+        target_time_range: Optional[str],
+        requires_confirmation: bool,
+        is_cascade: bool,
+        delete_mode: str,
+    ) -> Tuple[Dict[str, Any], bool]:
+        """forget.preview 单事务：解析 → 落计划 → 凭据哈希 → 清 selector → 缓存响应。
+
+        ADR-019 §4.9：确定性解析（不支持作用域 fail-closed）→ execute_idempotent
+        单事务（insert pending → update awaiting_confirmation + token hash + 清 selector）。
+        确认凭据明文只在响应中回传一次（D4 决策），服务端只存 SHA-256。
+        """
+        from service.forgetting import resolve_forget_targets
+
+        def _business() -> Dict[str, Any]:
+            resolved = resolve_forget_targets(
+                self.conn,
+                user_id=user_id,
+                forget_mode=forget_mode,
+                target_type=target_type,
+                target_id=target_id,
+                target_session_id=target_session_id,
+            )
+            affected_count = len(resolved)
+            selection_hash = repo.compute_selection_hash(resolved)
+            token_plaintext = secrets.token_hex(32)  # 32B 一次性凭据
+            token_hash = repo.hash_confirmation_token(token_plaintext)
+            token_expires_at = (
+                datetime.now(timezone.utc)
+                + timedelta(seconds=repo.CONFIRMATION_TOKEN_TTL_SECONDS)
+            ).isoformat()
+
+            repo.insert_forget_plan(
+                self.conn,
+                user_id=user_id,
+                forget_plan_id=forget_plan_id,
+                forget_mode=forget_mode,
+                target_selector=target_selector,
+                target_type=target_type,
+                target_id=target_id,
+                target_session_id=target_session_id,
+                target_topic=target_topic,
+                target_time_range=target_time_range,
+                requires_confirmation=requires_confirmation,
+                is_cascade=is_cascade,
+                delete_mode=delete_mode,
+            )
+            repo.update_forget_plan_preview(
+                self.conn,
+                user_id=user_id,
+                forget_plan_id=forget_plan_id,
+                resolved_target_ids=resolved,
+                affected_count=affected_count,
+                selection_hash=selection_hash,
+                confirmation_token_hash=token_hash,
+                token_expires_at=token_expires_at,
+            )
+            return {
+                "forget_plan_id": forget_plan_id,
+                "status": "awaiting_confirmation",
+                "resolved_target_ids": resolved,
+                "affected_count": affected_count,
+                "selection_hash": selection_hash,
+                "confirmation_token": token_plaintext,
+                "credential_ttl_seconds": repo.CONFIRMATION_TOKEN_TTL_SECONDS,
+                "requires_confirmation": requires_confirmation,
+                "is_cascade": is_cascade,
+                "delete_mode": delete_mode,
+            }
+
+        return self.execute_idempotent(
+            user_id=user_id,
+            session_id="",
+            idempotency_key=idempotency_key,
+            business_fn=_business,
+            request_fingerprint=request_fingerprint,
+        )
+
+    def execute_forget_plan(
+        self,
+        *,
+        user_id: str,
+        idempotency_key: str,
+        request_fingerprint: str,
+        forget_plan_id: str,
+        confirmation_token: str,
+        trace_id: str,
+    ) -> Tuple[Dict[str, Any], bool]:
+        """forget.execute 单事务：凭据校验/消费 → 软删 dispatcher → 审计 → 终态 + Outbox。
+
+        MEDIUM-03：executed_count != affected_count 不得进入 completed（漏删不得报完成）。
+        forget.executed 以 priority=1 入队（ADR-015 删除类高优先级）。
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        def _business() -> Dict[str, Any]:
+            plan = repo.get_forget_plan_by_id(
+                self.conn, user_id=user_id, forget_plan_id=forget_plan_id
+            )
+            if plan is None:
+                raise repo.ConfirmationCredentialError(
+                    "forget plan not found or not owned by user"
+                )
+            # fail-closed 门禁（先于凭据消费；异常 → 事务整体回滚，零副作用）
+            self._assert_execute_supported(plan)
+            # 凭据校验（绑定/过期/未消费）+ 消费（置 NULL + status→executing）
+            repo.consume_confirmation_token(
+                self.conn,
+                user_id=user_id,
+                forget_plan_id=forget_plan_id,
+                confirmation_token_plaintext=confirmation_token,
+                now_iso=now_iso,
+            )
+
+            target_type = plan["target_type"]
+            resolved_target_ids = json.loads(plan["resolved_target_ids"] or "[]")
+            affected_count = int(plan["affected_count"] or 0)
+
+            executed_count, version_ids = repo.soft_delete_resolved_targets(
+                self.conn,
+                user_id=user_id,
+                target_type=target_type,
+                resolved_target_ids=resolved_target_ids,
+                forget_plan_id=forget_plan_id,
+            )
+
+            executed_at = datetime.now(timezone.utc).isoformat()
+            terminal_status = "completed" if executed_count == affected_count else "failed"
+            repo.update_forget_plan_terminal(
+                self.conn,
+                user_id=user_id,
+                forget_plan_id=forget_plan_id,
+                status=terminal_status,
+                executed_count=executed_count,
+                executed_at=executed_at,
+                affected_count=affected_count,
+            )
+
+            audit_id = f"fa_{uuid.uuid4().hex}"
+            repo.insert_forget_audit(
+                self.conn,
+                audit_id=audit_id,
+                forget_plan_id=forget_plan_id,
+                user_id=user_id,
+                forget_mode=plan["forget_mode"],
+                target_type=target_type,
+                delete_mode=plan["delete_mode"],
+                is_cascade=bool(plan["is_cascade"]),
+                affected_count=affected_count,
+                selection_hash=plan["selection_hash"],
+                confirmation_ref=repo._sha256(
+                    f"conf:{forget_plan_id}:{executed_at}"
+                )[:16],
+                status=terminal_status,
+                result_code=terminal_status,
+                trace_id=trace_id,
+                sensitivity_max=None,
+                executed_at=executed_at,
+            )
+
+            repo.enqueue_outbox(
+                self.conn,
+                aggregate_type="forget",
+                aggregate_id=forget_plan_id,
+                event_type=repo.EVENT_FORGET_EXECUTED,
+                payload={
+                    "event_id": audit_id,
+                    "user_id": user_id,
+                    "forget_plan_id": forget_plan_id,
+                    "target_type": target_type,
+                    "forget_mode": plan["forget_mode"],
+                    "resolved_target_ids": resolved_target_ids,
+                    "version_ids": version_ids,
+                    "selection_hash": plan["selection_hash"],
+                    "confirmation_ref": repo._sha256(
+                        f"conf:{forget_plan_id}:{executed_at}"
+                    )[:16],
+                    "trace_id": trace_id,
+                },
+                priority=repo.FORGET_PRIORITY,
+            )
+
+            return {
+                "forget_plan_id": forget_plan_id,
+                "status": terminal_status,
+                "affected_count": affected_count,
+                "executed_count": executed_count,
+                "delete_mode": plan["delete_mode"],
+                "has_vector_cleanup": False,  # TD-033：仅标记，不实现清理
+                "executed_at": executed_at,
+                "audit_id": audit_id,
+            }
+
+        return self.execute_idempotent(
+            user_id=user_id,
+            session_id="",
+            idempotency_key=idempotency_key,
+            business_fn=_business,
+            request_fingerprint=request_fingerprint,
+        )
