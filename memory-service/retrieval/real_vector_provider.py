@@ -13,9 +13,11 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Optional
 
-from retrieval.contracts import Channel, RetrievalFilter, RetrievalHit, ScoreSemantics
+from retrieval.contracts import (Channel, RetrievalFilter, RetrievalHit, ScoreSemantics, filter_fingerprint_digest)
+from retrieval.vector_sdk_errors import VectorSdkStatusCode
 
 MAX_DELETE_PAIRS = 500
+_DEFAULT_SUBPROCESS_TIMEOUT = 120.0
 
 
 class VectorCliError(RuntimeError):
@@ -40,13 +42,34 @@ class VectorCliClient:
         self.cli_path = cli_path
         self.expected_dimension = expected_dimension
 
-    def _run(self, *args: str, stdin: Optional[str] = None) -> dict:
+    @staticmethod
+    def _remaining_budget(
+        deadline_at: Optional[datetime], now: datetime
+    ) -> Optional[float]:
+        """绝对 deadline_at 的剩余秒数；已过期或倒置则 fail-closed。"""
+        if deadline_at is None:
+            return None
+        if deadline_at.tzinfo is None:
+            raise ValueError("deadline_at 必须带时区（UTC）")
+        remaining = (deadline_at.astimezone(timezone.utc) - now.astimezone(timezone.utc)).total_seconds()
+        if remaining <= 0:
+            raise VectorCliError(
+                int(VectorSdkStatusCode.TIMEOUT), "deadline exceeded before vector_cli call"
+            )
+        return remaining
+
+    def _run(
+        self,
+        *args: str,
+        stdin: Optional[str] = None,
+        timeout: float = _DEFAULT_SUBPROCESS_TIMEOUT,
+    ) -> dict:
         proc = subprocess.run(
             [self.cli_path, *args],
             input=stdin,
             text=True,
             capture_output=True,
-            timeout=120,
+            timeout=timeout,
         )
         text = (proc.stdout or "").strip()
         # SDK 连接重试日志会污染 stdout；vector_cli 的协议 JSON 是最后一行。
@@ -97,6 +120,8 @@ class VectorCliClient:
         knowledge_types: Optional[list[str]] = None,
         primary_categories: Optional[list[str]] = None,
         source_event_ids: Optional[list[str]] = None,
+        deadline_at: Optional[datetime] = None,
+        now: Optional[datetime] = None,
     ) -> dict:
         has_knowledge_metadata = any(
             value is not None
@@ -170,10 +195,12 @@ class VectorCliClient:
                 "primary_categories": primary_categories,
                 "source_event_ids": source_event_ids,
             })
+        budget = self._remaining_budget(deadline_at, now or datetime.now(timezone.utc))
         result = self._run(
             "insert",
             name,
             stdin=json.dumps(payload),
+            timeout=_DEFAULT_SUBPROCESS_TIMEOUT if budget is None else budget,
         )
         self._require_ok(result)
         return result
@@ -193,6 +220,8 @@ class VectorCliClient:
         *,
         user_id: str,
         version_ids: list[str],
+        deadline_at: Optional[datetime] = None,
+        now: Optional[datetime] = None,
     ) -> dict:
         """向 Vector CLI 转发已解析的同用户 ID/版本删除对。"""
         if not isinstance(user_id, str) or not user_id:
@@ -212,6 +241,7 @@ class VectorCliClient:
             raise ValueError("版本 ID 必须与删除 ID 一一对应")
         if any(not isinstance(version_id, str) or not version_id for version_id in version_ids):
             raise ValueError("版本 ID 必须非空")
+        budget = self._remaining_budget(deadline_at, now or datetime.now(timezone.utc))
         result = self._run(
             "delete",
             name,
@@ -222,6 +252,7 @@ class VectorCliClient:
                     "version_ids": version_ids,
                 }
             ),
+            timeout=_DEFAULT_SUBPROCESS_TIMEOUT if budget is None else budget,
         )
         self._require_ok(result)
         return result
@@ -236,6 +267,7 @@ class VectorCliClient:
         user_id: str,
         filter: RetrievalFilter,
         now: Optional[datetime] = None,
+        deadline_at: Optional[datetime] = None,
     ) -> list[RetrievalHit]:
         """执行向量检索，返回 1 起始 rank 的 RetrievalHit。"""
         now = now or datetime.now(timezone.utc)
@@ -258,6 +290,7 @@ class VectorCliClient:
             raise ValueError(f"查询向量维度必须等于 {self.expected_dimension}")
         if filter.user_id != user_id:
             raise ValueError("RetrievalFilter.user_id 必须与搜索 user_id 一致")
+        fingerprint = filter_fingerprint_digest(filter)
         cli_filter = {
             "user_id": user_id,
             "allowed_scene_ids": sorted(set(filter.scene.allowed_scene_ids)),
@@ -277,12 +310,20 @@ class VectorCliClient:
                 ),
                 "version_ids": sorted(set(filter.knowledge.version_ids)),
             })
+        budget = self._remaining_budget(deadline_at, now)
+        if budget is None:
+            cli_timeout_ms = timeout
+            subprocess_timeout: float = _DEFAULT_SUBPROCESS_TIMEOUT
+        else:
+            cli_timeout_ms = max(1, int(budget * 1000))
+            subprocess_timeout = budget
         result = self._run(
             "search",
             name,
             str(top_n),
-            str(timeout),
+            str(cli_timeout_ms),
             stdin=json.dumps({"vector": vector, "filter": cli_filter}),
+            timeout=subprocess_timeout,
         )
         self._require_ok(result)
         raw_hits = result.get("hits", [])
@@ -333,7 +374,7 @@ class VectorCliClient:
                     score_semantics=ScoreSemantics.SDK_SCORE_UNVERIFIED,
                     provider="vector_cli",
                     retrieved_at=now,
-                    filter_fingerprint="hmac-sha256:k1:" + "a" * 64,
+                    filter_fingerprint=fingerprint,
                     diagnostics=diagnostics,
                 )
             )

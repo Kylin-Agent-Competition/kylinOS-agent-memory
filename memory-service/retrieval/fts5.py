@@ -18,6 +18,7 @@ from retrieval.contracts import (
     RetrievalFilter,
     RetrievalHit,
     ScoreSemantics,
+    filter_fingerprint_digest,
 )
 
 
@@ -83,6 +84,11 @@ class Fts5Index:
         if filter is not None and filter.user_id != user_id:
             raise ValueError("RetrievalFilter.user_id 必须与 FTS5 搜索 user_id 一致")
 
+
+        if filter is not None:
+            fingerprint = filter_fingerprint_digest(filter)
+        else:
+            fingerprint = filter_fingerprint_digest({"user_id": user_id})
         clauses = ["memory_fts MATCH ?", "user_id = ?"]
         params: list[object] = [query, user_id]
 
@@ -134,7 +140,7 @@ class Fts5Index:
                     score_semantics=ScoreSemantics.BM25,
                     provider="fts5",
                     retrieved_at=now,
-                    filter_fingerprint="hmac-sha256:k1:" + "a" * 64,
+                    filter_fingerprint=fingerprint,
                 )
             )
         return hits

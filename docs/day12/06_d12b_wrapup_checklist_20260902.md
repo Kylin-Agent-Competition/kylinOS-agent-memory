@@ -1,4 +1,4 @@
-# D12B 收尾工作清单（2026-09-02）
+# D12B 收尾工作清单（2026-09-02，v2：范围扩大 TD-018/019/020/027）
 
 > 状态：本地实现进行中，待提交/审查。
 > 基线：`origin/main@29b46ea`（含 D12B PR #119 合并）。
@@ -7,31 +7,36 @@
 ## 背景
 
 台账 D12-B（功能冻结、联调缓冲与缺陷清理）主交付 PR #119 已 APPROVED 并合并（TD-029 关闭）。
-本清单对总账中仍由 B 轨负责、且落在 D12-B 任务 1/2（分析失败查询/删除残留/索引恢复；修复性能与过滤错误）领域的 Open 项逐条核对当前代码状态，给出处置。
+本批次按 D12-B 任务 1/2（分析失败查询/删除残留/索引恢复；修复性能与过滤错误）对总账中 B 轨相关 Open 项逐条处理。
 
-## 逐项核对与处置
+## 逐项处置（2026-09-02，基于 main@29b46ea 代码核对）
 
-| TD | 严重度 | 标题 | 当前代码证据（2026-09-02, main@29b46ea） | 处置 |
-|---|---|---|---|---|
-| TD-030 | Low | TruthRecord 未在构造边界拒绝倒置有效期 | `memory-service/retrieval/fusion.py::TruthRecord.__post_init__` 仅校验时区/UTC 归一化，未拒绝 `valid_from > valid_to` | **本批关闭（已实现）**：构造期拒绝倒置；新增 `tests/retrieval/test_truth_record_validity.py` 7 例（倒置/相等/单侧/半开/naive/UTC） |
-| TD-018 | Medium | 检索命中 filter_fingerprint 使用固定假值 | `retrieval/fts5.py:137` 与 `retrieval/real_vector_provider.py:336` 仍写死 `hmac-sha256:k1:+a*64`；**无任何非测试消费方**（检索生产编排/接线未合入 main） | **保持 Open**：替换真 digest 属「接线时」动作；检索 search 编排合入后再关，避免产生无消费方的未验证改动 |
-| TD-019 | Medium | VectorCliClient.search 硬编码 `version_id="v1"` | main 非测试代码未发现 search 侧硬编码 `"v1"`；`VectorSearchRequest.filter.knowledge.version_ids` 由请求携带；硬编码 `source_generation="v1"` 仅存在于 outbox consumer（A/D 轨 `#109/#110` 文件） | **保持 Open**：需在检索生产接线（含 SQLite 真源 current-version 回源）批次一并验证/关闭，本批无独立可验证面 |
-| TD-020 | Medium | Vector 客户端 timeout 硬编码、无 deadline 递减 | D10B `SqliteVectorProvider`（delete/rebuild）已实现 `deadline_at` 校验与 `DEADLINE_EXCEEDED`；`real_vector_provider.VectorCliClient._run` 仍硬编码 `timeout=120`、`search(timeout=5000)` | **保持 Open**：生产 search 编排接线后统一 deadline 递减语义；现仅存在于 L2/测试路径，单独改造无生产验证面 |
-| TD-027 | Medium | RealVectorProvider 未注入 serving `index_generation` | D10B `SqliteVectorProvider` 已按 `vector_index_generations`/`required_generation` 管理代次与 serving 路由（delete/rebuild）；检索 search 编排与 D 轨索引状态注入尚未合入 main | **保持 Open**：依赖 D 轨索引状态/路由层与检索接线，B 跟踪 |
-| TD-032 | Medium | Knowledge 真值元数据未接通生产索引写入方 | `VectorCliClient.insert` 已支持 knowledge 元数据；生产写入方（outbox index consumer 接线）属 A/D 轨 `#109/#110`，`#110` 已合入但待 VM 验证 | **保持 Open**：跨轨（D/A 接线 + VM），B 跟踪 |
-| TD-033 | Medium | Vector bridge D8-B ABI 需与目标宿主重编译并绑定 L2 | 属麒麟 VM 编译/证据任务，非代码 PR 可关 | **保持 Open**：需 VM 会话，B 跟踪 |
-| TD-054 | Low | D11B filter_diagnostics 跨边界契约未冻结 | Issue #117；首次跨 IPC/C/D/OS Agent/用户接口接线前关闭 | **保持 Open**（B 主跟踪，D/E 契约冻结） |
-| TD-055 | Low | D11B 服务/OS 重启与 D→C 端到端 UNVERIFIED | Issue #118；责任 D/C | **保持 Open**（跨轨，B 只跟踪） |
+| TD | 严重度 | 处置 | 证据 |
+|---|---|---|---|
+| TD-030 | Low | **关闭（代码）** | `fusion.py::TruthRecord.__post_init__` 拒绝 `valid_from > valid_to`；`tests/retrieval/test_truth_record_validity.py` 7 passed |
+| TD-018 | Medium | **关闭（代码）** | `contracts.filter_fingerprint_digest` 以请求过滤器 canonical-json/v1 生成指纹；`fts5.py`/`real_vector_provider.py` 命中不再使用固定假值；`test_td018_filter_fingerprint.py` 8 passed（helper 确定性/区分 + FTS5/Vector 双层） |
+| TD-019 | Medium | **关闭（证据 + 回归测试）** | main 检索代码不再硬编码 `version_id="v1"`：VectorCliClient.search 透传引擎 version；fusion 以 SQLite 真源 `is_current` 剔除陈旧版本（既有语义）。`test_td019_version_truth.py` 3 passed 锁定 |
+| TD-020 | Medium | **关闭（代码）** | `VectorCliClient` search/insert/delete 接受绝对 `deadline_at`，剩余预算逐层递减（subprocess timeout 与 CLI 搜索 timeout(ms)），过期/naive fail-closed；`test_td020_deadline.py` 8 passed |
+| TD-027 | Medium | **保持 Open** | 代次/required_generation 的 search provider 消费点未合入 main：`VectorSearchRequest.required_generation` 仅定义于 contracts，生产 search 编排（D 轨路由注入 serving generation）仍缺；delete/rebuild/get_index_state 已实现代次账本与 serving 路由（D10B）。本批不改未接线面 |
+| TD-032 | Medium | 保持 Open | 生产索引写入方接线属 A/D 轨（#109/#110），B 跟踪 |
+| TD-033 | Medium | 保持 Open | 麒麟 VM bridge 重编译 + L2，非代码 PR |
+| TD-054 | Low | 保持 Open | 跨边界契约冻结需 D/E（Issue #117） |
+| TD-055 | Low | 保持 Open | D/C 服务/OS 重启端到端（Issue #118） |
 
-## 本批交付物
+## 本批交付物（v1 + v2）
 
-1. TD-030 修复：`retrieval/fusion.py` TruthRecord 构造期拒绝倒置有效期（`valid_from > valid_to` → ValueError），保留 UTC 归一化与单侧开放语义。
-2. 回归测试：`tests/retrieval/test_truth_record_validity.py`（7 passed）。
-3. 本清单：其余项逐条核对结果与依赖（不关闭、不伪装）。
-4. 验证：`tests/retrieval + evaluation/test_d9_retrieval_gold_spec.py` 391 passed（基线 384 + 新增 7）。
+1. TD-030：`fusion.TruthRecord` 拒绝倒置有效期（commit `b88c5da`）。
+2. TD-018：`contracts.filter_fingerprint_digest` + `fts5.py`/`real_vector_provider.py` 真实过滤器指纹。
+3. TD-019：版本真源语义回归测试（无硬编码 "v1" + fusion current-version 剔除）。
+4. TD-020：`VectorCliClient` 绝对 deadline 语义（search/insert/delete + 剩余预算递减 + 过期 fail-closed）。
+5. 本清单（v2）：TD-027 及跨轨项保持 Open 的原因与依赖。
 
-## 不纳入本批的原因（边界声明）
+## 验证
 
-- TD-018/019/020/027 的验收语义绑定「检索生产接线/编排」；main 上 gateway `memory.retrieve` 仍未接入检索编排（D11B Review 亦确认），在本批修改会产生无生产消费方、无法运行时验证的改动，违反「不新增未验证路径」。
-- TD-032/033/054/055 属跨轨/VM/契约冻结责任，B 不代行。
-- 技术债登记表更新（TD-030 → Resolved 等）在 PR 编号确定后随最终提交一并回填。
+- `pytest tests/retrieval + evaluation/test_d9_retrieval_gold_spec.py -q`：**410 passed**（基线 384 + TD-030 7 + TD-018 8 + TD-019 3 + TD-020 8）
+- `py_compile`（fusion/contracts/fts5/real_vector_provider）EXIT=0；`git diff --check` EXIT=0；行尾按 `.editorconfig`（LF）规范化。
+
+## 边界声明
+
+- TD-027/032/033/054/055 不因本批代码改动而关闭；登记原因与依赖如上，未投机关闭未接线/跨轨项。
+- 技术债登记表更新（TD-018/019/020/030 → Resolved）在 PR 编号确定后随最终提交回填。

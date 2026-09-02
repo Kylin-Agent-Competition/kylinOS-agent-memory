@@ -308,6 +308,42 @@ def digest_from_canonical(key_id: str, key: bytes, canonical_value: Any, set_pat
     payload = canonical.encode("utf-8")
     digest = hmac.new(key, payload, hashlib.sha256).hexdigest()
     return f"hmac-sha256:{key_id}:{digest}"
+# ── 5.6.2 过滤器指纹（TD-018）──
+# 指纹用于可复现地追溯“命中是在哪个检索过滤器下产生”。key 为公开固定值，
+# 仅保证确定性/完整性（integrity），不提供真实性（authenticity），因此不视为安全密钥。
+FILTER_FINGERPRINT_KEY_ID = "k1"
+_FILTER_FINGERPRINT_KEY = b"kylin-agent-memory:filter-fingerprint/v1"
+FILTER_FINGERPRINT_SET_PATHS = (
+    "scene.allowed_scene_ids",
+    "object_types",
+    "memory_types",
+    "allowed_memory_statuses",
+    "allowed_sensitivity",
+    "knowledge.knowledge_types",
+    "knowledge.primary_categories",
+    "knowledge.source_event_ids",
+    "knowledge.version_ids",
+    "knowledge.required_relation_ids",
+)
+
+
+def filter_fingerprint_digest(filter_value: Any) -> str:
+    """返回检索过滤器的 canonical-json/v1 指纹（TD-018）。
+
+    同一过滤器（含集合字段规范化）恒产生同一指纹；不同过滤器产生不同指纹。
+    接受 RetrievalFilter（自动 `model_dump(mode=\"json\")`）或已规范化的
+    dict payload（如无结构化过滤器时仅含 `user_id` 的最小承载）。
+    """
+    if hasattr(filter_value, "model_dump"):
+        payload = filter_value.model_dump(mode="json")
+    else:
+        payload = filter_value
+    return digest_from_canonical(
+        FILTER_FINGERPRINT_KEY_ID,
+        _FILTER_FINGERPRINT_KEY,
+        payload,
+        FILTER_FINGERPRINT_SET_PATHS,
+    )
 
 
 # ── 5.2 IndexScope / ScopeAuthorization ──
