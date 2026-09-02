@@ -308,8 +308,6 @@ def digest_from_canonical(key_id: str, key: bytes, canonical_value: Any, set_pat
     payload = canonical.encode("utf-8")
     digest = hmac.new(key, payload, hashlib.sha256).hexdigest()
     return f"hmac-sha256:{key_id}:{digest}"
-
-
 # ── 5.2 IndexScope / ScopeAuthorization ──
 
 
