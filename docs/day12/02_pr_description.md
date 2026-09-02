@@ -1,0 +1,108 @@
+# A-feat(day12): SDK 超时/异常恢复/性能抖动修复 + Bridge 假实现/吞异常检查 + 异常输入回归
+
+## 背景与目标
+
+D11（同一虚拟机全功能联调，PR #84）已合并。D12 进入功能冻结、联调缓冲与缺陷清理阶段，A 轨任务（台账 D12-A row 61）：
+1. 修复 SDK 超时、异常恢复和性能抖动
+2. 完成 Bridge 假实现/吞异常检查
+3. 回归全部异常输入
+
+**核心缺陷**：EmbeddingService 的 Bridge 线程池（max_workers=2）缺少挂死恢复机制。真实 SDK 调用超时后 `fut.cancel()` 无法中断已运行的 worker（SDK 无 cancel API，TD-A-005-01 Wontfix），若 2 个 worker 全被永久挂死的调用占满，后续所有 embed 请求排队超时——Embedding 路径性能抖动归零，直到进程重启。
+
+## 修改范围
+
+1. **Bridge 线程池挂死恢复**（镜像 TD-A-D7-LLM-HANG-DEGRADE）：
+   - `embedding_service.py` 新增 `_in_flight` future 跟踪 + `_maybe_recover_hung_executor()`（超阈值重建 executor）+ `recover_hung_bridge_executor()`（每次请求入口调用，含合并等待路径）+ `_mark_future_complete()`（完成/失败自动清理）
+   - `health()` 新增 `executor` 分项（max_workers/in_flight/hang_recovered/hang_threshold_ms）暴露可观测性
+2. **Bridge 假实现/吞异常检查**：`docs/day12/03_bridge_audit_checklist.md` 逐项核对（6 套 C++ 测试 + 逐 catch 核对 + 2 处 Wontfix 固定值判定）
+3. **异常输入回归**：`test_embedding_d12a.py` 25 项（挂死恢复 7 + 错误传播 3 + 异常输入回归 9 + A-REQ-01 事件类型对齐 1 + 有界恢复/回调清理/stop-start/submit-gate/stop-active 5：空文本/超长/错误模型/非法枚举/异常返回/非 str/batch 非法）
+
+## 明确不修改范围
+
+- 不涉及 B 轨 Vector/FTS5 检索链路（R-9 pending）
+- 不涉及 C 轨 MemoryClient/OS Agent Hook
+- 不涉及 E 轨记忆业务语义
+- 不涉及数据库 schema 变更
+- 不修改 `text_embedding_init_model` HOST_UNTESTED 状态
+- 不处理既有测试顺序依赖（`test_td_a_local_batch.py` importlib.reload 污染，基线已存在，登记技术债）
+
+## 关联任务与技术债
+
+- 任务卡：`docs/day12/01_task_card.md`
+- 关联：TD-A-005-01（Wontfix，本 PR 补强）、TD-A-D7-LLM-HANG-DEGRADE（模式复用）
+- 新增候选：测试顺序依赖问题登记技术债
+- TD-059（新登记）：SDK 无 cancel API，旧 executor worker 无法回收；有界重建（上限 3）防无界线程，超限/stop-active 进入 restart-required（REWORK HIGH-01 登记；main 占用 TD-058 后顺延为 TD-059）
+- 本次爬取历史 PR 补登未记录技术债：TD-047（A-REQ-01 生产组装缺口）、TD-048（A-REQ-02 治理不一致）、TD-049（PR#57 TD-1~3 未入账）、TD-050（PR#36 implicit 未实现）、TD-051（PR#42 cmake 未入账）、TD-052（本 PR 挂死阈值未参数化）——见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`
+
+## 架构与能力边界依据
+
+- 架构 TABLE 29（延迟预算）：Embedding 查询 ≤180ms
+- 架构 TABLE 36（可观测性）：health 分项指标
+- TD-A-D7-LLM-HANG-DEGRADE：挂死恢复模式（extraction_provider 已实现）
+
+## 修改文件清单
+
+| 文件 | 变更类型 | 摘要 |
+|------|---------|------|
+| `memory-service/embedding/embedding_service.py` | 修改 | +挂死恢复机制 + health executor 分项 |
+| `memory-service/tests/test_embedding_d12a.py` | 新增 | 25 项 D12A 专项测试（含 A-REQ-01 事件类型对齐、有界恢复、回调清理） |
+| `docs/day12/01_task_card.md` | 新增 | D12-A 任务卡 |
+| `docs/day12/02_pr_description.md` | 新增 | 本文件 |
+| `docs/day12/03_bridge_audit_checklist.md` | 新增 | Bridge 假实现/吞异常检查清单 |
+| `evidence/index.yaml` | 修改 | 新增 D12A 条目 |
+| `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` | 修改 | 登记 TD-046~052（TD-047~052 与 main 去重，仅新增 TD-046） |
+| `scripts/test_d12a_all.py` | 新增 | VM/L1 全量回归脚本（25 项检查） |
+| `scripts/verify_day12a_vm.sh` | 新增 | D12A 麒麟 VM 验证脚本 |
+
+## 测试结果
+
+### L0
+
+```
+python -m py_compile memory-service/embedding/embedding_service.py  # OK
+```
+
+### L1（WSL）
+
+```
+test_embedding_d12a.py: 25 passed
+test_embedding_service.py + d9 + d10 + d12a: 85 passed
+```
+
+覆盖：挂死恢复（L1 FakeProvider 模拟：超时→重建→恢复 / 未超阈值不误重建 / 有界上限与 restart-required / 同进程 stop→start 不绕过 / stop 时 active Future 冻结（threshold-before-stop 不绕过，R3）/ submit 原子 gate / 并发无死锁 / in-flight 清理 / health 分项）、错误传播（错误码保留 / 未知异常不崩溃 / 失败不伪装成功）、异常输入（空文本/超长/错误模型/非法枚举/异常返回/非 str/batch 非法/降级结构化）。
+
+### 安全与假实现审查
+
+- Bridge 检查清单：无空 catch、无吞异常、无固定返回、无 stub（见 `docs/day12/03_bridge_audit_checklist.md`）
+- 挂死恢复仅重建线程池，不触碰 Provider/SDK 会话（线程池重建与 SDK 会话解耦，安全）
+- 所有测试使用 FakeProvider（不依赖 SDK），无 Mock 冒充 Runtime 行为
+- 无密钥泄露、无硬编码配置
+
+### L2 麒麟虚拟机证据
+
+**已执行（麒麟 VM 真实 SDK）**：`scripts/verify_day12a_vm.sh` 7/7 ALL PASS（PASS 7 / FAIL 0）。原始日志 `evidence/l2-kylin-vm/day12a_verify_20260902_232744.log`（TD-059 统一后代码重跑）；证据索引 `D12A-L2-VERIFY`。真实 SDK 正常路径（embed dim=768、health executor 分项含 max_hang_rebuilds/restart_required、异常输入含空文本 dim=768、性能 avg=77.7ms p99=97.6ms ≤180ms、无挂死不误重建）HOST_VERIFIED；真实 SDK 挂死→重建恢复无法安全注入永久挂死，RUNTIME_UNVERIFIED，由 L1 FakeProvider 模拟验证（HIGH-02 收敛声明；R2/R3 收口：submit 原子 gate + 同进程 stop/start 不绕过 + stop 时 active Future 冻结 restart-required，threshold-before-stop 不绕过）。
+
+## 性能影响
+
+- 正常路径零开销：`recover_hung_bridge_executor()` 仅在每次 embed 入口检查 in-flight 计数（O(in-flight) 极小，默认 2 worker）
+- 仅挂死超过阈值（60s）时才重建 executor，正常慢任务不触发
+- health 分项仅读内存计数，无 SDK 调用
+
+## 已知限制
+
+- 挂死恢复是调用方超时保护的第二层保障（SDK 无主动中断能力，TD-A-005-01 Wontfix 保持）
+- `_embed_hang_threshold_ms` 默认 60s，为进程级全局配置（未参数化到 config.toml，已登记 TD-052）
+- L2 真实 SDK 正常路径 HOST_VERIFIED；真实 SDK 挂死恢复 RUNTIME_UNVERIFIED（HIGH-02 收敛声明）
+
+## 回滚方式
+
+回滚分支 `fix/day12a-sdk-stability` 即可；无数据库变更，无配置迁移，纯代码回滚安全。
+
+---
+
+**Reviewer 结论**（由 Reviewer 填写）：
+
+- [ ] PASS
+- [ ] PASS_WITH_DEBT（需记录技术债 TD 编号）
+- [ ] REWORK
+- [ ] BLOCKED

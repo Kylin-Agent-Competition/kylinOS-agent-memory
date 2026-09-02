@@ -1,0 +1,5 @@
+D12A L2 源码绑定 manifest（HIGH-02 追溯，TD-059 更新）
+被测代码 commit: 6a94b85776c7e3b93cc9eccf33e857338ab79814 (fix/day12a-sdk-stability)
+说明: guest 内同步文件与本提交内容逐字节一致（LF）；下列为文件内容 sha256 与 git blob id。
+memory-service/embedding/embedding_service.py  sha256=4d422ee6a91d5ce5f13b196aa65130d20b852d60ae99a8a82815274395e4b9d2  blob=74305bbcb9c0dedbf93846eaaab08272b38240fd
+scripts/verify_day12a_vm.sh  sha256=ac2baa683ff6668d9577a2db63169c291444fcfe82df6e79c6c20763b40f714e  blob=75795f9ad63c801ef753baade05e333a305bd36d
