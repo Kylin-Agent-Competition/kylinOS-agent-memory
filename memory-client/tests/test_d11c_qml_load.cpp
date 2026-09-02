@@ -164,20 +164,32 @@ void TestD11cQmlLoad::resourceUrlResolves()
         if (!opened) {
             qCritical() << "[d11c_qml_load] QResource 缺失："
                         << kD11PageResourcePath
-                        << "exists=" << QFile::exists(QString::fromLatin1(kD11PageResourcePath));
+                        << "exists="
+                        << QFile::exists(QString::fromLatin1(kD11PageResourcePath));
         }
-        QVERIFY2(opened,
-                 qPrintable(QStringLiteral(
-                                "qrc 资源表无 D11 页面（qt5_add_resources 是否正确执行？"
-                                "预期裸路径=%1。请查 resources.qrc 的 <qresource prefix>").arg(
-                                QString::fromLatin1(kD11PageResourcePath)))));
+        // 注意：QVERIFY2 的第二个参数必须是一个"有足够寿命"的 const char*。
+        // 把 QStringLiteral(...).arg(...) 直接包在 qPrintable() 里会让
+        // 临时 QString 在完整表达式求值后立刻析构，某些 GCC/Qt 版本下
+        // 宏展开会读到悬空指针；并且多行字符串拼接紧跟 .arg() 还会
+        // 让 Qt 5.12 的 Q_STATIC_ASSERT_X 触发编译期语法错误。所以
+        // 这里先把格式化结果写进局部 msg，再取 qPrintable(msg)。
+        const QString resPath = QString::fromLatin1(kD11PageResourcePath);
+        const QString msg =
+            QStringLiteral("qrc 资源表无 D11 页面（qt5_add_resources 是否"
+                           "正确执行？预期裸路径=%1。请查 resources.qrc 的"
+                           "<qresource prefix>）")
+                .arg(resPath);
+        QVERIFY2(opened, qPrintable(msg));
     }
 
     QQmlComponent probe(engine_.data(), kD11PageUrl);
     QTRY_COMPARE_WITH_TIMEOUT(probe.status(), QQmlComponent::Ready, 3000);
-    QVERIFY2(!probe.isError(),
-             qPrintable(QStringLiteral("Component 加载不应有错误，当前错误: %1")
-                            .arg(formatErrors(probe))));
+    {
+        const QString errMsg =
+            QStringLiteral("Component 加载不应有错误，当前错误: %1")
+                .arg(formatErrors(probe));
+        QVERIFY2(!probe.isError(), qPrintable(errMsg));
+    }
 }
 
 void TestD11cQmlLoad::componentCreatesWithoutErrors()
@@ -185,14 +197,20 @@ void TestD11cQmlLoad::componentCreatesWithoutErrors()
     QQmlComponent component(engine_.data(), kD11PageUrl);
     QTRY_COMPARE_WITH_TIMEOUT(component.status(), QQmlComponent::Ready, 3000);
 
-    QVERIFY2(component.isReady(),
-             qPrintable(QStringLiteral("D11 Component 必须 Ready，当前 status=%1 错误=%2")
-                            .arg(component.status())
-                            .arg(formatErrors(component))));
+    {
+        const QString errMsg =
+            QStringLiteral("D11 Component 必须 Ready，当前 status=%1 错误=%2")
+                .arg(component.status())
+                .arg(formatErrors(component));
+        QVERIFY2(component.isReady(), qPrintable(errMsg));
+    }
 
     QScopedPointer<QObject> obj(component.create());
-    QVERIFY2(!component.isError(),
-             qPrintable(QStringLiteral("create() 触发了错误: %1").arg(formatErrors(component))));
+    {
+        const QString errMsg =
+            QStringLiteral("create() 触发了错误: %1").arg(formatErrors(component));
+        QVERIFY2(!component.isError(), qPrintable(errMsg));
+    }
     QVERIFY2(!obj.isNull(), "create() 返回对象必须非空");
 
     // ScrollView 继承自 QQuickItem
@@ -205,9 +223,12 @@ void TestD11cQmlLoad::viewModelAliasExistsAndInitiallyNull()
     QQmlComponent component(engine_.data(), kD11PageUrl);
     QTRY_COMPARE_WITH_TIMEOUT(component.status(), QQmlComponent::Ready, 3000);
     QScopedPointer<QObject> obj(component.create());
-    QVERIFY2(!obj.isNull(),
-             qPrintable(QStringLiteral("create() 返回对象必须非空，错误=%1")
-                            .arg(formatErrors(component))));
+    {
+        const QString errMsg =
+            QStringLiteral("create() 返回对象必须非空，错误=%1")
+                .arg(formatErrors(component));
+        QVERIFY2(!obj.isNull(), qPrintable(errMsg));
+    }
 
     // HIGH-01 修复：root 必须暴露 "viewModel" alias 属性
     const QMetaObject* meta = obj->metaObject();
@@ -220,9 +241,12 @@ void TestD11cQmlLoad::viewModelAliasExistsAndInitiallyNull()
 
     // 初始没有 ViewModel 注入，alias 必须为 null
     const QVariant initial = obj->property("viewModel");
-    QVERIFY2(!initial.isValid() || initial.isNull(),
-             qPrintable(QStringLiteral("初始 viewModel 应为 null，实际: %1")
-                            .arg(initial.toString())));
+    {
+        const QString errMsg =
+            QStringLiteral("初始 viewModel 应为 null，实际: %1")
+                .arg(initial.toString());
+        QVERIFY2(!initial.isValid() || initial.isNull(), qPrintable(errMsg));
+    }
 }
 
 void TestD11cQmlLoad::multipleInstantiationsDoNotLeak()
@@ -231,13 +255,19 @@ void TestD11cQmlLoad::multipleInstantiationsDoNotLeak()
     QTRY_COMPARE_WITH_TIMEOUT(component.status(), QQmlComponent::Ready, 3000);
 
     QObject* first = component.create();
-    QVERIFY2(first != nullptr,
-             qPrintable(QStringLiteral("第 1 次 create() 必须成功，错误=%1")
-                            .arg(formatErrors(component))));
+    {
+        const QString errMsg =
+            QStringLiteral("第 1 次 create() 必须成功，错误=%1")
+                .arg(formatErrors(component));
+        QVERIFY2(first != nullptr, qPrintable(errMsg));
+    }
     QObject* second = component.create();
-    QVERIFY2(second != nullptr,
-             qPrintable(QStringLiteral("第 2 次 create() 必须成功，错误=%1")
-                            .arg(formatErrors(component))));
+    {
+        const QString errMsg =
+            QStringLiteral("第 2 次 create() 必须成功，错误=%1")
+                .arg(formatErrors(component));
+        QVERIFY2(second != nullptr, qPrintable(errMsg));
+    }
     QVERIFY2(first != second, "两次实例化必须返回不同对象");
 
     const QVariant vm1 = first->property("viewModel");
