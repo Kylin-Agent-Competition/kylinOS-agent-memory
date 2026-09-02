@@ -129,6 +129,14 @@ void MockGatewayServer::handleNewConnection()
                         raw->flush();
                         continue;
                     }
+                    // 测试后门：若 handler 返回 "__hold__": true，则不回包
+                    // （不 encodeEnvelope、不 write），用于 L0 制造"请求 in-flight
+                    // → reset → 延迟响应"竞态。requestId/traceId 已经 push 到
+                    // received_，外层稍后可通过 sendRawEnvelope 单独注入。
+                    static const QString kHoldKey = QStringLiteral("__hold__");
+                    if (response.value(kHoldKey).toBool()) {
+                        continue;
+                    }
 
                     const auto packet = encodeEnvelope(response);
                     if (packet.has_value()) {

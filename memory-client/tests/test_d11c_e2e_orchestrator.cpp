@@ -232,10 +232,11 @@ private slots:
     void step4_conflictCompare_yieldsCandidates();           // D1
     void step4_lifecycleStatus_yieldsItems();                // D2
 
-    // E. Step 5 精准遗忘 Preview + Execute（HIGH-02：凭据链闭环）
+    // E. Step 5 精准遗忘 Preview + Execute（HIGH-02 凭据链 + HIGH-01 TTL 过期门禁）
     void step5_preview_clearsSelectorHIGH01();               // E1
-    void step5_execute_matchingCredentialSucceeds();         // E2 (REWORK)
-    void step5_execute_wrongCredentialFailClosed();          // E3 (NEW)
+    void step5_execute_matchingCredentialSucceeds();         // E2
+    void step5_execute_wrongCredentialFailClosed();          // E3 (错误/不匹配凭据)
+    void step5_execute_expiredCredentialFailClosed();        // E4 (HIGH-01: TTL过期fail-closed)
 
     // F. 编排器总体一致性
     void stepF_notConnected_5StepsFailLocally();             // F1
@@ -772,6 +773,103 @@ void TestD11CE2EOrchestrator::step5_execute_wrongCredentialFailClosed()
                             .arg(vm.forgetExecuteError()).arg(gotErrCode).arg(gotErrMsg)));
 }
 
+// ── E4 · Step 5 Execute：TTL 过期凭据 → fail-closed (HIGH-01) ─────────
+//   使用 credential_ttl_s=1 的超短 TTL，等 2 秒后 deadline 必然过期。
+//   客户端 TTL 门禁生效：forget.execute 请求不得被发送；
+//   forgetStage 必须立即 failed；forgetExecuteError 包含 "expired"/"TTL"。
+void TestD11CE2EOrchestrator::step5_execute_expiredCredentialFailClosed()
+{
+    test_support::MockGatewayServer mock;
+
+    // 记录 forget.execute 是否被发送（HIGH-01 核心断言：过期凭据不得发请求）。
+    bool executeRequestSent = false;
+    mock.setHandler([&](const client::EnvelopeParts& req) -> QJsonObject {
+        const auto& m = req.method;
+        if (m == QLatin1String("forget.preview")) {
+            // HIGH-01 E4：返回 credential_ttl_s=1（1 秒过期）
+            const QString ttlCred = QStringLiteral("cred-short-ttl-A4f2");
+            return client::buildSuccessResponse(
+                req.requestId, req.traceId,
+                QJsonObject{
+                    {QStringLiteral("user_id"), QLatin1String(kUserId)},
+                    {QStringLiteral("selection_hash"), QStringLiteral("sha256:demo-d11c-ffff")},
+                    {QStringLiteral("affected_count"), 1},
+                    {QStringLiteral("credential_ttl_s"), 1},
+                    {QStringLiteral("confirmation_credential"), ttlCred},
+                    {QStringLiteral("forget_mode"), QStringLiteral("single_item")},
+                    {QStringLiteral("target_type"), QStringLiteral("knowledge")},
+                    {QStringLiteral("is_cascade"), false},
+                    {QStringLiteral("selector_cleared"), true},
+                    {QStringLiteral("resolved_target_ids_preview_snippet"),
+                     QJsonArray{QStringLiteral("km-1")}},
+                });
+        }
+        if (m == QLatin1String("forget.execute")) {
+            executeRequestSent = true;  // HIGH-01 违规：过期凭据不应发送 execute
+            return client::buildSuccessResponse(
+                req.requestId, req.traceId, buildForgetExecuteData());
+        }
+        // 其它方法：保持默认成功
+        return client::buildSuccessResponse(req.requestId, req.traceId, QJsonObject{});
+    });
+
+    const QString socket = mock.listen(uniqueSocketName("e4"));
+
+    client::MemoryViewModel vm;
+    vm.setSocketPath(socket);
+    vm.connectToService();
+    QVERIFY(waitForStage([&]{ return vm.connectionState() == "connected"; }));
+
+    // ① Preview → TTL=1s → credential_ttl_s=1 + credential 非空 + awaiting_confirmation
+    vm.runForgetPreviewPipeline(
+        QLatin1String(kUserId), "plan-demo-001", "single_item", "knowledge",
+        "selector-forget", "km-1", "", "", "", true, false);
+    QVERIFY(waitForStage([&]{ return vm.forgetStage() == "awaiting_confirmation"; }));
+    const QString credFromPreview = vm.forgetConfirmationCredential();
+    QVERIFY2(!credFromPreview.isEmpty(), "E4 Preview 必须返回 credential");
+    QCOMPARE(vm.forgetCredentialTtlSeconds(), 1);
+
+    // ② 等待过期：TTL=1s，等 2000ms 确保 deadline 已过
+    QTest::qWait(2000);
+
+    // ③ Execute：使用匹配但已过期的 credential
+    QString gotErrCode;
+    QString gotErrMsg;
+    QObject::connect(&vm, &client::MemoryViewModel::requestFailed,
+                     [&](const QString&, const QString& c, const QString& m) {
+                         gotErrCode = c; gotErrMsg = m;
+                     });
+    vm.runForgetExecutePipeline(
+        QLatin1String(kUserId), "plan-demo-001",
+        credFromPreview,   // 匹配但已过期
+        "", "soft");
+    QVERIFY(waitForStage([&]{ return vm.forgetStage() == "failed"
+                                    || vm.forgetStage() == "completed"
+                                    || vm.forgetStage() == "executing"; }, 5000));
+
+    // HIGH-01 断言 A：客户端侧 TTL 门禁必须生效，不得发出 forget.execute 请求
+    QVERIFY2(!executeRequestSent,
+             "D11C-E4 HIGH-01: 过期凭据必须 fail-closed，"
+             "客户端不得发送 forget.execute 请求");
+
+    // HIGH-01 断言 B：stage 必须进入 failed（completed/executing = 门禁失效）
+    QVERIFY2(vm.forgetStage() == "failed",
+             qPrintable(QStringLiteral("D11C-E4 过期凭据必须 fail-closed (stage=failed)，实际 forgetStage=%1")
+                            .arg(vm.forgetStage())));
+
+    // HIGH-01 断言 C：错误信息含 "expired" 或 "TTL" 或 "过期" 关键字
+    const QString errorText = vm.forgetExecuteError() + gotErrCode + gotErrMsg;
+    QVERIFY2(errorText.contains("expired", Qt::CaseInsensitive)
+             || errorText.contains("TTL", Qt::CaseInsensitive)
+             || errorText.contains(QStringLiteral("过期")),
+             qPrintable(QStringLiteral("D11C-E4 错误文案必须明确标注 TTL/过期，实际=%1")
+                            .arg(errorText)));
+
+    // HIGH-01 断言 D：过期 credential 被清空（后续不能再尝试）
+    QVERIFY2(vm.forgetConfirmationCredential().isEmpty(),
+             "D11C-E4: 过期凭据失败后必须清空 forgetConfirmationCredential（防重放）");
+}
+
 // ── F1 · 未连接：5 步客户端级立即拒绝（不会发请求） ───────────────────
 void TestD11CE2EOrchestrator::stepF_notConnected_5StepsFailLocally()
 {
@@ -884,140 +982,180 @@ void TestD11CE2EOrchestrator::stepF_everythingCompletes_busyClearedAllPendingEmp
     QCOMPARE(vm.forgetStage(), QStringLiteral("completed"));
 }
 
-// ── F3 · MEDIUM-01：Reset 清除 pending → stale response 不回写 stage ──
+// ── F3 · MEDIUM-01：Reset 清除 in-flight pending → stale response 不回写 ─
 //
-// 竞态场景（Reviewer E MEDIUM-01）：
-//   1. 发送 Tool / Conflict / Lifecycle 请求 → pendingXxxRequestId_ 非空
-//   2. 用户点击"重置 5 步" → resetAllPipelines() 清除 pendingXxxRequestId_
-//   3. 旧响应延迟到达 → onResponseReceived 检查 pendingXxxRequestId_ 已空
-//      → 不匹配 → stage 保持 idle（不会被回写为 sent/ready）
+// 真实竞态（Reviewer E MEDIUM-01）：
+//   1. 发送 Tool / Conflict / Lifecycle 请求 → busy=true + pending 非空
+//      (stage=querying/sending；Mock 故意不回响应)
+//   2. 用户点击"重置 5 步" → reset*Pipeline()：
+//      cancel deadline timer + clear pendingXxxRequestId_ + stage=idle
+//   3. 旧响应延迟到达 → onResponseReceived 发现 pending 已空 → 不匹配
+//      → stage 保持 idle（不会被回写为 sent/ready）
+//
+// 关键：不能先等到 stage==sent/ready 再 reset（那时 pending 已被正常响应
+// 清空，reset 中的 pending 清理没有实际工作）。必须在 Mock 未响应、
+// 仍 busy=true / stage=querying 时 reset，才能真正证明竞态修复。
 //
 // 测试策略：
-//   使用 MockGatewayServer::sendRawEnvelope 后门，在 reset 之后向客户端
-//   注入一个携带"旧 requestId"的响应 envelope，验证 stage 不变。
+//   Mock handler 对指定方法只**捕获 requestId / traceId 而不回包**；
+//   当 ViewModel side 出现 busy=true 时请求即处于 in-flight；
+//   调 reset*Pipeline()（此时 pending 确实非空，clear 真正生效）；
+//   再通过 MockGatewayServer::sendRawEnvelope 注入旧 requestId 的响应，
+//   断言 stage 保持 idle。
 void TestD11CE2EOrchestrator::stepF_resetClearsPending_staleResponseIgnored()
 {
-    test_support::MockGatewayServer mock;
-    // handler 只做正常响应（不延迟），用于拿到 requestId 快照
-    mock.setHandler([](const client::EnvelopeParts& parts) -> QJsonObject {
-        if (parts.method == QLatin1String("tool.execution")) {
+    // ── 工具 lambda：捕获单路 request 但 hold 住不回包 ───────────────
+    struct HoldCapture {
+        QString method;
+        QString requestId;
+        QString traceId;
+        bool    arrived = false;
+    };
+    auto captureThenHold = [&](test_support::MockGatewayServer& mock,
+                              const QLatin1String& targetMethod,
+                              HoldCapture& cap) {
+        mock.setHandler([&targetMethod, &cap](
+                            const client::EnvelopeParts& parts)
+                            -> QJsonObject {
+            // 对目标方法：仅捕获，不回包（通过 Mock 后门 __hold__:true 实现）。
+            // received_ 仍会 push，外层可稍后用 sendRawEnvelope 注入延迟响应。
+            if (parts.method == targetMethod) {
+                cap.method    = parts.method;
+                cap.requestId = parts.requestId;
+                cap.traceId   = parts.traceId;
+                cap.arrived    = true;
+                return QJsonObject{{QStringLiteral("__hold__"), true}};
+            }
+            // 其它方法：echo 一个最小成功响应
             return client::buildSuccessResponse(
-                parts.requestId, parts.traceId,
-                QJsonObject{{QStringLiteral("ingested"), true}});
-        }
-        if (parts.method == QLatin1String("conflict.compare")) {
-            return client::buildSuccessResponse(
-                parts.requestId, parts.traceId,
-                buildConflictCandidates());
-        }
-        if (parts.method == QLatin1String("lifecycle.status")) {
-            return client::buildSuccessResponse(
-                parts.requestId, parts.traceId,
-                buildLifecycleItems());
-        }
-        return client::buildSuccessResponse(
-            parts.requestId, parts.traceId, QJsonObject{});
-    });
-    const QString socket = mock.listen(uniqueSocketName("f3-stale"));
+                parts.requestId, parts.traceId, QJsonObject{});
+        });
+    };
 
+    test_support::MockGatewayServer mock;
+    const QString socket = mock.listen(uniqueSocketName("f3-stale"));
     client::MemoryViewModel vm;
     vm.setSocketPath(socket);
     vm.connectToService();
     QVERIFY(waitForStage([&]{ return vm.connectionState() == "connected"; }));
 
-    // ── Tool 路 ──
-    // Step 1: 发送 Tool 请求 → Mock 立即响应 → stage=sent
+    // Helper：发请求 → 等 Mock 捕获（request 已到达）→ 确认 busy=true →
+    //           调 reset → sendRawEnvelope 注入 stale → 断言 stage==idle
+    auto runStaleRaceForTool = [&](const QLatin1String& method,
+                                   std::function<void()> triggerRequest,
+                                   std::function<bool()> isBusy,
+                                   std::function<QString()> getStage,
+                                   std::function<void()> doReset,
+                                   const QJsonObject& successPayload,
+                                   const QString& label) {
+        HoldCapture cap;
+        captureThenHold(mock, method, cap);
+        triggerRequest();
+        // 等待 Mock handler 已经被调用（__HOLD__ 已 throw），
+        // 即 request 确实 in-flight，pendingXxxRequestId_ 非空。
+        {
+            QElapsedTimer t;
+            t.start();
+            while (!cap.arrived && t.elapsed() < 3000) QTest::qWait(20);
+            QVERIFY2(cap.arrived,
+                     qPrintable(QStringLiteral("D11C-F3(%1) Mock 未捕获请求，竞态无法建立")
+                                    .arg(label)));
+            QVERIFY2(!cap.requestId.isEmpty(),
+                     qPrintable(QStringLiteral("D11C-F3(%1) 捕获的 requestId 为空")
+                                    .arg(label)));
+        }
+        // 关键断言：请求 in-flight 时 busy=true（否则后面的 pending 清理
+        // 就没有真正清除的东西，整个竞态场景等于假）。
+        QVERIFY2(isBusy(),
+                 qPrintable(QStringLiteral(
+                     "D11C-F3(%1) Mock hold 住请求后 ViewModel 仍不 busy，"
+                     "pending 清理实际无事可做（竞态场景假阳性）")
+                                .arg(label)));
+        // reset：cancel timer + clear pending + stage=idle（真实竞态修复生效点）
+        doReset();
+        QVERIFY2(getStage() == "idle",
+                 qPrintable(QStringLiteral("D11C-F3(%1) reset 后 stage 应为 idle，实际=%2")
+                                .arg(label).arg(getStage())));
+        // 注入"同 requestId 的旧响应"：onResponseReceived 发现 pending 已空
+        // → 不匹配 → 不应回写 stage。
+        const QJsonObject staleResp = client::buildSuccessResponse(
+            cap.requestId, cap.traceId, successPayload);
+        QVERIFY2(mock.sendRawEnvelope(staleResp),
+                 qPrintable(QStringLiteral("D11C-F3(%1) sendRawEnvelope 失败（无连接）")
+                                .arg(label)));
+        QTest::qWait(200);  // 等待 socket readyRead → onResponseReceived 跑完
+        QVERIFY2(getStage() == "idle",
+                 qPrintable(QStringLiteral(
+                     "D11C-F3(%1) stale response 回写了 stage！期望=idle 实际=%2")
+                                .arg(label).arg(getStage())));
+        QVERIFY2(!isBusy(),
+                 qPrintable(QStringLiteral(
+                     "D11C-F3(%1) stale response 回写了 busy！")
+                                .arg(label)));
+    };
+
+    // ── 1) Tool 路 in-flight → reset → stale 不回写 ─────────────────
+    {
+        runStaleRaceForTool(
+            QLatin1String("tool.execution"),
+            [&]{ vm.runToolPipeline(QLatin1String(kUserId),
+                                    QLatin1String(kSessionA),
+                                    "turn-f3-tool-hold", "tc-f3-tool-hold",
+                                    "memory_search", "success",
+                                    "args", "result", "", "",
+                                    true, false); },
+            [&]{ return vm.toolBusy(); },
+            [&]{ return vm.toolStage(); },
+            [&]{ vm.resetToolPipeline(); },
+            QJsonObject{{QStringLiteral("ingested"), true}},
+            QStringLiteral("Tool"));
+    }
+
+    // ── 2) Conflict 路 in-flight → reset → stale 不回写 ───────────────
+    {
+        runStaleRaceForTool(
+            QLatin1String("conflict.compare"),
+            [&]{ vm.runConflictComparePipeline("km-f3-hold", false); },
+            [&]{ return vm.conflictCompareBusy(); },
+            [&]{ return vm.conflictCompareStage(); },
+            [&]{ vm.resetConflictComparePipeline(); },
+            buildConflictCandidates(),
+            QStringLiteral("Conflict"));
+    }
+
+    // ── 3) Lifecycle 路 in-flight → reset → stale 不回写 ─────────────
+    {
+        runStaleRaceForTool(
+            QLatin1String("lifecycle.status"),
+            [&]{ vm.runLifecycleStatusPipeline(QLatin1String(kUserId),
+                                               "km-f3-ls-hold", {}); },
+            [&]{ return vm.lifecycleStatusBusy(); },
+            [&]{ return vm.lifecycleStatusStage(); },
+            [&]{ vm.resetLifecycleStatusPipeline(); },
+            buildLifecycleItems(),
+            QStringLiteral("Lifecycle"));
+    }
+
+    // ── 4) resetAllPipelines() 全量：Tool hold 住 → 全 reset → 注入 stale
+    HoldCapture capAll;
+    captureThenHold(mock, QLatin1String("tool.execution"), capAll);
     vm.runToolPipeline(QLatin1String(kUserId), QLatin1String(kSessionA),
-                       "turn-f3", "tc-f3", "memory_search", "success",
+                       "turn-f3b-hold", "tc-f3b-hold",
+                       "memory_search", "success",
                        "args", "result", "", "", true, false);
-    QVERIFY(waitForStage([&]{ return vm.toolStage() == "sent"; }));
-
-    // 捕获 Tool 请求的 requestId（用于后续 stale response 注入）
-    const QString staleToolRequestId =
-        mock.receivedRequests().back().requestId;
-    const QString staleToolTraceId =
-        mock.receivedRequests().back().traceId;
-
-    // Step 2: 重置 Tool pipeline → stage=idle, pendingToolRequestId_ 清空
-    vm.resetToolPipeline();
-    QCOMPARE(vm.toolStage(), QStringLiteral("idle"));
-    QVERIFY(!vm.toolBusy());
-
-    // Step 3: 注入 stale Tool response（使用 Step 1 的 requestId）
-    // → onResponseReceived 检查 pendingToolRequestId_ == 空 → 不匹配 → 忽略
-    const QJsonObject staleToolResponse = client::buildSuccessResponse(
-        staleToolRequestId, staleToolTraceId,
-        QJsonObject{{QStringLiteral("ingested"), true}});
-    QVERIFY2(mock.sendRawEnvelope(staleToolResponse),
-             "MockGatewayServer 应有活跃连接可注入 stale response");
-    // 等待事件循环处理 stale response
-    QTest::qWait(200);
-
-    // Step 4: 断言 stage 仍为 idle（stale response 未回写）
-    QVERIFY2(vm.toolStage() == QStringLiteral("idle"),
-             qPrintable(QStringLiteral("D11C-F3 Tool stale response 回写了 stage！"
-                                       " 期望=idle 实际=%1")
-                            .arg(vm.toolStage())));
-    QVERIFY2(!vm.toolBusy(),
-             "D11C-F3 Tool stale response 回写了 busy!");
-
-    // ── Conflict Compare 路（同样的 stale 验证） ──
-    vm.runConflictComparePipeline("km-1", false);
-    QVERIFY(waitForStage([&]{ return vm.conflictCompareStage() == "ready"; }));
-    // receivedRequests 末尾是 conflict.compare 的请求
-    const QString staleConflictRequestId =
-        mock.receivedRequests().back().requestId;
-    const QString staleConflictTraceId =
-        mock.receivedRequests().back().traceId;
-    vm.resetConflictComparePipeline();
-    QCOMPARE(vm.conflictCompareStage(), QStringLiteral("idle"));
-    QVERIFY(!vm.conflictCompareBusy());
-    // 注入 stale conflict response
-    const QJsonObject staleConflictResponse = client::buildSuccessResponse(
-        staleConflictRequestId, staleConflictTraceId,
-        buildConflictCandidates());
-    mock.sendRawEnvelope(staleConflictResponse);
-    QTest::qWait(200);
-    QVERIFY2(vm.conflictCompareStage() == QStringLiteral("idle"),
-             qPrintable(QStringLiteral("D11C-F3 Conflict stale response 回写了 stage！"
-                                       " 期望=idle 实际=%1")
-                            .arg(vm.conflictCompareStage())));
-
-    // ── Lifecycle Status 路 ──
-    vm.runLifecycleStatusPipeline(QLatin1String(kUserId), "km-1", {});
-    QVERIFY(waitForStage([&]{ return vm.lifecycleStatusStage() == "ready"; }));
-    const QString staleLifecycleRequestId =
-        mock.receivedRequests().back().requestId;
-    const QString staleLifecycleTraceId =
-        mock.receivedRequests().back().traceId;
-    vm.resetLifecycleStatusPipeline();
-    QCOMPARE(vm.lifecycleStatusStage(), QStringLiteral("idle"));
-    QVERIFY(!vm.lifecycleStatusBusy());
-    const QJsonObject staleLifecycleResponse = client::buildSuccessResponse(
-        staleLifecycleRequestId, staleLifecycleTraceId,
-        buildLifecycleItems());
-    mock.sendRawEnvelope(staleLifecycleResponse);
-    QTest::qWait(200);
-    QVERIFY2(vm.lifecycleStatusStage() == QStringLiteral("idle"),
-             qPrintable(QStringLiteral("D11C-F3 Lifecycle stale response 回写了 stage！"
-                                       " 期望=idle 实际=%1")
-                            .arg(vm.lifecycleStatusStage())));
-
-    // ── resetAllPipelines() 全量验证 ──
-    // 再发一次 Tool，然后调 resetAllPipelines()，注入 stale → 全部 idle
-    vm.runToolPipeline(QLatin1String(kUserId), QLatin1String(kSessionA),
-                       "turn-f3b", "tc-f3b", "memory_search", "success",
-                       "args", "result", "", "", true, false);
-    QVERIFY(waitForStage([&]{ return vm.toolStage() == "sent"; }));
-    const QString staleAllRequestId =
-        mock.receivedRequests().back().requestId;
-    const QString staleAllTraceId =
-        mock.receivedRequests().back().traceId;
+    {
+        QElapsedTimer t;
+        t.start();
+        while (!capAll.arrived && t.elapsed() < 3000) QTest::qWait(20);
+        QVERIFY2(capAll.arrived, "D11C-F3(resetAllPipelines) Mock 未捕获 Tool 请求");
+    }
+    QVERIFY2(vm.toolBusy(),
+             "D11C-F3(resetAllPipelines) hold 住后 toolBusy 必须=true");
     vm.resetAllPipelines();
     QCOMPARE(vm.toolStage(), QStringLiteral("idle"));
     QVERIFY(!vm.busy());
     const QJsonObject staleAllResponse = client::buildSuccessResponse(
-        staleAllRequestId, staleAllTraceId,
+        capAll.requestId, capAll.traceId,
         QJsonObject{{QStringLiteral("ingested"), true}});
     mock.sendRawEnvelope(staleAllResponse);
     QTest::qWait(200);
