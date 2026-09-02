@@ -1,0 +1,58 @@
+=== D11D L2 evidence 4-6 capture 2026-09-02 00:21:48 ===
+--- item4: diagnostics (re-run diag) ---
+== Test A: running service diagnostics (production socket) ==
+{"trace_id": "diag-51b2649392", "request_id": "req-492e270fdc", "response": {"protocol_version": "1.0", "request_id": "req-492e270fdc", "trace_id": "diag-51b2649392", "status": "ok", "data": {"status": "ok", "db": "ok", "methods": ["echo", "health", "memory.retrieve", "memory.store"], "outbox": {"backlog": 0, "dead_letter": 0, "oldest_pending_created_at": null, "processed": 0, "dead_letters": 0}}, "server_ts": "2026-09-01T16:21:48.348300+00:00"}}
+{"trace_id": "diag-1b71f5c0b3", "request_id": "req-b5b8fea9da", "response": {"protocol_version": "1.0", "request_id": "req-b5b8fea9da", "trace_id": "diag-1b71f5c0b3", "status": "ok", "data": {"echo": {}}, "server_ts": "2026-09-01T16:21:48.402380+00:00"}}
+{"trace_id": "diag-eeba667d5d", "request_id": "req-f3067b6039", "response": {"protocol_version": "1.0", "request_id": "req-f3067b6039", "trace_id": "diag-eeba667d5d", "status": "ok", "data": {"context": [], "degraded": false, "reason": "retrieval main chain pending"}, "server_ts": "2026-09-01T16:21:48.467003+00:00"}}
+== Test B: JSON logs instance ==
+{"trace_id": "diag-8c4c53a21b", "request_id": "req-6bdd7a362e", "response": {"protocol_version": "1.0", "request_id": "req-6bdd7a362e", "trace_id": "diag-8c4c53a21b", "status": "ok", "data": {"status": "degraded", "db": "ok", "methods": ["echo", "health", "memory.retrieve", "memory.store"]}, "server_ts": "2026-09-01T16:21:51.547797+00:00"}}
+{"trace_id": "diag-d73e8c7197", "request_id": "req-6bee529d39", "response": {"protocol_version": "1.0", "request_id": "req-6bee529d39", "trace_id": "diag-d73e8c7197", "status": "ok", "data": {"echo": {}}, "server_ts": "2026-09-01T16:21:51.613853+00:00"}}
+{"trace_id": "diag-988a8644e0", "request_id": "req-889ac10cce", "response": {"protocol_version": "1.0", "request_id": "req-889ac10cce", "trace_id": "diag-988a8644e0", "status": "ok", "data": {"context": [], "degraded": false, "reason": "retrieval main chain pending"}, "server_ts": "2026-09-01T16:21:51.671976+00:00"}}
+== JSON log line count ==
+7
+== sample lines ==
+配置文件不存在 /home/yanmouren778/.config/kylin-memory/config.toml，使用全部默认值启动
+{"ts": "2026-09-02T00:21:49+0800", "level": "WARNING", "logger": "db.engine", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "收紧 DB 文件权限 0600 失败（不阻断启动）: /tmp/d11d-test/diag.db ([Errno 2] No such file or directory: '/tmp/d11d-test/diag.db')"}
+{"ts": "2026-09-02T00:21:49+0800", "level": "INFO", "logger": "__main__", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "schema 就绪: /tmp/d11d-test/diag.db"}
+{"ts": "2026-09-02T00:21:49+0800", "level": "WARNING", "logger": "__main__", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "开发模式建库（init_schema=create_all，绕过 Alembic）。生产环境必须先 `alembic upgrade head`，再以 `--no-migrate` 启动，避免两套建表路径 default 语义分叉（PR#52 Issue 6）。"}
+{"ts": "2026-09-02T00:21:49+0800", "level": "INFO", "logger": "gateway.server", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "IPC Gateway 启动: /tmp/d11d-test/diag.sock"}
+{"ts": "2026-09-02T00:21:49+0800", "level": "INFO", "logger": "__main__", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "Memory Service 就绪（socket=/tmp/d11d-test/diag.sock）"}
+{"ts": "2026-09-02T00:21:51+0800", "level": "INFO", "logger": "gateway.handlers", "trace_id": "diag-988a8644e0", "request_id": "req-889ac10cce", "method": "memory.retrieve", "event_id": "", "message": "memory.retrieve method=memory.retrieve request_id=req-889ac10cce（主链未接入，返回空上下文）"}
+== trace_id occurrences in logs ==
+== PII scan (expect 0) ==
+0
+0 PII markers
+--- item5: permissions ---
+memory.sock:
+srw------- 1 yanmouren778 yanmouren778 0  9月 2日 00:15 /run/user/1000/kylin-memory/memory.sock
+memory dir:
+drwxr-xr-x 2 yanmouren778 yanmouren778 60  9月 2日 00:15 /run/user/1000/kylin-memory
+vector sock:
+srwxrwxr-x 1 yanmouren778 yanmouren778 0  9月 1日 15:50 /tmp/kylin-ai-vector-engine-1000.sock
+runtime dir:
+drwxrwxrwx 2 yanmouren778 yanmouren778 4096  9月 1日 23:50 /tmp/.kylin-ai-runtime-unix/1000
+db file:
+总计 280
+drwxrwxr-x  2 yanmouren778 yanmouren778   4096  9月 2日 00:15 .
+drwxr-xr-x 10 yanmouren778 yanmouren778   4096  9月 2日 00:13 ..
+-rw-------  1 yanmouren778 yanmouren778 225280  9月 2日 00:14 kylin_memory.db
+-rw-------  1 yanmouren778 yanmouren778  32768  9月 2日 00:15 kylin_memory.db-shm
+-rw-------  1 yanmouren778 yanmouren778      0  9月 2日 00:15 kylin_memory.db-wal
+wrapper:
+-rwxrwxr-x 1 yanmouren778 yanmouren778 101  9月 2日 00:15 /home/yanmouren778/.local/bin/kylin-memory-server
+--- item5: KYSEC subsystem ---
+ls: 无法访问 '/sys/kernel/security/kylin/': 没有那个文件或目录
+--- item6: DB state ---
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+20260901_d10b_vector_ledger (head)
+outbox: 0 rows
+source_events: 0 rows
+memory_entries: 0 rows
+vector_index_entries: 0 rows
+turns: 0 rows
+outbox rows by status:
+Traceback (most recent call last):
+  File "<stdin>", line 10, in <module>
+sqlite3.OperationalError: no such column: status
+--- item6: perf reference (D11A evidence) ---
+=== end 2026-09-02 00:21:54 ===

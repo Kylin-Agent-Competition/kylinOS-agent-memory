@@ -1,0 +1,20 @@
+HEAD=
+c18184a9816d04a20fec95e8c535816dc8acae22
+SDK=
+/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0
+BRIDGE_BUILD=
+ls: 无法访问 'cpp-bridge/build': 没有那个文件或目录
+EMBED_VERIFY=
+== 调用前 ==
+core-textembedding.sock exists: True
+srwxrwxr-x 1 yanmouren778 yanmouren778 0  9月 2日 12:27 /tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock
+== health ==
+{"ok": true, "result": {"service": "ok", "provider": "ready", "provider_lifecycle": "N/A", "bridge_loaded": false, "bridge_has_session": false, "backlog": {"backlog": 0, "oldest_pending_age_seconds": 0.0, "backlog_alert": false, "oldest_alert": false, "thresholds": {"backlog_warn": 32, "oldest_warn_seconds": 0.2}}, "cache": {"size": 0, "hits": 0, "misses": 0, "evictions": 0}, "cache_invalidator": {}, "model": {}, "errors": {"count": 0, "last_code": "", "last_message": "", "last_time_seconds_ago": -1.0}, "degraded": true, "sdk_missing": true}}
+bridge_loaded: None | provider_lifecycle: None | degraded: None | sdk_missing: None
+== embed ==
+ok: True | degraded: True
+dimension: 0 | vec_len: 0 | l2_norm: 0.0
+== 调用后 ==
+core-textembedding.sock exists: True
+srwxrwxr-x 1 yanmouren778 yanmouren778 0  9月 2日 12:27 /tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock
+DONE

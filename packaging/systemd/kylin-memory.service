@@ -10,6 +10,7 @@ Type=simple
 # 启动不再走 create_all 兜底（PR#52 Issue 6）；未先迁移时启动会 fail-fast 拒绝。
 ExecStart=%h/.local/bin/kylin-memory-server --socket %t/kylin-memory/memory.sock --no-migrate
 RuntimeDirectory=kylin-memory
+RuntimeDirectoryMode=0700
 Restart=on-failure
 RestartSec=5s
 
