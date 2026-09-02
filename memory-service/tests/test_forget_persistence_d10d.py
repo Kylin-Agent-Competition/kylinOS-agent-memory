@@ -167,6 +167,10 @@ def test_preview_persists_plan_and_credential_hash(env):
     # 凭据明文只回传一次，且非哈希
     assert isinstance(resp["confirmation_token"], str) and len(resp["confirmation_token"]) == 64
     assert resp["credential_ttl_seconds"] == repo.CONFIRMATION_TOKEN_TTL_SECONDS
+    # Preview 响应字段真源（ADR-019 R2 收口）：credential_ttl_seconds + credential_ref；
+    # credential_ref 是凭据 SHA-256 哈希前缀（非敏感引用），不得与明文凭据相同。
+    assert resp["credential_ref"] == repo.hash_confirmation_token(resp["confirmation_token"])[:16]
+    assert resp["credential_ref"] != resp["confirmation_token"]
 
     with env["engine"].connect() as conn:
         plan = repo.get_forget_plan_by_id(conn, user_id=USER, forget_plan_id="plan-1")
@@ -189,6 +193,8 @@ def test_preview_persists_plan_and_credential_hash(env):
 
 
 def test_preview_idempotent_replay_does_not_reissue_credential(env):
+    # R2 收口：forget.preview 为一次性凭据受控例外——同键+同指纹重放 fail-closed
+    # → INVALID_REQUEST，不重发/不生成第二枚凭据；缓存仅存剔除 token 的脱敏响应。
     entry_id = _seed_knowledge(env["engine"])
     payload = _payload(target_id=str(entry_id), target_type="knowledge")
     first = _preview(env, payload, idem_key="preview-once")

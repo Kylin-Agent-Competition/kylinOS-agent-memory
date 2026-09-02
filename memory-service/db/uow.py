@@ -321,6 +321,9 @@ class UnitOfWork(AbstractContextManager["UnitOfWork"]):
                 "selection_hash": selection_hash,
                 "confirmation_token": token_plaintext,
                 "credential_ttl_seconds": repo.CONFIRMATION_TOKEN_TTL_SECONDS,
+                # credential_ref = 凭据 SHA-256 哈希前缀（非敏感引用，ADR-019 §4.3
+                # 冻结字段；仅供调用方自检，不得作为 execute 凭据使用）。
+                "credential_ref": token_hash[:16],
                 "requires_confirmation": requires_confirmation,
                 "is_cascade": is_cascade,
                 "delete_mode": delete_mode,

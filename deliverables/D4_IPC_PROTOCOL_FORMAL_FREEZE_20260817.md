@@ -20,7 +20,7 @@
 | FRZ-IPC-002 | 错误码枚举（UNSUPPORTED_METHOD / INVALID_REQUEST / PROTOCOL_ERROR / INTERNAL_ERROR / **TIMEOUT**） | 2026-08-07（TIMEOUT 于 2026-08-17 补充，见 §3.2） | ✅ 协议冻结（已签署生效） |
 | FRZ-IPC-003 | protocol_version `"1.0"`（MAJOR.MINOR，主版本变更需 ADR） | 2026-08-07 | ✅ 协议冻结（已签署生效） |
 | FRZ-IPC-004 | deadline_ms 字段定义与行为约定（类型/位置/超时语义/延迟预算参考） | 2026-08-07 | ✅ 协议冻结（已签署生效；字段与语义）；超时行为复测缺口 TD-IPC-003 保持登记 |
-| FRZ-IPC-005 | 幂等方案（idempotency_key + 三元组作用域 + 24h TTL） | 2026-08-07 | ✅ 设计层协议冻结（已签署生效；实现待 D4-D） |
+| FRZ-IPC-005 | 幂等方案（idempotency_key + 三元组作用域 + 24h TTL） | 2026-08-07 | ✅ 设计层协议冻结（已签署生效；实现待 D4-D。2026-09-02 ADR-019 v2 增加 `forget.preview` 一次性凭据受控例外，见下注） |
 | FRZ-IPC-006 | JSON 请求/响应顶级字段结构（请求 7 字段 / 响应 6 字段 + 错误附加字段） | 2026-08-07 | ✅ 协议冻结（已签署生效；仅允许新增 optional 字段） |
 | FRZ-IPC-007 | 方法路由表（活跃 3 项：echo / health / memory.retrieve；ADR-010 `turn.finalized`、ADR-014 `event.ingest`、ADR-019 `forget.preview` / `forget.execute` 均标 CANDIDATE / BLOCKED_BY_HOST_MAPPING；memory.store 未实现返回 UNSUPPORTED_METHOD；evidence.record 已按 P0-4 移除） | 2026-08-07（2026-08-17 更正；2026-08-27 ADR-010 扩展；2026-08-31 ADR-014 扩展；2026-09-02 ADR-019 扩展） | ✅ 协议冻结（已签署生效；ADR-010/014/019 均完成 D 决策 + Reviewer E 签署） |
 
@@ -29,6 +29,8 @@
 > **2026-08-31 扩展（ADR-014 批准，D 决策 + Reviewer E 终局签署 PASS_WITH_DEBT，TD-D6D-002）**：FRZ-IPC-007 路由表新增写方法 `event.ingest`（payload 对齐 A 轨 `MemorySourceEvent` **flat 映射契约**，`schema_version` 仅接受精确 `"0.1"`）。激活状态标 **CANDIDATE / BLOCKED_BY_HOST_MAPPING**：默认生产路由**不注册** → `UNSUPPORTED_METHOD`；待 C 轨事件源（Hook/Adapter）就绪后升级 ACTIVE。`memory.store` 保持 UNSUPPORTED_METHOD 不变。详见 `docs/adr/014-event-ingest-method.md`。
 
 > **2026-09-02 扩展（ADR-019 批准，D 已决策 + Reviewer E 已签署，PR #112 APPROVED）**：FRZ-IPC-007 路由表新增写方法 `forget.preview` / `forget.execute`，强制 Preview 与 Execute 分离；execute 的幂等键只取 FRZ-IPC-006 envelope 顶层字段，一次性确认凭据绑定 `user_id + forget_plan_id + selection_hash` 且服务端只存 SHA-256。两方法激活状态均为 **CANDIDATE / BLOCKED_BY_HOST_MAPPING**，production 默认路由**不注册** → `UNSUPPORTED_METHOD`；独立可信宿主身份映射和安全 Gate 完成前不得升级 ACTIVE。Hard Delete、Cascade、Full Reset、time_window、topic 及未闭环 event 目标 Runtime 必须 fail-closed，不得降级后报告成功。详见 `docs/adr/019-forget-ipc-method.md`。本扩展仅正式冻结方法契约，对外能力仍为 **`PARTIAL / staged implementation`**，不构成 Runtime 或麒麟宿主验证证据。
+
+> **2026-09-02 R2 收口（PR #120 第二轮 REWORK，ADR-019 v2，待 Reviewer E 复审）**：Preview 成功响应 `data` 字段集统一为 `forget_plan_id` / `status='awaiting_confirmation'` / `resolved_target_ids` / `affected_count` / `selection_hash` / `confirmation_token`（明文仅一次性回传）/ `credential_ttl_seconds` / `credential_ref` / `requires_confirmation` / `is_cascade` / `delete_mode`；`token_expires_at` 仅为服务端持久化字段（ADR-015），不进 IPC data。`forget.preview` 作为一次性 confirmation credential 场景，是 FRZ-IPC-005 通用成功 replay 的**受控例外**：同 idempotency_key + 同 request fingerprint 重放 fail-closed → `INVALID_REQUEST`，不重发/不生成第二枚凭据；服务端幂等缓存仅持久化剔除 token 的脱敏响应。
 
 **变更控制**：任何变更须走 ADR + Gate 流程；允许扩展范围（新增 optional 字段、新增错误码、次版本号兼容新增）见 `D4_IPC_PROTOCOL_FREEZE_20260807.md` §1.3 / §2.4 / §3。
 

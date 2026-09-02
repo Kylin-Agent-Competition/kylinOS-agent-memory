@@ -4,7 +4,8 @@
 - **日期**：2026-09-02
 - **决策人**：D（周子腾）
 - **Reviewer**：E（谢嘉然），PR #112 `APPROVED`（2026-09-02）
-- **决策版本**：`d10d-adr019-v1`
+- **决策版本**：`d10d-adr019-v2`（R2 收口修订；v1 见 PR #112 签署）
+- **修订记录**：v1 = PR #112 签署冻结（2026-09-02）；v2 = PR #120 第二轮 REWORK 收口（2026-09-02）——`forget.preview` 幂等重放冻结为一次性凭据受控例外（同 idempotency_key + 同指纹重放 fail-closed → `INVALID_REQUEST`，不重发/不生成第二枚凭据）；Preview 响应字段真源统一为 `credential_ttl_seconds` + `credential_ref`（`token_expires_at` 归服务端持久化字段，不进 IPC data）。v2 待 Reviewer E 复审确认。
 - **适用范围**：FRZ-IPC-007 扩展
 - **激活状态**：`CANDIDATE / BLOCKED_BY_HOST_MAPPING`
 - **对外能力状态**：`PARTIAL / staged implementation`；生产默认不注册，未注册返回 `UNSUPPORTED_METHOD`
@@ -47,7 +48,7 @@
 | `is_cascade` | bool | 否 | 默认 false |
 | `delete_mode` | string | 否 | 默认 `soft`；仅可信宿主/显式用户操作可指定；LLM 不得终判 |
 
-成功响应沿用冻结 envelope，`data` 至少包含：`forget_plan_id`、`status='awaiting_confirmation'`、`affected_count`、`selection_hash`、`confirmation_token`、`token_expires_at`、`requires_confirmation`、`is_cascade`、`delete_mode`。确认令牌明文只在此次响应返回一次。
+成功响应沿用冻结 envelope，`data` 至少包含：`forget_plan_id`、`status='awaiting_confirmation'`、`resolved_target_ids`、`affected_count`、`selection_hash`、`confirmation_token`、`credential_ttl_seconds`、`credential_ref`、`requires_confirmation`、`is_cascade`、`delete_mode`。确认令牌明文只在此次响应返回一次；`credential_ref` 为凭据 SHA-256 哈希前缀（非敏感引用，仅供调用方自检，不得作为 execute 凭据使用）。`token_expires_at` 仅为 ADR-015 服务端持久化字段（绝对过期时刻），不进 IPC data 字段集；凭据有效期以 `credential_ttl_seconds` 向调用方表达。
 
 ## `forget.execute` 契约
 
@@ -91,7 +92,8 @@
 
 ## 幂等与错误语义
 
-- 三元组 `(user_id, session_id, idempotency_key)` 复用 FRZ-IPC-005 / ADR-006；成功请求可 cache replay，失败请求不缓存。
+- 三元组 `(user_id, session_id, idempotency_key)` 复用 FRZ-IPC-005 / ADR-006；`forget.execute` 等一般成功请求可 cache replay，失败请求不缓存。
+- **受控例外（`forget.preview`，R2 冻结）**：一次性 confirmation credential 场景不适用通用 cache replay——首次成功仅在响应中回传一次 `confirmation_token` 明文，服务端幂等缓存只持久化剔除 token 的安全子集（`credential_replayable=false`）；相同 idempotency_key + 相同 request fingerprint 重放 **fail-closed → `INVALID_REQUEST`**，不得再次返回或生成第二枚凭据；失败请求不缓存。
 - request fingerprint 不得由 selector、正文或 confirmation token 原文派生；敏感输入统一使用 `<SENSITIVE-OMITTED>` 占位。
 - 同三元组、不同 privacy-safe request fingerprint → `INVALID_REQUEST`；不得静默复用首次响应。
 - payload/模式/selector/凭据/状态/数量不合法以及未支持执行路径 → `INVALID_REQUEST`；deadline → `TIMEOUT`；内部异常 → `INTERNAL_ERROR`；未注册 → `UNSUPPORTED_METHOD`。不新增错误码，不回显正文、凭据或敏感详情。
@@ -114,3 +116,4 @@
 - D（周子腾）：2026-09-02，D1～D6 全部采用推荐方案。
 - Reviewer E（谢嘉然）：2026-09-02，PR #112 终局 `APPROVED`。
 - 证据边界：签署使 FRZ-IPC-007 扩展正式生效；两方法仍为 `CANDIDATE / BLOCKED_BY_HOST_MAPPING`，对外保持 `PARTIAL / staged implementation`，不构成 Runtime 或麒麟宿主验证证据。
+- PR #120 R2 修订（v2）：本 PR 提交幂等受控例外与 Preview 响应字段真源治理收口，待 Reviewer E 复审确认后随本 PR 生效；生效前仍按本 ADR 记录的既有契约与代码行为执行。
