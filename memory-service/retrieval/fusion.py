@@ -171,6 +171,12 @@ class TruthRecord:
             if value.tzinfo is None:
                 raise ValueError(f"{field_name} 必须带时区（UTC）")
             object.__setattr__(self, field_name, value.astimezone(timezone.utc))
+        if (
+            self.valid_from is not None
+            and self.valid_to is not None
+            and self.valid_from > self.valid_to
+        ):
+            raise ValueError("valid_from 不能晚于 valid_to（有效期窗口倒置）")
 
 
 def _hard_filter_rejection_reason(
