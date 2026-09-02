@@ -1192,7 +1192,7 @@ entries:
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d11d_vm_embed_reboot_verify_20260902.log"
     tested_commit: "c18184a9816d04a20fec95e8c535816dc8acae22"
-    evidence_commit: "pending"
+    evidence_commit: "c3d80ab"
     date: "2026-09-02"
     reviewer: "pending"
     runtime_result: "DEGRADED"
