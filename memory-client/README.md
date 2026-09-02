@@ -20,13 +20,14 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 
 ## 当前状态
 
-**Memory Client L0（D5 / D6 / D7 / D8 / D9 / D10 / D11 原型链；L0 ctest 预期 10/10
-（protocol\_adapter / memory\_client\_mock / d5\_vertical\_link\_demo /
-d6c\_multi\_source\_adapters / d7c\_preference\_editor / d8c\_knowledge\_conflict\_lifecycle /
-d9c\_context\_assemble / d10c\_forgetting / d11c\_e2e\_orchestrator / d11c\_qml\_load；
-d11c\_qml\_load 在缺 Qt5::Gui/Qml/Quick/QuickControls2 IMPORTED target 的环境会
-跳过，其余 9 个不受影响）+ QML build-smoke green；C 角色各天 Demo 保持 OPEN；
-SEC-CTX-01 Runtime Evidence 未生成；
+**Memory Client L0（D12-C 缺陷清理版；覆盖 D5 / D6 / D7 / D8 / D9 / D10 / D11 原型链；
+L0 ctest 预期 10/10（protocol\_adapter / memory\_client\_mock /
+d5\_vertical\_link\_demo / d6c\_multi\_source\_adapters /
+d7c\_preference\_editor / d8c\_knowledge\_conflict\_lifecycle /
+d9c\_context\_assemble / d10c\_forgetting / d11c\_e2e\_orchestrator /
+d11c\_qml\_load；d11c\_qml\_load 在缺 Qt5::Gui/Qml/Quick/QuickControls2
+IMPORTED target 的环境会跳过，其余 9 个不受影响）+ QML build-smoke green；
+C 角色各天 Demo 保持 OPEN；SEC-CTX-01 Runtime Evidence 未生成；
 未接入真实 AI Assistant Hook / Chat DB / ChatRecord / model\_request /
 TurnExtractionAdapter / 知识治理 / 冲突仲裁持久化后端）。**
 
@@ -83,11 +84,70 @@ TurnExtractionAdapter / 知识治理 / 冲突仲裁持久化后端）。**
 
 **非阻断 Technical Debt（可后续跟踪）**：
 
-* FRZ-IPC-004 deadline 计时精度：目前使用 `deadlineMs` 常量；冻结口径为 `deadline_ms + 100ms`
+* D10-C 临时偏好生命周期：`shouldPersist=false` 偏好的 reload 恢复受 host 热加载路径
+  约束（D12-C 登记 TD-045，待 C×A 跨轨 host mapping 验证后关闭）。
 
-* timeout 后 `MemoryClient::pendingRequests_` 不自动删除；late response 可能刷新 `lastResponse`
+* D10-C evidence dedup vs 同值 UPDATE：同值版本化偏好的证据去重与历史 UPDATE
+  语义存在冲突（D12-C 登记 TD-044，待 E×B×C 跨轨治理决策）。
 
-* `memory_items` 展示作为 Demo 扩展暂存，待正式契约决策
+### D12-C 缺陷清理（已应用 · 生产路径假实现声明）
+
+\*\*D12-C 台账要求（C 轨 D12 收尾 #2）：修复 Stop / Retry / 断线重连 / 空状态 / UI 交互
+
+* 生产路径假实现检查。L1/L2 证据需在麒麟 VM 与 B/D 轨闭环前另行生成。\*\*
+
+本 PR 变更（五项，对照 D12-C 验收表 §C-1\~§C-5）：
+
+1. **TD-IPC-004 断线重连**：`MemoryClient::handleSocketDisconnected()` 区分"显式 Stop"
+   与"意外断开"；意外断开 → 3 次指数退避 `500ms × 2^(attempt-1)` 自动重连；
+   `ConnectionState::Reconnecting` 枚举 + `reconnectAttempts` QML 属性 +
+   `reconnectFinished(success,attempts)` 信号，Evidence L2 可断言次数与时序。
+
+2. **TD-022 客户端 deadline 超时**：`sendRequest()/sendEventEnvelope()` 注册
+   `PendingRequest{deadlineEpochMs}` 并启动 per-request `QTimer`，
+   `deadline_ms + 100ms` 到期后 `pendingRequests_.erase` +
+   `requestFailed(TIMEOUT)`；`handleSocketReadyRead()` 再做绝对时间戳兜底，
+   迟到响应（late response）直接丢弃，不再刷新 lastResponse。
+
+3. **TD-023 parser 边界强化**：`parseEnvelope()` 对 `payload` missing / null /
+   non-object 一律拒绝（`PayloadNotObject`），不再回退为空对象；
+   `parseResponse()` 对 status=error envelope 的 `message` 强制
+   非空非空白字符串，null / undefined / 非字符串 / 空串均返回
+   `MissingErrorMessage`，错误 envelope 不再产生"看起来成功"的投影。
+
+4. **空状态 & Stop / Retry UI 交互修复**：`VerticalLinkPage.qml` 新增
+   Stop + Retry 按钮；空状态提示条覆盖 disconnected / reconnecting / connecting /
+   closing；连接状态变为 disconnected/closing 时，ViewModel 立即 fail-close
+   `preChatBusy_ + postTurnBusy_` 并置 stage=idle，防止 UI 挂起在
+   "querying/sending" 的假 busy 空状态。
+
+5. **生产路径假实现检查（代码审计结论）**：
+
+   * `src/` 生产路径未发现固定样例 JSON 直接作为 `return` 值，
+     未发现硬编码的 sample record / user / session；
+
+   * `buildSuccessResponse/buildErrorResponse` 仅在 `tests/` Mock Gateway
+     中被调用，生产路径（`memory_client.*` / `view_models/*`）仅消费
+     来自 QLocalSocket 的真实响应 envelope；
+
+   * D5 \~ D11 业务方法的响应投影 **全部** 为 envelope→QVariant/QJsonObject 投影，
+     不存在 `if (empty) { return fake_data }` 分支；
+
+   * `VerticalLinkPage.qml` / ViewModel 头部保留 Demo/Prototype 降级声明，
+     不误导为真实链路；`memory.store` 仍按 ADR-010 保持
+     `UNSUPPORTED_METHOD`（生产默认不注册）。
+     生产路径为 **fail-closed 默认**：未连接 / error envelope / empty data /
+     timeout / parser error → 一律空投影或明确 failed 状态，不提供假阳性结果。
+
+#### D12-C 登记/关闭的技术债对照 TECHNICAL\_DEBT\_REGISTER.md
+
+| 条目         | 标题                              | D12-C 处置    | 证据 / 验收                                                                     |
+| ---------- | ------------------------------- | ----------- | --------------------------------------------------------------------------- |
+| TD-022     | 客户端 deadline\_ms 超时行为未实现        | **关闭**      | `memory_client.cpp` `startClientDeadlineTimer()` + `expirePendingRequest()` |
+| TD-023     | parser 边界严格性补全                  | **关闭**      | `parseEnvelope()` payload missing/null 拒绝；error message 非空字符串               |
+| TD-IPC-004 | MemoryClient 断线重连机制缺失           | **关闭**      | `startReconnectBackoff()` 3 次指数退避；Reconnecting state + L2 信号                |
+| TD-044     | 历史同值 UPDATE 与 evidence dedup 冲突 | **保留 / 登记** | 跨轨 E×B×C 决策前 fail-closed；不影响生产路径安全                                          |
+| TD-045     | 临时偏好生命周期 reload 后可靠恢复           | **保留 / 登记** | host mapping 前保持 Demo-only；不影响生产路径安全                                        |
 
 ### D8-C 知识详情 / 冲突对比 / 生命周期状态（Demo / Prototype）
 
