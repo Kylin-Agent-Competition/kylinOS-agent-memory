@@ -41,6 +41,7 @@
 #include <QQmlEngine>
 #include <QQmlError>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QString>
 #include <QStringList>
 #include <QTest>
@@ -77,6 +78,15 @@ void TestD11cQmlLoad::initTestCase()
     // 创建前把 offscreen 写入环境（对 main() 之前 Q*App ctor 探测无效，
     // 但可防御本地直接运行可执行文件时的默认 xcb 连接失败）。
     qputenv("QT_QPA_PLATFORM", "offscreen");
+    // D11 顶层是 ScrollView（继承 QQuickItem），component.create()
+    // 会触发 Qt Quick SceneGraph 初始化；CI runner 无 GPU / 无 EGL，
+    // 默认 GL backend 在 offscreen 平台上可能直接 SIGSEGV signal 11。
+    // 这里主动选择 software backend（2D adaption）并在日志中回显，
+    // 确保 L0 headless 能走完 QQuickItem 构造流程。
+    qputenv("QT_QUICK_BACKEND", "software");
+    // Qt 5.12 用字符串形式指定 scene graph backend（软件 2D adaption）
+    // 不依赖 Qt 5.14+ 的 QSGRendererInterface::Software 枚举。
+    QQuickWindow::setSceneGraphBackend(QStringLiteral("software"));
 
     QVERIFY2(QGuiApplication::instance() != nullptr,
              "需要 QGuiApplication（用 QTEST_GUILESS_MAIN 而非 QTEST_MAIN）");

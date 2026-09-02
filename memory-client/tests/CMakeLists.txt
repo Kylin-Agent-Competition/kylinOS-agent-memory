@@ -394,9 +394,14 @@ if(D11C_QML_LOAD_AVAILABLE)
     # CI headless 环境没有 X11 / display server，QGuiApplication 在 main()
     # 阶段尝试加载 xcb 平台插件会以 "could not connect to display" 直接
     # abort（先于 test 内 initTestCase 的 qputenv 执行）。
-    # 在 ctest 目标级别注入 QT_QPA_PLATFORM=offscreen 保证进程启动时
-    # 就命中 offscreen 插件，避免 Subprocess aborted。
+    #
+    # QT_QUICK_BACKEND=software：QQuickItem（D11 顶层是 ScrollView）
+    # create() 时 Qt Quick SceneGraph 会尝试初始化默认的 OpenGL backend；
+    # 即便 QT_QPA_PLATFORM=offscreen，offscreen 平台的 GL context 也
+    # 可能加载失败，导致 component.create() 阶段 SIGSEGV (signal 11)。
+    # 开启 software backend（Qt Quick 2D adaption）即可在无 GPU / 无
+    # EGL 的 L0 CI runner 上安全完成 QQuickItem 实例化。
     set_tests_properties(d11c_qml_load PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
     )
 endif()
