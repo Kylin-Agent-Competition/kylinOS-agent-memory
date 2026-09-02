@@ -16,11 +16,11 @@
 ### ADR-017（DB）推荐方案 A
 
 1. 新增 `memory_relation`、`memory_conflict`、`memory_conflict_member`、`memory_lifecycle_receipt` 四表。
-2. `memory_entries` additive 增列 `knowledge_id`、`content_version_id`、`lifecycle_eligibility`、`memory_status`、`memory_type`、`evidence_tier`、`last_accessed_at`、`access_count`。
+2. `memory_entries` additive 增列 `knowledge_id`、`row_revision`、`knowledge_type`、`conditions`、`lifecycle_eligibility`、`memory_status`、`memory_type`、`evidence_tier`、`last_accessed_at`、`access_count`；`knowledge_type/conditions` 是 ADR-018 受控投影的 SQLite 真源，不从未冻结的正文 JSON shape 临时解析。
 3. 冻结身份映射：
    - `knowledge_id` = E 轨 `Knowledge.knowledge_id`，由可信业务入口生成并持久化；
    - `memory_id` = `memory_entries.id` 的 canonical 十进制字符串；
-   - `version_id` = `memory_entries.content_version_id`；既有 `memory_entries.version` 仅作为内部 CAS `row_revision`，生命周期元数据变化不得改变检索版本身份；
+   - `version_id` = `'v' + memory_entries.version`；既有 B 轨 Vector snapshot/provider 已按此生成版本；新增 `memory_entries.row_revision` 专用于 optimistic CAS，生命周期元数据变化不得改变检索版本身份；
    - Repository 回源必须以 `(user_id, memory_id, version_id)` 三元组精确匹配，不允许仅按 `memory_id` 命中旧版本请求。
 4. legacy 行无法证明 `knowledge_id` 或 `evidence_tier` 时保持 NULL，由迁移一次性写入 `lifecycle_eligibility='legacy_unmapped'`；禁止从正文 JSON、行号或随机值猜测。
 5. Lifecycle Worker 只消费完整 SQLite 快照；任一必需真源缺失即 fail-closed 跳过并记录结构化原因，不调用 Policy、不制造默认值。
@@ -58,8 +58,8 @@ ADR-017 必须同时解决：
 |---|---|---|---|
 | `knowledge_id` | `memory_entries.knowledge_id` | 非空 opaque string，不解析、不由模型生成 | 新 knowledge 写必填；`UNIQUE(user_id, knowledge_id)`（仅非 NULL） |
 | `memory_id` | `memory_entries.id` | canonical 十进制字符串；禁止前导零、符号、小数 | 必须可严格 round-trip 为正整数 PK |
-| `version_id` | `memory_entries.content_version_id` | `^v[1-9][0-9]*$`，例如 `v1` | 内容/索引版本；生命周期元数据更新时保持不变 |
-| `row_revision` | `memory_entries.version` | SQLite positive integer（不进入 IPC/Vector ID） | 仅用于 optimistic CAS |
+| `version_id` | `'v' || memory_entries.version` | `^v[1-9][0-9]*$`，例如 `v1` | 当前内容/索引版本；与既有 Vector snapshot/provider 同源 |
+| `row_revision` | `memory_entries.row_revision` | SQLite positive integer（不进入 IPC/Vector ID） | 仅用于 optimistic CAS；迁移后所有业务 CAS 改用此列 |
 
 服务端解析 `memory_id` 时必须满足：`parsed > 0` 且 `str(parsed) == input`。`version_id` 必须满足 `^v[1-9][0-9]*$`。不满足时返回 `INVALID_REQUEST`，不得宽松归一化。
 
@@ -72,14 +72,15 @@ resolve_knowledge_identity(user_id, memory_id, version_id?)
          AND id = :parsed_memory_id
          AND entry_type = 'knowledge'
          AND knowledge_id IS NOT NULL
-         [AND content_version_id = :version_id]
+         [AND ('v' || CAST(version AS TEXT)) = :version_id]
 ```
 
 - 跨用户、非 knowledge、未映射、版本不匹配均返回 scoped not-found；
 - write/endpoint ownership 校验必须把未映射视为 `INVALID_REQUEST`，不得自动补 ID；
 - `knowledge_id` 不是 `memory_id` 的别名，禁止比较两者字符串相等；
 - `version_id` 是内容/索引身份，不声明为不可变历史表 ID。本 ADR 不新增知识历史版本表，不宣称已提供旧版本正文回放；`relation_type='version'` 只表达两个独立 knowledge identity 的 supersession 关系。
-- 新 knowledge INSERT 由 Repository 写 `content_version_id='v1'`；未来正文变更必须经独立受控 API 同时推进 `content_version_id`，生命周期/访问统计/软删除只推进 `row_revision`，不得推进 `content_version_id`。
+- 新 knowledge INSERT 由 Repository 写 `version=1,row_revision=1`。未来正文或其他索引身份变更必须经独立受控 API 同时令 `version += 1,row_revision += 1` 并触发索引更新；生命周期/访问统计/软删除只推进 `row_revision`，不得推进 `version`。
+- 已核对 `main@6e9394b`（PR #121）的 B 轨 current-version 语义和真实代码路径：`sqlite_vector_snapshot.py` 读取 `memory_entries.version`，`sqlite_vector_provider.py` 输出 `v{source_version}`；SQLite hydration 再以精确 `(user_id,memory_id,version_id)` 构造 `TruthRecord` 并由 SQLite 真源给出 `is_current`。因此本 ADR 保持 `memory_entries.version` 为内容/索引版本，新增独立 `row_revision` 解除 CAS 耦合；Repository 不接受 Provider 自称 current，也不把缺失/陈旧版本改写为 `v1`，且无需修改 `retrieval/` 即与 PR #121 对齐。
 
 ### 2.2 Legacy mapping
 
@@ -90,11 +91,12 @@ resolve_knowledge_identity(user_id, memory_id, version_id?)
 | 字段 | backfill |
 |---|---|
 | `knowledge_id` | NULL（unmapped） |
-| `content_version_id` | `v` + 迁移时既有 `version` 的 canonical 正整数 |
+| `row_revision` | 迁移时既有 `version` 的正整数值（保持旧 optimistic token 可平滑切换） |
 | `lifecycle_eligibility` | `legacy_unmapped` |
 | `memory_status` | `is_deleted=1 → removed`；否则 `candidate` |
 | `memory_type` | `short_term` |
 | `evidence_tier` | NULL（unknown，不伪造为任一六档） |
+| `knowledge_type` / `conditions` | NULL（不从既有 `content` JSON 猜测） |
 | `last_accessed_at` / `access_count` | NULL |
 
 legacy unmapped 行仍可按既有 `memory_entries.id` 读取/遗忘，但不得进入 relation/conflict endpoint、Lifecycle Worker、ADR-018 详情查询或 B 轨 conflict truth 接线。后续如需认领，必须经独立、可审计的 reconciliation API 在同一事务提供可信 `knowledge_id + evidence_tier` 并把 eligibility 改为 `eligible`；普通 INSERT/UPDATE 无权写 `legacy_unmapped`。
@@ -105,7 +107,10 @@ legacy unmapped 行仍可按既有 `memory_entries.id` 读取/遗忘，但不得
 
 ```sql
 ALTER TABLE memory_entries ADD COLUMN knowledge_id TEXT;
-ALTER TABLE memory_entries ADD COLUMN content_version_id TEXT;
+ALTER TABLE memory_entries ADD COLUMN row_revision INTEGER;
+UPDATE memory_entries SET row_revision = version WHERE row_revision IS NULL;
+ALTER TABLE memory_entries ADD COLUMN knowledge_type TEXT;
+ALTER TABLE memory_entries ADD COLUMN conditions TEXT;
 ALTER TABLE memory_entries ADD COLUMN lifecycle_eligibility TEXT;
 ALTER TABLE memory_entries ADD COLUMN memory_status TEXT;
 ALTER TABLE memory_entries ADD COLUMN memory_type TEXT;
@@ -129,32 +134,37 @@ ON memory_entries(user_id, memory_type);
 - `memory_status`：`active/candidate/superseded/deprecated/expired/removed`；
 - `memory_type`：`short_term/medium_term/long_term/ephemeral`；
 - `evidence_tier`：`user_explicit_config_latest/user_confirmed/tool_execution_result/consistent_behavior_multiple/behavior_inference_single/model_inference`；
+- `knowledge_type`：`workflow/case/template/fact/constraint/failure_experience`；
 - `lifecycle_eligibility`：`eligible/legacy_unmapped/evidence_unmapped`；
-- `content_version_id`：NULL 或 `^v[1-9][0-9]*$`；
+- `version`：既有 positive integer，正式定义为内容/索引版本；`version_id` 由 Repository 严格编码为 `v{version}`；
+- `row_revision`：NULL（仅迁移过程中）或 positive integer；迁移完成后所有行均非空；
 - `access_count`：NULL 或 `>= 0`。
 
-SQLite 既有表无法直接追加跨列 conditional NOT NULL CHECK。迁移采用「nullable additive column + legacy backfill + DB trigger/Repository 双门禁」：
+SQLite 既有表无法直接追加跨列 conditional NOT NULL CHECK。迁移采用「nullable additive column + 同事务 `row_revision=version` backfill + legacy backfill + DB trigger/Repository 双门禁」；在对外恢复 writer 前必须确认 `row_revision IS NULL` 行数为 0：
 
 - 迁移对当时存在的 knowledge PK 一次性写 `lifecycle_eligibility='legacy_unmapped'`；迁移完成后触发器禁止 INSERT/普通 UPDATE 把任何行写成 `legacy_unmapped`；
-- 新 INSERT 后 `entry_type='knowledge'` 时，`knowledge_id/content_version_id/memory_status/memory_type/lifecycle_eligibility` 必须非空；eligibility 为 `eligible` 时 `evidence_tier` 必须非空，为 `evidence_unmapped` 时 `evidence_tier` 必须 NULL；
+- 所有 entry_type 的新 INSERT 都必须写 positive `row_revision`（初始为 1），所有 optimistic writer 都只以该列比较/递增；`version` 不再承担 CAS；
+- 新 INSERT 后 `entry_type='knowledge'` 时，`knowledge_id/row_revision/knowledge_type/memory_status/memory_type/lifecycle_eligibility` 必须非空，且 `version >= 1,row_revision >= 1`；`conditions` 允许 NULL，但只能由通过 Domain 校验的 `Knowledge.conditions` 写入；eligibility 为 `eligible` 时 `evidence_tier` 必须非空，为 `evidence_unmapped` 时 `evidence_tier` 必须 NULL；
 - legacy 行只允许保持 `legacy_unmapped`，或由专用 reconciliation UoW 一次性改为 `eligible`；任何其他转换拒绝；
-- 非 knowledge 行允许以上列为 NULL；若提供则仍须满足值域；
+- 非 knowledge 行仅允许 knowledge 专属列（`knowledge_id/knowledge_type/conditions/lifecycle_eligibility/memory_status/memory_type/evidence_tier/last_accessed_at/access_count`）为 NULL；既有 `version` 与新增 `row_revision` 对所有 entry_type 始终 required positive；
 - `is_deleted=1` 与 `memory_status!='removed'` 的新写入拒绝；进入 `removed` 时同步置 `is_deleted=1`。迁移后 `memory_status` 是生命周期最终真源，`is_deleted` 仅为兼容字段。
 
-触发器/Repository 必须覆盖 direct SQL 负路径：迁移后新 knowledge 缺 `knowledge_id/content_version_id`、伪造 `legacy_unmapped`、`eligible + evidence_tier=NULL`、`evidence_unmapped + evidence_tier!=NULL` 均 MUST FAIL。
+触发器/Repository 必须覆盖 direct SQL 负路径：迁移后任意新行缺/非法 `row_revision`、新 knowledge 缺 `knowledge_id/knowledge_type`、`version/row_revision < 1`、伪造 `legacy_unmapped`、`eligible + evidence_tier=NULL`、`evidence_unmapped + evidence_tier!=NULL` 均 MUST FAIL。迁移后现有 `soft_delete_memory_entry` 等 optimistic write 必须从 `version` CAS 切换到 `row_revision`；遗漏任何 writer 视为 Gate fail。`knowledge.detail.knowledge_type/conditions` 只读取上述结构化列；禁止用 `json.loads(memory_entries.content).get(...)` 作为这两个响应字段的真源。
 
 ### 3.1.1 `evidence_tier` 唯一 ingress mapping
 
-Repository 不接受 payload/LLM/Knowledge Domain 直接指定 `evidence_tier`。它只读取 `Knowledge.source_event_id` 指向的同用户 `source_events` 真源，并按下表派生：
+Repository 不接受 payload/LLM/Knowledge Domain 直接指定 `evidence_tier`。它只读取 `Knowledge.source_event_id` 指向的同用户 `source_events` 真源，并先执行不可绕过的准入谓词：事件必须存在、属于同一 `user_id`，且 `admission_decision == 'allow_extraction'`；缺失、跨用户、未知 decision、`reject` 或 `audit_only` 均 fail-closed 拒绝 Knowledge 写入，不得降级成 `evidence_unmapped`，更不得升级为 eligible evidence。只有通过该门禁后才按下表继续派生：
 
 | source_events 真源 | evidence_tier | eligibility |
 |---|---|---|
-| `source_type='manual_config'` 且 `source_business_status IN ('success','completed')` | `user_explicit_config_latest` | `eligible` |
-| `source_type='tool_result'` 且 `source_business_status IN ('success','completed')` | `tool_execution_result` | `eligible` |
-| `source_business_status IN ('failed','cancelled','timeout','ignored')` | 不落 knowledge | 写入拒绝 |
-| 其他已准入来源 | NULL | `evidence_unmapped` |
+| `admission_decision='allow_extraction'` 且 `source_type='manual_config'` 且 `source_business_status IN ('success','completed')` | `user_explicit_config_latest` | `eligible` |
+| `admission_decision='allow_extraction'` 且 `source_type='tool_result'` 且 `source_business_status IN ('success','completed')` | `tool_execution_result` | `eligible` |
+| `admission_decision='allow_extraction'` 且 `source_business_status IN ('failed','cancelled','timeout','ignored')` | 不落 knowledge | 写入拒绝 |
+| `admission_decision='allow_extraction'` 的其他来源/状态组合 | NULL | `evidence_unmapped` |
 
-`user_confirmed/consistent_behavior_multiple/behavior_inference_single/model_inference` 当前没有已冻结的持久化证明，不得由 D8-D 猜测。未来启用必须通过新的跨轨契约明确可信事实与聚合窗口。`evidence_unmapped` knowledge 可持久化为 candidate，但不得进入 Lifecycle Worker 或 ConflictResolutionPolicy 自动裁决。
+`user_confirmed/consistent_behavior_multiple/behavior_inference_single/model_inference` 当前没有已冻结的持久化证明，不得由 D8-D 猜测。未来启用必须通过新的跨轨契约明确可信事实与聚合窗口。`evidence_unmapped` knowledge 可持久化为 candidate，但不得进入 Lifecycle Worker 或 ConflictResolutionPolicy 自动裁决。`admission_reason_code/consent_scope/sensitivity/is_sensitive_matched/should_ignore/payload_security_checked` 继续由已冻结 SourceAdmission 产生并审计；D8-D 不重新解释它们，也不得绕过 `admission_decision` 的最终门禁。
+
+新 Knowledge 的 provenance 采用单一结构化真源：在验证并读取上述 `source_events` 行后，Repository 必须在**同一 UoW**写入 Knowledge 及一条 canonical `memory_relation(relation_type='evidence', is_primary=1, left=Knowledge.knowledge_id, right=Knowledge.source_event_id)`；任一写入失败则整体回滚。`evidence_tier` 派生与后续审计只回查这条 primary relation 指向的同用户 `source_events` 行，`knowledge.detail.evidence[]` 则投影 primary 与后续受控追加的 supporting relations；不允许另从 `content` 或 Domain 自由文本 `evidence` 恢复 provenance。幂等重放复用既有 canonical relation，不重复造边；每个 knowledge 恰有一条 primary evidence relation，同一 `(user_id, knowledge_id, source_event_id)` 也只允许一条 evidence relation。
 
 ### 3.2 `memory_relation`
 
@@ -168,13 +178,29 @@ CREATE TABLE memory_relation (
     left_endpoint_id    TEXT    NOT NULL,
     right_endpoint_type TEXT    NOT NULL,
     right_endpoint_id   TEXT    NOT NULL,
+    is_primary          INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT    NOT NULL,
     CHECK (relation_type IN ('version','evidence','derived')),
     CHECK (left_endpoint_type IN ('knowledge','source_event')),
     CHECK (right_endpoint_type IN ('knowledge','source_event')),
+    CHECK (is_primary IN (0, 1)),
+    CHECK (relation_type = 'evidence' OR is_primary = 0),
     CHECK (left_endpoint_id <> right_endpoint_id OR left_endpoint_type <> right_endpoint_type),
     UNIQUE (user_id, relation_id)
 );
+
+CREATE UNIQUE INDEX uq_memory_relation_canonical_evidence
+ON memory_relation(user_id, left_endpoint_id, right_endpoint_id)
+WHERE relation_type = 'evidence'
+  AND left_endpoint_type = 'knowledge'
+  AND right_endpoint_type = 'source_event';
+
+CREATE UNIQUE INDEX uq_memory_relation_primary_evidence
+ON memory_relation(user_id, left_endpoint_id)
+WHERE relation_type = 'evidence'
+  AND left_endpoint_type = 'knowledge'
+  AND right_endpoint_type = 'source_event'
+  AND is_primary = 1;
 ```
 
 固定 endpoint 组合：
@@ -185,7 +211,7 @@ CREATE TABLE memory_relation (
 | `derived` | knowledge | knowledge | right 由 left 派生 |
 | `evidence` | knowledge | source_event | left knowledge 由 right event 支撑 |
 
-其他组合一律 `INVALID_REQUEST`。Repository 必须在同一事务内验证所有 endpoint 属于 `user_id`：knowledge 经 `memory_entries.knowledge_id`，source_event 经 `source_events.event_id`。本表不提供任何自由文本 evidence 列；证据只通过 `relation_type='evidence'` 的结构化 source_event endpoint 表达。
+其他组合一律 `INVALID_REQUEST`。Repository 必须在同一事务内验证所有 endpoint 属于 `user_id`：knowledge 经 `memory_entries.knowledge_id`，source_event 经 `source_events.event_id`。本表不提供任何自由文本 evidence 列；证据只通过 `relation_type='evidence'` 的结构化 source_event endpoint 表达。Knowledge ingress 建立的 `is_primary=1` relation 是 `Knowledge.source_event_id → SQLite provenance` 的唯一 canonical 真源；后续独立、受控的 provenance API 只能增加 `is_primary=0` supporting evidence，不能替换 primary 或据此静默重算既有 `evidence_tier`。
 
 索引：
 
@@ -271,7 +297,7 @@ CREATE TABLE memory_lifecycle_receipt (
     knowledge_id          TEXT    NOT NULL,
     memory_entry_id       INTEGER NOT NULL,
     evaluated_revision    INTEGER NOT NULL,
-    content_version_id    TEXT    NOT NULL,
+    version_id            TEXT    NOT NULL,
     policy_config_hash    TEXT    NOT NULL,
     evaluated_at          TEXT    NOT NULL,
     action                TEXT    NOT NULL,
@@ -287,11 +313,11 @@ CREATE TABLE memory_lifecycle_receipt (
 );
 
 CREATE UNIQUE INDEX uq_lifecycle_archive_once
-ON memory_lifecycle_receipt(user_id, knowledge_id, content_version_id, action, reason_code)
+ON memory_lifecycle_receipt(user_id, knowledge_id, version_id, action, reason_code)
 WHERE action = 'archive_request';
 ```
 
-`evaluation_id` 由可信 scheduler/CLI 为一次逻辑评估生成并在重试时复用，不得由 LLM 生成。`evaluation_fingerprint` = SHA-256(JCS(`user_id, knowledge_id, memory_entry_id, evaluated_revision, content_version_id, evaluated_at, policy_config_hash`))；同 `(user_id,evaluation_id)` 同 fingerprint 返回首次 receipt，不重复 Policy/mutation/outbox，不同 fingerprint 直接 `INVALID_REQUEST`。同一 knowledge/content_version/action/reason 的 archive request 只产生一次 receipt/outbox；后续 scheduler 重扫返回首次 disposition receipt。
+`evaluation_id` 由可信 scheduler/CLI 为一次逻辑评估生成并在重试时复用，不得由 LLM 生成。`evaluated_at` 是该 logical evaluation identity 的 immutable input：首次尝试生成后，scheduler/CLI 对同一 `evaluation_id` 的所有重试必须复用首次时间戳，不得用重试墙钟时间重算。`evaluation_fingerprint` = SHA-256(JCS(`user_id, knowledge_id, memory_entry_id, evaluated_revision, version_id, evaluated_at, policy_config_hash`))；其中 `version_id` 是评估时由 `memory_entries.version` 编码出的 `vN`。同 `(user_id,evaluation_id)` 且同 `evaluated_at`/同 fingerprint 返回首次 receipt，不重复 Policy/mutation/outbox；同 evaluation_id 携带新的 `evaluated_at` 或任何其他 fingerprint 输入变化均直接 `INVALID_REQUEST`。同一 knowledge/version/action/reason 的 archive request 只产生一次 receipt/outbox；后续 scheduler 重扫返回首次 disposition receipt。
 
 ## 4. Lifecycle execution
 
@@ -302,10 +328,15 @@ Worker 只选择：
 ```text
 entry_type='knowledge'
 AND knowledge_id IS NOT NULL
+AND knowledge_type IS NOT NULL
+AND version >= 1
+AND row_revision >= 1
 AND lifecycle_eligibility='eligible'
 AND memory_status IS NOT NULL
 AND memory_type IS NOT NULL
 AND evidence_tier IS NOT NULL
+AND EXISTS (exactly one same-user is_primary=1 evidence relation
+            whose source_event admission_decision='allow_extraction')
 ```
 
 `confidence_score` 复用 `memory_entries.confidence`；`created_at/updated_at/access_count/last_accessed_at` 均从同一 SQLite row 读取。`policy_config_hash` 对 PolicyConfig 的字段名排序 JCS 计算（timedelta 统一为整数微秒）；PolicyConfig 本身不含秘密。快照构造与状态更新在同一 UoW 内重新校验 row revision，防止 stale decision 覆盖并发更新。
@@ -314,8 +345,8 @@ AND evidence_tier IS NOT NULL
 
 | action | 原子持久化 | Outbox |
 |---|---|---|
-| promote/demote | `memory_type=target_memory_type`，`row_revision += 1`；`content_version_id` 不变 | `memory.lifecycle.changed` |
-| expire | `memory_status='expired'`，`row_revision += 1`；`content_version_id` 不变 | `memory.lifecycle.changed` |
+| promote/demote | `memory_type=target_memory_type`，`row_revision += 1`；`version`/`version_id` 不变 | `memory.lifecycle.changed` |
+| expire | `memory_status='expired'`，`row_revision += 1`；`version`/`version_id` 不变 | `memory.lifecycle.changed` |
 | archive_request | 业务行不变；写 receipt | `memory.lifecycle.archive_requested` |
 | hold/reject | 业务行不变；仅写 receipt | 无 Outbox |
 
@@ -325,22 +356,22 @@ mutation SQL 固定为以下两类（列名不可动态来自外部输入）：
 -- promote / demote
 UPDATE memory_entries
 SET memory_type = :target_memory_type,
-    version = :evaluated_revision + 1,
+    row_revision = :evaluated_revision + 1,
     updated_at = :now
 WHERE user_id = :user_id
   AND id = :memory_entry_id
-  AND version = :evaluated_revision
-  AND content_version_id = :content_version_id;
+  AND row_revision = :evaluated_revision
+  AND version = :evaluated_version;
 
 -- expire
 UPDATE memory_entries
 SET memory_status = 'expired',
-    version = :evaluated_revision + 1,
+    row_revision = :evaluated_revision + 1,
     updated_at = :now
 WHERE user_id = :user_id
   AND id = :memory_entry_id
-  AND version = :evaluated_revision
-  AND content_version_id = :content_version_id;
+  AND row_revision = :evaluated_revision
+  AND version = :evaluated_version;
 ```
 
 固定事务顺序：先查 `(user_id,evaluation_id)` replay/conflict → 读 row + 构造 snapshot → 调用 Policy 一次 → mutation action 执行 CAS → 插入 receipt → 必要时入 Outbox → commit。仅 `rowcount=1` 时 mutation action 才能插入 receipt + Outbox；`rowcount=0` 必须回滚本次所有副作用，重新读取一次并返回 structured CAS miss，禁止用旧 decision 重试 UPDATE。archive/hold/reject 不执行 row UPDATE，以 receipt 唯一键保证 replay 幂等；archive 另由部分唯一索引阻止不同 evaluation_id 重复产生同一 disposition。
@@ -376,7 +407,7 @@ Producer 与业务 mutation 同事务提交。Consumer 不在 ADR-017 范围；�
 1. `knowledge_id == memory_id == memory_entries.id`：拒绝，混淆 opaque Domain ID 与 SQLite PK。
 2. 从 `content` JSON backfill `knowledge_id/evidence_tier`：拒绝，正文不是身份/证据真源且会制造 provenance。
 3. 独立 `memory_lifecycle` 表：拒绝，增加 JOIN 与双真源风险。
-4. 本版新增 `knowledge_versions`：拒绝扩大范围；`content_version_id` 只表达当前内容/索引身份，历史正文版本需后续独立 ADR。
+4. 本版新增 `knowledge_versions`：拒绝扩大范围；`memory_entries.version`/`version_id=vN` 只表达当前内容/索引身份，历史正文版本需后续独立 ADR。
 5. Outbox 新 aggregate_type：拒绝，无需为事件路由扩展既有 DB CHECK。
 
 ---
@@ -403,12 +434,16 @@ Producer 与业务 mutation 同事务提交。Consumer 不在 ADR-017 范围；�
   "memory_id": "42",
   "version_id": "v3",
   "include_evidence": true,
-  "include_conditions": true
+  "include_conditions": true,
+  "relation_limit": 25,
+  "after_relation_created_at": null,
+  "after_relation_id": null
 }
 ```
 
 - `memory_id` 必填；`version_id` 可选，提供时必须精确匹配；
 - `include_evidence/include_conditions` 默认 true；
+- `relation_limit` 为 strict integer（bool/float/string 均拒绝），默认 25，范围 1..25；relation cursor 两字段必须同时缺失或同时提供；排序固定为 `memory_relation.created_at ASC, relation_id ASC`，cursor 为 exclusive；
 - scoped not-found 响应：`data = {"found": false}`（保持 FRZ-IPC-006 `data` 为 object）。
 
 成功 `data`：
@@ -427,6 +462,7 @@ Producer 与业务 mutation 同事务提交。Consumer 不在 ADR-017 范围；�
   "conditions_redacted": false,
   "evidence": [],
   "relation_ids": [],
+  "next_relation_cursor": null,
   "conflict_state": "none",
   "created_at": "2026-09-02T00:00:00+00:00",
   "updated_at": "2026-09-02T00:00:00+00:00"
@@ -438,9 +474,13 @@ Producer 与业务 mutation 同事务提交。Consumer 不在 ADR-017 范围；�
 | 字段 | include=false | 原值 None/空白 | 原值非空 |
 |---|---|---|---|
 | `conditions` | `[]`，redacted=false | `[]`，redacted=false | 通过 IpcTextProjectionGate → `[value]`；失败 → `[]`，redacted=true |
-| `evidence` | `[]` | `[]` | 只投影 `memory_relation(type=evidence)` 的 `{relation_id, source_event_id}` 结构化对象；绝不返回 Domain `evidence` 自由文本 |
+| `evidence` | `[]` | `[]` | 只投影当前 relation page 中 `memory_relation(type=evidence)` 的 `{relation_id, source_event_id, is_primary}` 结构化对象；绝不返回 Domain `evidence` 自由文本 |
 
-输出是受控投影，不直接返回 `memory_entries.content`，不返回用户原文、敏感 evidence 正文、内部 row dump 或其他用户标识。
+`relation_ids[]` 与 `evidence[]` 是同一个 relation page 的两种受控投影：Repository 查询所有以当前 knowledge 为端点的 relation，按上述稳定顺序读取 `relation_limit+1`；`relation_ids[]` 返回本页全部 relation ID，`evidence[]` 仅返回其中以当前 knowledge 为 left endpoint 的 evidence relation。`next_relation_cursor` 只在过滤后确有下一条 relation 时返回 `{"created_at":"...","relation_id":"..."}`。客户端用 continuation 可无遗漏取得全部 relation/evidence；禁止只取前 N 条后静默丢弃，禁止重复或跳项。`include_evidence=false` 时 evidence 固定 `[]`，但 relation page/cursor 仍按相同顺序推进，避免同一请求形状产生不同 cursor 语义。
+
+分页同时受真实编码 byte budget 约束：handler 按稳定顺序逐项加入 `relation_ids/evidence`，每加入一条 relation 后都调用既有 `gateway.protocol.encode()` 对**完整 response envelope**试编码。该函数对 UTF-8 JSON body 执行 `MAX_MSG_LEN=65536` 校验，返回值另含 4-byte length prefix；只有真实编码成功的条目才进入当前页。若下一条会超限，则当前页在上一条结束，并以最后已返回 relation 写 `next_relation_cursor`；不得截断字段、吞掉 relation 或返回假成功。若单条最大 128-byte ID relation 仍不能装入仅含基础详情的空页，则返回 `INTERNAL_ERROR` 并记录仅含结构化 ID 的审计事件。L1 必须以最大长度 ID 和大量 relation/evidence 证明：每个 JSON body 均不超过 65536 bytes，byte-budget 提前分页后 continuation 可无遗漏、无重复取回全部记录。
+
+输出是受控投影：`knowledge_type/conditions` 分别只读 `memory_entries.knowledge_type/conditions`，关系证据只读 `memory_relation`；不直接返回或解析 `memory_entries.content`，不返回用户原文、Domain 自由文本 evidence、敏感 evidence 正文、内部 row dump 或其他用户标识。
 
 ## 10. `conflict.compare`
 
@@ -483,7 +523,7 @@ Producer 与业务 mutation 同事务提交。Consumer 不在 ADR-017 范围；�
 
 顶层响应固定为 `{"candidates": [...], "next_cursor": {"detected_at": "...", "conflict_id": "..."}|null}`。`conflict_summary` 只能是 ADR-017 固定系统码；普通调用方不返回 `knowledge_id`、`resolved_by` 或内部 evidence。Repository 限制单 conflict 最多 32 个 involved 输入（None/空/重复语义仍按 §3.4 无损保存）；超限写入拒绝。
 
-分页同时受条数和真实编码 byte budget 约束：Repository 读取 `limit+1` 后，handler 按稳定顺序逐项投影，每加入一项都用既有 `encode_message()` 对完整 envelope 试编码；只有 `<=65536` bytes 才接受。若下一项会超限，则当前页在上一项结束并把最后已返回项写入 `next_cursor`，下一请求从该 cursor 后继续，禁止丢项/截断字段/返回假成功。若单项在已冻结 128-byte ID、32 involved 上限下仍不能装入空页，返回 `INTERNAL_ERROR` 并记录仅含结构化 ID 的审计事件；L1 必须证明最大长度 ID × 32 members 的单项可装入，以及 25 项因 byte budget 提前分页后能继续取得全部记录。
+分页同时受条数和真实编码 byte budget 约束：Repository 读取 `limit+1` 后，handler 按稳定顺序逐项投影，每加入一项都用既有 `gateway.protocol.encode()` 对完整 response envelope 试编码；该函数限制 UTF-8 JSON body 为 `MAX_MSG_LEN=65536`，4-byte length prefix 不计入 body 上限。只有真实编码成功的项才接受。若下一项会超限，则当前页在上一项结束并把最后已返回项写入 `next_cursor`，下一请求从该 cursor 后继续，禁止丢项/截断字段/返回假成功。若单项在已冻结 128-byte ID、32 involved 上限下仍不能装入空页，返回 `INTERNAL_ERROR` 并记录仅含结构化 ID 的审计事件；L1 必须证明最大长度 ID × 32 members 的单项可装入，以及 25 项因 byte budget 提前分页后能继续取得全部记录。
 
 ## 11. `lifecycle.status`
 
@@ -565,15 +605,16 @@ legacy/evidence-unmapped lifecycle-ineligible 行不出现在列表中。仅过�
 ### 14.3 L0/L1
 
 - migration single-head、upgrade/downgrade data-loss guard、schema/metadata 一致；
-- canonical ID 正/负/边界测试（`1/v1` 合法，`01/+1/v01/v0` 拒绝），并断言 lifecycle row_revision 变化不改变 content_version_id；
-- direct SQL 门禁：新行伪造 `legacy_unmapped`、eligibility/evidence 不一致 MUST FAIL；legacy/evidence-unmapped 不进入 Worker/IPC/conflict truth；
-- evidence_tier ingress：manual_config/tool success 两条正路、失败/取消拒绝、其余 evidence_unmapped，payload/LLM 不得覆盖；
+- canonical ID 正/负/边界测试（`1/v1` 合法，`01/+1/v01/v0` 拒绝），并断言 lifecycle row_revision 变化不改变 `memory_entries.version`/`version_id`；迁移把旧 version 复制到 row_revision，所有既有 CAS writer 改用 row_revision；
+- direct SQL 门禁：新行缺 knowledge_type、伪造 `legacy_unmapped`、eligibility/evidence 不一致 MUST FAIL；legacy/evidence-unmapped 不进入 Worker/IPC/conflict truth；
+- evidence_tier ingress：仅 `allow_extraction` 可继续映射；manual_config/tool success 两条正路；`tool_result + success + reject`、`manual_config + completed + audit_only`、失败/取消均拒绝写 Knowledge；其余已准入来源为 evidence_unmapped；payload/LLM 不得覆盖；
+- 新 Knowledge 与唯一 `is_primary=1` canonical evidence relation 同 UoW 原子写入，失败整体回滚；重复 `(user,knowledge,source_event)` 不造第二条；evidence tier/audit 只由 primary relation 回查同用户 source_event，supporting relation 不静默改 tier；
 - relation endpoint type/方向/ownership；relation 无自由文本列；conflict member 的 None/empty/duplicate/order round-trip 与 33 项超限拒绝；
 - conflict summary 输入 Sentinel 不出现在 SQLite、日志、Outbox、IPC，持久化/响应只能是固定 `conflict:<type>`；
-- LifecycleDecision 六 action、receipt replay/conflict、archive semantic dedup、两个并发 evaluation CAS 仅一方提交、CAS miss 全事务回滚、removed/expired 不恢复；
+- LifecycleDecision 六 action、receipt replay/conflict、archive semantic dedup、两个并发 evaluation CAS 仅一方提交、CAS miss 全事务回滚、removed/expired 不恢复；同 evaluation_id + 同首次 evaluated_at 为 replay，同 evaluation_id + 新 evaluated_at 为 conflict，scheduler retry 复用 logical timestamp；
 - Outbox Producer 同事务原子性与 payload 零正文；hold/reject 不产生 Outbox；
-- ADR-018 payload extra-forbid、synthetic trusted identity 必填、mismatch 先于查询、scoped empty object、strict limit/cursor 与 65536-byte encoder 边界；
-- conditions/evidence 投影矩阵、IpcTextProjectionGate 敏感 Sentinel/控制字符/257-byte 拒绝；
+- ADR-018 payload extra-forbid、synthetic trusted identity 必填、mismatch 先于查询、scoped empty object、strict limit/cursor 与 `gateway.protocol.encode()` 65536-byte JSON body 边界；
+- knowledge_type/conditions 结构化列真源、conditions/evidence 投影矩阵、IpcTextProjectionGate 敏感 Sentinel/控制字符/257-byte 拒绝；knowledge.detail 最大 ID × 大量 relation/evidence 的 byte-budget 提前分页及 continuation 全量无遗漏/无重复；
 - `git diff --check`、ruff F/E9、compileall、敏感信息扫描、全量 pytest 不回退。
 
 ### 14.4 L2（签署/实现后，当前 NOT_TESTED）
@@ -597,7 +638,7 @@ legacy/evidence-unmapped lifecycle-ineligible 行不出现在列表中。仅过�
 ## 十六、当前限制
 
 - 当前仅为文档决策草案，无 Runtime 代码、L1、L2 或 HOST_VERIFIED 事实；
-- knowledge immutable history 不在本 ADR，`version_id` 仅为当前内容/索引身份，`memory_entries.version` 仅为 row revision；
+- knowledge immutable history 不在本 ADR，`version_id='v' + memory_entries.version` 仅为当前内容/索引身份，独立 `memory_entries.row_revision` 仅为 CAS；
 - legacy unmapped knowledge 不自动认领；
 - Outbox Consumer、Vector cleanup、冲突检测、TTL 数值均不在范围；
 - ADR-018 production handler 默认不注册。
