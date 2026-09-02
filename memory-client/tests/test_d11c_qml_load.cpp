@@ -73,6 +73,9 @@ private slots:
     // E. 再次加载：重复实例化无冲突（保证 QML 缓存和 id 命名无泄漏）
     void multipleInstantiationsDoNotLeak();
 
+    // F. MEDIUM-03：初始态安全汇总不得显示 PASS/OK/READY 绿灯（避免"未执行"被误读为"已通过"）。
+    void summaryLightsInitiallyNoGreen();
+
 private:
     QScopedPointer<QQmlEngine> engine_;
 
@@ -84,8 +87,12 @@ private:
     static QString formatComponentErrors(const QQmlComponent& c);
     // 格式化 QQuickView::errors() 为单行字符串
     static QString formatViewErrors(const QQuickView& v);
-    // 在 item 树中查找至少一个 implicitHeight > 0 的 QQuickItem
-    static bool findChildWithPositiveImplicitHeight(QQuickItem* parent);
+    // 在 item 树中递归查找全部 Step Card（通过 objectName
+    // "d11-step-1-card" ~ "d11-step-5-card" 精确定位，MEDIUM-01）。
+    // 返回找到的 Card item 列表（按 1~5 顺序）。
+    static QVector<QQuickItem*> findAllStepCards(QQuickItem* root);
+    // 验证所有 5 张 Card 都存在且 implicitHeight > 0 / height > 0
+    static bool validateAllStepCards(const QVector<QQuickItem*>& cards);
 };
 
 void TestD11cQmlLoad::initTestCase()
@@ -218,14 +225,69 @@ bool TestD11cQmlLoad::waitReady(QQmlComponent& c, const char* caller)
     return c.status() == QQmlComponent::Ready;
 }
 
-bool TestD11cQmlLoad::findChildWithPositiveImplicitHeight(QQuickItem* parent)
+// MEDIUM-01：按 objectName 精确找 5 张 Step Card（d11-step-[1..5]-card），
+// 避免被 Label/Button 等控件的正 implicitHeight 误判通过。
+static void collectStepCards(QQuickItem* item,
+                             QVector<QQuickItem*>& out1to5)
 {
-    if (!parent) return false;
-    if (parent->implicitHeight() > 0) return true;
-    for (QQuickItem* child : parent->childItems()) {
-        if (findChildWithPositiveImplicitHeight(child)) return true;
+    if (!item) return;
+    const QString name = item->objectName();
+    if (name.startsWith(QStringLiteral("d11-step-"))
+        && name.endsWith(QStringLiteral("-card"))) {
+        // 按 objectName 数字填入对应位置
+        const QString num = name.mid(
+            QStringLiteral("d11-step-").size(), 1);
+        bool ok = false;
+        const int idx = num.toInt(&ok);
+        if (ok && idx >= 1 && idx <= 5 && out1to5.size() == 5) {
+            out1to5[idx - 1] = item;
+        }
     }
-    return false;
+    for (QQuickItem* c : item->childItems()) {
+        collectStepCards(c, out1to5);
+    }
+}
+
+QVector<QQuickItem*> TestD11cQmlLoad::findAllStepCards(QQuickItem* root)
+{
+    QVector<QQuickItem*> out(5, nullptr);
+    collectStepCards(root, out);
+    return out;
+}
+
+bool TestD11cQmlLoad::validateAllStepCards(
+    const QVector<QQuickItem*>& cards)
+{
+    if (cards.size() != 5) return false;
+    for (int i = 0; i < 5; ++i) {
+        QQuickItem* card = cards[i];
+        if (!card) {
+            qCritical() << "[d11c_qml_load MEDIUM-01]"
+                        << "缺失 Step" << (i + 1) << "Card (objectName 找不到)";
+            return false;
+        }
+        const qreal ih = card->implicitHeight();
+        const qreal h  = card->height();
+        if (ih <= 0) {
+            qCritical() << "[d11c_qml_load MEDIUM-01]"
+                        << "Step" << (i + 1)
+                        << "Card implicitHeight=" << ih
+                        << "（应为 > 0；objectName=" << card->objectName() << "）";
+            return false;
+        }
+        if (h <= 0) {
+            qCritical() << "[d11c_qml_load MEDIUM-01]"
+                        << "Step" << (i + 1)
+                        << "Card height=" << h
+                        << "（应为 > 0；objectName=" << card->objectName() << "）";
+            return false;
+        }
+        qDebug() << "[d11c_qml_load MEDIUM-01]"
+                 << "Step" << (i + 1)
+                 << "Card objectName=" << card->objectName()
+                 << "implicitHeight=" << ih << "height=" << h;
+    }
+    return true;
 }
 
 void TestD11cQmlLoad::resourceUrlResolves()
@@ -316,14 +378,29 @@ void TestD11cQmlLoad::componentCreatesWithoutErrors()
             .arg(QString::fromLatin1(root->metaObject()->className()));
     QVERIFY2(rootItem != nullptr, qPrintable(rootMsg));
 
-    // 至少一个主演示 Card 实例化后的 implicitHeight > 0
-    // （HIGH-01 布局修复：Rectangle.implicitHeight = content.implicitHeight + 20）
-    const bool hasPositiveHeight =
-        findChildWithPositiveImplicitHeight(rootItem);
-    QVERIFY2(hasPositiveHeight,
-             "至少一个 Step Card 的 implicitHeight 必须 > 0 "
-             "（HIGH-01 布局修复验证：Rectangle.implicitHeight = "
-             "contentColumnLayout.implicitHeight + 20）");
+    // MEDIUM-01：按 objectName 精确验证 5 张 Step Card 都存在，
+    // 且每张 implicitHeight > 0 且实际 height > 0（HIGH-01 布局修复）。
+    // 不再使用递归找"任意 implicitHeight>0 的 QQuickItem"（那会被
+    // Label/Button 等控件误判通过）。
+    //
+    // 注意：QQuickView::show() + QTest::qWait() 触发一次 layout 计算，
+    // 保证 height 已分配（否则 ColumnLayout/RowLayout 不完成 layout 可能
+    // height 仍为 0）。
+    view.show();
+    view.resize(960, 640);
+    {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < 300) QTest::qWait(20);
+    }
+    const QVector<QQuickItem*> cards = findAllStepCards(rootItem);
+    {
+        const QString countMsg = QStringLiteral(
+            "应找到 5 张 Step Card，实际 null 数量=%1/5（缺 objectName）")
+            .arg(std::count_if(cards.begin(), cards.end(),
+                               [](QQuickItem* p) { return p == nullptr; }));
+        QVERIFY2(validateAllStepCards(cards), qPrintable(countMsg));
+    }
 }
 
 void TestD11cQmlLoad::viewModelAliasExistsAndInitiallyNull()
@@ -386,12 +463,81 @@ void TestD11cQmlLoad::multipleInstantiationsDoNotLeak()
         QVERIFY2(view.rootObject() != nullptr,
                  qPrintable(QStringLiteral("第 %1 次实例化：rootObject 为空").arg(i + 1)));
 
-        // 每次实例化后至少一个 Card 有正高度（验证 implicitHeight 绑定不泄漏）
+        // MEDIUM-01：每次实例化后验证 5 张 Step Card 都存在且
+        // implicitHeight/height > 0（验证 objectName + implicitHeight
+        // 绑定无泄漏）。
+        view.show();
+        view.resize(960, 640);
+        {
+            QElapsedTimer t;
+            t.start();
+            while (t.elapsed() < 250) QTest::qWait(20);
+        }
         QQuickItem* rootItem = qobject_cast<QQuickItem*>(view.rootObject());
         QVERIFY2(rootItem != nullptr,
                  qPrintable(QStringLiteral("第 %1 次实例化：root 非 QQuickItem").arg(i + 1)));
-        QVERIFY2(findChildWithPositiveImplicitHeight(rootItem),
-                 qPrintable(QStringLiteral("第 %1 次实例化：无 Card implicitHeight > 0").arg(i + 1)));
+        const QVector<QQuickItem*> cards = findAllStepCards(rootItem);
+        QVERIFY2(validateAllStepCards(cards),
+                 qPrintable(QStringLiteral(
+                     "第 %1 次实例化：5 张 Step Card 未全部存在或高度不合法")
+                                .arg(i + 1)));
+    }
+}
+
+// ── F · MEDIUM-03：页面初始态，验收汇总灯不得显示 PASS/OK/READY 绿灯 ─────
+//
+// 验收总览的每一项都必须 gate 到"对应 pipeline 已执行完成"之后。
+// 否则，ViewModel 中初始态的布尔 getter 可能返回 trivially-true（例如
+// textIsolationVerified 在空 context 时直接返回 true），于是页面一
+// 打开就亮起绿灯，把"尚未验证"误导为"已经验证通过"。
+//
+// 本测试通过 objectName 直接读取 4 个汇总 Label 的 text，断言其中不
+// 出现 PASS/OK/READY 绿灯字样。
+void TestD11cQmlLoad::summaryLightsInitiallyNoGreen()
+{
+    QQuickView view;
+    applyImportPaths(view.engine());
+    view.setSource(QUrl(QStringLiteral("qrc:/memory_client/pages/D11DemoOrchestratorPage.qml")));
+    QTRY_VERIFY2_WITH_TIMEOUT(view.status() == QQuickView::Ready,
+                              qPrintable(formatViewErrors(view)), 5000);
+    QVERIFY(view.rootObject() != nullptr);
+    view.show();
+    view.resize(960, 640);
+    {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < 250) QTest::qWait(20);
+    }
+    QQuickItem* rootItem = qobject_cast<QQuickItem*>(view.rootObject());
+    QVERIFY(rootItem != nullptr);
+
+    static const struct {
+        const char* objectName;
+        const char* description;
+    } kLights[] = {
+        {"d11-summary-text-isolation",    "原文隔离 (D5-C)"},
+        {"d11-summary-selector-cleared",  "Selector 明文清除"},
+        {"d11-summary-credential-chain",  "凭据链闭合"},
+        {"d11-summary-forget-missing",    "遗忘漏删一致性"},
+    };
+
+    // 初始态没有 ViewModel 上下文注入 → 所有 stage 都是 idle/idle/idle/idle
+    // → 4 个灯都必须显示"未执行 · —"，不能提前亮绿灯。
+    for (const auto& light : kLights) {
+        auto* label = rootItem->findChild<QQuickItem*>(QLatin1String(light.objectName));
+        QVERIFY2(label != nullptr,
+                 qPrintable(QStringLiteral("D11C-QML-F: 未找到汇总 Label objectName=%1 (%2)")
+                                .arg(QLatin1String(light.objectName))
+                                .arg(QLatin1String(light.description))));
+        const QString text = label->property("text").toString();
+        QVERIFY2(!text.contains(QLatin1String("PASS"), Qt::CaseInsensitive)
+                 && !text.contains(QLatin1String("OK"), Qt::CaseInsensitive)
+                 && !text.contains(QLatin1String("READY"), Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral(
+                     "D11C-QML-F: [%1] 初始态显示绿灯 text=\"%2\"，但 5 步尚未执行，"
+                     "不得提前显示 PASS/OK/READY")
+                                .arg(QLatin1String(light.description))
+                                .arg(text)));
     }
 }
 

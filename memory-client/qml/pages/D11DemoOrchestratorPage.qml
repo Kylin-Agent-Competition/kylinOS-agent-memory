@@ -135,6 +135,7 @@ ScrollView {
             Layout.fillWidth: true
             spacing: 4
             Rectangle {
+                objectName: "d11-step-1-card"
                 Layout.fillWidth: true
                 implicitHeight: step1Content.implicitHeight + 20
                 border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
@@ -207,6 +208,7 @@ ScrollView {
         ColumnLayout {
             Layout.fillWidth: true; spacing: 4
             Rectangle {
+                objectName: "d11-step-2-card"
                 Layout.fillWidth: true
                 implicitHeight: step2Content.implicitHeight + 20
                 border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
@@ -261,6 +263,7 @@ ScrollView {
         ColumnLayout {
             Layout.fillWidth: true; spacing: 4
             Rectangle {
+                objectName: "d11-step-3-card"
                 Layout.fillWidth: true
                 implicitHeight: step3Content.implicitHeight + 20
                 border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
@@ -307,6 +310,7 @@ ScrollView {
         ColumnLayout {
             Layout.fillWidth: true; spacing: 4
             Rectangle {
+                objectName: "d11-step-4-card"
                 Layout.fillWidth: true
                 implicitHeight: step4Content.implicitHeight + 20
                 border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
@@ -368,6 +372,7 @@ ScrollView {
         ColumnLayout {
             Layout.fillWidth: true; spacing: 4
             Rectangle {
+                objectName: "d11-step-5-card"
                 Layout.fillWidth: true
                 implicitHeight: step5Content.implicitHeight + 20
                 border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
@@ -449,6 +454,8 @@ ScrollView {
         }
 
         // ── 5 步安全汇总（D11C 验收：三绿总览） ────────────────────────
+        // MEDIUM-03：所有汇总灯必须 gate 到"对应 pipeline 已完成执行"之后；
+        // 未执行/执行中不得显示 PASS/OK（避免初始态假阳性把"尚未验证"显示成"验证通过"）。
         GroupBox {
             Layout.fillWidth: true
             title: qsTr("安全 & 隔离汇总 (验收总览)")
@@ -459,19 +466,43 @@ ScrollView {
                 Row {
                     Label { text: qsTr("原文隔离 (D5-C): ") }
                     Label {
-                        text: (viewModel && viewModel.textIsolationVerified)
-                              ? qsTr("PASS ✓") : qsTr("—")
-                        color: (viewModel && viewModel.textIsolationVerified)
-                               ? "#2e7d32" : "#666"
+                        text: {
+                            if (!viewModel) return qsTr("—");
+                            // Gate 到 Step1 preChat 完成：stage==ready 才允许给 PASS/FAIL
+                            if (viewModel.preChatStage !== "ready") return qsTr("未执行 · —");
+                            return viewModel.textIsolationVerified
+                                   ? qsTr("PASS ✓") : qsTr("FAIL ✗");
+                        }
+                        color: {
+                            if (!viewModel) return "#666";
+                            if (viewModel.preChatStage !== "ready") return "#9e9e9e";
+                            return viewModel.textIsolationVerified
+                                   ? "#2e7d32" : "#c62828";
+                        }
+                        objectName: "d11-summary-text-isolation"
                     }
                 }
                 Row {
                     Label { text: qsTr("Selector 明文清除 (D10-C HIGH-01): ") }
                     Label {
-                        text: (viewModel && viewModel.forgetSelectorCleared)
-                              ? qsTr("PASS ✓") : qsTr("—")
-                        color: (viewModel && viewModel.forgetSelectorCleared)
-                               ? "#2e7d32" : "#666"
+                        text: {
+                            if (!viewModel) return qsTr("—");
+                            // Gate 到 Step5 forget 执行完成（completed / failed）后才显示
+                            if (viewModel.forgetStage !== "completed"
+                                && viewModel.forgetStage !== "failed")
+                                return qsTr("未执行 · —");
+                            return viewModel.forgetSelectorCleared
+                                   ? qsTr("PASS ✓") : qsTr("FAIL ✗");
+                        }
+                        color: {
+                            if (!viewModel) return "#666";
+                            if (viewModel.forgetStage !== "completed"
+                                && viewModel.forgetStage !== "failed")
+                                return "#9e9e9e";
+                            return viewModel.forgetSelectorCleared
+                                   ? "#2e7d32" : "#c62828";
+                        }
+                        objectName: "d11-summary-selector-cleared"
                     }
                 }
                 Row {
@@ -485,7 +516,9 @@ ScrollView {
                                 && viewModel.forgetConfirmationCredential
                                 && viewModel.forgetConfirmationCredential.length > 0)
                                 return qsTr("READY ✓ (等待 Execute)");
-                            return qsTr("—");
+                            if (viewModel.forgetStage === "failed")
+                                return qsTr("FAIL ✗ (凭据不匹配 / 过期)");
+                            return qsTr("未执行 · —");
                         }
                         color: {
                             if (!viewModel) return "#666";
@@ -494,21 +527,37 @@ ScrollView {
                                 && viewModel.forgetConfirmationCredential
                                 && viewModel.forgetConfirmationCredential.length > 0)
                                 return "#2e7d32";
-                            return "#666";
+                            if (viewModel.forgetStage === "failed") return "#c62828";
+                            return "#9e9e9e";
                         }
+                        objectName: "d11-summary-credential-chain"
                     }
                 }
                 Row {
                     Label { text: qsTr("跨用户拦截 (D10-C #3): ") }
-                    Label { text: qsTr("未触发 (默认)") }
+                    Label { text: qsTr("未触发 (默认)"); color: "#666" }
                 }
                 Row {
                     Label { text: qsTr("遗忘漏删一致性 (v0.3/MEDIUM-03): ") }
                     Label {
-                        text: (viewModel && !viewModel.forgetHasMissingDeletes)
-                              ? qsTr("OK (无漏删)") : qsTr("WARNING")
-                        color: (viewModel && !viewModel.forgetHasMissingDeletes)
-                               ? "#2e7d32" : "#c62828"
+                        text: {
+                            if (!viewModel) return qsTr("—");
+                            // Gate 到 Step5 forget 已执行完成后才允许判定
+                            if (viewModel.forgetStage !== "completed"
+                                && viewModel.forgetStage !== "failed")
+                                return qsTr("未执行 · —");
+                            return !viewModel.forgetHasMissingDeletes
+                                   ? qsTr("OK (无漏删)") : qsTr("WARNING (漏删)");
+                        }
+                        color: {
+                            if (!viewModel) return "#666";
+                            if (viewModel.forgetStage !== "completed"
+                                && viewModel.forgetStage !== "failed")
+                                return "#9e9e9e";
+                            return !viewModel.forgetHasMissingDeletes
+                                   ? "#2e7d32" : "#c62828";
+                        }
+                        objectName: "d11-summary-forget-missing"
                     }
                 }
                 Label {
