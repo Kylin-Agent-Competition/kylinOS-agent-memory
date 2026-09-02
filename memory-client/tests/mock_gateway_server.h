@@ -59,6 +59,11 @@ public:
 
     void close();
 
+    // 测试后门：向第一个连接的 socket 直接写入一个 envelope 响应。
+    // 用于模拟"延迟到达"的 stale response（MEDIUM-01 stale-response 防回写测试）。
+    // 仅在已有客户端连接时有效；无连接时返回 false。
+    bool sendRawEnvelope(const QJsonObject& envelope);
+
 private slots:
     void handleNewConnection();
 

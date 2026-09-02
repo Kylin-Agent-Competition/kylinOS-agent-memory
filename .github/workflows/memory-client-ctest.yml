@@ -29,7 +29,28 @@ jobs:
             build-essential \
             cmake \
             qtbase5-dev \
-            qt5-qmake
+            qt5-qmake \
+            qtdeclarative5-dev \
+            qtquickcontrols2-5-dev \
+            qml-module-qtquick2 \
+            qml-module-qtquick-controls2 \
+            qml-module-qtquick-layouts \
+            qml-module-qtquick-window2 \
+            qml-module-qtquick-dialogs \
+            libqt5quick5 \
+            libqt5gui5 \
+            libqt5qml5 \
+            libgl1-mesa-dev
+        # d11c_qml_load (Reviewer E HIGH-01) 需要 QQuickView
+        # 真实加载 D11DemoOrchestratorPage.qml，因此 L0 ctest Job 需安装
+        # Qt Quick 头文件 + 运行时 QML 模块；原仅 qtbase5-dev 会在
+        # target_link_libraries(Qt5::Qml/Quick/Gui) 阶段报 IMPORTED target
+        # 未找到，CMake Configure 失败，后续 build/ctest 全部跳过。
+        # libqt5quick5/libqt5gui5 + libgl1-mesa-dev：确保 offscreen runner
+        # 里 Qt Quick SceneGraph software backend plugin 及其 GL fallback
+        # 能被找到（原裸 QQmlComponent::create() 在 headless CI 触发
+        # SIGSEGV signal 11；已改用 QQuickView + QT_QUICK_BACKEND=software
+        # 稳定完成 QQuickItem 实例化 + Step Card implicitHeight>0 验证）。
 
       - name: Configure CMake (QML app OFF, tests ON)
         run: |
@@ -44,6 +65,9 @@ jobs:
       - name: Run ctest
         working-directory: memory-client/build
         run: ctest --output-on-failure --verbose
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
 
   qml-build-smoke:
     name: memory-client QML app smoke build

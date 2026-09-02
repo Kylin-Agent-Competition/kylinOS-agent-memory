@@ -53,6 +53,22 @@ void MockGatewayServer::close()
     }
 }
 
+bool MockGatewayServer::sendRawEnvelope(const QJsonObject& envelope)
+{
+    for (auto& conn : connections_) {
+        if (conn->socket && conn->socket->state() == QLocalSocket::ConnectedState) {
+            const auto packet = encodeEnvelope(envelope);
+            if (packet.has_value()) {
+                conn->socket->write(*packet);
+                conn->socket->flush();
+                return true;
+            }
+            return false;
+        }
+    }
+    return false;
+}
+
 void MockGatewayServer::handleNewConnection()
 {
     QLocalSocket* socket = server_.nextPendingConnection();
@@ -111,6 +127,14 @@ void MockGatewayServer::handleNewConnection()
                         bad[3] = static_cast<char>(oversized & 0xFF);
                         raw->write(bad, 4);
                         raw->flush();
+                        continue;
+                    }
+                    // 测试后门：若 handler 返回 "__hold__": true，则不回包
+                    // （不 encodeEnvelope、不 write），用于 L0 制造"请求 in-flight
+                    // → reset → 延迟响应"竞态。requestId/traceId 已经 push 到
+                    // received_，外层稍后可通过 sendRawEnvelope 单独注入。
+                    static const QString kHoldKey = QStringLiteral("__hold__");
+                    if (response.value(kHoldKey).toBool()) {
                         continue;
                     }
 
