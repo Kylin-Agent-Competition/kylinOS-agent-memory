@@ -1937,6 +1937,9 @@ void MemoryViewModel::runForgetPreviewPipeline(
     bool requiresConfirmation,
     bool isCascade)
 {
+    // 新请求显式清错（resetForgetProjection 不再清 Error，避免失败路径先 setError
+    // 再 reset 时误覆盖为""导致 L0 断言失败）。
+    setForgetPreviewError({});
     // 未连接时快速失败（避免排队）。
     if (client_.connectionState() != MemoryClient::ConnectionState::Connected) {
         setForgetPreviewError(QStringLiteral("Client is not connected."));
@@ -2036,6 +2039,8 @@ void MemoryViewModel::runForgetExecutePipeline(
     const QString& idempotencyKey,
     const QString& deleteMode)
 {
+    // 新请求显式清错（同 runForgetPreviewPipeline：避免 resetForgetProjection 误清空）。
+    setForgetExecuteError({});
     if (client_.connectionState() != MemoryClient::ConnectionState::Connected) {
         setForgetExecuteError(QStringLiteral("Client is not connected."));
         setForgetStage(QStringLiteral("failed"));
@@ -2277,9 +2282,16 @@ void MemoryViewModel::projectForgetExecute(const QJsonObject& data)
 }
 
 // D10C 统一重置（失败路径 / Pipeline 前置调用；Sentinel 验证不留明文 selector）。
+// ⚠️ 关键修复：**不重置 forgetPreviewError / forgetExecuteError**：
+//   失败路径通常是先 setForget*Error(message) 再调用本函数（SEC-FORGET-03 校验、
+//   send失败、onRequestFailed、status=error 防御分支），如果这里清空错误，
+//   会让 C 侧 QML/L0 断言拿到空字符串，CI 失败。
+//   新请求的错误清除由 runForgetPreviewPipeline / runForgetExecutePipeline
+//   入口显式执行，避免上一轮错误残留。
 void MemoryViewModel::resetForgetProjection()
 {
     // 不重置 forgetStage（由调用方设置 previewing/awaiting/executing 或 failed）。
+    // 不重置 forgetPreviewError / forgetExecuteError（失败保留语义；新请求入口显式清）。
     // 不重置 crossUserBlocked：跨用户拒绝是验收断言，仅下一轮 Preview 成功时清零。
     setForgetSelectionHash({});
     setForgetAffectedCount(0);
@@ -2292,8 +2304,6 @@ void MemoryViewModel::resetForgetProjection()
     setForgetExecutedCount(-1);
     setForgetPreviewResult(QJsonObject{});
     setForgetExecuteResult(QJsonObject{});
-    setForgetPreviewError({});
-    setForgetExecuteError({});
     // forgetSelectorCleared：下一轮 Preview 开始时清零（展示新一轮未清除状态）。
     setForgetSelectorCleared(false);
     // crossUserBlocked：新请求前清零（防止上一次拒绝残留影响验收）。
