@@ -1353,14 +1353,15 @@ entries:
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "L2 麒麟 VM 证据待 VM 运行（本次会话 SSH 127.0.0.1:2222 connection refused，脚本 scripts/verify_day12a_vm.sh 已备好）；19 项 D12A 专项 + A 轨 79 项回归通过；既有测试顺序依赖（TD-046）在基线同样存在，非本 PR 引入"
+    limitations: "L2 麒麟 VM 证据待 VM 运行（本次会话 SSH 127.0.0.1:2222 connection refused，脚本 scripts/verify_day12a_vm.sh 已备好）；20 项 D12A 专项 + A 轨 80 项回归通过（含 A-REQ-01 事件类型对齐回归，对应 #110 合并文档声明）；测试在 merge main @ 8cc4a89 后的分支重跑；既有测试顺序依赖（TD-046）在基线同样存在，非本 PR 引入"
     checksum_sha256: "待回填"
     details: |
-      D12A 专项测试（test_embedding_d12a.py）: 19 passed
+      D12A 专项测试（test_embedding_d12a.py）: 20 passed
       挂死恢复 7 项（超时→重建→恢复 / 未超阈值不误重建 / 恢复后路径畅通 / in-flight 清理 / 并发无死锁 / health executor 分项 / shutdown 幂等）
+      A-REQ-01 事件类型对齐 1 项（forget.executed 权威 + memory.deletion/deletion 兼容别名被消费、payload/event_type 不一致 fail-closed、turn.finalized 拒绝）
       错误传播 3 项（错误码精确传播 / 未知异常 ERR_UNKNOWN / 失败不伪装成功）
       异常输入回归 9 项（空文本/纯空白 / 超长文本正常 / 超长+积压保护降级 / 错误模型 / 非法枚举 / 非 str / batch 非法 / 降级结构化 / 合法枚举正向）
-      A 轨回归: test_embedding_service + d9 + d10 + d12a = 79 passed
+      A 轨回归: test_embedding_service + d9 + d10 + d12a = 80 passed（merge main @ 8cc4a89 后）
       scripts/test_d12a_all.py: 25/25 ALL PASS（VM 全量回归脚本本地验证）
       scripts/verify_day12a_vm.sh: D12A VM 验证脚本（待 VM 运行）
       Bridge 假实现/吞异常检查清单: docs/day12/03_bridge_audit_checklist.md（无假实现、无吞异常）

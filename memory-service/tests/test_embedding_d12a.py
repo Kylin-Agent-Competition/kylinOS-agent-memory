@@ -346,18 +346,22 @@ def test_regression_wrong_model_propagates_error():
 
 
 def test_regression_invalid_enum_logical():
-    """非法枚举（DeletionEvent）：错误枚举值在构造/消费边界抛 ValueError。"""
+    """非法枚举（DeletionEvent）：错误枚举值在消费边界抛 ValueError。
+
+    A-REQ-01 契约：consumer 回调签名 (event_type, payload)；payload 不再内嵌
+    event_type（不一致 fail-closed）；非法 target_type/forget_mode 抛 ValueError。
+    """
     # TargetType/ForgetMode 通过字符串非法值 → outbox_consumer 抛 ValueError
     svc = EmbeddingService(provider=FakeProvider())
     svc.start()
     svc.set_extraction_provider(_DummyExtractionProvider())
     consumer = build_deletion_consumer(svc)
     with pytest.raises(ValueError):
-        consumer({"event_type": "memory.deletion", "event_id": "e1", "user_id": "u",
-                  "target_type": "invalid_type"})
+        consumer("memory.deletion", {"event_id": "e1", "user_id": "u",
+                                     "target_type": "invalid_type"})
     with pytest.raises(ValueError):
-        consumer({"event_type": "memory.deletion", "event_id": "e2", "user_id": "u",
-                  "forget_mode": "invalid_mode"})
+        consumer("memory.deletion", {"event_id": "e2", "user_id": "u",
+                                     "forget_mode": "invalid_mode"})
     svc.close()
 
 
@@ -442,3 +446,35 @@ def test_shutdown_then_recover_idempotent():
     assert r["ok"] is True
     svc.close()
     shutdown_executor()
+
+
+def test_regression_deletion_event_type_aligned_forget_executed():
+    """A-REQ-01 事件类型对齐（#110 契约）：forget.executed（权威）与兼容别名
+    memory.deletion/deletion 均被消费；payload/event_type 不一致与非删除事件类型拒绝。"""
+    _reset_hang_threshold()
+    svc = EmbeddingService(provider=FakeProvider())
+    svc.start()
+    svc.set_extraction_provider(_DummyExtractionProvider())
+    consumer = build_deletion_consumer(svc)
+
+    base = {
+        "event_id": "aligned_001",
+        "user_id": "u",
+        "target_type": "event",
+        "content_hashes": [raw_text_hash("forget executed aligned text")],
+        "content_fingerprints": [],
+        "forget_mode": "single_item",
+    }
+    # 权威事件类型 forget.executed → 正常消费（返回 None，不抛异常）
+    consumer("forget.executed", dict(base))
+    # 兼容别名 memory.deletion / deletion → 正常消费
+    consumer("memory.deletion", dict(base, event_id="aligned_002"))
+    consumer("deletion", dict(base, event_id="aligned_003"))
+    # payload 内嵌 event_type 与显式 event_type 不一致 → fail-closed
+    with pytest.raises(ValueError):
+        consumer("forget.executed", dict(base, event_id="aligned_004",
+                                         event_type="memory.deletion"))
+    # 非删除事件类型（turn.finalized）→ 拒绝
+    with pytest.raises(ValueError):
+        consumer("turn.finalized", dict(base, event_id="aligned_005"))
+    svc.close()

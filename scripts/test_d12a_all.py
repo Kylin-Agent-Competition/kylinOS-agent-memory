@@ -196,14 +196,14 @@ svc.start()
 svc.set_extraction_provider(DummyExt())
 consumer = build_deletion_consumer(svc)
 try:
-    consumer({"event_type": "memory.deletion", "event_id": "e1", "user_id": "u",
-              "target_type": "invalid_type"})
+    consumer("memory.deletion", {"event_id": "e1", "user_id": "u",
+                                 "target_type": "invalid_type"})
     check("非法 target_type 抛 ValueError", False)
 except ValueError:
     check("非法 target_type 抛 ValueError", True)
 try:
-    consumer({"event_type": "memory.deletion", "event_id": "e2", "user_id": "u",
-              "forget_mode": "invalid_mode"})
+    consumer("memory.deletion", {"event_id": "e2", "user_id": "u",
+                                 "forget_mode": "invalid_mode"})
     check("非法 forget_mode 抛 ValueError", False)
 except ValueError:
     check("非法 forget_mode 抛 ValueError", True)

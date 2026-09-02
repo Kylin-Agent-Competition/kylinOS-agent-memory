@@ -5,7 +5,7 @@
 | 任务编号 | D12-A（台账 row 61） |
 | 任务标题 | ① 修复 SDK 超时、异常恢复和性能抖动；② 完成 Bridge 假实现/吞异常检查；③ 回归全部异常输入 |
 | 责任轨道 | A（刘依枫）；Reviewer：D 主审；安全/评测影响时 E 补审 |
-| 基线分支 | `fix/day12a-sdk-stability`（基于 main @ d4f564c） |
+| 基线分支 | `fix/day12a-sdk-stability`（基于 main，已 merge main @ 8cc4a89（#110/#123 等合入后）） |
 | 阶段 | 功能冻结、联调缓冲与缺陷清理 |
 | 完成定义 | SDK 相关 Critical/High 清零，或有明确负责人和日期；提交修复代码 + L0/L1 测试 + （必要时）L2 麒麟 VM 证据；更新证据索引与相关任务卡/PR 描述 |
 
@@ -55,7 +55,7 @@
 | # | 交付物 | 类型 |
 |---|--------|------|
 | 1 | `memory-service/embedding/embedding_service.py`：挂死恢复（`_maybe_recover_hung_executor`/`_submit_bridge`/`_mark_future_complete`/`recover_hung_bridge_executor`）+ health executor 分项 | 修改 |
-| 2 | `memory-service/tests/test_embedding_d12a.py`：19 项（挂死恢复 7 + 错误传播 3 + 异常输入回归 9） | 新增 |
+| 2 | `memory-service/tests/test_embedding_d12a.py`：20 项（挂死恢复 7 + 错误传播 3 + 异常输入回归 9 + A-REQ-01 事件类型对齐 1） | 新增 |
 | 3 | `docs/day12/01_task_card.md`：本文件 | 新增 |
 | 4 | `docs/day12/03_bridge_audit_checklist.md`：Bridge 假实现/吞异常检查清单 | 新增 |
 | 5 | `docs/day12/02_pr_description.md`：PR 描述 | 新增 |
@@ -66,8 +66,8 @@
 | 层级 | 命令 | 预期 |
 |------|------|------|
 | L0 | `python -m py_compile memory-service/embedding/embedding_service.py` | 通过 |
-| L1 | `PYTHONPATH=memory-service python -m pytest memory-service/tests/test_embedding_d12a.py` | 19 passed |
-| L1 回归 | `... test_embedding_service.py test_embedding_d9.py test_embedding_d10.py test_embedding_d12a.py` | 79 passed |
+| L1 | `PYTHONPATH=memory-service python -m pytest memory-service/tests/test_embedding_d12a.py` | 20 passed |
+| L1 回归 | `... test_embedding_service.py test_embedding_d9.py test_embedding_d10.py test_embedding_d12a.py` | 80 passed |
 | L2 | `scripts/verify_day12a_vm.sh`（待 VM 运行） | 待执行 |
 
 ## 五、技术债关联
@@ -78,7 +78,7 @@
 
 ## 六、验收标准
 
-- L0/L1 全绿；19 项 D12A 专项测试 + A 轨回归 79 项通过。
+- L0/L1 全绿；20 项 D12A 专项测试 + A 轨回归 80 项通过（含 A-REQ-01 事件类型对齐回归）。
 - Bridge 检查清单逐项核实：无假实现、无吞异常、无固定返回、无空 catch。
 - 异常输入回归覆盖：空文本/超长/错误模型/非法枚举/异常返回/非 str/batch 非法。
 - PR 描述如实标注 L2 待 VM 运行状态。
