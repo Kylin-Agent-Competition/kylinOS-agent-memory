@@ -79,7 +79,7 @@ test_embedding_service.py + d9 + d10 + d12a: 84 passed
 
 ### L2 麒麟虚拟机证据
 
-**已执行（麒麟 VM 真实 SDK）**：`scripts/verify_day12a_vm.sh` 7/7 ALL PASS（PASS 7 / FAIL 0）。原始日志 `evidence/l2-kylin-vm/day12a_verify_20260902_215347.log`；证据索引 `D12A-L2-VERIFY`。真实 SDK 正常路径（embed dim=768、health executor 分项含 max_hang_rebuilds/restart_required、异常输入含空文本 dim=768、性能 avg=111.0ms p99=133.6ms ≤180ms、无挂死不误重建）HOST_VERIFIED；真实 SDK 挂死→重建恢复无法安全注入永久挂死，RUNTIME_UNVERIFIED，由 L1 FakeProvider 模拟验证（HIGH-02 收敛声明）。
+**已执行（麒麟 VM 真实 SDK）**：`scripts/verify_day12a_vm.sh` 7/7 ALL PASS（PASS 7 / FAIL 0）。原始日志 `evidence/l2-kylin-vm/day12a_verify_20260902_224252.log`（R2 代码重跑）；证据索引 `D12A-L2-VERIFY`。真实 SDK 正常路径（embed dim=768、health executor 分项含 max_hang_rebuilds/restart_required、异常输入含空文本 dim=768、性能 avg=72.9ms p99=91.0ms ≤180ms、无挂死不误重建）HOST_VERIFIED；真实 SDK 挂死→重建恢复无法安全注入永久挂死，RUNTIME_UNVERIFIED，由 L1 FakeProvider 模拟验证（HIGH-02 收敛声明；R2 收口：submit 原子 gate + 同进程 stop/start 不绕过 restart-required）。
 
 ## 性能影响
 
