@@ -497,7 +497,7 @@ void TestD11cQmlLoad::summaryLightsInitiallyNoGreen()
 {
     QQuickView view;
     applyImportPaths(view.engine());
-    view.setSource(QUrl(QStringLiteral("qrc:/memory_client/pages/D11DemoOrchestratorPage.qml")));
+    view.setSource(kD11PageUrl);
     QTRY_VERIFY2_WITH_TIMEOUT(view.status() == QQuickView::Ready,
                               qPrintable(formatViewErrors(view)), 5000);
     QVERIFY(view.rootObject() != nullptr);

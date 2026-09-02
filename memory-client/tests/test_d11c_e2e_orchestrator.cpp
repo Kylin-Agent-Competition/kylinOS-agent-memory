@@ -1014,7 +1014,11 @@ void TestD11CE2EOrchestrator::stepF_resetClearsPending_staleResponseIgnored()
     auto captureThenHold = [&](test_support::MockGatewayServer& mock,
                               const QLatin1String& targetMethod,
                               HoldCapture& cap) {
-        mock.setHandler([&targetMethod, &cap](
+        // 注意：targetMethod 必须按值捕获到 lambda 内部。
+        // 如果按引用捕获，captureThenHold 返回后 targetMethod 就失效了，
+        // Mock handler 在后续异步 readyRead 回调里做字符串比较时就是
+        // 未定义行为，会导致 cap.arrived 永远为 false（尤其在 CI 上）。
+        mock.setHandler([targetMethod, &cap](
                             const client::EnvelopeParts& parts)
                             -> QJsonObject {
             // 对目标方法：仅捕获，不回包（通过 Mock 后门 __hold__:true 实现）。
