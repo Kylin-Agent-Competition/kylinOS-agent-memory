@@ -2,8 +2,9 @@
 
 读取评测输入 bundle JSON（config + corpus + queries），按冻结口径
 （d9-retrieval-eval-config/v1）计算正式指标与护栏统计，输出 JSON 报告。
-fail-closed：provenance 不完整/格式非法、config_version 不符、返回 ref 重复或
-超过 top_k、0 个有效 positive query 时，不输出可被误读为正式的指标。
+fail-closed：provenance/采样参数不完整或非法、config_version 不符、返回 ref 重复或
+超过 top_k、有结果但缺 latency、latency 非有限、0 个有效 positive query 时，
+不输出可被误读为正式的指标。
 
 用法：
     PYTHONPATH=memory-service python scripts/run_d13b_formal_eval.py <bundle.json> [--output report.json]
@@ -18,7 +19,11 @@ bundle JSON 结构：
         "environment": "...",
         "evidence_reference": "...",
         "dataset_sha256": "<64 hex>",
-        "gold_sha256": "<64 hex>"
+        "gold_sha256": "<64 hex>",
+        "statistics_method": "p50_and_p95",
+        "warmup_count": 0,
+        "repeat_count": 1,
+        "concurrency": 1
       },
       "corpus": [
         {"user_id": "...", "memory_id": "...", "version_id": "...",

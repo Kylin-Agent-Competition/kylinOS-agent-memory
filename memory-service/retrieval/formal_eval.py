@@ -4,8 +4,8 @@
 ----
 本模块在 D13D 环境冻结、D13E 封存测试集与 Gold 哈希就绪后，对同一 Commit、
 同一麒麟 VM 的检索结果计算正式指标。它只消费数据、不执行检索、不生产 Gold；
-provenance（dataset/gold 哈希、commit、environment、evidence）未完整绑定或
-config_version 不符时 fail-closed，不输出任何可被当作正式指标的数值。
+provenance（dataset/gold 哈希、commit、environment、evidence、采样参数）未完整
+绑定或 config_version 不符时 fail-closed，不输出任何可被当作正式指标的数值。
 
 冻结口径来源
 ------------
@@ -15,21 +15,27 @@ config_version 不符时 fail-closed，不输出任何可被当作正式指标�
 - evaluation/D9_RETRIEVAL_DATASET_README_V2.md：positive-answerable 定义。
 - memory-service/retrieval/evaluation.py：Recall@K / MRR / nDCG@K / 延迟分位。
 
-v2（吸收 PR #123 首轮 Review REQUEST_CHANGES）
---------------------------------------------
-- 正式分母显式基于 row.positive_answerable()；stale（is_current=false）不进入分母，
-  归入 boundary:not_current_version 剔除。
+v2（PR #123 首轮 REQUEST_CHANGES）
+----------------------------------
+- 正式分母显式基于 row.positive_answerable()；stale（is_current=false）归 boundary。
 - corpus 解析严格校验类型与枚举（is_current 必须为真布尔；字段不允许默认放宽）。
-- 全局 guardrail violation query count 使用违规 query 唯一集合，避免跨类别重复累计。
-- valid_query_count == 0 或通道无样本时返回 NO_VALID_QUERIES / NO_CHANNEL_RESULTS，
-  指标为 null，而不是 0.0。
-- 延迟改为按通道记录 latency_ms: {channel: ms}，分通道独立汇总。
-- provenance 强校验：commit 为 40 位 Git SHA；dataset/gold 为 64 位 SHA-256；evidence 必填。
-- 每个通道返回 ref 必须唯一且长度不超过冻结 top_k=10。
+- 全局 guardrail violation query count 使用违规 query 唯一集合。
+- valid_query_count==0 / 通道无样本返回 NO_VALID_QUERIES / NO_CHANNEL_RESULTS，指标 null。
+- 延迟按通道记录 latency_ms: {channel: ms}。
+- provenance 强校验：commit 40 位 Git SHA；dataset/gold 64 位 SHA-256；evidence 必填。
+- 每个通道返回 ref 唯一且长度 <= top_k=10。
+
+v3（PR #123 第二轮 REQUEST_CHANGES）
+----------------------------------
+- statistics_method / warmup_count / repeat_count / concurrency 由调用方显式提供，
+  严格校验并写入最终 report config（不再隐式硬编码）。
+- results.<channel> 存在时必须提供对应 latency_ms.<channel>，否则 fail-closed。
+- latency 仅接受有限非负数（拒绝 bool / NaN / ±Infinity）。
 """
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Optional
@@ -45,7 +51,7 @@ FROZEN_CONFIG_VERSION = "d9-retrieval-eval-config/v1"
 FROZEN_K = 10
 FROZEN_TOP_K = 10
 FROZEN_RRF_K = 60
-REPORT_VERSION = "d13b-retrieval-eval-report/v2"
+REPORT_VERSION = "d13b-retrieval-eval-report/v3"
 DEFAULT_GUARDRAIL_CHANNEL = "rrf_v1"
 
 # 通道字符串 -> ChannelMode（正式对照通道；weighted-rrf/v1 未冻结前不进正式集）
@@ -71,6 +77,9 @@ CRITICAL_ZERO_CATEGORIES: tuple[str, ...] = (
     "cross_user",
     "sensitive_recall_prohibited",
 )
+
+# 显式采样统计方法白名单（未冻结项：TEAM_DEFINED，必须显式登记，禁止 UNKNOWN/PENDING）
+SUPPORTED_STATISTICS_METHODS = frozenset({"p50_and_p95", "p50", "p95"})
 
 _MEMORY_STATUSES = frozenset({"active", "candidate", "superseded", "expired", "removed", "deprecated"})
 _SENSITIVITIES = frozenset({"none", "low", "medium", "high", "critical"})
@@ -232,7 +241,7 @@ class CorpusIndex:
 
 @dataclass(frozen=True)
 class EvalBundleConfig:
-    """评测运行绑定配置（fail-closed：provenance 必须完整且格式合法）。"""
+    """评测运行绑定配置（fail-closed：provenance 与采样参数必须显式完整）。"""
 
     config_version: str
     dataset_version: str
@@ -242,6 +251,10 @@ class EvalBundleConfig:
     evidence_reference: str
     dataset_sha256: str
     gold_sha256: str
+    statistics_method: str
+    warmup_count: int
+    repeat_count: int
+    concurrency: int
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "EvalBundleConfig":
@@ -256,7 +269,7 @@ class EvalBundleConfig:
             "environment": "environment",
             "evidence_reference": "evidence_reference",
         }
-        normalized: dict[str, str] = {"config_version": config_version}
+        normalized: dict[str, Any] = {"config_version": config_version}
         for field_name, raw_key in text_fields.items():
             value = str(raw.get(raw_key, "")).strip()
             if not value or value.upper() == "UNKNOWN":
@@ -271,6 +284,21 @@ class EvalBundleConfig:
             if not _SHA256_RE.match(digest):
                 raise ValueError(f"{raw_key} 必须是非空 64 位小写十六进制 SHA-256")
             normalized[raw_key] = digest
+
+        statistics_method = str(raw.get("statistics_method", "")).strip().lower()
+        if not statistics_method or statistics_method.upper() in ("UNKNOWN", "PENDING"):
+            raise ValueError("statistics_method 必须显式登记，不得为 UNKNOWN/PENDING")
+        if statistics_method not in SUPPORTED_STATISTICS_METHODS:
+            raise ValueError(
+                f"不支持的 statistics_method {statistics_method!r}；"
+                f"支持 {sorted(SUPPORTED_STATISTICS_METHODS)}"
+            )
+        normalized["statistics_method"] = statistics_method
+
+        normalized["warmup_count"] = cls._int_field(raw, "warmup_count", minimum=0)
+        normalized["repeat_count"] = cls._int_field(raw, "repeat_count", minimum=1)
+        normalized["concurrency"] = cls._int_field(raw, "concurrency", minimum=1)
+
         for frozen_key, frozen_value in (
             ("k", FROZEN_K),
             ("top_k", FROZEN_TOP_K),
@@ -282,6 +310,17 @@ class EvalBundleConfig:
                     f"实际 {raw[frozen_key]!r}"
                 )
         return cls(**normalized)
+
+    @staticmethod
+    def _int_field(raw: Mapping[str, Any], key: str, minimum: int) -> int:
+        if key not in raw:
+            raise ValueError(f"正式评测必须显式提供 {key!r}")
+        value = raw[key]
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"{key} 必须是整数（不接受 bool/浮点/字符串）")
+        if value < minimum:
+            raise ValueError(f"{key} 必须 >= {minimum}")
+        return value
 
 
 def _parse_refs(items: Any, label: str) -> tuple[Mapping[str, str], ...]:
@@ -335,10 +374,13 @@ class QueryRecord:
             for channel, value in raw_latency.items():
                 if channel not in CHANNEL_MODES:
                     raise ValueError(f"latency_ms 含不支持的通道 {channel!r}")
-                latency = float(value)
-                if latency < 0:
-                    raise ValueError(f"latency_ms.{channel} 不得为负数")
-                latencies[channel] = latency
+                latencies[channel] = cls._parse_latency(value, channel)
+        # N2：formal 模式要求 results.<channel> 存在即有对应 latency_ms.<channel>
+        for channel in results:
+            if channel not in latencies:
+                raise ValueError(
+                    f"results.{channel} 存在但缺少 latency_ms.{channel}（formal 模式不允许缺延迟）"
+                )
 
         return cls(
             query_id=query_id,
@@ -348,6 +390,16 @@ class QueryRecord:
             channel_results=results,
             channel_latency_ms=latencies,
         )
+
+    @staticmethod
+    def _parse_latency(value: Any, channel: str) -> float:
+        """latency 只接受有限非负数（拒绝 bool / NaN / ±Infinity）。"""
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"latency_ms.{channel} 必须是有限数值")
+        latency = float(value)
+        if not math.isfinite(latency) or latency < 0:
+            raise ValueError(f"latency_ms.{channel} 必须是有限非负数")
+        return latency
 
 
 @dataclass(frozen=True)
@@ -398,7 +450,6 @@ def classify_queries(
             elif boundary_reasons:
                 reason = f"boundary:{boundary_reasons[0]}"
             else:
-                # 全部 relevant 均为 positive-answerable 且无护栏类别
                 metric_valid = True
         else:
             if query.forbidden_refs:
@@ -451,10 +502,10 @@ def _channel_report(
         implementation_commit=config.implementation_commit,
         environment=config.environment,
         evidence_reference=config.evidence_reference,
-        statistics_method="p95",
-        warmup_count=0,
-        repeat_count=1,
-        concurrency=1,
+        statistics_method=config.statistics_method,
+        warmup_count=config.warmup_count,
+        repeat_count=config.repeat_count,
+        concurrency=config.concurrency,
         target_threshold=0.85,
     )
     results: list[QueryEvalResult] = []
@@ -666,6 +717,10 @@ def compute_official_report(
             "evidence_reference": config.evidence_reference,
             "dataset_sha256": config.dataset_sha256,
             "gold_sha256": config.gold_sha256,
+            "statistics_method": config.statistics_method,
+            "warmup_count": config.warmup_count,
+            "repeat_count": config.repeat_count,
+            "concurrency": config.concurrency,
         },
         "accounting": {
             "total_query_count": len(accounts),
