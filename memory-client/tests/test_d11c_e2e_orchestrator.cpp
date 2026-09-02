@@ -908,12 +908,12 @@ void TestD11CE2EOrchestrator::stepF_resetClearsPending_staleResponseIgnored()
         if (parts.method == QLatin1String("conflict.compare")) {
             return client::buildSuccessResponse(
                 parts.requestId, parts.traceId,
-                client::buildConflictCandidates());
+                buildConflictCandidates());
         }
         if (parts.method == QLatin1String("lifecycle.status")) {
             return client::buildSuccessResponse(
                 parts.requestId, parts.traceId,
-                client::buildLifecycleItems());
+                buildLifecycleItems());
         }
         return client::buildSuccessResponse(
             parts.requestId, parts.traceId, QJsonObject{});
@@ -975,7 +975,7 @@ void TestD11CE2EOrchestrator::stepF_resetClearsPending_staleResponseIgnored()
     // 注入 stale conflict response
     const QJsonObject staleConflictResponse = client::buildSuccessResponse(
         staleConflictRequestId, staleConflictTraceId,
-        client::buildConflictCandidates());
+        buildConflictCandidates());
     mock.sendRawEnvelope(staleConflictResponse);
     QTest::qWait(200);
     QVERIFY2(vm.conflictCompareStage() == QStringLiteral("idle"),
@@ -995,7 +995,7 @@ void TestD11CE2EOrchestrator::stepF_resetClearsPending_staleResponseIgnored()
     QVERIFY(!vm.lifecycleStatusBusy());
     const QJsonObject staleLifecycleResponse = client::buildSuccessResponse(
         staleLifecycleRequestId, staleLifecycleTraceId,
-        client::buildLifecycleItems());
+        buildLifecycleItems());
     mock.sendRawEnvelope(staleLifecycleResponse);
     QTest::qWait(200);
     QVERIFY2(vm.lifecycleStatusStage() == QStringLiteral("idle"),
