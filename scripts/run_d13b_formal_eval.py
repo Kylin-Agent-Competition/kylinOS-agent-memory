@@ -2,8 +2,8 @@
 
 读取评测输入 bundle JSON（config + corpus + queries），按冻结口径
 （d9-retrieval-eval-config/v1）计算正式指标与护栏统计，输出 JSON 报告。
-fail-closed：config 未绑定 dataset/gold/commit/environment 或 config_version
-不符时拒绝输出。
+fail-closed：provenance 不完整/格式非法、config_version 不符、返回 ref 重复或
+超过 top_k、0 个有效 positive query 时，不输出可被误读为正式的指标。
 
 用法：
     PYTHONPATH=memory-service python scripts/run_d13b_formal_eval.py <bundle.json> [--output report.json]
@@ -14,11 +14,11 @@ bundle JSON 结构：
         "config_version": "d9-retrieval-eval-config/v1",
         "dataset_version": "...",
         "gold_label_version": "...",
-        "implementation_commit": "...",
+        "implementation_commit": "<40 hex>",
         "environment": "...",
         "evidence_reference": "...",
-        "dataset_sha256": "...",
-        "gold_sha256": "..."
+        "dataset_sha256": "<64 hex>",
+        "gold_sha256": "<64 hex>"
       },
       "corpus": [
         {"user_id": "...", "memory_id": "...", "version_id": "...",
@@ -35,7 +35,7 @@ bundle JSON 结构：
             "vector": [...],
             "rrf_v1": [...]
           },
-          "latency_ms": 12.5
+          "latency_ms": {"fts5": 5.0, "vector": 8.0, "rrf_v1": 12.5}
         }
       ]
     }

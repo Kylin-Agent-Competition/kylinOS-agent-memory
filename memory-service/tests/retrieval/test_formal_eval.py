@@ -1,4 +1,13 @@
-"""D13B 正式检索评测账本 L0/L1 测试（纯数据，无 VM 依赖）。"""
+"""D13B 正式检索评测账本 L0/L1 测试（纯数据，无 VM 依赖）。
+
+覆盖 PR #123 首轮 Review（REQUEST_CHANGES）的修复项：
+- R1 positive-answerable 用于正式分母；corpus 严格类型/枚举校验；stale 归 boundary。
+- R2 全局 guardrail violation query count 不跨类别重复累计。
+- R3 0 有效 positive query 返回 NO_VALID_QUERIES（指标 null）。
+- R4 按通道延迟独立汇总。
+- R5 provenance 哈希/commit/evidence 强校验。
+- R6 Top-K 返回 ref 唯一且长度 <= top_k=10。
+"""
 
 from __future__ import annotations
 
@@ -8,7 +17,6 @@ from retrieval.formal_eval import (
     CRITICAL_ZERO_CATEGORIES,
     FROZEN_CONFIG_VERSION,
     FROZEN_K,
-    FROZEN_RRF_K,
     FROZEN_TOP_K,
     CorpusIndex,
     CorpusRow,
@@ -20,15 +28,19 @@ from retrieval.formal_eval import (
     serialize_ref,
 )
 
+COMMIT = "a" * 40
+DS_SHA = "d" * 64
+GOLD_SHA = "e" * 64
+
 CONFIG = {
     "config_version": FROZEN_CONFIG_VERSION,
     "dataset_version": "d9-dataset-v2-test",
     "gold_label_version": "d9-gold-v2-test",
-    "implementation_commit": "a" * 40,
+    "implementation_commit": COMMIT,
     "environment": "unit-test",
     "evidence_reference": "unittest/formal-eval",
-    "dataset_sha256": "d" * 64,
-    "gold_sha256": "e" * 64,
+    "dataset_sha256": DS_SHA,
+    "gold_sha256": GOLD_SHA,
 }
 
 
@@ -61,6 +73,7 @@ def _corpus_records():
         _row("u1", "m8", conflict="unresolved"),   # unresolved_conflict
         _row("u1", "m9", status="superseded", is_current=False),  # superseded
         _row("u1", "m10", status="deprecated"),    # deprecated
+        _row("u1", "m11", is_current=False),       # stale active / not current
     ]
 
 
@@ -72,7 +85,7 @@ def _queries():
             "relevant_refs": [_ref("m1"), _ref("m2")],
             "forbidden_refs": [],
             "results": {"rrf_v1": [_ref("m1"), _ref("m2")], "fts5": [_ref("m1")]},
-            "latency_ms": 10.0,
+            "latency_ms": {"rrf_v1": 10.0, "fts5": 5.0},
         },
         {
             "query_id": "q2",
@@ -101,7 +114,7 @@ def _queries():
             "relevant_refs": [_ref("m1")],
             "forbidden_refs": [_ref("m6")],  # sensitive
             "results": {"rrf_v1": [_ref("m1"), _ref("m6")]},
-            "latency_ms": 20.0,
+            "latency_ms": {"rrf_v1": 20.0},
         },
         {
             "query_id": "q6",
@@ -109,7 +122,29 @@ def _queries():
             "relevant_refs": [_ref("m1")],
             "forbidden_refs": [],
             "results": {"rrf_v1": [_ref("m4")]},  # 返回跨用户 → violation
-            "latency_ms": 30.0,
+            "latency_ms": {"rrf_v1": 30.0},
+        },
+        {
+            "query_id": "q7",
+            "user_id": "u1",
+            "relevant_refs": [_ref("m1")],
+            "forbidden_refs": [],
+            "results": {"rrf_v1": [_ref("m4"), _ref("m6")]},  # 同时两类 violation
+            "latency_ms": {"rrf_v1": 40.0},
+        },
+        {
+            "query_id": "q11",
+            "user_id": "u1",
+            "relevant_refs": [_ref("m11")],  # stale active/current=false
+            "forbidden_refs": [],
+            "results": {},
+        },
+        {
+            "query_id": "q12",
+            "user_id": "u1",
+            "relevant_refs": [_ref("m1"), _ref("m11")],
+            "forbidden_refs": [],
+            "results": {},
         },
     ]
 
@@ -148,25 +183,55 @@ def test_guardrail_category_matrix():
     assert cat(status="deprecated") == "deprecated"
     assert cat(status="candidate") == "candidate"
     assert cat(conflict="unresolved") == "unresolved_conflict"
+    # is_current=false 不产生护栏类别（由 boundary 处理）
+    stale = CorpusRow("u1", "m", "v1", "active", "none", "none", False)
+    assert stale.guardrail_category("u1") is None
 
 
-def test_corpus_index_rejects_unknown_and_duplicate():
-    records = [_row("u1", "m1")]
-    index = CorpusIndex.from_records(records)
-    with pytest.raises(ValueError):
-        index.resolve(_ref("ghost"))
-    with pytest.raises(ValueError):
+def test_boundary_reason_matrix():
+    positive = CorpusRow("u1", "m1", "v1", "active", "none", "none", True)
+    assert positive.boundary_reason() is None
+    stale = CorpusRow("u1", "m1", "v1", "active", "none", "none", False)
+    assert stale.boundary_reason() == "not_current_version"
+    removed = CorpusRow("u1", "m1", "v1", "removed", "none", "none", True)
+    assert removed.boundary_reason() is None  # guardrail 已覆盖
+    cross = CorpusRow("u2", "m1", "v1", "active", "none", "none", True)
+    assert cross.boundary_reason() is None  # guardrail 已覆盖
+
+
+# ── corpus 严格校验（R1） ─────────────────────────────────────────
+
+
+def test_corpus_index_requires_all_fields_no_permissive_defaults():
+    missing_is_current = {
+        "user_id": "u1", "memory_id": "m1", "version_id": "v1",
+        "memory_status": "active", "sensitivity": "none", "conflict_state": "none",
+    }
+    with pytest.raises(ValueError, match="缺少字段"):
+        CorpusIndex.from_records([missing_is_current])
+    with pytest.raises(ValueError, match="sensitivity"):
+        CorpusIndex.from_records([_row("u1", "m1", sensitivity="unknown")])
+    with pytest.raises(ValueError, match="memory_status"):
+        CorpusIndex.from_records([_row("u1", "m1", status="bogus")])
+    with pytest.raises(ValueError, match="conflict_state"):
+        CorpusIndex.from_records([_row("u1", "m1", conflict="bogus")])
+    with pytest.raises(ValueError, match="is_current"):
+        CorpusIndex.from_records([_row("u1", "m1", is_current="false")])
+    with pytest.raises(ValueError, match="重复判定键"):
         CorpusIndex.from_records([_row("u1", "m1"), _row("u1", "m1")])
+    with pytest.raises(ValueError):
+        CorpusIndex.from_records([_row("u1", "m1")]).resolve(_ref("ghost"))
 
 
-# ── config fail-closed ───────────────────────────────────────────
+# ── config fail-closed（R5） ──────────────────────────────────────
 
 
 def test_config_valid_binds_all_provenance():
     cfg = EvalBundleConfig.from_mapping(CONFIG)
     assert cfg.config_version == FROZEN_CONFIG_VERSION
-    assert cfg.dataset_version == "d9-dataset-v2-test"
-    assert cfg.dataset_sha256 == "d" * 64
+    assert cfg.implementation_commit == COMMIT
+    assert cfg.dataset_sha256 == DS_SHA
+    assert cfg.gold_sha256 == GOLD_SHA
 
 
 def test_config_rejects_wrong_or_missing_binding():
@@ -183,6 +248,21 @@ def test_config_rejects_wrong_or_missing_binding():
         EvalBundleConfig.from_mapping(unknown_ds)
 
 
+def test_config_rejects_incomplete_provenance():
+    no_evidence = {k: v for k, v in CONFIG.items() if k != "evidence_reference"}
+    with pytest.raises(ValueError, match="evidence_reference"):
+        EvalBundleConfig.from_mapping(no_evidence)
+    no_ds_sha = dict(CONFIG, dataset_sha256="")
+    with pytest.raises(ValueError, match="dataset_sha256"):
+        EvalBundleConfig.from_mapping(no_ds_sha)
+    short_sha = dict(CONFIG, gold_sha256="abcd")
+    with pytest.raises(ValueError, match="gold_sha256"):
+        EvalBundleConfig.from_mapping(short_sha)
+    bad_commit = dict(CONFIG, implementation_commit="not-a-commit")
+    with pytest.raises(ValueError, match="implementation_commit"):
+        EvalBundleConfig.from_mapping(bad_commit)
+
+
 def test_config_rejects_non_frozen_parameters():
     with pytest.raises(ValueError, match="k"):
         EvalBundleConfig.from_mapping(dict(CONFIG, k=5))
@@ -192,20 +272,56 @@ def test_config_rejects_non_frozen_parameters():
         EvalBundleConfig.from_mapping(dict(CONFIG, rrf_k=30))
 
 
-# ── QueryRecord 解析 ─────────────────────────────────────────────
+# ── QueryRecord 解析（R4/R6） ─────────────────────────────────────
 
 
-def test_query_record_rejects_unsupported_channel_and_bad_latency():
+def test_query_record_rejects_unsupported_channel():
     with pytest.raises(ValueError, match="通道"):
         QueryRecord.from_mapping(
             {"query_id": "q", "user_id": "u", "results": {"weighted_rrf_v1": []}}
         )
+
+
+def test_query_record_requires_per_channel_latency():
+    with pytest.raises(ValueError, match="latency_ms"):
+        QueryRecord.from_mapping({"query_id": "q", "user_id": "u", "latency_ms": 12.0})
     with pytest.raises(ValueError, match="latency_ms"):
         QueryRecord.from_mapping(
-            {"query_id": "q", "user_id": "u", "latency_ms": -1}
+            {"query_id": "q", "user_id": "u", "latency_ms": {"rrf_v1": -1}}
         )
+    with pytest.raises(ValueError, match="通道"):
+        QueryRecord.from_mapping(
+            {"query_id": "q", "user_id": "u", "latency_ms": {"weighted_rrf_v1": 1}}
+        )
+
+
+def test_query_record_rejects_duplicate_or_oversized_results():
+    duplicate = {
+        "query_id": "q",
+        "user_id": "u",
+        "results": {"rrf_v1": [_ref("m1"), _ref("m1")]},
+    }
+    with pytest.raises(ValueError, match="重复"):
+        QueryRecord.from_mapping(duplicate)
+    oversized = {
+        "query_id": "q",
+        "user_id": "u",
+        "results": {"rrf_v1": [_ref(f"m{i}") for i in range(FROZEN_TOP_K + 1)]},
+    }
+    with pytest.raises(ValueError, match="超过冻结 top_k"):
+        QueryRecord.from_mapping(oversized)
+
+
+def test_query_record_rejects_malformed_ref_and_missing_id():
     with pytest.raises(ValueError, match="query_id"):
         QueryRecord.from_mapping({"user_id": "u"})
+    extra_key = {
+        "query_id": "q",
+        "user_id": "u",
+        "relevant_refs": [{"memory_id": "m1", "version_id": "v1", "extra": 1}],
+    }
+    with pytest.raises(ValueError, match="只能包含"):
+        QueryRecord.from_mapping(extra_key)
 
 
 # ── 端到端报告 ───────────────────────────────────────────────────
@@ -219,14 +335,15 @@ def _compute():
     )
 
 
-def test_official_report_accounting():
+def test_official_report_accounting_includes_boundary():
     report = _compute()
     accounting = report["accounting"]
-    assert accounting["total_query_count"] == 6
-    assert accounting["valid_query_count"] == 3
-    assert accounting["excluded_query_count"] == 3
+    assert accounting["total_query_count"] == 9
+    assert accounting["valid_query_count"] == 4  # q1/q5/q6/q7
+    assert accounting["excluded_query_count"] == 5
     assert accounting["exclusions"]["empty_gold"] == 1
     assert accounting["exclusions"]["environmental_anomaly"] == 0
+    assert accounting["exclusions"]["boundary"] == {"not_current_version": 2}
     guardrail_ex = accounting["exclusions"]["negative_guardrail"]
     assert guardrail_ex["removed_or_forgotten"] == 1
     assert guardrail_ex["cross_user"] == 1
@@ -236,63 +353,94 @@ def test_official_report_rrf_metrics_hand_computed():
     report = _compute()
     rrf = report["channels"]["rrf_v1"]
     assert rrf["status"] == "COMPUTED"
-    assert rrf["query_count"] == 3
+    assert rrf["query_count"] == 4
     assert rrf["hit_count"] == 2
-    assert rrf["recall_at_k"] == pytest.approx(2 / 3)
-    assert rrf["mrr"] == pytest.approx(2 / 3)
-    assert rrf["ndcg_at_k"] == pytest.approx(2 / 3)
-    assert rrf["p50_ms"] == pytest.approx(20.0)
-    assert rrf["mean_ms"] == pytest.approx(20.0)
-    assert rrf["max_ms"] == pytest.approx(30.0)
-    assert rrf["latency_sample_count"] == 3
+    assert rrf["recall_at_k"] == pytest.approx(0.5)
+    assert rrf["mrr"] == pytest.approx(0.5)
+    assert rrf["ndcg_at_k"] == pytest.approx(0.5)
+    assert rrf["p50_ms"] == pytest.approx(25.0)
+    assert rrf["mean_ms"] == pytest.approx(25.0)
+    assert rrf["max_ms"] == pytest.approx(40.0)
+    assert rrf["latency_sample_count"] == 4
     assert rrf["k_value"] == FROZEN_K
 
 
-def test_official_report_fts5_incomplete_when_channel_absent():
+def test_official_report_per_channel_latency_distinct():
     report = _compute()
     fts5 = report["channels"]["fts5"]
-    # 仅 q1 提供 fts5 结果；q5/q6 无该通道 → INCOMPLETE，recall=1/2
     assert fts5["status"] == "INCOMPLETE_SKIPPED_QUERIES"
     assert fts5["query_count"] == 1
-    assert fts5["skipped_query_count"] == 2
+    assert fts5["skipped_query_count"] == 3
     assert fts5["recall_at_k"] == pytest.approx(0.5)
+    assert fts5["p50_ms"] == pytest.approx(5.0)  # 与 rrf 延迟 10/20/30/40 独立
+    vector = report["channels"]["vector"]
+    assert vector["status"] == "NO_CHANNEL_RESULTS"
+    assert vector["recall_at_k"] is None
 
 
-def test_official_report_guardrail_accounting():
+def test_official_report_guardrail_global_query_count_unique_per_query():
     report = _compute()
     guardrail = report["guardrail"]
     assert guardrail["channel"] == "rrf_v1"
-    assert guardrail["participating_query_count"] == 5
-    assert guardrail["returned_item_count"] == 6
-    assert guardrail["violation_query_count"] == 2
-    assert guardrail["violation_item_count"] == 2
+    assert guardrail["participating_query_count"] == 6
+    assert guardrail["returned_item_count"] == 8
+    # q5(敏感)、q6(cross)、q7(cross+敏感)：全局 query count 只计 3，不按类别累加
+    assert guardrail["violation_query_count"] == 3
+    assert guardrail["violation_item_count"] == 4
     assert guardrail["critical_zero_ok"] is False
     cross_user = guardrail["per_category"]["cross_user"]
-    assert cross_user["violation_query_count"] == 1
-    assert cross_user["violation_item_count"] == 1
+    assert cross_user["violation_query_count"] == 2  # q6/q7
+    assert cross_user["violation_item_count"] == 2
     sensitive = guardrail["per_category"]["sensitive_recall_prohibited"]
-    assert sensitive["violation_query_count"] == 1
-    assert sensitive["violation_item_count"] == 1
-    assert cross_user["violation_query_rate"] == pytest.approx(1 / 5)
-    assert cross_user["violation_item_rate"] == pytest.approx(1 / 6)
+    assert sensitive["violation_query_count"] == 2  # q5/q7
+    assert sensitive["violation_item_count"] == 2
+    assert cross_user["violation_query_rate"] == pytest.approx(2 / 6)
+    assert cross_user["violation_item_rate"] == pytest.approx(2 / 8)
     assert set(guardrail["critical_zero_categories"]) == set(CRITICAL_ZERO_CATEGORIES)
 
 
 def test_official_report_per_query_detail():
     report = _compute()
     by_id = {d["query_id"]: d for d in report["per_query_detail"]}
-    assert len(by_id) == 6
+    assert len(by_id) == 9
     assert by_id["q1"]["metric_valid"] is True
     assert by_id["q1"]["exclusion_reason"] is None
-    assert by_id["q2"]["metric_valid"] is False
     assert by_id["q2"]["exclusion_reason"] == "negative_guardrail:removed_or_forgotten"
     assert by_id["q3"]["exclusion_reason"] == "empty_gold"
     assert by_id["q4"]["exclusion_reason"] == "negative_guardrail:cross_user"
-    assert by_id["q5"]["metric_valid"] is True  # 正解合法；forbidden 只用于护栏
+    assert by_id["q5"]["metric_valid"] is True
     assert by_id["q5"]["resolved_forbidden_categories"] == ["sensitive_recall_prohibited"]
+    assert by_id["q11"]["exclusion_reason"] == "boundary:not_current_version"
+    assert by_id["q11"]["boundary_reasons"] == ["not_current_version"]
+    assert by_id["q12"]["exclusion_reason"] == "boundary:not_current_version"
+    assert by_id["q12"]["metric_valid"] is False
 
 
-def test_official_report_unknown_ref_fails_closed():
+def test_no_valid_queries_returns_null_metrics():
+    corpus = _corpus_records()
+    empty_gold_queries = [
+        {"query_id": "e1", "user_id": "u1", "relevant_refs": [], "forbidden_refs": [], "results": {"rrf_v1": []}},
+        {"query_id": "e2", "user_id": "u1", "relevant_refs": [], "forbidden_refs": [], "results": {}},
+    ]
+    report = compute_official_report(corpus, empty_gold_queries, EvalBundleConfig.from_mapping(CONFIG))
+    assert report["accounting"]["valid_query_count"] == 0
+    rrf = report["channels"]["rrf_v1"]
+    assert rrf["status"] == "NO_VALID_QUERIES"
+    assert rrf["recall_at_k"] is None
+    assert rrf["mrr"] is None
+    assert rrf["ndcg_at_k"] is None
+    assert rrf["hit_count"] is None
+
+    guardrail_only = [
+        {"query_id": "g1", "user_id": "u1", "relevant_refs": [], "forbidden_refs": [_ref("m4")], "results": {"rrf_v1": [_ref("m1")]}},
+    ]
+    report2 = compute_official_report(corpus, guardrail_only, EvalBundleConfig.from_mapping(CONFIG))
+    assert report2["accounting"]["valid_query_count"] == 0
+    assert report2["channels"]["rrf_v1"]["status"] == "NO_VALID_QUERIES"
+    assert report2["channels"]["rrf_v1"]["recall_at_k"] is None
+
+
+def test_unknown_ref_fails_closed():
     queries = [
         {
             "query_id": "qx",
@@ -314,5 +462,6 @@ def test_guardrail_accounting_no_participants_returns_none_rates():
     report = guardrail_accounting(queries, index)
     assert report["participating_query_count"] == 0
     assert report["returned_item_count"] == 0
+    assert report["violation_query_count"] == 0
     assert report["per_category"]["cross_user"]["violation_query_rate"] is None
     assert report["critical_zero_ok"] is True
