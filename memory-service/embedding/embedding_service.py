@@ -56,11 +56,18 @@ _executor_shutdown = False  # shutdown 标记：submit 前若已关闭则惰性�
 # 见 TD-A-005-01 Wontfix）——若 2 个 worker 被挂死调用占满，后续所有 embed 将
 # 排队并永久超时（性能抖动归零）直到进程重启。因此跟踪 in-flight future 的
 # 开始时间，一旦超过 hang 阈值仍未完成，判定为永久挂死并重建 executor
-# （释放挂死 worker），恢复 Embedding 路径。
+# （恢复后续请求能力；旧挂死 worker 无法终止，残余风险见 TD-056）。
 _executor_lock = threading.Lock()  # 保护 executor 重建 + in-flight 跟踪
 _in_flight: Dict[Any, float] = {}  # future -> start time (monotonic)
 _embed_hang_threshold_ms = 60000.0  # 默认 60s：远大于单次超时（5s），只针对真正挂死
 _embed_hang_recovered = 0  # 统计：挂死恢复次数（可观测性）
+# [D12A Review HIGH-01] 有界挂死恢复：executor rebuild 无法终止已挂死的旧
+# worker（SDK 无 cancel API，TD-A-005-01 Wontfix；残余风险登记 TD-056），只能
+# “恢复后续请求能力”。为避免无界创建线程池，最多连续重建
+# _embed_max_hang_rebuilds 次；超限后置 _embed_restart_required，后续 embed
+# 快速失败并提示进程重启（不再继续新建 executor）。
+_embed_max_hang_rebuilds = 3  # 有界重建上限（可观测/测试可调）
+_embed_restart_required = False  # 超限标记：需进程重启恢复
 
 
 def shutdown_executor() -> None:
@@ -68,13 +75,16 @@ def shutdown_executor() -> None:
 
     幂等；关闭后再 submit 会惰性重建（见 _submit_bridge），保持进程级单例语义。
     """
-    global _executor, _executor_shutdown
+    global _executor, _executor_shutdown, _embed_hang_recovered, _embed_restart_required
     with _executor_lock:
         if _executor_shutdown:
             return
         _executor.shutdown(wait=False)
         _executor_shutdown = True
         _in_flight.clear()
+        # 显式 shutdown 近似“进程重启”语义：重置有界恢复计数与重启标记
+        _embed_hang_recovered = 0
+        _embed_restart_required = False
 
 
 def _maybe_recover_hung_executor() -> bool:
@@ -83,17 +93,23 @@ def _maybe_recover_hung_executor() -> bool:
     调用方须持有 _executor_lock。返回是否发生重建。
 
     - 清理已完成的 future（慢任务完成/异常结束的释放 in-flight 槽位）；
-    - 若任一 in-flight future 超过 hang 阈值仍未完成 → 判定永久挂死，
-      重建 executor（释放挂死 worker）恢复 Embedding 路径；
+    - 若任一 in-flight future 超过 hang 阈值仍未完成 → 判定永久挂死，重建
+      executor（仅恢复后续请求能力；旧挂死 worker 无法终止，SDK 无 cancel API）；
+    - 有界策略（HIGH-01）：连续重建次数 < _embed_max_hang_rebuilds 才重建；
+      达到上限后置 _embed_restart_required 并停止重建，避免无界线程；
     - 重建后 in-flight 清空（挂死 future 被遗弃，其结果已被调用方超时丢弃）。
     """
-    global _executor, _executor_shutdown, _embed_hang_recovered
+    global _executor, _executor_shutdown, _embed_hang_recovered, _embed_restart_required
     now = time.monotonic()
     for fut in list(_in_flight):
         if fut.done():
             _in_flight.pop(fut, None)
     for fut, started in list(_in_flight.items()):
         if (now - started) * 1000.0 > _embed_hang_threshold_ms:
+            if _embed_restart_required or _embed_hang_recovered >= _embed_max_hang_rebuilds:
+                # 有界：不再创建新线程池，要求进程重启
+                _embed_restart_required = True
+                return False
             try:
                 _executor.shutdown(wait=False)
             except Exception:  # noqa: BLE001 - 重建路径尽力而为
@@ -122,7 +138,11 @@ def _submit_bridge(fn, *args, **kwargs):
             _executor_shutdown = False
         fut = _executor.submit(fn, *args, **kwargs)
         _in_flight[fut] = time.monotonic()
-        return fut
+    # [D12A Review MEDIUM-01] 完成后由回调主动清理 in_flight，避免 timeout 后
+    # SDK 自行返回时残留 stale Future；在锁外注册——快任务可能已完成，
+    # add_done_callback 同步回调若仍持锁会导致非重入锁自死锁。
+    fut.add_done_callback(_mark_future_complete)
+    return fut
 
 
 def _mark_future_complete(fut) -> None:
@@ -138,10 +158,20 @@ def recover_hung_bridge_executor() -> bool:
     """[D12A] 线程安全入口：检测 in-flight 是否挂死超过阈值并重建 executor。
 
     供 EmbeddingService.embed() 在每次请求入口调用（含合并等待路径），
-    确保挂死 worker 在被占满前被释放，恢复 Embedding 路径。
+    恢复后续请求能力（无法终止旧挂死 worker；见 TD-056）。
     """
     with _executor_lock:
         return _maybe_recover_hung_executor()
+
+
+def bridge_executor_restart_required() -> bool:
+    """[D12A HIGH-01] 有界恢复是否已超限（需进程重启）。
+
+    线程安全只读入口；embed 入口在 recover 后调用，超限时快速失败，
+    不再向可能已失效的线程池提交新请求。
+    """
+    with _executor_lock:
+        return _embed_restart_required
 
 # 架构 4.4 方法名（总体架构文档 TABLE 15 风格：memory.*）
 # ALIGN-004：embedding 子服务方法域（memory.embed/embed_batch/ping/health）与
@@ -476,6 +506,8 @@ class EmbeddingService:
                     "in_flight": len(_in_flight),
                     "hang_recovered": _embed_hang_recovered,
                     "hang_threshold_ms": _embed_hang_threshold_ms,
+                    "max_hang_rebuilds": _embed_max_hang_rebuilds,
+                    "restart_required": _embed_restart_required,
                 },
             },
         }
@@ -498,6 +530,12 @@ class EmbeddingService:
         # [D12A 挂死恢复] 每次请求入口检测挂死 worker（含合并等待路径），
         # 挂死超过阈值后重建 executor 恢复 Embedding 路径。
         recover_hung_bridge_executor()
+        if bridge_executor_restart_required():
+            # [D12A Review HIGH-01] 有界恢复超限：停止提交，要求进程重启
+            self._track_error(ProviderErrorCode.ERR_EMBED_FAILED,
+                              "Bridge hang-recovery exhausted, restart required")
+            return self._error(ProviderErrorCode.ERR_EMBED_FAILED.name,
+                               "Bridge hang-recovery exhausted, restart required")
 
         # Day9 查询缓存：键 = 模型维度 + 原文确定性哈希（维度变化自动失效）
         # 维度获取：真实 EmbeddingProvider 有 get_dimension()；D5 既有测试的

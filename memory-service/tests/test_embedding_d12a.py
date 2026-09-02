@@ -38,6 +38,7 @@ from embedding.embedding_service import (
     _executor_lock,
     _in_flight,
     _mark_future_complete,
+    _submit_bridge,
     recover_hung_bridge_executor,
     shutdown_executor,
 )
@@ -98,6 +99,8 @@ def _restore_executor_state():
         _in_flight.clear()
         _es._embed_hang_recovered = 0
         _es._embed_hang_threshold_ms = 60000.0
+        _es._embed_restart_required = False
+        _es._embed_max_hang_rebuilds = 3
 
 
 def _set_hang_threshold(ms: float) -> None:
@@ -179,19 +182,21 @@ def test_recovery_preserves_healthy_embedding_path():
 
 
 def test_in_flight_cleanup_after_completion():
-    """已完成 future 自动从 in-flight 移除（无泄漏）。"""
+    """已完成 future 自动从 in-flight 移除（done callback 主动清理，无泄漏）。"""
     _reset_hang_threshold()
     from embedding.embedding_service import _submit_bridge
-    svc = EmbeddingService(provider=FakeProvider())
+    svc = EmbeddingService(provider=FakeProvider(delay=0.2))
     svc.start()
 
     fut = _submit_bridge(svc._provider.embed, "cleanup", timeout_ms=5000)
     with _executor_lock:
-        assert fut in _in_flight
-    fut.result(timeout=5.0)  # 完成
-    _mark_future_complete(fut)
+        assert fut in _in_flight  # 执行中保留在 in_flight
+    fut.result(timeout=5.0)  # 等待完成（模拟 timeout 后 SDK 最终返回）
+    deadline = time.monotonic() + 2.0
+    while fut in _in_flight and time.monotonic() < deadline:
+        time.sleep(0.02)
     with _executor_lock:
-        assert fut not in _in_flight, "完成后应从 in-flight 移除"
+        assert fut not in _in_flight, "完成后应由 done callback 主动移除"
     svc.close()
 
 
@@ -478,3 +483,62 @@ def test_regression_deletion_event_type_aligned_forget_executed():
     with pytest.raises(ValueError):
         consumer("turn.finalized", dict(base, event_id="aligned_005"))
     svc.close()
+def test_bounded_hang_rebuild_then_restart_required():
+    """HIGH-01 有界恢复：达重建上限后不再新建线程池，进入 restart-required，
+    embed 入口快速失败（不向可能失效的线程池提交新请求）。"""
+    _reset_hang_threshold()
+    _es._embed_max_hang_rebuilds = 1
+    _es._embed_restart_required = False
+    _es._embed_hang_recovered = 0
+
+    def _hang_forever():
+        time.sleep(30.0)
+
+    # 第 1 代挂死占满 2 个 worker → cap 内允许重建
+    _submit_bridge(_hang_forever)
+    _submit_bridge(_hang_forever)
+    assert len(_in_flight) == 2
+    _set_hang_threshold(0.001)
+    assert recover_hung_bridge_executor() is True
+    assert _es._embed_hang_recovered == 1
+    assert _es._embed_restart_required is False
+
+    # 第 2 代挂死再次占满 → 达上限：不重建，进入 restart-required
+    _submit_bridge(_hang_forever)
+    _submit_bridge(_hang_forever)
+    _set_hang_threshold(0.001)
+    assert recover_hung_bridge_executor() is False
+    assert _es._embed_restart_required is True
+    assert _es._embed_hang_recovered == 1  # 未再新建 executor
+
+    # embed 入口 fail-fast（结构化错误，不伪装成功）
+    svc = EmbeddingService(provider=FakeProvider())
+    svc.start()
+    r = svc.embed("after-exhaust", timeout_ms=200)
+    assert r["ok"] is False
+    assert r["error"]["code"] == "ERR_EMBED_FAILED"
+    assert "restart" in r["error"]["message"]
+    svc.close()
+    shutdown_executor()  # 显式 shutdown 近似重启，重置标记
+    assert _es._embed_restart_required is False
+
+
+def test_done_callback_clears_in_flight_after_completion():
+    """MEDIUM-01：timeout 后 SDK 稍后返回，完成回调主动清理 in_flight，
+    不再依赖下一次请求触发清理。"""
+    _reset_hang_threshold()
+    with _executor_lock:
+        _in_flight.clear()
+
+    def _slow(delay):
+        time.sleep(delay)
+        return "ok"
+
+    fut = _submit_bridge(_slow, 0.2)
+    assert len(_in_flight) == 1
+    fut.result(timeout=5.0)  # 调用方等待（模拟 timeout 后 SDK 最终自行返回）
+    deadline = time.monotonic() + 2.0
+    while len(_in_flight) > 0 and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert len(_in_flight) == 0, "done callback 应主动清理 in_flight"
+    shutdown_executor()

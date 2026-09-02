@@ -178,8 +178,9 @@ try:
     else:
         print('  空文本/纯空白: PASS（真实 SDK dim=768）')
 
-    # 超长文本
-    r = svc.embed('a' * 10000)
+    # 超长文本：真实 SDK 10KB 极端输入实测约 10s（init_v1 同步引擎），
+    # 给足量超时验证“无积压时不误降级”；常规延迟预算由第 5 节（典型文本）把关。
+    r = svc.embed('a' * 10000, timeout_ms=30000)
     assert r.get('ok'), '超长文本应正常（无积压）'
     print('  超长文本(10KB): PASS')
 
@@ -225,15 +226,19 @@ try:
         el = (time.monotonic() - t0) * 1000
         if r.get('ok') and not r.get('degraded'):
             latencies.append(el)
-    if latencies:
-        avg = sum(latencies) / len(latencies)
-        p99 = sorted(latencies)[int(len(latencies) * 0.99)]
-        print(f'  延迟: avg={avg:.1f}ms p99={p99:.1f}ms samples={len(latencies)}')
-        print(f'  架构预算: ≤180ms — {\"OK\" if avg < 180 else \"EXCEEDED\"}')
-    else:
-        print('  延迟: 无有效样本')
+    expected = len(texts)
+    if len(latencies) != expected:
+        # MEDIUM-03：样本不足按失败处理，不得计为 PASS
+        print(f'  延迟: 有效样本不足 {len(latencies)}/{expected}')
+        svc.close()
+        sys.exit(1)
+    avg = sum(latencies) / len(latencies)
+    p99 = sorted(latencies)[int(len(latencies) * 0.99)]
+    ok = (avg < 180.0 and p99 <= 180.0)
+    print(f'  延迟: avg={avg:.1f}ms p99={p99:.1f}ms samples={len(latencies)}')
+    print(f'  架构预算: ≤180ms（avg 且 p99）— {\"OK\" if ok else \"EXCEEDED\"}')
     svc.close()
-    sys.exit(0)
+    sys.exit(0 if ok else 1)
 except Exception as e:
     print(f'  ERROR: {e}')
     svc.close()
