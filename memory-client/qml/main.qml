@@ -19,7 +19,7 @@ ApplicationWindow {
     visible: true
     width: 960
     height: 640
-    title: qsTr("Kylin Memory Client — D4 Skeleton")
+    title: qsTr("Kylin Memory Client — D11 E2E Orchestrator (Demo/Prototype)")
 
     // 公共 ViewModel（C++ 注册，全页面共享）
     // socketPath 不在此覆盖——走 C++ 构造函数默认值（$XDG_RUNTIME_DIR/kylin-memory/memory.sock，
@@ -158,6 +158,14 @@ ApplicationWindow {
                 text: qsTr("D10 Forget (精准遗忘)")
                 onClicked: stack.replace(forgetPage)
             }
+            // D11-C 同一虚拟机全功能联调主演示编排器（5-Step · 同一 Commit / 同一 VM）
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                highlighted: true
+                text: qsTr("D11 E2E Orchestrator")
+                onClicked: stack.replace(d11OrchestratorPage)
+            }
             Item { Layout.fillHeight: true }
             Button {
                 Layout.fillWidth: true
@@ -192,6 +200,8 @@ ApplicationWindow {
     Component { id: contextAssemblePage; ContextAssemblePage { viewModel: window.viewModel } }
     // D10-C 精准遗忘 Pipeline Demo 页面
     Component { id: forgetPage; ForgetPage { viewModel: window.viewModel } }
+    // D11-C 同一 VM 全功能联调主演示编排器（Demo / Prototype）
+    Component { id: d11OrchestratorPage; D11DemoOrchestratorPage { viewModel: window.viewModel } }
 
     // 连接错误与请求失败统一弹出提示（不展示原始正文/凭据）。
     // Qt 5.12 风格：信号参数按名直接可见。

@@ -13,5 +13,6 @@
         <file>pages/LifecycleStatusPage.qml</file>
         <file>pages/ContextAssemblePage.qml</file>
         <file>pages/ForgetPage.qml</file>
+        <file>pages/D11DemoOrchestratorPage.qml</file>
     </qresource>
 </RCC>
