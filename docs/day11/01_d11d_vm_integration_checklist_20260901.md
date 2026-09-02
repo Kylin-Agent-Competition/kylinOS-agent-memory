@@ -51,5 +51,5 @@
 - 已完成第 1 项（基线与环境盘点）：记录见 `docs/day11/02_d11d_baseline_environment_inventory_20260901.md`；Vector Engine 版本（D11B `0k0.11` vs VERSION_MAP `0k1.0`）不一致已标记，待工作项 2 实测定案。
 - 第 2 项（冻结统一环境）已完成：D11D 专用 VM 实测定案（vector 0k0.11/0k0.7、Python 3.12.3、DB head=`20260901_d10b_vector_ledger`、UDS），详见 `evidence/l2-kylin-vm/d11d_vm_service_l2_20260902.md`。
 - 第 3 项（服务与安装）已完成：`install_kylin_memory.sh` 麒麟 VM L2 通过（安装/重启/回退/重装/socket/日志）。
-- D11D 专用麒麟 VM 已建（`Kylin-V11-2603-D11D-47af2fa-Test`）并完成第 3/7/8 项 L2 与复审返工 L2；A+C 跨轨输入已归档（`evidence/l2-kylin-vm/d11d_ac_track_input_20260902.md`）。剩余跨轨：B/C 端到端输入（C 轨已提供 L0/静态证据，真实 VM 交互复测待 D11D 汇合点 main 最新）、最晚停止时间。
+- D11D 专用麒麟 VM 已建（`Kylin-V11-2603-D11D-47af2fa-Test`）并完成第 3/7/8 项 L2 与复审返工 L2；`origin/main` 已 merge 同步（HEAD=`c18184a`）并在该 HEAD 完成全量 L2 复验（`evidence/l2-kylin-vm/d11d_vm_head_l2_20260902.md`）；A+C 跨轨输入已归档。剩余跨轨：B/C 端到端输入（C 轨已提供 L0/静态证据，真实 VM 交互复测以 main 最新为准）、最晚停止时间。
 - 上述事项未满足前，不将准备清单表述为已完成的联调能力。

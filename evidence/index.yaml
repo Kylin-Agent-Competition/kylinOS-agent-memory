@@ -1164,6 +1164,27 @@ entries:
       L2-4 systemd: unit 安装 + 默认库 alembic upgrade head ALEMBIC_RC=0（alembic_version=20260831_add_source_events）；数据目录 700 PASS；enable --now RC=0 active；socket /run/user/1000/kylin-memory/memory.sock srw-------；health status ok/db ok/backlog 0；restart active；插入 L2A-SYSD-1 → restart → 行仍在（数据存在 PASS）；但 DB 文件 644 ≠ 0600（发现②，测试后已清理测试行）。
       证据: 完整日志 evidence/l2-kylin-vm/d6d_l2_vm_20260901.log（SHA-256 以 git 仓库 LF 归一化 blob 为准，与 Windows 工作树 CRLF 副本哈希可能不同）。
 
+  - id: "D11D-L2-HEAD-REVERIFY"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2 复验（merge 同步 main 后）——以分支 HEAD c18184a 重跑服务生命周期/权限/日志诊断/OS 重启"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_head_l2_20260902.log"
+    tested_commit: "c18184a9816d04a20fec95e8c535816dc8acae22"
+    evidence_commit: "pending"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "正式发行环境 systemd 未验证；KYSEC 生产规则本 VM 不可见；本次重启后 runtime UDS core-textembedding.sock 未出现（SDK/Runtime 侧）；检索/删除端到端与 C 轨真实 VM 交互复测跨轨 pending"
+    checksum_sha256: "4e55f712aed20ac792be765dd7870e8e184dbb14256151d92814d07e80dea6e7"
+    details: |
+      HEAD=c18184a（merge: 同步 main PR #113/#114/#109）；脚本 sha256 07819008…/cf8f76aa…。
+      生命周期：install(升级备份)/restart/rollback(恢复原 unit/wrapper)/reinstall 全 exit=0；权限 config/share/state/RuntimeDir 700、socket/DB 600、wrapper 755。
+      诊断：health=ok/db=ok（outbox 含 D9D index_sync_lag/fatal_error，null 正常）；JSON 日志 trace 关联、PII 0；Alembic current=20260901_d10b_vector_ledger。
+      OS 重启后服务自动启动（active，PID 1712）、socket 0600、health ok。重启后 runtime UDS 未出现（观察）。
+      重启证据：d11d_vm_head_reboot_20260902.log（SHA-256 ed0e3627…）。
   - id: "D11D-L2-REWORK-SERVICE"
     task_id: "D11D"
     description: "D11D 麒麟 VM L2（复审返工）——部署目录权限 0700 对齐冻结契约 + rollback 恢复安装前备份 + 完整生命周期转录（install/restart/rollback/reinstall）"
