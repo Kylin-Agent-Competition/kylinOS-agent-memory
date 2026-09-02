@@ -210,7 +210,7 @@ def test_turn_finalized_outbox_worker_preserves_event_context(gw_turn_finalized)
 
     seen_context = []
 
-    def consumer(_payload):
+    def consumer(event_type, _payload):
         seen_context.append(get_request_context())
 
     worker = OutboxWorker(gw_turn_finalized["engine"], consumer=consumer)

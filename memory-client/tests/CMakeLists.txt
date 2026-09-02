@@ -220,3 +220,45 @@ add_test(
     NAME d9c_context_assemble
     COMMAND test_d9c_context_assemble
 )
+
+# ============================================================================
+# D10C 精准遗忘 L0 Mock 契约测试
+# （forget.preview / forget.execute；候选方法 pending ADR）
+# 范围：A. 模式互斥（SEC-FORGET-03 五值互斥）
+#       B. Preview 投影（selection_hash / affected_count / credential_ttl_s
+#          / resolved_target_ids / selector_cleared）
+#       C. 状态机（idle→previewing→awaiting_confirmation→executing→completed）
+#       D. Execute 漏删保护（v0.3/MEDIUM-03：executed != affected → failed）
+#       E. 跨用户操作拒绝（C-D10 #3：响应 user_id 不匹配 → blocked=true）
+#       F. Execute 必须基于成功 Preview（stage != awaiting_confirmation → 拒绝）
+#       G. 独立 busy/pending / 未连接拒绝
+#       H. UNSUPPORTED_METHOD / error → failed，无伪结果
+#       I. full_reset 携带 target_* → 拒绝（Demo fail-closed）
+#       J. Hard Delete Runtime fail-closed：错误不自动降级软删
+# 注意：L0 Mock 契约验证，不代表麒麟宿主真实交互（L2 另行在 VM 验证）。
+# ============================================================================
+add_executable(test_d10c_forgetting
+    ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+    ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
+    mock_gateway_server.cpp
+    test_d10c_forgetting.cpp
+)
+target_link_libraries(test_d10c_forgetting
+    PRIVATE
+        Qt5::Core
+        Qt5::Network
+        Qt5::Test
+)
+target_include_directories(test_d10c_forgetting
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_d10c_forgetting
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME d10c_forgetting
+    COMMAND test_d10c_forgetting
+)

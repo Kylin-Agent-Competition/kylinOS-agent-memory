@@ -155,6 +155,86 @@ C-D9 保持 OPEN）。**
 实现；`context.assemble` 候选方法 pending ADR 立项；L2 宿主验证需在麒麟 VM 上
 另行执行。
 
+### D10-C 精准遗忘 Pipeline（Demo / Prototype）
+
+**D10-C Demo / Prototype（CANDIDATE / pending ADR；未接入真实 D-B-E 跨轨 Forget
+事务；C-D10 保持 OPEN；Runtime Hard Delete / Cascade / Full Reset 保持
+fail-closed）。**
+
+业务契约基于 `docs/day10/16_d10d_forget_contract_plan_v0.3.md`（§一~§九 冻结）。
+本 QML Pipeline Harness 仅演示客户端侧状态机与安全投影闭环：
+
+* 候选 IPC 方法（`protocol_adapter.{h,cpp}`）：`forget.preview` /
+  `forget.execute`，标记 `CANDIDATE / pending ADR`；生产默认返回
+  `UNSUPPORTED_METHOD`。Demo / 测试态 Mock Gateway 可注册 handler 验证契约。
+  - `forget.preview`：接收 ForgetPlan（user\_id / forget\_plan\_id / forget\_mode
+    / target\_type / requires\_confirmation + 模式条件字段），返回
+    `selection_hash` + `affected_count` + `credential_ttl_s` +
+    `resolved_target_ids_preview_snippet` + `selector_cleared:true`（§四.8
+    HIGH-01：Preview 完成即清除明文 target\_selector / target\_topic）。
+  - `forget.execute`：携带 `forget_plan_id` + `confirmation_token` +
+    可选 `idempotency_key` + `delete_mode`（soft 硬删优先 / hard Runtime
+    fail-closed）。服务端校验 selection\_hash 一致、凭据有效未过期、
+    expected\_affected\_count 匹配后执行软删事务，v0.3/MEDIUM-03 要求
+    executed\_count == affected\_count，不一致不得进入 completed。
+
+* MemoryClient 便捷方法：`sendForgetPreviewRequest()` /
+  `sendForgetExecuteRequest()`，复用 `sendRequest()` 共享编解码与超时门禁。
+
+* ViewModel Pipeline（D9C 相同分层风格，独立 pending / busy）：
+  - `runForgetPreviewPipeline()`：SEC-FORGET-03 五模式互斥校验（single\_item
+    → target\_id / session → target\_session\_id / topic → target\_topic /
+    time\_window → target\_time\_range / full\_reset → 无任何 target\_*）；
+    登记 pending + 暂存明文（Preview 完成后清除）。
+  - `handleForgetPreviewResponse()`：跨用户 user\_id 预检（C-D10 #3，不匹配
+    → forgetCrossUserBlocked=true + stage=failed）→ 投影 → 清除本地明文
+    pendingForgetPreviewSelector\_/Topic\_ → forgetSelectorCleared 置位 →
+    保存 selection\_hash / affected\_count 快照 → stage=awaiting\_confirmation。
+  - `runForgetExecutePipeline()`：awaiting\_confirmation 门禁 + 校验三必填
+    → 附带 selection\_hash 二次校验 + expected\_affected\_count 漏删保护。
+  - `handleForgetExecuteResponse()`：projectForgetExecute 投影 executed\_count
+    → v0.3/MEDIUM-03 漏删保护（executed != affected → stage=failed +
+    forgetHasMissingDeletes=true）→ 否则 stage=completed。
+
+* 状态机（§三.3 v0.2 冻结）：`idle → previewing → awaiting_confirmation →
+  executing → completed`；任一错误路径回到 `failed`。Preview/Execute 独立
+  pending\_RequestId\_ + busy 标志，互斥启动防竞态。
+
+* 安全控制（客户端侧 Demo 闭环）：
+  - **明文生命周期**（§四.8 HIGH-01）：Preview 响应后立即清除本地
+    target\_selector / target\_topic 明文；forgetSelectorCleared=true。
+  - **跨用户操作拒绝**（C-D10 #3）：响应 data.user\_id ≠ 请求 user\_id
+    → forgetCrossUserBlocked=true + stage=failed + 清空投影。
+  - **漏删一致性**（v0.3/MEDIUM-03）：forgetHasMissingDeletes getter 基于
+    affectedCount 与 executedCount 计算；不一致 → stage=failed。
+  - **Hard Delete fail-closed**（v0.3/MEDIUM-04）：delete\_mode=hard 时
+    服务端返回 fail-closed 错误，Execute 进入 failed，executedCount=-1
+    （不得自动降级 soft 后伪成功）。
+  - **full_reset 门禁**：携带任意 target\_* 立即拒绝（SEC-FORGET-03）。
+
+* QML 页面：`ForgetPage.qml`（目标 Qt 5.12，ScrollView 防 960×640 溢出），
+  分区：基础输入 / 自然语言 selector / 模式条件字段（按 forget\_mode 互斥显示）
+  / Preview-Execute 按钮 / Execute 参数 / 敏感提示 / 影响范围面板 /
+  Execute 一致性校验 / 安全验收（selector 清除 + 跨用户拒绝）/ 原始响应 JSON。
+
+* L0 测试：`test_d10c_forgetting.cpp`（18 用例 A~J）：
+  - **A. 模式互斥**（5 合法模式 + crossMode 携带非模式字段拒绝）
+  - **B. Preview 投影**（selection\_hash / affected\_count / TTL /
+    resolved\_targets + forgetSelectorCleared=true HIGH-01）
+  - **C. 状态机** idle→previewing→awaiting→executing→completed
+  - **D. 漏删保护**（MEDIUM-03：executed \< affected → failed）
+  - **E. 跨用户拒绝**（C-D10 #3：user\_id mismatch → forgetCrossUserBlocked）
+  - **F. Execute 门禁**（非 awaiting\_confirmation → 拒绝）
+  - **G. 独立 busy + 未连接拒绝**
+  - **H. UNSUPPORTED_METHOD / error → failed 且无伪结果**
+  - **I. full\_reset 携带 target\_\* → 拒绝**
+  - **J. Hard Delete fail-closed（错误不自动降级）**
+
+**关键声明（D10-C）**：本实现仅为 memory-client 侧 QML Pipeline Harness；
+不关闭 C-D10；**不宣称 D 轨 SQLite Forget 事务 / B 轨 Vector+FTS5 物理删除 /
+E 轨 ForgetPlan 业务 Gate 已 Runtime 接线**；Hard Delete / Cascade / Full Reset
+在跨轨闭环与麒麟 L2 证据前保持 fail-closed；L2 宿主验证需在麒麟 VM 另行执行。
+
 ## 明确不负责的内容
 
 * 不实现 Python 侧服务逻辑
@@ -191,6 +271,7 @@ memory-client/
 │       ├── ConflictComparisonPage.qml # D8-C 冲突对比 Demo
 │       ├── LifecycleStatusPage.qml   # D8-C 生命周期状态 Demo
 │       └── ContextAssemblePage.qml   # D9-C Memory Context 组装 Demo
+│       └── ForgetPage.qml            # D10-C 精准遗忘 Pipeline Demo
 └── tests/
     ├── CMakeLists.txt
     ├── mock_gateway_server.{h,cpp}    # QLocalServer Mock
@@ -199,6 +280,8 @@ memory-client/
     ├── test_d5_vertical_link_demo.cpp # L0 D5-C Demo（§A/B/C 10 用例）
     ├── test_d8c_knowledge_conflict_lifecycle.cpp # L0 D8-C Demo（14 用例）
     └── test_d9c_context_assemble.cpp # L0 D9-C Demo（17 用例 A/E/S/R）
+    ├── test_d9c_context_assemble.cpp # L0 D9-C Demo（17 用例 A/E/S/R）
+    └── test_d10c_forgetting.cpp      # L0 D10-C Demo（18 用例 A~J 遗忘契约）
 ```
 
 ## 构建
