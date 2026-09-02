@@ -151,18 +151,24 @@ SQLite 既有表无法直接追加跨列 conditional NOT NULL CHECK。迁移采�
 
 触发器/Repository 必须覆盖 direct SQL 负路径：迁移后任意新行缺/非法 `row_revision`、新 knowledge 缺 `knowledge_id/knowledge_type`、`version/row_revision < 1`、伪造 `legacy_unmapped`、`eligible + evidence_tier=NULL`、`evidence_unmapped + evidence_tier!=NULL` 均 MUST FAIL。迁移后现有 `soft_delete_memory_entry` 等 optimistic write 必须从 `version` CAS 切换到 `row_revision`；遗漏任何 writer 视为 Gate fail。`knowledge.detail.knowledge_type/conditions` 只读取上述结构化列；禁止用 `json.loads(memory_entries.content).get(...)` 作为这两个响应字段的真源。
 
-### 3.1.1 `evidence_tier` 唯一 ingress mapping
+### 3.1.1 Knowledge ingress 与 `evidence_tier` 唯一映射（含 E 轨 `allowed_extraction_kinds` 对象类型门禁）
 
-Repository 不接受 payload/LLM/Knowledge Domain 直接指定 `evidence_tier`。它只读取 `Knowledge.source_event_id` 指向的同用户 `source_events` 真源，并先执行不可绕过的准入谓词：事件必须存在、属于同一 `user_id`，且 `admission_decision == 'allow_extraction'`；缺失、跨用户、未知 decision、`reject` 或 `audit_only` 均 fail-closed 拒绝 Knowledge 写入，不得降级成 `evidence_unmapped`，更不得升级为 eligible evidence。只有通过该门禁后才按下表继续派生：
+Repository 不接受 payload/LLM/Knowledge Domain 直接指定 `evidence_tier`。它只读取 `Knowledge.source_event_id` 指向的同用户 `source_events` 真源，并先执行两层不可绕过的准入谓词：
 
-| source_events 真源 | evidence_tier | eligibility |
-|---|---|---|
-| `admission_decision='allow_extraction'` 且 `source_type='manual_config'` 且 `source_business_status IN ('success','completed')` | `user_explicit_config_latest` | `eligible` |
-| `admission_decision='allow_extraction'` 且 `source_type='tool_result'` 且 `source_business_status IN ('success','completed')` | `tool_execution_result` | `eligible` |
-| `admission_decision='allow_extraction'` 且 `source_business_status IN ('failed','cancelled','timeout','ignored')` | 不落 knowledge | 写入拒绝 |
-| `admission_decision='allow_extraction'` 的其他来源/状态组合 | NULL | `evidence_unmapped` |
+1. **admission 门禁**：事件必须存在、属于同一 `user_id`，且 `admission_decision == 'allow_extraction'`；缺失、跨用户、未知 decision、`reject` 或 `audit_only` 均 fail-closed 拒绝 Knowledge 写入，不得降级成 `evidence_unmapped`，更不得升级为 eligible evidence。
+2. **对象类型门禁**：`allow_extraction` 只说明该事件存在允许抽取的对象类型，不等价于允许写任意 Knowledge。`source_events` 不持久化 `allowed_extraction_kinds`（既有 D6 契约的范围选择），因此 D8-D 冻结下表列出的 E 轨 status → allowed-extraction-kind 语义作为 D 边界只读门禁；不扩表、不改 E 轨 Policy/枚举，也不重新解释 `admission_decision`。knowledge_type 取 Domain 已校验的 `Knowledge.knowledge_type`，Repository 不得从 `content` 或事件 payload 重新推导。
 
-`user_confirmed/consistent_behavior_multiple/behavior_inference_single/model_inference` 当前没有已冻结的持久化证明，不得由 D8-D 猜测。未来启用必须通过新的跨轨契约明确可信事实与聚合窗口。`evidence_unmapped` knowledge 可持久化为 candidate，但不得进入 Lifecycle Worker 或 ConflictResolutionPolicy 自动裁决。`admission_reason_code/consent_scope/sensitivity/is_sensitive_matched/should_ignore/payload_security_checked` 继续由已冻结 SourceAdmission 产生并审计；D8-D 不重新解释它们，也不得绕过 `admission_decision` 的最终门禁。
+| source_events 真源（先过 admission 门禁） | knowledge_type 对象门禁 | evidence_tier | eligibility |
+|---|---|---|---|
+| `admission_decision='allow_extraction'` 且 `source_type='manual_config'` 且 `source_business_status IN ('success','completed')` | 不额外限制（沿用当前映射） | `user_explicit_config_latest` | `eligible` |
+| `admission_decision='allow_extraction'` 且 `source_type='tool_result'` 且 `source_business_status IN ('success','completed')` | 不额外限制（沿用当前映射） | `tool_execution_result` | `eligible` |
+| `admission_decision='allow_extraction'` 且 `source_business_status='failed'` | **仅 `knowledge_type='failure_experience'`**（E 轨 `allowed_extraction_kinds={FAILURE_EXPERIENCE}`） | NULL | `evidence_unmapped` |
+| 同上 `source_business_status='failed'` | `knowledge_type IN ('fact','workflow','case','template','constraint')` | 不落 Knowledge | 写入拒绝 |
+| `admission_decision='allow_extraction'` 且 `source_business_status='partial'` | 任何 Knowledge（E 轨 `allowed_extraction_kinds={PREFERENCE}`；Preference 不落 `entry_type='knowledge'`） | 不落 Knowledge | 写入拒绝 |
+| `admission_decision='allow_extraction'` 且 `source_business_status IN ('cancelled','timeout','ignored')` | — | 不落 Knowledge | 写入拒绝 |
+| `admission_decision='allow_extraction'` 的其他来源/状态组合（经对象类型门禁后仍允许） | 按 E 轨 allowed-extraction-kind 语义 | NULL | `evidence_unmapped` |
+
+`failed + failure_experience` 是 E 轨已合法产生的 Knowledge 路径，D8-D 必须按真实失败语义持久化，不得改写为成功知识：在尚无冻结证据等级映射前保守落为 `evidence_tier=NULL / lifecycle_eligibility='evidence_unmapped'`，可进入 candidate 但不得进入 Lifecycle Worker 或 ConflictResolutionPolicy 自动裁决。`user_confirmed/consistent_behavior_multiple/behavior_inference_single/model_inference` 当前没有已冻结的持久化证明，不得由 D8-D 猜测。未来启用必须通过新的跨轨契约明确可信事实与聚合窗口。`evidence_unmapped` knowledge 可持久化为 candidate，但不得进入 Lifecycle Worker 或 ConflictResolutionPolicy 自动裁决。`admission_reason_code/consent_scope/sensitivity/is_sensitive_matched/should_ignore/payload_security_checked` 继续由已冻结 SourceAdmission 产生并审计；D8-D 不重新解释它们，也不得绕过 `admission_decision` 或 `allowed_extraction_kinds` 的最终语义。
 
 新 Knowledge 的 provenance 采用单一结构化真源：在验证并读取上述 `source_events` 行后，Repository 必须在**同一 UoW**写入 Knowledge 及一条 canonical `memory_relation(relation_type='evidence', is_primary=1, left=Knowledge.knowledge_id, right=Knowledge.source_event_id)`；任一写入失败则整体回滚。`evidence_tier` 派生与后续审计只回查这条 primary relation 指向的同用户 `source_events` 行，`knowledge.detail.evidence[]` 则投影 primary 与后续受控追加的 supporting relations；不允许另从 `content` 或 Domain 自由文本 `evidence` 恢复 provenance。幂等重放复用既有 canonical relation，不重复造边；每个 knowledge 恰有一条 primary evidence relation，同一 `(user_id, knowledge_id, source_event_id)` 也只允许一条 evidence relation。
 
@@ -607,7 +613,9 @@ legacy/evidence-unmapped lifecycle-ineligible 行不出现在列表中。仅过�
 - migration single-head、upgrade/downgrade data-loss guard、schema/metadata 一致；
 - canonical ID 正/负/边界测试（`1/v1` 合法，`01/+1/v01/v0` 拒绝），并断言 lifecycle row_revision 变化不改变 `memory_entries.version`/`version_id`；迁移把旧 version 复制到 row_revision，所有既有 CAS writer 改用 row_revision；
 - direct SQL 门禁：新行缺 knowledge_type、伪造 `legacy_unmapped`、eligibility/evidence 不一致 MUST FAIL；legacy/evidence-unmapped 不进入 Worker/IPC/conflict truth；
-- evidence_tier ingress：仅 `allow_extraction` 可继续映射；manual_config/tool success 两条正路；`tool_result + success + reject`、`manual_config + completed + audit_only`、失败/取消均拒绝写 Knowledge；其余已准入来源为 evidence_unmapped；payload/LLM 不得覆盖；
+- evidence_tier ingress admission：仅同 user + `allow_extraction` 可继续映射；`tool_result + success + reject`、`manual_config + completed + audit_only`、缺失/跨用户/未知 decision 均 MUST NOT 写 Knowledge；payload/LLM 不得覆盖；
+- allowed-extraction-kind 对象类型门禁：`failed + allow_extraction + knowledge_type='failure_experience'` MUST 持久化且 MUST NOT 被改写为成功知识/eligible（evidence_tier=NULL、evidence_unmapped）；`failed + allow_extraction + knowledge_type='fact'/'workflow'/…` MUST reject；`partial + allow_extraction + Knowledge` MUST reject；cancelled/timeout/ignored 拒绝；
+- evidence_tier 正路与其余：manual_config/tool_result 的 success/completed 两条 eligible 正路；其余已准入组合（经对象类型门禁）为 evidence_unmapped；payload/LLM 不得覆盖；
 - 新 Knowledge 与唯一 `is_primary=1` canonical evidence relation 同 UoW 原子写入，失败整体回滚；重复 `(user,knowledge,source_event)` 不造第二条；evidence tier/audit 只由 primary relation 回查同用户 source_event，supporting relation 不静默改 tier；
 - relation endpoint type/方向/ownership；relation 无自由文本列；conflict member 的 None/empty/duplicate/order round-trip 与 33 项超限拒绝；
 - conflict summary 输入 Sentinel 不出现在 SQLite、日志、Outbox、IPC，持久化/响应只能是固定 `conflict:<type>`；
