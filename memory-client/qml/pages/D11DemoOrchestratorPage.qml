@@ -4,21 +4,22 @@
 //        不关闭 C-D5 / C-D6 / C-D8 / C-D9 / C-D10；不声称真实 AI Assistant Hook /
 //        Chat DB / ChatRecord / SourceResolver 已 Runtime 接线）。
 //
-// 职责：把 5 条主演示路径（D11B 文档 C1-1 ~ C1-5）串为单页 5-Step 编排，
-//       方便 B/D 轨在 D11B 麒麟 VM（同一 Commit、同一 VM）内一键复跑：
-//         Step 1 · 普通聊天（Pre-Chat 召回 + Post-Turn 落库 / turn.finalized）
-//         Step 2 · 跨会话（跨 session，user 保持一致，召回持久化偏好+知识）
-//         Step 3 · Tool 调用（Tool Result 入记忆 / 事件采集）
-//         Step 4 · 冲突对比（知识生命周期）
-//         Step 5 · 精准遗忘（Preview→Confirm→Execute 全流程）
-//       编排器不添加任何超出各单页 Pipeline 的业务逻辑；它只
-//         (a) 复用 D5/D6/D8/D9/D10 的既有 ViewModel 方法，
-//         (b) 提供默认演示样例输入（与 D11B 回填文档 C1-1~C1-5 对齐），
-//         (c) 汇总 5 条路径的阶段/错误/安全指示（3 绿/红灯板），
-//         (d) 保证每一步的输入明文（selector / originalUserText 等）与
-//             响应注入文本严格分离（沿用 D5 原文隔离 + D10 HIGH-01 明文清除）。
+// HIGH-01 修复：
+//   - viewModel alias 直接绑定 id=orchestrator 的属性（不经过 var inner）。
+//   - 本页由 L0 测试 test_d11c_qml_load 通过 QQmlComponent 真实实例化校验。
 //
-// 兼容性：Qt 5.12（不使用 5.15+ 语法）；ScrollView 防 960×640 溢出。
+// HIGH-03 修复：
+//   - 5 张 Step Card 为显式声明式实例（NOT createObject+快照），每张 Card 内部
+//     直接绑定 viewModel.* Q_PROPERTY；状态变更自动刷新。
+//   - 兼容 Qt 5.12：不使用 inline component / Qt 5.15 语法。
+//
+// MEDIUM-01 修复：
+//   - "重置 5 步" 调用 viewModel.resetAllPipelines()，明确覆盖 6 条 Pipeline。
+//
+// HIGH-02 修复：
+//   - Step 5 Execute 按钮使用 viewModel.forgetConfirmationCredential
+//     （forget.preview 响应中的 confirmation_credential），非空才启用；
+//     ViewModel runForgetExecutePipeline 内部再做 fail-closed 二次校验。
 
 import QtQuick 2.12
 import QtQuick.Controls 2.12
@@ -28,8 +29,8 @@ ScrollView {
     id: root
     clip: true
 
-    property alias viewModel: inner.viewModel
-    property var inner: orchestrator
+    // HIGH-01：直接 alias 到 id=orchestrator 的 viewModel，避免中间 var inner
+    property alias viewModel: orchestrator.viewModel
 
     ColumnLayout {
         id: orchestrator
@@ -53,9 +54,7 @@ ScrollView {
                 font.pixelSize: 16
             }
             Item { Layout.fillWidth: true }
-            Label {
-                text: qsTr("连接：")
-            }
+            Label { text: qsTr("连接：") }
             Label {
                 text: viewModel ? viewModel.connectionState : "—"
                 color: (viewModel && viewModel.connectionState === "connected")
@@ -72,7 +71,8 @@ ScrollView {
                 }
             }
             Button {
-                text: qsTr("重置 5 步")
+                text: qsTr("重置 5 步 (全 Pipeline)")
+                toolTip: qsTr("重置 PreChat/PostTurn/Tool/Conflict/Lifecycle/Forget stage 和 busy（保留 forget 错误文案）")
                 onClicked: resetAllSteps()
             }
         }
@@ -121,135 +121,315 @@ ScrollView {
             }
         }
 
-        // ── Step 1 · 普通聊天（Pre-Chat + Post-Turn） ─────────────────
-        stepCardComponent.createObject(orchestrator, {
-            "stepIndex": 1,
-            "stepTitle": qsTr("Step 1 · 普通聊天 (Pre-Chat → Post-Turn)"),
-            "stepDescription": qsTr("D5 Vertical Link 主路径：Pre-Chat 召回上下文，三路原文隔离绿灯；Post-Turn 用 turn.finalized 发送 TurnFinalizedEvent，is_end=true。"),
-            "stageBinding": viewModel ? viewModel.preChatStage : "",
-            "postBinding": viewModel ? viewModel.postTurnStage : "",
-            "isolationOk": viewModel ? viewModel.textIsolationVerified : false,
-            "errorBinding": "",
-            "runAction": function() {
-                if (!viewModel) return;
-                viewModel.runPreChatPipeline(
-                    fUserId.text, fSession1.text, fScene.text,
-                    fMaxTokens.value,
-                    "帮我回忆昨天讨论的麒麟 OS Agent 记忆系统架构要点");
-            },
-            "runPost": function() {
-                if (!viewModel) return;
-                viewModel.runPostTurnPipeline(
-                    fUserId.text, fSession1.text,
-                    "turn-0001" /* turnId */,
-                    "tr-demo-0001" /* traceId */,
-                    "msg-final-0001" /* finalMessageId */,
-                    "记忆系统含 Vector+FTS5 混合检索 + SQLite 结构化真源。" /* finalAssistantText */,
-                    "ended" /* finalizationReason */,
-                    "stop" /* stopReason */);
+        // ── Step 1 · 普通聊天（Pre-Chat + Post-Turn）─────────────────
+        // HIGH-03：stageBinding/postBinding/isolationOk 均为 QML 原生绑定，
+        // viewModel 的 NOTIFY 信号会自动触发刷新。
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+            Rectangle {
+                Layout.fillWidth: true
+                border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
+                ColumnLayout {
+                    anchors.fill: parent; anchors.margins: 10; spacing: 6
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            text: qsTr("[1] Step 1 · 普通聊天 (Pre-Chat → Post-Turn)")
+                            font.bold: true
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: viewModel ? viewModel.preChatStage : ""
+                            color: (viewModel && (viewModel.preChatStage === "ready"
+                                     || viewModel.preChatStage === "sent"
+                                     || viewModel.preChatStage === "completed"))
+                                   ? "#2e7d32"
+                                   : (viewModel && viewModel.preChatStage === "failed"
+                                          ? "#c62828" : "#555")
+                        }
+                        Label {
+                            text: " / " + (viewModel ? viewModel.postTurnStage : "")
+                            color: (viewModel && (viewModel.postTurnStage === "ready"
+                                     || viewModel.postTurnStage === "sent"
+                                     || viewModel.postTurnStage === "completed"))
+                                   ? "#2e7d32"
+                                   : (viewModel && viewModel.postTurnStage === "failed"
+                                          ? "#c62828" : "#555")
+                        }
+                    }
+                    Label {
+                        text: qsTr("D5 Vertical Link 主路径：Pre-Chat 召回上下文，三路原文隔离绿灯；Post-Turn 用 turn.finalized 发送 TurnFinalizedEvent，is_end=true。")
+                        wrapMode: Text.Wrap; color: "#555"; Layout.fillWidth: true
+                    }
+                    RowLayout {
+                        spacing: 8
+                        Button {
+                            text: qsTr("①-A Pre-Chat")
+                            enabled: viewModel !== null && !viewModel.busy
+                            onClicked: if (viewModel) viewModel.runPreChatPipeline(
+                                fUserId.text, fSession1.text, fScene.text,
+                                fMaxTokens.value,
+                                "帮我回忆昨天讨论的麒麟 OS Agent 记忆系统架构要点")
+                        }
+                        Button {
+                            text: qsTr("①-B Post-Turn (turn.finalized)")
+                            enabled: viewModel !== null && !viewModel.busy
+                            onClicked: if (viewModel) viewModel.runPostTurnPipeline(
+                                fUserId.text, fSession1.text,
+                                "turn-0001", "tr-demo-0001", "msg-final-0001",
+                                "记忆系统含 Vector+FTS5 混合检索 + SQLite 结构化真源。",
+                                "ended", "stop")
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: qsTr("原文隔离: ")
+                                  + ((viewModel && viewModel.textIsolationVerified)
+                                     ? qsTr("PASS ✓") : qsTr("—"))
+                            color: (viewModel && viewModel.textIsolationVerified)
+                                   ? "#2e7d32" : "#666"
+                        }
+                    }
+                }
             }
-        })
+        }
 
         // ── Step 2 · 跨会话召回持久化偏好+知识 ────────────────────────
-        stepCardComponent.createObject(orchestrator, {
-            "stepIndex": 2,
-            "stepTitle": qsTr("Step 2 · 跨会话召回 (同一 user / 不同 session)"),
-            "stepDescription": qsTr("D5 Vertical Link，切换 session_id，期望 context[] 中含持久化 preference/knowledge 条目（session 不回退）。"),
-            "stageBinding": viewModel ? viewModel.preChatStage : "",
-            "postBinding": "",
-            "isolationOk": viewModel ? viewModel.textIsolationVerified : false,
-            "errorBinding": "",
-            "runAction": function() {
-                if (!viewModel) return;
-                viewModel.runPreChatPipeline(
-                    fUserId.text, fSession2.text, fScene.text,
-                    fMaxTokens.value,
-                    "提醒我上次提到的 Vector 删除一致性规则");
-            },
-            "runPost": null
-        })
+        ColumnLayout {
+            Layout.fillWidth: true; spacing: 4
+            Rectangle {
+                Layout.fillWidth: true
+                border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
+                ColumnLayout {
+                    anchors.fill: parent; anchors.margins: 10; spacing: 6
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            text: qsTr("[2] Step 2 · 跨会话召回 (同一 user / 不同 session)")
+                            font.bold: true
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: viewModel ? viewModel.preChatStage : ""
+                            color: (viewModel && (viewModel.preChatStage === "ready"
+                                     || viewModel.preChatStage === "sent"
+                                     || viewModel.preChatStage === "completed"))
+                                   ? "#2e7d32"
+                                   : (viewModel && viewModel.preChatStage === "failed"
+                                          ? "#c62828" : "#555")
+                        }
+                    }
+                    Label {
+                        text: qsTr("D5 Vertical Link，切换 session_id = session-demo-0002，期望 context[] 含持久化 preference/knowledge 条目（session 不回退）。")
+                        wrapMode: Text.Wrap; color: "#555"; Layout.fillWidth: true
+                    }
+                    RowLayout {
+                        spacing: 8
+                        Button {
+                            text: qsTr("Run Step 2 · Pre-Chat")
+                            enabled: viewModel !== null && !viewModel.busy
+                            onClicked: if (viewModel) viewModel.runPreChatPipeline(
+                                fUserId.text, fSession2.text, fScene.text,
+                                fMaxTokens.value,
+                                "提醒我上次提到的 Vector 删除一致性规则")
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: qsTr("原文隔离: ")
+                                  + ((viewModel && viewModel.textIsolationVerified)
+                                     ? qsTr("PASS ✓") : qsTr("—"))
+                            color: (viewModel && viewModel.textIsolationVerified)
+                                   ? "#2e7d32" : "#666"
+                        }
+                    }
+                }
+            }
+        }
 
         // ── Step 3 · Tool 调用事件入记忆 ──────────────────────────────
-        stepCardComponent.createObject(orchestrator, {
-            "stepIndex": 3,
-            "stepTitle": qsTr("Step 3 · Tool 调用 (Tool Result 入记忆 / 事件采集)"),
-            "stepDescription": qsTr("D6 Tool Adapter：tool_name=memory_search，status=success；tool_output 仅在展示区显示，错误路径只回 safeMessage，不泄露原文。"),
-            "stageBinding": viewModel ? viewModel.toolStage : "",
-            "postBinding": "",
-            "isolationOk": false,
-            "errorBinding": "",
-            "runAction": function() {
-                if (!viewModel) return;
-                viewModel.runToolPipeline(
-                    fUserId.text, fSession2.text,
-                    "turn-0002" /* turnId */,
-                    "tc-0001" /* toolCallId */,
-                    "memory_search" /* toolName */,
-                    "success" /* executionStatus */,
-                    "{\"query\":\"qlatent 向量召回阈值\"}" /* argumentsRef */,
-                    "{\"hits\":5,\"threshold\":0.52}" /* resultRef */,
-                    "" /* errorType */,
-                    "" /* errorMessageSafe */,
-                    true /* sideEffect */,
-                    false /* rollbackRequired */);
-            },
-            "runPost": null
-        })
+        ColumnLayout {
+            Layout.fillWidth: true; spacing: 4
+            Rectangle {
+                Layout.fillWidth: true
+                border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
+                ColumnLayout {
+                    anchors.fill: parent; anchors.margins: 10; spacing: 6
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            text: qsTr("[3] Step 3 · Tool 调用 (Tool Result 入记忆 / 事件采集)")
+                            font.bold: true
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: viewModel ? viewModel.toolStage : ""
+                            color: (viewModel && viewModel.toolStage === "sent")
+                                   ? "#2e7d32"
+                                   : (viewModel && viewModel.toolStage === "failed"
+                                          ? "#c62828" : "#555")
+                        }
+                    }
+                    Label {
+                        text: qsTr("D6 Tool Adapter：tool_name=memory_search，execution_status=success；错误路径 safeMessage 只显 error_code，不泄露 tool_output 正文。")
+                        wrapMode: Text.Wrap; color: "#555"; Layout.fillWidth: true
+                    }
+                    RowLayout {
+                        spacing: 8
+                        Button {
+                            text: qsTr("Run Step 3 · Tool")
+                            enabled: viewModel !== null && !viewModel.busy
+                            onClicked: if (viewModel) viewModel.runToolPipeline(
+                                fUserId.text, fSession2.text,
+                                "turn-0002", "tc-0001", "memory_search", "success",
+                                "{\"query\":\"qlatent 向量召回阈值\"}",
+                                "{\"hits\":5,\"threshold\":0.52}",
+                                "", "", true, false)
+                        }
+                    }
+                }
+            }
+        }
 
         // ── Step 4 · 冲突对比（知识生命周期） ──────────────────────────
-        stepCardComponent.createObject(orchestrator, {
-            "stepIndex": 4,
-            "stepTitle": qsTr("Step 4 · 冲突对比 (知识 Conflict / Lifecycle)"),
-            "stepDescription": qsTr("D8-C conflict.compare(km-1, include_resolved=false)；冲突候选展示区仅展示摘要 entry_summary，不展示脱敏原文。"),
-            "stageBinding": viewModel ? viewModel.conflictCompareStage : "",
-            "postBinding": viewModel ? viewModel.lifecycleStatusStage : "",
-            "isolationOk": false,
-            "errorBinding": viewModel ? viewModel.conflictCompareError : "",
-            "runAction": function() {
-                if (!viewModel) return;
-                viewModel.runConflictComparePipeline("km-1", false /* includeResolved */);
-            },
-            "runPost": function() {
-                if (!viewModel) return;
-                viewModel.runLifecycleStatusPipeline(
-                    fUserId.text, "km-1", "" /* memoryStatus */);
+        ColumnLayout {
+            Layout.fillWidth: true; spacing: 4
+            Rectangle {
+                Layout.fillWidth: true
+                border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
+                ColumnLayout {
+                    anchors.fill: parent; anchors.margins: 10; spacing: 6
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            text: qsTr("[4] Step 4 · 冲突对比 (知识 Conflict / Lifecycle)")
+                            font.bold: true
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: viewModel ? viewModel.conflictCompareStage : ""
+                            color: (viewModel && viewModel.conflictCompareStage === "ready")
+                                   ? "#2e7d32"
+                                   : (viewModel && viewModel.conflictCompareStage === "failed"
+                                          ? "#c62828" : "#555")
+                        }
+                        Label {
+                            text: " / " + (viewModel ? viewModel.lifecycleStatusStage : "")
+                            color: (viewModel && viewModel.lifecycleStatusStage === "ready")
+                                   ? "#2e7d32"
+                                   : (viewModel && viewModel.lifecycleStatusStage === "failed"
+                                          ? "#c62828" : "#555")
+                        }
+                    }
+                    Label {
+                        text: qsTr("D8-C conflict.compare(km-1, include_resolved=false) → 候选列表；lifecycle.status(km-1) → active/archived 版本流转。")
+                        wrapMode: Text.Wrap; color: "#555"; Layout.fillWidth: true
+                    }
+                    RowLayout {
+                        spacing: 8
+                        Button {
+                            text: qsTr("④-A Conflict Compare")
+                            enabled: viewModel !== null && !viewModel.busy
+                            onClicked: if (viewModel)
+                                viewModel.runConflictComparePipeline("km-1", false)
+                        }
+                        Button {
+                            text: qsTr("④-B Lifecycle Status")
+                            enabled: viewModel !== null && !viewModel.busy
+                            onClicked: if (viewModel)
+                                viewModel.runLifecycleStatusPipeline(fUserId.text, "km-1", "")
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            visible: viewModel && viewModel.conflictCompareError && viewModel.conflictCompareError.length > 0
+                            text: qsTr("错误: ") + (viewModel ? viewModel.conflictCompareError : "")
+                            color: "#c62828"
+                        }
+                    }
+                }
             }
-        })
+        }
 
-        // ── Step 5 · 精准遗忘 (Preview→Confirm→Execute) ──────────────
-        stepCardComponent.createObject(orchestrator, {
-            "stepIndex": 5,
-            "stepTitle": qsTr("Step 5 · 精准遗忘 (Preview → Confirm → Execute)"),
-            "stepDescription": qsTr("D10-C single_item+知识：Preview 立即清除 selector 明文（HIGH-01），三绿安全灯（selector_cleared / cross-user / missing_deletes）。"),
-            "stageBinding": viewModel ? viewModel.forgetStage : "",
-            "postBinding": "",
-            "isolationOk": viewModel ? (viewModel ? viewModel.forgetSelectorCleared : false) : false,
-            "errorBinding": "",
-            "runAction": function() {
-                if (!viewModel) return;
-                viewModel.runForgetPreviewPipeline(
-                    fUserId.text,
-                    "plan-demo-001" /* forgetPlanId */,
-                    "single_item" /* forgetMode */,
-                    "knowledge" /* targetType */,
-                    "关于 2026-08-20 向量阈值的那条记忆" /* targetSelector */,
-                    "km-1" /* targetId */,
-                    "" /* targetSessionId */,
-                    "" /* targetTopic */,
-                    "" /* targetTimeRange */,
-                    true /* requiresConfirmation */,
-                    false /* isCascade */);
-            },
-            "runPost": function() {
-                if (!viewModel) return;
-                viewModel.runForgetExecutePipeline(
-                    fUserId.text,
-                    "plan-demo-001" /* forgetPlanId */,
-                    "credential-demo-32b" /* confirmationToken */,
-                    "" /* idempotencyKey */,
-                    "soft" /* deleteMode */);
+        // ── Step 5 · 精准遗忘 (Preview → Confirm → Execute) ──────────────
+        ColumnLayout {
+            Layout.fillWidth: true; spacing: 4
+            Rectangle {
+                Layout.fillWidth: true
+                border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
+                ColumnLayout {
+                    anchors.fill: parent; anchors.margins: 10; spacing: 6
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            text: qsTr("[5] Step 5 · 精准遗忘 (Preview → Confirm → Execute)")
+                            font.bold: true
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: viewModel ? viewModel.forgetStage : ""
+                            color: (viewModel && (viewModel.forgetStage === "ready"
+                                     || viewModel.forgetStage === "awaiting_confirmation"
+                                     || viewModel.forgetStage === "completed"))
+                                   ? "#2e7d32"
+                                   : (viewModel && viewModel.forgetStage === "failed"
+                                          ? "#c62828" : "#555")
+                        }
+                    }
+                    Label {
+                        text: qsTr("D10-C single_item+知识：Preview 生成 confirmation_credential（绑定 userId+forgetPlanId+selection_hash，TTL=300s），HIGH-01 立即清除 selector 明文；Execute 仅在携带同一 Preview 凭据时放行，凭据不匹配 / 过期 = fail-closed。")
+                        wrapMode: Text.Wrap; color: "#555"; Layout.fillWidth: true
+                    }
+                    RowLayout {
+                        spacing: 8
+                        Button {
+                            text: qsTr("⑤-A Run Preview")
+                            enabled: viewModel !== null && !viewModel.busy
+                            onClicked: if (viewModel) viewModel.runForgetPreviewPipeline(
+                                fUserId.text, "plan-demo-001",
+                                "single_item", "knowledge",
+                                "关于 2026-08-20 向量阈值的那条记忆",
+                                "km-1", "", "", "", true, false)
+                        }
+                        Button {
+                            // HIGH-02：仅当 Preview 成功返回 credential 后才启用
+                            text: (viewModel && viewModel.forgetConfirmationCredential
+                                      && viewModel.forgetConfirmationCredential.length > 0)
+                                  ? qsTr("⑤-B Execute (Preview 凭据, soft)")
+                                  : qsTr("⑤-B Execute (请先完成 Preview)")
+                            enabled: viewModel
+                                     && viewModel.forgetStage === "awaiting_confirmation"
+                                     && viewModel.forgetConfirmationCredential
+                                     && viewModel.forgetConfirmationCredential.length > 0
+                                     && !viewModel.busy
+                            onClicked: if (viewModel) viewModel.runForgetExecutePipeline(
+                                // HIGH-02：直接绑定 Preview 返回的凭据（ViewModel 再校验）
+                                fUserId.text, "plan-demo-001",
+                                viewModel.forgetConfirmationCredential,
+                                "", "soft")
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: qsTr("Selector清除: ")
+                                  + ((viewModel && viewModel.forgetSelectorCleared)
+                                     ? qsTr("PASS ✓") : qsTr("—"))
+                            color: (viewModel && viewModel.forgetSelectorCleared)
+                                   ? "#2e7d32" : "#666"
+                        }
+                    }
+                    Label {
+                        visible: viewModel
+                                 && viewModel.forgetStage === "failed"
+                                 && ((viewModel.forgetPreviewError
+                                        && viewModel.forgetPreviewError.length > 0)
+                                     || (viewModel.forgetExecuteError
+                                           && viewModel.forgetExecuteError.length > 0))
+                        text: qsTr("错误: ")
+                              + (viewModel ? (viewModel.forgetPreviewError
+                                                || viewModel.forgetExecuteError) : "")
+                        color: "#c62828"; Layout.fillWidth: true; wrapMode: Text.Wrap
+                    }
+                }
             }
-        })
+        }
 
         // ── 5 步安全汇总（D11C 验收：三绿总览） ────────────────────────
         GroupBox {
@@ -257,13 +437,10 @@ ScrollView {
             title: qsTr("安全 & 隔离汇总 (验收总览)")
 
             ColumnLayout {
-                width: parent.width
-                spacing: 4
+                width: parent.width; spacing: 4
 
                 Row {
-                    Label {
-                        text: qsTr("原文隔离 (D5-C): ")
-                    }
+                    Label { text: qsTr("原文隔离 (D5-C): ") }
                     Label {
                         text: (viewModel && viewModel.textIsolationVerified)
                               ? qsTr("PASS ✓") : qsTr("—")
@@ -281,10 +458,32 @@ ScrollView {
                     }
                 }
                 Row {
-                    Label { text: qsTr("跨用户拦截 (D10-C #3): ") }
+                    Label { text: qsTr("凭据链闭合 (D11 Step5 HIGH-02): ") }
                     Label {
-                        text: qsTr("未触发 (默认)")
+                        text: {
+                            if (!viewModel) return qsTr("—");
+                            if (viewModel.forgetStage === "completed")
+                                return qsTr("PASS ✓ (Preview→Execute 同一凭据)");
+                            if (viewModel.forgetStage === "awaiting_confirmation"
+                                && viewModel.forgetConfirmationCredential
+                                && viewModel.forgetConfirmationCredential.length > 0)
+                                return qsTr("READY ✓ (等待 Execute)");
+                            return qsTr("—");
+                        }
+                        color: {
+                            if (!viewModel) return "#666";
+                            if (viewModel.forgetStage === "completed") return "#2e7d32";
+                            if (viewModel.forgetStage === "awaiting_confirmation"
+                                && viewModel.forgetConfirmationCredential
+                                && viewModel.forgetConfirmationCredential.length > 0)
+                                return "#2e7d32";
+                            return "#666";
+                        }
                     }
+                }
+                Row {
+                    Label { text: qsTr("跨用户拦截 (D10-C #3): ") }
+                    Label { text: qsTr("未触发 (默认)") }
                 }
                 Row {
                     Label { text: qsTr("遗忘漏删一致性 (v0.3/MEDIUM-03): ") }
@@ -296,129 +495,18 @@ ScrollView {
                     }
                 }
                 Label {
-                    text: qsTr("⚠️ 本页为客户端编排 Demo，未接入真实 AI 助手 Hook / Chat DB / 持久化后端；")
-                          + qsTr("真实 Runtime 证据需 B/D 轨在 D11B 麒麟 VM (同一 Commit) 复测归档。")
-                    color: "#b26a00"
-                    wrapMode: Text.Wrap
-                    Layout.fillWidth: true
+                    text: qsTr("⚠️ 本页为客户端编排 Demo，未接入真实 AI 助手 Hook / Chat DB / 持久化后端；真实 Runtime 证据需 B/D 轨在 D11B 麒麟 VM (同一 Commit) 复测归档。")
+                    color: "#b26a00"; wrapMode: Text.Wrap; Layout.fillWidth: true
                 }
             }
         }
 
         function resetAllSteps() {
             if (!viewModel) return;
-            viewModel.resetPreChatPipeline();
-            viewModel.resetForgetProjection();
-            // D5 resetPreChat 已清零三路口径；D10 resetForgetProjection 保留错误文案
-            // (L0 测试契约要求：错误不得被 reset 清空，但明文 projection 已清)。
-        }
-    }
-
-    // ── Step Card 组件（Qt 5.12 兼容：在 ScrollView 根作用域声明 Component）──
-    Component {
-        id: stepCardComponent
-
-        ColumnLayout {
-            property int stepIndex: 1
-            property string stepTitle: ""
-            property string stepDescription: ""
-            property string stageBinding: ""
-            property string postBinding: ""
-            property bool isolationOk: false
-            property string errorBinding: ""
-            // 两个可选动作按钮回调：主按钮=runAction；
-            // 当 Step 含第二动作（Post-Turn / Lifecycle / Execute）时使用 runPost。
-            property var runAction: null
-            property var runPost: null
-
-            Layout.fillWidth: true
-            spacing: 4
-
-            Rectangle {
-                Layout.fillWidth: true
-                border.color: "#bdbdbd"
-                border.width: 1
-                radius: 6
-                color: "#fafafa"
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 6
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Label {
-                            text: qsTr("[%1] %2").arg(stepIndex).arg(stepTitle)
-                            font.bold: true
-                        }
-                        Item { Layout.fillWidth: true }
-                        Label {
-                            text: stageBinding
-                            color: (stageBinding === "ready"
-                                    || stageBinding === "sent"
-                                    || stageBinding === "awaiting_confirmation"
-                                    || stageBinding === "completed")
-                                   ? "#2e7d32" : (stageBinding === "failed"
-                                                  ? "#c62828" : "#555")
-                        }
-                        Label {
-                            visible: postBinding !== ""
-                            text: " / " + postBinding
-                            color: (postBinding === "ready"
-                                    || postBinding === "sent"
-                                    || postBinding === "completed")
-                                   ? "#2e7d32" : (postBinding === "failed"
-                                                  ? "#c62828" : "#555")
-                        }
-                    }
-                    Label {
-                        text: stepDescription
-                        wrapMode: Text.Wrap
-                        color: "#555"
-                        Layout.fillWidth: true
-                    }
-                    RowLayout {
-                        spacing: 8
-                        Button {
-                            text: (stepIndex === 5) ? qsTr("⑤-A Run Preview") :
-                                  (stepIndex === 1) ? qsTr("①-A Pre-Chat") :
-                                  (stepIndex === 4) ? qsTr("④-A Conflict Compare") :
-                                  qsTr("Run Step %1").arg(stepIndex)
-                            enabled: viewModel !== null && !viewModel.busy
-                            onClicked: if (runAction) runAction()
-                        }
-                        Button {
-                            visible: stepIndex === 1 || stepIndex === 4 || stepIndex === 5
-                            text: (stepIndex === 1) ? qsTr("①-B Post-Turn (turn.finalized)") :
-                                  (stepIndex === 4) ? qsTr("④-B Lifecycle Status") :
-                                                      qsTr("⑤-B Run Execute (soft)")
-                            enabled: viewModel !== null && !viewModel.busy
-                            onClicked: if (runPost) runPost()
-                        }
-                        Item { Layout.fillWidth: true }
-                        Label {
-                            visible: stepIndex === 1 || stepIndex === 2
-                            text: qsTr("原文隔离: ")
-                                  + (isolationOk ? qsTr("PASS ✓") : qsTr("—"))
-                            color: isolationOk ? "#2e7d32" : "#666"
-                        }
-                        Label {
-                            visible: stepIndex === 5
-                            text: qsTr("Selector清除: ")
-                                  + (isolationOk ? qsTr("PASS ✓") : qsTr("—"))
-                            color: isolationOk ? "#2e7d32" : "#666"
-                        }
-                    }
-                    Label {
-                        visible: errorBinding !== ""
-                        text: qsTr("错误: ") + errorBinding
-                        color: "#c62828"
-                        Layout.fillWidth: true
-                        wrapMode: Text.Wrap
-                    }
-                }
-            }
+            // MEDIUM-01：使用 ViewModel.resetAllPipelines() 全量 reset
+            // 覆盖 PreChat/PostTurn/Tool/Conflict/Lifecycle/Forget 的 stage/busy
+            // 保留 forget*Error 文案（resetForgetProjection 契约不变）。
+            viewModel.resetAllPipelines();
         }
     }
 }

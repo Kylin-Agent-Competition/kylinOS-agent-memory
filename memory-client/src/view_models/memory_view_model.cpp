@@ -2067,6 +2067,23 @@ void MemoryViewModel::runForgetExecutePipeline(
         setForgetStage(QStringLiteral("failed"));
         return;
     }
+    // D10 v0.3 凭据链校验：Execute 传入的 confirmationToken 必须与 Preview 返回
+    // 的 forgetConfirmationCredential_ 完全一致；不匹配 / 缺失 = fail-closed。
+    // 该校验是客户端侧第一道门禁（真实后端会二次校验），确保 Step 5 Preview→Execute
+    // 形成闭环，杜绝硬编码 token 绕过。
+    if (forgetConfirmationCredential_.isEmpty()) {
+        setForgetExecuteError(QStringLiteral(
+            "forget.execute: prior forget.preview did not return confirmation_credential."));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+    if (confirmationToken != forgetConfirmationCredential_) {
+        setForgetExecuteError(QStringLiteral(
+            "forget.execute: confirmation_token does not match the preview credential."
+            " (Credential replay / mismatch is fail-closed.)"));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
 
     QJsonObject payload;
     payload.insert(QStringLiteral("schema_version"), QStringLiteral("1.0"));
@@ -2223,6 +2240,8 @@ void MemoryViewModel::handleForgetExecuteResponse(
     // 正常完成：executing → completed（§三.3 v0.2 冻结状态机）
     setForgetExecuteBusy(false);
     setForgetStage(QStringLiteral("completed"));
+    // 消费一次性凭据：成功 Execute 后立即清空，杜绝重放攻击（D10 v0.3 §F-2）。
+    setForgetConfirmationCredential({});
     emit forgetHasMissingDeletesChanged();
 }
 
@@ -2244,6 +2263,14 @@ void MemoryViewModel::projectForgetPreview(const QJsonObject& data)
     // credential_ttl_s：确认凭据 TTL（默认 300s = 5 分钟，可调参数 TD-D）。
     const int ttl = data.value(QStringLiteral("credential_ttl_s")).toInt(300);
     setForgetCredentialTtlSeconds(ttl < 0 ? 300 : ttl);
+
+    // confirmation_credential：Preview 生成的一次性确认凭据（D10 v0.3 冻结）。
+    // 绑定 user_id + forget_plan_id + selection_hash，具备 TTL；Execute 必须
+    // 传入完全匹配值，错误/过期/重放必须 fail-closed。
+    const QString cred = data.value(QStringLiteral("confirmation_credential")).toString();
+    if (!cred.isEmpty()) {
+        setForgetConfirmationCredential(cred);
+    }
 
     // resolved_target_ids：预览命中目标 ID 切片（仅 ID；不含正文；含 cascade 扩展目标）。
     const QJsonArray ids = data.value(
@@ -2296,6 +2323,7 @@ void MemoryViewModel::resetForgetProjection()
     setForgetSelectionHash({});
     setForgetAffectedCount(0);
     setForgetCredentialTtlSeconds(0);
+    setForgetConfirmationCredential({});  // 预览投影的一部分：新 Preview 会重置
     setForgetResolvedTargets({});
     setForgetMode({});
     setForgetTargetType({});
@@ -2308,6 +2336,68 @@ void MemoryViewModel::resetForgetProjection()
     setForgetSelectorCleared(false);
     // crossUserBlocked：新请求前清零（防止上一次拒绝残留影响验收）。
     setForgetCrossUserBlocked(false);
+}
+
+// ── D11 编排器：单项 reset × 5 + 全量 reset ─────────────────────────────
+
+void MemoryViewModel::resetPostTurnPipeline()
+{
+    if (!pendingPostTurnRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingPostTurnRequestId_);
+        pendingPostTurnRequestId_.clear();
+    }
+    setPostTurnBusy(false);
+    setPostTurnStage(QStringLiteral("idle"));
+    setLastTurnFinalizedEvent({});
+}
+
+void MemoryViewModel::resetToolPipeline()
+{
+    // Tool 独立 pending（如有）统一取消；此处仅清 busy/stage。
+    setToolBusy(false);
+    setToolStage(QStringLiteral("idle"));
+    setLastToolEvent({});
+}
+
+void MemoryViewModel::resetConflictComparePipeline()
+{
+    setConflictCompareBusy(false);
+    setConflictCompareStage(QStringLiteral("idle"));
+    setConflictCandidates({});
+    setConflictCompareError({});
+}
+
+void MemoryViewModel::resetLifecycleStatusPipeline()
+{
+    setLifecycleStatusBusy(false);
+    setLifecycleStatusStage(QStringLiteral("idle"));
+    setLifecycleItems({});
+    setLifecycleStatusError({});
+}
+
+void MemoryViewModel::resetAllPipelines()
+{
+    // D5 两路
+    resetPreChatPipeline();
+    resetPostTurnPipeline();
+    // D6 Tool
+    resetToolPipeline();
+    // D8 两路
+    resetConflictComparePipeline();
+    resetLifecycleStatusPipeline();
+    // D10 遗忘：forgetStage → idle（注意：forget*Error 故意保留，与契约一致）
+    resetForgetProjection();
+    if (!pendingForgetPreviewRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingForgetPreviewRequestId_);
+        pendingForgetPreviewRequestId_.clear();
+    }
+    if (!pendingForgetExecuteRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingForgetExecuteRequestId_);
+        pendingForgetExecuteRequestId_.clear();
+    }
+    setForgetPreviewBusy(false);
+    setForgetExecuteBusy(false);
+    setForgetStage(QStringLiteral("idle"));
 }
 
 // ── D10C 私有 setters ────────────────────────────────────────────────────────
@@ -2360,6 +2450,13 @@ void MemoryViewModel::setForgetCredentialTtlSeconds(int value)
     if (forgetCredentialTtlSeconds_ == v) return;
     forgetCredentialTtlSeconds_ = v;
     emit forgetCredentialTtlSecondsChanged();
+}
+
+void MemoryViewModel::setForgetConfirmationCredential(const QString& value)
+{
+    if (forgetConfirmationCredential_ == value) return;
+    forgetConfirmationCredential_ = value;
+    emit forgetConfirmationCredentialChanged();
 }
 
 void MemoryViewModel::setForgetResolvedTargets(const QVariantList& value)

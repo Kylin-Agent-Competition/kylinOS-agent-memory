@@ -299,3 +299,40 @@ add_test(
     NAME d11c_e2e_orchestrator
     COMMAND test_d11c_e2e_orchestrator
 )
+
+# ============================================================================
+# D11-C QML 真实加载验证 L0 测试（Reviewer E HIGH-01 修复）
+# 范围：QQmlEngine + QQmlComponent 真实加载 resources.qrc 内的
+#       D11DemoOrchestratorPage.qml，验证 QML parser 可解析、alias 正确、
+#       重复实例化无泄漏；替代原有只验证 qrc 打包的 smoke build。
+# 注意：headless 运行（QT_QPA_PLATFORM=offscreen），不启动 Window；
+#       不代表真实 Runtime + D11B VM 已接线（L2 另行归档）。
+# ============================================================================
+add_executable(test_d11c_qml_load
+    ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+    ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
+    mock_gateway_server.cpp
+    test_d11c_qml_load.cpp
+)
+target_link_libraries(test_d11c_qml_load
+    PRIVATE
+        Qt5::Core
+        Qt5::Gui
+        Qt5::Network
+        Qt5::Qml
+        Qt5::Quick
+        Qt5::Test
+)
+target_include_directories(test_d11c_qml_load
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_d11c_qml_load
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME d11c_qml_load
+    COMMAND test_d11c_qml_load
+)

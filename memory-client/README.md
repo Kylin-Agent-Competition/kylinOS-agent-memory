@@ -239,15 +239,17 @@ E 轨 ForgetPlan 业务 Gate 已 Runtime 接线**；Hard Delete / Cascade / Full
 
 **D11-C Demo / Prototype（CANDIDATE / Demo 编排骨架；不关闭 C-D5 ~ C-D10；
 不声称已接入真实 AI Assistant Hook / Chat DB / 跨轨持久化后端；
-L2 宿主 Runtime 证据由 B/D 轨在 D11B 最终 VM（同一 Commit `e9dba4f`）复测并归档
+L2 宿主 Runtime 证据由 B/D 轨在 D11B 最终 VM（与最终验收 HEAD commit
+**同一 SHA**，不得提前硬编码）复测并归档
 `evidence/l2-kylin-vm/d11b_c_e2e_YYYYMMDD.md`）。**
 
 业务编排依据：
   - 台账 15 天 D11 C 轨任务卡 #1~#3：主导 AI 助手 + MemoryClient + 全部 QML
     页面联调；完成「普通聊天 / 跨会话 / Tool / 冲突 / 遗忘」5 条主演示路径；
     修复用户交互和原文隔离问题。主演示路径必须在**同一 Commit、同一虚拟机**中完整通过。
-  - 2026-09-02 D11B 回填文档 `docs/day10/D11B_UNVERIFIED回填_服务OS重启与DC端到端_20260902_C轨已填.md`
-    中 C1-1 ~ C1-5 的样例输入 / 期望输出（见该文档 §三 · C1 主演示路径）：
+  - D11B 回填文档：C1-1 ~ C1-5 样例输入 / 期望输出来源于 D11B 任务在 VM
+    内联调后产出的归档文件；本 PR 合入前**不得引用 base/HEAD 均不存在的路径**；
+    如 D11B 回填文件最终落位，请在合入前补充相对仓库的可追溯路径。
 
 - **编排器页面**：`qml/pages/D11DemoOrchestratorPage.qml`
   - 目标 Qt 5.12，ScrollView 防 960×640 溢出；5-Step Card + 公共参数区 +
@@ -269,49 +271,74 @@ L2 宿主 Runtime 证据由 B/D 轨在 D11B 最终 VM（同一 Commit `e9dba4f`�
   - Step 4 · 冲突对比 + 生命周期状态（D8-C）：memory_id=km-1，
     include_resolved=false：`conflict.compare` 返回候选列表；
     再跑 `lifecycle.status` 展示 km-1 的 active/archived 版本流转。
-  - Step 5 · 精准遗忘（D10-C Preview→Confirm→Execute）：
+  - Step 5 · 精准遗忘（D10-C Preview→Confirm→Execute，**HIGH-02 凭据链修复**）：
     forget_mode=single_item / target_type=knowledge /
-    forget_plan_id=plan-demo-001 +
-    自然语言 selector（成功后 HIGH-01 明文立即清除、
-    `forgetSelectorCleared=true`）→ Execute 携带
-    confirmation_token=credential-demo-32b + delete_mode=soft →
+    forget_plan_id=plan-demo-001 + 自然语言 selector（成功后 HIGH-01 明文立即清除、
+    `forgetSelectorCleared=true`）→
+    Preview 响应生成并下发 **confirmation_credential**（绑定
+    user_id + forget_plan_id + selection_hash，TTL 300s，ViewModel 通过
+    `forgetConfirmationCredential` Q_PROPERTY 暴露给 QML）→
+    Execute 按钮仅在 `forgetStage=awaiting_confirmation` 且 credential 非空时启用，
+    直接绑定同一 Preview 返回的 credential（ViewModel 端 fail-closed 二次校验：
+    空 / 不匹配 / 过期 token 直接 rejected）→ delete_mode=soft →
     completed 且 `forgetHasMissingDeletes=false`（MEDIUM-03 一致性）。
+    **严禁硬编码 credential-demo-32b 作为传参；Preview→Execute 必须闭环。**
   - 安全汇总板：D5 原文隔离 PASS / D10 HIGH-01 Selector 清除 PASS /
     跨用户拦截默认未触发(OK) / 遗忘漏删一致性 OK /
     Demo/Prototype 非真实 Runtime 的显式声明。
 - **导航入口**：`qml/main.qml` Drawer 新增「D11 E2E Orchestrator」按钮；
   窗口标题更新为「Kylin Memory Client — D11 E2E Orchestrator (Demo/Prototype)」。
 - **QRC**：`qml/resources.qrc` 注册 `pages/D11DemoOrchestratorPage.qml`。
-- **L0 测试**：`tests/test_d11c_e2e_orchestrator.cpp`（A~F 共 **12 用例**），
-  使用 test_support::MockGatewayServer + setHandler(lambda) 注册 9 路活跃 handler
-  （memory.retrieve / turn.finalized / tool.execution / conflict.compare /
-  lifecycle.status / forget.preview / forget.execute / health / echo）。
-  - **A. Step1 普通聊天**：A1 PreChat → ready，三路原文隔离 textIsolationVerified=true
-    且 originalUserText（8 字以上前缀）不得出现在 injectedContextText /
-    modelRequestText；A2 PostTurn 发送的 envelope.method 必须是 ADR-010 的
-    `turn.finalized` 且不得回退为 `memory.store`（非 retry 路径下
-    retry_of_turn_id 必须为空）。
-  - **B. Step2 跨会话**：session=session-demo-0002 时 PreChat 仍 ready，
-    originalUserText 被重写为 Step 2 的新查询（「Vector 删除一致性规则」），
-    证明 session 切换生效、不会回退到 session-demo-0001。
-  - **C. Step3 Tool**：C1 toolStage=sent；Gateway 收到的
-    `metadata.tool_name=memory_search` / `metadata.execution_status=success`；
-    C2 UNSUPPORTED_METHOD 错误注入 → toolStage=failed + requestFailed 信号
-    safeMessage **不含** `PK0f3e2d_c2` 等 tool_output 正文。
-  - **D. Step4 知识+生命周期**：D1 conflictCompareStage=ready，
-    conflictCandidates.size()==2；D2 lifecycleStatusStage=ready，
-    lifecycleItems.size()==2，两条错误为空。
-  - **E. Step5 精准遗忘**：E1 Preview → awaiting_confirmation +
-    forgetSelectorCleared=true（HIGH-01），forgetMode/targetType 正确投影；
-    E2 Execute → completed + forgetExecutedCount==1 +
-    forgetHasMissingDeletes==false（MEDIUM-03）。
-  - **F. 编排器总体一致性**：F1 未连接时 5 步全部本地 fail-closed（stage=failed，
-    busy 不会挂死，至少 1 次 requestFailed 信号）；F2 依次跑完 5 步后
-    `QTRY_VERIFY_WITH_TIMEOUT(!vm.busy(), 3000)`，六个阶段最终值一致
-    （ready/sent/ready/ready/ready/completed）+ 三绿安全板
-    （textIsolationVerified / forgetSelectorCleared / !forgetHasMissingDeletes）。
-- **ctest 目标**：`d11c_e2e_orchestrator`。CI `memory-client-ctest.yml`
-  随 `d5 / d6c / d7c / d8c / d9c / d10c / d11c` 一起执行。
+- **L0 测试**：
+  1. `tests/test_d11c_e2e_orchestrator.cpp`（A~G 共 **11 个 QtTest slot**），
+     使用 test_support::MockGatewayServer + setHandler(lambda) 注册 9 路活跃 handler
+     （memory.retrieve / turn.finalized / tool.execution / conflict.compare /
+     lifecycle.status / forget.preview / forget.execute / health / echo）。
+     - **A. Step1 普通聊天**：A1 PreChat → ready，三路原文隔离 textIsolationVerified=true
+       且 `modelRequestText = originalUserText + separator + injectedContextText`（**HEAD
+       b634894 起废除"originalUserText 不得出现在 modelRequestText"的错误断言，Model
+       Request 本身必须带原始查询以便 AI 处理**；originalUserText **不得**出现在
+       injectedContextText）；A2 PostTurn 发送的 envelope.method 必须是 ADR-010 的
+       `turn.finalized` 且不得回退为 `memory.store`（非 retry 路径下
+       retry_of_turn_id 必须为空）。
+     - **B. Step2 跨会话（MEDIUM-02 修复：session 正对照）**：
+       Gateway **分别捕获** Step 1 / Step 2 请求的 `payload.session_id`，
+       断言第一次为 `session-demo-0001`、第二次为 `session-demo-0002`；
+       Mock 对两个 session 返回**可区分**的 Context（Session B 含独有偏好条目，
+       injectedContextText 不同），证明第二次确为新 session 而非 Step 1 残留。
+     - **C. Step3 Tool**：C1 toolStage=sent；Gateway 收到的
+       `metadata.tool_name=memory_search` / `metadata.execution_status=success`；
+       C2 UNSUPPORTED_METHOD 错误注入 → toolStage=failed + requestFailed 信号
+       safeMessage **不含** `PK0f3e2d_c2` 等 tool_output 正文。
+     - **D. Step4 知识+生命周期**：D1 conflictCompareStage=ready，
+       conflictCandidates.size()==2；D2 lifecycleStatusStage=ready，
+       lifecycleItems.size()==2，两条错误为空。
+     - **E. Step5 精准遗忘（HIGH-02 凭据链正反向）**：
+       E1 Preview → awaiting_confirmation + forgetSelectorCleared=true（HIGH-01），
+       forgetConfirmationCredential 非空且投影的 forgetMode/targetType 正确；
+       E2 Execute 若用 Preview 返回的 **同一条** credential → completed +
+       forgetExecutedCount==1 + forgetHasMissingDeletes==false（MEDIUM-03）；
+       E3 Execute 若用错误 credential / 空 token → fail-closed：
+       forgetStage=failed，forgetExecuteError 含 "credential"。
+     - **F. 编排器总体一致性**：F1 未连接时 5 步全部本地 fail-closed（stage=failed，
+       busy 不会挂死，至少 1 次 requestFailed 信号）；F2 依次跑完 5 步后
+       `QTRY_VERIFY_WITH_TIMEOUT(!vm.busy(), 3000)`，六个阶段最终值一致
+       （ready/sent/ready/ready/ready/completed）+ 三绿安全板
+       （textIsolationVerified / forgetSelectorCleared / !forgetHasMissingDeletes）。
+     - **G. 全量 Reset（MEDIUM-01 修复）**：跑完 5 步后调用
+       `resetAllPipelines()` 断言 6 条 pipeline 的 stage=idle 且 busy=false
+       （forget*Error 文案保留）。
+  2. `tests/test_d11c_qml_load.cpp`（**HIGH-01 修复：真实 QML 加载验证**）：
+     用 QQmlEngine + QQmlComponent（QT_QPA_PLATFORM=offscreen，headless）
+     直接加载 `qrc:/qt/qml/memory_client/pages/D11DemoOrchestratorPage.qml`，
+     断言资源可解析、Component Ready、create() 返回非空 QQuickItem、
+     `viewModel` alias 属性存在且初始为 null、重复实例化无泄漏。
+     弥补原 CI QML smoke build 仅验证打包不验证 parser 的缺口。
+- **ctest 目标**：`d11c_e2e_orchestrator` 与 `d11c_qml_load`。
+  CI `memory-client-ctest.yml` 随 `protocol_adapter / memory_client_mock /
+  d5_vertical_link_demo / d6c_multi_source_adapters / d7c_preference_editor /
+  d8c_knowledge_conflict_lifecycle / d9c_context_assemble /
+  d10c_forgetting / d11c_e2e_orchestrator / d11c_qml_load` 一起执行（**共 10 个**，此前口径请以此行覆盖）。
 
 **关键声明（D11-C）**：
   - 本实现仅为 memory-client 侧的**编排 Harness / Demo**，不关闭 C-D5 ~ C-D10。
@@ -321,8 +348,8 @@ L2 宿主 Runtime 证据由 B/D 轨在 D11B 最终 VM（同一 Commit `e9dba4f`�
     D 轨 SQLite 事务 / E 轨业务规则。
   - D11B 最终 VM 的真实复测与 L2 证据归档（含 Wireshark/socat UDS 抓包、
     journalctl 原文泄露扫描、5 路径截图与 SHA-256）必须由 B 轨在
-    同一 Commit（`tested_commit=e9dba4f`）与同一 VM
-    （`Kylin-V11-2603-D11B-ffd20b9-Test`）上执行并完成，
+    **最终合入的 HEAD commit（本 README 不提前硬编码 SHA，以合入时 git rev-parse HEAD 为准）**
+    与同一 VM（`Kylin-V11-2603-D11B-ffd20b9-Test`）上执行并完成，
     以 D11B 回填文档 `d11b_c_e2e_YYYYMMDD.md` 归档为唯一闭环依据。
   - Hard Delete / Cascade / Full Reset Runtime Execute 在跨轨闭环 + L2 证据前
     继续保持 fail-closed（D10-C 既有口径不变）。
@@ -402,15 +429,18 @@ cmake --build memory-client/build
 * **环境**：ubuntu-22.04（qtbase5-dev / qt5-qmake / qtdeclarative5-dev / Qt Quick 模块）
 
 * **Job 1 / L0 ctest**：cmake configure（QML OFF / tests ON）→ cmake --build → `ctest --output-on-failure --verbose`
-  * 覆盖 ctest 目标（共 8 个）：`protocol_adapter` / `memory_client_mock` / `d5_vertical_link_demo` /
-    `d6c_multi_source_adapters` / `d7c_preference_editor` / `d8c_knowledge_conflict_lifecycle` /
-    `d9c_context_assemble` / `d10c_forgetting` / `d11c_e2e_orchestrator`
+  * 覆盖 ctest 目标（**共 10 个**，按注册顺序）：
+    `protocol_adapter` / `memory_client_mock` / `d5_vertical_link_demo` /
+    `d6c_multi_source_adapters` / `d7c_preference_editor` /
+    `d8c_knowledge_conflict_lifecycle` / `d9c_context_assemble` /
+    `d10c_forgetting` / `d11c_e2e_orchestrator` / `d11c_qml_load`
 
 * **Job 2 / QML build smoke**：cmake configure（QML ON / tests OFF）→ cmake --build → 产物存在校验
   * 验证 `resources.qrc` 可处理、`main.qml` Component 引用无误、
     `KnowledgeDetailPage.qml` / `ConflictComparisonPage.qml` / `LifecycleStatusPage.qml` /
-    `ContextAssemblePage.qml` 可参与 Qt Quick 构建
-  * 运行态（VM L2）不在本 job 范围
+    `ContextAssemblePage.qml` / `D11DemoOrchestratorPage.qml` 可参与 Qt Quick 构建
+  * **运行态 QQmlComponent 真实加载验证由 Job 1 的 d11c_qml_load 承担**（Reviewer E HIGH-01）
+  * VM L2 不在本 job 范围
 
 ## 验收要求
 

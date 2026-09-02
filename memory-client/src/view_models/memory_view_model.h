@@ -224,6 +224,10 @@ class MemoryViewModel : public QObject {
                    NOTIFY forgetAffectedCountChanged)
     Q_PROPERTY(int forgetCredentialTtlSeconds READ forgetCredentialTtlSeconds
                    NOTIFY forgetCredentialTtlSecondsChanged)
+    // Preview 返回的一次性确认凭据（绑定 userId+forgetPlanId+selection_hash，具备TTL）。
+    // Execute 必须传入与该值完全匹配的 confirmation_token，否则 fail-closed。
+    Q_PROPERTY(QString forgetConfirmationCredential READ forgetConfirmationCredential
+                   NOTIFY forgetConfirmationCredentialChanged)
     // 预览命中目标 ID 列表（Demo 展示影响范围；仅 ID 切片，不含正文）
     Q_PROPERTY(QVariantList forgetResolvedTargets READ forgetResolvedTargets
                    NOTIFY forgetResolvedTargetsChanged)
@@ -343,6 +347,7 @@ public:
     [[nodiscard]] QString forgetSelectionHash() const { return forgetSelectionHash_; }
     [[nodiscard]] int forgetAffectedCount() const { return forgetAffectedCount_; }
     [[nodiscard]] int forgetCredentialTtlSeconds() const { return forgetCredentialTtlSeconds_; }
+    [[nodiscard]] QString forgetConfirmationCredential() const { return forgetConfirmationCredential_; }
     [[nodiscard]] QVariantList forgetResolvedTargets() const { return forgetResolvedTargets_; }
     [[nodiscard]] QString forgetMode() const { return forgetMode_; }
     [[nodiscard]] QString forgetTargetType() const { return forgetTargetType_; }
@@ -388,6 +393,18 @@ public:
 
     // 手动重置 Pre-Chat（取消 in-flight 请求 + 清零三路口径）。
     Q_INVOKABLE void resetPreChatPipeline();
+    // 手动重置 Post-Turn 阶段与 busy 标志。
+    Q_INVOKABLE void resetPostTurnPipeline();
+    // 手动重置 Tool Adapter 阶段与 busy 标志。
+    Q_INVOKABLE void resetToolPipeline();
+    // 手动重置 Conflict Compare 阶段与 busy 标志。
+    Q_INVOKABLE void resetConflictComparePipeline();
+    // 手动重置 Lifecycle Status 阶段与 busy 标志。
+    Q_INVOKABLE void resetLifecycleStatusPipeline();
+    // D11 编排器：一键重置全部 5 条 Pipeline（Pre/Post/Tool/Conflict/Lifecycle/Forget）。
+    // 语义：取消所有 in-flight 请求，全部 stage 回到 idle，三路口径清零；
+    // 明确不清除 forget*Error 文案（与 resetForgetProjection 契约一致）。
+    Q_INVOKABLE void resetAllPipelines();
 
     // ── D5-C Post-Turn Pipeline ────────────────────────────────────────
     Q_INVOKABLE void runPostTurnPipeline(
@@ -660,6 +677,7 @@ signals:
     void forgetSelectionHashChanged();
     void forgetAffectedCountChanged();
     void forgetCredentialTtlSecondsChanged();
+    void forgetConfirmationCredentialChanged();
     void forgetResolvedTargetsChanged();
     void forgetModeChanged();
     void forgetTargetTypeChanged();
@@ -749,6 +767,7 @@ private:
     void setForgetSelectionHash(const QString& value);
     void setForgetAffectedCount(int value);
     void setForgetCredentialTtlSeconds(int value);
+    void setForgetConfirmationCredential(const QString& value);
     void setForgetResolvedTargets(const QVariantList& value);
     void setForgetMode(const QString& value);
     void setForgetTargetType(const QString& value);
@@ -918,6 +937,7 @@ private:
     QString forgetSelectionHash_;
     int forgetAffectedCount_ = 0;
     int forgetCredentialTtlSeconds_ = 0;
+    QString forgetConfirmationCredential_;
     QVariantList forgetResolvedTargets_;
     QString forgetMode_;
     QString forgetTargetType_;

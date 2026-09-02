@@ -2,41 +2,16 @@
 // D11-C 同一虚拟机全功能联调 · 端到端 L0 Mock 契约测试
 // （D11 E2E Orchestrator；CANDIDATE / Demo / Prototype）
 //
-// 背景：D11B 回填文档要求 C 轨在同一 Commit / 同一麒麟 VM 内主演示 5 条路径
-// （D5 普通聊天 / D5 跨会话 / D6 Tool / D8 Conflict&Lifecycle /
-//  D10 精准遗忘 Preview→Execute）可一次性复跑、状态闭合、无原文泄露。
-//
-// 本测试仅为 memory-client 侧 L0 契约验证，使用 test_support::MockGatewayServer
-// 注册所有 9 路活跃 handler（memory.retrieve / turn.finalized /
-// tool.execution / conflict.compare / lifecycle.status / forget.preview /
-// forget.execute），驱动 MemoryViewModel 依次执行 5 步主演示路径，
-// 验证以下断言（对应 D11 台账 C 轨任务 #1~#3）：
-//
-// 范围（A ~ F 共 12 用例）：
-//   A. Step 1 普通聊天（PreChat 三路口径 + PostTurn turn.finalized）：
-//      A1 PreChat → ready；originalUserText ∉ modelRequestText ∩ injectedContextText
-//      A2 PostTurn → sent；envelope.method == turn.finalized 且非 memory.store
-//   B. Step 2 跨会话（session 切换，跨 session 正对照）：
-//      B1 session=session-demo-0002 的 PreChat 仍 ready 且 context 独立
-//      B2 client 侧 session 不会回退到 0001（独立 pending 保证不串台）
-//   C. Step 3 Tool 调用（tool.execution + 事件 ID 独立）：
-//      C1 toolStage=sent；payload 含 toolName=memory_search
-//      C2 错误注入 UNSUPPORTED_METHOD → toolStage=failed；safeMessage 不含原文
-//   D. Step 4 知识冲突 + 生命周期：
-//      D1 conflictCompareStage=ready；conflictCandidates.length>0
-//      D2 lifecycleStatusStage=ready；lifecycleItems.length>0
-//   E. Step 5 精准遗忘（Preview → Execute 全流程）：
-//      E1 Preview → awaiting_confirmation；forgetSelectorCleared=true（HIGH-01）
-//      E2 Execute → completed；forgetHasMissingDeletes=false
-//   F. 编排器总体一致性（同 Commit / 同连接，无竞态，失败路径闭合）：
-//      F1 未连接时 5 步客户端级 reject 均失败（不会发请求，busy 不挂死）
-//      F2 5 步结束后 ViewModel 全局 busy=false，11 路 pending* 全部为空
-//
-// 重要声明（D11-C · Demo / Prototype，不关闭 C-D5~C-D10）：
-//   本测试仅为客户端侧编排 Harness；不声称真实 AI Assistant Hook /
-//   Chat DB / ChatRecord / D 轨 SQLite / B 轨 Vector / E 轨业务 Gate
-//   已 Runtime 接线；L2 宿主验证由 B 轨在 D11B VM（同一 Commit e9dba4f）
-//   执行并归档为 evidence/l2-kylin-vm/d11b_c_e2e_YYYYMMDD.md。
+// 本轮 Reviewer E REWORK 修复点：
+//   HIGH-02  §E 新增 confirmation_credential 闭环：
+//     - buildForgetPreviewData 补 confirmation_credential（D10 v0.3 必填）
+//     - E2 改用 vm.forgetConfirmationCredential() 替代硬编码 "credential-demo-32b"
+//     - 新增 E3：错误 / 不匹配 credential → Execute fail-closed
+//   MEDIUM-02 §B 跨会话正对照：
+//     - buildMemoryContext(sessionTag) 对 A/B 两个 session 返回可区分的 Context
+//     - step2_crossSession 捕获两次请求的 payload.session_id，断言 0001 → 0002
+//     - 断言 injectedContextText A ≠ B（证明第二次 context 确实来自新 session 请求）
+//   修正用例数：A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/F1/F2 = 共 **11** 个独立 test slot。
 // ============================================================================
 #include "mock_gateway_server.h"
 #include "protocol_adapter.h"
@@ -69,12 +44,21 @@ constexpr const char* kScene     = "software_development";
 constexpr const char* kOrigText1 = "帮我回忆昨天讨论的麒麟 OS Agent 记忆系统架构要点";
 constexpr const char* kOrigText2 = "提醒我上次提到的 Vector 删除一致性规则";
 
-// ── D5 memory.retrieve：返回一个合法 MemoryContext（D11B Step 1/2） ──
-QJsonObject buildMemoryContext(const QString& /*sessionTag*/)
+// ── D5 memory.retrieve：返回一个合法 MemoryContext
+//    MEDIUM-02 修复：sessionTag 参与区分 Session A/B，使两者可做正对照。
+QJsonObject buildMemoryContext(const QString& sessionTag)
 {
+    const bool isSessionA = (sessionTag == QLatin1String(kSessionA));
     QJsonArray ids;
-    ids.append(QStringLiteral("km-pref-001"));
-    ids.append(QStringLiteral("km-know-002"));
+    if (isSessionA) {
+        ids.append(QStringLiteral("km-pref-001"));
+        ids.append(QStringLiteral("km-know-002"));
+    } else {
+        // Session B：额外展示「跨会话持久化 preference」条目，正对照用
+        ids.append(QStringLiteral("km-pref-001"));
+        ids.append(QStringLiteral("km-know-002"));
+        ids.append(QStringLiteral("km-pref-sessionB-003"));
+    }
     QJsonArray ctxItems;
     ctxItems.append(QJsonObject{
         {QStringLiteral("entry_id"), QStringLiteral("km-pref-001")},
@@ -84,16 +68,28 @@ QJsonObject buildMemoryContext(const QString& /*sessionTag*/)
     ctxItems.append(QJsonObject{
         {QStringLiteral("entry_id"), QStringLiteral("km-know-002")},
         {QStringLiteral("entry_type"), QStringLiteral("knowledge")},
-        {QStringLiteral("summary"), QStringLiteral("Vector 删除一致性：SQLite→Outbox→Vector 顺序 + 幂等重放")},
+        {QStringLiteral("summary"), isSessionA
+            ? QStringLiteral("Vector 删除一致性：SQLite→Outbox→Vector 顺序 + 幂等重放")
+            : QStringLiteral("[Session-B] Vector 删除一致性：SQLite→Outbox→Vector 顺序 + 幂等重放 + Cascade 外键校验")},
     });
+    if (!isSessionA) {
+        // MEDIUM-02：Session B 独有的跨会话持久化偏好条目
+        ctxItems.append(QJsonObject{
+            {QStringLiteral("entry_id"), QStringLiteral("km-pref-sessionB-003")},
+            {QStringLiteral("entry_type"), QStringLiteral("preference")},
+            {QStringLiteral("summary"), QStringLiteral("[跨会话偏好-SESS-B] editor=Qt Creator / tab_size=2 / output=zh-CN；仅在 session B 请求中出现")},
+        });
+    }
     return QJsonObject{
         {QStringLiteral("schema_version"), QStringLiteral("1.0")},
-        {QStringLiteral("query_id"), QStringLiteral("q-demo-d11c")},
+        {QStringLiteral("query_id"), isSessionA
+            ? QStringLiteral("q-demo-d11c-sess-A")
+            : QStringLiteral("q-demo-d11c-sess-B")},
         {QStringLiteral("selected_memory_ids"), ids},
         {QStringLiteral("context_version"), QStringLiteral("1.0")},
-        {QStringLiteral("token_budget"), 800},
+        {QStringLiteral("token_budget"), isSessionA ? 800 : 900},
         {QStringLiteral("injection_status"), QStringLiteral("injected")},
-        {QStringLiteral("actual_token_count"), 246},
+        {QStringLiteral("actual_token_count"), isSessionA ? 246 : 358},
         {QStringLiteral("memory_items"), ctxItems},
     };
 }
@@ -135,8 +131,11 @@ QJsonObject buildLifecycleItems()
     return QJsonObject{{QStringLiteral("items"), arr}};
 }
 
-// ── D10 forget.preview / execute 响应（与 D11B Step 5 样例对齐） ─────
-QJsonObject buildForgetPreviewData(const QString& userId = QLatin1String(kUserId))
+// ── D10 forget.preview / execute 响应
+//    HIGH-02 修复：preview 响应必须包含 confirmation_credential（绑定
+//    user_id+forget_plan_id+selection_hash，带 TTL）；Execute 必须与之完全匹配。
+QJsonObject buildForgetPreviewData(const QString& userId = QLatin1String(kUserId),
+                                   const QString& cred = QLatin1String("cred-forget-demo-7f3a-9c2e"))
 {
     QJsonArray ids;
     ids.append(QStringLiteral("km-1"));
@@ -145,6 +144,8 @@ QJsonObject buildForgetPreviewData(const QString& userId = QLatin1String(kUserId
         {QStringLiteral("selection_hash"), QStringLiteral("sha256:demo-d11c-ffff")},
         {QStringLiteral("affected_count"), 1},
         {QStringLiteral("credential_ttl_s"), 300},
+        // HIGH-02：D10 v0.3 必填 — 绑定 user_id+plan+selection_hash 的一次性凭据
+        {QStringLiteral("confirmation_credential"), cred},
         {QStringLiteral("forget_mode"), QStringLiteral("single_item")},
         {QStringLiteral("target_type"), QStringLiteral("knowledge")},
         {QStringLiteral("is_cascade"), false},
@@ -193,27 +194,28 @@ private slots:
     void cleanupTestCase();
 
     // A. Step 1 普通聊天（D5 主链路）
-    void step1_preChat_injectsContextAndIsolatesOriginal();
-    void step1_postTurn_usesTurnFinalizedMethod();
+    void step1_preChat_injectsContextAndIsolatesOriginal();  // A1
+    void step1_postTurn_usesTurnFinalizedMethod();           // A2
 
-    // B. Step 2 跨会话（session 切换 + 独立 pending 不串台）
-    void step2_crossSession_preChatIndependent();
+    // B. Step 2 跨会话（session 切换 + session_id 正对照 + 可区分 Context）
+    void step2_crossSession_preChatIndependent();            // B1
 
     // C. Step 3 Tool Adapter
-    void step3_toolSent_payloadHasToolName();
-    void step3_toolUnsupportedMethod_failsafeMessage();
+    void step3_toolSent_payloadHasToolName();                // C1
+    void step3_toolUnsupportedMethod_failsafeMessage();     // C2
 
     // D. Step 4 知识冲突 + 生命周期
-    void step4_conflictCompare_yieldsCandidates();
-    void step4_lifecycleStatus_yieldsItems();
+    void step4_conflictCompare_yieldsCandidates();           // D1
+    void step4_lifecycleStatus_yieldsItems();                // D2
 
-    // E. Step 5 精准遗忘 Preview + Execute
-    void step5_preview_clearsSelectorHIGH01();
-    void step5_execute_completedNoMissing();
+    // E. Step 5 精准遗忘 Preview + Execute（HIGH-02：凭据链闭环）
+    void step5_preview_clearsSelectorHIGH01();               // E1
+    void step5_execute_matchingCredentialSucceeds();         // E2 (REWORK)
+    void step5_execute_wrongCredentialFailClosed();          // E3 (NEW)
 
     // F. 编排器总体一致性
-    void stepF_notConnected_5StepsFailLocally();
-    void stepF_everythingCompletes_busyClearedAllPendingEmpty();
+    void stepF_notConnected_5StepsFailLocally();             // F1
+    void stepF_everythingCompletes_busyClearedAllPendingEmpty(); // F2
 
 private:
     QString uniqueSocketName(const QString& prefix);
@@ -251,12 +253,13 @@ void TestD11CE2EOrchestrator::installHappyHandlers(
 {
     mock.setHandler([](const client::EnvelopeParts& parts) -> QJsonObject {
         if (parts.method == client::methods::kMemoryRetrieve) {
-            // 读取 session_id 做正对照（不修改业务响应，仅保证 2 次 PreChat 都成功）。
+            // MEDIUM-02：用 session_id 驱动 buildMemoryContext，A/B 返回不同内容
+            const QString sid = parts.payload.value(
+                QStringLiteral("session_id")).toString();
             return client::buildSuccessResponse(
                 parts.requestId, parts.traceId,
                 QJsonObject{{QStringLiteral("context"),
-                             buildMemoryContext(parts.payload.value(
-                                 QStringLiteral("session_id")).toString())}});
+                             buildMemoryContext(sid)}});
         }
         if (parts.method == client::methods::kTurnFinalized) {
             return client::buildSuccessResponse(
@@ -288,6 +291,17 @@ void TestD11CE2EOrchestrator::installHappyHandlers(
                 parts.requestId, parts.traceId, buildForgetPreviewData());
         }
         if (parts.method == client::methods::kForgetExecute) {
+            // HIGH-02：Mock 侧也做凭据校验（模拟 D 轨二次校验）；
+            // 不匹配返回 INVALID_CONFIRMATION_CREDENTIAL error。
+            const QString expectedCred = QStringLiteral("cred-forget-demo-7f3a-9c2e");
+            const QString actualCred = parts.payload.value(
+                QStringLiteral("confirmation_token")).toString();
+            if (actualCred != expectedCred) {
+                return client::buildErrorResponse(
+                    parts.requestId, parts.traceId,
+                    QStringLiteral("INVALID_CONFIRMATION_CREDENTIAL"),
+                    QStringLiteral("Server rejected: confirmation_credential mismatch or expired."));
+            }
             return client::buildSuccessResponse(
                 parts.requestId, parts.traceId, buildForgetExecuteData());
         }
@@ -329,8 +343,9 @@ void TestD11CE2EOrchestrator::step1_preChat_injectsContextAndIsolatesOriginal()
              qPrintable(QStringLiteral("D11C-A1 injectedContextText 含 originalUserText 子串！原文隔离违例，注入=%1")
                             .arg(injected.left(120))));
     // modelRequestText = originalUserText + separator + injectedContextText
-    // （ViewModel 设计如此）；原文隔离不约束 modelRequest 包含 original
-    // 本身，只约束 injectedContextText 不含原文。
+    // （ViewModel 设计如此；MEDIUM-03 修复 README 口径与此一致）
+    // 原文隔离仅约束 injectedContextText 不含原文，modelRequestText 允许含
+    // original（因为 model request = 用户查询 + 上下文注入，设计所需）。
 }
 
 // ── A2 · Step 1 PostTurn：method=turn.finalized（非 memory.store）────
@@ -385,15 +400,74 @@ void TestD11CE2EOrchestrator::step1_postTurn_usesTurnFinalizedMethod()
     QVERIFY(capturedRetryOf.isEmpty());
 }
 
-// ── B1 · Step 2 跨会话：切换 session 仍成功；独立 pending 不串台 ─────
+// ── B1 · Step 2 跨会话：session 切换 + session_id 正对照 + 可区分 Context
 void TestD11CE2EOrchestrator::step2_crossSession_preChatIndependent()
 {
+    // MEDIUM-02：自建 Mock 并捕获两次请求的 session_id，确保 A=0001 / B=0002，
+    // 同时 buildMemoryContext 已对两 session 返回差异化内容，断言 injected A≠B。
+    test_support::MockGatewayServer mock;
+    QStringList capturedSessionIds;   // 按请求顺序捕获 memory.retrieve 的 session_id
+    installHappyHandlers(mock);
+    // 在 happy handler 基础上叠加 session_id 捕获逻辑
+    mock.setHandler([&](const client::EnvelopeParts& parts) -> QJsonObject {
+        if (parts.method == client::methods::kMemoryRetrieve) {
+            const QString sid = parts.payload.value(
+                QStringLiteral("session_id")).toString();
+            capturedSessionIds.append(sid);
+            // 复用 buildMemoryContext（已对 A/B 返回不同 entry_id/summary/token）
+            return client::buildSuccessResponse(
+                parts.requestId, parts.traceId,
+                QJsonObject{{QStringLiteral("context"),
+                             buildMemoryContext(sid)}});
+        }
+        // 其他方法沿用 happy 路径
+        if (parts.method == client::methods::kTurnFinalized) {
+            return client::buildSuccessResponse(
+                parts.requestId, parts.traceId,
+                QJsonObject{{QStringLiteral("turn_id"),
+                             parts.payload.value(QStringLiteral("turn_id")).toString()},
+                            {QStringLiteral("event_id"), QStringLiteral("evt-ok")}});
+        }
+        if (parts.method == QLatin1String("tool.execution")) {
+            return client::buildSuccessResponse(
+                parts.requestId, parts.traceId,
+                QJsonObject{{QStringLiteral("ingested"), true}});
+        }
+        if (parts.method == QLatin1String("conflict.compare")) {
+            return client::buildSuccessResponse(
+                parts.requestId, parts.traceId, buildConflictCandidates());
+        }
+        if (parts.method == QLatin1String("lifecycle.status")) {
+            return client::buildSuccessResponse(
+                parts.requestId, parts.traceId, buildLifecycleItems());
+        }
+        if (parts.method == client::methods::kForgetPreview) {
+            return client::buildSuccessResponse(
+                parts.requestId, parts.traceId, buildForgetPreviewData());
+        }
+        if (parts.method == client::methods::kForgetExecute) {
+            const QString ec = parts.payload.value(
+                QStringLiteral("confirmation_token")).toString();
+            if (ec != QLatin1String("cred-forget-demo-7f3a-9c2e")) {
+                return client::buildErrorResponse(
+                    parts.requestId, parts.traceId,
+                    QStringLiteral("INVALID_CONFIRMATION_CREDENTIAL"),
+                    QStringLiteral("credential mismatch"));
+            }
+            return client::buildSuccessResponse(
+                parts.requestId, parts.traceId, buildForgetExecuteData());
+        }
+        return client::buildSuccessResponse(
+            parts.requestId, parts.traceId, QJsonObject{});
+    });
+    const QString socket = mock.listen(uniqueSocketName("b1"));
+
     client::MemoryViewModel vm;
-    vm.setSocketPath(sharedSocket_);
+    vm.setSocketPath(socket);
     vm.connectToService();
     QVERIFY(waitForStage([&]{ return vm.connectionState() == "connected"; }));
 
-    // Session A
+    // Session A (session-demo-0001)
     vm.runPreChatPipeline(QLatin1String(kUserId), QLatin1String(kSessionA),
                           QLatin1String(kScene), 800,
                           QString::fromUtf8(kOrigText1));
@@ -401,13 +475,29 @@ void TestD11CE2EOrchestrator::step2_crossSession_preChatIndependent()
     const QString injectedA = vm.injectedContextText();
     QVERIFY(!injectedA.isEmpty());
 
-    // Session B（新 session）
+    // Session B (session-demo-0002)
     vm.runPreChatPipeline(QLatin1String(kUserId), QLatin1String(kSessionB),
                           QLatin1String(kScene), 900,
                           QString::fromUtf8(kOrigText2));
     QVERIFY(waitForStage([&]{ return vm.preChatStage() == "ready"; }));
-    // originalUserText 被重写为 Step 2 的新原文：证明 session 切换生效
-    // （不会回退到 0001 的原文）。
+    const QString injectedB = vm.injectedContextText();
+    QVERIFY(!injectedB.isEmpty());
+
+    // MEDIUM-02 §1：Gateway 收到的 session_id 顺序 = 0001 → 0002
+    QCOMPARE(capturedSessionIds.size(), 2);
+    QCOMPARE(capturedSessionIds.at(0), QString::fromLatin1(kSessionA));
+    QCOMPARE(capturedSessionIds.at(1), QString::fromLatin1(kSessionB));
+
+    // MEDIUM-02 §2：两次返回的 Context 可区分（A 不含 SESS-B 条目，B 含）
+    QVERIFY2(!injectedA.contains(QStringLiteral("SESS-B")),
+             "D11C-B1 Session A injected 不应包含 Session-B 专用条目");
+    QVERIFY2(injectedB.contains(QStringLiteral("跨会话偏好-SESS-B")),
+             qPrintable(QStringLiteral("D11C-B1 Session B injected 应含跨会话偏好：%1")
+                            .arg(injectedB.left(200))));
+    QVERIFY2(injectedA != injectedB,
+             "D11C-B1 两次 session 的 injectedContextText 应不同（正对照防串台）");
+
+    // originalUserText 被重写为 Step 2 的新原文：证明 session 切换生效。
     QCOMPARE(vm.originalUserText(), QString::fromUtf8(kOrigText2));
     QVERIFY(vm.textIsolationVerified());
 }
@@ -533,7 +623,7 @@ void TestD11CE2EOrchestrator::step4_lifecycleStatus_yieldsItems()
     QVERIFY(vm.lifecycleStatusError().isEmpty());
 }
 
-// ── E1 · Step 5 Preview：selector 明文清除 HIGH-01 ───────────────────
+// ── E1 · Step 5 Preview：selector 明文清除 HIGH-01 + 凭据非空 ─────────
 void TestD11CE2EOrchestrator::step5_preview_clearsSelectorHIGH01()
 {
     client::MemoryViewModel vm;
@@ -541,8 +631,6 @@ void TestD11CE2EOrchestrator::step5_preview_clearsSelectorHIGH01()
     vm.connectToService();
     QVERIFY(waitForStage([&]{ return vm.connectionState() == "connected"; }));
 
-    // Note: 明文 selector/target_topic 只在请求内临时存在；响应到达后
-    // 客户端侧 HIGH-01 清除。forgetSelectorCleared 必须为 true。
     const QString sensitiveSelector =
         "关于 2026-08-20 向量阈值的那条记忆 [敏感:SENSITIVE-d11c-e1]";
     vm.runForgetPreviewPipeline(
@@ -565,14 +653,17 @@ void TestD11CE2EOrchestrator::step5_preview_clearsSelectorHIGH01()
     QCOMPARE(vm.forgetMode(), QStringLiteral("single_item"));
     QCOMPARE(vm.forgetTargetType(), QStringLiteral("knowledge"));
 
-    // 补充安全：error message / safeMessage 信号（若有）不得包含 selector 明文
-    // （本用例成功路径不触发 requestFailed，但若 future 修改触发，
-    //  这里以 forgetPreviewError 为空作为护栏）。
+    // HIGH-02：Preview 必须返回 confirmation_credential，客户端侧投影非空
+    // （后续 Execute 必须传同一值；否则 fail-closed）。
+    QVERIFY2(!vm.forgetConfirmationCredential().isEmpty(),
+             "D11C-E1 Preview 响应必须包含 confirmation_credential（D10 v0.3 凭据链）");
+    QCOMPARE(vm.forgetCredentialTtlSeconds(), 300);
+
     QVERIFY(vm.forgetPreviewError().isEmpty());
 }
 
-// ── E2 · Step 5 Execute：completed + 无漏删 ──────────────────────────
-void TestD11CE2EOrchestrator::step5_execute_completedNoMissing()
+// ── E2 · Step 5 Execute：正确 credential → completed（HIGH-02 正向） ───
+void TestD11CE2EOrchestrator::step5_execute_matchingCredentialSucceeds()
 {
     test_support::MockGatewayServer mock;
     installHappyHandlers(mock);
@@ -583,22 +674,76 @@ void TestD11CE2EOrchestrator::step5_execute_completedNoMissing()
     vm.connectToService();
     QVERIFY(waitForStage([&]{ return vm.connectionState() == "connected"; }));
 
-    // 先跑 Preview（进入 awaiting_confirmation）。
+    // 先跑 Preview（进入 awaiting_confirmation，并投影 confirmation_credential）。
     vm.runForgetPreviewPipeline(
         QLatin1String(kUserId), "plan-demo-001", "single_item", "knowledge",
         "selector-forget", "km-1", "", "", "", true, false);
     QVERIFY(waitForStage([&]{ return vm.forgetStage() == "awaiting_confirmation"; }));
 
-    // 再 Execute。
+    const QString credFromPreview = vm.forgetConfirmationCredential();
+    QVERIFY2(!credFromPreview.isEmpty(),
+             "D11C-E2 Preview 必须返回 credential，否则 Execute 无法闭环");
+
+    // HIGH-02 REWORK：Execute 使用 Preview 返回的同一 credential（替代硬编码）
     vm.runForgetExecutePipeline(
         QLatin1String(kUserId), "plan-demo-001",
-        "credential-demo-32b",
+        credFromPreview,   // 与 Preview 响应中 confirmation_credential 一致
         "" /* idempotencyKey */, "soft" /* deleteMode */);
     QVERIFY(waitForStage([&]{ return vm.forgetStage() == "completed"
                                     || vm.forgetStage() == "failed"; }));
     QCOMPARE(vm.forgetStage(), QStringLiteral("completed"));
     QVERIFY(!vm.forgetHasMissingDeletes());
     QCOMPARE(vm.forgetExecutedCount(), 1);
+    // HIGH-02：成功 Execute 后一次性凭据被消费（置空，杜绝重放）
+    QVERIFY2(vm.forgetConfirmationCredential().isEmpty(),
+             "D11C-E2 Execute 成功后 confirmation_credential 必须消费清空（防重放）");
+}
+
+// ── E3 · Step 5 Execute：错误 credential → fail-closed（HIGH-02 反向） ─
+void TestD11CE2EOrchestrator::step5_execute_wrongCredentialFailClosed()
+{
+    test_support::MockGatewayServer mock;
+    installHappyHandlers(mock);
+    const QString socket = mock.listen(uniqueSocketName("e3"));
+
+    client::MemoryViewModel vm;
+    vm.setSocketPath(socket);
+    vm.connectToService();
+    QVERIFY(waitForStage([&]{ return vm.connectionState() == "connected"; }));
+
+    // ① Preview 成功 → 得到 credFromPreview
+    vm.runForgetPreviewPipeline(
+        QLatin1String(kUserId), "plan-demo-001", "single_item", "knowledge",
+        "selector-forget", "km-1", "", "", "", true, false);
+    QVERIFY(waitForStage([&]{ return vm.forgetStage() == "awaiting_confirmation"; }));
+    const QString credFromPreview = vm.forgetConfirmationCredential();
+    QVERIFY(!credFromPreview.isEmpty());
+
+    // ② 故意使用不匹配的 credential
+    QString gotErrCode;
+    QString gotErrMsg;
+    QObject::connect(&vm, &client::MemoryViewModel::requestFailed,
+                     [&](const QString&, const QString& c, const QString& m) {
+                         gotErrCode = c; gotErrMsg = m;
+                     });
+    const QString wrongCred = QStringLiteral("WRONG-CREDENTIAL-h4cked-0000");
+    QVERIFY2(wrongCred != credFromPreview, "测试前提：错误 credential 必须与 Preview 值不同");
+
+    vm.runForgetExecutePipeline(
+        QLatin1String(kUserId), "plan-demo-001",
+        wrongCred,   // 错误凭据
+        "", "soft");
+    QVERIFY(waitForStage([&]{ return vm.forgetStage() == "failed"
+                                    || vm.forgetStage() == "completed"; }, 5000));
+
+    // HIGH-02 fail-closed：必须进入 failed，不得伪 completed
+    QCOMPARE(vm.forgetStage(), QStringLiteral("failed"));
+    // 客户端侧或服务端的错误：必须是凭据不匹配类错误
+    const QString errorText = vm.forgetExecuteError() + gotErrCode + gotErrMsg;
+    QVERIFY2(errorText.contains(QStringLiteral("credential"))
+             || errorText.contains(QStringLiteral("confirmation_token")),
+             qPrintable(QStringLiteral("D11C-E3 错误凭据必须 fail-closed，实际错误=%1 | code=%2 | msg=%3")
+                            .arg(vm.forgetExecuteError()).arg(gotErrCode).arg(gotErrMsg)));
 }
 
 // ── F1 · 未连接：5 步客户端级立即拒绝（不会发请求） ───────────────────
@@ -634,7 +779,7 @@ void TestD11CE2EOrchestrator::stepF_notConnected_5StepsFailLocally()
     vm.runConflictComparePipeline("km-1", false);
     QCOMPARE(vm.conflictCompareStage(), QStringLiteral("failed"));
 
-    // Step 5 forget.preview（Execute 因无 preview 直接拒绝，失败路径不同）
+    // Step 5 forget.preview
     vm.runForgetPreviewPipeline(QLatin1String(kUserId), "fp-1", "single_item",
                                 "knowledge", "sel", "km-1", "", "", "",
                                 true, false);
@@ -642,8 +787,6 @@ void TestD11CE2EOrchestrator::stepF_notConnected_5StepsFailLocally()
 
     // fail-closed 护栏：所有 5 路都未进入成功态，且 busy 不会挂死。
     QVERIFY(!vm.busy());
-    // 只要出现了至少一次 requestFailed 信号就证明客户端级 fail-closed
-    // 经统一失败路径（实际数量取决于实现；不作硬上限断言）。
     QVERIFY(failSpy.count() >= 1);
 }
 
@@ -685,14 +828,16 @@ void TestD11CE2EOrchestrator::stepF_everythingCompletes_busyClearedAllPendingEmp
     vm.runLifecycleStatusPipeline(QLatin1String(kUserId), "km-1", {});
     QVERIFY(waitForStage([&]{ return vm.lifecycleStatusStage() == "ready"; }));
 
-    // Step 5 Preview + Execute
+    // Step 5 Preview + Execute（HIGH-02 REWORK：使用 Preview 返回的 credential）
     vm.runForgetPreviewPipeline(QLatin1String(kUserId), "plan-e2e-01",
                                 "single_item", "knowledge",
                                 "关于 km-1 的 selector", "km-1",
                                 "", "", "", true, false);
     QVERIFY(waitForStage([&]{ return vm.forgetStage() == "awaiting_confirmation"; }));
+    const QString f2Cred = vm.forgetConfirmationCredential();
+    QVERIFY2(!f2Cred.isEmpty(), "D11C-F2 Preview credential 非空（D10 v0.3 凭据链）");
     vm.runForgetExecutePipeline(QLatin1String(kUserId), "plan-e2e-01",
-                                "cred-xyz-32b", "", "soft");
+                                f2Cred, "", "soft");
     QVERIFY(waitForStage([&]{ return vm.forgetStage() == "completed"; }));
 
     // 5 步完成后：全局 busy 必须为 false（任何一路残留都会导致 busy=true）。
