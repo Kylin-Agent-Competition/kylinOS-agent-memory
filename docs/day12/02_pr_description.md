@@ -15,7 +15,7 @@ D11（同一虚拟机全功能联调，PR #84）已合并。D12 进入功能冻�
    - `embedding_service.py` 新增 `_in_flight` future 跟踪 + `_maybe_recover_hung_executor()`（超阈值重建 executor）+ `recover_hung_bridge_executor()`（每次请求入口调用，含合并等待路径）+ `_mark_future_complete()`（完成/失败自动清理）
    - `health()` 新增 `executor` 分项（max_workers/in_flight/hang_recovered/hang_threshold_ms）暴露可观测性
 2. **Bridge 假实现/吞异常检查**：`docs/day12/03_bridge_audit_checklist.md` 逐项核对（6 套 C++ 测试 + 逐 catch 核对 + 2 处 Wontfix 固定值判定）
-3. **异常输入回归**：`test_embedding_d12a.py` 25 项（挂死恢复 7 + 错误传播 3 + 异常输入回归 9 + A-REQ-01 事件类型对齐 1 + 有界恢复/回调清理 2：空文本/超长/错误模型/非法枚举/异常返回/非 str/batch 非法）
+3. **异常输入回归**：`test_embedding_d12a.py` 25 项（挂死恢复 7 + 错误传播 3 + 异常输入回归 9 + A-REQ-01 事件类型对齐 1 + 有界恢复/回调清理/stop-start/submit-gate/stop-active 5：空文本/超长/错误模型/非法枚举/异常返回/非 str/batch 非法）
 
 ## 明确不修改范围
 

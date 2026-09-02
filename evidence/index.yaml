@@ -1356,7 +1356,7 @@ entries:
     limitations: "L2 麒麟 VM 证据已执行（真实 SDK 正常路径 HOST_VERIFIED；真实 SDK 挂死恢复 RUNTIME_UNVERIFIED，见 D12A-L2-VERIFY 条目标注）；25 项 D12A 专项 + A 轨 85 项回归通过（含 A-REQ-01 事件类型对齐、有界恢复 HIGH-01、done-callback 清理 MEDIUM-01，对应 #110 合并文档声明）；测试在 merge main @ 6058391 后的分支重跑；挂死→重建恢复为 L1 FakeProvider 模拟验证（真实 SDK RUNTIME_UNVERIFIED，见 D12A-L2-VERIFY limitations）；既有测试顺序依赖（TD-046）在基线同样存在，非本 PR 引入"
     checksum_sha256: "待回填"
     details: |
-      D12A 专项测试（test_embedding_d12a.py）: 25 passed（含有界恢复/回调清理/stop-start/submit-gate 4 项）
+      D12A 专项测试（test_embedding_d12a.py）: 25 passed（含有界恢复/回调清理/stop-start/submit-gate/stop-active 5 项）
       挂死恢复 7 项（超时→重建→恢复 / 未超阈值不误重建 / 恢复后路径畅通 / in-flight 清理 / 并发无死锁 / health executor 分项 / shutdown 幂等）
       A-REQ-01 事件类型对齐 1 项（forget.executed 权威 + memory.deletion/deletion 兼容别名被消费、payload/event_type 不一致 fail-closed、turn.finalized 拒绝）
       错误传播 3 项（错误码精确传播 / 未知异常 ERR_UNKNOWN / 失败不伪装成功）

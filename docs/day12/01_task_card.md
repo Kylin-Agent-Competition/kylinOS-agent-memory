@@ -55,7 +55,7 @@
 | # | 交付物 | 类型 |
 |---|--------|------|
 | 1 | `memory-service/embedding/embedding_service.py`：挂死恢复（`_maybe_recover_hung_executor`/`_submit_bridge`/`_mark_future_complete`/`recover_hung_bridge_executor`）+ health executor 分项 | 修改 |
-| 2 | `memory-service/tests/test_embedding_d12a.py`：25 项（挂死恢复 7 + 错误传播 3 + 异常输入回归 9 + A-REQ-01 事件类型对齐 1 + 有界恢复/回调清理/stop-start/submit-gate 4） | 新增 |
+| 2 | `memory-service/tests/test_embedding_d12a.py`：25 项（挂死恢复 7 + 错误传播 3 + 异常输入回归 9 + A-REQ-01 事件类型对齐 1 + 有界恢复/回调清理/stop-start/submit-gate/stop-active 5） | 新增 |
 | 3 | `docs/day12/01_task_card.md`：本文件 | 新增 |
 | 4 | `docs/day12/03_bridge_audit_checklist.md`：Bridge 假实现/吞异常检查清单 | 新增 |
 | 5 | `docs/day12/02_pr_description.md`：PR 描述 | 新增 |
