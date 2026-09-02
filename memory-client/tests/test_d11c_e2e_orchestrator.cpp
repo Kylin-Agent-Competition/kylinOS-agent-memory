@@ -61,13 +61,24 @@ QJsonObject buildMemoryContext(const QString& sessionTag)
     }
     QJsonArray ctxItems;
     ctxItems.append(QJsonObject{
-        {QStringLiteral("entry_id"), QStringLiteral("km-pref-001")},
+        // NOTE: 字段名必须与 ViewModel buildContextTextFromContextObject
+        // 读取的契约对齐：memory_id / version_id / content。
+        // 否则 injectedContextText().left(200) 仅包含 begin/end 头行、
+        // 不含实际条目文字，MEDIUM-02 的 SESS-B 正对照断言就会失败。
+        {QStringLiteral("memory_id"), QStringLiteral("km-pref-001")},
+        {QStringLiteral("version_id"), QStringLiteral("v1")},
         {QStringLiteral("entry_type"), QStringLiteral("preference")},
+        {QStringLiteral("content"), QStringLiteral("用户偏好中文输出 / 80 字摘要")},
         {QStringLiteral("summary"), QStringLiteral("用户偏好中文输出 / 80 字摘要")},
     });
     ctxItems.append(QJsonObject{
-        {QStringLiteral("entry_id"), QStringLiteral("km-know-002")},
+        {QStringLiteral("memory_id"), QStringLiteral("km-know-002")},
+        {QStringLiteral("version_id"), isSessionA
+            ? QStringLiteral("v1") : QStringLiteral("v2")},
         {QStringLiteral("entry_type"), QStringLiteral("knowledge")},
+        {QStringLiteral("content"), isSessionA
+            ? QStringLiteral("Vector 删除一致性：SQLite→Outbox→Vector 顺序 + 幂等重放")
+            : QStringLiteral("[Session-B] Vector 删除一致性：SQLite→Outbox→Vector 顺序 + 幂等重放 + Cascade 外键校验")},
         {QStringLiteral("summary"), isSessionA
             ? QStringLiteral("Vector 删除一致性：SQLite→Outbox→Vector 顺序 + 幂等重放")
             : QStringLiteral("[Session-B] Vector 删除一致性：SQLite→Outbox→Vector 顺序 + 幂等重放 + Cascade 外键校验")},
@@ -75,8 +86,10 @@ QJsonObject buildMemoryContext(const QString& sessionTag)
     if (!isSessionA) {
         // MEDIUM-02：Session B 独有的跨会话持久化偏好条目
         ctxItems.append(QJsonObject{
-            {QStringLiteral("entry_id"), QStringLiteral("km-pref-sessionB-003")},
+            {QStringLiteral("memory_id"), QStringLiteral("km-pref-sessionB-003")},
+            {QStringLiteral("version_id"), QStringLiteral("v1")},
             {QStringLiteral("entry_type"), QStringLiteral("preference")},
+            {QStringLiteral("content"), QStringLiteral("[跨会话偏好-SESS-B] editor=Qt Creator / tab_size=2 / output=zh-CN；仅在 session B 请求中出现")},
             {QStringLiteral("summary"), QStringLiteral("[跨会话偏好-SESS-B] editor=Qt Creator / tab_size=2 / output=zh-CN；仅在 session B 请求中出现")},
         });
     }

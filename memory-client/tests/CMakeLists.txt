@@ -378,4 +378,12 @@ if(D11C_QML_LOAD_AVAILABLE)
         NAME d11c_qml_load
         COMMAND test_d11c_qml_load
     )
+    # CI headless 环境没有 X11 / display server，QGuiApplication 在 main()
+    # 阶段尝试加载 xcb 平台插件会以 "could not connect to display" 直接
+    # abort（先于 test 内 initTestCase 的 qputenv 执行）。
+    # 在 ctest 目标级别注入 QT_QPA_PLATFORM=offscreen 保证进程启动时
+    # 就命中 offscreen 插件，避免 Subprocess aborted。
+    set_tests_properties(d11c_qml_load PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
 endif()
