@@ -1,7 +1,8 @@
 # D11B `filter_diagnostics` 候选字段契约 v1
 
-> 状态：`CANDIDATE_INTERNAL_ONLY`（2026-09-02）  
-> 适用实现：`memory-service/retrieval/fusion.py` 的 `RetrievalOutcome.filter_diagnostics`  
+> 状态：`CANDIDATE_INTERNAL_ONLY`（2026-09-02）
+>
+> 适用实现：`memory-service/retrieval/fusion.py` 的 `RetrievalOutcome.filter_diagnostics`
 > Policy version：`retrieval-filter-diagnostics/v1`
 
 ## 1. 定位与冻结边界
