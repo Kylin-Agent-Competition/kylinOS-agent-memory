@@ -1370,21 +1370,21 @@ entries:
     description: "D12A 麒麟 VM L2 验证——真实 SDK 正常路径 HOST_VERIFIED（health executor 可观测性 + 异常输入 + 性能 + 无挂死不误重建）；真实 SDK 挂死→重建恢复 RUNTIME_UNVERIFIED（HIGH-02 收敛声明，算法由 L1 FakeProvider 模拟）"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
-    source: "evidence/l2-kylin-vm/day12a_verify_20260902_231247.log"
-    tested_commit: "f58c4367a755cfe52f1985e2b1566287eb84dd37"
-    evidence_commit: "f0c1d3675c67173f1db5144bcaa6bd8bebea93a0"
+    source: "evidence/l2-kylin-vm/day12a_verify_20260902_232744.log"
+    tested_commit: "6a94b85776c7e3b93cc9eccf33e857338ab79814"
+    evidence_commit: "EVID4_PENDING"
     date: "2026-09-02"
     reviewer: "待复审（D 主审）"
     runtime_result: "PASS（真实 SDK 正常路径；挂死恢复 L1 SIMULATED）"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "真实 SDK 正常路径 HOST_VERIFIED：embed dim=768、health executor 分项（max_workers/in_flight/hang_recovered/hang_threshold_ms/max_hang_rebuilds=3/restart_required）、异常输入（空文本 dim=768、超长 10KB 给 30s 超时、非 str、embed_batch 非法）、性能 avg=99.3ms p99=161.8ms samples=10（样本数=预期且 avg/p99≤180ms 才 PASS，MEDIUM-03；gate 曾拦截瞬时 p99 183~268ms 抖动，代表通过值 161.8ms）、无挂死不误重建；R2/R3 收口：submit 原子 gate + 同进程 stop/start 不绕过 + stop 时 active Future 冻结 restart-required（HIGH-01 复验）。真实 SDK 挂死→重建恢复 RUNTIME_UNVERIFIED：无法安全注入永久挂死（SDK 无 cancel API，TD-A-005-01；旧 worker 不可回收风险登记 TD-058），有界重建上限 3 次、超限 restart-required（HIGH-01）、done-callback 清理 in_flight（MEDIUM-01）均以 L1 FakeProvider 验证。环境：克隆 /usr 只读 overlay，SDK 0k0.4 bind-mount（dpkg 0k0.3），runtime 1.1.0.1 fallback v1.0.0；源码绑定 manifest 见合入时回填"
-    checksum_sha256: "1856be5f2c4d547b78ebe020ac6c898b3011b693d456111d7456851a5063c6ad"
+    limitations: "真实 SDK 正常路径 HOST_VERIFIED：embed dim=768、health executor 分项（max_workers/in_flight/hang_recovered/hang_threshold_ms/max_hang_rebuilds=3/restart_required）、异常输入（空文本 dim=768、超长 10KB 给 30s 超时、非 str、embed_batch 非法）、性能 avg=77.7ms p99=97.6ms samples=10（样本数=预期且 avg/p99≤180ms 才 PASS，MEDIUM-03；gate 曾拦截瞬时 p99 183~268ms 抖动）、无挂死不误重建；R2/R3 收口：submit 原子 gate + 同进程 stop/start 不绕过 + stop 时 active Future 冻结 restart-required（HIGH-01 复验）；D12A 残余 TD 引用=TD-059。真实 SDK 挂死→重建恢复 RUNTIME_UNVERIFIED：无法安全注入永久挂死（SDK 无 cancel API，TD-A-005-01；旧 worker 不可回收风险登记 TD-059），有界重建上限 3 次、超限 restart-required（HIGH-01）、done-callback 清理 in_flight（MEDIUM-01）均以 L1 FakeProvider 验证。环境：克隆 /usr 只读 overlay，SDK 0k0.4 bind-mount（dpkg 0k0.3），runtime 1.1.0.1 fallback v1.0.0；源码绑定 manifest 见合入时回填"
+    checksum_sha256: "e9b5370639bb360e63d7036a22091d9d57c0a9cb8efacf0b16bdb8303e812bf5"
     details: |
-      verify_day12a_vm.sh 全 6 节 + 汇总：ALL PASS（PASS: 7, FAIL: 0）— 日志 day12a_verify_20260902_231247.log（R3 代码重跑）
+      verify_day12a_vm.sh 全 6 节 + 汇总：ALL PASS（PASS: 7, FAIL: 0）— 日志 day12a_verify_20260902_232744.log（TD-059 统一后代码重跑）
       1) 系统环境：Python 3.12.3 / SDK 包检测 PASS
       2) health executor 分项：service ok / bridge_loaded=True / executor{max_workers, in_flight, hang_recovered, hang_threshold_ms, max_hang_rebuilds:3, restart_required:False}
       3) 挂死恢复机制（真实 SDK 正常路径）：embed ok dim=768 / 无挂死不误重建（recovered=False）/ in_flight=0（done-callback 清理）
       4) 异常输入回归：空文本/纯空白 dim=768、超长 10KB（30s 超时）、非 str、embed_batch 非法 ALL PASS
-      5) 性能基准：avg=99.3ms p99=161.8ms samples=10（样本数=预期 且 avg/p99≤180ms 才 PASS；gate 拦截抖动验证有效）
+      5) 性能基准：avg=77.7ms p99=97.6ms samples=10（样本数=预期 且 avg/p99≤180ms 才 PASS；gate 拦截抖动验证有效）
       6) bridge.log 不存在（无正文残留）
