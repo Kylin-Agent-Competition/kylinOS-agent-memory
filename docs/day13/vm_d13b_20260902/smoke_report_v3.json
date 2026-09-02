@@ -1,0 +1,157 @@
+{
+  "report_version": "d13b-retrieval-eval-report/v3",
+  "config": {
+    "config_version": "d9-retrieval-eval-config/v1",
+    "dataset_version": "vm-smoke-ds",
+    "gold_label_version": "vm-smoke-gold",
+    "implementation_commit": "f3760067a185230af75da0e3b0cab69742fd10f0",
+    "environment": "kylin-vm-d13b-smoke",
+    "evidence_reference": "vm/d13b-smoke",
+    "dataset_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "gold_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "statistics_method": "p50_and_p95",
+    "warmup_count": 0,
+    "repeat_count": 1,
+    "concurrency": 1
+  },
+  "accounting": {
+    "total_query_count": 1,
+    "valid_query_count": 1,
+    "excluded_query_count": 0,
+    "exclusions": {
+      "empty_gold": 0,
+      "environmental_anomaly": 0,
+      "boundary": {},
+      "negative_guardrail": {
+        "cross_user": 0,
+        "sensitive_recall_prohibited": 0,
+        "removed_or_forgotten": 0,
+        "expired": 0,
+        "superseded": 0,
+        "deprecated": 0,
+        "candidate": 0,
+        "unresolved_conflict": 0
+      }
+    }
+  },
+  "channels": {
+    "fts5": {
+      "status": "COMPUTED",
+      "query_count": 1,
+      "skipped_query_count": 0,
+      "recall_at_k": 0.5,
+      "mrr": 1.0,
+      "ndcg_at_k": 0.6131471927654584,
+      "hit_count": 1,
+      "k_value": 10,
+      "p50_ms": 7.0,
+      "p95_ms": 7.0,
+      "mean_ms": 7.0,
+      "max_ms": 7.0,
+      "latency_sample_count": 1
+    },
+    "vector": {
+      "status": "NO_CHANNEL_RESULTS",
+      "query_count": 0,
+      "skipped_query_count": 1,
+      "recall_at_k": null,
+      "mrr": null,
+      "ndcg_at_k": null,
+      "hit_count": null,
+      "k_value": 10,
+      "p50_ms": null,
+      "p95_ms": null,
+      "mean_ms": null,
+      "max_ms": null,
+      "latency_sample_count": 0
+    },
+    "rrf_v1": {
+      "status": "COMPUTED",
+      "query_count": 1,
+      "skipped_query_count": 0,
+      "recall_at_k": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_k": 1.0,
+      "hit_count": 1,
+      "k_value": 10,
+      "p50_ms": 15.0,
+      "p95_ms": 15.0,
+      "mean_ms": 15.0,
+      "max_ms": 15.0,
+      "latency_sample_count": 1
+    }
+  },
+  "guardrail": {
+    "channel": "rrf_v1",
+    "participating_query_count": 1,
+    "returned_item_count": 2,
+    "violation_query_count": 0,
+    "violation_item_count": 0,
+    "critical_zero_categories": [
+      "cross_user",
+      "sensitive_recall_prohibited"
+    ],
+    "critical_zero_ok": true,
+    "per_category": {
+      "cross_user": {
+        "violation_query_count": 0,
+        "violation_item_count": 0,
+        "violation_query_rate": 0.0,
+        "violation_item_rate": 0.0
+      },
+      "sensitive_recall_prohibited": {
+        "violation_query_count": 0,
+        "violation_item_count": 0,
+        "violation_query_rate": 0.0,
+        "violation_item_rate": 0.0
+      },
+      "removed_or_forgotten": {
+        "violation_query_count": 0,
+        "violation_item_count": 0,
+        "violation_query_rate": 0.0,
+        "violation_item_rate": 0.0
+      },
+      "expired": {
+        "violation_query_count": 0,
+        "violation_item_count": 0,
+        "violation_query_rate": 0.0,
+        "violation_item_rate": 0.0
+      },
+      "superseded": {
+        "violation_query_count": 0,
+        "violation_item_count": 0,
+        "violation_query_rate": 0.0,
+        "violation_item_rate": 0.0
+      },
+      "deprecated": {
+        "violation_query_count": 0,
+        "violation_item_count": 0,
+        "violation_query_rate": 0.0,
+        "violation_item_rate": 0.0
+      },
+      "candidate": {
+        "violation_query_count": 0,
+        "violation_item_count": 0,
+        "violation_query_rate": 0.0,
+        "violation_item_rate": 0.0
+      },
+      "unresolved_conflict": {
+        "violation_query_count": 0,
+        "violation_item_count": 0,
+        "violation_query_rate": 0.0,
+        "violation_item_rate": 0.0
+      }
+    },
+    "rate_denominator_note": "query rate = 违规查询数/参与护栏统计的查询总数；item rate = 违规条目数/同批 Top-K 返回条目总数（D9 建议口径，待正式冻结）"
+  },
+  "per_query_detail": [
+    {
+      "query_id": "q1",
+      "metric_valid": true,
+      "exclusion_reason": null,
+      "guardrail_categories_in_relevant": [],
+      "resolved_forbidden_categories": [],
+      "boundary_reasons": []
+    }
+  ]
+}

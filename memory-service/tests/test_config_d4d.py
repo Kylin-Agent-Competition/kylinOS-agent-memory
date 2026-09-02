@@ -29,6 +29,20 @@ def clear_env():
             os.environ[k] = v
 
 
+@pytest.fixture(autouse=True)
+def _portable_default_paths(tmp_path, monkeypatch):
+    """把默认路径（$XDG_RUNTIME_DIR、~）重定向到 pytest 临时目录。
+
+    修复宿主可移植性：XDG_RUNTIME_DIR 未设置时 socket 默认回退 /tmp，database
+    默认展开到 ~/.local/share/...；在 Windows/受限宿主上这些目录不可写会使
+    load_config 的目录可创建性校验（FR-DB-006）fail-fast。本 fixture 不改变
+    生产 config.py 的 Linux 默认值契约，仅保证默认路径落到可写临时目录。
+    """
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "xdg-run"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
+
+
 def test_defaults_no_file_no_env(clear_env, tmp_path, monkeypatch):
     # 默认配置路径不存在 → 默认值 + WARN（不 fail-fast）
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
@@ -43,10 +57,12 @@ def test_defaults_no_file_no_env(clear_env, tmp_path, monkeypatch):
 
 
 def test_toml_values_loaded(clear_env, tmp_path):
+    sock = str(tmp_path / "kylin-memory" / "memory.sock")
+    db = str(tmp_path / "kylin-memory" / "test.db")
     cfg_file = tmp_path / "config.toml"
     cfg_file.write_text(
-        "[socket]\npath = '/tmp/kylin-memory/memory.sock'\n"
-        "[database]\npath = '/tmp/kylin-memory/test.db'\n"
+        f"[socket]\npath = '{sock}'\n"
+        f"[database]\npath = '{db}'\n"
         "[deadline]\ndefault_ms = 3000\n"
         "[retrieve]\ndeadline_ms = 200\n"
         "[outbox]\npoll_interval_s = 2\nmax_retries = 3\n"
@@ -55,8 +71,8 @@ def test_toml_values_loaded(clear_env, tmp_path):
         encoding="utf-8",
     )
     cfg, _ = load_config(config_file=str(cfg_file))
-    assert cfg.socket_path == "/tmp/kylin-memory/memory.sock"
-    assert cfg.database_path == "/tmp/kylin-memory/test.db"
+    assert cfg.socket_path == sock
+    assert cfg.database_path == db
     assert cfg.deadline_default_ms == 3000
     assert cfg.retrieve_deadline_ms == 200
     assert cfg.outbox_poll_interval_s == 2
@@ -76,9 +92,11 @@ def test_env_overrides_file(clear_env, tmp_path):
 
 
 def test_cli_override_top_priority(clear_env, tmp_path):
-    os.environ["KYLIN_MEMORY_SOCKET"] = "/tmp/from-env.sock"
-    cfg, _ = load_config(config_file=str(tmp_path / "absent.toml"), socket_override="/tmp/from-cli.sock")
-    assert cfg.socket_path == "/tmp/from-cli.sock"  # CLI > env
+    env_socket = str(tmp_path / "from-env.sock")
+    cli_socket = str(tmp_path / "from-cli.sock")
+    os.environ["KYLIN_MEMORY_SOCKET"] = env_socket
+    cfg, _ = load_config(config_file=str(tmp_path / "absent.toml"), socket_override=cli_socket)
+    assert cfg.socket_path == cli_socket  # CLI > env
 
 
 def test_cli_db_override(clear_env, tmp_path):

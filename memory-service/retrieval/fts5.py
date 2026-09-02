@@ -83,6 +83,7 @@ class Fts5Index:
         if filter is not None and filter.user_id != user_id:
             raise ValueError("RetrievalFilter.user_id 必须与 FTS5 搜索 user_id 一致")
 
+
         clauses = ["memory_fts MATCH ?", "user_id = ?"]
         params: list[object] = [query, user_id]
 

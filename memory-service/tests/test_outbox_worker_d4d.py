@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 
 from db import repositories as repo
 from db.engine import create_db_engine, init_schema
-from outbox.worker import OutboxWorker
+from outbox.worker import OutboxWorker, _is_schema_missing
 
 
 @pytest.fixture()
@@ -44,11 +44,12 @@ def test_worker_consumes_success(engine):
     _enqueue(engine)
     seen = []
 
-    def consumer(payload):
+    def consumer(event_type, payload):
         seen.append(payload)
 
     w = OutboxWorker(engine, poll_interval_s=1, max_retries=3, consumer=consumer)
     w._poll_once()
+    # HIGH-01：路由真源 = outbox.event_type 独立列，显式传给 consumer；payload 不注入
     assert seen == [{"turn_id": "1"}]
     assert _count(engine) == 0  # 成功 → DELETE
     w.stop()
@@ -122,7 +123,7 @@ def test_worker_metrics_backlog(engine):
 
 def test_worker_start_stop_lifecycle(engine):
     _enqueue(engine)
-    w = OutboxWorker(engine, poll_interval_s=1, max_retries=3, consumer=lambda p: None)
+    w = OutboxWorker(engine, poll_interval_s=1, max_retries=3, consumer=lambda et, p: None)
     w.start()
     w.start()  # 幂等：已启动忽略
     # 等待消费
@@ -133,3 +134,59 @@ def test_worker_start_stop_lifecycle(engine):
         time.sleep(0.1)
     w.stop()
     assert _count(engine) == 0
+
+
+def test_worker_schema_missing_stops_not_deadloop(tmp_path):
+    """表缺失（无 outbox schema）时 Worker 应停止并置 fatal_error，而非无限重试死循环。
+
+    对应 A-REQ-01 死循环：对空库启动 Worker 会撞 `no such table: idempotency_cache`，
+    若不处理会对该持久性错误无限重试。修复后应设置 fatal_error 并停止线程。
+    """
+    assert _is_schema_missing(
+        RuntimeError("(sqlite3.OperationalError) no such table: outbox")
+    )
+    assert not _is_schema_missing(
+        RuntimeError("(sqlite3.OperationalError) database is locked")
+    )
+
+    # 建一个空库（不 init_schema → 无 outbox/idempotency_cache 表）
+    eng = create_db_engine(str(tmp_path / "empty.db"))
+    import time
+
+    w2 = OutboxWorker(eng, poll_interval_s=1, max_retries=3)
+    w2.start()
+    deadline = time.time() + 5
+    while w2._thread.is_alive() and time.time() < deadline:
+        time.sleep(0.1)
+    assert not w2._thread.is_alive(), "schema 缺失时 Worker 应停止（防死循环）"
+    assert w2._fatal_error is not None
+    assert w2.metrics()["fatal_error"] is not None
+    w2.stop()
+    eng.dispose()
+
+
+def test_worker_passes_event_type_to_deletion_consumer(engine):
+    """[HIGH-01] worker 将 outbox 行 event_type（forget.executed）显式传给 consumer
+    （路由真源 = outbox.event_type 独立列，不注入 payload），
+    使删除 consumer 能识别并触发 CacheInvalidator 失效。"""
+    # 入队一条 forget.executed 删除事件（payload 不含 event_type，模拟 D 轨 Forget Executor）
+    with engine.begin() as conn:
+        repo.enqueue_outbox(
+            conn,
+            aggregate_type="memory",
+            aggregate_id="m1",
+            event_type=repo.EVENT_FORGET_EXECUTED,
+            payload={
+                "event_id": "del_001", "user_id": "u1",
+                "target_type": "event", "forget_mode": "single_item",
+                "content_hashes": ["abc123def456"],
+            },
+        )
+    seen = []
+    # 模拟 deletion consumer（HIGH-01 双参约定）：仅记录收到的 event_type，确认 worker 显式传入
+    w = OutboxWorker(engine, poll_interval_s=1, max_retries=3,
+                     consumer=lambda event_type, payload: seen.append(event_type))
+    w._poll_once()
+    assert seen == ["forget.executed"], "worker 应将 forget.executed 显式传给 consumer"
+    assert _count(engine) == 0  # 消费成功 → DELETE
+    w.stop()

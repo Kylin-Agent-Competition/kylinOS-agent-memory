@@ -1,0 +1,44 @@
+=== post-reboot verify 2026-09-02 12:09:04 ===
+ 12:09:04 up 1 min,  2 users,  load average: 7.04, 1.89, 0.64
+--- user session ---
+SESSION  UID USER         SEAT  TTY  STATE  IDLE SINCE
+      4 1000 yanmouren778 seat0 tty7 active no   -
+      7 1000 yanmouren778 -     -    active no   -
+
+2 sessions listed.
+--- kylin-memory service ---
+active
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 12:08:36 CST; 28s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 1712 (python3)
+      Tasks: 3 (limit: 9464)
+     Memory: 54.0M (peak: 56.0M)
+        CPU: 3.113s
+     CGroup: /user.slice/user-1000.slice/user@1000.service/app.slice/kylin-memory.service
+             └─1712 /usr/bin/python3 /home/yanmouren778/kylinOS-agent-memory/memory-service/app.py --socket /run/user/1000/kylin-memory/memory.sock --no-migrate
+--- socket ---
+srw------- 1 yanmouren778 yanmouren778 0  9月 2日 12:08 /run/user/1000/kylin-memory/memory.sock
+--- journal ---
+9月 02 12:06:43 yanmouren778-pc systemd[1597]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 02 12:06:43 yanmouren778-pc systemd[1597]: kylin-memory.service: Consumed 1.566s CPU time, 34.9M memory peak, 0B memory swap peak.
+9月 02 12:06:43 yanmouren778-pc systemd[1597]: Started kylin-memory.service - Kylin Memory Service.
+9月 02 12:06:45 yanmouren778-pc kylin-memory-server[12671]: 配置文件不存在 /home/yanmouren778/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 02 12:06:45 yanmouren778-pc kylin-memory-server[12671]: 2026-09-02T12:06:45+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 02 12:06:45 yanmouren778-pc kylin-memory-server[12671]: 2026-09-02T12:06:45+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 02 12:06:45 yanmouren778-pc kylin-memory-server[12671]: 2026-09-02T12:06:45+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+9月 02 12:06:45 yanmouren778-pc kylin-memory-server[12671]: 2026-09-02T12:06:45+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 02 12:06:52 yanmouren778-pc kylin-memory-server[12671]: 2026-09-02T12:06:52+0800 INFO gateway.handlers [Thread-3 (_handle_connection)] memory.retrieve method=memory.retrieve request_id=req-e5cefacaa0（主链未接入，返回空上下文）
+9月 02 12:07:16 yanmouren778-pc systemd[1597]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 02 12:07:16 yanmouren778-pc systemd[1597]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 02 12:07:16 yanmouren778-pc systemd[1597]: kylin-memory.service: Consumed 1.725s CPU time, 35.1M memory peak, 0B memory swap peak.
+--- health via UDS ---
+{"protocol_version": "1.0", "request_id": "req-3f89cf1470", "trace_id": "tr-1bb8d9dd95", "status": "ok", "data": {"status": "ok", "db": "ok", "methods": ["echo", "health", "memory.retrieve", "memory.store"], "outbox": {"backlog": 0, "dead_letter": 0, "oldest_pending_created_at": null, "processed": 0, "dead_letters": 0, "index_sync_lag": null, "index_sync_lag_seconds": null, "fatal_error": null}}, "server_ts": "2026-09-02T04:09:06.260795+00:00"}
+--- vector/runtime UDS ---
+srwxrwxr-x 1 yanmouren778 yanmouren778 0  9月 2日 12:08 /tmp/kylin-ai-vector-engine-1000.sock
+ls: 无法访问 '/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock': 没有那个文件或目录
+--- screensaver persisted ---
+false
+uint32 0
+=== end 2026-09-02 12:09:06 ===

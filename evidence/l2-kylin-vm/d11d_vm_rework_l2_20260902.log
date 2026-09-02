@@ -1,0 +1,96 @@
+=== D11D rework L2 2026-09-02 11:51:42 ===
+--- script/unit head hash ---
+0781900881eacc91024148c6759ff16ccc31fc73aabc5b6a944c2f8e1da7655f  packaging/systemd/install_kylin_memory.sh
+cf8f76aab5da36dd5eaff6276a71f8307bf4511b1da135d2226af0402e120c28  packaging/systemd/kylin-memory.service
+--- pre state ---
+-rw-rw-r-- 1 yanmouren778 yanmouren778 1096  9月 2日 00:15 /home/yanmouren778/.config/systemd/user/kylin-memory.service
+-rwxrwxr-x 1 yanmouren778 yanmouren778 101  9月 2日 00:15 /home/yanmouren778/.local/bin/kylin-memory-server
+--- STEP 1: install (upgrade, creates backups) ---
+[kylin-memory-install] 已备份既有 wrapper: /home/yanmouren778/.local/bin/kylin-memory-server.bak.*
+[kylin-memory-install] 已备份既有 unit: /home/yanmouren778/.config/systemd/user/kylin-memory.service.bak.*
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 03:51:12 CST; 8h ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 1712 (python3)
+      Tasks: 3 (limit: 9464)
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+[kylin-memory-install] 重启验证…
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 11:51:59 CST; 6s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 5103 (python3)
+      Tasks: 3 (limit: 9464)
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+[kylin-memory-install] 安装完成：wrapper=/home/yanmouren778/.local/bin/kylin-memory-server unit=/home/yanmouren778/.config/systemd/user/kylin-memory.service
+STEP1_EXIT=0
+--- perms after install (contract 0700) ---
+700 /home/yanmouren778/.config/kylin-memory
+700 /home/yanmouren778/.local/share/kylin-memory
+700 /home/yanmouren778/.local/state/kylin-memory
+700 /run/user/1000/kylin-memory
+600 /run/user/1000/kylin-memory/memory.sock
+600 /home/yanmouren778/.local/share/kylin-memory/kylin_memory.db
+755 /home/yanmouren778/.local/bin/kylin-memory-server
+--- backups after install ---
+-rw-rw-r-- 1 yanmouren778 yanmouren778 1096  9月 2日 11:51 /home/yanmouren778/.config/systemd/user/kylin-memory.service.bak.20260902_115151
+-rwxrwxr-x 1 yanmouren778 yanmouren778  101  9月 2日 11:51 /home/yanmouren778/.local/bin/kylin-memory-server.bak.20260902_115150
+--- STEP 2: restart ---
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 11:52:06 CST; 6s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 5513 (python3)
+      Tasks: 3 (limit: 9464)
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+STEP2_EXIT=0
+--- STEP 3: rollback (restore original) ---
+[kylin-memory-install] 已恢复原 unit: kylin-memory.service.bak.20260902_115151
+[kylin-memory-install] 已恢复原 wrapper: kylin-memory-server.bak.20260902_115150
+[kylin-memory-install] 回退完成：已停止并禁用 kylin-memory，已恢复安装前状态（wrapper/unit）
+STEP3_EXIT=0
+--- after rollback ---
+inactive
+inactive confirmed
+-rw-rw-r-- 1 yanmouren778 yanmouren778 1096  9月 2日 11:51 /home/yanmouren778/.config/systemd/user/kylin-memory.service
+-rwxrwxr-x 1 yanmouren778 yanmouren778 101  9月 2日 11:51 /home/yanmouren778/.local/bin/kylin-memory-server
+--- STEP 4: re-install (final state) ---
+[kylin-memory-install] 已备份既有 wrapper: /home/yanmouren778/.local/bin/kylin-memory-server.bak.*
+[kylin-memory-install] 已备份既有 unit: /home/yanmouren778/.config/systemd/user/kylin-memory.service.bak.*
+Created symlink /home/yanmouren778/.config/systemd/user/default.target.wants/kylin-memory.service → /home/yanmouren778/.config/systemd/user/kylin-memory.service.
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 11:52:26 CST; 2s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 6511 (python3)
+      Tasks: 3 (limit: 9464)
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+[kylin-memory-install] 重启验证…
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 11:52:29 CST; 3s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 7061 (python3)
+      Tasks: 3 (limit: 9464)
+[kylin-memory-install] WARN: 日志中未匹配到 'Memory Service 就绪'（请人工核对 journalctl --user -u kylin-memory）
+[kylin-memory-install] 安装完成：wrapper=/home/yanmouren778/.local/bin/kylin-memory-server unit=/home/yanmouren778/.config/systemd/user/kylin-memory.service
+STEP4_EXIT=0
+--- final state ---
+active
+600 /run/user/1000/kylin-memory/memory.sock
+600 /home/yanmouren778/.local/share/kylin-memory/kylin_memory.db
+9月 02 11:52:29 yanmouren778-pc systemd[1625]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 02 11:52:29 yanmouren778-pc systemd[1625]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 02 11:52:29 yanmouren778-pc systemd[1625]: Started kylin-memory.service - Kylin Memory Service.
+9月 02 11:52:29 yanmouren778-pc kylin-memory-server[7061]: 配置文件不存在 /home/yanmouren778/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 02 11:52:29 yanmouren778-pc kylin-memory-server[7061]: 2026-09-02T11:52:29+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 02 11:52:29 yanmouren778-pc kylin-memory-server[7061]: 2026-09-02T11:52:29+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 02 11:52:29 yanmouren778-pc kylin-memory-server[7061]: 2026-09-02T11:52:29+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 02 11:52:29 yanmouren778-pc kylin-memory-server[7061]: 2026-09-02T11:52:29+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+=== end 2026-09-02 11:52:46 ===

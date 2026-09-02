@@ -1,0 +1,106 @@
+=== D11D HEAD L2 re-run 2026-09-02 12:05:38 ===
+HEAD=c18184a9816d04a20fec95e8c535816dc8acae22
+HEAD_COMMIT=c18184a merge: 同步 main（PR #113/#114/#109）至 D11D 分支
+0781900881eacc91024148c6759ff16ccc31fc73aabc5b6a944c2f8e1da7655f  packaging/systemd/install_kylin_memory.sh
+cf8f76aab5da36dd5eaff6276a71f8307bf4511b1da135d2226af0402e120c28  packaging/systemd/kylin-memory.service
+--- STEP1 install ---
+[kylin-memory-install] 已备份既有 wrapper: /home/yanmouren778/.local/bin/kylin-memory-server.bak.*
+[kylin-memory-install] 已备份既有 unit: /home/yanmouren778/.config/systemd/user/kylin-memory.service.bak.*
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 04:04:00 CST; 8h ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 1741 (python3)
+      Tasks: 3 (limit: 9464)
+[kylin-memory-install] WARN: 日志中未匹配到 'Memory Service 就绪'（请人工核对 journalctl --user -u kylin-memory）
+[kylin-memory-install] 重启验证…
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 12:06:15 CST; 5s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 10370 (python3)
+      Tasks: 3 (limit: 9464)
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+[kylin-memory-install] 安装完成：wrapper=/home/yanmouren778/.local/bin/kylin-memory-server unit=/home/yanmouren778/.config/systemd/user/kylin-memory.service
+STEP1_EXIT=0
+--- perms ---
+700 /home/yanmouren778/.config/kylin-memory
+700 /home/yanmouren778/.local/share/kylin-memory
+700 /home/yanmouren778/.local/state/kylin-memory
+700 /run/user/1000/kylin-memory
+600 /run/user/1000/kylin-memory/memory.sock
+600 /home/yanmouren778/.local/share/kylin-memory/kylin_memory.db
+755 /home/yanmouren778/.local/bin/kylin-memory-server
+--- STEP2 restart ---
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 12:06:21 CST; 2s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 10604 (python3)
+      Tasks: 3 (limit: 9464)
+[kylin-memory-install] WARN: 日志中未匹配到 'Memory Service 就绪'（请人工核对 journalctl --user -u kylin-memory）
+STEP2_EXIT=0
+--- STEP3 rollback (restore) ---
+[kylin-memory-install] 已恢复原 unit: kylin-memory.service.bak.20260902_120555
+[kylin-memory-install] 已恢复原 wrapper: kylin-memory-server.bak.20260902_120555
+[kylin-memory-install] 回退完成：已停止并禁用 kylin-memory，已恢复安装前状态（wrapper/unit）
+STEP3_EXIT=0
+inactive
+inactive confirmed
+--- STEP4 re-install (final) ---
+[kylin-memory-install] 已备份既有 wrapper: /home/yanmouren778/.local/bin/kylin-memory-server.bak.*
+[kylin-memory-install] 已备份既有 unit: /home/yanmouren778/.config/systemd/user/kylin-memory.service.bak.*
+Created symlink /home/yanmouren778/.config/systemd/user/default.target.wants/kylin-memory.service → /home/yanmouren778/.config/systemd/user/kylin-memory.service.
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 12:06:35 CST; 2s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 11810 (python3)
+      Tasks: 3 (limit: 9464)
+[kylin-memory-install] WARN: 日志中未匹配到 'Memory Service 就绪'（请人工核对 journalctl --user -u kylin-memory）
+[kylin-memory-install] 重启验证…
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 12:06:43 CST; 2s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 12671 (python3)
+      Tasks: 3 (limit: 9464)
+[kylin-memory-install] WARN: 日志中未匹配到 'Memory Service 就绪'（请人工核对 journalctl --user -u kylin-memory）
+[kylin-memory-install] 安装完成：wrapper=/home/yanmouren778/.local/bin/kylin-memory-server unit=/home/yanmouren778/.config/systemd/user/kylin-memory.service
+STEP4_EXIT=0
+--- diagnostics (Test A production socket + Test B JSON logs) ---
+== Test A: running service diagnostics (production socket) ==
+{"trace_id": "diag-719cea2017", "request_id": "req-de70920f91", "response": {"protocol_version": "1.0", "request_id": "req-de70920f91", "trace_id": "diag-719cea2017", "status": "ok", "data": {"status": "ok", "db": "ok", "methods": ["echo", "health", "memory.retrieve", "memory.store"], "outbox": {"backlog": 0, "dead_letter": 0, "oldest_pending_created_at": null, "processed": 0, "dead_letters": 0, "index_sync_lag": null, "index_sync_lag_seconds": null, "fatal_error": null}}, "server_ts": "2026-09-02T04:06:51.922442+00:00"}}
+{"trace_id": "diag-bccae30fdb", "request_id": "req-0499cca856", "response": {"protocol_version": "1.0", "request_id": "req-0499cca856", "trace_id": "diag-bccae30fdb", "status": "ok", "data": {"echo": {}}, "server_ts": "2026-09-02T04:06:52.046078+00:00"}}
+{"trace_id": "diag-01671506aa", "request_id": "req-e5cefacaa0", "response": {"protocol_version": "1.0", "request_id": "req-e5cefacaa0", "trace_id": "diag-01671506aa", "status": "ok", "data": {"context": [], "degraded": false, "reason": "retrieval main chain pending"}, "server_ts": "2026-09-02T04:06:52.184741+00:00"}}
+== Test B: JSON logs instance ==
+{"trace_id": "diag-23ff2c67c7", "request_id": "req-87bb5f455d", "response": {"protocol_version": "1.0", "request_id": "req-87bb5f455d", "trace_id": "diag-23ff2c67c7", "status": "ok", "data": {"status": "degraded", "db": "ok", "methods": ["echo", "health", "memory.retrieve", "memory.store"]}, "server_ts": "2026-09-02T04:06:55.341895+00:00"}}
+{"trace_id": "diag-c850e84a21", "request_id": "req-faf9280dff", "response": {"protocol_version": "1.0", "request_id": "req-faf9280dff", "trace_id": "diag-c850e84a21", "status": "ok", "data": {"echo": {}}, "server_ts": "2026-09-02T04:06:55.475674+00:00"}}
+{"trace_id": "diag-175626d2f8", "request_id": "req-89e9b43c83", "response": {"protocol_version": "1.0", "request_id": "req-89e9b43c83", "trace_id": "diag-175626d2f8", "status": "ok", "data": {"context": [], "degraded": false, "reason": "retrieval main chain pending"}, "server_ts": "2026-09-02T04:06:55.617299+00:00"}}
+== JSON log line count ==
+7
+== sample lines ==
+配置文件不存在 /home/yanmouren778/.config/kylin-memory/config.toml，使用全部默认值启动
+{"ts": "2026-09-02T12:06:53+0800", "level": "WARNING", "logger": "db.engine", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "收紧 DB 文件权限 0600 失败（不阻断启动）: /tmp/d11d-test/diag.db ([Errno 2] No such file or directory: '/tmp/d11d-test/diag.db')"}
+{"ts": "2026-09-02T12:06:54+0800", "level": "INFO", "logger": "__main__", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "schema 就绪: /tmp/d11d-test/diag.db"}
+{"ts": "2026-09-02T12:06:54+0800", "level": "WARNING", "logger": "__main__", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "开发模式建库（init_schema=create_all，绕过 Alembic）。生产环境必须先 `alembic upgrade head`，再以 `--no-migrate` 启动，避免两套建表路径 default 语义分叉（PR#52 Issue 6）。"}
+{"ts": "2026-09-02T12:06:54+0800", "level": "INFO", "logger": "__main__", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "Memory Service 就绪（socket=/tmp/d11d-test/diag.sock）"}
+{"ts": "2026-09-02T12:06:54+0800", "level": "INFO", "logger": "gateway.server", "trace_id": "", "request_id": "", "method": "", "event_id": "", "message": "IPC Gateway 启动: /tmp/d11d-test/diag.sock"}
+{"ts": "2026-09-02T12:06:55+0800", "level": "INFO", "logger": "gateway.handlers", "trace_id": "diag-175626d2f8", "request_id": "req-89e9b43c83", "method": "memory.retrieve", "event_id": "", "message": "memory.retrieve method=memory.retrieve request_id=req-89e9b43c83（主链未接入，返回空上下文）"}
+== trace_id occurrences in logs ==
+== PII scan (expect 0) ==
+0
+0 PII markers
+--- final journal ---
+9月 02 12:06:45 yanmouren778-pc kylin-memory-server[12671]: 配置文件不存在 /home/yanmouren778/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 02 12:06:45 yanmouren778-pc kylin-memory-server[12671]: 2026-09-02T12:06:45+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 02 12:06:45 yanmouren778-pc kylin-memory-server[12671]: 2026-09-02T12:06:45+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 02 12:06:45 yanmouren778-pc kylin-memory-server[12671]: 2026-09-02T12:06:45+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+9月 02 12:06:45 yanmouren778-pc kylin-memory-server[12671]: 2026-09-02T12:06:45+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 02 12:06:52 yanmouren778-pc kylin-memory-server[12671]: 2026-09-02T12:06:52+0800 INFO gateway.handlers [Thread-3 (_handle_connection)] memory.retrieve method=memory.retrieve request_id=req-e5cefacaa0（主链未接入，返回空上下文）
+=== end 2026-09-02 12:06:56 ===

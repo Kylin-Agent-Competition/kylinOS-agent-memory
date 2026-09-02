@@ -1,4 +1,4 @@
-﻿#include "view_models/memory_view_model.h"
+#include "view_models/memory_view_model.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -807,6 +807,49 @@ void MemoryViewModel::onResponseReceived(
         setLifecycleStatusBusy(false);
         setLifecycleStatusStage(QStringLiteral("ready"));
     }
+
+    // ── D9C Memory Context 组装 路由 ───────────────────────────────
+    // 防伪 Context：仅当 data 为非空对象且 injection_status 非 failed/skipped
+    // 时投影；空 data / injection_status=failed/skipped 保持 assembledContext_ 空。
+    if (!pendingContextAssembleRequestId_.isEmpty()
+        && requestId == pendingContextAssembleRequestId_) {
+        pendingContextAssembleRequestId_.clear();
+        const QString injectionStatus =
+            parts.data.value(QStringLiteral("injection_status")).toString();
+        const bool contextInvalid =
+            parts.data.isEmpty()
+            || injectionStatus == QStringLiteral("failed")
+            || injectionStatus == QStringLiteral("skipped");
+        if (contextInvalid) {
+            // 空 data / failed / skipped：清空投影，stage=failed（防伪 Context）
+            // I-2 修复：统一使用 resetContextProjection() 避免 stale Context 残留。
+            resetContextProjection();
+            setContextInjectionStatus(injectionStatus.isEmpty()
+                ? QStringLiteral("skipped") : injectionStatus);
+            setContextAssembleError(QStringLiteral(
+                "Context assembly returned no usable context."));
+            setContextAssembleBusy(false);
+            setContextAssembleStage(QStringLiteral("failed"));
+        } else {
+            projectAssembledContext(parts.data);
+            setContextAssembleBusy(false);
+            setContextAssembleStage(QStringLiteral("ready"));
+        }
+    }
+
+    // ── D10C 精准遗忘 路由 ──────────────────────────────────────
+    // forget.preview：调用 handleForgetPreviewResponse
+    if (!pendingForgetPreviewRequestId_.isEmpty()
+        && requestId == pendingForgetPreviewRequestId_) {
+        pendingForgetPreviewRequestId_.clear();
+        handleForgetPreviewResponse(requestId, envelope);
+    }
+    // forget.execute：调用 handleForgetExecuteResponse（含漏删 MEDIUM-03 保护）
+    if (!pendingForgetExecuteRequestId_.isEmpty()
+        && requestId == pendingForgetExecuteRequestId_) {
+        pendingForgetExecuteRequestId_.clear();
+        handleForgetExecuteResponse(requestId, envelope);
+    }
 }
 
 void MemoryViewModel::onRequestFailed(
@@ -902,6 +945,45 @@ void MemoryViewModel::onRequestFailed(
         setLifecycleStatusStage(errorCode == QString::fromUtf8(kErrClientTimeout)
                                     ? QStringLiteral("timeout")
                                     : QStringLiteral("failed"));
+    }
+
+    // ── D9C Memory Context 组装 pending 命中 ───────────────────────
+    // 错误响应绝不参与 Context 拼接：清空 assembledContext 防伪注入。
+    // I-2 修复：统一使用 resetContextProjection() 避免 stale Context 残留。
+    if (!pendingContextAssembleRequestId_.isEmpty()
+        && requestId == pendingContextAssembleRequestId_) {
+        pendingContextAssembleRequestId_.clear();
+        resetContextProjection();
+        setContextInjectionStatus(QStringLiteral("failed"));
+        setContextAssembleBusy(false);
+        setContextAssembleError(safeMessage);
+        setContextAssembleStage(errorCode == QString::fromUtf8(kErrClientTimeout)
+                                    ? QStringLiteral("timeout")
+                                    : QStringLiteral("failed"));
+    }
+
+    // ── D10C 精准遗忘 pending 命中 ──────────────────────────────
+    // 失败路径清空所有投影（selector 明文、selection 快照等），标记 stage=failed/timeout。
+    if (!pendingForgetPreviewRequestId_.isEmpty()
+        && requestId == pendingForgetPreviewRequestId_) {
+        pendingForgetPreviewRequestId_.clear();
+        pendingForgetPreviewSelector_.clear();
+        pendingForgetPreviewTopic_.clear();
+        resetForgetProjection();
+        setForgetPreviewBusy(false);
+        setForgetPreviewError(safeMessage);
+        setForgetStage(errorCode == QString::fromUtf8(kErrClientTimeout)
+                           ? QStringLiteral("timeout")
+                           : QStringLiteral("failed"));
+    }
+    if (!pendingForgetExecuteRequestId_.isEmpty()
+        && requestId == pendingForgetExecuteRequestId_) {
+        pendingForgetExecuteRequestId_.clear();
+        setForgetExecuteBusy(false);
+        setForgetExecuteError(safeMessage);
+        setForgetStage(errorCode == QString::fromUtf8(kErrClientTimeout)
+                           ? QStringLiteral("timeout")
+                           : QStringLiteral("failed"));
     }
 
     emit requestFailed(requestId, errorCode, safeMessage);
@@ -1426,6 +1508,24 @@ QVariantList MemoryViewModel::projectJsonArray(const QJsonArray& items) const
     return out;
 }
 
+// D9C 专用投影：recall_sources / uncertainty_hints 契约允许字符串元素
+// （如 "fts5" / "vector_score_unverified"）或对象元素（{channel,provider} /
+// {memory_id,conflict_state}）。projectJsonArray 仅保留 isObject()，会丢弃
+// 字符串元素导致投影恒空（CI 实证 A2/A5 失败）。本函数同时保留字符串与对象。
+QVariantList MemoryViewModel::projectJsonArrayMixed(const QJsonArray& items) const
+{
+    QVariantList out;
+    for (const QJsonValue& value : items) {
+        if (value.isObject()) {
+            out.append(value.toObject().toVariantMap());
+        } else if (value.isString()) {
+            out.append(QVariant(value.toString()));
+        }
+        // 其它类型（数字/bool/null）静默忽略，与 D8C projectJsonArray 保持一致。
+    }
+    return out;
+}
+
 // ── D8C 私有 setters ───────────────────────────────────────────────────────
 
 void MemoryViewModel::setKnowledgeDetailBusy(bool value)
@@ -1516,6 +1616,836 @@ void MemoryViewModel::setLifecycleStatusError(const QString& value)
     if (lifecycleStatusError_ == value) return;
     lifecycleStatusError_ = value;
     emit lifecycleStatusErrorChanged();
+}
+
+// ── D9C Memory Context 组装 Pipeline ────────────────────────────────────────
+
+void MemoryViewModel::runContextAssemblePipeline(
+    const QString& userId,
+    const QString& queryText,
+    int tokenBudget,
+    const QString& scene,
+    const QString& candidatesJson)
+{
+    if (contextAssembleBusy_) {
+        setContextAssembleError(QStringLiteral(
+            "A context.assemble request is already in flight."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
+        return;
+    }
+    if (userId.isEmpty()) {
+        setContextAssembleError(QStringLiteral("user_id must not be empty."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
+        return;
+    }
+    if (queryText.isEmpty()) {
+        setContextAssembleError(QStringLiteral("query_text must not be empty."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
+        return;
+    }
+    if (tokenBudget <= 0) {
+        setContextAssembleError(QStringLiteral(
+            "token_budget must be a positive integer."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
+        return;
+    }
+    if (client_.connectionState() != MemoryClient::ConnectionState::Connected) {
+        setContextAssembleError(QStringLiteral("Client is not connected."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
+        return;
+    }
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("schema_version"), QStringLiteral("1.0"));
+    payload.insert(QStringLiteral("user_id"), userId);
+    payload.insert(QStringLiteral("query_text"), queryText);
+    payload.insert(QStringLiteral("token_budget"), tokenBudget);
+    if (!scene.isEmpty()) {
+        payload.insert(QStringLiteral("scene"), scene);
+    }
+    // candidatesJson：可选 B 轨 RetrievalCandidateSample[] JSON 字符串。
+    // 解析失败时静默忽略（不阻塞 Context 组装；Mock 可自行生成候选）。
+    if (!candidatesJson.isEmpty()) {
+        const QJsonDocument doc = QJsonDocument::fromJson(
+            candidatesJson.toUtf8());
+        if (doc.isArray()) {
+            payload.insert(QStringLiteral("candidates"), doc.array());
+        }
+    }
+
+    const QString id = client_.sendContextAssembleRequest(payload);
+    if (id.isEmpty()) {
+        setContextAssembleError(QStringLiteral(
+            "Failed to send context.assemble request."));
+        setContextAssembleStage(QStringLiteral("failed"));
+        resetContextProjection();
+        return;
+    }
+    pendingContextAssembleRequestId_ = id;
+    // 记录本次请求的 token_budget 用于响应缺失时的回退（M-2 修复）。
+    requestedTokenBudget_ = tokenBudget;
+    setContextAssembleBusy(true);
+    setContextAssembleError({});
+    setContextAssembleStage(QStringLiteral("querying"));
+    // 清空上一轮投影，避免 stale Context 残留（防伪 Context 统一口径）。
+    resetContextProjection();
+    setContextInjectionStatus(QStringLiteral("querying"));
+    setLastRequestId(id);
+    armDeadlineTimer(id, kDefaultDeadlineMs);
+}
+
+void MemoryViewModel::projectAssembledContext(const QJsonObject& data)
+{
+    // 整体投影（保留全部字段供 QML 渲染完整 JSON）。
+    setAssembledContext(data);
+
+    // 召回来源（通道）：recall_sources[]（字符串或 {channel,provider} 对象）。
+    // 使用 projectJsonArrayMixed 保留字符串元素（fts5/vector/rrf 等）。
+    setContextRecallSources(projectJsonArrayMixed(
+        data.value(QStringLiteral("recall_sources")).toArray()));
+
+    // 记忆类型分布：memory_types[]（字符串或 {type,count} 对象）。
+    setContextMemoryTypes(projectJsonArrayMixed(
+        data.value(QStringLiteral("memory_types")).toArray()));
+
+    // 冲突提示：conflict_hints[]（含 memory_id / conflict_state 等）。
+    setContextConflictHints(projectJsonArrayMixed(
+        data.value(QStringLiteral("conflict_hints")).toArray()));
+
+    // 不确定性提示：uncertainty_hints[]（降级通道 / 陈旧索引 / score_semantics 未验证等）。
+    // 使用 projectJsonArrayMixed 保留字符串元素（vector_score_unverified 等）。
+    setContextUncertaintyHints(projectJsonArrayMixed(
+        data.value(QStringLiteral("uncertainty_hints")).toArray()));
+
+    // Token 预算校验：actual_token_count / token_budget / budget_exceeded。
+    // 客户端独立计算 budget_exceeded 以防服务端遗漏；同时回填服务端值（若提供）。
+    // M-2 修复：响应缺失 token_budget 时回退到本次请求的 requestedTokenBudget_，
+    // 避免 UI 显示 "250 / 0" 且无法触发超预算（请求前已清零投影）。
+    const int fallbackBudget = (requestedTokenBudget_ > 0)
+        ? requestedTokenBudget_ : contextTokenBudget_;
+    const int budget = data.value(QStringLiteral("token_budget")).toInt(
+        fallbackBudget);
+    const int actual = data.value(QStringLiteral("actual_token_count")).toInt(
+        contextActualTokenCount_);
+    const bool serverExceeded =
+        data.value(QStringLiteral("budget_exceeded")).toBool(false);
+    const bool clientExceeded = (budget > 0 && actual > budget);
+    setContextTokenBudget(budget);
+    setContextActualTokenCount(actual);
+    setContextBudgetExceeded(serverExceeded || clientExceeded);
+
+    // injection_status：prepared / degraded / failed / skipped。
+    // 注意：failed / skipped 已在路由阶段拦截到 failed stage；
+    //       此处仅处理 prepared / degraded（非空 Context）。
+    const QString injectionStatus =
+        data.value(QStringLiteral("injection_status")).toString();
+    if (!injectionStatus.isEmpty()) {
+        setContextInjectionStatus(injectionStatus);
+    } else {
+        // 缺省回退：有 selected_memory_ids 即视为 prepared，否则 degraded。
+        const auto selectedIds = data.value(
+            QStringLiteral("selected_memory_ids")).toArray();
+        setContextInjectionStatus(selectedIds.isEmpty()
+            ? QStringLiteral("degraded") : QStringLiteral("prepared"));
+    }
+}
+
+// D9C 防伪 Context 统一清空辅助：所有失败路径与请求前置清空调用本函数，
+// 确保 stale Context 不残留在投影字段中（I-2 修复）。
+void MemoryViewModel::resetContextProjection()
+{
+    setAssembledContext(QJsonObject{});
+    setContextRecallSources({});
+    setContextMemoryTypes({});
+    setContextConflictHints({});
+    setContextUncertaintyHints({});
+    setContextTokenBudget(0);
+    setContextActualTokenCount(0);
+    setContextBudgetExceeded(false);
+    // injection_status 由调用方决定（querying / failed / skipped）。
+}
+
+// ── D9C 私有 setters ─────────────────────────────────────────────────────────
+
+void MemoryViewModel::setContextAssembleBusy(bool value)
+{
+    const bool oldBusy = busy();
+    if (contextAssembleBusy_ == value) { return; }
+    contextAssembleBusy_ = value;
+    emit contextAssembleBusyChanged();
+    if (oldBusy != busy()) { emit busyChanged(); }
+}
+
+void MemoryViewModel::setContextAssembleStage(const QString& value)
+{
+    if (contextAssembleStage_ == value) return;
+    contextAssembleStage_ = value;
+    emit contextAssembleStageChanged();
+}
+
+void MemoryViewModel::setAssembledContext(const QJsonObject& value)
+{
+    if (assembledContext_ == value) return;
+    assembledContext_ = value;
+    emit assembledContextChanged();
+}
+
+void MemoryViewModel::setContextRecallSources(const QVariantList& value)
+{
+    if (contextRecallSources_ == value) return;
+    contextRecallSources_ = value;
+    emit contextRecallSourcesChanged();
+}
+
+void MemoryViewModel::setContextMemoryTypes(const QVariantList& value)
+{
+    if (contextMemoryTypes_ == value) return;
+    contextMemoryTypes_ = value;
+    emit contextMemoryTypesChanged();
+}
+
+void MemoryViewModel::setContextConflictHints(const QVariantList& value)
+{
+    if (contextConflictHints_ == value) return;
+    contextConflictHints_ = value;
+    emit contextConflictHintsChanged();
+}
+
+void MemoryViewModel::setContextUncertaintyHints(const QVariantList& value)
+{
+    if (contextUncertaintyHints_ == value) return;
+    contextUncertaintyHints_ = value;
+    emit contextUncertaintyHintsChanged();
+}
+
+void MemoryViewModel::setContextTokenBudget(int value)
+{
+    if (contextTokenBudget_ == value) return;
+    contextTokenBudget_ = value;
+    emit contextTokenBudgetChanged();
+}
+
+void MemoryViewModel::setContextActualTokenCount(int value)
+{
+    if (contextActualTokenCount_ == value) return;
+    contextActualTokenCount_ = value;
+    emit contextActualTokenCountChanged();
+}
+
+void MemoryViewModel::setContextBudgetExceeded(bool value)
+{
+    if (contextBudgetExceeded_ == value) return;
+    contextBudgetExceeded_ = value;
+    emit contextBudgetExceededChanged();
+}
+
+void MemoryViewModel::setContextInjectionStatus(const QString& value)
+{
+    if (contextInjectionStatus_ == value) return;
+    contextInjectionStatus_ = value;
+    emit contextInjectionStatusChanged();
+}
+
+void MemoryViewModel::setContextAssembleError(const QString& value)
+{
+    if (contextAssembleError_ == value) return;
+    contextAssembleError_ = value;
+    emit contextAssembleErrorChanged();
+}
+
+// ── D10C 精准遗忘 Pipeline（Demo / Prototype） ──────────────────────────────
+
+// forget.preview 模式互斥校验（SEC-FORGET-03，v0.3冻结）：
+//   single_item→targetId, session→targetSessionId, topic→targetTopic,
+//   time_window→targetTimeRange, full_reset→无任何 target_*
+static bool validateForgetModeSelector(
+    const QString& mode,
+    const QString& targetId,
+    const QString& targetSessionId,
+    const QString& targetTopic,
+    const QString& targetTimeRange,
+    QString* outSafeError)
+{
+    const QLatin1String kSingle("single_item"), kSession("session"),
+        kTopic("topic"), kWindow("time_window"), kReset("full_reset");
+    const bool hasTargetId = !targetId.isEmpty();
+    const bool hasSessionId = !targetSessionId.isEmpty();
+    const bool hasTopic = !targetTopic.isEmpty();
+    const bool hasTimeRange = !targetTimeRange.isEmpty();
+    const bool anyExtraTarget = hasTargetId || hasSessionId || hasTopic || hasTimeRange;
+
+    if (mode == kSingle) {
+        if (!hasTargetId || hasSessionId || hasTopic || hasTimeRange) {
+            *outSafeError = QStringLiteral(
+                "single_item mode requires exactly target_id (no session/topic/time).");
+            return false;
+        }
+        return true;
+    }
+    if (mode == kSession) {
+        if (!hasSessionId || hasTargetId || hasTopic || hasTimeRange) {
+            *outSafeError = QStringLiteral(
+                "session mode requires exactly target_session_id (no id/topic/time).");
+            return false;
+        }
+        return true;
+    }
+    if (mode == kTopic) {
+        if (!hasTopic || hasTargetId || hasSessionId || hasTimeRange) {
+            *outSafeError = QStringLiteral(
+                "topic mode requires exactly target_topic (no id/session/time).");
+            return false;
+        }
+        return true;
+    }
+    if (mode == kWindow) {
+        if (!hasTimeRange || hasTargetId || hasSessionId || hasTopic) {
+            *outSafeError = QStringLiteral(
+                "time_window mode requires exactly target_time_range (no id/session/topic).");
+            return false;
+        }
+        return true;
+    }
+    if (mode == kReset) {
+        if (anyExtraTarget) {
+            *outSafeError = QStringLiteral(
+                "full_reset mode must not carry any target_* field.");
+            return false;
+        }
+        return true;
+    }
+    *outSafeError = QStringLiteral(
+        "forget_mode must be one of: single_item|session|topic|time_window|full_reset.");
+    return false;
+}
+
+void MemoryViewModel::runForgetPreviewPipeline(
+    const QString& userId,
+    const QString& forgetPlanId,
+    const QString& forgetMode,
+    const QString& targetType,
+    const QString& targetSelector,
+    const QString& targetId,
+    const QString& targetSessionId,
+    const QString& targetTopic,
+    const QString& targetTimeRange,
+    bool requiresConfirmation,
+    bool isCascade)
+{
+    // 新请求显式清错（resetForgetProjection 不再清 Error，避免失败路径先 setError
+    // 再 reset 时误覆盖为""导致 L0 断言失败）。
+    setForgetPreviewError({});
+    // 未连接时快速失败（避免排队）。
+    if (client_.connectionState() != MemoryClient::ConnectionState::Connected) {
+        setForgetPreviewError(QStringLiteral("Client is not connected."));
+        setForgetStage(QStringLiteral("failed"));
+        resetForgetProjection();
+        return;
+    }
+    // 防并发：Preview/Execute 任一 busy 时拒绝（避免状态机竞态，§三.3）。
+    if (forgetPreviewBusy_ || forgetExecuteBusy_) {
+        setForgetPreviewError(QStringLiteral(
+            "A forget.preview/execute request is already in flight."));
+        setForgetStage(QStringLiteral("failed"));
+        resetForgetProjection();
+        return;
+    }
+    // 必填校验（v0.3 冻结：user_id / forget_plan_id / forget_mode / target_type 必填）。
+    QString safeErr;
+    if (userId.isEmpty()) {
+        safeErr = QStringLiteral("user_id must not be empty.");
+    } else if (forgetPlanId.isEmpty()) {
+        safeErr = QStringLiteral("forget_plan_id must not be empty.");
+    } else if (forgetMode.isEmpty()) {
+        safeErr = QStringLiteral("forget_mode must not be empty.");
+    } else if (targetType.isEmpty()) {
+        safeErr = QStringLiteral("target_type must not be empty.");
+    } else {
+        // 模式互斥（SEC-FORGET-03 / v0.3 §三.1 冻结）
+        if (!validateForgetModeSelector(forgetMode, targetId, targetSessionId,
+                                        targetTopic, targetTimeRange, &safeErr)) {
+            // 错误消息已由辅助填充（safe，不含用户正文）。
+        }
+    }
+    if (!safeErr.isEmpty()) {
+        setForgetPreviewError(safeErr);
+        setForgetStage(QStringLiteral("failed"));
+        resetForgetProjection();
+        return;
+    }
+
+    // ── 构造 forget.preview payload（对齐 v0.3 §三 + D3 §5.5 ForgetPlan） ──
+    // 注意：target_selector 明文生命周期=Preview 完成后清除（§四.8 HIGH-01）。
+    //       客户端暂存于 pendingForgetPreviewSelector_ 以便成功回调时显式清除，
+    //       并将 forgetSelectorCleared=true 置位（Sentinel 验收可覆盖）。
+    QJsonObject payload;
+    payload.insert(QStringLiteral("schema_version"), QStringLiteral("1.0"));
+    payload.insert(QStringLiteral("user_id"), userId);
+    payload.insert(QStringLiteral("forget_plan_id"), forgetPlanId);
+    payload.insert(QStringLiteral("forget_mode"), forgetMode);
+    payload.insert(QStringLiteral("target_type"), targetType);
+    if (!targetSelector.isEmpty()) {
+        payload.insert(QStringLiteral("target_selector"), targetSelector);
+    }
+    // 模式条件字段（互斥）：仅写入对应模式那一个（full_reset 全跳过）。
+    const QString& m = forgetMode;
+    if      (m == QLatin1String("single_item")) {
+        payload.insert(QStringLiteral("target_id"), targetId);
+    } else if (m == QLatin1String("session")) {
+        payload.insert(QStringLiteral("target_session_id"), targetSessionId);
+    } else if (m == QLatin1String("topic")) {
+        payload.insert(QStringLiteral("target_topic"), targetTopic);
+    } else if (m == QLatin1String("time_window")) {
+        payload.insert(QStringLiteral("target_time_range"), targetTimeRange);
+    }  // full_reset：无任何 target_*
+    payload.insert(QStringLiteral("requires_confirmation"), requiresConfirmation);
+    payload.insert(QStringLiteral("is_cascade"), isCascade);  // v0.3：默认false冻结
+
+    const QString id = client_.sendForgetPreviewRequest(payload);
+    if (id.isEmpty()) {
+        setForgetPreviewError(QStringLiteral(
+            "Failed to send forget.preview request."));
+        setForgetStage(QStringLiteral("failed"));
+        resetForgetProjection();
+        return;
+    }
+    // ── 登记 pending + 暂存明文（用于成功回调时清除 §四.8 HIGH-01） ──
+    pendingForgetPreviewRequestId_ = id;
+    pendingForgetPreviewUserId_ = userId;
+    pendingForgetPreviewSelector_ = targetSelector;  // 临时，Preview完成即清
+    pendingForgetPreviewTopic_ = targetTopic;        // 可能含正文，等同处理
+    pendingForgetPlanId_ = forgetPlanId;
+    // 清空上一轮投影，避免 stale 残留（失败路径前置调用也走 resetForgetProjection）。
+    resetForgetProjection();
+    // 当前请求的 forget_mode/target_type/is_cascade 先在 UI 侧展示（若响应有更新则覆盖）。
+    setForgetMode(forgetMode);
+    setForgetTargetType(targetType);
+    setForgetIsCascade(isCascade);
+    setForgetPreviewBusy(true);
+    setForgetStage(QStringLiteral("previewing"));
+    setLastRequestId(id);
+    armDeadlineTimer(id, kDefaultDeadlineMs);
+}
+
+void MemoryViewModel::runForgetExecutePipeline(
+    const QString& userId,
+    const QString& forgetPlanId,
+    const QString& confirmationToken,
+    const QString& idempotencyKey,
+    const QString& deleteMode)
+{
+    // 新请求显式清错（同 runForgetPreviewPipeline：避免 resetForgetProjection 误清空）。
+    setForgetExecuteError({});
+    if (client_.connectionState() != MemoryClient::ConnectionState::Connected) {
+        setForgetExecuteError(QStringLiteral("Client is not connected."));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+    if (forgetPreviewBusy_ || forgetExecuteBusy_) {
+        setForgetExecuteError(QStringLiteral(
+            "A forget.preview/execute request is already in flight."));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+    // 必填校验：userId / forgetPlanId / confirmationToken
+    if (userId.isEmpty() || forgetPlanId.isEmpty() || confirmationToken.isEmpty()) {
+        setForgetExecuteError(QStringLiteral(
+            "user_id / forget_plan_id / confirmation_token must not be empty."));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+    // execute 必须基于前一次成功 Preview（状态机 v0.2 冻结：awaiting_confirmation → executing）。
+    // 若 selection_hash 为空 / affected_count=0 且非 reset，显式拒绝。
+    if (forgetStage_ != QStringLiteral("awaiting_confirmation")) {
+        setForgetExecuteError(QStringLiteral(
+            "forget.execute requires a prior successful forget.preview (awaiting_confirmation)."));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("schema_version"), QStringLiteral("1.0"));
+    payload.insert(QStringLiteral("user_id"), userId);
+    payload.insert(QStringLiteral("forget_plan_id"), forgetPlanId);
+    // 确认凭据：明文一次性发送（仅 SHA-256 哈希由 D 轨持久层保存；§F-2 冻结）。
+    payload.insert(QStringLiteral("confirmation_token"), confirmationToken);
+    if (!idempotencyKey.isEmpty()) {
+        // 复用 FRZ-IPC-005 三元组 (user_id,session_id,idempotency_key) 语义。
+        payload.insert(QStringLiteral("idempotency_key"), idempotencyKey);
+    }
+    // delete_mode：soft/hard（v0.3 §三.2 + §四.9）。
+    // ⚠️  Hard Delete 可信输入来源门禁（v0.3/MEDIUM-04）：
+    //     Repository 不得根据 target_selector 自行推导 soft/hard；
+    //     LLM 不得终判 soft/hard；ADR-016 可信输入来源冻结与接线前，
+    //     Runtime Execute 保持 fail-closed（不得自动降级软删后报成功）。
+    const QString mode = deleteMode.isEmpty() ? QStringLiteral("soft") : deleteMode;
+    payload.insert(QStringLiteral("delete_mode"), mode);
+    // 附带 selection_hash（服务端二次校验目标快照一致，§五 F-7 并行接线）。
+    if (!pendingForgetSelectionHash_.isEmpty()) {
+        payload.insert(QStringLiteral("selection_hash"), pendingForgetSelectionHash_);
+    }
+    // 附带 affected_count（服务端二次校验漏删一致性 §三.1 v0.3/MEDIUM-03）。
+    if (pendingForgetAffectedCount_ >= 0) {
+        payload.insert(QStringLiteral("expected_affected_count"),
+                       pendingForgetAffectedCount_);
+    }
+
+    const QString id = client_.sendForgetExecuteRequest(payload);
+    if (id.isEmpty()) {
+        setForgetExecuteError(QStringLiteral(
+            "Failed to send forget.execute request."));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+    pendingForgetExecuteRequestId_ = id;
+    // 清空执行结果投影（保留 Preview 结果确认上下文）。
+    setForgetExecuteResult(QJsonObject{});
+    setForgetExecutedCount(-1);
+    setForgetExecuteError({});
+    setForgetExecuteBusy(true);
+    setForgetStage(QStringLiteral("executing"));
+    setLastRequestId(id);
+    armDeadlineTimer(id, kDefaultDeadlineMs);
+}
+
+// forget.preview 响应路由与投影
+void MemoryViewModel::handleForgetPreviewResponse(
+    const QString& /*requestId*/, const QJsonObject& envelope)
+{
+    ResponseParts parts{};
+    QString errCode;
+    QString errMsg;
+    // 注意：envelope status=error 已在 onResponseReceived 首行路由到 onRequestFailed；
+    // 本函数仅处理 status=ok 的业务响应。此处保留防御式解析。
+    const bool statusOk = tryParseResponseStatus(envelope, &parts, &errCode, &errMsg);
+    if (!statusOk) {
+        // 不应到达（外层已转 failed）。保险起见清零明文。
+        pendingForgetPreviewSelector_.clear();
+        pendingForgetPreviewTopic_.clear();
+        resetForgetProjection();
+        setForgetPreviewBusy(false);
+        setForgetPreviewError(errMsg.isEmpty() ? QStringLiteral(
+            "forget.preview returned status=error.") : errMsg);
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+
+    // 跨用户拦截（C轨客户端预检 + D轨服务端响应双重保障）：
+    // 请求携带的 user_id 与响应 data.user_id 必须一致，否则标记
+    // forgetCrossUserBlocked=true + stage=failed（验收：跨用户操作被拒绝）。
+    const QString respUserId =
+        parts.data.value(QStringLiteral("user_id")).toString();
+    if (!pendingForgetPreviewUserId_.isEmpty() && !respUserId.isEmpty()
+        && pendingForgetPreviewUserId_ != respUserId) {
+        pendingForgetPreviewSelector_.clear();
+        pendingForgetPreviewTopic_.clear();
+        resetForgetProjection();
+        setForgetCrossUserBlocked(true);
+        setForgetPreviewBusy(false);
+        setForgetPreviewError(QStringLiteral(
+            "Cross-user forget preview blocked: user_id mismatch."));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+
+    // 投影 data → 子属性（selection_hash / affected_count / credential_ttl_s / ...）
+    projectForgetPreview(parts.data);
+    setForgetPreviewResult(parts.data);
+
+    // §四.8 HIGH-01：Preview 完成后清除客户端侧明文 target_selector / target_topic
+    // （D 轨持久层同时安全清除 / 置 <CLEARED> 占位）。
+    pendingForgetPreviewSelector_.clear();
+    pendingForgetPreviewTopic_.clear();
+    // selector_cleared:true：服务端契约字段响应；若缺省，客户端侧也确保置位。
+    const bool clearedByServer =
+        parts.data.value(QStringLiteral("selector_cleared")).toBool(false);
+    setForgetSelectorCleared(clearedByServer || true);
+
+    // 状态机推进：previewing → awaiting_confirmation（§三.3 v0.2 冻结）
+    // 仅当 selection_hash 已生成且 affected_count 已确定（允许 0 为合法零命中）。
+    const int affected = forgetAffectedCount_;  // 投影后的值
+    if (forgetSelectionHash_.isEmpty() || affected < 0) {
+        setForgetPreviewBusy(false);
+        setForgetPreviewError(QStringLiteral(
+            "forget.preview response missing selection_hash or affected_count."));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+    // 保存快照到 pending 关联变量，供 execute 校验（v0.3/MEDIUM-03 漏删保护）。
+    pendingForgetSelectionHash_ = forgetSelectionHash_;
+    pendingForgetAffectedCount_ = affected;
+
+    setForgetPreviewBusy(false);
+    setForgetStage(QStringLiteral("awaiting_confirmation"));
+}
+
+// forget.execute 响应路由与投影
+void MemoryViewModel::handleForgetExecuteResponse(
+    const QString& /*requestId*/, const QJsonObject& envelope)
+{
+    ResponseParts parts{};
+    QString errCode;
+    QString errMsg;
+    const bool statusOk = tryParseResponseStatus(envelope, &parts, &errCode, &errMsg);
+    if (!statusOk) {
+        setForgetExecuteBusy(false);
+        setForgetExecuteError(errMsg.isEmpty() ? QStringLiteral(
+            "forget.execute returned status=error.") : errMsg);
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+
+    projectForgetExecute(parts.data);
+    setForgetExecuteResult(parts.data);
+
+    // v0.3/MEDIUM-03 漏删保护：executed_count != affected_count → failed，
+    // 闭合「漏删不得报完成」（§三.1 / §四.1 + §九 L1 Gate）。
+    // affected_count 以 Preview 确定的 pendingForgetAffectedCount_ 为真源。
+    const int affected = pendingForgetAffectedCount_;
+    const int executed = forgetExecutedCount_;
+    const bool missingDelete =
+        affected > 0 && executed >= 0 && executed != affected;
+    if (missingDelete) {
+        // 显式进入 failed；forgetHasMissingDeletes 由 getter 计算已为 true。
+        setForgetExecuteBusy(false);
+        setForgetExecuteError(QStringLiteral(
+            "Missing deletes detected: executed_count does not match affected_count."));
+        setForgetStage(QStringLiteral("failed"));
+        emit forgetHasMissingDeletesChanged();
+        return;
+    }
+
+    // 正常完成：executing → completed（§三.3 v0.2 冻结状态机）
+    setForgetExecuteBusy(false);
+    setForgetStage(QStringLiteral("completed"));
+    emit forgetHasMissingDeletesChanged();
+}
+
+// forget.preview 响应投影：data → 子属性（selection_hash / affected_count 等）
+void MemoryViewModel::projectForgetPreview(const QJsonObject& data)
+{
+    // selection_hash：Preview/Selection 稳定 Hash（非正文，长期持久化真源）。
+    const QString hash = data.value(QStringLiteral("selection_hash")).toString();
+    if (!hash.isEmpty()) setForgetSelectionHash(hash);
+
+    // affected_count：Preview 确定并经确认的目标数量 = len(resolved_target_ids)
+    // （v0.3/MEDIUM-03 冻结；允许 0 为合法零命中精准解析）。
+    const QJsonValue ac = data.value(QStringLiteral("affected_count"));
+    if (ac.isDouble() || ac.isUndefined()) {
+        const int count = ac.toInt(0);
+        setForgetAffectedCount(count < 0 ? 0 : count);
+    }
+
+    // credential_ttl_s：确认凭据 TTL（默认 300s = 5 分钟，可调参数 TD-D）。
+    const int ttl = data.value(QStringLiteral("credential_ttl_s")).toInt(300);
+    setForgetCredentialTtlSeconds(ttl < 0 ? 300 : ttl);
+
+    // resolved_target_ids：预览命中目标 ID 切片（仅 ID；不含正文；含 cascade 扩展目标）。
+    const QJsonArray ids = data.value(
+        QStringLiteral("resolved_target_ids_preview_snippet")).toArray();
+    if (!ids.isEmpty()) {
+        setForgetResolvedTargets(projectJsonArrayMixed(ids));
+    }
+
+    // forget_mode / target_type / is_cascade：响应回显（覆盖客户端侧预填充）。
+    const QString mode = data.value(QStringLiteral("forget_mode")).toString();
+    if (!mode.isEmpty()) setForgetMode(mode);
+    const QString ttype = data.value(QStringLiteral("target_type")).toString();
+    if (!ttype.isEmpty()) setForgetTargetType(ttype);
+    if (data.contains(QStringLiteral("is_cascade"))) {
+        setForgetIsCascade(data.value(QStringLiteral("is_cascade")).toBool(false));
+    }
+
+    // sensitivity_warning：敏感提示（高敏感/批量/full_reset/cascade的显式警告）。
+    const QString warning = data.value(
+        QStringLiteral("sensitivity_warning")).toString();
+    setForgetSensitivityWarning(warning);
+}
+
+// forget.execute 响应投影：data → executed_count
+void MemoryViewModel::projectForgetExecute(const QJsonObject& data)
+{
+    // executed_count：实际软删成功数量（v0.3/MEDIUM-02：D 轨持久化/Execute 字段）。
+    // 默认 -1 = 未执行或缺失（区分 "0 条成功删除" 与 "未执行"）。
+    const QJsonValue ec = data.value(QStringLiteral("executed_count"));
+    if (ec.isDouble()) {
+        const int c = ec.toInt(-1);
+        setForgetExecutedCount(c);
+    } else {
+        setForgetExecutedCount(-1);
+    }
+}
+
+// D10C 统一重置（失败路径 / Pipeline 前置调用；Sentinel 验证不留明文 selector）。
+// ⚠️ 关键修复：**不重置 forgetPreviewError / forgetExecuteError**：
+//   失败路径通常是先 setForget*Error(message) 再调用本函数（SEC-FORGET-03 校验、
+//   send失败、onRequestFailed、status=error 防御分支），如果这里清空错误，
+//   会让 C 侧 QML/L0 断言拿到空字符串，CI 失败。
+//   新请求的错误清除由 runForgetPreviewPipeline / runForgetExecutePipeline
+//   入口显式执行，避免上一轮错误残留。
+void MemoryViewModel::resetForgetProjection()
+{
+    // 不重置 forgetStage（由调用方设置 previewing/awaiting/executing 或 failed）。
+    // 不重置 forgetPreviewError / forgetExecuteError（失败保留语义；新请求入口显式清）。
+    // 不重置 crossUserBlocked：跨用户拒绝是验收断言，仅下一轮 Preview 成功时清零。
+    setForgetSelectionHash({});
+    setForgetAffectedCount(0);
+    setForgetCredentialTtlSeconds(0);
+    setForgetResolvedTargets({});
+    setForgetMode({});
+    setForgetTargetType({});
+    setForgetIsCascade(false);
+    setForgetSensitivityWarning({});
+    setForgetExecutedCount(-1);
+    setForgetPreviewResult(QJsonObject{});
+    setForgetExecuteResult(QJsonObject{});
+    // forgetSelectorCleared：下一轮 Preview 开始时清零（展示新一轮未清除状态）。
+    setForgetSelectorCleared(false);
+    // crossUserBlocked：新请求前清零（防止上一次拒绝残留影响验收）。
+    setForgetCrossUserBlocked(false);
+}
+
+// ── D10C 私有 setters ────────────────────────────────────────────────────────
+
+void MemoryViewModel::setForgetPreviewBusy(bool value)
+{
+    const bool oldBusy = busy();
+    if (forgetPreviewBusy_ == value) return;
+    forgetPreviewBusy_ = value;
+    emit forgetPreviewBusyChanged();
+    if (oldBusy != busy()) emit busyChanged();
+}
+
+void MemoryViewModel::setForgetExecuteBusy(bool value)
+{
+    const bool oldBusy = busy();
+    if (forgetExecuteBusy_ == value) return;
+    forgetExecuteBusy_ = value;
+    emit forgetExecuteBusyChanged();
+    if (oldBusy != busy()) emit busyChanged();
+}
+
+void MemoryViewModel::setForgetStage(const QString& value)
+{
+    if (forgetStage_ == value) return;
+    forgetStage_ = value;
+    emit forgetStageChanged();
+}
+
+void MemoryViewModel::setForgetSelectionHash(const QString& value)
+{
+    if (forgetSelectionHash_ == value) return;
+    forgetSelectionHash_ = value;
+    emit forgetSelectionHashChanged();
+}
+
+void MemoryViewModel::setForgetAffectedCount(int value)
+{
+    const int v = value < 0 ? 0 : value;
+    if (forgetAffectedCount_ == v) return;
+    forgetAffectedCount_ = v;
+    emit forgetAffectedCountChanged();
+    // affectedCount 变化可能影响 forgetHasMissingDeletes 计算（getter 用 affectedCount）。
+    emit forgetHasMissingDeletesChanged();
+}
+
+void MemoryViewModel::setForgetCredentialTtlSeconds(int value)
+{
+    const int v = value < 0 ? 0 : value;
+    if (forgetCredentialTtlSeconds_ == v) return;
+    forgetCredentialTtlSeconds_ = v;
+    emit forgetCredentialTtlSecondsChanged();
+}
+
+void MemoryViewModel::setForgetResolvedTargets(const QVariantList& value)
+{
+    if (forgetResolvedTargets_ == value) return;
+    forgetResolvedTargets_ = value;
+    emit forgetResolvedTargetsChanged();
+}
+
+void MemoryViewModel::setForgetMode(const QString& value)
+{
+    if (forgetMode_ == value) return;
+    forgetMode_ = value;
+    emit forgetModeChanged();
+}
+
+void MemoryViewModel::setForgetTargetType(const QString& value)
+{
+    if (forgetTargetType_ == value) return;
+    forgetTargetType_ = value;
+    emit forgetTargetTypeChanged();
+}
+
+void MemoryViewModel::setForgetIsCascade(bool value)
+{
+    if (forgetIsCascade_ == value) return;
+    forgetIsCascade_ = value;
+    emit forgetIsCascadeChanged();
+}
+
+void MemoryViewModel::setForgetSensitivityWarning(const QString& value)
+{
+    if (forgetSensitivityWarning_ == value) return;
+    forgetSensitivityWarning_ = value;
+    emit forgetSensitivityWarningChanged();
+}
+
+void MemoryViewModel::setForgetExecutedCount(int value)
+{
+    if (forgetExecutedCount_ == value) return;
+    forgetExecutedCount_ = value;
+    emit forgetExecutedCountChanged();
+    // executedCount 变化影响 forgetHasMissingDeletes（MEDIUM-03 漏删保护显示）。
+    emit forgetHasMissingDeletesChanged();
+}
+
+void MemoryViewModel::setForgetPreviewResult(const QJsonObject& value)
+{
+    if (forgetPreviewResult_ == value) return;
+    forgetPreviewResult_ = value;
+    emit forgetPreviewResultChanged();
+}
+
+void MemoryViewModel::setForgetExecuteResult(const QJsonObject& value)
+{
+    if (forgetExecuteResult_ == value) return;
+    forgetExecuteResult_ = value;
+    emit forgetExecuteResultChanged();
+}
+
+void MemoryViewModel::setForgetPreviewError(const QString& value)
+{
+    if (forgetPreviewError_ == value) return;
+    forgetPreviewError_ = value;
+    emit forgetPreviewErrorChanged();
+}
+
+void MemoryViewModel::setForgetExecuteError(const QString& value)
+{
+    if (forgetExecuteError_ == value) return;
+    forgetExecuteError_ = value;
+    emit forgetExecuteErrorChanged();
+}
+
+void MemoryViewModel::setForgetCrossUserBlocked(bool value)
+{
+    if (forgetCrossUserBlocked_ == value) return;
+    forgetCrossUserBlocked_ = value;
+    emit forgetCrossUserBlockedChanged();
+}
+
+void MemoryViewModel::setForgetSelectorCleared(bool value)
+{
+    if (forgetSelectorCleared_ == value) return;
+    forgetSelectorCleared_ = value;
+    emit forgetSelectorClearedChanged();
 }
 
 }  // namespace kylin::memory::client::v1

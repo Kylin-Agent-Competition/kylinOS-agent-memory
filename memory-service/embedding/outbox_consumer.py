@@ -7,7 +7,7 @@
     consumer = build_deletion_consumer(embedding_service)
     worker = OutboxWorker(engine, consumer=consumer)
 
-consumer 回调签名：payload dict → None（成功）或抛异常（重试/Dead Letter）。
+consumer 回调签名：(event_type, payload) → 成功返回 None，失败抛异常（HIGH-01 路由真源）。
 """
 
 from __future__ import annotations
@@ -21,10 +21,16 @@ from embedding.embedding_service import EmbeddingService
 logger = logging.getLogger(__name__)
 
 # Outbox 事件类型常量
+# 权威生产事件类型为 D 轨 Forget Executor 入队的 `forget.executed`
+# （memory-service/db/repositories.py EVENT_FORGET_EXECUTED）；
+# `memory.deletion` / `deletion` 为向后兼容的别名（D10A 早期契约）。
 EVENT_DELETION = "memory.deletion"
+EVENT_FORGET_EXECUTED = "forget.executed"
+# 合法删除事件类型集合（跨版本兼容）
+DELETION_EVENT_TYPES = frozenset({EVENT_DELETION, EVENT_FORGET_EXECUTED, "deletion"})
 
-# Outbox 消费回调类型：payload dict → 成功返回 None，失败抛异常
-EventConsumer = Callable[[Dict[str, Any]], None]
+# Outbox 消费回调类型：(event_type, payload) → 成功返回 None，失败抛异常（HIGH-01 路由真源）
+EventConsumer = Callable[[str, Dict[str, Any]], None]
 
 
 def build_deletion_consumer(
@@ -36,7 +42,7 @@ def build_deletion_consumer(
         embedding_service: EmbeddingService 实例（含已接线的 CacheInvalidator）。
 
     Returns:
-        consumer 回调（payload dict → None/异常）。
+        consumer 回调（(event_type, payload) → None/异常）。
 
     Payload 格式：
         {
@@ -58,9 +64,15 @@ def build_deletion_consumer(
             "Outbox 删除事件 consumer 已注册（invalidator 已就绪）"
         )
 
-    def _consumer(payload: Dict[str, Any]) -> None:
-        event_type = payload.get("event_type", "")
-        if event_type == EVENT_DELETION or event_type == "deletion":
+    def _consumer(event_type: str, payload: Dict[str, Any]) -> None:
+        # HIGH-01：event_type 由 worker 从 outbox.event_type 独立列显式传入（路由真源），
+        # 不再依赖 payload 注入；payload 内嵌 event_type 若与显式值不一致则 fail-closed。
+        embedded = payload.get("event_type")
+        if embedded is not None and str(embedded) != event_type:
+            raise ValueError(
+                f"outbox event_type 与 payload 不一致: db={event_type!r} payload={embedded!r}"
+            )
+        if event_type in DELETION_EVENT_TYPES:
             _handle_deletion_payload(payload, embedding_service)
         else:
             raise ValueError(f"unknown outbox event_type: {event_type!r}")

@@ -1164,6 +1164,131 @@ entries:
       L2-4 systemd: unit 安装 + 默认库 alembic upgrade head ALEMBIC_RC=0（alembic_version=20260831_add_source_events）；数据目录 700 PASS；enable --now RC=0 active；socket /run/user/1000/kylin-memory/memory.sock srw-------；health status ok/db ok/backlog 0；restart active；插入 L2A-SYSD-1 → restart → 行仍在（数据存在 PASS）；但 DB 文件 644 ≠ 0600（发现②，测试后已清理测试行）。
       证据: 完整日志 evidence/l2-kylin-vm/d6d_l2_vm_20260901.log（SHA-256 以 git 仓库 LF 归一化 blob 为准，与 Windows 工作树 CRLF 副本哈希可能不同）。
 
+  - id: "D11D-L2-HEAD-REVERIFY"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2 复验（merge 同步 main 后）——以分支 HEAD c18184a 重跑服务生命周期/权限/日志诊断/OS 重启"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_head_l2_20260902.log"
+    tested_commit: "c18184a9816d04a20fec95e8c535816dc8acae22"
+    evidence_commit: "05fd8e6"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "正式发行环境 systemd 未验证；KYSEC 生产规则本 VM 不可见；本次重启后 runtime UDS core-textembedding.sock 未出现（SDK/Runtime 侧）；检索/删除端到端与 C 轨真实 VM 交互复测跨轨 pending"
+    checksum_sha256: "4e55f712aed20ac792be765dd7870e8e184dbb14256151d92814d07e80dea6e7"
+    details: |
+      HEAD=c18184a（merge: 同步 main PR #113/#114/#109）；脚本 sha256 07819008…/cf8f76aa…。
+      生命周期：install(升级备份)/restart/rollback(恢复原 unit/wrapper)/reinstall 全 exit=0；权限 config/share/state/RuntimeDir 700、socket/DB 600、wrapper 755。
+      诊断：health=ok/db=ok（outbox 含 D9D index_sync_lag/fatal_error，null 正常）；JSON 日志 trace 关联、PII 0；Alembic current=20260901_d10b_vector_ledger。
+      OS 重启后服务自动启动（active，PID 1712）、socket 0600、health ok。重启后 runtime UDS 未出现（观察）。
+      重启证据：d11d_vm_head_reboot_20260902.log（SHA-256 ed0e3627…）。
+  - id: "D11D-L2-EMBED-REBOOT-VERIFY"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2——reboot 后 Embedding/SDK 真实调用验证（情况 B：A 轨 bridge 未构建，embed 降级）→ 工作项 8 收缩为 PARTIAL/BLOCKED_BY_A_RUNTIME"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_embed_reboot_verify_20260902.log"
+    tested_commit: "c18184a9816d04a20fec95e8c535816dc8acae22"
+    evidence_commit: "c3d80ab"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "DEGRADED"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "真实 Embedding/SDK 调用降级（A 轨 cpp-bridge 未构建）；工作项 8 PARTIAL/BLOCKED_BY_A_RUNTIME；正式发行环境 systemd/KYSEC 未验证"
+    checksum_sha256: "486c372c4140ed6e58273e365617ca0950408665c9b3ecea8654b8904377b0c2"
+    details: |
+      HEAD=c18184a；SDK libkylin-coreai-embedding.so.1.0.0 存在（0k0.3）；cpp-bridge/build 不存在。
+      EmbeddingService.start()->health(): service=ok/provider=ready/bridge_loaded=false/sdk_missing=true/degraded=true；embed ok=true/degraded=true/dim=0（降级空向量）。
+      Runtime UDS 调用前后均存在（本次启动自动拉起）。判定：情况 B —— 真实 SDK 调用待 A 轨 bridge 构建后闭环。
+
+  - id: "D11D-L2-REWORK-SERVICE"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2（复审返工）——部署目录权限 0700 对齐冻结契约 + rollback 恢复安装前备份 + 完整生命周期转录（install/restart/rollback/reinstall）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_rework_l2_20260902.log"
+    tested_commit: "47af2fa42edf45ab4dc227453c47ed784bf46e16"
+    evidence_commit: "9588382"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "正式发行环境 systemd 未验证；KYSEC 生产规则本 VM 不可见；检索/删除端到端跨轨 pending；Kaiming 包未实现"
+    checksum_sha256: "832ad69ab6fc80a48318a01f90aff7dfc5f41126c998030738f0473764d769b6"
+    details: |
+      被测脚本 sha256：install_kylin_memory.sh=07819008…、kylin-memory.service=cf8f76aa…（转录日志头部绑定）。
+      STEP1 install（升级，备份既有 unit/wrapper）exit=0 active；STEP2 restart exit=0；STEP3 rollback exit=0 恢复原 unit/wrapper + inactive；
+      STEP4 re-install exit=0 active。权限：config/share/state/RuntimeDir 700、socket/DB 600、wrapper 755（契约 0700 对齐）。
+      A+C 跨轨输入归档 d11d_ac_track_input_20260902.md。
+  - id: "D11D-L2-REBOOT-STARTUP"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2——OS 整机重启后 kylin-memory.service 自动启动 + 同 Commit 全模块（memory-service/Runtime/vector-engine）启动可追踪"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_reboot_l2_20260902.log"
+    tested_commit: "47af2fa42edf45ab4dc227453c47ed784bf46e16"
+    evidence_commit: "543e150"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "正式发行环境 systemd 未验证；KYSEC 生产规则本 VM 不可见；检索/删除端到端依赖 B/C/D10D 输入跨轨 pending"
+    checksum_sha256: "50431c4c0f87a2c4277e2ad62970bea3e0f5ddca8abd8ba16cb530e91f888e45"
+    details: |
+      sudo reboot 后 SSH 恢复（up 1 min）；用户会话 active；kylin-memory.service 自动启动 active (running) Main PID 1925；
+      socket srw-------(0600)；UDS health status=ok/db=ok/backlog=0；Vector/Runtime UDS 存在；screensaver lock=false/idle=0 持久。
+  - id: "D11D-L2-DIAGNOSTICS-PERM-EVIDENCE"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2——日志与诊断（health/echo/retrieve + JSON 日志 + trace_id + 脱敏）+ 权限与安全（UDS/DB 0600、用户隔离）+ DB/trace 证据汇总"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_diagnostics_l2_20260902.log"
+    tested_commit: "47af2fa42edf45ab4dc227453c47ed784bf46e16"
+    evidence_commit: "543e150"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "KYSEC 生产规则本 VM 不可见（/sys/kernel/security/kylin 不存在），保持 UNVERIFIED；OS 整机重启自启归第 7 项；检索/删除端到端待 B/C 输入；embedding 性能为 A 轨 D11A 证据引用"
+    checksum_sha256: "569afe12e5003f7b18eaccb2df46ab8f8ade5162f633981d4971de390307023a"
+    details: |
+      health=ok/db=ok/outbox backlog 0；echo=ok；memory.retrieve 返回真实空上下文（degraded=false, reason=retrieval main chain pending）。
+      JSON 日志每行 ts/level/logger/trace_id/request_id/method/event_id/message；memory.retrieve 日志行 trace_id/request_id 与客户端一致（trace 关联成立）。
+      PII 扫描（sk-demo/password/secret/api_key/token）0 命中。
+      memory.sock srw-------(0600)；DB 0600（含 -shm/-wal）；服务以 uid1000 运行；unit RestrictAddressFamilies=AF_UNIX + NoNewPrivileges。
+      KYSEC /sys/kernel/security/kylin 不存在 → UNVERIFIED。
+      DB：alembic head=20260901_d10b_vector_ledger；outbox/source_events/memory_entries/vector_index_entries/turns 均 0 行。
+      性能：引用 A 轨 D11A 实测 avg=41.3ms p99=44.2ms（<180ms 预算）。
+  - id: "D11D-L2-SERVICE-LIFECYCLE"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2——kylin-memory 服务安装/重启/回退/重装 + systemd --user 生命周期验证（install_kylin_memory.sh）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_service_l2_20260902.log"
+    tested_commit: "47af2fa42edf45ab4dc227453c47ed784bf46e16"
+    evidence_commit: "543e150"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "正式发行环境 systemd 未验证；OS 整机重启自启复测归入工作项 7；Kaiming 包安装未实现；本证据仅覆盖服务生命周期"
+    checksum_sha256: "cd0bb83f1f99cdc55d05055ac37f003ebf49083d20d85164579d7fe1408fb298"
+    details: |
+      VM=Kylin-V11-2603-D11D-47af2fa-Test（链接克隆，基础快照 20-btrack-test-deps-20260821）；被测生产代码 origin/main@47af2fa。
+      环境实测定案：Kylin V11 / 6.6.0-63-generic / Python 3.12.3 / sqlalchemy 2.0.52 / alembic 1.19.1 / pydantic 2.13.5 / pytest 9.1.1；
+      vector-engine 1.2.0.1-0k0.11 + client 1.2.0.0-0k0.7（D11B 与 VERSION_MAP 分歧以本实测为准）。
+      alembic upgrade head exit=0，current=20260901_d10b_vector_ledger（head），表齐。
+      install_kylin_memory.sh install exit=0：enabled+active；socket /run/user/1000/kylin-memory/memory.sock srw-------；
+      journal「生产模式：alembic_version 校验通过」「Outbox Worker 启动」「Memory Service 就绪」「IPC Gateway 启动」。
+      restart 复验 active；rollback exit=0（inactive，wrapper/unit 删除）；重装 exit=0 active（可重复、可回退）。
   - id: "D11A-L2-VERIFY"
     task_id: "D11A"
     description: "D11A 麒麟 VM 全功能联调验证——health 增强（model/errors/lifecycle）+ Outbox 桥接 + VM 检测 + 全量测试"
@@ -1193,6 +1318,28 @@ entries:
       日志: 无正文残留
       日志: evidence/l2-kylin-vm/d11a_evidence_20260831_204650_vm_verify.log
       全量测试: evidence/l2-kylin-vm/d11a_evidence_20260831_204650_test_all.log
+  - id: "D11B-VM-20260901"
+    task_id: "D11B"
+    description: "PR #111（D11B 检索与索引联调修复）麒麟 VM 检索验证：首轮实测 3831856（312+68+Vector 15/15），REWORK #111 MEDIUM-01 方案 A 已在最终 HEAD e9dba4f 于同 VM 复测闭环：324+52+68 passed、Vector 删除 15/15（证据 §七）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11b_vm_retrieval_validation_20260901.md"
+    tested_commit: "e9dba4f"
+    date: "2026-09-01"
+    reviewer: "高翌哲（B 轨）"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "kylin-memory.service 在干净 VM 中不存在，服务重启/OS 重启/正式 health/index state/D/C 端到端联调未执行（UNVERIFIED）；物理删除 L2 以真实 Engine 运行器 15/15 通过，但不等于 D/C 服务端到端验证；REWORK #111 MEDIUM-01 已在最终 HEAD e9dba4f 于同 VM 复测闭环"
+    checksum_sha256: "f5421e2a884a0e9f7b941e3e64179b9fb4f7939cba4f4fd1bc92eeecfc271978"
+    details: |
+      执行环境: Kylin-V11-2603-D11B-ffd20b9-Test（链接克隆，前台 GUI），Kylin V11 / Linux 6.6.0-63-generic / Python 3.12.3。
+      代码: 以 Git bundle 部署并校验 git rev-parse HEAD = 38318562111bca482bb0a716fbdf73b29ce9e792，工作树无改动；pytest 9.1.1 安装于 ~/d11b-pylibs。
+      检索回归: tests/retrieval + tests/test_migrations_d10b.py → 312 passed in 16.06s；D9 Gold 契约 → 68 passed in 0.45s。
+      真实 Vector 删除 L2: vector_bridge_cli（二进制 SHA-256 2ff6ed3c...）运行 run_d10b_vector_delete_l2.sh，绑定 tested_commit，15/15 通过退出码 0；临时 d10b_ Collection 已清理。
+      REWORK #111 MEDIUM-01 方案 A: 公共 RetrievalOutcome.filter_diagnostics 将 cross_user 泛化为 security_filtered，精确计数仅保留在可信内部 telemetry/debug 边界（_retrieve_graceful_with_internal_diagnostics）。
+      最终 HEAD 复测（2026-09-02）: 以 Git bundle（SHA-256 ec0d1086...）部署 e9dba4f，rev-parse 校验一致，工作树由 git archive 重建；检索回归+migration+config_d4d 324 passed in 8.54s、fusion 52 passed in 0.35s、D9 Gold 68 passed in 0.12s；Vector 删除运行器 15/15 元数据绑定 e9dba4f（桥接 5f0e1310.../运行器 cf820947... 与首轮一致）；日志 d11b_l2_session_e9dba4f.log / d11b_vector_delete_l2_e9dba4f.log。
+      证据: evidence/l2-kylin-vm/d11b_vm_retrieval_validation_20260901.md（SHA-256 以 git 仓库 LF 归一化 blob 为准）。
 
   - id: "D12A-L1-REGRESSION"
     task_id: "D12A"

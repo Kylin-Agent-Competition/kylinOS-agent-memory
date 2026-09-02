@@ -127,6 +127,22 @@ extern const QString kBehaviorObserve;      // "behavior.observe"
 extern const QString kKnowledgeDetail;    // "knowledge.detail"
 extern const QString kConflictCompare;    // "conflict.compare"
 extern const QString kLifecycleStatus;    // "lifecycle.status"
+// D9C 候选 IPC 方法（CANDIDATE / pending ADR；生产默认不注册）。
+// context.assemble：把召回候选（B 轨混合检索输出）组装为受 Token 预算控制的
+// MemoryContext，返回可解释字段（召回来源、记忆类型、冲突/不确定性提示）。
+extern const QString kContextAssemble;   // "context.assemble"
+// D10C 候选 IPC 方法（CANDIDATE / pending ADR；生产默认不注册；
+// 业务契约已冻结，但 Runtime Execute 在跨轨实现与麒麟 L2 证据闭环前保持
+// fail-closed —— 参见 docs/day10/16_d10d_forget_contract_plan_v0.3.md §F-1/4/7）。
+//   - forget.preview：解析 ForgetPlan → 生成 resolved_target_ids +
+//     selection_hash + 确认凭据（仅哈希存库）；Preview 完成后清除明文
+//     target_selector / target_topic 等正文承载字段。
+//   - forget.execute：携带 forget_plan_id + 确认凭据 → 校验绑定（用户/
+//     计划/目标快照一致+未过期+未重放）→ 仅消费已确认的
+//     resolved_target_ids 执行软删事务 + 最小审计；hard/cascade/
+//     full_reset Runtime fail-closed（接线前）。
+extern const QString kForgetPreview;   // "forget.preview"
+extern const QString kForgetExecute;   // "forget.execute"
 }  // namespace methods
 
 // D 冻结服务端错误码枚举（FRZ-IPC-002，5 项）。

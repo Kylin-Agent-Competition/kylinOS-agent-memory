@@ -1,0 +1,52 @@
+=== D11D L2 evidence capture 2026-09-02 00:16:24 ===
+--- host/OS ---
+yanmouren778-pc
+6.6.0-63-generic
+NAME="Kylin"
+FULL_NAME="kylin"
+--- commit (product code) ---
+47af2fa42edf45ab4dc227453c47ed784bf46e16
+47af2fa feat(embedding): A-REQ-01 删除 consumer 生产接线 + 历史 PR 技术债补登 TD-047~052 (#110)
+--- python/deps ---
+Python 3.12.3
+sqlalchemy 2.0.52 | alembic 1.19.1 | pydantic 2.13.5 | pytest 9.1.1
+--- vector ---
+ii  kylin-ai-vector-engine                               1.2.0.1-0k0.11                          amd64        A lightweight vector database fork from Milvus Lite
+ii  libkysdk-vector-engine-client                        1.2.0.0-0k0.7                           amd64        Kylin AI Vector Database SDK
+--- uds ---
+srwxrwxr-x 1 yanmouren778 yanmouren778 0  9月 1日 15:50 /tmp/kylin-ai-vector-engine-1000.sock
+srw------- 1 yanmouren778 yanmouren778 0  9月 2日 00:15 /run/user/1000/kylin-memory/memory.sock
+--- service status ---
+active
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-09-02 00:15:51 CST; 37s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 41568 (python3)
+      Tasks: 3 (limit: 9464)
+     Memory: 34.2M (peak: 34.6M)
+        CPU: 1.862s
+     CGroup: /user.slice/user-1000.slice/user@1000.service/app.slice/kylin-memory.service
+             └─41568 /usr/bin/python3 /home/yanmouren778/kylinOS-agent-memory/memory-service/app.py --socket /run/user/1000/kylin-memory/memory.sock --no-migrate
+
+9月 02 00:15:51 yanmouren778-pc systemd[1698]: Started kylin-memory.service - Kylin Memory Service.
+--- journal ---
+9月 02 00:15:48 yanmouren778-pc systemd[1698]: Started kylin-memory.service - Kylin Memory Service.
+9月 02 00:15:50 yanmouren778-pc kylin-memory-server[41553]: 配置文件不存在 /home/yanmouren778/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 02 00:15:50 yanmouren778-pc kylin-memory-server[41553]: 2026-09-02T00:15:50+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 02 00:15:50 yanmouren778-pc kylin-memory-server[41553]: 2026-09-02T00:15:50+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 02 00:15:50 yanmouren778-pc kylin-memory-server[41553]: 2026-09-02T00:15:50+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+9月 02 00:15:50 yanmouren778-pc kylin-memory-server[41553]: 2026-09-02T00:15:50+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 02 00:15:50 yanmouren778-pc systemd[1698]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 02 00:15:50 yanmouren778-pc systemd[1698]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 02 00:15:50 yanmouren778-pc systemd[1698]: kylin-memory.service: Consumed 1.744s CPU time, 34.8M memory peak, 0B memory swap peak.
+9月 02 00:15:51 yanmouren778-pc systemd[1698]: Started kylin-memory.service - Kylin Memory Service.
+9月 02 00:15:52 yanmouren778-pc kylin-memory-server[41568]: 配置文件不存在 /home/yanmouren778/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 02 00:15:52 yanmouren778-pc kylin-memory-server[41568]: 2026-09-02T00:15:52+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 02 00:15:52 yanmouren778-pc kylin-memory-server[41568]: 2026-09-02T00:15:52+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 02 00:15:52 yanmouren778-pc kylin-memory-server[41568]: 2026-09-02T00:15:52+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+9月 02 00:15:52 yanmouren778-pc kylin-memory-server[41568]: 2026-09-02T00:15:52+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+--- alembic current ---
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+20260901_d10b_vector_ledger (head)
+=== end 2026-09-02 00:16:30 ===

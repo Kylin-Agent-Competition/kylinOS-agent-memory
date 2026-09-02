@@ -17,7 +17,12 @@ from retrieval.contracts import (
     SceneFilter,
     ScoreSemantics,
 )
-from retrieval.fusion import TruthRecord, fuse_retrieval, retrieve_graceful
+from retrieval.fusion import (
+    TruthRecord,
+    _retrieve_graceful_with_internal_diagnostics,
+    fuse_retrieval,
+    retrieve_graceful,
+)
 from retrieval.fts5 import Fts5Index
 
 NOW = datetime(2026, 8, 22, 12, 0, 0, tzinfo=timezone.utc)
@@ -926,6 +931,135 @@ def test_retrieve_graceful_records_selection_diagnostics_without_content():
         "estimator_version": "character-count/v1",
         "estimator_semantics": "Unicode code point count; not a model tokenizer",
     }
+
+
+@pytest.mark.parametrize("failed_channel", ["fts5", "vector"])
+@pytest.mark.parametrize(
+    "sentinel",
+    [
+        "https://user:secret@example.invalid/private-index",
+        "/home/agent/.config/vector/private-index.db",
+    ],
+)
+def test_retrieve_graceful_redacts_provider_exception_details(
+    caplog, failed_channel, sentinel
+):
+    """D12B：公共结果与内部日志都不得保留 Provider 异常原文。"""
+
+    def unavailable_provider():
+        raise RuntimeError(f"connection failed: {sentinel}")
+
+    normal_channel = Channel.VECTOR if failed_channel == "fts5" else Channel.FTS5
+    normal_search = lambda: [_hit("safe", "v1", normal_channel, 1)]
+    outcome = retrieve_graceful(
+        fts5_search=unavailable_provider if failed_channel == "fts5" else normal_search,
+        vector_search=unavailable_provider if failed_channel == "vector" else normal_search,
+        truth={("alice", "safe", "v1"): _truth("safe")},
+        flt=_flt(),
+    )
+
+    assert outcome.degraded_channels == {failed_channel: "provider_unavailable"}
+    assert outcome.candidates[0].explanation["degraded_channels"] == [failed_channel]
+    assert sentinel not in repr(outcome)
+    assert "retrieval_provider_unavailable" in caplog.text
+    assert sentinel not in caplog.text
+
+
+def test_retrieve_graceful_exposes_redacted_filter_diagnostics():
+    """D11B：联调诊断只汇总过滤原因计数，绝不暴露正文或候选标识。"""
+    sentinel = "D11B-SENSITIVE-SENTINEL"
+    outcome = retrieve_graceful(
+        fts5_search=lambda: [
+            _hit("kept", "v1", Channel.FTS5, 1),
+            _hit("removed", "v1", Channel.FTS5, 2),
+            _hit("conflict", "v1", Channel.FTS5, 3),
+            _hit("other-user", "v1", Channel.FTS5, 4, user_id="bob"),
+            _hit("stale", "v1", Channel.FTS5, 5),
+        ],
+        vector_search=lambda: [],
+        truth={
+            ("alice", "kept", "v1"): _truth("kept", content=sentinel),
+            ("alice", "removed", "v1"): _truth("removed", status="removed"),
+            ("alice", "conflict", "v1"): _truth(
+                "conflict", conflict_state="unresolved"
+            ),
+            ("bob", "other-user", "v1"): _truth("other-user", user_id="bob"),
+            ("alice", "stale", "v1"): _truth("stale", is_current=False),
+            ("alice", "stale", "v2"): _truth("stale", version_id="v2"),
+        },
+        flt=_flt(),
+    )
+
+    assert [candidate.memory_id for candidate in outcome.candidates] == ["kept"]
+    assert outcome.filter_diagnostics == {
+        "policy_version": "retrieval-filter-diagnostics/v1",
+        "input_hit_count": 5,
+        "deduplicated_hit_count": 5,
+        "hard_filter_passed_hit_count": 2,
+        "current_version_passed_hit_count": 1,
+        "dropped_by_reason": {
+            "memory_status": 1,
+            "not_current_version": 1,
+            "security_filtered": 1,
+            "unresolved_conflict": 1,
+        },
+    }
+    assert set(outcome.filter_diagnostics) == {
+        "policy_version",
+        "input_hit_count",
+        "deduplicated_hit_count",
+        "hard_filter_passed_hit_count",
+        "current_version_passed_hit_count",
+        "dropped_by_reason",
+    }
+    assert (
+        outcome.filter_diagnostics["current_version_passed_hit_count"]
+        <= outcome.filter_diagnostics["hard_filter_passed_hit_count"]
+        <= outcome.filter_diagnostics["deduplicated_hit_count"]
+        <= outcome.filter_diagnostics["input_hit_count"]
+    )
+    assert sum(outcome.filter_diagnostics["dropped_by_reason"].values()) == (
+        outcome.filter_diagnostics["deduplicated_hit_count"]
+        - outcome.filter_diagnostics["current_version_passed_hit_count"]
+    )
+    assert sentinel not in repr(outcome.filter_diagnostics)
+    assert "kept" not in repr(outcome.filter_diagnostics)
+    # REWORK #111 MEDIUM-01 方案 A：公共返回不得出现 cross_user 存在性 oracle
+    assert "cross_user" not in repr(outcome.filter_diagnostics)
+
+
+def test_internal_filter_diagnostics_keeps_precise_cross_user_internal_only():
+    """REWORK #111 MEDIUM-01 方案 A：精确 cross_user 仅留在可信内部边界。
+
+    公共 RetrievalOutcome.filter_diagnostics 必须泛化为 security_filtered 且永不
+    出现 cross_user；精确计数只能通过 internal-only 入口获得。
+    """
+    sentinel = "D11B-SENSITIVE-SENTINEL"
+    outcome, internal = _retrieve_graceful_with_internal_diagnostics(
+        fts5_search=lambda: [
+            _hit("kept", "v1", Channel.FTS5, 1),
+            _hit("other-user", "v1", Channel.FTS5, 2, user_id="bob"),
+        ],
+        vector_search=lambda: [],
+        truth={
+            ("alice", "kept", "v1"): _truth("kept", content=sentinel),
+            ("bob", "other-user", "v1"): _truth("other-user", user_id="bob"),
+        },
+        flt=_flt(),
+    )
+
+    # 公共返回：泛化原因码，无 cross_user，无正文/候选标识
+    assert [candidate.memory_id for candidate in outcome.candidates] == ["kept"]
+    assert outcome.filter_diagnostics["dropped_by_reason"] == {
+        "security_filtered": 1,
+    }
+    assert "cross_user" not in repr(outcome.filter_diagnostics)
+    assert sentinel not in repr(outcome.filter_diagnostics)
+
+    # 内部边界：精确 cross_user 仅存在于 internal-only 返回值
+    assert internal["policy_version"] == "retrieval-filter-diagnostics/v1"
+    assert internal["dropped_by_reason"] == {"cross_user": 1}
+    assert sentinel not in repr(internal)
 
 
 def test_fts5_index_returns_ranked_hits():
