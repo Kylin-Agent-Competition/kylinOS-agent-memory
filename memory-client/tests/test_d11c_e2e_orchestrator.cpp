@@ -87,6 +87,7 @@ QJsonObject buildMemoryContext(const QString& /*sessionTag*/)
         {QStringLiteral("summary"), QStringLiteral("Vector 删除一致性：SQLite→Outbox→Vector 顺序 + 幂等重放")},
     });
     return QJsonObject{
+        {QStringLiteral("schema_version"), QStringLiteral("1.0")},
         {QStringLiteral("query_id"), QStringLiteral("q-demo-d11c")},
         {QStringLiteral("selected_memory_ids"), ids},
         {QStringLiteral("context_version"), QStringLiteral("1.0")},
@@ -314,7 +315,7 @@ void TestD11CE2EOrchestrator::step1_preChat_injectsContextAndIsolatesOriginal()
 
     vm.runPreChatPipeline(
         QLatin1String(kUserId), QLatin1String(kSessionA), QLatin1String(kScene),
-        800, QLatin1String(kOrigText1));
+        800, QString::fromUtf8(kOrigText1));
     QVERIFY(waitForStage([&]{ return vm.preChatStage() == "ready"; }));
 
     // 三路口径：originalUserText 必须严格等于用户输入，不能在
@@ -396,7 +397,7 @@ void TestD11CE2EOrchestrator::step2_crossSession_preChatIndependent()
     // Session A
     vm.runPreChatPipeline(QLatin1String(kUserId), QLatin1String(kSessionA),
                           QLatin1String(kScene), 800,
-                          QLatin1String(kOrigText1));
+                          QString::fromUtf8(kOrigText1));
     QVERIFY(waitForStage([&]{ return vm.preChatStage() == "ready"; }));
     const QString injectedA = vm.injectedContextText();
     QVERIFY(!injectedA.isEmpty());
@@ -404,7 +405,7 @@ void TestD11CE2EOrchestrator::step2_crossSession_preChatIndependent()
     // Session B（新 session）
     vm.runPreChatPipeline(QLatin1String(kUserId), QLatin1String(kSessionB),
                           QLatin1String(kScene), 900,
-                          QLatin1String(kOrigText2));
+                          QString::fromUtf8(kOrigText2));
     QVERIFY(waitForStage([&]{ return vm.preChatStage() == "ready"; }));
     // originalUserText 被重写为 Step 2 的新原文：证明 session 切换生效
     // （不会回退到 0001 的原文）。
@@ -420,11 +421,8 @@ void TestD11CE2EOrchestrator::step3_toolSent_payloadHasToolName()
     QString capturedStatus;
     mock.setHandler([&](const client::EnvelopeParts& parts) -> QJsonObject {
         if (parts.method == QLatin1String("tool.execution")) {
-            QJsonObject md = parts.payload.value(QStringLiteral("metadata"))
-                                  .toObject();
-            capturedToolName = md.value(QStringLiteral("tool_name")).toString();
-            capturedStatus = md.value(QStringLiteral("execution_status"))
-                                 .toString();
+            capturedToolName = parts.payload.value(QStringLiteral("tool_name")).toString();
+            capturedStatus = parts.payload.value(QStringLiteral("execution_status")).toString();
             return client::buildSuccessResponse(
                 parts.requestId, parts.traceId,
                 QJsonObject{{QStringLiteral("ingested"), true}});
@@ -662,7 +660,7 @@ void TestD11CE2EOrchestrator::stepF_everythingCompletes_busyClearedAllPendingEmp
     // Step 1-A PreChat (session A)
     vm.runPreChatPipeline(QLatin1String(kUserId), QLatin1String(kSessionA),
                           QLatin1String(kScene), 800,
-                          QLatin1String(kOrigText1));
+                          QString::fromUtf8(kOrigText1));
     QVERIFY(waitForStage([&]{ return vm.preChatStage() == "ready"; }));
     // Step 1-B PostTurn
     vm.runPostTurnPipeline(QLatin1String(kUserId), QLatin1String(kSessionA),
@@ -673,7 +671,7 @@ void TestD11CE2EOrchestrator::stepF_everythingCompletes_busyClearedAllPendingEmp
     // Step 2 cross-session PreChat
     vm.runPreChatPipeline(QLatin1String(kUserId), QLatin1String(kSessionB),
                           QLatin1String(kScene), 800,
-                          QLatin1String(kOrigText2));
+                          QString::fromUtf8(kOrigText2));
     QVERIFY(waitForStage([&]{ return vm.preChatStage() == "ready"; }));
 
     // Step 3 Tool
