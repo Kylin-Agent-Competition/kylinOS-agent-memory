@@ -41,7 +41,6 @@
 #include <QQmlEngine>
 #include <QQmlError>
 #include <QQuickItem>
-#include <QQuickWindow>
 #include <QString>
 #include <QStringList>
 #include <QTest>
@@ -81,12 +80,8 @@ void TestD11cQmlLoad::initTestCase()
     // D11 顶层是 ScrollView（继承 QQuickItem），component.create()
     // 会触发 Qt Quick SceneGraph 初始化；CI runner 无 GPU / 无 EGL，
     // 默认 GL backend 在 offscreen 平台上可能直接 SIGSEGV signal 11。
-    // 这里主动选择 software backend（2D adaption）并在日志中回显，
-    // 确保 L0 headless 能走完 QQuickItem 构造流程。
+    // 通过环境变量选择 software backend，无需 include QQuickWindow。
     qputenv("QT_QUICK_BACKEND", "software");
-    // Qt 5.12 用字符串形式指定 scene graph backend（软件 2D adaption）
-    // 不依赖 Qt 5.14+ 的 QSGRendererInterface::Software 枚举。
-    QQuickWindow::setSceneGraphBackend(QStringLiteral("software"));
 
     QVERIFY2(QGuiApplication::instance() != nullptr,
              "需要 QGuiApplication（用 QTEST_GUILESS_MAIN 而非 QTEST_MAIN）");
@@ -269,7 +264,7 @@ void TestD11cQmlLoad::resourceUrlResolves()
     }
 }
 
-// 所有用例共用的“等 component Ready，否则带 formatErrors FAIL”。
+// 所有用例共用的"等 component Ready，否则带 formatErrors FAIL"。
 // 直接替掉 QTRY_COMPARE_WITH_TIMEOUT，保证 status!=Ready 瞬间一定先
 // 把 component 错误串打到 CI log，再让断言 fail。
 static void waitReadyOrFail(const char* caller, QQmlComponent& c)
@@ -292,65 +287,19 @@ static void waitReadyOrFail(const char* caller, QQmlComponent& c)
     QVERIFY2(c.status() == QQmlComponent::Ready, qPrintable(msg));
 }
 
-// create() 前确保有一个已创建（但非显示）的 QQuickWindow：
-//
-// D11 顶层是 ScrollView (继承 QQuickFlickable + QQuickItem)，其构造和
-// polish pass 会访问 window()->contentItem() / schedulePolish 等接口；
-// CI offscreen 环境下若在 component.create() 时还没有任何
-// QQuickWindow 作为 SceneGraph 宿主，软件 backend 即便启用了也会
-// 在创建 SGNode/Context 时访问到未初始化的静态 singleton 指针，触发
-// SIGSEGV signal 11 (QTest 会打印 Received signal 11)。
-//
-// 做法：在 initTestCase 里一次构造 QScopedPointer<QQuickWindow>，设
-// 置与 D11 相同的 engine 作为全局 QML 引擎，show() 会真正走
-// QQuickWindow::create() 初始化 SceneGraph；后续每个用例里
-// QQmlComponent::create() 就能复用这个已 ready 的渲染上下文。
-static QQuickWindow* ensureHostWindow(QQmlEngine* engine)
-{
-    static QScopedPointer<QQuickWindow> host;
-    if (host.isNull()) {
-        host.reset(new QQuickWindow);
-        if (engine) host->setTitle(QStringLiteral("D11 L0 headless host"));
-        host->setGeometry(0, 0, 640, 480);
-        host->create();
-        // 用 show() 触发平台 surface 和 SGContext 创建；showMaximized
-        // / showFullScreen 在 offscreen 下等价但 show() 最轻。
-        host->show();
-        QTest::qWaitForWindowExposed(host.data());
-    }
-    return host.data();
-}
-
-// 把 create() 的结果作为 QQuickItem 构造出来并**挂到 host window 上**。
-// 返回对象归 caller 所有（用 ScopedPointer 管理），但 component-level
-// 错误会立刻 formatErrors 打印并 fail。
-static QObject* createOrFail(const char* caller, QQmlComponent& component,
-                             QQmlEngine* engine)
-{
-    ensureHostWindow(engine);
-    QObject* obj = component.create();
-    if (component.isError() || obj == nullptr) {
-        qCritical() << "[d11c_qml_load]" << caller
-                    << "create() FAILED obj=" << obj
-                    << "errors=" << qPrintable(formatErrors(component));
-    }
-    const QString msg1 = QStringLiteral("%1 create() 不应产生 QML error：%2")
-                             .arg(QString::fromLatin1(caller))
-                             .arg(formatErrors(component));
-    QVERIFY2(!component.isError(), qPrintable(msg1));
-    const QString msg2 = QStringLiteral("%1 create() 必须返回非空对象")
-                             .arg(QString::fromLatin1(caller));
-    QVERIFY2(obj != nullptr, qPrintable(msg2));
-    return obj;
-}
-
 void TestD11cQmlLoad::componentCreatesWithoutErrors()
 {
     QQmlComponent component(engine_.data(), kD11PageUrl);
     waitReadyOrFail("componentCreatesWithoutErrors", component);
 
-    QScopedPointer<QObject> obj(createOrFail(
-        "componentCreatesWithoutErrors", component, engine_.data()));
+    QScopedPointer<QObject> obj(component.create());
+    {
+        const QString errMsg =
+            QStringLiteral("create() 触发了错误: %1").arg(formatErrors(component));
+        QVERIFY2(!component.isError(), qPrintable(errMsg));
+    }
+    QVERIFY2(!obj.isNull(), "create() 返回对象必须非空");
+
     // ScrollView 继承自 QQuickItem
     auto* item = qobject_cast<QQuickItem*>(obj.data());
     QVERIFY2(item != nullptr, "D11 顶层对象必须为 QQuickItem (ScrollView)");
@@ -360,8 +309,13 @@ void TestD11cQmlLoad::viewModelAliasExistsAndInitiallyNull()
 {
     QQmlComponent component(engine_.data(), kD11PageUrl);
     waitReadyOrFail("viewModelAliasExistsAndInitiallyNull", component);
-    QScopedPointer<QObject> obj(createOrFail(
-        "viewModelAliasExistsAndInitiallyNull", component, engine_.data()));
+    QScopedPointer<QObject> obj(component.create());
+    {
+        const QString errMsg =
+            QStringLiteral("create() 返回对象必须非空，错误=%1")
+                .arg(formatErrors(component));
+        QVERIFY2(!obj.isNull(), qPrintable(errMsg));
+    }
 
     // HIGH-01 修复：root 必须暴露 "viewModel" alias 属性
     const QMetaObject* meta = obj->metaObject();
@@ -387,20 +341,27 @@ void TestD11cQmlLoad::multipleInstantiationsDoNotLeak()
     QQmlComponent component(engine_.data(), kD11PageUrl);
     waitReadyOrFail("multipleInstantiationsDoNotLeak", component);
 
-    QObject* first = createOrFail("multipleInstantiationsDoNotLeak#1",
-                                  component, engine_.data());
-    QObject* second = createOrFail("multipleInstantiationsDoNotLeak#2",
-                                   component, engine_.data());
-    QVERIFY2(first != second, "两次实例化必须返回不同对象");
+    QScopedPointer<QObject> first(component.create());
+    {
+        const QString errMsg =
+            QStringLiteral("第 1 次 create() 必须成功，错误=%1")
+                .arg(formatErrors(component));
+        QVERIFY2(first.data() != nullptr, qPrintable(errMsg));
+    }
+    QScopedPointer<QObject> second(component.create());
+    {
+        const QString errMsg =
+            QStringLiteral("第 2 次 create() 必须成功，错误=%1")
+                .arg(formatErrors(component));
+        QVERIFY2(second.data() != nullptr, qPrintable(errMsg));
+    }
+    QVERIFY2(first.data() != second.data(), "两次实例化必须返回不同对象");
 
     const QVariant vm1 = first->property("viewModel");
     const QVariant vm2 = second->property("viewModel");
     // 初始都应为 null，互不影响
     QCOMPARE(vm1.isNull() || !vm1.isValid(), true);
     QCOMPARE(vm2.isNull() || !vm2.isValid(), true);
-
-    delete second;
-    delete first;
 }
 
 // 使用 GUILESS：生成 QGuiApplication，QQmlEngine / QQuickItem 的 GUI 资源
