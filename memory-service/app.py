@@ -27,6 +27,7 @@ from gateway.preference_handlers import register_preference_handlers
 from gateway.registry import HandlerRegistry
 from gateway.server import UDSGatewayServer
 from logging_setup import setup_logging
+from outbox.router import build_outbox_router
 from outbox.worker import OutboxWorker
 from service.source_resolver import (
     InMemorySourceResolver,
@@ -163,10 +164,19 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     worker: Optional[OutboxWorker] = None
     if not args.no_outbox:
+        # D9D D-REQ-05：注入 OutboxRouter（统一消费路由）。
+        # 生产尚未接线真实 Vector provider / EmbeddingService（D8D producer 未合并），
+        # 依赖为 None 时对应消费者不注册 → 事件按 UnknownEventTypeError 失败/重试/DL
+        # （真实结果，不假装成功）；`--no-outbox` 行为不变。
+        router = build_outbox_router(
+            vector_provider=None,
+            embedding_service=None,
+        )
         worker = OutboxWorker(
             engine,
             poll_interval_s=cfg.outbox_poll_interval_s,
             max_retries=cfg.outbox_max_retries,
+            consumer=router.route,
         )
         worker.start()
 

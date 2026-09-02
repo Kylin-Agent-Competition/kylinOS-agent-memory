@@ -36,8 +36,25 @@ logger = logging.getLogger(__name__)
 # 退避基数（附录 B：next_retry_at = now + 2^attempts * 30s）
 RETRY_BASE_SECONDS = 30
 
-# 消费回调类型：payload dict → 成功返回 None，失败抛异常
-EventConsumer = Callable[[Dict[str, Any]], None]
+# 消费回调类型：(event_type, payload) → 成功返回 None，失败抛异常（HIGH-01 路由真源）
+EventConsumer = Callable[[str, Dict[str, Any]], None]
+
+# SQLite "no such table" 属于持久性 schema 错误：表缺失不会随重试恢复，
+# Worker 对其无限重试会形成死循环。识别后应停止线程而非继续轮询。
+_SCHEMA_MISSING_MARKERS = (
+    "no such table",
+    "no such column",
+)
+
+
+def _is_schema_missing(exc: BaseException) -> bool:
+    """判定异常是否为持久性 schema 缺失（表/列不存在）。
+
+    这类错误不会因重试而恢复（非 transient），Worker 应 fail-fast 停止，
+    而非对 `no such table` 无限重试（死循环）。
+    """
+    msg = str(exc).lower()
+    return any(marker in msg for marker in _SCHEMA_MISSING_MARKERS)
 
 
 class OutboxWorker:
@@ -60,6 +77,11 @@ class OutboxWorker:
         self._lock = get_write_lock()
         self._processed = 0
         self._dead_letters = 0
+        # D9D D-REQ-06：最近一次成功消费的 outbox.created_at（index_sync_lag 口径）。
+        # 成功消费后 outbox 行被删除，故用内存追踪最近成功 created_at（无持久化；
+        # 不做 Schema 变更，重启后为 None——缺数据返回 None，不伪造 0）。
+        self._last_indexed_ts: Optional[str] = None
+        self._fatal_error: Optional[str] = None  # 持久性 schema 缺失等致命错误（防死循环）
 
     # ── 生命周期 ──
 
@@ -84,14 +106,41 @@ class OutboxWorker:
     def metrics(self) -> Dict[str, Any]:
         """诊断指标（FR-FB-003：backlog / oldest_pending_age / index_sync_lag）。"""
         now_iso = datetime.now(timezone.utc).isoformat()
+        index_sync_lag = None
+        index_sync_lag_seconds = None
+        latest_memory = None  # MEDIUM-01：busy 降级路径也必须已赋值（防 UnboundLocalError）
         try:
             with self._engine.connect() as conn:
                 backlog = repo.outbox_backlog(conn, now_iso=now_iso)
+                latest_memory = repo.latest_memory_change_ts(conn)
         except OperationalError as exc:
             if is_locked_error(exc):
                 logger.warning("metrics busy 降级")
             backlog = {"backlog": -1, "dead_letter": -1, "oldest_pending_created_at": None}
-        return {**backlog, "processed": self._processed, "dead_letters": self._dead_letters}
+        # D9D D-REQ-06：index_sync_lag = latest committed memory change −
+        # latest successfully indexed（最近成功消费的 outbox.created_at）。
+        # 任一侧缺数据 → None（不伪造 0）；同库时间戳自洽，backlog=0 时收敛。
+        if latest_memory and self._last_indexed_ts:
+            try:
+                mem_ts = datetime.fromisoformat(str(latest_memory))
+                idx_ts = datetime.fromisoformat(self._last_indexed_ts)
+                if mem_ts.tzinfo is None:
+                    mem_ts = mem_ts.replace(tzinfo=timezone.utc)
+                if idx_ts.tzinfo is None:
+                    idx_ts = idx_ts.replace(tzinfo=timezone.utc)
+                index_sync_lag = idx_ts.isoformat()
+                index_sync_lag_seconds = round((mem_ts - idx_ts).total_seconds(), 3)
+            except (ValueError, TypeError):
+                index_sync_lag = None
+                index_sync_lag_seconds = None
+        return {
+            **backlog,
+            "processed": self._processed,
+            "dead_letters": self._dead_letters,
+            "index_sync_lag": index_sync_lag,
+            "index_sync_lag_seconds": index_sync_lag_seconds,
+            "fatal_error": self._fatal_error,  # A-REQ-01：schema 缺失等致命错误（防死循环）
+        }
 
     # ── 内部实现 ──
 
@@ -102,6 +151,14 @@ class OutboxWorker:
             except DatabaseLockedError:
                 logger.warning("Worker 轮询遇 SQLITE_BUSY（busy_timeout 到期），跳过本轮")
             except Exception as exc:  # noqa: BLE001
+                if _is_schema_missing(exc):
+                    # 持久性 schema 缺失：重试不会恢复 → 停止线程防死循环
+                    self._fatal_error = f"schema missing: {exc}"
+                    logger.error(
+                        "Worker 轮询致命错误（schema 缺失，停止线程防死循环）: %s", exc
+                    )
+                    self._stop.set()
+                    break
                 logger.error("Worker 轮询异常: %s", exc)
             self._stop.wait(self._poll_interval_s)
 
@@ -164,11 +221,16 @@ class OutboxWorker:
                     last_error="no consumer registered (vector integration pending, R-9)",
                 )
                 return
-            self._consumer(payload)
+            # HIGH-01：路由真源 = outbox.event_type 独立列，显式传给 consumer
+            self._consumer(event_type, payload)
 
             # 成功（附录 B 4a）
             repo.mark_outbox_success(conn, outbox_id=event_id)
             self._processed += 1
+            # D9D D-REQ-06：index_sync_lag 水位只允许索引事件（memory.upserted）推进
+            # （MEDIUM-02：非索引事件如 forget.executed 成功后不得前移水位，避免假健康指标）
+            if event_type == repo.EVENT_MEMORY_UPSERTED:
+                self._last_indexed_ts = str(event.get("created_at") or "") or self._last_indexed_ts
             logger.info(
                 "Outbox 事件完成 id=%d type=%s agg=%s", event_id, event_type, aggregate_id
             )

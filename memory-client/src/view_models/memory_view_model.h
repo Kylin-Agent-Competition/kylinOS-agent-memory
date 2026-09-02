@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <QJsonObject>
 #include <QObject>
@@ -202,6 +202,63 @@ class MemoryViewModel : public QObject {
     Q_PROPERTY(QString contextAssembleError READ contextAssembleError
                    NOTIFY contextAssembleErrorChanged)
 
+    // ── D10C 精准遗忘 Pipeline（Demo / Prototype） ──────────────────────
+    // forget.preview + forget.execute（CANDIDATE / pending ADR；业务契约已冻结，
+    // Hard/Cascade/Full Reset Runtime Execute fail-closed 至跨轨闭环 + 麒麟L2）。
+    // 状态机（v0.2 冻结）：idle → previewing → awaiting_confirmation → executing
+    //                    → completed / failed / rolled_back
+    // ⚠️  本 ViewModel 仅为客户端侧 Pipeline Harness，不实现：
+    //     - D 轨 SQLite Forget 事务与确认令牌持久化
+    //     - B 轨 Vector/FTS5 精确删除与残留率验证
+    //     - E 轨 ForgetPlan 业务规则解析与安全 Gate
+    //     因此本实现不关闭 C-D10，也不宣称完整精准遗忘能力已 Runtime 验证。
+    Q_PROPERTY(bool forgetPreviewBusy READ forgetPreviewBusy
+                   NOTIFY forgetPreviewBusyChanged)
+    Q_PROPERTY(bool forgetExecuteBusy READ forgetExecuteBusy
+                   NOTIFY forgetExecuteBusyChanged)
+    Q_PROPERTY(QString forgetStage READ forgetStage NOTIFY forgetStageChanged)
+    // Preview 结果：selection_hash + affected_count + credential_ttl_s + 敏感提示
+    Q_PROPERTY(QString forgetSelectionHash READ forgetSelectionHash
+                   NOTIFY forgetSelectionHashChanged)
+    Q_PROPERTY(int forgetAffectedCount READ forgetAffectedCount
+                   NOTIFY forgetAffectedCountChanged)
+    Q_PROPERTY(int forgetCredentialTtlSeconds READ forgetCredentialTtlSeconds
+                   NOTIFY forgetCredentialTtlSecondsChanged)
+    // 预览命中目标 ID 列表（Demo 展示影响范围；仅 ID 切片，不含正文）
+    Q_PROPERTY(QVariantList forgetResolvedTargets READ forgetResolvedTargets
+                   NOTIFY forgetResolvedTargetsChanged)
+    // 当前计划 forget_mode / target_type / is_cascade（展示确认上下文）
+    Q_PROPERTY(QString forgetMode READ forgetMode NOTIFY forgetModeChanged)
+    Q_PROPERTY(QString forgetTargetType READ forgetTargetType
+                   NOTIFY forgetTargetTypeChanged)
+    Q_PROPERTY(bool forgetIsCascade READ forgetIsCascade NOTIFY forgetIsCascadeChanged)
+    // 敏感提示：高敏感 / 批量 / full_reset / cascade 的显式警告
+    Q_PROPERTY(QString forgetSensitivityWarning READ forgetSensitivityWarning
+                   NOTIFY forgetSensitivityWarningChanged)
+    // Execute 结果：executed_count / affected_count 一致性校验
+    Q_PROPERTY(int forgetExecutedCount READ forgetExecutedCount
+                   NOTIFY forgetExecutedCountChanged)
+    // 执行是否漏删：executed_count != affected_count → 不得报 completed
+    Q_PROPERTY(bool forgetHasMissingDeletes READ forgetHasMissingDeletes
+                   NOTIFY forgetHasMissingDeletesChanged)
+    // 完整 Preview / Execute 响应 JSON（诊断用）
+    Q_PROPERTY(QJsonObject forgetPreviewResult READ forgetPreviewResult
+                   NOTIFY forgetPreviewResultChanged)
+    Q_PROPERTY(QJsonObject forgetExecuteResult READ forgetExecuteResult
+                   NOTIFY forgetExecuteResultChanged)
+    // 错误消息（不含正文/PII，safe message）
+    Q_PROPERTY(QString forgetPreviewError READ forgetPreviewError
+                   NOTIFY forgetPreviewErrorChanged)
+    Q_PROPERTY(QString forgetExecuteError READ forgetExecuteError
+                   NOTIFY forgetExecuteErrorChanged)
+    // 跨用户操作拒绝标志：请求 user_id 与响应 user_id 不匹配时为 true
+    // （用于 QML 展示「跨用户操作被拒绝」的验收断言）
+    Q_PROPERTY(bool forgetCrossUserBlocked READ forgetCrossUserBlocked
+                   NOTIFY forgetCrossUserBlockedChanged)
+    // Preview 后 target_selector 明文清除状态（§四.8 安全验收）
+    Q_PROPERTY(bool forgetSelectorCleared READ forgetSelectorCleared
+                   NOTIFY forgetSelectorClearedChanged)
+
 public:
     explicit MemoryViewModel(QObject* parent = nullptr);
     ~MemoryViewModel() override;
@@ -221,11 +278,13 @@ public:
     // D6-C 扩展：四 busy 合并兼容属性（PreChat / PostTurn / Tool / ManualConfig / Behavior）
     // D8-C 进一步扩展：包含 KnowledgeDetail / ConflictCompare / LifecycleStatus
     // D9-C 进一步扩展：包含 ContextAssemble
+    // D10-C 进一步扩展：包含 ForgetPreview / ForgetExecute
     [[nodiscard]] bool busy() const {
         return preChatBusy_ || postTurnBusy_
             || toolBusy_ || manualConfigBusy_ || behaviorBusy_
             || knowledgeDetailBusy_ || conflictCompareBusy_ || lifecycleStatusBusy_
-            || contextAssembleBusy_;
+            || contextAssembleBusy_
+            || forgetPreviewBusy_ || forgetExecuteBusy_;
     }
 
     // D5-C Getter
@@ -276,6 +335,32 @@ public:
     [[nodiscard]] bool contextBudgetExceeded() const { return contextBudgetExceeded_; }
     [[nodiscard]] QString contextInjectionStatus() const { return contextInjectionStatus_; }
     [[nodiscard]] QString contextAssembleError() const { return contextAssembleError_; }
+
+    // ── D10C getters ────────────────────────────────────────────────────
+    [[nodiscard]] bool forgetPreviewBusy() const { return forgetPreviewBusy_; }
+    [[nodiscard]] bool forgetExecuteBusy() const { return forgetExecuteBusy_; }
+    [[nodiscard]] QString forgetStage() const { return forgetStage_; }
+    [[nodiscard]] QString forgetSelectionHash() const { return forgetSelectionHash_; }
+    [[nodiscard]] int forgetAffectedCount() const { return forgetAffectedCount_; }
+    [[nodiscard]] int forgetCredentialTtlSeconds() const { return forgetCredentialTtlSeconds_; }
+    [[nodiscard]] QVariantList forgetResolvedTargets() const { return forgetResolvedTargets_; }
+    [[nodiscard]] QString forgetMode() const { return forgetMode_; }
+    [[nodiscard]] QString forgetTargetType() const { return forgetTargetType_; }
+    [[nodiscard]] bool forgetIsCascade() const { return forgetIsCascade_; }
+    [[nodiscard]] QString forgetSensitivityWarning() const { return forgetSensitivityWarning_; }
+    [[nodiscard]] int forgetExecutedCount() const { return forgetExecutedCount_; }
+    [[nodiscard]] bool forgetHasMissingDeletes() const {
+        // v0.3/MEDIUM-03：漏删不得报完成
+        return forgetAffectedCount_ > 0
+               && forgetExecutedCount_ >= 0
+               && forgetExecutedCount_ != forgetAffectedCount_;
+    }
+    [[nodiscard]] QJsonObject forgetPreviewResult() const { return forgetPreviewResult_; }
+    [[nodiscard]] QJsonObject forgetExecuteResult() const { return forgetExecuteResult_; }
+    [[nodiscard]] QString forgetPreviewError() const { return forgetPreviewError_; }
+    [[nodiscard]] QString forgetExecuteError() const { return forgetExecuteError_; }
+    [[nodiscard]] bool forgetCrossUserBlocked() const { return forgetCrossUserBlocked_; }
+    [[nodiscard]] bool forgetSelectorCleared() const { return forgetSelectorCleared_; }
 
     // D7C Getter
     [[nodiscard]] QVariantList preferenceItems() const { return preferenceItems_; }
@@ -461,6 +546,43 @@ public:
         const QString& scene,
         const QString& candidatesJson);
 
+    // ── D10C 精准遗忘 Pipeline（Demo / Prototype） ──────────────────────
+    // forget.preview：构造 ForgetPlan payload 并发送 forget.preview。
+    // 必填校验：userId / forgetPlanId / forgetMode / targetType；
+    // 模式互斥（SEC-FORGET-03）：按 forgetMode 只接受对应 target_*，
+    //   single_item→targetId, session→targetSessionId, topic→targetTopic,
+    //   time_window→targetTimeRange, full_reset→无任何 target_*（携带拒绝）。
+    // 跨用户拦截（客户端预检）：若请求携带的 selectorUserId 与响应
+    //   data.user_id 不匹配 → forgetCrossUserBlocked=true，stage=failed。
+    // 客户端侧明文清除（§四.8 HIGH-01）：Preview 成功后清空本 ViewModel
+    //   保存的 targetSelector / targetTopic（若为 Demo 态存储），
+    //   并将 forgetSelectorCleared=true（展示清除状态）。
+    Q_INVOKABLE void runForgetPreviewPipeline(
+        const QString& userId,
+        const QString& forgetPlanId,
+        const QString& forgetMode,
+        const QString& targetType,
+        const QString& targetSelector,
+        const QString& targetId,
+        const QString& targetSessionId,
+        const QString& targetTopic,
+        const QString& targetTimeRange,
+        bool requiresConfirmation,
+        bool isCascade);
+
+    // forget.execute：携带 forgetPlanId + confirmationToken（一次性确认凭据）
+    // 执行遗忘。idempotencyKey 可选（复用 FRZ-IPC-005 三元组）；
+    // deleteMode ∈ {soft,hard}（hard 在 ADR-016 可信输入接线前 fail-closed）。
+    // 漏删保护（v0.3/MEDIUM-03）：Execute 返回 executed_count 与
+    //   affected_count 不一致 → forgetHasMissingDeletes=true，stage 进入
+    //   failed（不得报 completed，闭合「漏删不得报完成」）。
+    Q_INVOKABLE void runForgetExecutePipeline(
+        const QString& userId,
+        const QString& forgetPlanId,
+        const QString& confirmationToken,
+        const QString& idempotencyKey,
+        const QString& deleteMode);
+
     // 原文隔离验证
     Q_INVOKABLE bool verifyOriginalTextIsolation() const;
 
@@ -531,6 +653,27 @@ signals:
     void contextInjectionStatusChanged();
     void contextAssembleErrorChanged();
 
+    // D10C 信号
+    void forgetPreviewBusyChanged();
+    void forgetExecuteBusyChanged();
+    void forgetStageChanged();
+    void forgetSelectionHashChanged();
+    void forgetAffectedCountChanged();
+    void forgetCredentialTtlSecondsChanged();
+    void forgetResolvedTargetsChanged();
+    void forgetModeChanged();
+    void forgetTargetTypeChanged();
+    void forgetIsCascadeChanged();
+    void forgetSensitivityWarningChanged();
+    void forgetExecutedCountChanged();
+    void forgetHasMissingDeletesChanged();
+    void forgetPreviewResultChanged();
+    void forgetExecuteResultChanged();
+    void forgetPreviewErrorChanged();
+    void forgetExecuteErrorChanged();
+    void forgetCrossUserBlockedChanged();
+    void forgetSelectorClearedChanged();
+
     void requestFailed(const QString& requestId, const QString& errorCode, const QString& safeMessage);
     void connectionError(const QString& safeMessage);
 
@@ -598,6 +741,35 @@ private:
     void projectAssembledContext(const QJsonObject& data);
     // D9C 防伪 Context 统一清空（失败路径 / 请求前置调用，I-2 修复）。
     void resetContextProjection();
+
+    // D10C 私有 setter
+    void setForgetPreviewBusy(bool value);
+    void setForgetExecuteBusy(bool value);
+    void setForgetStage(const QString& value);
+    void setForgetSelectionHash(const QString& value);
+    void setForgetAffectedCount(int value);
+    void setForgetCredentialTtlSeconds(int value);
+    void setForgetResolvedTargets(const QVariantList& value);
+    void setForgetMode(const QString& value);
+    void setForgetTargetType(const QString& value);
+    void setForgetIsCascade(bool value);
+    void setForgetSensitivityWarning(const QString& value);
+    void setForgetExecutedCount(int value);
+    void setForgetPreviewResult(const QJsonObject& value);
+    void setForgetExecuteResult(const QJsonObject& value);
+    void setForgetPreviewError(const QString& value);
+    void setForgetExecuteError(const QString& value);
+    void setForgetCrossUserBlocked(bool value);
+    void setForgetSelectorCleared(bool value);
+    // D10C 响应路由与投影
+    void handleForgetPreviewResponse(const QString& requestId, const QJsonObject& envelope);
+    void handleForgetExecuteResponse(const QString& requestId, const QJsonObject& envelope);
+    // D10C forget.preview 响应 data 投影到子属性
+    void projectForgetPreview(const QJsonObject& data);
+    // D10C forget.execute 响应 data 投影
+    void projectForgetExecute(const QJsonObject& data);
+    // D10C 统一重置（失败路径 / Pipeline 前置调用）
+    void resetForgetProjection();
 
     // D8C 响应投影辅助
     [[nodiscard]] QVariantList projectJsonArray(const QJsonArray& items) const;
@@ -738,6 +910,36 @@ private:
     QString pendingContextAssembleRequestId_;
     // M-2 修复：记录本次请求的 token_budget，响应缺失时回退（避免显示 250/0）。
     int requestedTokenBudget_ = 0;
+
+    // ── D10C 精准遗忘 ───────────────────────────────────────────────────
+    bool forgetPreviewBusy_ = false;
+    bool forgetExecuteBusy_ = false;
+    QString forgetStage_ = QStringLiteral("idle");
+    QString forgetSelectionHash_;
+    int forgetAffectedCount_ = 0;
+    int forgetCredentialTtlSeconds_ = 0;
+    QVariantList forgetResolvedTargets_;
+    QString forgetMode_;
+    QString forgetTargetType_;
+    bool forgetIsCascade_ = false;
+    QString forgetSensitivityWarning_;
+    int forgetExecutedCount_ = -1;  // -1 = 未执行
+    QJsonObject forgetPreviewResult_;
+    QJsonObject forgetExecuteResult_;
+    QString forgetPreviewError_;
+    QString forgetExecuteError_;
+    bool forgetCrossUserBlocked_ = false;
+    bool forgetSelectorCleared_ = false;
+    // 独立 pending request_id（避免 Preview↔Execute 竞态，沿用 D5 REWORK 模式）
+    QString pendingForgetPreviewRequestId_;
+    QString pendingForgetExecuteRequestId_;
+    // 暂存 Preview 请求参数（用于客户端侧 selector 明文清除 + 跨用户校验）
+    QString pendingForgetPreviewUserId_;
+    QString pendingForgetPreviewSelector_;   // target_selector（明文清除前临时）
+    QString pendingForgetPreviewTopic_;      // target_topic（含正文，清除前临时）
+    QString pendingForgetPlanId_;            // 供 execute 关联确认
+    QString pendingForgetSelectionHash_;     // 供 execute 绑定目标快照
+    int pendingForgetAffectedCount_ = 0;     // 供 execute 校验漏删
 
     // 问题4修复：per-request deadline timer（超时→ requestFailed TIMEOUT）
     // key = requestId；超时后由单例 QTimer 回调，统一在 onRequestFailed 路径处理。

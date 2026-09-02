@@ -12,5 +12,6 @@
         <file>pages/ConflictComparisonPage.qml</file>
         <file>pages/LifecycleStatusPage.qml</file>
         <file>pages/ContextAssemblePage.qml</file>
+        <file>pages/ForgetPage.qml</file>
     </qresource>
 </RCC>

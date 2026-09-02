@@ -350,6 +350,23 @@ QString MemoryClient::sendContextAssembleRequest(const QJsonObject& payload)
     return sendRequest(methods::kContextAssemble, payload);
 }
 
+QString MemoryClient::sendForgetPreviewRequest(const QJsonObject& payload)
+{
+    // D10C / ADR-016 候选：forget.preview
+    // CANDIDATE / pending ADR；Demo Mock Gateway 注册 handler；
+    // 生产 Gateway 默认不注册 → UNSUPPORTED_METHOD（fail-closed 符合预期）。
+    return sendRequest(methods::kForgetPreview, payload);
+}
+
+QString MemoryClient::sendForgetExecuteRequest(const QJsonObject& payload)
+{
+    // D10C / ADR-016 候选：forget.execute
+    // 注意：Hard Delete / Cascade / Full Reset Runtime 在跨轨闭环与
+    // ADR-016 可信 delete_mode 输入来源冻结与接线前保持 fail-closed；
+    // 软删（delete_mode=soft）主路径可先行 Demo。
+    return sendRequest(methods::kForgetExecute, payload);
+}
+
 void MemoryClient::handleSocketConnected()
 {
     setConnectionState(ConnectionState::Connected);
