@@ -56,13 +56,13 @@ _executor_shutdown = False  # shutdown 标记：submit 前若已关闭则惰性�
 # 见 TD-A-005-01 Wontfix）——若 2 个 worker 被挂死调用占满，后续所有 embed 将
 # 排队并永久超时（性能抖动归零）直到进程重启。因此跟踪 in-flight future 的
 # 开始时间，一旦超过 hang 阈值仍未完成，判定为永久挂死并重建 executor
-# （恢复后续请求能力；旧挂死 worker 无法终止，残余风险见 TD-056）。
+# （恢复后续请求能力；旧挂死 worker 无法终止，残余风险见 TD-058）。
 _executor_lock = threading.Lock()  # 保护 executor 重建 + in-flight 跟踪
 _in_flight: Dict[Any, float] = {}  # future -> start time (monotonic)
 _embed_hang_threshold_ms = 60000.0  # 默认 60s：远大于单次超时（5s），只针对真正挂死
 _embed_hang_recovered = 0  # 统计：挂死恢复次数（可观测性）
 # [D12A Review HIGH-01] 有界挂死恢复：executor rebuild 无法终止已挂死的旧
-# worker（SDK 无 cancel API，TD-A-005-01 Wontfix；残余风险登记 TD-056），只能
+# worker（SDK 无 cancel API，TD-A-005-01 Wontfix；残余风险登记 TD-058），只能
 # “恢复后续请求能力”。为避免无界创建线程池，最多连续重建
 # _embed_max_hang_rebuilds 次；超限后置 _embed_restart_required，后续 embed
 # 快速失败并提示进程重启（不再继续新建 executor）。
@@ -75,16 +75,16 @@ def shutdown_executor() -> None:
 
     幂等；关闭后再 submit 会惰性重建（见 _submit_bridge），保持进程级单例语义。
     """
-    global _executor, _executor_shutdown, _embed_hang_recovered, _embed_restart_required
+    global _executor, _executor_shutdown
     with _executor_lock:
         if _executor_shutdown:
             return
         _executor.shutdown(wait=False)
         _executor_shutdown = True
         _in_flight.clear()
-        # 显式 shutdown 近似“进程重启”语义：重置有界恢复计数与重启标记
-        _embed_hang_recovered = 0
-        _embed_restart_required = False
+        # [D12A Review R2 HIGH-01] 同进程 stop/start 不得重置有界恢复计数与
+        # restart-required：旧 hung worker 无法终止（TD-058），只有进程级重启
+        # 才清场（模块重载自然复位）；测试通过 fixture/模块级复位隔离。
 
 
 def _maybe_recover_hung_executor() -> bool:
@@ -132,6 +132,11 @@ def _submit_bridge(fn, *args, **kwargs):
     global _executor, _executor_shutdown
     with _executor_lock:
         _maybe_recover_hung_executor()
+        # [D12A Review R2 HIGH-01] 原子 gate：recover/检测 + restart 判定 + submit
+        # 同处临界区；restart-required 已置位（含并发窗口中被置位）时不再提交，
+        # 返回 None，由调用方转为结构化 ERR_EMBED_FAILED。
+        if _embed_restart_required:
+            return None
         if _executor_shutdown:
             _executor = ThreadPoolExecutor(
                 max_workers=2, thread_name_prefix="embed-bridge")
@@ -158,7 +163,7 @@ def recover_hung_bridge_executor() -> bool:
     """[D12A] 线程安全入口：检测 in-flight 是否挂死超过阈值并重建 executor。
 
     供 EmbeddingService.embed() 在每次请求入口调用（含合并等待路径），
-    恢复后续请求能力（无法终止旧挂死 worker；见 TD-056）。
+    恢复后续请求能力（无法终止旧挂死 worker；见 TD-058）。
     """
     with _executor_lock:
         return _maybe_recover_hung_executor()
@@ -626,6 +631,12 @@ class EmbeddingService:
         fut = None
         try:
             fut = _submit_bridge(self._provider.embed, text, timeout_ms=timeout_ms)
+            if fut is None:
+                # [D12A Review R2 HIGH-01] submit 原子 gate 命中 restart-required
+                self._track_error(ProviderErrorCode.ERR_EMBED_FAILED,
+                                  "Bridge hang-recovery exhausted, restart required")
+                return self._error(ProviderErrorCode.ERR_EMBED_FAILED.name,
+                                   "Bridge hang-recovery exhausted, restart required")
             self._coalescer.register(coalesce_key, fut)
             try:
                 result = fut.result(timeout=timeout_ms / 1000.0 + 1.0)

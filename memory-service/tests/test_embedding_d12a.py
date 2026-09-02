@@ -519,8 +519,8 @@ def test_bounded_hang_rebuild_then_restart_required():
     assert r["error"]["code"] == "ERR_EMBED_FAILED"
     assert "restart" in r["error"]["message"]
     svc.close()
-    shutdown_executor()  # 显式 shutdown 近似重启，重置标记
-    assert _es._embed_restart_required is False
+    shutdown_executor()  # R2 HIGH-01：同进程 stop 不得绕过 restart-required
+    assert _es._embed_restart_required is True
 
 
 def test_done_callback_clears_in_flight_after_completion():
@@ -541,4 +541,50 @@ def test_done_callback_clears_in_flight_after_completion():
     while len(_in_flight) > 0 and time.monotonic() < deadline:
         time.sleep(0.02)
     assert len(_in_flight) == 0, "done callback 应主动清理 in_flight"
+    shutdown_executor()
+def test_restart_required_survives_stop_start_same_process():
+    """R2 HIGH-01：recovery 耗尽后，同进程 stop→start 不得绕过 restart-required。"""
+    _reset_hang_threshold()
+    _es._embed_max_hang_rebuilds = 0  # 上限 0：首次挂死即耗尽
+    _es._embed_restart_required = False
+    _es._embed_hang_recovered = 0
+
+    def _hang_forever():
+        time.sleep(30.0)
+
+    _submit_bridge(_hang_forever)
+    _submit_bridge(_hang_forever)
+    _set_hang_threshold(0.001)
+    assert recover_hung_bridge_executor() is False  # 达上限(0)，不重建
+    assert _es._embed_restart_required is True
+
+    shutdown_executor()  # server.stop() 语义：不得清零 restart-required
+    assert _es._embed_restart_required is True
+
+    # 同进程 start：仍必须快速失败，不得继续向线程池提交
+    svc = EmbeddingService(provider=FakeProvider())
+    svc.start()
+    r = svc.embed("x", timeout_ms=200)
+    assert r["ok"] is False
+    assert r["error"]["code"] == "ERR_EMBED_FAILED"
+    assert "restart" in r["error"]["message"]
+    svc.close()
+
+
+def test_submit_blocked_when_restart_required():
+    """R2 HIGH-01：restart-required 已置位时 _submit_bridge 不得提交新任务（返回 None）。"""
+    _reset_hang_threshold()
+    with _executor_lock:
+        _es._embed_restart_required = True
+        _in_flight.clear()
+
+    def _hang_forever():
+        time.sleep(30.0)
+
+    with _executor_lock:
+        before = len(_in_flight)
+    fut = _submit_bridge(_hang_forever)
+    assert fut is None, "restart-required 下不应提交"
+    with _executor_lock:
+        assert len(_in_flight) == before
     shutdown_executor()

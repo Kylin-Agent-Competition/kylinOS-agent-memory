@@ -9,7 +9,7 @@
 # 检测项：
 #   1. 系统环境（Python/SDK/依赖）
 #   2. Embedding Service health（含 executor 挂死恢复分项）
-#   3. 挂死恢复机制（超时→重建→恢复）
+#   3. 挂死恢复可观测性与无挂死不误重建（真实 SDK 挂死→重建恢复 RUNTIME_UNVERIFIED，由 L1 FakeProvider 模拟）
 #   4. Bridge 假实现/吞异常（异常输入回归：空文本/超长/错误模型/非法枚举/异常返回）
 #   5. 性能基准（延迟/吞吐量）
 #   6. 日志无正文残留
