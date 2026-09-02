@@ -780,13 +780,13 @@ def test_migration_upgrade_creates_forget_tables_and_priority(tmp_path):
     assert "priority" in outbox_info
     assert str(outbox_info["attempts"][4]) in {"0", "'0'", '"0"'}
     assert "'forget'" in outbox_sql  # aggregate_type CHECK 扩展
-    assert revision == "20260901_add_forget_plan"
+    assert revision == "20260902_add_memory_relation_conflict"
 
 
 def test_migration_single_head(tmp_path):
     r = _run_alembic(tmp_path / "heads.db", "heads")
     assert r.returncode == 0, r.stderr
-    assert r.stdout.strip() == "20260901_add_forget_plan (head)"
+    assert r.stdout.strip() == "20260902_add_memory_relation_conflict (head)"
 
 
 def test_migration_downgrade_roundtrip(tmp_path):

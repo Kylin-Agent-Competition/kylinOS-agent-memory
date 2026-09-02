@@ -198,7 +198,9 @@ def test_memory_entry_soft_delete_fts_sync(engine):
             memory_entries.select().where(memory_entries.c.id == eid)
         ).mappings().first()
         assert row["is_deleted"] == 1
-        assert row["version"] == 2
+        # ADR-017：内容/索引版本保持不变；业务写入的 CAS token 是 row_revision。
+        assert row["version"] == 1
+        assert row["row_revision"] == 2
 
 
 def test_memory_entry_optimistic_lock_conflict(engine):

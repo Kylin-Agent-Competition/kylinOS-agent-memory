@@ -76,8 +76,99 @@ memory_entries = Table(
     Column("updated_at", String, nullable=False),
     # ADR-011：nullable 追踪列（trace_id 来自 IPC envelope，非正文）
     Column("trace_id", String, nullable=True),
+    # ADR-017：业务 knowledge identity 与检索 identity 分离。version 仍是内容/
+    # 索引版本，row_revision 才是所有写入的 optimistic CAS token。
+    Column("knowledge_id", String, nullable=True),
+    Column("row_revision", Integer, nullable=True),
+    Column("knowledge_type", String, nullable=True),
+    Column("conditions", Text, nullable=True),
+    Column("lifecycle_eligibility", String, nullable=True),
+    Column("memory_status", String, nullable=True),
+    Column("memory_type", String, nullable=True),
+    Column("evidence_tier", String, nullable=True),
+    Column("last_accessed_at", String, nullable=True),
+    Column("access_count", Integer, nullable=True),
     CheckConstraint("entry_type IN ('preference','knowledge','tool_result','behavior')", name="ck_memory_entries_entry_type"),
     CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_memory_entries_confidence"),
+    CheckConstraint("row_revision IS NULL OR row_revision >= 1", name="ck_memory_entries_row_revision"),
+    CheckConstraint("access_count IS NULL OR access_count >= 0", name="ck_memory_entries_access_count"),
+    CheckConstraint("memory_status IS NULL OR memory_status IN ('active','superseded','deprecated','expired','removed','candidate')", name="ck_memory_entries_memory_status"),
+    CheckConstraint("memory_type IS NULL OR memory_type IN ('short_term','medium_term','long_term','ephemeral')", name="ck_memory_entries_memory_type"),
+    CheckConstraint("evidence_tier IS NULL OR evidence_tier IN ('user_explicit_config_latest','user_confirmed','tool_execution_result','consistent_behavior_multiple','behavior_inference_single','model_inference')", name="ck_memory_entries_evidence_tier"),
+    CheckConstraint("knowledge_type IS NULL OR knowledge_type IN ('workflow','case','template','fact','constraint','failure_experience')", name="ck_memory_entries_knowledge_type"),
+    CheckConstraint("lifecycle_eligibility IS NULL OR lifecycle_eligibility IN ('eligible','legacy_unmapped','evidence_unmapped')", name="ck_memory_entries_lifecycle_eligibility"),
+)
+
+# ADR-017：关系、冲突与生命周期的 SQLite 真源。关系端点显式带类型，禁止把
+# source_event 和 knowledge 的 opaque ID 混为一谈；证据只用结构化 relation 表达。
+memory_relation = Table(
+    "memory_relation", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", String, nullable=False),
+    Column("relation_id", String, nullable=False),
+    Column("relation_type", String, nullable=False),
+    Column("left_endpoint_type", String, nullable=False),
+    Column("left_endpoint_id", String, nullable=False),
+    Column("right_endpoint_type", String, nullable=False),
+    Column("right_endpoint_id", String, nullable=False),
+    Column("is_primary", Integer, nullable=False, server_default="0"),
+    Column("created_at", String, nullable=False),
+    CheckConstraint("relation_type IN ('version','evidence','derived')", name="ck_memory_relation_type"),
+    CheckConstraint("left_endpoint_type IN ('knowledge','source_event')", name="ck_memory_relation_left_type"),
+    CheckConstraint("right_endpoint_type IN ('knowledge','source_event')", name="ck_memory_relation_right_type"),
+    CheckConstraint("is_primary IN (0,1)", name="ck_memory_relation_primary"),
+    CheckConstraint("relation_type = 'evidence' OR is_primary = 0", name="ck_memory_relation_primary_kind"),
+    CheckConstraint("left_endpoint_id <> right_endpoint_id OR left_endpoint_type <> right_endpoint_type", name="ck_memory_relation_not_self"),
+    sqlite_autoincrement=True,
+)
+
+memory_conflict = Table(
+    "memory_conflict", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", String, nullable=False), Column("conflict_id", String, nullable=False),
+    Column("conflict_type", String, nullable=False),
+    Column("left_knowledge_id", String, nullable=False), Column("right_knowledge_id", String, nullable=False),
+    Column("conflict_summary", Text, nullable=False), Column("involved_present", Integer, nullable=False),
+    Column("resolution_status", String, nullable=False), Column("is_auto_resolvable", Integer, nullable=False, server_default="0"),
+    Column("detected_at", String, nullable=False), Column("resolution_strategy", String, nullable=True),
+    Column("resolution_confidence", Float, nullable=True), Column("resolved_at", String, nullable=True),
+    Column("resolved_by", String, nullable=True), Column("winner_id", String, nullable=True),
+    Column("decision_action", String, nullable=True), Column("reason_code", String, nullable=True),
+    Column("created_at", String, nullable=False), Column("updated_at", String, nullable=False),
+    CheckConstraint("left_knowledge_id <> right_knowledge_id", name="ck_memory_conflict_not_self"),
+    CheckConstraint("conflict_type IN ('contradiction','temporal_inconsistency','source_conflict','preference_conflict','scope_ambiguity')", name="ck_memory_conflict_type"),
+    CheckConstraint("resolution_status IN ('detected','analyzing','resolved_auto','resolved_manual','deferred','unresolvable')", name="ck_memory_conflict_status"),
+    CheckConstraint("decision_action IS NULL OR decision_action IN ('keep_left','keep_right','coexist','defer','reject')", name="ck_memory_conflict_action"),
+    CheckConstraint("is_auto_resolvable IN (0,1)", name="ck_memory_conflict_auto"),
+    CheckConstraint("involved_present IN (0,1)", name="ck_memory_conflict_involved"),
+    CheckConstraint("resolution_confidence IS NULL OR (resolution_confidence >= 0 AND resolution_confidence <= 1)", name="ck_memory_conflict_confidence"),
+    sqlite_autoincrement=True,
+)
+
+memory_conflict_member = Table(
+    "memory_conflict_member", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True), Column("user_id", String, nullable=False),
+    Column("conflict_id", String, nullable=False), Column("knowledge_id", String, nullable=False),
+    Column("ordinal", Integer, nullable=False), Column("role", String, nullable=False), Column("created_at", String, nullable=False),
+    CheckConstraint("ordinal >= 0", name="ck_memory_conflict_member_ordinal"),
+    CheckConstraint("role IN ('left','right','involved')", name="ck_memory_conflict_member_role"),
+    sqlite_autoincrement=True,
+)
+
+memory_lifecycle_receipt = Table(
+    "memory_lifecycle_receipt", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True), Column("user_id", String, nullable=False),
+    Column("evaluation_id", String, nullable=False), Column("evaluation_fingerprint", String, nullable=False),
+    Column("knowledge_id", String, nullable=False), Column("memory_entry_id", Integer, nullable=False),
+    Column("evaluated_revision", Integer, nullable=False), Column("version_id", String, nullable=False),
+    Column("policy_config_hash", String, nullable=False), Column("evaluated_at", String, nullable=False),
+    Column("action", String, nullable=False), Column("reason_code", String, nullable=False),
+    Column("target_memory_type", String, nullable=True), Column("target_memory_status", String, nullable=True),
+    Column("applied", Integer, nullable=False), Column("created_at", String, nullable=False),
+    CheckConstraint("evaluated_revision >= 1", name="ck_lifecycle_receipt_revision"),
+    CheckConstraint("action IN ('promote','demote','expire','archive_request','hold','reject')", name="ck_lifecycle_receipt_action"),
+    CheckConstraint("applied IN (0,1)", name="ck_lifecycle_receipt_applied"),
+    sqlite_autoincrement=True,
 )
 
 # D10-B：Vector 代次与索引项账本。SQLite 是删除结果、重建激活和幂等回执的
@@ -388,6 +479,38 @@ idx_turns_host_turn_id = Index(
 )
 idx_memory_user_type = Index("idx_memory_user_type", memory_entries.c.user_id, memory_entries.c.entry_type)
 idx_memory_deleted = Index("idx_memory_deleted", memory_entries.c.is_deleted)
+uq_memory_entries_user_knowledge = Index(
+    "uq_memory_entries_user_knowledge", memory_entries.c.user_id, memory_entries.c.knowledge_id,
+    unique=True, sqlite_where=(memory_entries.c.entry_type == "knowledge") & memory_entries.c.knowledge_id.isnot(None),
+)
+idx_memory_entries_user_status = Index("idx_memory_entries_user_status", memory_entries.c.user_id, memory_entries.c.memory_status)
+idx_memory_entries_user_lifecycle_type = Index("idx_memory_entries_user_lifecycle_type", memory_entries.c.user_id, memory_entries.c.memory_type)
+uq_memory_relation_user_relation = Index("uq_memory_relation_user_relation", memory_relation.c.user_id, memory_relation.c.relation_id, unique=True)
+idx_memory_relation_left = Index("idx_memory_relation_left", memory_relation.c.user_id, memory_relation.c.left_endpoint_type, memory_relation.c.left_endpoint_id)
+idx_memory_relation_right = Index("idx_memory_relation_right", memory_relation.c.user_id, memory_relation.c.right_endpoint_type, memory_relation.c.right_endpoint_id)
+uq_memory_relation_canonical_evidence = Index(
+    "uq_memory_relation_canonical_evidence", memory_relation.c.user_id, memory_relation.c.left_endpoint_id, memory_relation.c.right_endpoint_id,
+    unique=True, sqlite_where=(memory_relation.c.relation_type == "evidence") & (memory_relation.c.left_endpoint_type == "knowledge") & (memory_relation.c.right_endpoint_type == "source_event"),
+)
+uq_memory_relation_primary_evidence = Index(
+    "uq_memory_relation_primary_evidence", memory_relation.c.user_id, memory_relation.c.left_endpoint_id,
+    unique=True, sqlite_where=(memory_relation.c.relation_type == "evidence") & (memory_relation.c.left_endpoint_type == "knowledge") & (memory_relation.c.right_endpoint_type == "source_event") & (memory_relation.c.is_primary == 1),
+)
+uq_memory_relation_version_successor = Index(
+    "uq_memory_relation_version_successor", memory_relation.c.user_id, memory_relation.c.left_endpoint_id,
+    unique=True, sqlite_where=(memory_relation.c.relation_type == "version") & (memory_relation.c.left_endpoint_type == "knowledge"),
+)
+uq_memory_conflict_user_conflict = Index("uq_memory_conflict_user_conflict", memory_conflict.c.user_id, memory_conflict.c.conflict_id, unique=True)
+idx_memory_conflict_left = Index("idx_memory_conflict_left", memory_conflict.c.user_id, memory_conflict.c.left_knowledge_id)
+idx_memory_conflict_right = Index("idx_memory_conflict_right", memory_conflict.c.user_id, memory_conflict.c.right_knowledge_id)
+idx_memory_conflict_status = Index("idx_memory_conflict_status", memory_conflict.c.user_id, memory_conflict.c.resolution_status)
+uq_memory_conflict_member_ordinal = Index("uq_memory_conflict_member_ordinal", memory_conflict_member.c.user_id, memory_conflict_member.c.conflict_id, memory_conflict_member.c.ordinal, unique=True)
+uq_lifecycle_receipt_evaluation = Index("uq_lifecycle_receipt_evaluation", memory_lifecycle_receipt.c.user_id, memory_lifecycle_receipt.c.evaluation_id, unique=True)
+uq_lifecycle_archive_once = Index(
+    "uq_lifecycle_archive_once", memory_lifecycle_receipt.c.user_id, memory_lifecycle_receipt.c.knowledge_id,
+    memory_lifecycle_receipt.c.version_id, memory_lifecycle_receipt.c.action, memory_lifecycle_receipt.c.reason_code,
+    unique=True, sqlite_where=memory_lifecycle_receipt.c.action == "archive_request",
+)
 uq_vector_generation_serving_scope = Index(
     "uq_vector_generation_serving_scope",
     vector_index_generations.c.scope_id,
