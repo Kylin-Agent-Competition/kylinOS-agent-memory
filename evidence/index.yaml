@@ -1164,6 +1164,26 @@ entries:
       L2-4 systemd: unit 安装 + 默认库 alembic upgrade head ALEMBIC_RC=0（alembic_version=20260831_add_source_events）；数据目录 700 PASS；enable --now RC=0 active；socket /run/user/1000/kylin-memory/memory.sock srw-------；health status ok/db ok/backlog 0；restart active；插入 L2A-SYSD-1 → restart → 行仍在（数据存在 PASS）；但 DB 文件 644 ≠ 0600（发现②，测试后已清理测试行）。
       证据: 完整日志 evidence/l2-kylin-vm/d6d_l2_vm_20260901.log（SHA-256 以 git 仓库 LF 归一化 blob 为准，与 Windows 工作树 CRLF 副本哈希可能不同）。
 
+  - id: "D11D-L2-REWORK-SERVICE"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2（复审返工）——部署目录权限 0700 对齐冻结契约 + rollback 恢复安装前备份 + 完整生命周期转录（install/restart/rollback/reinstall）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_rework_l2_20260902.log"
+    tested_commit: "47af2fa42edf45ab4dc227453c47ed784bf46e16"
+    evidence_commit: "pending"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "正式发行环境 systemd 未验证；KYSEC 生产规则本 VM 不可见；检索/删除端到端跨轨 pending；Kaiming 包未实现"
+    checksum_sha256: "832ad69ab6fc80a48318a01f90aff7dfc5f41126c998030738f0473764d769b6"
+    details: |
+      被测脚本 sha256：install_kylin_memory.sh=07819008…、kylin-memory.service=cf8f76aa…（转录日志头部绑定）。
+      STEP1 install（升级，备份既有 unit/wrapper）exit=0 active；STEP2 restart exit=0；STEP3 rollback exit=0 恢复原 unit/wrapper + inactive；
+      STEP4 re-install exit=0 active。权限：config/share/state/RuntimeDir 700、socket/DB 600、wrapper 755（契约 0700 对齐）。
+      A+C 跨轨输入归档 d11d_ac_track_input_20260902.md。
   - id: "D11D-L2-REBOOT-STARTUP"
     task_id: "D11D"
     description: "D11D 麒麟 VM L2——OS 整机重启后 kylin-memory.service 自动启动 + 同 Commit 全模块（memory-service/Runtime/vector-engine）启动可追踪"

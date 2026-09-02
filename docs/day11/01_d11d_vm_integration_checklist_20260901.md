@@ -8,7 +8,7 @@
 - 工作分支：`feat/D11D-vm-integration`（基线 `origin/main@47af2fa`）。
 - 本次范围：D 轨职责内的统一环境、服务生命周期、安装部署、日志诊断、权限与证据汇总；不代行 A/B/C/E 轨实现或审查。
 - 开始时间：2026-09-01（准备阶段）。最晚停止时间：进入实现前须由 D 轨负责人指定并确认。
-- 当前进度：7/9（78%）。
+- 当前进度：8/9（89%）。
 
 ## 完成定义
 
@@ -20,9 +20,9 @@
 |---|---|---|---|---|
 | 1 | 基线与环境盘点：记录 `origin/main`、既有 D 轨产物（`packaging/systemd`、`os-agent-integration/echo`、`docs/deployment`）、VM 快照、Vector/UDS/KYSEC 状态与 VERSION_MAP | 可用的 `origin/main` 基线；D11 集成基础（已合并 PR #84） | `git status`、仓库审阅、VM 实测核对 | 已完成（仓库与既有证据侧；记录见 `docs/day11/02_d11d_baseline_environment_inventory_20260901.md`；VM 实测待 D11D 专用环境复核） |
 | 2 | 冻结统一环境：统一 VM 内 Commit、依赖版本、配置与数据目录；更新环境基线/VERSION_MAP 证据 | 工作项 1 | 版本/哈希/配置核对、证据落盘 | 已完成（D11D 专用 VM 实测定案；见 `evidence/l2-kylin-vm/d11d_vm_service_l2_20260902.md`） |
-| 3 | 服务与安装：部署并验证 `kylin-memory.service` 等 systemd 单元；安装流程（依赖、Kaiming 包、运行时）可重复、可回退 | 工作项 2 | `systemctl start/stop/restart`、安装/回退脚本复跑 | 已完成（麒麟 VM L2：安装/重启/回退/重装/socket/日志全部通过；`packaging/systemd/install_kylin_memory.sh`） |
+| 3 | 服务与安装：部署并验证 `kylin-memory.service` 等 systemd 单元；安装流程（依赖、Kaiming 包、运行时）可重复、可回退 | 工作项 2 | `systemctl start/stop/restart`、安装/回退脚本复跑 | 已完成（麒麟 VM L2：安装/重启/回退恢复/重装/socket/日志全过；复审返工后权限 0700 对齐、回退恢复备份，见 `evidence/l2-kylin-vm/d11d_vm_rework_l2_20260902.md`） |
 | 4 | 日志与诊断页：JSON 日志、`trace_id` 贯穿、health/诊断端点（含 D11A 已增强分项）与诊断命令；禁止记录正文/敏感内容 | 工作项 3；A 轨 health 增强（已合并 PR #84） | 真实日志断言、脱敏断言、诊断输出核对 | 已完成（麒麟 VM L2：health/echo/retrieve + JSON 日志 + trace_id 关联 + PII 0；见 `evidence/l2-kylin-vm/d11d_vm_diagnostics_l2_20260902.md`） |
-| 5 | 权限与安全：UDS socket 权限、KYSEC 授权（`kysec_authorize.sh`）、用户/组边界，失败关闭 | 工作项 3 | KYSEC 授权实测、越权/失败路径测试 | 已完成（本 VM 能力范围内：UDS 0600、DB 0600、用户隔离；KYSEC `/sys/kernel/security/kylin` 本 VM 不可见，保持 UNVERIFIED） |
+| 5 | 权限与安全：UDS socket 权限、KYSEC 授权（`kysec_authorize.sh`）、用户/组边界，失败关闭 | 工作项 3 | KYSEC 授权实测、越权/失败路径测试 | 已完成（config/share/state/RuntimeDir 0700、UDS/DB 0600、wrapper 0755、用户隔离；KYSEC 本 VM 不可见保持 UNVERIFIED） |
 | 6 | 汇总 trace、数据库与性能证据：trace 日志、`source_events`/outbox 数据库状态、延迟/吞吐性能基线 | 工作项 4、5 | 证据采集脚本、SHA-256、`evidence/index.yaml` 回填 | 已完成（DB head+0 行、trace 关联证据；性能引用 A 轨 D11A 实测 avg=41.3ms/p99=44.2ms） |
 | 7 | 修复启动、重启与部署问题：启动失败、服务重启、OS 重启、部署/回退问题定位与修复 | 工作项 3–6 | 同 Commit 同 VM 复测、回归测试、真实日志 | 已完成（麒麟 VM L2：服务重启 + OS 整机重启后自动启动 + 部署/回退可重复；见 `evidence/l2-kylin-vm/d11d_vm_reboot_l2_20260902.md`） |
 | 8 | 端到端联调：所有模块同 Commit 同 VM 启动并相互可追踪；与 A/B/C 轨输入联调 | 工作项 7；A/B/C 轨 D11 输入 | 全模块启动清单、trace 串联核对 | 已完成（D 侧：同 Commit 同 VM 全模块启动可追踪；B/C 端到端输入跨轨 pending，`memory.retrieve` 返回真实空上下文） |
@@ -51,5 +51,5 @@
 - 已完成第 1 项（基线与环境盘点）：记录见 `docs/day11/02_d11d_baseline_environment_inventory_20260901.md`；Vector Engine 版本（D11B `0k0.11` vs VERSION_MAP `0k1.0`）不一致已标记，待工作项 2 实测定案。
 - 第 2 项（冻结统一环境）已完成：D11D 专用 VM 实测定案（vector 0k0.11/0k0.7、Python 3.12.3、DB head=`20260901_d10b_vector_ledger`、UDS），详见 `evidence/l2-kylin-vm/d11d_vm_service_l2_20260902.md`。
 - 第 3 项（服务与安装）已完成：`install_kylin_memory.sh` 麒麟 VM L2 通过（安装/重启/回退/重装/socket/日志）。
-- 尚未取得：D 轨负责人指定的最晚停止时间；D11D 专用麒麟 VM 联调环境（需确认复用 D11B 克隆 `Kylin-V11-2603-D11B-ffd20b9-Test` 或新建同 Commit 环境）；A/B/C 轨端到端输入。
+- D11D 专用麒麟 VM 已建（`Kylin-V11-2603-D11D-47af2fa-Test`）并完成第 3/7/8 项 L2 与复审返工 L2；A+C 跨轨输入已归档（`evidence/l2-kylin-vm/d11d_ac_track_input_20260902.md`）。剩余跨轨：B/C 端到端输入（C 轨已提供 L0/静态证据，真实 VM 交互复测待 D11D 汇合点 main 最新）、最晚停止时间。
 - 上述事项未满足前，不将准备清单表述为已完成的联调能力。

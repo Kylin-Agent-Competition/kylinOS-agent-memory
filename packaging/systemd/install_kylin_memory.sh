@@ -104,9 +104,16 @@ status_check() {
 do_install() {
   preflight
   mkdir -p "$HOME/.local/bin" "$HOME/.config/systemd/user"
-  # 3.1 创建 ExecStart 入口 wrapper（unit 骨架 ExecStart=%h/.local/bin/kylin-memory-server，不改 unit 冻结文件）
+  # 部署冻结 §1.1：config/data/state 目录确定性 0700（防 umask 漂移）
+  mkdir -p "$HOME/.config/kylin-memory" "$HOME/.local/share/kylin-memory" "$HOME/.local/state/kylin-memory"
+  chmod 0700 "$HOME/.config/kylin-memory" "$HOME/.local/share/kylin-memory" "$HOME/.local/state/kylin-memory"
+  # 3.1 备份既有 wrapper（回退可恢复）后创建 ExecStart 入口 wrapper（不改 unit 冻结文件）
+  if [ -f "$BIN_DST" ]; then
+    cp -f "$BIN_DST" "$BIN_DST.bak.$(date +%Y%m%d_%H%M%S)"
+    log "已备份既有 wrapper: $BIN_DST.bak.*"
+  fi
   printf '#!/bin/bash\nexec %q %q "$@"\n' "$PYTHON_BIN" "$REPO_DIR/memory-service/app.py" > "$BIN_DST"
-  chmod +x "$BIN_DST"
+  chmod 0755 "$BIN_DST"
   # 3.2 备份既有 unit 后安装并启动
   if [ -f "$UNIT_DST" ]; then
     cp -f "$UNIT_DST" "$UNIT_DST.bak.$(date +%Y%m%d_%H%M%S)"
@@ -140,10 +147,25 @@ do_rollback() {
   systemctl --user stop "$UNIT_NAME" 2>/dev/null || true
   systemctl --user disable "$UNIT_NAME" 2>/dev/null || true
   if [ "$KEEP_UNIT" -eq 0 ]; then
-    rm -f "$BIN_DST"
-    rm -f "$UNIT_DST"
+    # 恢复安装前备份（如存在），否则删除
+    local unit_bak bin_bak
+    unit_bak="$(ls -1t "$UNIT_DST".bak.* 2>/dev/null | head -1 || true)"
+    bin_bak="$(ls -1t "$BIN_DST".bak.* 2>/dev/null | head -1 || true)"
+    if [ -n "$unit_bak" ] && [ -f "$unit_bak" ]; then
+      mv -f "$unit_bak" "$UNIT_DST"
+      log "已恢复原 unit: $(basename "$unit_bak")"
+    else
+      rm -f "$UNIT_DST"
+    fi
+    if [ -n "$bin_bak" ] && [ -f "$bin_bak" ]; then
+      mv -f "$bin_bak" "$BIN_DST"
+      log "已恢复原 wrapper: $(basename "$bin_bak")"
+    else
+      rm -f "$BIN_DST"
+    fi
+    rm -f "$UNIT_DST".bak.* "$BIN_DST".bak.*
     systemctl --user daemon-reload
-    log "回退完成：已停止并禁用 ${UNIT_NAME}，已删除 wrapper 与 unit"
+    log "回退完成：已停止并禁用 ${UNIT_NAME}，已恢复安装前状态（wrapper/unit）"
   else
     log "回退完成：已停止并禁用 ${UNIT_NAME}（--keep-unit：保留 wrapper 与 unit）"
   fi

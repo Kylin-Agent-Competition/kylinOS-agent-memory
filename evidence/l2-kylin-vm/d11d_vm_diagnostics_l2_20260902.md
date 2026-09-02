@@ -24,7 +24,7 @@
 - 数据库：Alembic head=`20260901_d10b_vector_ledger`；`outbox/source_events/memory_entries/vector_index_entries/turns` 均 0 行（干净基线，无测试数据残留）。
 - 失败披露（E-4）：采集脚本中 `select status, count(*) from outbox group by status` 因 outbox 表无 `status` 列（`sqlite3.OperationalError: no such column: status`）失败；`outbox: 0 rows` 的总行数统计有效，按状态分组统计不可用，raw log 保留失败现场，未伪装 PASS。
 - trace：JSON 日志中 `trace_id` 与请求关联成立（见第 4 项）。
-- 性能：Embedding 延迟实测为 A 轨 D11A 证据（`avg=41.3ms p99=44.2ms < 180ms` 预算，commit `b16b00f`，2026-08-31）；D11D 未重复 embedding 压测（属 A 轨范围），本项为汇总引用并标注来源。
+- 性能：A 轨 D11A 填写（2026-09-02，基线 `47af2fa`）真实 SDK 20 次 embed 实测：`min=2.86ms p50=3.92ms p95=5.93ms p99=5.93ms avg=4.14ms max=6.48ms`，p95=5.93ms 远低于 180ms 预算（约 3.3%）；D11D 未重复 embedding 压测（属 A 轨范围），本项为汇总引用并标注来源（A+C 输入归档见 `evidence/l2-kylin-vm/d11d_ac_track_input_20260902.md`）。
 
 ## 限制 / UNVERIFIED
 
