@@ -1,4 +1,4 @@
-﻿#include "view_models/memory_view_model.h"
+#include "view_models/memory_view_model.h"
 
 #include <QDateTime>
 #include <QJsonArray>

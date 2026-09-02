@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <QJsonObject>
 #include <QObject>
@@ -283,6 +283,7 @@ public:
         return preChatBusy_ || postTurnBusy_
             || toolBusy_ || manualConfigBusy_ || behaviorBusy_
             || knowledgeDetailBusy_ || conflictCompareBusy_ || lifecycleStatusBusy_
+            || contextAssembleBusy_;
             || contextAssembleBusy_
             || forgetPreviewBusy_ || forgetExecuteBusy_;
     }

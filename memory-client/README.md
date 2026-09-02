@@ -279,6 +279,7 @@ memory-client/
     ├── test_memory_client_mock.cpp    # L0 Client ↔ Mock Gateway
     ├── test_d5_vertical_link_demo.cpp # L0 D5-C Demo（§A/B/C 10 用例）
     ├── test_d8c_knowledge_conflict_lifecycle.cpp # L0 D8-C Demo（14 用例）
+    └── test_d9c_context_assemble.cpp # L0 D9-C Demo（17 用例 A/E/S/R）
     ├── test_d9c_context_assemble.cpp # L0 D9-C Demo（17 用例 A/E/S/R）
     └── test_d10c_forgetting.cpp      # L0 D10-C Demo（18 用例 A~J 遗忘契约）
 ```
