@@ -24,6 +24,64 @@ Page {
     id: root
     property MemoryViewModel viewModel
 
+    // D12-C MEDIUM-02：一次性 toast（reconnectFinished 事件驱动），3.2s 后自动隐藏。
+    // 成功→绿色；达到最大重连次数失败→红色并提示 Retry。
+    Rectangle {
+        id: reconnectToast
+        x: 16
+        y: -height  // 初始在画面外
+        width: Math.min(root.width - 32, 520)
+        implicitHeight: reconnectToastText.height + 20
+        radius: 8
+        color: reconnectSuccess ? "#e8f5e9" : "#ffebee"
+        border.color: reconnectSuccess ? "#4caf50" : "#e53935"
+        border.width: 1
+        opacity: 0
+        z: 100
+        property bool reconnectSuccess: false
+        property int attempts: 0
+        // 3.2s 自动关闭（淡入 220ms → 展示 2.7s → 淡出 220ms）
+        Timer {
+            id: reconnectToastTimer
+            interval: 2700
+            onTriggered: reconnectToastHideAnim.start()
+        }
+        Label {
+            id: reconnectToastText
+            anchors.fill: parent
+            anchors.leftMargin: 12; anchors.rightMargin: 12
+            anchors.topMargin: 10; anchors.bottomMargin: 10
+            wrapMode: Text.WordWrap
+            text: {
+                if (reconnectToast.reconnectSuccess)
+                    return qsTr("✅ 重连成功：经过 %1 次尝试，Memory Service 连接已恢复。"
+                              ).arg(reconnectToast.attempts);
+                return qsTr("❌ 重连失败：经过 %1/3 次自动重试仍无法连接 Memory Service。" +
+                           "请检查服务状态后点击 Retry。").arg(reconnectToast.attempts);
+            }
+            color: reconnectToast.reconnectSuccess ? "#2e7d32" : "#c62828"
+            font.bold: true
+        }
+        NumberAnimation on y { id: reconnectToastShowAnim; to: 16; duration: 220; easing.type: Easing.OutCubic }
+        NumberAnimation on y { id: reconnectToastHideAnim; to: -reconnectToast.height; duration: 220; easing.type: Easing.InCubic
+            onStopped: { reconnectToast.opacity = 0 }
+        }
+        NumberAnimation on opacity {
+            id: reconnectToastFadeIn;
+            from: 0; to: 1; duration: 220
+        }
+    }
+    Connections {
+        target: viewModel
+        function onReconnectFinished(success, attempts) {
+            reconnectToast.reconnectSuccess = success
+            reconnectToast.attempts = attempts
+            reconnectToastFadeIn.start()
+            reconnectToastShowAnim.start()
+            reconnectToastTimer.restart()
+        }
+    }
+
     // 问题4/非阻断项：整个页面包一层 ScrollView，默认 960×640 不再溢出
     ScrollView {
         anchors.fill: parent

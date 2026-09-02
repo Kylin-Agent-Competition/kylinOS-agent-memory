@@ -43,6 +43,9 @@ MemoryViewModel::MemoryViewModel(QObject* parent)
             this, &MemoryViewModel::reconnectAttemptsChanged);
     connect(&client_, &MemoryClient::autoReconnectEnabledChanged,
             this, &MemoryViewModel::autoReconnectEnabledChanged);
+    // D12-C MEDIUM-02：转发 reconnectFinished（一次事件驱动 UI toast）
+    connect(&client_, &MemoryClient::reconnectFinished,
+            this, &MemoryViewModel::reconnectFinished);
 }
 
 MemoryViewModel::~MemoryViewModel()

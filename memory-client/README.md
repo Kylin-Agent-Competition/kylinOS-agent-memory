@@ -120,6 +120,8 @@ TurnExtractionAdapter / 知识治理 / 冲突仲裁持久化后端）。**
    closing；连接状态变为 disconnected/closing 时，ViewModel 立即 fail-close
    `preChatBusy_ + postTurnBusy_` 并置 stage=idle，防止 UI 挂起在
    "querying/sending" 的假 busy 空状态。
+   `ViewModel.reconnectFinished(success,attempts)` 信号转发到 QML（MEDIUM-02），
+   一次性 toast 展示「重连成功 / 达到 3 次上限失败」并 3.2s 自动消失。
 
 5. **生产路径假实现检查（代码审计结论）**：
 
@@ -141,13 +143,13 @@ TurnExtractionAdapter / 知识治理 / 冲突仲裁持久化后端）。**
 
 #### D12-C 登记/关闭的技术债对照 TECHNICAL\_DEBT\_REGISTER.md
 
-| 条目         | 标题                              | D12-C 处置    | 证据 / 验收                                                                     |
-| ---------- | ------------------------------- | ----------- | --------------------------------------------------------------------------- |
-| TD-022     | 客户端 deadline\_ms 超时行为未实现        | **关闭**      | `memory_client.cpp` `startClientDeadlineTimer()` + `expirePendingRequest()` |
-| TD-023     | parser 边界严格性补全                  | **关闭**      | `parseEnvelope()` payload missing/null 拒绝；error message 非空字符串               |
-| TD-IPC-004 | MemoryClient 断线重连机制缺失           | **关闭**      | `startReconnectBackoff()` 3 次指数退避；Reconnecting state + L2 信号                |
-| TD-044     | 历史同值 UPDATE 与 evidence dedup 冲突 | **保留 / 登记** | 跨轨 E×B×C 决策前 fail-closed；不影响生产路径安全                                          |
-| TD-045     | 临时偏好生命周期 reload 后可靠恢复           | **保留 / 登记** | host mapping 前保持 Demo-only；不影响生产路径安全                                        |
+| 条目         | 标题                              | D12-C 处置        | 证据 / 验收                                                                                                                    |
+| ---------- | ------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| TD-022     | 客户端 deadline\_ms 超时行为未实现        | **关闭**          | `memory_client.cpp` `startClientDeadlineTimer()` + `expirePendingRequest()`                                                |
+| TD-023     | parser 边界严格性补全                  | **关闭**          | `parseEnvelope()` payload missing/null 拒绝；error message 非空字符串                                                              |
+| TD-IPC-004 | MemoryClient 断线重连机制缺失           | **In Progress** | `startReconnectBackoff()` 3 次指数退避 + Reconnecting state 已实现；L0 4 用例通过；L2 Evidence 待麒麟 VM C×D 联调 + ReconnectFinished 日志归档后关闭 |
+| TD-044     | 历史同值 UPDATE 与 evidence dedup 冲突 | **保留 / 登记**     | 跨轨 E×B×C 决策前 fail-closed；不影响生产路径安全                                                                                         |
+| TD-045     | 临时偏好生命周期 reload 后可靠恢复           | **保留 / 登记**     | host mapping 前保持 Demo-only；不影响生产路径安全                                                                                       |
 
 ### D8-C 知识详情 / 冲突对比 / 生命周期状态（Demo / Prototype）
 

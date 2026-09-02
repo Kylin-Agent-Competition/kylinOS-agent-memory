@@ -621,6 +621,8 @@ signals:
     // D12-C：重连相关信号
     void reconnectAttemptsChanged();
     void autoReconnectEnabledChanged();
+    // D12-C MEDIUM-02：转发 reconnectFinished 事件（成功 or 达到上限），便于 QML 弹 toast / 结束动画
+    void reconnectFinished(bool success, int attempts);
     void lastRequestIdChanged();
     void lastResponseChanged();
     void preChatBusyChanged();
