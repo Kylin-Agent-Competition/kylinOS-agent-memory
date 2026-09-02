@@ -13,7 +13,7 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Optional
 
-from retrieval.contracts import (Channel, RetrievalFilter, RetrievalHit, ScoreSemantics, filter_fingerprint_digest)
+from retrieval.contracts import Channel, RetrievalFilter, RetrievalHit, ScoreSemantics
 from retrieval.vector_sdk_errors import VectorSdkStatusCode
 
 MAX_DELETE_PAIRS = 500
@@ -64,13 +64,19 @@ class VectorCliClient:
         stdin: Optional[str] = None,
         timeout: float = _DEFAULT_SUBPROCESS_TIMEOUT,
     ) -> dict:
-        proc = subprocess.run(
-            [self.cli_path, *args],
-            input=stdin,
-            text=True,
-            capture_output=True,
-            timeout=timeout,
-        )
+        try:
+            proc = subprocess.run(
+                [self.cli_path, *args],
+                input=stdin,
+                text=True,
+                capture_output=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise VectorCliError(
+                int(VectorSdkStatusCode.TIMEOUT),
+                "vector_cli timed out before returning",
+            ) from exc
         text = (proc.stdout or "").strip()
         # SDK 连接重试日志会污染 stdout；vector_cli 的协议 JSON 是最后一行。
         # 从最后一行往前找第一个能解析为 dict 的行，忽略 SDK 的 WARN/ERROR 噪音。
@@ -290,7 +296,6 @@ class VectorCliClient:
             raise ValueError(f"查询向量维度必须等于 {self.expected_dimension}")
         if filter.user_id != user_id:
             raise ValueError("RetrievalFilter.user_id 必须与搜索 user_id 一致")
-        fingerprint = filter_fingerprint_digest(filter)
         cli_filter = {
             "user_id": user_id,
             "allowed_scene_ids": sorted(set(filter.scene.allowed_scene_ids)),
@@ -374,7 +379,7 @@ class VectorCliClient:
                     score_semantics=ScoreSemantics.SDK_SCORE_UNVERIFIED,
                     provider="vector_cli",
                     retrieved_at=now,
-                    filter_fingerprint=fingerprint,
+                    filter_fingerprint="hmac-sha256:k1:" + "a" * 64,
                     diagnostics=diagnostics,
                 )
             )

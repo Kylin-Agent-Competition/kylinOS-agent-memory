@@ -143,3 +143,18 @@ def test_delete_propagates_remaining_budget(monkeypatch):
         deadline_at=NOW + timedelta(seconds=3), now=NOW,
     )
     assert 2.9 <= calls[0]["timeout"] <= 3.1
+
+def test_subprocess_timeout_maps_to_deadline_exceeded(monkeypatch):
+    """CLI 执行中预算耗尽：subprocess.TimeoutExpired 归一为 VectorCliError(TIMEOUT)。"""
+
+    def timed_out(*args, **kwargs):
+        raise subprocess.TimeoutExpired("vector_cli", timeout=kwargs.get("timeout", 120))
+
+    monkeypatch.setattr(subprocess, "run", timed_out)
+    client = VectorCliClient(cli_path="vector_cli", expected_dimension=4)
+    with pytest.raises(VectorCliError) as exc:
+        client.search(
+            "c", [1, 0, 0, 0], 3, now=NOW, user_id="alice", filter=_flt(),
+            deadline_at=NOW + timedelta(seconds=2),
+        )
+    assert exc.value.code == int(VectorSdkStatusCode.TIMEOUT)
