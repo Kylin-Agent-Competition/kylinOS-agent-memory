@@ -39,6 +39,12 @@ from retrieval.validation import validate_retrieval_filter
 RRF_DEFAULT_K = 60
 TOKEN_ESTIMATOR_VERSION = "character-count/v1"
 TOKEN_ESTIMATOR_SEMANTICS = "Unicode code point count; not a model tokenizer"
+FILTER_DIAGNOSTICS_POLICY_VERSION = "retrieval-filter-diagnostics/v1"
+# 公共 filter_diagnostics 的安全泛化原因码：跨用户命中在普通检索结果中记为
+# security_filtered；精确 cross_user 计数仅存在于可信内部 telemetry/debug 边界
+# （REWORK #111 MEDIUM-01，方案 A）。
+PUBLIC_SECURITY_FILTERED_REASON = "security_filtered"
+INTERNAL_CROSS_USER_REASON = "cross_user"
 
 
 def _final_score(
@@ -164,73 +170,85 @@ class TruthRecord:
             object.__setattr__(self, field_name, value.astimezone(timezone.utc))
 
 
-def _hard_filter(
+def _hard_filter_rejection_reason(
     rec: Optional[TruthRecord],
     flt: RetrievalFilter,
-) -> bool:
-    """融合前硬过滤：回源缺失/跨用户/状态/敏感度/对象类型/未解决冲突均丢弃。"""
+) -> Optional[str]:
+    """返回硬过滤拒绝原因；``None`` 表示可进入后续 current-version 检查。
+
+    该结果仅用于 D11B 联调诊断的聚合计数：不得携带正文、候选 ID、用户 ID
+    或查询内容。原因码稳定且按现有 fail-closed 的检查顺序返回。
+    """
     if rec is None:
-        return False
+        return "missing_truth"
     if rec.user_id != flt.user_id:
-        return False
+        return "cross_user"
     if rec.object_type not in flt.object_types:
-        return False
+        return "object_type"
     if flt.allowed_memory_statuses and rec.memory_status not in flt.allowed_memory_statuses:
-        return False
+        return "memory_status"
     if flt.allowed_sensitivity and rec.sensitivity not in flt.allowed_sensitivity:
-        return False
+        return "sensitivity"
     if flt.memory_types and rec.memory_type not in flt.memory_types:
-        return False
+        return "memory_type"
     if rec.object_type is ObjectType.PREFERENCE:
         if rec.scene_id is None:
             if not flt.scene.include_unscoped:
-                return False
+                return "scene"
         elif rec.scene_id not in flt.scene.allowed_scene_ids:
-            return False
+            return "scene"
         if not preference_scope_terms_match(
             preference_scope=rec.preference_scope,
             truth_scope_terms=rec.scope_terms,
             query_scope_terms=flt.scope_terms,
         ):
-            return False
+            return "scope"
         if rec.valid_from is not None and flt.as_of < rec.valid_from:
-            return False
+            return "validity"
         if rec.valid_to is not None and flt.as_of >= rec.valid_to:
-            return False
+            return "validity"
     if rec.object_type is ObjectType.KNOWLEDGE:
         # Knowledge 的结构化真值是 D8-B 的回源边界；缺失时不能让索引命中进入 RRF。
         if rec.knowledge is None:
-            return False
+            return "knowledge_metadata"
         if rec.knowledge.memory_status != rec.memory_status:
-            return False
+            return "knowledge_status_mismatch"
         if flt.knowledge.knowledge_types and (
             rec.knowledge.knowledge_type not in flt.knowledge.knowledge_types
         ):
-            return False
+            return "knowledge_type"
         if flt.knowledge.primary_categories and (
             rec.knowledge.primary_category not in flt.knowledge.primary_categories
         ):
-            return False
+            return "knowledge_category"
         if flt.knowledge.source_event_ids and (
             rec.knowledge.source_event_id not in flt.knowledge.source_event_ids
         ):
-            return False
+            return "knowledge_source_event"
         if (
             flt.knowledge.version_ids
             and rec.version_id not in flt.knowledge.version_ids
         ):
-            return False
+            return "knowledge_version"
         if flt.knowledge.required_relation_ids and (
             not set(flt.knowledge.required_relation_ids).issubset(
                 rec.knowledge.relation_ids
             )
         ):
-            return False
+            return "knowledge_relation"
     # 未解决冲突硬过滤：不注入上下文（ADR-001 输入边界第 5 步）。
     # conflict_policy 当前默认 exclude_unresolved；其他策略需新增 ADR 后才可放宽。
     if rec.conflict_state == "unresolved":
-        return False
-    return True
+        return "unresolved_conflict"
+    return None
+
+
+def _hard_filter(
+    rec: Optional[TruthRecord],
+    flt: RetrievalFilter,
+) -> bool:
+    """融合前硬过滤的兼容布尔入口。"""
+    return _hard_filter_rejection_reason(rec, flt) is None
 
 
 def _preference_explanation(
@@ -322,7 +340,7 @@ def fuse_retrieval(
     - 输出 RetrievalCandidate，rrf_score == final_score（v1 不做业务重排）；
     - 指定 token_budget 时，按最终排序依次保留不超预算的候选。
     """
-    candidates, _ = _fuse_retrieval_with_diagnostics(
+    candidates, _, _ = _fuse_retrieval_with_diagnostics(
         fts5_hits=fts5_hits,
         vector_hits=vector_hits,
         truth=truth,
@@ -345,8 +363,8 @@ def _fuse_retrieval_with_diagnostics(
     top_k: Optional[int],
     token_budget: Optional[int],
     rerank_policy: Optional[RerankPolicy],
-) -> tuple[list[RetrievalCandidate], dict[str, object]]:
-    """执行融合并返回不含候选正文的预算选择诊断。"""
+) -> tuple[list[RetrievalCandidate], dict[str, object], dict[str, object]]:
+    """执行融合并返回预算选择和过滤聚合诊断（均不含正文或标识）。"""
     _validate_preference_filter(flt)
     _validate_query_options(
         k=k,
@@ -355,12 +373,22 @@ def _fuse_retrieval_with_diagnostics(
         rerank_policy=rerank_policy,
     )
 
+    input_hit_count = len(fts5_hits) + len(vector_hits)
     deduped = dedupe_exact_version(list(fts5_hits) + list(vector_hits))
+    dropped_by_reason: dict[str, int] = {}
+
+    def record_drop(reason: str) -> None:
+        dropped_by_reason[reason] = dropped_by_reason.get(reason, 0) + 1
+
     legal: list[RetrievalHit] = []
     for hit in deduped:
         rec = truth.get((hit.user_id, hit.memory_id, hit.version_id))
-        if _hard_filter(rec, flt):
+        rejection_reason = _hard_filter_rejection_reason(rec, flt)
+        if rejection_reason is None:
             legal.append(hit)
+        else:
+            record_drop(rejection_reason)
+    hard_filter_passed_hit_count = len(legal)
 
     # 唯一确定 current version（SQLite 真源）：每个 memory_id 只有 is_current=True 的一个版本。
     # stale version 命中在聚合前移除，避免不同 version 的 rank 混入同一 memory_id（ADR-001 输入边界第 5 步）。
@@ -372,10 +400,13 @@ def _fuse_retrieval_with_diagnostics(
     for key, version_ids in current_versions.items():
         if len(version_ids) == 1:
             current_version[key] = next(iter(version_ids))
-    legal = [
-        h for h in legal
-        if current_version.get((h.user_id, h.memory_id)) == h.version_id
-    ]
+    current_legal: list[RetrievalHit] = []
+    for hit in legal:
+        if current_version.get((hit.user_id, hit.memory_id)) == hit.version_id:
+            current_legal.append(hit)
+        else:
+            record_drop("not_current_version")
+    legal = current_legal
 
     aggregated = aggregate_by_memory(legal)
     agg_candidates = [
@@ -462,7 +493,7 @@ def _fuse_retrieval_with_diagnostics(
             )
         used_tokens = next_used_tokens
         out.append(candidate)
-    return out, {
+    selection_diagnostics: dict[str, object] = {
         "policy_version": "token-budget/v1",
         "requested_top_k": top_k,
         "token_budget": token_budget,
@@ -475,38 +506,79 @@ def _fuse_retrieval_with_diagnostics(
         "estimator_version": TOKEN_ESTIMATOR_VERSION,
         "estimator_semantics": TOKEN_ESTIMATOR_SEMANTICS,
     }
+    filter_diagnostics: dict[str, object] = {
+        "policy_version": FILTER_DIAGNOSTICS_POLICY_VERSION,
+        "input_hit_count": input_hit_count,
+        "deduplicated_hit_count": len(deduped),
+        "hard_filter_passed_hit_count": hard_filter_passed_hit_count,
+        "current_version_passed_hit_count": len(legal),
+        "dropped_by_reason": dict(sorted(dropped_by_reason.items())),
+    }
+    return out, selection_diagnostics, filter_diagnostics
 
+
+
+def _to_public_filter_diagnostics(
+    precise: dict[str, object],
+) -> dict[str, object]:
+    """把内部精确过滤诊断泛化为普通检索 consumer 可见的版本。
+
+    MEDIUM-01（REWORK #111 方案 A）：精确 ``cross_user`` 计数是跨用户存在性
+    oracle，普通检索 consumer 可通过 ``cross_user > 0`` 反推召回命中过他人数据，
+    因此公共 ``RetrievalOutcome.filter_diagnostics`` 将其泛化为
+    ``security_filtered``。精确计数仅保留在可信内部 telemetry/debug 边界
+    （``_retrieve_graceful_with_internal_diagnostics``），不进入公共返回。
+    """
+    dropped_by_reason = dict(precise.get("dropped_by_reason", {}))
+    cross_user_count = dropped_by_reason.pop(INTERNAL_CROSS_USER_REASON, 0)
+    if cross_user_count:
+        dropped_by_reason[PUBLIC_SECURITY_FILTERED_REASON] = (
+            dropped_by_reason.get(PUBLIC_SECURITY_FILTERED_REASON, 0)
+            + cross_user_count
+        )
+    return {
+        **precise,
+        "dropped_by_reason": dict(sorted(dropped_by_reason.items())),
+    }
 
 
 @dataclass
 class RetrievalOutcome:
-    """检索结果 + 降级通道说明（服务故障时单路降级不中断整体）。"""
+    """检索结果 + 降级通道说明（服务故障时单路降级不中断整体）。
+
+    filter_diagnostics 为普通检索 consumer 可见的聚合过滤诊断：只含计数与泛化
+    原因码（如 ``security_filtered``），不含正文、候选标识、用户标识或查询内容；
+    精确 ``cross_user`` 等内部原因仅存在于可信内部 telemetry/debug 边界。
+    """
 
     candidates: list[RetrievalCandidate]
     degraded_channels: dict[str, str] = field(default_factory=dict)
     selection_diagnostics: dict[str, object] = field(default_factory=dict)
+    filter_diagnostics: dict[str, object] = field(default_factory=dict)
 
     @property
     def degraded(self) -> bool:
         return bool(self.degraded_channels)
 
 
-def retrieve_graceful(
+def _retrieve_graceful_impl(
     *,
     fts5_search,
     vector_search,
     truth: dict[tuple[str, str, str], TruthRecord],
     flt: RetrievalFilter,
-    k: int = RRF_DEFAULT_K,
-    top_k: Optional[int] = None,
-    token_budget: Optional[int] = None,
-    rerank_policy: Optional[RerankPolicy] = None,
-) -> RetrievalOutcome:
-    """执行两路召回并融合；单路故障时降级为空命中的该路，不抛未捕获异常。
+    k: int,
+    top_k: Optional[int],
+    token_budget: Optional[int],
+    rerank_policy: Optional[RerankPolicy],
+) -> tuple[RetrievalOutcome, dict[str, object]]:
+    """执行两路召回并融合，返回普通结果与精确内部过滤诊断。
 
     - fts5_search / vector_search 均为无参可调用对象，返回 list[RetrievalHit]。
     - 某路抛出异常时，该路命中记为空，并把错误登记到 degraded_channels。
     - 正常那路命中仍参与融合，保证服务故障时可解释降级而非整体崩溃。
+    - 返回的精确过滤诊断（含 cross_user 计数）仅供可信内部调用方使用；公共
+      RetrievalOutcome.filter_diagnostics 已泛化（cross_user → security_filtered）。
     """
     _validate_preference_filter(flt)
     _validate_query_options(
@@ -528,7 +600,7 @@ def retrieve_graceful(
         vector_hits = []
         degraded["vector"] = f"{type(exc).__name__}: {exc}"
 
-    candidates, selection_diagnostics = _fuse_retrieval_with_diagnostics(
+    candidates, selection_diagnostics, precise_filter_diagnostics = _fuse_retrieval_with_diagnostics(
         fts5_hits=fts5_hits,
         vector_hits=vector_hits,
         truth=truth,
@@ -548,8 +620,72 @@ def retrieve_graceful(
         })
         for candidate in candidates
     ]
-    return RetrievalOutcome(
+    outcome = RetrievalOutcome(
         candidates=candidates,
         degraded_channels=degraded,
         selection_diagnostics=selection_diagnostics,
+        filter_diagnostics=_to_public_filter_diagnostics(precise_filter_diagnostics),
+    )
+    return outcome, precise_filter_diagnostics
+
+
+def retrieve_graceful(
+    *,
+    fts5_search,
+    vector_search,
+    truth: dict[tuple[str, str, str], TruthRecord],
+    flt: RetrievalFilter,
+    k: int = RRF_DEFAULT_K,
+    top_k: Optional[int] = None,
+    token_budget: Optional[int] = None,
+    rerank_policy: Optional[RerankPolicy] = None,
+) -> RetrievalOutcome:
+    """执行两路召回并融合；单路故障时降级为空命中的该路，不抛未捕获异常。
+
+    - fts5_search / vector_search 均为无参可调用对象，返回 list[RetrievalHit]。
+    - 某路抛出异常时，该路命中记为空，并把错误登记到 degraded_channels。
+    - 正常那路命中仍参与融合，保证服务故障时可解释降级而非整体崩溃。
+    - filter_diagnostics 为普通检索 consumer 可见的泛化聚合诊断（不含 cross_user
+      等内部原因码；跨用户命中记为 security_filtered）。
+    """
+    outcome, _ = _retrieve_graceful_impl(
+        fts5_search=fts5_search,
+        vector_search=vector_search,
+        truth=truth,
+        flt=flt,
+        k=k,
+        top_k=top_k,
+        token_budget=token_budget,
+        rerank_policy=rerank_policy,
+    )
+    return outcome
+
+
+def _retrieve_graceful_with_internal_diagnostics(
+    *,
+    fts5_search,
+    vector_search,
+    truth: dict[tuple[str, str, str], TruthRecord],
+    flt: RetrievalFilter,
+    k: int = RRF_DEFAULT_K,
+    top_k: Optional[int] = None,
+    token_budget: Optional[int] = None,
+    rerank_policy: Optional[RerankPolicy] = None,
+) -> tuple[RetrievalOutcome, dict[str, object]]:
+    """可信内部 telemetry/debug 专用入口（internal-only 边界）。
+
+    仅限可信内部 diagnostics/observability 消费者调用：返回的精确过滤诊断
+    （含 ``cross_user`` 计数）绝不进入 IPC、C 轨/客户端或用户可观察返回；
+    公共 ``RetrievalOutcome.filter_diagnostics`` 仍为泛化版本（cross_user →
+    security_filtered）。
+    """
+    return _retrieve_graceful_impl(
+        fts5_search=fts5_search,
+        vector_search=vector_search,
+        truth=truth,
+        flt=flt,
+        k=k,
+        top_k=top_k,
+        token_budget=token_budget,
+        rerank_policy=rerank_policy,
     )

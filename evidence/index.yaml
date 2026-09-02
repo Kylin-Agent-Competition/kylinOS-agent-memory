@@ -1193,3 +1193,25 @@ entries:
       日志: 无正文残留
       日志: evidence/l2-kylin-vm/d11a_evidence_20260831_204650_vm_verify.log
       全量测试: evidence/l2-kylin-vm/d11a_evidence_20260831_204650_test_all.log
+  - id: "D11B-VM-20260901"
+    task_id: "D11B"
+    description: "PR #111（D11B 检索与索引联调修复）麒麟 VM 检索验证：首轮实测 3831856（312+68+Vector 15/15），REWORK #111 MEDIUM-01 方案 A 已在最终 HEAD e9dba4f 于同 VM 复测闭环：324+52+68 passed、Vector 删除 15/15（证据 §七）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11b_vm_retrieval_validation_20260901.md"
+    tested_commit: "e9dba4f"
+    date: "2026-09-01"
+    reviewer: "高翌哲（B 轨）"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "kylin-memory.service 在干净 VM 中不存在，服务重启/OS 重启/正式 health/index state/D/C 端到端联调未执行（UNVERIFIED）；物理删除 L2 以真实 Engine 运行器 15/15 通过，但不等于 D/C 服务端到端验证；REWORK #111 MEDIUM-01 已在最终 HEAD e9dba4f 于同 VM 复测闭环"
+    checksum_sha256: "f5421e2a884a0e9f7b941e3e64179b9fb4f7939cba4f4fd1bc92eeecfc271978"
+    details: |
+      执行环境: Kylin-V11-2603-D11B-ffd20b9-Test（链接克隆，前台 GUI），Kylin V11 / Linux 6.6.0-63-generic / Python 3.12.3。
+      代码: 以 Git bundle 部署并校验 git rev-parse HEAD = 38318562111bca482bb0a716fbdf73b29ce9e792，工作树无改动；pytest 9.1.1 安装于 ~/d11b-pylibs。
+      检索回归: tests/retrieval + tests/test_migrations_d10b.py → 312 passed in 16.06s；D9 Gold 契约 → 68 passed in 0.45s。
+      真实 Vector 删除 L2: vector_bridge_cli（二进制 SHA-256 2ff6ed3c...）运行 run_d10b_vector_delete_l2.sh，绑定 tested_commit，15/15 通过退出码 0；临时 d10b_ Collection 已清理。
+      REWORK #111 MEDIUM-01 方案 A: 公共 RetrievalOutcome.filter_diagnostics 将 cross_user 泛化为 security_filtered，精确计数仅保留在可信内部 telemetry/debug 边界（_retrieve_graceful_with_internal_diagnostics）。
+      最终 HEAD 复测（2026-09-02）: 以 Git bundle（SHA-256 ec0d1086...）部署 e9dba4f，rev-parse 校验一致，工作树由 git archive 重建；检索回归+migration+config_d4d 324 passed in 8.54s、fusion 52 passed in 0.35s、D9 Gold 68 passed in 0.12s；Vector 删除运行器 15/15 元数据绑定 e9dba4f（桥接 5f0e1310.../运行器 cf820947... 与首轮一致）；日志 d11b_l2_session_e9dba4f.log / d11b_vector_delete_l2_e9dba4f.log。
+      证据: evidence/l2-kylin-vm/d11b_vm_retrieval_validation_20260901.md（SHA-256 以 git 仓库 LF 归一化 blob 为准）。
