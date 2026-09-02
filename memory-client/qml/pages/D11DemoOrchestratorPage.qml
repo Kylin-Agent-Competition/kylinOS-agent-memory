@@ -72,7 +72,11 @@ ScrollView {
             }
             Button {
                 text: qsTr("重置 5 步 (全 Pipeline)")
-                toolTip: qsTr("重置 PreChat/PostTurn/Tool/Conflict/Lifecycle/Forget stage 和 busy（保留 forget 错误文案）")
+                // HIGH-01 / Qt 5.12：Controls 2 Button 没有 "toolTip" 直接属性，
+                // 必须使用 ToolTip 附加属性，否则 QQmlComponent 解析阶段
+                // 就报 "Cannot assign to non-existent property \"toolTip\""
+                // 导致 status 永远 Error。
+                ToolTip.text: qsTr("重置 PreChat/PostTurn/Tool/Conflict/Lifecycle/Forget stage 和 busy（保留 forget 错误文案）")
                 onClicked: resetAllSteps()
             }
         }
