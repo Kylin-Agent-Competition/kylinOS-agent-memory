@@ -5,9 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import func, select
 
 from db import repositories as repo
 from db.engine import create_db_engine, init_schema
+from db.schema import outbox
 from service.conflict_resolution_policy import EvidenceTier
 from service.lifecycle_policy import PolicyConfig
 from service.lifecycle_worker import evaluate_lifecycle
@@ -55,6 +57,14 @@ def test_knowledge_provenance_relation_and_cross_user_scoping(conn):
     assert repo.get_relation_by_id(conn, user_id="u2", relation_id=edges[0]["relation_id"]) is None
     with pytest.raises(ValueError, match="not owned"):
         repo.insert_relation(conn, user_id="u2", relation_id="cross", relation_type="derived", left_endpoint_type="knowledge", left_endpoint_id="k1", right_endpoint_type="knowledge", right_endpoint_id="k1b")
+    emitted = conn.execute(
+        select(outbox.c.event_type, outbox.c.payload).where(
+            outbox.c.aggregate_id == "k1"
+        )
+    ).mappings().all()
+    assert len(emitted) == 1
+    assert emitted[0]["event_type"] == repo.EVENT_MEMORY_RELATION_CHANGED
+    assert "metadata" not in emitted[0]["payload"]
 
 
 def test_failed_tool_only_writes_evidence_unmapped_failure_experience(conn):
@@ -101,3 +111,56 @@ def test_lifecycle_expire_keeps_index_version_and_replay_is_idempotent(conn):
     assert replay["status"] == "replayed"
     with pytest.raises(ValueError, match="immutable input"):
         evaluate_lifecycle(conn, user_id="u1", knowledge_id="k1", evaluation_id="eval-1", policy_config=config, now=now + timedelta(seconds=1))
+
+
+def test_forget_uses_row_revision_after_lifecycle_mutation(conn):
+    created = _knowledge(conn)
+    row = repo.get_lifecycle_memory(conn, user_id="u1", knowledge_id="k1")
+    assert row is not None
+    assert repo.update_lifecycle_memory(
+        conn,
+        user_id="u1",
+        knowledge_id="k1",
+        expected_row_revision=row["row_revision"],
+        memory_status="active",
+    ) == 1
+    executed, version_ids = repo.soft_delete_resolved_targets(
+        conn,
+        user_id="u1",
+        target_type="knowledge",
+        resolved_target_ids=[created["memory_id"]],
+        forget_plan_id="plan-d8d-row-revision",
+    )
+    assert (executed, version_ids) == (1, [])
+    deleted = repo._get_memory_entry(conn, entry_id=int(created["memory_id"]), user_id="u1")
+    assert deleted is not None and deleted["is_deleted"] == 1
+
+
+def test_archive_rescan_replays_first_disposition_without_duplicate_outbox(conn):
+    _knowledge(conn)
+    row = repo.get_lifecycle_memory(conn, user_id="u1", knowledge_id="k1")
+    assert row is not None
+    assert repo.update_lifecycle_memory(
+        conn,
+        user_id="u1",
+        knowledge_id="k1",
+        expected_row_revision=row["row_revision"],
+        memory_status="expired",
+    ) == 1
+    config = PolicyConfig(
+        promote_min_confidence=1.0, promote_min_access_count=99, promote_min_age=timedelta(days=999),
+        promote_required_evidence_tier=EvidenceTier.USER_CONFIRMED, demote_inactivity_period=timedelta(days=999),
+        demote_max_access_count=0, demote_max_confidence=0.0, expire_after_age=timedelta(days=999),
+        archive_after_expired=timedelta(0),
+    )
+    now = datetime.now(timezone.utc) + timedelta(seconds=1)
+    first = evaluate_lifecycle(conn, user_id="u1", knowledge_id="k1", evaluation_id="archive-1", policy_config=config, now=now)
+    second = evaluate_lifecycle(conn, user_id="u1", knowledge_id="k1", evaluation_id="archive-2", policy_config=config, now=now)
+    assert first["action"] == "archive_request"
+    assert second["status"] == "archive_replayed"
+    archive_events = conn.execute(
+        select(func.count()).select_from(outbox).where(
+            outbox.c.event_type == repo.EVENT_MEMORY_LIFECYCLE_ARCHIVE_REQUESTED
+        )
+    ).scalar_one()
+    assert archive_events == 1

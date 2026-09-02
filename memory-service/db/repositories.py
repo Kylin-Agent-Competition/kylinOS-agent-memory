@@ -1823,7 +1823,11 @@ def soft_delete_resolved_targets(
                 conn,
                 entry_id=entry_id,
                 user_id=user_id,
-                current_version=int(entry["version"]),
+                # ``version`` is the stable retrieval/index identity.  D8D
+                # lifecycle mutations intentionally advance only
+                # ``row_revision``; passing ``version`` here would make a
+                # later forget CAS fail after any lifecycle transition.
+                current_row_revision=int(entry["row_revision"]),
             )
         return executed, []
     if target_type == "preference":
@@ -1910,6 +1914,20 @@ def insert_knowledge_entry(
         entry_id = int(res.lastrowid)
         relation_id = f"evidence:{knowledge_id}:{source_event_id}"
         insert_relation(conn, user_id=user_id, relation_id=relation_id, relation_type="evidence", left_endpoint_type="knowledge", left_endpoint_id=knowledge_id, right_endpoint_type="source_event", right_endpoint_id=source_event_id, is_primary=True, emit_outbox=False)
+        # The canonical evidence edge is created as part of this same business
+        # write.  Emit its structural change event in the same transaction,
+        # while keeping user content and evidence payloads out of Outbox.
+        _d8d_outbox(
+            conn,
+            aggregate_id=knowledge_id,
+            event_type=EVENT_MEMORY_RELATION_CHANGED,
+            payload={
+                "user_id": user_id,
+                "knowledge_id": knowledge_id,
+                "relation_id": relation_id,
+                "occurred_at": now,
+            },
+        )
     except OperationalError as exc:
         raise _wrap_locked(exc) from exc
     return {"memory_entry_id": entry_id, "memory_id": str(entry_id), "version_id": "v1", "knowledge_id": knowledge_id, "evidence_tier": tier, "lifecycle_eligibility": lifecycle_eligibility}
