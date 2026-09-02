@@ -254,4 +254,3 @@ cd build && ctest --output-on-failure -V
 - 无实测项一律 `UNVERIFIED`（A1/A2/A3 为真实 VM 实测；C1/C2/C3 为 L0 CI 全绿 + QML 代码闭合证据，麒麟 VM 真实用户交互复测由 B 轨在 D11D 汇合点执行）。
 
 - C 轨所有 Demo / Prototype 声明保持 OPEN（C-D5/D6/D8/D9/D10 任务卡），真实 Runtime 接线以 D11D 汇合点 VM 同 Commit 复测为唯一验收依据。
-
