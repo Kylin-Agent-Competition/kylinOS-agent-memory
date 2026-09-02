@@ -1,14 +1,14 @@
-D13B L0/L1 regression log (2026-09-02)
+D13B L0/L1 regression log (2026-09-02, round-3 v3)
 command: C:\Users\高翌哲\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m pytest -q -p no:cacheprovider D:\插件\河工大\Agent\code\kylinOS-agent-memory\memory-service\tests\retrieval D:\插件\河工大\Agent\code\kylinOS-agent-memory\evaluation\test_d9_retrieval_gold_spec.py D:\插件\河工大\Agent\code\kylinOS-agent-memory\evaluation\test_d9_retrieval_dataset.py D:\插件\河工大\Agent\code\kylinOS-agent-memory\evaluation\test_d6_multisource_devset.py
 exit code: 0
 ---- stdout ----
 ........................................................................ [ 13%]
 ........................................................................ [ 27%]
-........................................................................ [ 41%]
+........................................................................ [ 40%]
 ........................................................................ [ 54%]
 ........................................................................ [ 68%]
-........................................................................ [ 82%]
+........................................................................ [ 81%]
 ........................................................................ [ 95%]
-......................                                                   [100%]
-526 passed in 2.26s
+........................                                                 [100%]
+528 passed in 2.43s
 ---- stderr (tail) ----

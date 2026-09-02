@@ -8,7 +8,7 @@
 - 本次范围：仅 B 轨检索评测链。冻结评测配置下，对同一 Commit、同一麒麟 VM 正式执行检索评测，输出正式指标、原始结果、失败查询/过滤/重排错误分类与统一评测结果；不代行 A、C、D、E 轨实现或审查。
 - 基线：`origin/main@6e9394b`（含已合并的 D12B PR #121）。
 - 开始时间：2026-09-02（准备阶段）。最晚停止时间：尚未由负责人指定；进入实现前须确认。
-- 当前进度：D13B 正式施工 1/7（约 14%）：工作项 2 落地并通过 Review 返工 v2（L0/L1 526 passed）；工作项 1 准备中；工作项 3–7 待 VM/冻结输入。PR #123 已由用户转为 Ready for review。
+- 当前进度：D13B 正式施工 1/7（约 14%）：工作项 2 落地并通过 Review 返工 v2（L0/L1 528 passed）；工作项 1 准备中；工作项 3–7 待 VM/冻结输入。PR #123 已由用户转为 Ready for review。
 
 ## 完成定义
 
@@ -19,7 +19,7 @@
 | # | 工作项 | 依赖 | 验证方式 | 状态 |
 |---|---|---|---|---|
 | 1 | 记录正式评测基线与环境口径：`main@6e9394b`、D13D 环境冻结（VM 资源/Commit/依赖/数据版本/统一日志与报告目录）、D13E 封存测试集版本与 SHA-256、评测配置 `d9-retrieval-eval-config/v1`、评测输入输出 JSON schema（`retrieval_ref=(memory_id, version_id)`，完整校验键 `(user_id, memory_id, version_id)`）。 | D13D/D13E 冻结交付；可用 `origin/main` | commit/环境清单、哈希核对、schema 校验 | 准备中（已记录既有 D9 契约；D13D/D13E 冻结输入待提供） |
-| 2 | 收敛正式评测运行器：在 `scripts/v007_eval.py` + `memory-service/retrieval/evaluation.py` 基础上固定 EvalConfig（k=10、top_k=10、rrf_k=60、top_k==k、algorithm_version、warmup/repeat/concurrency/statistics_method），补齐输入校验、错误分类输出与 `report_to_dict` 元数据（gold_label_version/dataset_version/implementation_commit/environment/evidence_reference）。 | D9 Gold 契约；D11B 诊断输出契约 | 运行器 L0/L1 测试、负向输入、`git diff --check` | 已完成（Review 返工 v2；L0/L1 526 passed；正式执行仍待 VM/封存集） |
+| 2 | 收敛正式评测运行器：在 `scripts/v007_eval.py` + `memory-service/retrieval/evaluation.py` 基础上固定 EvalConfig（k=10、top_k=10、rrf_k=60、top_k==k、algorithm_version、warmup/repeat/concurrency/statistics_method），补齐输入校验、错误分类输出与 `report_to_dict` 元数据（gold_label_version/dataset_version/implementation_commit/environment/evidence_reference）。 | D9 Gold 契约；D11B 诊断输出契约 | 运行器 L0/L1 测试、负向输入、`git diff --check` | 已完成（Review 返工 v2；L0/L1 528 passed；正式执行仍待 VM/封存集） |
 | 3 | 麒麟 VM 正式检索执行：对 rrf-v1（含 FTS5/Vector 通道对照）采集每条查询 Top-K、延迟与过滤/降级信息；同一 Commit 记录命令、版本、日志与结果。 | 麒麟 VM；D/C 可调用的检索链路或等价真源回放；D13D 统一目录 | 真实 VM 日志、查询数与封存集一致、P50/P95、失败样本可复现 | 待开始（无 VM 证据前为 `UNVERIFIED`） |
 | 4 | 指标计算与汇总：Recall@K、MRR、nDCG@K、命中数；对照 E 冻结的 OFFICIAL 阈值（如 M2 知识检索召回率）；空 Gold/护栏统计按 Gold Policy v2 口径。 | D9 Gold Policy v2；D13E 正式口径 | `test_evaluation.py` 等定向测试、单查询明细与聚合核对 | 部分完成（账本模块已实现剔除与护栏统计并通过 L0/L1；正式汇总待封存集/VM） |
 | 5 | 失败查询、过滤与重排错误分类：对每条未命中/排序异常按阶段归因（查询/Embedding 失败、过滤规则、版本真源、重排、降级通道、护栏拦截），复用 D6 错误分类与 D11B 诊断输出，输出分类计数与脱敏样例。 | D6 错误分类；D11B 诊断数据 | 分类覆盖 100%、无正文/敏感/凭据泄漏、guardrail/cross_user/sensitive critical=0 | 待开始（依赖 D11B 诊断输出契约与真实失败样本） |
@@ -27,6 +27,18 @@
 | 7 | 回归与审查收口：运行 B 轨回归与评测契约测试、`git diff --check`、处理 Review 意见并回填本清单与 PR。 | 1–6；Review 可用性 | pytest 全绿、`git diff --check`、Review 结论 | 进行中（首轮 REQUEST_CHANGES 已返工 v2，待 D Reviewer 复审） |
 
 ## Review 返工记录（PR #123 首轮 REQUEST_CHANGES，2026-09-02）
+
+第二轮复审（2026-09-02 10:02）确认 R1–R6 已关闭，新增 N1–N3 与流程观察：
+
+| 项 | 级别 | 处置 |
+|---|---|---|
+| N1 采样参数（statistics_method/warmup/repeat/concurrency）隐式硬编码且未写入报告 provenance | P1 | 改为显式必填配置并严格校验（拒绝 UNKNOWN/PENDING/bool/越界），写入最终 report config（report v3） |
+| N2 有 results 但缺该通道 latency 仍标记 COMPUTED | P1 | formal 模式 fail-closed：results.<channel> 存在必须提供 latency_ms.<channel>，否则报错 |
+| N3 latency 允许 NaN/Infinity 穿透 | P2 | 仅接受有限非负数（math.isfinite，拒绝 bool/NaN/±Inf） |
+| O1 PR 正文仍写 Draft | 观察 | 按 B 轨惯例保留原正文作历史记录，状态以最新 comment/工作清单为准 |
+| O2 CI 未跑 pytest | 观察 | 以可复现日志 `03_d13b_l0l1_regression_20260902.log` 作为本轮证据 |
+| O3 hash 只校验格式 | 观察 | 正式 VM 执行前必须核对真实封存输入哈希（待 D13D/D13E） |
+
 
 Reviewer（Ducknesses）给出 REQUEST_CHANGES。逐项处置：
 
