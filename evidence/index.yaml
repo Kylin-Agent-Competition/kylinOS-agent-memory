@@ -1365,4 +1365,26 @@ entries:
       scripts/test_d12a_all.py: 25/25 ALL PASS（VM 全量回归脚本本地验证）
       scripts/verify_day12a_vm.sh: D12A VM 验证脚本（待 VM 运行）
       Bridge 假实现/吞异常检查清单: docs/day12/03_bridge_audit_checklist.md（无假实现、无吞异常）
-
+  - id: "D12A-L2-VERIFY"
+    task_id: "D12A"
+    description: "D12A 麒麟 VM L2 验证——SDK 超时/异常恢复/性能抖动修复（Bridge 线程池挂死恢复）+ Bridge 假实现/吞异常检查 + 异常输入回归（真实 SDK）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/day12a_verify_20260902_211711.log"
+    tested_commit: "3768b2bd114c30202b8d8fc0c0406f6bb221efef"
+    evidence_commit: "待 PR 合入后回填"
+    date: "2026-09-02"
+    reviewer: "待审（D 主审）"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "克隆 Kylin-V11-2603-BTrack-Base（快照 20-btrack-test-deps-20260821）：/usr 为只读 overlay（ostree-pkgs-guard 阻止系统升级），SDK 0k0.4 .so 自 deb 解包至用户目录后 bind-mount 到 /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0（运行态 0k0.4；dpkg 记录仍 0k0.3）；kylin-ai-runtime 1.1.0.1（D-Bus 协议 fallback v1.0.0/init_v1）；被测代码 = fix/day12a-sdk-stability @ 3768b2b（guest 内无 .git，按同步 tar 内容一致）；7/7 ALL PASS：health executor 分项、挂死恢复（真实 embed dim=768）、异常输入回归（空文本 dim=768）、性能 avg=63.3ms p99=117.0ms（≤180ms）、日志无正文残留"
+    checksum_sha256: "db969a4dcfa4f6c7b4d98768de348cabbcc2c71431d9a61c006b5b389772a124"
+    details: |
+      verify_day12a_vm.sh 全 6 节 + 汇总：ALL PASS（PASS: 7, FAIL: 0）
+      1) 系统环境：Python 3.12.3 / SDK 包检测 PASS
+      2) health executor 分项：service ok / bridge_loaded=True / executor{max_workers,in_flight,hang_recovered,hang_threshold_ms}
+      3) 挂死恢复机制：embed ok dim=768 / 无挂死不重建（recovered=False）/ in_flight=0
+      4) 异常输入回归：空文本/纯空白 dim=768、超长 10KB、非 str、embed_batch 非法 ALL PASS
+      5) 性能基准：avg=63.3ms p99=117.0ms samples=10（架构预算 ≤180ms OK）
+      6) bridge.log 不存在（无正文残留）
