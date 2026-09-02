@@ -1372,7 +1372,7 @@ entries:
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/day12a_verify_20260902_232744.log"
     tested_commit: "6a94b85776c7e3b93cc9eccf33e857338ab79814"
-    evidence_commit: "EVID4_PENDING"
+    evidence_commit: "4ff74e1a508c45573bd95e7b95e2c72e49cd77af"
     date: "2026-09-02"
     reviewer: "待复审（D 主审）"
     runtime_result: "PASS（真实 SDK 正常路径；挂死恢复 L1 SIMULATED）"
