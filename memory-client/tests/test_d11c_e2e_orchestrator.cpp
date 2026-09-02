@@ -11,7 +11,18 @@
 //     - buildMemoryContext(sessionTag) 对 A/B 两个 session 返回可区分的 Context
 //     - step2_crossSession 捕获两次请求的 payload.session_id，断言 0001 → 0002
 //     - 断言 injectedContextText A ≠ B（证明第二次 context 确实来自新 session 请求）
-//   修正用例数：A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/F1/F2 = 共 **11** 个独立 test slot。
+//   修正用例数：A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/F1/F2/F3 = 共 **13** 个独立 test slot。
+//   MEDIUM-01 §F 新增 F3 stale response 防回写：
+//     - resetToolPipeline/resetConflictComparePipeline/resetLifecycleStatusPipeline 三路
+//       补 pending 清理 + deadline timer 取消（与 resetPostTurnPipeline 对齐）。
+//     - F3 通过 MockGatewayServer::sendRawEnvelope 注入延迟 stale response，
+//       断言 reset 后 stage 仍保持 idle（不被回写）。
+//   MEDIUM-02 §README/PR 口径统一：
+//     - 测试用例数 13（A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/F1/F2/F3），
+//       原 README "A~G 共 11" 与原注释 "12" 均已修正；
+//       原 "G. 全量 Reset" 实为 F3（编排骨架总体一致性分类下）。
+//     - test_d11c_qml_load.cpp 改用 QQuickView 完成真实实例化验证
+//       （QQmlComponent::create() 在 headless CI 触发 SIGSEGV，见该文件头注释）。
 // ============================================================================
 #include "mock_gateway_server.h"
 #include "protocol_adapter.h"
@@ -229,6 +240,8 @@ private slots:
     // F. 编排器总体一致性
     void stepF_notConnected_5StepsFailLocally();             // F1
     void stepF_everythingCompletes_busyClearedAllPendingEmpty(); // F2
+    // MEDIUM-01：Reset 后 stale response 不得回写 stage
+    void stepF_resetClearsPending_staleResponseIgnored();    // F3
 
 private:
     QString uniqueSocketName(const QString& prefix);
@@ -869,6 +882,149 @@ void TestD11CE2EOrchestrator::stepF_everythingCompletes_busyClearedAllPendingEmp
     QCOMPARE(vm.conflictCompareStage(), QStringLiteral("ready"));
     QCOMPARE(vm.lifecycleStatusStage(), QStringLiteral("ready"));
     QCOMPARE(vm.forgetStage(), QStringLiteral("completed"));
+}
+
+// ── F3 · MEDIUM-01：Reset 清除 pending → stale response 不回写 stage ──
+//
+// 竞态场景（Reviewer E MEDIUM-01）：
+//   1. 发送 Tool / Conflict / Lifecycle 请求 → pendingXxxRequestId_ 非空
+//   2. 用户点击"重置 5 步" → resetAllPipelines() 清除 pendingXxxRequestId_
+//   3. 旧响应延迟到达 → onResponseReceived 检查 pendingXxxRequestId_ 已空
+//      → 不匹配 → stage 保持 idle（不会被回写为 sent/ready）
+//
+// 测试策略：
+//   使用 MockGatewayServer::sendRawEnvelope 后门，在 reset 之后向客户端
+//   注入一个携带"旧 requestId"的响应 envelope，验证 stage 不变。
+void TestD11CE2EOrchestrator::stepF_resetClearsPending_staleResponseIgnored()
+{
+    test_support::MockGatewayServer mock;
+    // handler 只做正常响应（不延迟），用于拿到 requestId 快照
+    mock.setHandler([](const client::EnvelopeParts& parts) -> QJsonObject {
+        if (parts.method == QLatin1String("tool.execution")) {
+            return client::buildSuccessResponse(
+                parts.requestId, parts.traceId,
+                QJsonObject{{QStringLiteral("ingested"), true}});
+        }
+        if (parts.method == QLatin1String("conflict.compare")) {
+            return client::buildSuccessResponse(
+                parts.requestId, parts.traceId,
+                client::buildConflictCandidates());
+        }
+        if (parts.method == QLatin1String("lifecycle.status")) {
+            return client::buildSuccessResponse(
+                parts.requestId, parts.traceId,
+                client::buildLifecycleItems());
+        }
+        return client::buildSuccessResponse(
+            parts.requestId, parts.traceId, QJsonObject{});
+    });
+    const QString socket = mock.listen(uniqueSocketName("f3-stale"));
+
+    client::MemoryViewModel vm;
+    vm.setSocketPath(socket);
+    vm.connectToService();
+    QVERIFY(waitForStage([&]{ return vm.connectionState() == "connected"; }));
+
+    // ── Tool 路 ──
+    // Step 1: 发送 Tool 请求 → Mock 立即响应 → stage=sent
+    vm.runToolPipeline(QLatin1String(kUserId), QLatin1String(kSessionA),
+                       "turn-f3", "tc-f3", "memory_search", "success",
+                       "args", "result", "", "", true, false);
+    QVERIFY(waitForStage([&]{ return vm.toolStage() == "sent"; }));
+
+    // 捕获 Tool 请求的 requestId（用于后续 stale response 注入）
+    const QString staleToolRequestId =
+        mock.receivedRequests().back().requestId;
+    const QString staleToolTraceId =
+        mock.receivedRequests().back().traceId;
+
+    // Step 2: 重置 Tool pipeline → stage=idle, pendingToolRequestId_ 清空
+    vm.resetToolPipeline();
+    QCOMPARE(vm.toolStage(), QStringLiteral("idle"));
+    QVERIFY(!vm.toolBusy());
+
+    // Step 3: 注入 stale Tool response（使用 Step 1 的 requestId）
+    // → onResponseReceived 检查 pendingToolRequestId_ == 空 → 不匹配 → 忽略
+    const QJsonObject staleToolResponse = client::buildSuccessResponse(
+        staleToolRequestId, staleToolTraceId,
+        QJsonObject{{QStringLiteral("ingested"), true}});
+    QVERIFY2(mock.sendRawEnvelope(staleToolResponse),
+             "MockGatewayServer 应有活跃连接可注入 stale response");
+    // 等待事件循环处理 stale response
+    QTest::qWait(200);
+
+    // Step 4: 断言 stage 仍为 idle（stale response 未回写）
+    QVERIFY2(vm.toolStage() == QStringLiteral("idle"),
+             qPrintable(QStringLiteral("D11C-F3 Tool stale response 回写了 stage！"
+                                       " 期望=idle 实际=%1")
+                            .arg(vm.toolStage())));
+    QVERIFY2(!vm.toolBusy(),
+             "D11C-F3 Tool stale response 回写了 busy!");
+
+    // ── Conflict Compare 路（同样的 stale 验证） ──
+    vm.runConflictComparePipeline("km-1", false);
+    QVERIFY(waitForStage([&]{ return vm.conflictCompareStage() == "ready"; }));
+    // receivedRequests 末尾是 conflict.compare 的请求
+    const QString staleConflictRequestId =
+        mock.receivedRequests().back().requestId;
+    const QString staleConflictTraceId =
+        mock.receivedRequests().back().traceId;
+    vm.resetConflictComparePipeline();
+    QCOMPARE(vm.conflictCompareStage(), QStringLiteral("idle"));
+    QVERIFY(!vm.conflictCompareBusy());
+    // 注入 stale conflict response
+    const QJsonObject staleConflictResponse = client::buildSuccessResponse(
+        staleConflictRequestId, staleConflictTraceId,
+        client::buildConflictCandidates());
+    mock.sendRawEnvelope(staleConflictResponse);
+    QTest::qWait(200);
+    QVERIFY2(vm.conflictCompareStage() == QStringLiteral("idle"),
+             qPrintable(QStringLiteral("D11C-F3 Conflict stale response 回写了 stage！"
+                                       " 期望=idle 实际=%1")
+                            .arg(vm.conflictCompareStage())));
+
+    // ── Lifecycle Status 路 ──
+    vm.runLifecycleStatusPipeline(QLatin1String(kUserId), "km-1", {});
+    QVERIFY(waitForStage([&]{ return vm.lifecycleStatusStage() == "ready"; }));
+    const QString staleLifecycleRequestId =
+        mock.receivedRequests().back().requestId;
+    const QString staleLifecycleTraceId =
+        mock.receivedRequests().back().traceId;
+    vm.resetLifecycleStatusPipeline();
+    QCOMPARE(vm.lifecycleStatusStage(), QStringLiteral("idle"));
+    QVERIFY(!vm.lifecycleStatusBusy());
+    const QJsonObject staleLifecycleResponse = client::buildSuccessResponse(
+        staleLifecycleRequestId, staleLifecycleTraceId,
+        client::buildLifecycleItems());
+    mock.sendRawEnvelope(staleLifecycleResponse);
+    QTest::qWait(200);
+    QVERIFY2(vm.lifecycleStatusStage() == QStringLiteral("idle"),
+             qPrintable(QStringLiteral("D11C-F3 Lifecycle stale response 回写了 stage！"
+                                       " 期望=idle 实际=%1")
+                            .arg(vm.lifecycleStatusStage())));
+
+    // ── resetAllPipelines() 全量验证 ──
+    // 再发一次 Tool，然后调 resetAllPipelines()，注入 stale → 全部 idle
+    vm.runToolPipeline(QLatin1String(kUserId), QLatin1String(kSessionA),
+                       "turn-f3b", "tc-f3b", "memory_search", "success",
+                       "args", "result", "", "", true, false);
+    QVERIFY(waitForStage([&]{ return vm.toolStage() == "sent"; }));
+    const QString staleAllRequestId =
+        mock.receivedRequests().back().requestId;
+    const QString staleAllTraceId =
+        mock.receivedRequests().back().traceId;
+    vm.resetAllPipelines();
+    QCOMPARE(vm.toolStage(), QStringLiteral("idle"));
+    QVERIFY(!vm.busy());
+    const QJsonObject staleAllResponse = client::buildSuccessResponse(
+        staleAllRequestId, staleAllTraceId,
+        QJsonObject{{QStringLiteral("ingested"), true}});
+    mock.sendRawEnvelope(staleAllResponse);
+    QTest::qWait(200);
+    QVERIFY2(vm.toolStage() == QStringLiteral("idle"),
+             "D11C-F3 resetAllPipelines 后 stale Tool response 不得回写");
+    QVERIFY2(!vm.busy(),
+             "D11C-F3 resetAllPipelines 后 stale response 不得恢复 busy");
 }
 
 QTEST_MAIN(TestD11CE2EOrchestrator)

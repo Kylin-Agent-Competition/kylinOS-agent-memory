@@ -53,6 +53,22 @@ void MockGatewayServer::close()
     }
 }
 
+bool MockGatewayServer::sendRawEnvelope(const QJsonObject& envelope)
+{
+    for (auto& conn : connections_) {
+        if (conn->socket && conn->socket->state() == QLocalSocket::ConnectedState) {
+            const auto packet = encodeEnvelope(envelope);
+            if (packet.has_value()) {
+                conn->socket->write(*packet);
+                conn->socket->flush();
+                return true;
+            }
+            return false;
+        }
+    }
+    return false;
+}
+
 void MockGatewayServer::handleNewConnection()
 {
     QLocalSocket* socket = server_.nextPendingConnection();

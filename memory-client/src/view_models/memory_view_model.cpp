@@ -2353,7 +2353,14 @@ void MemoryViewModel::resetPostTurnPipeline()
 
 void MemoryViewModel::resetToolPipeline()
 {
-    // Tool 独立 pending（如有）统一取消；此处仅清 busy/stage。
+    // MEDIUM-01 修复：与 resetPreChatPipeline/resetPostTurnPipeline 一致，
+    // 先取消 in-flight 请求的 deadline timer + 清除 pending request id，
+    // 再清 busy/stage/projection。否则 late response 仍命中 pendingToolRequestId_
+    // 并通过 onResponseReceived 路由回写 stage=sent，导致"重置"不稳定。
+    if (!pendingToolRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingToolRequestId_);
+        pendingToolRequestId_.clear();
+    }
     setToolBusy(false);
     setToolStage(QStringLiteral("idle"));
     setLastToolEvent({});
@@ -2361,6 +2368,11 @@ void MemoryViewModel::resetToolPipeline()
 
 void MemoryViewModel::resetConflictComparePipeline()
 {
+    // MEDIUM-01 修复：同 resetToolPipeline，取消 in-flight + 清 pending 防回写。
+    if (!pendingConflictCompareRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingConflictCompareRequestId_);
+        pendingConflictCompareRequestId_.clear();
+    }
     setConflictCompareBusy(false);
     setConflictCompareStage(QStringLiteral("idle"));
     setConflictCandidates({});
@@ -2369,6 +2381,11 @@ void MemoryViewModel::resetConflictComparePipeline()
 
 void MemoryViewModel::resetLifecycleStatusPipeline()
 {
+    // MEDIUM-01 修复：同 resetToolPipeline，取消 in-flight + 清 pending 防回写。
+    if (!pendingLifecycleStatusRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingLifecycleStatusRequestId_);
+        pendingLifecycleStatusRequestId_.clear();
+    }
     setLifecycleStatusBusy(false);
     setLifecycleStatusStage(QStringLiteral("idle"));
     setLifecycleItems({});

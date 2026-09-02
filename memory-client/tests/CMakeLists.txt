@@ -291,13 +291,13 @@ add_test(
 
 # ============================================================================
 # D11-C 同一虚拟机全功能联调 · E2E Orchestrator L0 Mock 契约测试
-# 范围（A~F 共 12 用例）：
+# 范围（A~F 共 13 用例）：
 #   A. Step1 普通聊天：A1 三路原文隔离（D5）；A2 PostTurn 用 turn.finalized (ADR-010)
 #   B. Step2 跨会话：B1 切换 sessionId 仍成功 + 独立 pending 不串台
 #   C. Step3 Tool：C1 toolName 正确转发；C2 UNSUPPORTED_METHOD safeMessage 不含正文
 #   D. Step4 知识+生命周期：D1 conflictCandidates 非空；D2 lifecycleItems 非空
-#   E. Step5 精准遗忘：E1 Preview HIGH-01 selector 明文清除；E2 Execute completed+无漏删
-#   F. 编排器总体一致性：F1 未连接 fail-closed；F2 5 步完毕 busy=false + stage 一致
+#   E. Step5 精准遗忘：E1 Preview HIGH-01 selector 明文清除；E2 Execute completed+无漏删；E3 错误凭据 fail-closed
+#   F. 编排器总体一致性：F1 未连接 fail-closed；F2 5 步完毕 busy=false + stage 一致；F3 Reset 清 pending 防 stale response 回写
 # 注意：L0 Mock 契约验证，不代表麒麟宿主真实交互（L2 由 B/D 轨在 D11B VM 复测归档）。
 # ============================================================================
 add_executable(test_d11c_e2e_orchestrator

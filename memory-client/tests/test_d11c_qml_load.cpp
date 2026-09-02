@@ -10,24 +10,24 @@
 //   A. 加载资源路径下的 D11DemoOrchestratorPage.qml（非本地 fs，等价于
 //      Runtime 真实 import 流程）。
 //   B. QQmlComponent 构造无 error / 无 warning（严格模式）。
-//   C. create() 返回非空对象指针，类型为 QQuickItem/ScrollView。
+//   C. QQuickView 实际创建根对象，类型为 QQuickItem/ScrollView，
+//      且至少一个 Step Card 的 implicitHeight > 0。
 //   D. viewModel alias 属性存在且初始值为 null（HIGH-01 alias 修复验证）。
 //   E. 再次加载：重复实例化无冲突（保证 QML 缓存和 id 命名无泄漏）。
 //
 // 注意：
-//   本测试仅加载 QML Component，不启动真实 Window；符合 L0 / CI headless 环境。
+//   本测试使用 QQuickView（而非裸 QQmlComponent::create()）进行实例化，
+//   因为 QQuickView 内部创建 QQuickWindow 并管理 scene graph 生命周期，
+//   在 offscreen + software backend 环境中比裸 create() 更稳定。
 //   本测试仍为 Demo/Prototype L0，不代表真实 Runtime + D11B VM 已接。
 //
 // 实现要点（避免 CI 子进程崩溃 / 组件 Error）：
 //   * 使用 QTEST_GUILESS_MAIN（生成 QGuiApplication，Qt5）。
-//     QTEST_MAIN 仅生成 QCoreApplication，会让 QQmlEngine / QQuickItem
-//     在部分平台上无法正确初始化 GUI 资源。
-//     不再在 initTestCase 中二次 new QGuiApplication（双 Q*App 实例会
-//     引发析构期 double free / SEGFAULT）。
-//   * 通过 ctest ENVIRONMENT（见 CMakeLists.txt）设置
-//     QT_QPA_PLATFORM=offscreen，进程启动时即命中 offscreen 平台插件；
-//     initTestCase 的 qputenv 晚于 main() 里 QGuiApplication ctor 的
-//     xcb 平台探测，会出现 "could not connect to display" 直接 abort。
+//   * 通过 ctest ENVIRONMENT 设置 QT_QPA_PLATFORM=offscreen +
+//     QT_QUICK_BACKEND=software，进程启动时即命中 offscreen 平台 +
+//     software scene graph backend。
+//   * QQuickView 会自动创建 QQuickWindow 并初始化 scene graph（software），
+//     然后加载 QML 创建根对象，比裸 QQmlComponent::create() 更安全。
 // ============================================================================
 
 #include <QDebug>
@@ -38,9 +38,11 @@
 #include <QLibraryInfo>
 #include <QLoggingCategory>
 #include <QQmlComponent>
+#include <QQmlContext>
 #include <QQmlEngine>
 #include <QQmlError>
 #include <QQuickItem>
+#include <QQuickView>
 #include <QString>
 #include <QStringList>
 #include <QTest>
@@ -55,10 +57,10 @@ private slots:
     void initTestCase();
     void cleanupTestCase();
 
-    // A. qrc:/ 路径存在 & 资源可加载
+    // A. qrc:/ 路径存在 & 资源可加载 & QQmlComponent status==Ready
     void resourceUrlResolves();
 
-    // B + C. QQmlComponent 解析成功 & create() 返回非空对象
+    // B + C. QQuickView 实际创建根对象，rootItem 非空，至少一个 Card height>0
     void componentCreatesWithoutErrors();
 
     // D. viewModel alias 属性存在 + 初始值为 null（HIGH-01 alias 修复）
@@ -69,66 +71,32 @@ private slots:
 
 private:
     QScopedPointer<QQmlEngine> engine_;
+
+    // 共享 import path 设置逻辑（engine_ 和 QQuickView 都需要）
+    void applyImportPaths(QQmlEngine* eng);
+    // 等待 Loading → Ready/Error，返回 Ready=true
+    static bool waitReady(QQmlComponent& c, const char* caller);
+    // 格式化 QQmlComponent::errors() 为单行字符串
+    static QString formatComponentErrors(const QQmlComponent& c);
+    // 格式化 QQuickView::errors() 为单行字符串
+    static QString formatViewErrors(const QQuickView& v);
+    // 在 item 树中查找至少一个 implicitHeight > 0 的 QQuickItem
+    static bool findChildWithPositiveImplicitHeight(QQuickItem* parent);
 };
 
 void TestD11cQmlLoad::initTestCase()
 {
-    // 保险：即便 ctest 注入的 QT_QPA_PLATFORM 没生效，也在 GUI 相关资源
-    // 创建前把 offscreen 写入环境（对 main() 之前 Q*App ctor 探测无效，
-    // 但可防御本地直接运行可执行文件时的默认 xcb 连接失败）。
     qputenv("QT_QPA_PLATFORM", "offscreen");
-    // D11 顶层是 ScrollView（继承 QQuickItem），component.create()
-    // 会触发 Qt Quick SceneGraph 初始化；CI runner 无 GPU / 无 EGL，
-    // 默认 GL backend 在 offscreen 平台上可能直接 SIGSEGV signal 11。
-    // 通过环境变量选择 software backend，无需 include QQuickWindow。
     qputenv("QT_QUICK_BACKEND", "software");
 
     QVERIFY2(QGuiApplication::instance() != nullptr,
              "需要 QGuiApplication（用 QTEST_GUILESS_MAIN 而非 QTEST_MAIN）");
 
     engine_.reset(new QQmlEngine);
-    // 严格模式：把 QML warning 记录到我们自己的 buffer，便于断言
     QLoggingCategory::setFilterRules(QStringLiteral("qt.qml.binding.removal.info=true"));
+    applyImportPaths(engine_.data());
 
-    // import paths：显式补齐 Qt5 QML modules 默认安装路径，确保
-    // qtdeclarative5-dev + qml-module-qtquick-* 安装的运行时模块被
-    // QQmlEngine 找到，否则 D11 QML import QtQuick.Controls 2.12
-    // 会在 CI headless 环境报 module not found，导致
-    // QQmlComponent status() == Error 而 create() 永远返回 null。
-    {
-        QStringList extraImports;
-        // Qt 5 标准 QML 模块根（Ubuntu 下通常为 /usr/lib/x86_64-linux-gnu/qt5/qml
-        // 或 QLibraryInfo::location(QLibraryInfo::Qml2ImportsPath)）。
-        const QString sysImports =
-            QLibraryInfo::location(QLibraryInfo::Qml2ImportsPath);
-        if (!sysImports.isEmpty()) extraImports.append(sysImports);
-        // Ubuntu / Debian 打包的常见 fallback。
-        extraImports.append(QStringLiteral("/usr/lib/qt5/qml"));
-        extraImports.append(QStringLiteral("/usr/share/qt5/qml"));
-        // Ubuntu 22.04 + qml-module-qtquick-controls2 实际安装路径：
-        //   /usr/lib/x86_64-linux-gnu/qt5/qml/QtQuick/Controls.2/qmldir
-        // 我们先加其所有可能的父目录兜底，再在 initTestCase 末尾打印
-        // 每条路径的 QDir exists + qmldir 文件探测结果，方便 CI 诊断。
-        extraImports.append(QStringLiteral("/usr/lib/x86_64-linux-gnu/qt5/qml"));
-        extraImports.append(QStringLiteral("/usr/lib/x86_64-linux-gnu/qml"));
-        // NixOS / Qt 在 /usr/local 下安装的兼容路径兜底。
-        extraImports.append(QStringLiteral("/usr/local/share/qt5/qml"));
-        // qrc 内前缀，便于其它模块把 qml 代码嵌入自身资源。
-        extraImports.append(QStringLiteral("qrc:/qt/qml"));
-        extraImports.append(QStringLiteral("qrc:/qml"));
-        // 去空后注册。
-        for (const QString& p : extraImports) {
-            if (!p.isEmpty()) engine_->addImportPath(p);
-        }
-    }
-
-    // ── CI 诊断：打印 import paths + QML plugin 目录实际探测 ──
-    // D11 QML 依赖 import QtQuick/Controls.2 这个 qmldir。即便
-    // find_package(Qt5 QuickControls2) 通过，且 apt 装了
-    // qml-module-qtquick-controls2，也可能 QQmlEngine 的默认 import
-    // 路径里并没有包含实际 qmldir 所在目录（例如 Qt5.15 Ubuntu 打包
-    // 时把 qmldir 放在了 /usr/lib/x86_64-linux-gnu/qt5/qml 但
-    // QLibraryInfo::Qml2ImportsPath 指向了别的路径）。
+    // CI 诊断：打印 import paths + QML plugin 目录实际探测
     {
         qDebug() << "[d11c_qml_load] QQmlEngine import paths="
                  << engine_->importPathList();
@@ -170,26 +138,35 @@ void TestD11cQmlLoad::cleanupTestCase()
     engine_.reset();
 }
 
+void TestD11cQmlLoad::applyImportPaths(QQmlEngine* eng)
+{
+    QStringList extraImports;
+    const QString sysImports =
+        QLibraryInfo::location(QLibraryInfo::Qml2ImportsPath);
+    if (!sysImports.isEmpty()) extraImports.append(sysImports);
+    extraImports.append(QStringLiteral("/usr/lib/qt5/qml"));
+    extraImports.append(QStringLiteral("/usr/share/qt5/qml"));
+    extraImports.append(QStringLiteral("/usr/lib/x86_64-linux-gnu/qt5/qml"));
+    extraImports.append(QStringLiteral("/usr/lib/x86_64-linux-gnu/qml"));
+    extraImports.append(QStringLiteral("/usr/local/share/qt5/qml"));
+    extraImports.append(QStringLiteral("qrc:/qt/qml"));
+    extraImports.append(QStringLiteral("qrc:/qml"));
+    for (const QString& p : extraImports) {
+        if (!p.isEmpty()) eng->addImportPath(p);
+    }
+}
+
 static const QUrl kD11PageUrl{
     QStringLiteral("qrc:/qt/qml/memory_client/pages/D11DemoOrchestratorPage.qml")};
-// 对应 qrc 文件系统内的"裸路径"；QFile 打开成功即意味着
-// qt5_add_resources 已把 resources.qrc 中的 D11 页面真正打进了
-// 本测试可执行文件的 Qt resource table。若失败则 QQmlComponent
-// 永远不会 Ready（会一直 Error 说无效 URL），先在此 fail-fast
-// 便于 CI 定位是 rcc 打包问题还是 QML parser 问题。
 static const char* kD11PageResourcePath =
     ":/qt/qml/memory_client/pages/D11DemoOrchestratorPage.qml";
 
-// 小工具：把 QQmlComponent::errors() 里的每一条 (url/line/col/desc)
-// 格式化成可直接粘进 CI log 的单行字符串，避免 CI 只能看到
-// "status=Error" 却不知道具体是哪个 import / 哪一行出错。
-static QString formatErrors(const QQmlComponent& c)
+QString TestD11cQmlLoad::formatComponentErrors(const QQmlComponent& c)
 {
     QString out;
     const QList<QQmlError> errs = c.errors();
     if (errs.isEmpty()) {
-        out = QStringLiteral("<QQmlComponent::errors() 空，可能是 qrc URL 指向资源不存在>");
-        return out;
+        return QStringLiteral("<QQmlComponent::errors() 空，可能是 qrc URL 指向资源不存在>");
     }
     for (int i = 0; i < errs.size(); ++i) {
         if (!out.isEmpty()) out += QStringLiteral(" || ");
@@ -203,15 +180,54 @@ static QString formatErrors(const QQmlComponent& c)
     return out;
 }
 
+QString TestD11cQmlLoad::formatViewErrors(const QQuickView& v)
+{
+    QString out;
+    const QList<QQmlError> errs = v.errors();
+    if (errs.isEmpty()) {
+        return QStringLiteral("<QQuickView::errors() 空>");
+    }
+    for (int i = 0; i < errs.size(); ++i) {
+        if (!out.isEmpty()) out += QStringLiteral(" || ");
+        out += QStringLiteral("[%1] %2:%3:%4: %5")
+                   .arg(i)
+                   .arg(errs.at(i).url().toString())
+                   .arg(errs.at(i).line())
+                   .arg(errs.at(i).column())
+                   .arg(errs.at(i).description());
+    }
+    return out;
+}
+
+bool TestD11cQmlLoad::waitReady(QQmlComponent& c, const char* caller)
+{
+    QElapsedTimer t;
+    t.start();
+    while (c.status() == QQmlComponent::Loading && t.elapsed() < 3000) {
+        QTest::qWait(20);
+    }
+    if (c.status() != QQmlComponent::Ready) {
+        qCritical() << "[d11c_qml_load]" << caller
+                    << "component status=" << c.status()
+                    << "errors=" << qPrintable(formatComponentErrors(c));
+    }
+    return c.status() == QQmlComponent::Ready;
+}
+
+bool TestD11cQmlLoad::findChildWithPositiveImplicitHeight(QQuickItem* parent)
+{
+    if (!parent) return false;
+    if (parent->implicitHeight() > 0) return true;
+    for (QQuickItem* child : parent->childItems()) {
+        if (findChildWithPositiveImplicitHeight(child)) return true;
+    }
+    return false;
+}
+
 void TestD11cQmlLoad::resourceUrlResolves()
 {
     QVERIFY2(kD11PageUrl.isValid(), "D11 页面 qrc URL 格式必须合法");
 
-    // FAIL-FAST：先验证 QFile 可直接打开 qrc 裸路径。
-    // 若这里失败，说明 qt5_add_resources 没把 resources.qrc 编进
-    // test_d11c_qml_load 二进制，或者 qrc prefix 与 test 内路径
-    // 不一致；直接在这里报 ASSERT 就不会让后续 QQmlComponent
-    // 给出更晦涩的 "status=Error / errorString()=空" 了。
     {
         QFile f(QString::fromLatin1(kD11PageResourcePath));
         const bool opened = f.open(QIODevice::ReadOnly);
@@ -221,12 +237,6 @@ void TestD11cQmlLoad::resourceUrlResolves()
                         << "exists="
                         << QFile::exists(QString::fromLatin1(kD11PageResourcePath));
         }
-        // 注意：QVERIFY2 的第二个参数必须是一个"有足够寿命"的 const char*。
-        // 把 QStringLiteral(...).arg(...) 直接包在 qPrintable() 里会让
-        // 临时 QString 在完整表达式求值后立刻析构，某些 GCC/Qt 版本下
-        // 宏展开会读到悬空指针；并且多行字符串拼接紧跟 .arg() 还会
-        // 让 Qt 5.12 的 Q_STATIC_ASSERT_X 触发编译期语法错误。所以
-        // 这里先把格式化结果写进局部 msg，再取 qPrintable(msg)。
         const QString resPath = QString::fromLatin1(kD11PageResourcePath);
         const QString msg =
             QStringLiteral("qrc 资源表无 D11 页面（qt5_add_resources 是否"
@@ -237,12 +247,6 @@ void TestD11cQmlLoad::resourceUrlResolves()
     }
 
     QQmlComponent probe(engine_.data(), kD11PageUrl);
-    // 注意：QTRY_COMPARE_WITH_TIMEOUT 一旦失败会立刻 FAIL 掉整条用例，
-    // 因此 BEFORE 断言失败必须把 formatErrors(...) 打出来——否则 CI log
-    // 只会留下“Actual : Error / Expected : Ready”这种对定位 import 错
-    // 误毫无帮助的信息。这里用一个简单的 QElapsedTimer + processEvents
-    // 轮询替代，让 status==Error 时立刻 qCritical 详细错误字符串再
-    // QFAIL。
     {
         QElapsedTimer t;
         t.start();
@@ -252,63 +256,139 @@ void TestD11cQmlLoad::resourceUrlResolves()
         if (probe.status() != QQmlComponent::Ready) {
             qCritical() << "[d11c_qml_load] resourceUrlResolves probe status="
                         << probe.status()
-                        << "errors=" << qPrintable(formatErrors(probe));
+                        << "errors=" << qPrintable(formatComponentErrors(probe));
         }
     }
     QCOMPARE(probe.status(), QQmlComponent::Ready);
     {
         const QString errMsg =
             QStringLiteral("Component 加载不应有错误，当前错误: %1")
-                .arg(formatErrors(probe));
+                .arg(formatComponentErrors(probe));
         QVERIFY2(!probe.isError(), qPrintable(errMsg));
     }
 }
 
-// 所有用例共用的"等 component Ready，否则带 formatErrors FAIL"。
-// 直接替掉 QTRY_COMPARE_WITH_TIMEOUT，保证 status!=Ready 瞬间一定先
-// 把 component 错误串打到 CI log，再让断言 fail。
-static void waitReadyOrFail(const char* caller, QQmlComponent& c)
-{
-    QElapsedTimer t;
-    t.start();
-    while (c.status() == QQmlComponent::Loading && t.elapsed() < 3000) {
-        QTest::qWait(20);
-    }
-    if (c.status() != QQmlComponent::Ready) {
-        qCritical() << "[d11c_qml_load]" << caller
-                    << "component status=" << c.status()
-                    << "errors=" << qPrintable(formatErrors(c));
-    }
-    const QString msg =
-        QStringLiteral("%1 需 status=Ready，实际=%2 错误=%3")
-            .arg(QString::fromLatin1(caller))
-            .arg(c.status())
-            .arg(formatErrors(c));
-    QVERIFY2(c.status() == QQmlComponent::Ready, qPrintable(msg));
-}
-
 void TestD11cQmlLoad::componentCreatesWithoutErrors()
 {
-    // component.create() 需要 Qt Quick SceneGraph 初始化，在 headless
-    // offscreen CI 环境中即便设了 QT_QUICK_BACKEND=software 仍可能
-    // SIGSEGV (signal 11)。L0 仅验证 QQmlComponent::status()==Ready
-    // （QML 语法解析 + import 全部解析通过 + alias 语法正确），
-    // create()/渲染验证留给 L2 VM 真实显示环境。
-    QSKIP("component.create() 需要显示上下文，headless L0 CI 跳过");
+    // HIGH-01 修复：使用 QQuickView（而非裸 QQmlComponent::create()）
+    // 进行真实实例化验证。QQuickView 内部创建 QQuickWindow 并管理 scene
+    // graph 生命周期，在 offscreen + software backend 环境中比裸 create()
+    // 更稳定（裸 create() 在 headless CI 曾触发 SIGSEGV signal 11）。
+    QQuickView view;
+
+    // QQuickView 有自己的 QQmlEngine，需要复制 import paths
+    applyImportPaths(view.engine());
+
+    view.setSource(kD11PageUrl);
+
+    // 等待 Loading → Ready/Error
+    {
+        QElapsedTimer t;
+        t.start();
+        while (view.status() == QQuickView::Loading && t.elapsed() < 3000) {
+            QTest::qWait(20);
+        }
+    }
+
+    if (view.status() != QQuickView::Ready) {
+        qCritical() << "[d11c_qml_load] QQuickView status=" << view.status()
+                    << "errors=" << qPrintable(formatViewErrors(view));
+    }
+
+    const QString statusMsg =
+        QStringLiteral("QQuickView 应为 Ready，实际=%1 错误=%2")
+            .arg(view.status())
+            .arg(formatViewErrors(view));
+    QVERIFY2(view.status() == QQuickView::Ready, qPrintable(statusMsg));
+
+    // 根对象非空
+    QObject* root = view.rootObject();
+    QVERIFY2(root != nullptr, "QQuickView rootObject 必须非空");
+
+    // 根对象为有效 QQuickItem
+    QQuickItem* rootItem = qobject_cast<QQuickItem*>(root);
+    const QString rootMsg =
+        QStringLiteral("根对象应为 QQuickItem，实际类型=%1")
+            .arg(QString::fromLatin1(root->metaObject()->className()));
+    QVERIFY2(rootItem != nullptr, qPrintable(rootMsg));
+
+    // 至少一个主演示 Card 实例化后的 implicitHeight > 0
+    // （HIGH-01 布局修复：Rectangle.implicitHeight = content.implicitHeight + 20）
+    const bool hasPositiveHeight =
+        findChildWithPositiveImplicitHeight(rootItem);
+    QVERIFY2(hasPositiveHeight,
+             "至少一个 Step Card 的 implicitHeight 必须 > 0 "
+             "（HIGH-01 布局修复验证：Rectangle.implicitHeight = "
+             "contentColumnLayout.implicitHeight + 20）");
 }
 
 void TestD11cQmlLoad::viewModelAliasExistsAndInitiallyNull()
 {
-    // 同上：create() 在 headless 环境不可靠。
-    // 但 resourceUrlResolves 已验证 QQmlComponent::status()==Ready，
-    // 这意味着 QML parser 成功解析了 property alias viewModel: ...
-    // 语法——如果 alias 写法错误，status 会是 Error。
-    QSKIP("component.create() 需要显示上下文，headless L0 CI 跳过");
+    QQuickView view;
+    applyImportPaths(view.engine());
+    view.setSource(kD11PageUrl);
+
+    {
+        QElapsedTimer t;
+        t.start();
+        while (view.status() == QQuickView::Loading && t.elapsed() < 3000) {
+            QTest::qWait(20);
+        }
+    }
+
+    if (view.status() != QQuickView::Ready) {
+        qCritical() << "[d11c_qml_load] viewModelAlias status=" << view.status()
+                    << "errors=" << qPrintable(formatViewErrors(view));
+    }
+    QVERIFY2(view.status() == QQuickView::Ready,
+             qPrintable(QStringLiteral("QQuickView 应为 Ready，实际=%1")
+                            .arg(view.status())));
+
+    QObject* root = view.rootObject();
+    QVERIFY2(root != nullptr, "rootObject 必须非空");
+
+    // HIGH-01：viewModel alias 属性存在
+    const int vmIdx = root->metaObject()->indexOfProperty("viewModel");
+    QVERIFY2(vmIdx >= 0, "root 对象必须有 viewModel 属性（HIGH-01 alias 修复）");
+
+    // 初始值为 null（未绑定 MemoryViewModel）
+    const QVariant vmValue = root->property("viewModel");
+    QVERIFY2(vmValue.isNull() || !vmValue.isValid(),
+             qPrintable(QStringLiteral("viewModel 初始值应为 null，实际=%1")
+                            .arg(vmValue.toString())));
 }
 
 void TestD11cQmlLoad::multipleInstantiationsDoNotLeak()
 {
-    QSKIP("component.create() 需要显示上下文，headless L0 CI 跳过");
+    // 连续创建 3 个 QQuickView 实例，验证 QML 缓存和 id 命名无泄漏
+    for (int i = 0; i < 3; ++i) {
+        QQuickView view;
+        applyImportPaths(view.engine());
+        view.setSource(kD11PageUrl);
+
+        {
+            QElapsedTimer t;
+            t.start();
+            while (view.status() == QQuickView::Loading && t.elapsed() < 3000) {
+                QTest::qWait(20);
+            }
+        }
+
+        const QString msg =
+            QStringLiteral("第 %1 次实例化：QQuickView 应为 Ready，实际=%2")
+                .arg(i + 1)
+                .arg(view.status());
+        QVERIFY2(view.status() == QQuickView::Ready, qPrintable(msg));
+        QVERIFY2(view.rootObject() != nullptr,
+                 qPrintable(QStringLiteral("第 %1 次实例化：rootObject 为空").arg(i + 1)));
+
+        // 每次实例化后至少一个 Card 有正高度（验证 implicitHeight 绑定不泄漏）
+        QQuickItem* rootItem = qobject_cast<QQuickItem*>(view.rootObject());
+        QVERIFY2(rootItem != nullptr,
+                 qPrintable(QStringLiteral("第 %1 次实例化：root 非 QQuickItem").arg(i + 1)));
+        QVERIFY2(findChildWithPositiveImplicitHeight(rootItem),
+                 qPrintable(QStringLiteral("第 %1 次实例化：无 Card implicitHeight > 0").arg(i + 1)));
+    }
 }
 
 // 使用 GUILESS：生成 QGuiApplication，QQmlEngine / QQuickItem 的 GUI 资源

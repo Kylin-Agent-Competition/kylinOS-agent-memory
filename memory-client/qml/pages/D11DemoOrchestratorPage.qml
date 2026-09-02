@@ -7,6 +7,9 @@
 // HIGH-01 修复：
 //   - viewModel alias 直接绑定 id=orchestrator 的属性（不经过 var inner）。
 //   - 本页由 L0 测试 test_d11c_qml_load 通过 QQmlComponent 真实实例化校验。
+//   - 每张 Step Card Rectangle 设置 implicitHeight = 内容 ColumnLayout.implicitHeight + 20，
+//     防止 anchors.fill: parent 造成的"父高度依赖 Layout/implicit size 而子又依赖父高度"的
+//     循环依赖导致 Card 获得 0 或错误高度。
 //
 // HIGH-03 修复：
 //   - 5 张 Step Card 为显式声明式实例（NOT createObject+快照），每张 Card 内部
@@ -133,8 +136,10 @@ ScrollView {
             spacing: 4
             Rectangle {
                 Layout.fillWidth: true
+                implicitHeight: step1Content.implicitHeight + 20
                 border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
                 ColumnLayout {
+                    id: step1Content
                     anchors.fill: parent; anchors.margins: 10; spacing: 6
                     RowLayout {
                         Layout.fillWidth: true
@@ -203,8 +208,10 @@ ScrollView {
             Layout.fillWidth: true; spacing: 4
             Rectangle {
                 Layout.fillWidth: true
+                implicitHeight: step2Content.implicitHeight + 20
                 border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
                 ColumnLayout {
+                    id: step2Content
                     anchors.fill: parent; anchors.margins: 10; spacing: 6
                     RowLayout {
                         Layout.fillWidth: true
@@ -255,8 +262,10 @@ ScrollView {
             Layout.fillWidth: true; spacing: 4
             Rectangle {
                 Layout.fillWidth: true
+                implicitHeight: step3Content.implicitHeight + 20
                 border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
                 ColumnLayout {
+                    id: step3Content
                     anchors.fill: parent; anchors.margins: 10; spacing: 6
                     RowLayout {
                         Layout.fillWidth: true
@@ -299,8 +308,10 @@ ScrollView {
             Layout.fillWidth: true; spacing: 4
             Rectangle {
                 Layout.fillWidth: true
+                implicitHeight: step4Content.implicitHeight + 20
                 border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
                 ColumnLayout {
+                    id: step4Content
                     anchors.fill: parent; anchors.margins: 10; spacing: 6
                     RowLayout {
                         Layout.fillWidth: true
@@ -358,8 +369,10 @@ ScrollView {
             Layout.fillWidth: true; spacing: 4
             Rectangle {
                 Layout.fillWidth: true
+                implicitHeight: step5Content.implicitHeight + 20
                 border.color: "#bdbdbd"; border.width: 1; radius: 6; color: "#fafafa"
                 ColumnLayout {
+                    id: step5Content
                     anchors.fill: parent; anchors.margins: 10; spacing: 6
                     RowLayout {
                         Layout.fillWidth: true

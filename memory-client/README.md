@@ -20,8 +20,12 @@ Qt/QML 侧记忆客户端，基于 QLocalSocket 连接 Memory Service，提供 Q
 
 ## 当前状态
 
-**Memory Client L0（D5 / D6 / D7 / D8 / D9 原型链；L0\_PENDING CI — ctest 预期 7/7
-（d9c REWORK 后待 CI 重跑）+ QML build-smoke green；C 角色各天 Demo 保持 OPEN；
+**Memory Client L0（D5 / D6 / D7 / D8 / D9 / D10 / D11 原型链；L0 ctest 预期 10/10
+（protocol_adapter / memory_client_mock / d5_vertical_link_demo /
+d6c_multi_source_adapters / d7c_preference_editor / d8c_knowledge_conflict_lifecycle /
+d9c_context_assemble / d10c_forgetting / d11c_e2e_orchestrator / d11c_qml_load；
+d11c_qml_load 在缺 Qt5::Gui/Qml/Quick/QuickControls2 IMPORTED target 的环境会
+跳过，其余 9 个不受影响）+ QML build-smoke green；C 角色各天 Demo 保持 OPEN；
 SEC-CTX-01 Runtime Evidence 未生成；
 未接入真实 AI Assistant Hook / Chat DB / ChatRecord / model\_request /
 TurnExtractionAdapter / 知识治理 / 冲突仲裁持久化后端）。**
@@ -290,7 +294,8 @@ L2 宿主 Runtime 证据由 B/D 轨在 D11B 最终 VM（与最终验收 HEAD com
   窗口标题更新为「Kylin Memory Client — D11 E2E Orchestrator (Demo/Prototype)」。
 - **QRC**：`qml/resources.qrc` 注册 `pages/D11DemoOrchestratorPage.qml`。
 - **L0 测试**：
-  1. `tests/test_d11c_e2e_orchestrator.cpp`（A~G 共 **11 个 QtTest slot**），
+  1. `tests/test_d11c_e2e_orchestrator.cpp`（A~F 共 **13 个 QtTest slot**：
+     A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/F1/F2/F3），
      使用 test_support::MockGatewayServer + setHandler(lambda) 注册 9 路活跃 handler
      （memory.retrieve / turn.finalized / tool.execution / conflict.compare /
      lifecycle.status / forget.preview / forget.execute / health / echo）。
@@ -305,7 +310,7 @@ L2 宿主 Runtime 证据由 B/D 轨在 D11B 最终 VM（与最终验收 HEAD com
        Gateway **分别捕获** Step 1 / Step 2 请求的 `payload.session_id`，
        断言第一次为 `session-demo-0001`、第二次为 `session-demo-0002`；
        Mock 对两个 session 返回**可区分**的 Context（Session B 含独有偏好条目，
-       injectedContextText 不同），证明第二次确为新 session 而非 Step 1 残留。
+       injectedContextText 不同），证明第二次确为新 session 而非 Step 1 拋留。
      - **C. Step3 Tool**：C1 toolStage=sent；Gateway 收到的
        `metadata.tool_name=memory_search` / `metadata.execution_status=success`；
        C2 UNSUPPORTED_METHOD 错误注入 → toolStage=failed + requestFailed 信号
@@ -320,20 +325,28 @@ L2 宿主 Runtime 证据由 B/D 轨在 D11B 最终 VM（与最终验收 HEAD com
        forgetExecutedCount==1 + forgetHasMissingDeletes==false（MEDIUM-03）；
        E3 Execute 若用错误 credential / 空 token → fail-closed：
        forgetStage=failed，forgetExecuteError 含 "credential"。
-     - **F. 编排器总体一致性**：F1 未连接时 5 步全部本地 fail-closed（stage=failed，
-       busy 不会挂死，至少 1 次 requestFailed 信号）；F2 依次跑完 5 步后
+     - **F. 编排器总体一致性（含 MEDIUM-01 Reset 防 stale response 回写）**：
+       F1 未连接时 5 步全部本地 fail-closed（stage=failed，busy 不会挂死，
+       至少 1 次 requestFailed 信号）；F2 依次跑完 5 步后
        `QTRY_VERIFY_WITH_TIMEOUT(!vm.busy(), 3000)`，六个阶段最终值一致
        （ready/sent/ready/ready/ready/completed）+ 三绿安全板
-       （textIsolationVerified / forgetSelectorCleared / !forgetHasMissingDeletes）。
-     - **G. 全量 Reset（MEDIUM-01 修复）**：跑完 5 步后调用
+       （textIsolationVerified / forgetSelectorCleared / !forgetHasMissingDeletes）；
+       **F3（MEDIUM-01 修复，原口径误标 "G. 全量 Reset"）**：跑完 5 步后调用
        `resetAllPipelines()` 断言 6 条 pipeline 的 stage=idle 且 busy=false
-       （forget*Error 文案保留）。
+       （forget\*Error 文案保留），并通过 `MockGatewayServer::sendRawEnvelope()`
+       注入延迟 stale response，验证 `onResponseReceived()` 因 pending 已清空
+       而不再回写 stage（防"重置 5 步"被旧响应污染）。
   2. `tests/test_d11c_qml_load.cpp`（**HIGH-01 修复：真实 QML 加载验证**）：
-     用 QQmlEngine + QQmlComponent（QT_QPA_PLATFORM=offscreen，headless）
-     直接加载 `qrc:/qt/qml/memory_client/pages/D11DemoOrchestratorPage.qml`，
-     断言资源可解析、Component Ready、create() 返回非空 QQuickItem、
-     `viewModel` alias 属性存在且初始为 null、重复实例化无泄漏。
-     弥补原 CI QML smoke build 仅验证打包不验证 parser 的缺口。
+     用 **QQuickView**（QT_QPA_PLATFORM=offscreen + QT_QUICK_BACKEND=software，
+     headless）直接加载 `qrc:/qt/qml/memory_client/pages/D11DemoOrchestratorPage.qml`，
+     断言：资源可解析、`view.status() == QQuickView::Ready`、`rootObject()` 非空、
+     根对象为有效 `QQuickItem`、**至少一个 Step Card `implicitHeight > 0`**
+     （HIGH-01 布局修复：`Rectangle.implicitHeight = stepNContent.implicitHeight + 20`）、
+     `viewModel` alias 属性存在且初始为 null、连续 3 次实例化无泄漏。
+     **注意**：原使用裸 `QQmlComponent::create()` 在 headless CI 触发
+     SIGSEGV (signal 11)，已改用 `QQuickView`（内部管理 QQuickWindow + scene graph
+     生命周期）稳定完成实例化；弥补原 CI QML smoke build 仅验证打包不验证 parser
+     的缺口。
 - **ctest 目标**：`d11c_e2e_orchestrator` 与 `d11c_qml_load`。
   CI `memory-client-ctest.yml` 随 `protocol_adapter / memory_client_mock /
   d5_vertical_link_demo / d6c_multi_source_adapters / d7c_preference_editor /
@@ -377,7 +390,7 @@ memory-client/
 │   ├── memory_client.{h,cpp}          # QLocalSocket 客户端
 │   ├── protocol_adapter.{h,cpp}       # 长度前缀 JSON envelope 编解码（含 ADR-010 turn.finalized）
 │   └── view_models/
-│       └── memory_view_model.{h,cpp}  # QML 公共 ViewModel（D5-C Demo Pipeline）
+│       └── memory_view_model.{h,cpp}  # QML 公共 ViewModel（D5~D11 Demo Pipeline）
 ├── qml/
 │   ├── main.qml                       # ApplicationWindow + StackView
 │   ├── resources.qrc
@@ -385,22 +398,26 @@ memory-client/
 │       ├── StatusPage.qml
 │       ├── MemoryQueryPage.qml
 │       ├── PreferenceEditorPage.qml   # 占位（待 E 轨 Schema）
-│       ├── VerticalLinkPage.qml       # 新增：D5-C Demo（Pre/Post + 原文隔离）
+│       ├── VerticalLinkPage.qml       # D5-C Demo（Pre/Post + 原文隔离）
 │       ├── KnowledgeDetailPage.qml    # D8-C 知识详情 Demo
 │       ├── ConflictComparisonPage.qml # D8-C 冲突对比 Demo
 │       ├── LifecycleStatusPage.qml   # D8-C 生命周期状态 Demo
-│       └── ContextAssemblePage.qml   # D9-C Memory Context 组装 Demo
-│       └── ForgetPage.qml            # D10-C 精准遗忘 Pipeline Demo
+│       ├── ContextAssemblePage.qml   # D9-C Memory Context 组装 Demo
+│       ├── ForgetPage.qml            # D10-C 精准遗忘 Pipeline Demo
+│       └── D11DemoOrchestratorPage.qml # D11-C E2E Orchestrator（5-Step Demo）
 └── tests/
     ├── CMakeLists.txt
-    ├── mock_gateway_server.{h,cpp}    # QLocalServer Mock
+    ├── mock_gateway_server.{h,cpp}    # QLocalServer Mock（含 sendRawEnvelope 注入 stale response）
     ├── test_protocol_adapter.cpp      # L0 协议单元测试
     ├── test_memory_client_mock.cpp    # L0 Client ↔ Mock Gateway
     ├── test_d5_vertical_link_demo.cpp # L0 D5-C Demo（§A/B/C 10 用例）
+    ├── test_d6c_multi_source_adapters.cpp # L0 D6-C 多源 Adapter（Tool/Manual/Behavior）
+    ├── test_d7c_preference_editor.cpp # L0 D7-C 偏好编辑
     ├── test_d8c_knowledge_conflict_lifecycle.cpp # L0 D8-C Demo（14 用例）
-    └── test_d9c_context_assemble.cpp # L0 D9-C Demo（17 用例 A/E/S/R）
     ├── test_d9c_context_assemble.cpp # L0 D9-C Demo（17 用例 A/E/S/R）
-    └── test_d10c_forgetting.cpp      # L0 D10-C Demo（18 用例 A~J 遗忘契约）
+    ├── test_d10c_forgetting.cpp      # L0 D10-C Demo（18 用例 A~J 遗忘契约）
+    ├── test_d11c_e2e_orchestrator.cpp # L0 D11-C E2E（13 用例 A1~F3，含 F3 stale response 防回写）
+    └── test_d11c_qml_load.cpp        # L0 D11-C QML 真实加载（QQuickView 实例化 + Card implicitHeight>0）
 ```
 
 ## 构建
@@ -439,14 +456,16 @@ cmake --build memory-client/build
   * 验证 `resources.qrc` 可处理、`main.qml` Component 引用无误、
     `KnowledgeDetailPage.qml` / `ConflictComparisonPage.qml` / `LifecycleStatusPage.qml` /
     `ContextAssemblePage.qml` / `D11DemoOrchestratorPage.qml` 可参与 Qt Quick 构建
-  * **运行态 QQmlComponent 真实加载验证由 Job 1 的 d11c_qml_load 承担**（Reviewer E HIGH-01）
+  * **运行态 QQuickView 真实加载验证由 Job 1 的 d11c_qml_load 承担**（Reviewer E HIGH-01：
+    原 QQmlComponent::create() 在 headless CI 触发 SIGSEGV，已改用 QQuickView +
+    QT_QUICK_BACKEND=software 稳定完成实例化，至少验证一个 Step Card implicitHeight>0）
   * VM L2 不在本 job 范围
 
 ## 验收要求
 
 | 层级                 | 要求                                                                                | 状态                                                                                                                                                                                   |
 | ------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **L0**             | 编译通过、Mock 协议测试 + QML build smoke                              | **L0\_PENDING CI** — ctest 预期 **7/7**（protocol / mock / D5 / D6 / D7 / D8 / D9，d9c REWORK 后待 CI 重跑）；上一轮 CI d9c 15/17 passed（A2/A5 字符串投影失败已修复）；QML\_APP=ON 构建 smoke job 验证 QRC / main.qml / 四 Page 可编译 |
+| **L0**             | 编译通过、Mock 协议测试 + QML build smoke                              | **L0\_PENDING CI** — ctest 预期 **10/10**（protocol_adapter / memory_client_mock / d5_vertical_link_demo / d6c_multi_source_adapters / d7c_preference_editor / d8c_knowledge_conflict_lifecycle / d9c_context_assemble / d10c_forgetting / d11c_e2e_orchestrator / d11c_qml_load；d11c_qml_load 在缺 Qt5 Quick 运行时的环境会跳过）；QML\_APP=ON 构建 smoke job 验证 QRC / main.qml / 五 Page 可编译（含 D11DemoOrchestratorPage） |
 | **L1**             | QLocalSocket 连接真实 Gateway / Echo；turn.finalized 测试态 handler；真实 MemoryContext 返回非空 | 待联调                                                                                                                                                                                  |
 | **L2**             | 银河麒麟 VM 中真实 AI Assistant Hook / ChatRecord / Chat DB / SourceResolver 打通          | **未实现**（属后续真实 C-D5 关闭工作）                                                                                                                                                             |
 | **HOST\_VERIFIED** | SEC-CTX-01 原文隔离宿主级证据                                                              | **RUNTIME\_UNVERIFIED**                                                                                                                                                              |
