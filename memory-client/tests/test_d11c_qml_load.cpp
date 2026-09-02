@@ -30,8 +30,11 @@
 //     xcb 平台探测，会出现 "could not connect to display" 直接 abort。
 // ============================================================================
 
-#include <QGuiApplication>
+#include <QDebug>
+#include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
+#include <QGuiApplication>
 #include <QLibraryInfo>
 #include <QLoggingCategory>
 #include <QQmlComponent>
@@ -42,6 +45,7 @@
 #include <QStringList>
 #include <QTest>
 #include <QUrl>
+#include <QVector>
 
 class TestD11cQmlLoad : public QObject
 {
@@ -96,6 +100,12 @@ void TestD11cQmlLoad::initTestCase()
         // Ubuntu / Debian 打包的常见 fallback。
         extraImports.append(QStringLiteral("/usr/lib/qt5/qml"));
         extraImports.append(QStringLiteral("/usr/share/qt5/qml"));
+        // Ubuntu 22.04 + qml-module-qtquick-controls2 实际安装路径：
+        //   /usr/lib/x86_64-linux-gnu/qt5/qml/QtQuick/Controls.2/qmldir
+        // 我们先加其所有可能的父目录兜底，再在 initTestCase 末尾打印
+        // 每条路径的 QDir exists + qmldir 文件探测结果，方便 CI 诊断。
+        extraImports.append(QStringLiteral("/usr/lib/x86_64-linux-gnu/qt5/qml"));
+        extraImports.append(QStringLiteral("/usr/lib/x86_64-linux-gnu/qml"));
         // NixOS / Qt 在 /usr/local 下安装的兼容路径兜底。
         extraImports.append(QStringLiteral("/usr/local/share/qt5/qml"));
         // qrc 内前缀，便于其它模块把 qml 代码嵌入自身资源。
@@ -105,9 +115,48 @@ void TestD11cQmlLoad::initTestCase()
         for (const QString& p : extraImports) {
             if (!p.isEmpty()) engine_->addImportPath(p);
         }
-        // 打印到 QTest log，便于 CI 失败时做路径诊断。
+    }
+
+    // ── CI 诊断：打印 import paths + QML plugin 目录实际探测 ──
+    // D11 QML 依赖 import QtQuick/Controls.2 这个 qmldir。即便
+    // find_package(Qt5 QuickControls2) 通过，且 apt 装了
+    // qml-module-qtquick-controls2，也可能 QQmlEngine 的默认 import
+    // 路径里并没有包含实际 qmldir 所在目录（例如 Qt5.15 Ubuntu 打包
+    // 时把 qmldir 放在了 /usr/lib/x86_64-linux-gnu/qt5/qml 但
+    // QLibraryInfo::Qml2ImportsPath 指向了别的路径）。
+    {
         qDebug() << "[d11c_qml_load] QQmlEngine import paths="
                  << engine_->importPathList();
+        const QVector<const char*> probeQmldirs = {
+            "QtQuick.2/qmldir",
+            "QtQuick/Controls.2/qmldir",
+            "QtQuick/Layouts/qmldir",
+            "QtQuick/Window.2/qmldir",
+            "QtQuick/Dialogs/qmldir",
+        };
+        const QStringList paths = engine_->importPathList();
+        for (const char* rel : probeQmldirs) {
+            QString found;
+            for (const QString& p : paths) {
+                const QString candidate =
+                    p + QStringLiteral("/") + QString::fromLatin1(rel);
+                if (QFile::exists(candidate)) {
+                    found = candidate;
+                    break;
+                }
+            }
+            if (found.isEmpty()) {
+                qCritical() << "[d11c_qml_load] MISSING qmldir:" << rel;
+            } else {
+                qDebug() << "[d11c_qml_load] FOUND qmldir:" << rel << "at" << found;
+            }
+        }
+        const QString qtVer = QStringLiteral("Qt runtime=%1 build=%2 gui=%3 qpa=%4")
+            .arg(QString::fromLatin1(qVersion()))
+            .arg(QLatin1String(QT_VERSION_STR))
+            .arg(QGuiApplication::instance() ? "yes" : "no")
+            .arg(QString::fromLatin1(qgetenv("QT_QPA_PLATFORM")));
+        qDebug() << "[d11c_qml_load]" << qPrintable(qtVer);
     }
 }
 
@@ -183,7 +232,25 @@ void TestD11cQmlLoad::resourceUrlResolves()
     }
 
     QQmlComponent probe(engine_.data(), kD11PageUrl);
-    QTRY_COMPARE_WITH_TIMEOUT(probe.status(), QQmlComponent::Ready, 3000);
+    // 注意：QTRY_COMPARE_WITH_TIMEOUT 一旦失败会立刻 FAIL 掉整条用例，
+    // 因此 BEFORE 断言失败必须把 formatErrors(...) 打出来——否则 CI log
+    // 只会留下“Actual : Error / Expected : Ready”这种对定位 import 错
+    // 误毫无帮助的信息。这里用一个简单的 QElapsedTimer + processEvents
+    // 轮询替代，让 status==Error 时立刻 qCritical 详细错误字符串再
+    // QFAIL。
+    {
+        QElapsedTimer t;
+        t.start();
+        while (probe.status() == QQmlComponent::Loading && t.elapsed() < 3000) {
+            QTest::qWait(20);
+        }
+        if (probe.status() != QQmlComponent::Ready) {
+            qCritical() << "[d11c_qml_load] resourceUrlResolves probe status="
+                        << probe.status()
+                        << "errors=" << qPrintable(formatErrors(probe));
+        }
+    }
+    QCOMPARE(probe.status(), QQmlComponent::Ready);
     {
         const QString errMsg =
             QStringLiteral("Component 加载不应有错误，当前错误: %1")
@@ -192,18 +259,33 @@ void TestD11cQmlLoad::resourceUrlResolves()
     }
 }
 
+// 所有用例共用的“等 component Ready，否则带 formatErrors FAIL”。
+// 直接替掉 QTRY_COMPARE_WITH_TIMEOUT，保证 status!=Ready 瞬间一定先
+// 把 component 错误串打到 CI log，再让断言 fail。
+static void waitReadyOrFail(const char* caller, QQmlComponent& c)
+{
+    QElapsedTimer t;
+    t.start();
+    while (c.status() == QQmlComponent::Loading && t.elapsed() < 3000) {
+        QTest::qWait(20);
+    }
+    if (c.status() != QQmlComponent::Ready) {
+        qCritical() << "[d11c_qml_load]" << caller
+                    << "component status=" << c.status()
+                    << "errors=" << qPrintable(formatErrors(c));
+    }
+    const QString msg =
+        QStringLiteral("%1 需 status=Ready，实际=%2 错误=%3")
+            .arg(QString::fromLatin1(caller))
+            .arg(c.status())
+            .arg(formatErrors(c));
+    QVERIFY2(c.status() == QQmlComponent::Ready, qPrintable(msg));
+}
+
 void TestD11cQmlLoad::componentCreatesWithoutErrors()
 {
     QQmlComponent component(engine_.data(), kD11PageUrl);
-    QTRY_COMPARE_WITH_TIMEOUT(component.status(), QQmlComponent::Ready, 3000);
-
-    {
-        const QString errMsg =
-            QStringLiteral("D11 Component 必须 Ready，当前 status=%1 错误=%2")
-                .arg(component.status())
-                .arg(formatErrors(component));
-        QVERIFY2(component.isReady(), qPrintable(errMsg));
-    }
+    waitReadyOrFail("componentCreatesWithoutErrors", component);
 
     QScopedPointer<QObject> obj(component.create());
     {
@@ -221,7 +303,7 @@ void TestD11cQmlLoad::componentCreatesWithoutErrors()
 void TestD11cQmlLoad::viewModelAliasExistsAndInitiallyNull()
 {
     QQmlComponent component(engine_.data(), kD11PageUrl);
-    QTRY_COMPARE_WITH_TIMEOUT(component.status(), QQmlComponent::Ready, 3000);
+    waitReadyOrFail("viewModelAliasExistsAndInitiallyNull", component);
     QScopedPointer<QObject> obj(component.create());
     {
         const QString errMsg =
@@ -252,7 +334,7 @@ void TestD11cQmlLoad::viewModelAliasExistsAndInitiallyNull()
 void TestD11cQmlLoad::multipleInstantiationsDoNotLeak()
 {
     QQmlComponent component(engine_.data(), kD11PageUrl);
-    QTRY_COMPARE_WITH_TIMEOUT(component.status(), QQmlComponent::Ready, 3000);
+    waitReadyOrFail("multipleInstantiationsDoNotLeak", component);
 
     QObject* first = component.create();
     {
