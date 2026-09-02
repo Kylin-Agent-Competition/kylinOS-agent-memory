@@ -505,6 +505,7 @@ idx_memory_conflict_left = Index("idx_memory_conflict_left", memory_conflict.c.u
 idx_memory_conflict_right = Index("idx_memory_conflict_right", memory_conflict.c.user_id, memory_conflict.c.right_knowledge_id)
 idx_memory_conflict_status = Index("idx_memory_conflict_status", memory_conflict.c.user_id, memory_conflict.c.resolution_status)
 uq_memory_conflict_member_ordinal = Index("uq_memory_conflict_member_ordinal", memory_conflict_member.c.user_id, memory_conflict_member.c.conflict_id, memory_conflict_member.c.ordinal, unique=True)
+idx_memory_conflict_member_knowledge = Index("idx_memory_conflict_member_knowledge", memory_conflict_member.c.user_id, memory_conflict_member.c.knowledge_id)
 uq_lifecycle_receipt_evaluation = Index("uq_lifecycle_receipt_evaluation", memory_lifecycle_receipt.c.user_id, memory_lifecycle_receipt.c.evaluation_id, unique=True)
 uq_lifecycle_archive_once = Index(
     "uq_lifecycle_archive_once", memory_lifecycle_receipt.c.user_id, memory_lifecycle_receipt.c.knowledge_id,

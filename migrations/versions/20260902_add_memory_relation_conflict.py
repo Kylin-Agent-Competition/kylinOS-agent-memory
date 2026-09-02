@@ -84,15 +84,23 @@ def upgrade() -> None:
     # Direct SQL must not manufacture an eligible knowledge row or invalidate the
     # compatibility soft-delete projection.
     op.execute("""CREATE TRIGGER memory_entries_d8d_insert_gate BEFORE INSERT ON memory_entries
-    WHEN NEW.row_revision IS NULL OR NEW.row_revision < 1 OR
+    WHEN NEW.version IS NULL OR NEW.version < 1 OR NEW.row_revision IS NULL OR NEW.row_revision < 1 OR
+      (NEW.is_deleted=1 AND NEW.memory_status != 'removed') OR
+      (NEW.entry_type != 'knowledge' AND (NEW.knowledge_id IS NOT NULL OR NEW.knowledge_type IS NOT NULL OR NEW.conditions IS NOT NULL OR NEW.lifecycle_eligibility IS NOT NULL OR NEW.memory_status IS NOT NULL OR NEW.memory_type IS NOT NULL OR NEW.evidence_tier IS NOT NULL OR NEW.last_accessed_at IS NOT NULL OR NEW.access_count IS NOT NULL)) OR
       (NEW.entry_type='knowledge' AND (NEW.knowledge_id IS NULL OR NEW.knowledge_type IS NULL OR NEW.memory_status IS NULL OR NEW.memory_type IS NULL OR NEW.lifecycle_eligibility NOT IN ('eligible','evidence_unmapped') OR (NEW.lifecycle_eligibility='eligible' AND NEW.evidence_tier IS NULL) OR (NEW.lifecycle_eligibility='evidence_unmapped' AND NEW.evidence_tier IS NOT NULL)))
     BEGIN SELECT RAISE(ABORT, 'd8d knowledge lifecycle gate'); END""")
     op.execute("""CREATE TRIGGER memory_entries_d8d_update_gate BEFORE UPDATE ON memory_entries
-    WHEN NEW.row_revision IS NULL OR NEW.row_revision < 1 OR
-      (OLD.lifecycle_eligibility='legacy_unmapped' AND NEW.lifecycle_eligibility NOT IN ('legacy_unmapped','eligible')) OR
-      (NEW.entry_type='knowledge' AND NEW.lifecycle_eligibility='eligible' AND NEW.evidence_tier IS NULL) OR
-      (NEW.entry_type='knowledge' AND NEW.lifecycle_eligibility='evidence_unmapped' AND NEW.evidence_tier IS NOT NULL) OR
-      (NEW.is_deleted=1 AND NEW.memory_status != 'removed')
+    WHEN NEW.version IS NULL OR NEW.version < 1 OR NEW.row_revision IS NULL OR NEW.row_revision < 1 OR
+      (NEW.is_deleted=1 AND NEW.memory_status != 'removed') OR
+      (NEW.entry_type != 'knowledge' AND (NEW.knowledge_id IS NOT NULL OR NEW.knowledge_type IS NOT NULL OR NEW.conditions IS NOT NULL OR NEW.lifecycle_eligibility IS NOT NULL OR NEW.memory_status IS NOT NULL OR NEW.memory_type IS NOT NULL OR NEW.evidence_tier IS NOT NULL OR NEW.last_accessed_at IS NOT NULL OR NEW.access_count IS NOT NULL)) OR
+      (NEW.entry_type='knowledge' AND (
+        (OLD.lifecycle_eligibility IN ('eligible','evidence_unmapped') AND NEW.lifecycle_eligibility NOT IN ('eligible','evidence_unmapped')) OR
+        (OLD.lifecycle_eligibility IN ('eligible','evidence_unmapped') AND (NEW.knowledge_id IS NULL OR NEW.knowledge_type IS NULL OR NEW.memory_status IS NULL OR NEW.memory_type IS NULL)) OR
+        (OLD.lifecycle_eligibility='legacy_unmapped' AND NEW.lifecycle_eligibility NOT IN ('legacy_unmapped','eligible')) OR
+        (NEW.lifecycle_eligibility IN ('eligible','evidence_unmapped') AND (NEW.knowledge_id IS NULL OR NEW.knowledge_type IS NULL OR NEW.memory_status IS NULL OR NEW.memory_type IS NULL)) OR
+        (NEW.lifecycle_eligibility='eligible' AND NEW.evidence_tier IS NULL) OR
+        (NEW.lifecycle_eligibility='evidence_unmapped' AND NEW.evidence_tier IS NOT NULL)
+      ))
     BEGIN SELECT RAISE(ABORT, 'd8d lifecycle update gate'); END""")
 
 
@@ -111,6 +119,7 @@ def _indexes() -> None:
     op.create_index("idx_memory_conflict_right", "memory_conflict", ["user_id", "right_knowledge_id"])
     op.create_index("idx_memory_conflict_status", "memory_conflict", ["user_id", "resolution_status"])
     op.create_index("uq_memory_conflict_member_ordinal", "memory_conflict_member", ["user_id", "conflict_id", "ordinal"], unique=True)
+    op.create_index("idx_memory_conflict_member_knowledge", "memory_conflict_member", ["user_id", "knowledge_id"])
     op.create_index("uq_lifecycle_receipt_evaluation", "memory_lifecycle_receipt", ["user_id", "evaluation_id"], unique=True)
     op.create_index("uq_lifecycle_archive_once", "memory_lifecycle_receipt", ["user_id", "knowledge_id", "version_id", "action", "reason_code"], unique=True, sqlite_where=text("action='archive_request'"))
 
@@ -125,7 +134,7 @@ def downgrade() -> None:
         raise RuntimeError("refuse D8D downgrade: mapped knowledge exists")
     op.execute("DROP TRIGGER IF EXISTS memory_entries_d8d_update_gate")
     op.execute("DROP TRIGGER IF EXISTS memory_entries_d8d_insert_gate")
-    for name, table in (("uq_lifecycle_archive_once", "memory_lifecycle_receipt"), ("uq_lifecycle_receipt_evaluation", "memory_lifecycle_receipt"), ("uq_memory_conflict_member_ordinal", "memory_conflict_member"), ("idx_memory_conflict_status", "memory_conflict"), ("idx_memory_conflict_right", "memory_conflict"), ("idx_memory_conflict_left", "memory_conflict"), ("uq_memory_conflict_user_conflict", "memory_conflict"), ("uq_memory_relation_version_successor", "memory_relation"), ("uq_memory_relation_primary_evidence", "memory_relation"), ("uq_memory_relation_canonical_evidence", "memory_relation"), ("idx_memory_relation_right", "memory_relation"), ("idx_memory_relation_left", "memory_relation"), ("uq_memory_relation_user_relation", "memory_relation"), ("idx_memory_entries_user_lifecycle_type", "memory_entries"), ("idx_memory_entries_user_status", "memory_entries"), ("uq_memory_entries_user_knowledge", "memory_entries")):
+    for name, table in (("uq_lifecycle_archive_once", "memory_lifecycle_receipt"), ("uq_lifecycle_receipt_evaluation", "memory_lifecycle_receipt"), ("idx_memory_conflict_member_knowledge", "memory_conflict_member"), ("uq_memory_conflict_member_ordinal", "memory_conflict_member"), ("idx_memory_conflict_status", "memory_conflict"), ("idx_memory_conflict_right", "memory_conflict"), ("idx_memory_conflict_left", "memory_conflict"), ("uq_memory_conflict_user_conflict", "memory_conflict"), ("uq_memory_relation_version_successor", "memory_relation"), ("uq_memory_relation_primary_evidence", "memory_relation"), ("uq_memory_relation_canonical_evidence", "memory_relation"), ("idx_memory_relation_right", "memory_relation"), ("idx_memory_relation_left", "memory_relation"), ("uq_memory_relation_user_relation", "memory_relation"), ("idx_memory_entries_user_lifecycle_type", "memory_entries"), ("idx_memory_entries_user_status", "memory_entries"), ("uq_memory_entries_user_knowledge", "memory_entries")):
         op.drop_index(name, table_name=table)
     for table in ("memory_lifecycle_receipt", "memory_conflict_member", "memory_conflict", "memory_relation"):
         op.drop_table(table)

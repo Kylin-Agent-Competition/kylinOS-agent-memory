@@ -21,7 +21,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, delete, func, insert, select, update
+from sqlalchemy import and_, delete, exists, func, insert, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from db.engine import DatabaseLockedError, is_locked_error
@@ -1910,6 +1910,50 @@ def insert_knowledge_entry(
     lifecycle_eligibility = "eligible" if tier else "evidence_unmapped"
     now = _now_iso()
     try:
+        # Canonical idempotent replay (ADR-017 §3.1.1): a retried logical ingress
+        # with the same user/knowledge/source and identical immutable inputs must
+        # return the existing canonical identity without re-inserting the entry,
+        # re-creating the primary evidence relation, or emitting a second Outbox
+        # event.  Any drift in immutable inputs is fail-closed.
+        existing = conn.execute(
+            select(memory_entries).where(and_(
+                memory_entries.c.user_id == user_id,
+                memory_entries.c.entry_type == "knowledge",
+                memory_entries.c.knowledge_id == knowledge_id,
+            ))
+        ).mappings().first()
+        if existing is not None:
+            edge = conn.execute(
+                select(memory_relation).where(and_(
+                    memory_relation.c.user_id == user_id,
+                    memory_relation.c.relation_type == "evidence",
+                    memory_relation.c.is_primary == 1,
+                    memory_relation.c.left_endpoint_type == "knowledge",
+                    memory_relation.c.left_endpoint_id == knowledge_id,
+                    memory_relation.c.right_endpoint_type == "source_event",
+                ))
+            ).mappings().first()
+            if edge is None:
+                raise ValueError("canonical primary evidence relation is missing")
+            if edge["right_endpoint_id"] != source_event_id:
+                raise ValueError("knowledge replay source event conflict")
+            stored_content = json.loads(existing["content"])
+            if (
+                existing["knowledge_type"] != knowledge_type
+                or existing["conditions"] != conditions
+                or existing["confidence"] != confidence
+                or stored_content != content
+            ):
+                raise ValueError("knowledge replay immutable input conflict")
+            return {
+                "memory_entry_id": int(existing["id"]),
+                "memory_id": str(existing["id"]),
+                "version_id": f"v{int(existing['version'])}",
+                "knowledge_id": knowledge_id,
+                "evidence_tier": existing["evidence_tier"],
+                "lifecycle_eligibility": existing["lifecycle_eligibility"],
+                "replayed": True,
+            }
         res = conn.execute(insert(memory_entries).values(user_id=user_id, entry_type="knowledge", content=json.dumps(content, ensure_ascii=False), confidence=confidence, version=1, row_revision=1, is_deleted=0, created_at=now, updated_at=now, trace_id=trace_id, knowledge_id=knowledge_id, knowledge_type=knowledge_type, conditions=conditions, lifecycle_eligibility=lifecycle_eligibility, memory_status="candidate", memory_type="short_term", evidence_tier=tier, last_accessed_at=None, access_count=None))
         entry_id = int(res.lastrowid)
         relation_id = f"evidence:{knowledge_id}:{source_event_id}"
@@ -1986,16 +2030,16 @@ def insert_conflict(
     _d8d_nonempty(user_id=user_id, conflict_id=conflict_id, conflict_type=conflict_type, left_knowledge_id=left_knowledge_id, right_knowledge_id=right_knowledge_id, resolution_status=resolution_status, detected_at=detected_at)
     if conflict_type not in _CONFLICT_TYPES or resolution_status not in _RESOLUTION_STATUSES or left_knowledge_id == right_knowledge_id:
         raise ValueError("invalid conflict")
-    if decision_action is not None and decision_action not in _DECISION_ACTIONS:
-        raise ValueError("invalid decision_action")
     if resolution_confidence is not None and not 0 <= resolution_confidence <= 1:
         raise ValueError("invalid resolution_confidence")
     if resolution_status in {"resolved_auto", "resolved_manual"} and (not resolved_at or not resolved_by):
         raise ValueError("resolved conflict requires resolved_at and resolved_by")
-    if decision_action == "keep_left" and winner_id != left_knowledge_id or decision_action == "keep_right" and winner_id != right_knowledge_id:
-        raise ValueError("winner_id must match keep side")
-    if decision_action not in {"keep_left", "keep_right"} and winner_id is not None:
-        raise ValueError("only keep decisions may have a winner")
+    _validate_conflict_decision(
+        decision_action=decision_action,
+        winner_id=winner_id,
+        left_knowledge_id=left_knowledge_id,
+        right_knowledge_id=right_knowledge_id,
+    )
     members = involved_knowledge_ids
     if members is not None and len(members) > 32:
         raise ValueError("at most 32 involved knowledge ids")
@@ -2016,15 +2060,65 @@ def get_conflict_by_id(conn, *, user_id: str, conflict_id: str) -> Optional[Dict
     return dict(row) if row else None
 
 
+def _validate_conflict_decision(
+    *, decision_action: Optional[str], winner_id: Optional[str],
+    left_knowledge_id: str, right_knowledge_id: str,
+) -> None:
+    """Single Decision validator shared by insert/update (ADR-017 audit truth).
+
+    ``winner_id`` may only appear for a keep decision and must name the side
+    actually kept; coexist/defer/reject must not carry a winner.
+    """
+    if decision_action is None:
+        if winner_id is not None:
+            raise ValueError("only keep decisions may have a winner")
+        return
+    if decision_action not in _DECISION_ACTIONS:
+        raise ValueError("invalid decision_action")
+    if decision_action == "keep_left":
+        if winner_id != left_knowledge_id:
+            raise ValueError("winner_id must match keep side")
+    elif decision_action == "keep_right":
+        if winner_id != right_knowledge_id:
+            raise ValueError("winner_id must match keep side")
+    elif winner_id is not None:
+        raise ValueError("only keep decisions may have a winner")
+
+
 def list_conflicts_by_knowledge(conn, *, user_id: str, knowledge_id: str) -> List[Dict[str, Any]]:
-    rows = conn.execute(select(memory_conflict).where(and_(memory_conflict.c.user_id == user_id, (memory_conflict.c.left_knowledge_id == knowledge_id) | (memory_conflict.c.right_knowledge_id == knowledge_id))).order_by(memory_conflict.c.detected_at, memory_conflict.c.conflict_id)).mappings().all()
+    # Conflict truth membership is the member table: an involved-only participant
+    # (neither left nor right) must surface in the same scoped conflict set.
+    rows = conn.execute(
+        select(memory_conflict).where(and_(
+            memory_conflict.c.user_id == user_id,
+            exists(
+                select(1).where(and_(
+                    memory_conflict_member.c.user_id == memory_conflict.c.user_id,
+                    memory_conflict_member.c.conflict_id == memory_conflict.c.conflict_id,
+                    memory_conflict_member.c.knowledge_id == knowledge_id,
+                ))
+            ),
+        )).order_by(memory_conflict.c.detected_at, memory_conflict.c.conflict_id)
+    ).mappings().all()
     return [dict(row) for row in rows]
 
 
 def resolve_conflict_state(conn, *, user_id: str, knowledge_id: str) -> str:
     if _knowledge_row(conn, user_id=user_id, knowledge_id=knowledge_id, eligible_only=True) is None:
         return "none"
-    unresolved = conn.execute(select(func.count()).select_from(memory_conflict).where(and_(memory_conflict.c.user_id == user_id, ((memory_conflict.c.left_knowledge_id == knowledge_id) | (memory_conflict.c.right_knowledge_id == knowledge_id)), memory_conflict.c.resolution_status.not_in(["resolved_auto", "resolved_manual"])))).scalar_one()
+    unresolved = conn.execute(
+        select(func.count()).select_from(memory_conflict).where(and_(
+            memory_conflict.c.user_id == user_id,
+            memory_conflict.c.resolution_status.not_in(["resolved_auto", "resolved_manual"]),
+            exists(
+                select(1).where(and_(
+                    memory_conflict_member.c.user_id == memory_conflict.c.user_id,
+                    memory_conflict_member.c.conflict_id == memory_conflict.c.conflict_id,
+                    memory_conflict_member.c.knowledge_id == knowledge_id,
+                ))
+            ),
+        ))
+    ).scalar_one()
     return "unresolved" if unresolved else "resolved"
 
 
@@ -2036,8 +2130,12 @@ def update_conflict_resolution(conn, *, user_id: str, conflict_id: str, resoluti
         raise ValueError("invalid resolution_status")
     if resolution_status in {"resolved_auto", "resolved_manual"} and (not resolved_at or not resolved_by):
         raise ValueError("resolved conflict requires resolved_at and resolved_by")
-    if decision_action == "keep_left" and winner_id != row["left_knowledge_id"] or decision_action == "keep_right" and winner_id != row["right_knowledge_id"]:
-        raise ValueError("winner_id must match keep side")
+    _validate_conflict_decision(
+        decision_action=decision_action,
+        winner_id=winner_id,
+        left_knowledge_id=row["left_knowledge_id"],
+        right_knowledge_id=row["right_knowledge_id"],
+    )
     now = _now_iso()
     result = conn.execute(update(memory_conflict).where(and_(memory_conflict.c.user_id == user_id, memory_conflict.c.conflict_id == conflict_id)).values(resolution_status=resolution_status, decision_action=decision_action, winner_id=winner_id, reason_code=reason_code, resolved_at=resolved_at, resolved_by=resolved_by, updated_at=now))
     if result.rowcount:

@@ -86,9 +86,62 @@ def test_conflict_is_sanitized_member_round_trip_and_unresolved_is_fail_closed(c
     assert conflict and conflict["conflict_summary"] == "conflict:contradiction"
     assert "user original secret" not in str(conflict)
     assert repo.resolve_conflict_state(conn, user_id="u1", knowledge_id="left") == "unresolved"
+    # HIGH-02：involved-only member 也必须从 conflict truth 命中 unresolved。
+    assert repo.resolve_conflict_state(conn, user_id="u1", knowledge_id="extra") == "unresolved"
+    assert len(repo.list_conflicts_by_knowledge(conn, user_id="u1", knowledge_id="extra")) == 1
     assert repo.get_conflict_by_id(conn, user_id="u2", conflict_id="c1") is None
     assert repo.update_conflict_resolution(conn, user_id="u1", conflict_id="c1", resolution_status="resolved_auto", decision_action="keep_left", winner_id="left", reason_code="evidence_tier_priority", resolved_at=datetime.now(timezone.utc).isoformat(), resolved_by="policy") == 1
     assert repo.resolve_conflict_state(conn, user_id="u1", knowledge_id="left") == "resolved"
+    assert repo.resolve_conflict_state(conn, user_id="u1", knowledge_id="extra") == "resolved"
+
+
+def test_conflict_update_rejects_illegal_decision_winner_combo(conn):
+    _knowledge(conn, knowledge_id="left", event_id="e-left")
+    _knowledge(conn, knowledge_id="right", event_id="e-right")
+    repo.insert_conflict(conn, user_id="u1", conflict_id="c1", conflict_type="contradiction", left_knowledge_id="left", right_knowledge_id="right", resolution_status="detected", is_auto_resolvable=False, detected_at=datetime.now(timezone.utc).isoformat())
+    # MEDIUM-01：winner 只允许出现在 keep_* 且必须等于被保留方。
+    with pytest.raises(ValueError, match="only keep decisions"):
+        repo.update_conflict_resolution(conn, user_id="u1", conflict_id="c1", resolution_status="resolved_manual", decision_action="coexist", winner_id="left", reason_code="scope_distinguishable", resolved_at=datetime.now(timezone.utc).isoformat(), resolved_by="user")
+    with pytest.raises(ValueError, match="winner_id must match keep side"):
+        repo.update_conflict_resolution(conn, user_id="u1", conflict_id="c1", resolution_status="resolved_manual", decision_action="keep_right", winner_id="left", reason_code="scope_distinguishable", resolved_at=datetime.now(timezone.utc).isoformat(), resolved_by="user")
+    assert repo.resolve_conflict_state(conn, user_id="u1", knowledge_id="left") == "unresolved"
+
+
+def test_knowledge_ingress_replay_reuses_canonical_without_second_edge_or_outbox(conn):
+    created = _knowledge(conn)
+    replay = repo.insert_knowledge_entry(
+        conn, user_id="u1", knowledge_id="k1", knowledge_type="fact",
+        source_event_id="e1", content={"safe": "metadata"}, confidence=0.9,
+    )
+    # MEDIUM-02：幂等重放复用既有 canonical 身份，不再插入 relation / Outbox。
+    assert replay["replayed"] is True
+    assert replay["memory_entry_id"] == created["memory_entry_id"]
+    assert replay["version_id"] == "v1"
+    assert len(repo.list_relations(conn, user_id="u1", knowledge_id="k1")) == 1
+    outbox_count = conn.execute(
+        select(func.count()).select_from(outbox).where(outbox.c.aggregate_id == "k1")
+    ).scalar_one()
+    assert outbox_count == 1
+
+
+def test_knowledge_ingress_replay_immutable_conflict_fails_closed(conn):
+    _knowledge(conn)
+    with pytest.raises(ValueError, match="immutable input"):
+        repo.insert_knowledge_entry(
+            conn, user_id="u1", knowledge_id="k1", knowledge_type="fact",
+            source_event_id="e1", content={"safe": "changed"}, confidence=0.9,
+        )
+    _event(conn, user_id="u1", event_id="e2")
+    with pytest.raises(ValueError, match="source event conflict"):
+        repo.insert_knowledge_entry(
+            conn, user_id="u1", knowledge_id="k1", knowledge_type="fact",
+            source_event_id="e2", content={"safe": "metadata"}, confidence=0.9,
+        )
+    assert len(repo.list_relations(conn, user_id="u1", knowledge_id="k1")) == 1
+    outbox_count = conn.execute(
+        select(func.count()).select_from(outbox).where(outbox.c.aggregate_id == "k1")
+    ).scalar_one()
+    assert outbox_count == 1
 
 
 def test_lifecycle_expire_keeps_index_version_and_replay_is_idempotent(conn):
