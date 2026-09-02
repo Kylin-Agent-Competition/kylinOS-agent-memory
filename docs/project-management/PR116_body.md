@@ -2,23 +2,23 @@
 
 > **最终合入 HEAD 模板**（以 `git rev-parse HEAD` 的最终值为准，合并前重新生成）
 >
-> - **HEAD**：`__REPLACE_WITH_FINAL_HEAD__`
+> - **HEAD**：`5d4d863bd9627bf01a4d8565f049637c877e5671`
 > - **Base**：`a929436f696e11316d221ed5f23cf947ee61b4f7`
-> - **规模**：`__REPLACE_WITH_COMMIT_COUNT__` commits / `__REPLACE_WITH_CHANGED_FILES__` changed files / `+__X__ -__Y__`
+> - **规模**：`22` commits / `14` changed files
 
 ## 变更摘要
 
 在 `memory-client/` 内新增一个**显式 5-Step Demo 编排器**（QML + ViewModel），
 将 D5-C / D6-C / D10-C 原型与新增遗忘 Preview→Execute 一次性凭据链串成单页
-客户端验收 Harness，配套 **15 个 QtTest E2E slot + 5 个 QML 业务 slot**，
-覆盖 Reviewer E 第三轮增量复审的 1 HIGH + 4 MEDIUM。
+客户端验收 Harness，配套 **14 个 QtTest E2E slot + 5 个 QML 业务 slot**，
+覆盖 Reviewer E 第四轮复审关闭的 1 HIGH + 4 MEDIUM。
 
 ## 主要新增文件 (memory-client)
 
 | 文件 | 作用 |
 |---|---|
 | `qml/pages/D11DemoOrchestratorPage.qml` | 5 张声明式 Step Card（objectName `d11-step-1-card` ~ `d11-step-5-card`），状态直接绑定 `viewModel.*`；4 项安全汇总灯 gate 到对应 pipeline 完成（MEDIUM-03）。 |
-| `tests/test_d11c_e2e_orchestrator.cpp` | 15 个 QtTest L0：A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/**E4**/F1/F2/**F3** |
+| `tests/test_d11c_e2e_orchestrator.cpp` | 14 个 QtTest L0：A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/**E4**/F1/F2/**F3** |
 | `tests/test_d11c_qml_load.cpp` | QQuickView 真实加载；5 张 Card 精确 objectName 定位 + 断言 `implicitHeight>0 && height>0`（MEDIUM-01）；slot F `summaryLightsInitiallyNoGreen`（MEDIUM-03）。 |
 | `tests/mock_gateway_server.{h,cpp}` | MockGatewayServer 新增 `__hold__:true` 后门（handler 返回时不回包），用于构造"请求 in-flight → reset → stale response"竞态（MEDIUM-02 F3）。 |
 
@@ -32,11 +32,11 @@
 | `tests/CMakeLists.txt` | 新增 ctest target：`d11c_e2e_orchestrator` / `d11c_qml_load`，后者设置 `QT_QPA_PLATFORM=offscreen` + `QT_QUICK_BACKEND=software`。 |
 | `tests/test_d10c_forgetting.cpp` | D10 既有契约保持不回归（与 D11 ViewModel 修改编译一致）。 |
 | `.github/workflows/memory-client-ctest.yml` | CI 纳入 10 个 ctest 目标（见下）。 |
-| `README.md` | D11-C 章节更新到第三轮最终口径：15+5 slot 清单、HIGH-01 TTL、MEDIUM-01/02/03 精确场景、L2 声明。 |
+| `README.md` | D11-C 章节更新到第四轮最终口径：14+5 slot 清单、HIGH-01 TTL、MEDIUM-01/02/03 精确场景、L2 声明。 |
 
-## L0 用例清单（20 业务 QtTest slot）
+## L0 用例清单（19 业务 QtTest slot）
 
-**D11-C E2E Orchestrator（15 slots，`d11c_e2e_orchestrator`）：**
+**D11-C E2E Orchestrator（14 slots，`d11c_e2e_orchestrator`）：**
 - A1 Step1 preChat：三路原文隔离 verified + modelRequestText 拼接
 - A2 Step1 postTurn：envelope.method==`turn.finalized`，不回退 `memory.store`
 - B1 Step2 cross-session：session-demo-0001 → session-demo-0002 + 差异化 Context 正对照
@@ -73,11 +73,11 @@
 >
 > 另一个 CI `Repository Baseline Check` 同步 ✅。
 
-## 安全契约落地（Reviewer E 第三轮 HIGH + MEDIUM）
+## 安全契约落地（Reviewer E 第四轮 HIGH + MEDIUM，均已关闭）
 
 | ID | 项目 | 证据 |
 |---|---|---|
-| **HIGH-01** | confirmation credential TTL 过期 fail-closed（客户端门禁） | ViewModel `forgetCredentialDeadlineMs_` 记录 monotonic deadline；Execute 前校验 `now<deadline`；过期清空 credential + stage=failed + 不发 forget.execute；E4 L0 用 TTL=1s 真实等待 2s 证明。 |
+| **HIGH-01** | confirmation credential TTL 过期 fail-closed（客户端门禁） | ViewModel `forgetCredentialDeadlineMs_` 记录 wall-clock deadline；Execute 前校验 `now<deadline`；过期清空 credential + stage=failed + 不发 forget.execute；E4 L0 用 TTL=1s 真实等待 2s 证明。 |
 | **MEDIUM-01** | Step Card 高度不得被任意 QQuickItem 误判 | 5 张 Card 有稳定 objectName；d11c_qml_load 精确找到 5 张并逐一断言 implicitHeight>0 && height>0。 |
 | **MEDIUM-02** | F3 reset 真清除 in-flight pending + stale response 不回写 | Mock `__hold__` 后门构造 hold 状态，保证 busy=true / pending 非空时 reset；reset 后 sendRawEnvelope 注入响应，三路（Tool/Conflict/Lifecycle）+ resetAllPipelines 均 stage 保持 idle。 |
 | **MEDIUM-03** | 验收汇总初始态不得假阳性 PASS/OK/READY | 4 个汇总灯都 gate 到对应 pipeline stage（preChatStage==ready / forgetStage==completed or failed）；否则显示"未执行 · —"；d11c_qml_load slot F 断言 4 个 Label 初始文本不含 PASS/OK/READY。 |

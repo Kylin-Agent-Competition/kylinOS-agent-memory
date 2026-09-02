@@ -2282,7 +2282,7 @@ void MemoryViewModel::projectForgetPreview(const QJsonObject& data)
     // confirmation_credential：Preview 生成的一次性确认凭据（D10 v0.3 冻结）。
     // 绑定 user_id + forget_plan_id + selection_hash，具备 TTL；Execute 必须
     // 传入完全匹配值，错误/过期/重放必须 fail-closed。
-    // HIGH-01: 记录 monotonic deadline (ms since epoch)。
+    // HIGH-01: 记录 wall-clock deadline (ms since epoch)。
     const QString cred = data.value(QStringLiteral("confirmation_credential")).toString();
     if (!cred.isEmpty()) {
         setForgetConfirmationCredential(cred);

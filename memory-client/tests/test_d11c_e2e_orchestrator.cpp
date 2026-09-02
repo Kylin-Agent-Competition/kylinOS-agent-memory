@@ -11,14 +11,14 @@
 //     - buildMemoryContext(sessionTag) 对 A/B 两个 session 返回可区分的 Context
 //     - step2_crossSession 捕获两次请求的 payload.session_id，断言 0001 → 0002
 //     - 断言 injectedContextText A ≠ B（证明第二次 context 确实来自新 session 请求）
-//   修正用例数：A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/F1/F2/F3 = 共 **13** 个独立 test slot。
+//   修正用例数：A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/E4/F1/F2/F3 = 共 **14** 个独立 E2E test slot。
 //   MEDIUM-01 §F 新增 F3 stale response 防回写：
 //     - resetToolPipeline/resetConflictComparePipeline/resetLifecycleStatusPipeline 三路
 //       补 pending 清理 + deadline timer 取消（与 resetPostTurnPipeline 对齐）。
 //     - F3 通过 MockGatewayServer::sendRawEnvelope 注入延迟 stale response，
 //       断言 reset 后 stage 仍保持 idle（不被回写）。
 //   MEDIUM-02 §README/PR 口径统一：
-//     - 测试用例数 13（A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/F1/F2/F3），
+//     - 测试用例数 14（A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/E4/F1/F2/F3），
 //       原 README "A~G 共 11" 与原注释 "12" 均已修正；
 //       原 "G. 全量 Reset" 实为 F3（编排骨架总体一致性分类下）。
 //     - test_d11c_qml_load.cpp 改用 QQuickView 完成真实实例化验证

@@ -328,7 +328,7 @@ L2 宿主 Runtime 证据由 B/D 轨在 D11B 最终 VM（与最终验收 HEAD com
 
 * **L0 测试**：
 
-  1. `tests/test_d11c_e2e_orchestrator.cpp`（A\~F 共 **15 个 QtTest slot**：
+  1. `tests/test_d11c_e2e_orchestrator.cpp`（A\~F 共 **14 个 QtTest E2E slot**：
      A1/A2/B1/C1/C2/D1/D2/E1/E2/E3/E4/F1/F2/F3），
      使用 test\_support::MockGatewayServer + setHandler(lambda) 注册 9 路活跃 handler
      （memory.retrieve / turn.finalized / tool.execution / conflict.compare /
