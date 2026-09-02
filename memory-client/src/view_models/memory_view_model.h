@@ -942,8 +942,8 @@ private:
     // （ms since epoch）= current + forgetCredentialTtlSeconds_ * 1000。
     // Execute 前校验：非空 + 匹配 + 当前时刻 < deadline。
     // 过期 credential = fail-closed（不发送 forget.execute）。
-    // TD-056: 非 monotonic 时钟，不抗系统时间回拨。关闭前防回拨不作为正式安全承诺。
-    qint64 forgetCredentialDeadlineMs_ = 0;  // HIGH-01: credential wall-clock 过期时间戳 (ms since epoch)。TD-056: 非 monotonic，不抗系统时间回拨。
+    // TD-058: 非 monotonic 时钟，不抗系统时间回拨。关闭前防回拨不作为正式安全承诺。
+    qint64 forgetCredentialDeadlineMs_ = 0;  // HIGH-01: credential wall-clock 过期时间戳 (ms since epoch)。TD-058: 非 monotonic，不抗系统时间回拨。
     QVariantList forgetResolvedTargets_;
     QString forgetMode_;
     QString forgetTargetType_;

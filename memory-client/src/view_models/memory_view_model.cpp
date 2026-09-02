@@ -2283,9 +2283,9 @@ void MemoryViewModel::projectForgetPreview(const QJsonObject& data)
     // 绑定 user_id + forget_plan_id + selection_hash，具备 TTL；Execute 必须
     // 传入完全匹配值，错误/过期/重放必须 fail-closed。
     // HIGH-01: 记录 wall-clock deadline (ms since epoch)。
-    // TD-056: 此处使用 wall-clock（QDateTime::currentMSecsSinceEpoch）而非
+    // TD-058: 此处使用 wall-clock（QDateTime::currentMSecsSinceEpoch）而非
     // monotonic clock；系统时钟被恶意或误操作回拨时，过期凭据可能被误判为仍
-    // 有效。缓解/关闭路径见 docs/technical-debt/TECHNICAL_DEBT_REGISTER.md TD-056。
+    // 有效。缓解/关闭路径见 docs/technical-debt/TECHNICAL_DEBT_REGISTER.md TD-058。
     const QString cred = data.value(QStringLiteral("confirmation_credential")).toString();
     if (!cred.isEmpty()) {
         setForgetConfirmationCredential(cred);

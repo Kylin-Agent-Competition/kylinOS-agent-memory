@@ -209,7 +209,11 @@ outbox = Table(
     Column("next_retry_at", String, nullable=True),  # ISO8601 UTC
     Column("last_error", Text, nullable=True),
     Column("created_at", String, nullable=False),
-    CheckConstraint("aggregate_type IN ('turn','memory')", name="ck_outbox_aggregate_type"),
+    # ADR-015（D 已决策 + Reviewer E 已签署 2026-09-02）：nullable priority 列，
+    # DEFAULT 0（普通索引任务）；forget.* 删除类事件 = 1；预留 2 = urgent。
+    # 历史行 NULL 与 0 语义统一为 0（迁移重建时显式回填 0）。
+    Column("priority", Integer, nullable=True, server_default="0"),
+    CheckConstraint("aggregate_type IN ('turn','memory','forget')", name="ck_outbox_aggregate_type"),
 )
 
 idempotency_cache = Table(
@@ -285,6 +289,90 @@ source_events = Table(
         "processing_status IN ('pending','extracting','extracted','embedded','stored')",
         name="ck_source_events_processing_status",
     ),
+    sqlite_autoincrement=True,
+)
+
+# ADR-015（v1，D 已决策 + Reviewer E 已签署 2026-09-02）：精准遗忘持久化（FRZ-DB-001 扩展）。
+# forget_plan = 遗忘计划持久化行（D 轨实体）；forget_audit = 最小审计（零正文）。
+# selector 明文生命周期（HIGH-01）：Preview 完成后 target_selector/target_topic 清除或置
+# 安全占位（<CLEARED>）；selection_hash 由结构化 resolved_target_ids 派生（非正文）。
+forget_plan = Table(
+    "forget_plan",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", String, nullable=False),          # 隔离键，禁止模型生成
+    Column("forget_plan_id", String, nullable=False),   # 计划唯一 ID（宿主生成）
+    Column("forget_mode", String, nullable=False),      # 五值枚举（冻结）
+    Column("target_selector", String, nullable=True),   # 明文生命周期，Preview 后清除/占位
+    Column("target_type", String, nullable=False),      # 四值枚举
+    Column("target_id", String, nullable=True),         # 模式条件字段（互斥）
+    Column("target_session_id", String, nullable=True),
+    Column("target_topic", String, nullable=True),      # 可能承载自然语言正文（HIGH-01）
+    Column("target_time_range", String, nullable=True),
+    Column("resolved_target_ids", String, nullable=True),  # JSON 数组（preview 产物，禁止模型生成）
+    Column("selection_hash", String, nullable=True),    # Preview/Selection 稳定 Hash（非正文）
+    Column("status", String, nullable=False),           # v0.2 冻结状态机
+    Column("requires_confirmation", Integer, nullable=False, server_default="1"),
+    Column("is_cascade", Integer, nullable=False, server_default="0"),
+    Column("delete_mode", String, nullable=False, server_default="soft"),
+    Column("has_vector_cleanup", Integer, nullable=False, server_default="0"),
+    Column("confirmation_token", String, nullable=True),  # 确认凭据 SHA-256 哈希（明文不落库）
+    Column("token_expires_at", String, nullable=True),    # 凭据 TTL（默认 300s）
+    Column("affected_count", Integer, nullable=True),     # = len(resolved_target_ids)
+    Column("executed_count", Integer, nullable=True),     # 实际执行成功数量
+    Column("executed_at", String, nullable=True),
+    Column("rollback_plan_id", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    CheckConstraint(
+        "forget_mode IN ('single_item','session','topic','time_window','full_reset')",
+        name="ck_forget_plan_forget_mode",
+    ),
+    CheckConstraint(
+        "target_type IN ('knowledge','preference','event','all')",
+        name="ck_forget_plan_target_type",
+    ),
+    CheckConstraint(
+        "status IN ('pending','previewing','awaiting_confirmation','executing','completed','failed','rolled_back')",
+        name="ck_forget_plan_status",
+    ),
+    CheckConstraint("delete_mode IN ('soft','hard')", name="ck_forget_plan_delete_mode"),
+    sqlite_autoincrement=True,
+)
+
+forget_audit = Table(
+    "forget_audit",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("audit_id", String, nullable=False),          # 审计唯一 ID
+    Column("forget_plan_id", String, nullable=False),
+    Column("user_id", String, nullable=False),
+    Column("forget_mode", String, nullable=False),       # 五值
+    Column("target_type", String, nullable=True),        # 四值
+    Column("delete_mode", String, nullable=False),       # soft / hard
+    Column("is_cascade", Integer, nullable=False, server_default="0"),
+    Column("affected_count", Integer, nullable=True),
+    Column("selection_hash", String, nullable=True),     # 非正文
+    Column("confirmation_ref", String, nullable=True),   # 凭据非敏感引用/Hash（不得存原 Token）
+    Column("status", String, nullable=False),
+    Column("result_code", String, nullable=True),
+    Column("trace_id", String, nullable=True),           # 追踪链（非正文）
+    Column("sensitivity_max", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("executed_at", String, nullable=True),        # 遗忘动作实际执行时间（终态必填）
+    CheckConstraint(
+        "forget_mode IN ('single_item','session','topic','time_window','full_reset')",
+        name="ck_forget_audit_forget_mode",
+    ),
+    CheckConstraint(
+        "target_type IN ('knowledge','preference','event','all')",
+        name="ck_forget_audit_target_type",
+    ),
+    CheckConstraint(
+        "status IN ('pending','previewing','awaiting_confirmation','executing','completed','failed','rolled_back')",
+        name="ck_forget_audit_status",
+    ),
+    CheckConstraint("delete_mode IN ('soft','hard')", name="ck_forget_audit_delete_mode"),
     sqlite_autoincrement=True,
 )
 
@@ -367,6 +455,13 @@ idx_outbox_pending = Index(
     outbox.c.next_retry_at,
     sqlite_where=outbox.c.attempts <= 3,  # 与 outbox.max_retries=3 配套（需求 §2.2）
 )
+# ADR-015：删除类事件优先级部分索引（forget.* priority=1 优先于普通索引任务）
+idx_outbox_priority = Index(
+    "idx_outbox_priority",
+    outbox.c.priority,
+    outbox.c.next_retry_at,
+    sqlite_where=outbox.c.priority == 1,
+)
 idx_idempotency_expires = Index("idx_idempotency_expires", idempotency_cache.c.expires_at)
 
 # ADR-013：source_events 5 索引（全局唯一 event_id + 时间线 + 指纹 + 去重组 + 状态）
@@ -394,6 +489,24 @@ idx_source_events_status = Index(
     "idx_source_events_status",
     source_events.c.user_id,
     source_events.c.processing_status,
+)
+
+# ADR-015：forget 两表索引（计划级唯一 + 时间线审计）
+uq_forget_plan_user_plan = Index(
+    "uq_forget_plan_user_plan",
+    forget_plan.c.user_id,
+    forget_plan.c.forget_plan_id,
+    unique=True,
+)
+idx_forget_plan_user_created = Index(
+    "idx_forget_plan_user_created",
+    forget_plan.c.user_id,
+    forget_plan.c.created_at,
+)
+idx_forget_audit_user_created = Index(
+    "idx_forget_audit_user_created",
+    forget_audit.c.user_id,
+    forget_audit.c.created_at,
 )
 
 # ── FTS5（冻结文档 §2.4） ──

@@ -933,6 +933,38 @@ def test_retrieve_graceful_records_selection_diagnostics_without_content():
     }
 
 
+@pytest.mark.parametrize("failed_channel", ["fts5", "vector"])
+@pytest.mark.parametrize(
+    "sentinel",
+    [
+        "https://user:secret@example.invalid/private-index",
+        "/home/agent/.config/vector/private-index.db",
+    ],
+)
+def test_retrieve_graceful_redacts_provider_exception_details(
+    caplog, failed_channel, sentinel
+):
+    """D12B：公共结果与内部日志都不得保留 Provider 异常原文。"""
+
+    def unavailable_provider():
+        raise RuntimeError(f"connection failed: {sentinel}")
+
+    normal_channel = Channel.VECTOR if failed_channel == "fts5" else Channel.FTS5
+    normal_search = lambda: [_hit("safe", "v1", normal_channel, 1)]
+    outcome = retrieve_graceful(
+        fts5_search=unavailable_provider if failed_channel == "fts5" else normal_search,
+        vector_search=unavailable_provider if failed_channel == "vector" else normal_search,
+        truth={("alice", "safe", "v1"): _truth("safe")},
+        flt=_flt(),
+    )
+
+    assert outcome.degraded_channels == {failed_channel: "provider_unavailable"}
+    assert outcome.candidates[0].explanation["degraded_channels"] == [failed_channel]
+    assert sentinel not in repr(outcome)
+    assert "retrieval_provider_unavailable" in caplog.text
+    assert sentinel not in caplog.text
+
+
 def test_retrieve_graceful_exposes_redacted_filter_diagnostics():
     """D11B：联调诊断只汇总过滤原因计数，绝不暴露正文或候选标识。"""
     sentinel = "D11B-SENSITIVE-SENTINEL"

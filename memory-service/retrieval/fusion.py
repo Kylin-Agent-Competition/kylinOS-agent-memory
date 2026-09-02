@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
@@ -39,6 +40,8 @@ from retrieval.validation import validate_retrieval_filter
 RRF_DEFAULT_K = 60
 TOKEN_ESTIMATOR_VERSION = "character-count/v1"
 TOKEN_ESTIMATOR_SEMANTICS = "Unicode code point count; not a model tokenizer"
+PUBLIC_PROVIDER_UNAVAILABLE_CODE = "provider_unavailable"
+logger = logging.getLogger(__name__)
 FILTER_DIAGNOSTICS_POLICY_VERSION = "retrieval-filter-diagnostics/v1"
 # 公共 filter_diagnostics 的安全泛化原因码：跨用户命中在普通检索结果中记为
 # security_filtered；精确 cross_user 计数仅存在于可信内部 telemetry/debug 边界
@@ -168,6 +171,12 @@ class TruthRecord:
             if value.tzinfo is None:
                 raise ValueError(f"{field_name} 必须带时区（UTC）")
             object.__setattr__(self, field_name, value.astimezone(timezone.utc))
+        if (
+            self.valid_from is not None
+            and self.valid_to is not None
+            and self.valid_from > self.valid_to
+        ):
+            raise ValueError("valid_from 不能晚于 valid_to（有效期窗口倒置）")
 
 
 def _hard_filter_rejection_reason(
@@ -561,6 +570,16 @@ class RetrievalOutcome:
         return bool(self.degraded_channels)
 
 
+def _record_provider_unavailable(channel: str, exc: Exception) -> str:
+    """记录脱敏的内部故障事件，并返回可公开的稳定错误码。"""
+    logger.warning(
+        "retrieval_provider_unavailable channel=%s exception_type=%s",
+        channel,
+        type(exc).__name__,
+    )
+    return PUBLIC_PROVIDER_UNAVAILABLE_CODE
+
+
 def _retrieve_graceful_impl(
     *,
     fts5_search,
@@ -575,7 +594,7 @@ def _retrieve_graceful_impl(
     """执行两路召回并融合，返回普通结果与精确内部过滤诊断。
 
     - fts5_search / vector_search 均为无参可调用对象，返回 list[RetrievalHit]。
-    - 某路抛出异常时，该路命中记为空，并把错误登记到 degraded_channels。
+    - 某路抛出异常时，该路命中记为空，并把稳定错误码登记到 degraded_channels。
     - 正常那路命中仍参与融合，保证服务故障时可解释降级而非整体崩溃。
     - 返回的精确过滤诊断（含 cross_user 计数）仅供可信内部调用方使用；公共
       RetrievalOutcome.filter_diagnostics 已泛化（cross_user → security_filtered）。
@@ -593,12 +612,12 @@ def _retrieve_graceful_impl(
         fts5_hits = list(fts5_search())
     except Exception as exc:  # noqa: BLE001 - 编排层统一捕获单路故障
         fts5_hits = []
-        degraded["fts5"] = f"{type(exc).__name__}: {exc}"
+        degraded["fts5"] = _record_provider_unavailable("fts5", exc)
     try:
         vector_hits = list(vector_search())
     except Exception as exc:  # noqa: BLE001
         vector_hits = []
-        degraded["vector"] = f"{type(exc).__name__}: {exc}"
+        degraded["vector"] = _record_provider_unavailable("vector", exc)
 
     candidates, selection_diagnostics, precise_filter_diagnostics = _fuse_retrieval_with_diagnostics(
         fts5_hits=fts5_hits,
@@ -643,7 +662,7 @@ def retrieve_graceful(
     """执行两路召回并融合；单路故障时降级为空命中的该路，不抛未捕获异常。
 
     - fts5_search / vector_search 均为无参可调用对象，返回 list[RetrievalHit]。
-    - 某路抛出异常时，该路命中记为空，并把错误登记到 degraded_channels。
+    - 某路抛出异常时，该路命中记为空，并把稳定错误码登记到 degraded_channels。
     - 正常那路命中仍参与融合，保证服务故障时可解释降级而非整体崩溃。
     - filter_diagnostics 为普通检索 consumer 可见的泛化聚合诊断（不含 cross_user
       等内部原因码；跨用户命中记为 security_filtered）。
