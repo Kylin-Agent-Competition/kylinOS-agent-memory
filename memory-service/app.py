@@ -67,12 +67,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--register-forget-handlers",
         action="store_true",
-        help="（仅 test/validation profile）显式注册 forget.preview/forget.execute"
-        "（ADR-019 activation 方案 A+B）；production 默认不注册（未注册 → UNSUPPORTED_METHOD）",
-    )
-    p.add_argument(
-        "--register-forget-handlers",
-        action="store_true",
         help="（仅 test/validation profile）显式注册 forget.preview / forget.execute"
         "（ADR-019 activation 方案 A+B，CANDIDATE/BLOCKED_BY_HOST_MAPPING）；"
         "production 默认不注册（未注册 → UNSUPPORTED_METHOD）",
@@ -173,16 +167,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         register_event_ingest_handler(registry, uow_factory=_uow_factory)
         logger.warning(
             "event.ingest 已注册（test/validation profile，trusted_identity=None）。"
-            "production 禁止使用此参数（BLOCKED_BY_HOST_MAPPING）"
-        )
-
-    # ADR-019 activation 方案 A+B：production 默认不注册 forget.preview/forget.execute；
-    # 仅 test/validation profile（--register-forget-handlers）显式注册。
-    # trusted_identity=None = 仅声明内部自洽，非宿主认证证据（L2 HOST_VERIFIED 前保持如此）。
-    if args.register_forget_handlers:
-        register_forget_handlers(registry, uow_factory=_uow_factory)
-        logger.warning(
-            "forget.preview/forget.execute 已注册（test/validation profile，trusted_identity=None）。"
             "production 禁止使用此参数（BLOCKED_BY_HOST_MAPPING）"
         )
 

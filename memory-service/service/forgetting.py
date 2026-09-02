@@ -68,12 +68,13 @@ def _resolve_session_knowledge(
     # memory_entries.source_turn_id → turns.session_id → conversations.user_id（跨用户隔离）
     rows = conn.execute(
         select(memory_entries.c.id)
-        .join(turns, memory_entries.c.source_turn_id == turns.id)
-        .join(conversations, turns.session_id == conversations.session_id)
+        .join(turns, memory_entries.c.source_turn_id == turns.c.id)
+        .join(conversations, turns.c.session_id == conversations.c.session_id)
         .where(
             and_(
-                turns.session_id == target_session_id,
-                conversations.user_id == user_id,
+                turns.c.session_id == target_session_id,
+                conversations.c.user_id == user_id,
+                memory_entries.c.user_id == user_id,
                 memory_entries.c.is_deleted == 0,
             )
         )

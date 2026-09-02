@@ -904,7 +904,10 @@ def claim_pending_outbox(conn, *, now_iso: str, max_retries: int, limit: int = 1
                     outbox.c.attempts <= max_retries,
                 )
             )
-            .order_by(outbox.c.priority.desc(), outbox.c.next_retry_at.asc())
+            .order_by(
+                func.coalesce(outbox.c.priority, 0).desc(),
+                outbox.c.next_retry_at.asc(),
+            )
             .limit(limit)
         ).mappings().all()
     except OperationalError as exc:
@@ -1069,6 +1072,7 @@ def execute_idempotent(
     idempotency_key: str,
     business_fn,
     request_fingerprint: Optional[str] = None,
+    response_for_cache_fn=None,
 ) -> Tuple[Dict[str, Any], bool]:
     """幂等执行器（附录 A 单一真相源 + ADR-010 请求指纹）。
 
@@ -1078,6 +1082,8 @@ def execute_idempotent(
         request_fingerprint: ADR-010 `_request_fingerprint`（sha256 规范化
             method+业务语义字段）。提供时写缓存走 wrapper；命中时比对指纹，
             不一致抛 IdempotencyConflictError（转 INVALID_REQUEST）。
+        response_for_cache_fn: 可选的持久化前转换函数。业务调用方仍收到原始
+            response，缓存只保存一次性凭据剔除后的安全子集。
 
     Returns:
         (response, from_cache)：from_cache=True 表示命中缓存未执行副作用。
@@ -1098,12 +1104,15 @@ def execute_idempotent(
         )
 
     response = business_fn()
+    response_for_cache = (
+        response_for_cache_fn(response) if response_for_cache_fn is not None else response
+    )
     write_idempotency_cache(
         conn,
         user_id=user_id,
         session_id=session_id,
         idempotency_key=idempotency_key,
-        response=_wrap_response(response, request_fingerprint),
+        response=_wrap_response(response_for_cache, request_fingerprint),
     )
     return response, False
 

@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 from alembic import op
-from sqlalchemy import CheckConstraint, Column, Integer, String, Text, text
+from sqlalchemy import CheckConstraint, Column, Integer, String, text
 
 
 revision = "20260901_add_forget_plan"
@@ -30,7 +30,7 @@ _OUTBOX_UPGRADE_SQL = (
     "aggregate_id VARCHAR NOT NULL, "
     "event_type VARCHAR NOT NULL, "
     "payload TEXT NOT NULL, "
-    "attempts INTEGER NOT NULL, "
+    "attempts INTEGER NOT NULL DEFAULT 0, "
     "next_retry_at VARCHAR, "
     "last_error TEXT, "
     "created_at VARCHAR NOT NULL, "
@@ -53,7 +53,7 @@ _OUTBOX_DOWNGRADE_SQL = (
     "aggregate_id VARCHAR NOT NULL, "
     "event_type VARCHAR NOT NULL, "
     "payload TEXT NOT NULL, "
-    "attempts INTEGER NOT NULL, "
+    "attempts INTEGER NOT NULL DEFAULT 0, "
     "next_retry_at VARCHAR, "
     "last_error TEXT, "
     "created_at VARCHAR NOT NULL, "

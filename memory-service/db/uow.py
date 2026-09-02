@@ -79,6 +79,9 @@ class UnitOfWork(AbstractContextManager["UnitOfWork"]):
         idempotency_key: str,
         business_fn: Callable[[], Dict[str, Any]],
         request_fingerprint: Optional[str] = None,
+        response_for_cache_fn: Optional[
+            Callable[[Dict[str, Any]], Dict[str, Any]]
+        ] = None,
     ) -> Tuple[Dict[str, Any], bool]:
         """幂等执行：查缓存 → 命中返回；未命中 → 同事务执行 + 写缓存。
 
@@ -100,6 +103,7 @@ class UnitOfWork(AbstractContextManager["UnitOfWork"]):
                 idempotency_key=idempotency_key,
                 business_fn=business_fn,
                 request_fingerprint=request_fingerprint,
+                response_for_cache_fn=response_for_cache_fn,
             )
         except IntegrityError:
             # 并发未命中双写：复合 PK 唯一约束兜底 → 回查首次缓存，不视为错误（附录 A）
@@ -322,13 +326,25 @@ class UnitOfWork(AbstractContextManager["UnitOfWork"]):
                 "delete_mode": delete_mode,
             }
 
-        return self.execute_idempotent(
+        def _without_confirmation_token(response: Dict[str, Any]) -> Dict[str, Any]:
+            safe_response = dict(response)
+            safe_response.pop("confirmation_token", None)
+            safe_response["credential_replayable"] = False
+            return safe_response
+
+        response, from_cache = self.execute_idempotent(
             user_id=user_id,
             session_id="",
             idempotency_key=idempotency_key,
             business_fn=_business,
             request_fingerprint=request_fingerprint,
+            response_for_cache_fn=_without_confirmation_token,
         )
+        if from_cache:
+            raise repo.ConfirmationCredentialError(
+                "confirmation credential is only returned once"
+            )
+        return response, False
 
     def execute_forget_plan(
         self,

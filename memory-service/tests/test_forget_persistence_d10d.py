@@ -20,7 +20,7 @@ import os
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -28,6 +28,7 @@ import pytest
 from db import repositories as repo
 from db.engine import create_db_engine, init_schema
 from db.uow import UnitOfWork
+from app import build_parser
 from gateway.forget_handlers import register_forget_handlers
 from gateway.handlers import register_default_handlers
 from gateway.protocol import RequestValidationError
@@ -141,8 +142,6 @@ def _seed_preference(engine, *, user_id=USER, key="theme", scope="global", value
             idempotency_key=None,
             request_fingerprint=f"fp-{key}",
         )
-        from db.schema import memory_items
-
         row = conn.exec_driver_sql(
             "SELECT id FROM memory_items WHERE user_id=? AND preference_key=? AND preference_scope=?",
             (user_id, key, scope),
@@ -179,6 +178,29 @@ def test_preview_persists_plan_and_credential_hash(env):
         assert plan["selection_hash"] == repo.compute_selection_hash([str(entry_id)])
         assert plan["affected_count"] == 1
 
+        cached = repo.get_idempotency_cache(
+            conn, user_id=USER, session_id="", idempotency_key="preview-1"
+        )
+        assert cached is not None
+        assert resp["confirmation_token"] not in cached["response"]
+        cached_response = json.loads(cached["response"])["response"]
+        assert "confirmation_token" not in cached_response
+        assert cached_response["credential_replayable"] is False
+
+
+def test_preview_idempotent_replay_does_not_reissue_credential(env):
+    entry_id = _seed_knowledge(env["engine"])
+    payload = _payload(target_id=str(entry_id), target_type="knowledge")
+    first = _preview(env, payload, idem_key="preview-once")
+    with pytest.raises(RequestValidationError, match="only returned once"):
+        _preview(env, payload, idem_key="preview-once")
+
+    with env["engine"].connect() as conn:
+        cached = repo.get_idempotency_cache(
+            conn, user_id=USER, session_id="", idempotency_key="preview-once"
+        )
+        assert first["confirmation_token"] not in cached["response"]
+
 
 def test_execute_valid_credential_soft_deletes_and_audits(env):
     entry_id = _seed_knowledge(env["engine"])
@@ -198,8 +220,6 @@ def test_execute_valid_credential_soft_deletes_and_audits(env):
 
     with env["engine"].connect() as conn:
         # knowledge 软删（is_deleted=1）
-        from db.schema import memory_entries
-
         row = conn.exec_driver_sql(
             "SELECT is_deleted FROM memory_entries WHERE id=?", (entry_id,)
         ).first()
@@ -346,12 +366,42 @@ def test_cross_user_zero_affected_count(env):
     entry_id = _seed_knowledge(env["engine"], user_id=OTHER)
     # 用户 B 的计划解析目标为用户 B 的数据；当前用户 u1 无法命中 B 的条目（隔离）
     _seed_knowledge(env["engine"], user_id=USER)  # u1 自己有一条
-    with env["engine"].begin() as conn:
-        # OTHER 拥有的 entry (entry_id) 不被 u1 命中
-        pass
     resp = _preview(env, _payload(target_id=str(entry_id), target_type="knowledge", user_id=USER))
     assert resp["affected_count"] == 0  # 跨用户目标不进 resolved_target_ids
     assert resp["resolved_target_ids"] == []
+
+
+def test_session_resolver_rejects_mismatched_memory_entry_owner(env):
+    now = _now_iso()
+    with env["engine"].begin() as conn:
+        conn.exec_driver_sql(
+            "INSERT INTO conversations(user_id, session_id, started_at) VALUES (?, ?, ?)",
+            (USER, "session-owned-by-u1", now),
+        )
+        turn_id = conn.exec_driver_sql(
+            "INSERT INTO turns(session_id, turn_index, original_user_text, is_end, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("session-owned-by-u1", 1, "source", 1, now),
+        ).lastrowid
+        polluted_entry_id = conn.exec_driver_sql(
+            "INSERT INTO memory_entries(user_id, entry_type, content, source_turn_id, "
+            "confidence, version, is_deleted, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (OTHER, "knowledge", '{"value":"other-user"}', turn_id, 1.0, 1, 0, now, now),
+        ).lastrowid
+
+    response = _preview(
+        env,
+        _payload(
+            forget_mode="session",
+            target_id=None,
+            target_session_id="session-owned-by-u1",
+            target_type="knowledge",
+        ),
+        idem_key="preview-session-isolation",
+    )
+    assert response["affected_count"] == 0
+    assert str(polluted_entry_id) not in response["resolved_target_ids"]
 
 
 # ── D. Outbox priority ──
@@ -383,6 +433,37 @@ def test_outbox_priority_forget_before_normal(env):
             conn, now_iso="2026-09-02T00:00:00+00:00", max_retries=3, limit=10
         )
     assert claimed[0]["event_type"] == repo.EVENT_FORGET_EXECUTED  # 优先消费 forget
+
+
+def test_outbox_null_priority_orders_as_zero(env):
+    with env["engine"].begin() as conn:
+        repo.enqueue_outbox(
+            conn,
+            aggregate_type="memory",
+            aggregate_id="zero",
+            event_type=repo.EVENT_MEMORY_UPSERTED,
+            payload={"event_id": "zero"},
+            next_retry_at="2026-09-01T10:00:00+00:00",
+            priority=0,
+        )
+        conn.exec_driver_sql(
+            "INSERT INTO outbox(aggregate_type, aggregate_id, event_type, payload, attempts, "
+            "next_retry_at, created_at, priority) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)",
+            (
+                "memory",
+                "null",
+                repo.EVENT_MEMORY_UPSERTED,
+                '{"event_id":"null"}',
+                0,
+                "2026-09-01T00:00:00+00:00",
+                _now_iso(),
+            ),
+        )
+    with env["engine"].connect() as conn:
+        claimed = repo.claim_pending_outbox(
+            conn, now_iso="2026-09-02T00:00:00+00:00", max_retries=3, limit=10
+        )
+    assert [row["aggregate_id"] for row in claimed] == ["null", "zero"]
 
 
 # ── E. 软删 + FTS / 事务 / Gate ──
@@ -522,6 +603,13 @@ def test_forget_not_registered_by_default():
         registry.route("forget.preview")
     with pytest.raises(UnsupportedMethodError):
         registry.route("forget.execute")
+
+
+def test_cli_parser_default_and_forget_profile_smoke():
+    default_args = build_parser().parse_args([])
+    explicit_args = build_parser().parse_args(["--register-forget-handlers"])
+    assert default_args.register_forget_handlers is False
+    assert explicit_args.register_forget_handlers is True
 
 
 def test_preview_mode_selector_mutual_exclusion(env):
@@ -673,7 +761,7 @@ def test_migration_upgrade_creates_forget_tables_and_priority(tmp_path):
     conn = sqlite3.connect(str(db))
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     indexes = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
-    outbox_cols = {row[1] for row in conn.execute("PRAGMA table_info(outbox)")}
+    outbox_info = {row[1]: row for row in conn.execute("PRAGMA table_info(outbox)")}
     outbox_sql = conn.execute("SELECT sql FROM sqlite_master WHERE name='outbox'").fetchone()[0]
     revision = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     conn.close()
@@ -683,7 +771,8 @@ def test_migration_upgrade_creates_forget_tables_and_priority(tmp_path):
     assert "idx_forget_plan_user_created" in indexes
     assert "idx_forget_audit_user_created" in indexes
     assert "idx_outbox_priority" in indexes
-    assert "priority" in outbox_cols
+    assert "priority" in outbox_info
+    assert str(outbox_info["attempts"][4]) in {"0", "'0'", '"0"'}
     assert "'forget'" in outbox_sql  # aggregate_type CHECK 扩展
     assert revision == "20260901_add_forget_plan"
 
@@ -701,7 +790,9 @@ def test_migration_downgrade_roundtrip(tmp_path):
     assert r.returncode == 0, r.stderr
     conn = sqlite3.connect(str(db))
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    outbox_info = {row[1]: row for row in conn.execute("PRAGMA table_info(outbox)")}
     conn.close()
     assert "forget_plan" not in tables
     assert "forget_audit" not in tables
+    assert str(outbox_info["attempts"][4]) in {"0", "'0'", '"0"'}
     assert _run_alembic(db, "upgrade", "head").returncode == 0
