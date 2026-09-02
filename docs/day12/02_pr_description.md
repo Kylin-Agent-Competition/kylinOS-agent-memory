@@ -31,6 +31,7 @@ D11（同一虚拟机全功能联调，PR #84）已合并。D12 进入功能冻�
 - 任务卡：`docs/day12/01_task_card.md`
 - 关联：TD-A-005-01（Wontfix，本 PR 补强）、TD-A-D7-LLM-HANG-DEGRADE（模式复用）
 - 新增候选：测试顺序依赖问题登记技术债
+- TD-059（新登记）：SDK 无 cancel API，旧 executor worker 无法回收；有界重建（上限 3）防无界线程，超限/stop-active 进入 restart-required（REWORK HIGH-01 登记；main 占用 TD-058 后顺延为 TD-059）
 - 本次爬取历史 PR 补登未记录技术债：TD-047（A-REQ-01 生产组装缺口）、TD-048（A-REQ-02 治理不一致）、TD-049（PR#57 TD-1~3 未入账）、TD-050（PR#36 implicit 未实现）、TD-051（PR#42 cmake 未入账）、TD-052（本 PR 挂死阈值未参数化）——见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`
 
 ## 架构与能力边界依据
@@ -79,7 +80,7 @@ test_embedding_service.py + d9 + d10 + d12a: 85 passed
 
 ### L2 麒麟虚拟机证据
 
-**已执行（麒麟 VM 真实 SDK）**：`scripts/verify_day12a_vm.sh` 7/7 ALL PASS（PASS 7 / FAIL 0）。原始日志 `evidence/l2-kylin-vm/day12a_verify_20260902_231247.log`（R3 代码重跑）；证据索引 `D12A-L2-VERIFY`。真实 SDK 正常路径（embed dim=768、health executor 分项含 max_hang_rebuilds/restart_required、异常输入含空文本 dim=768、性能 avg=99.3ms p99=161.8ms ≤180ms、无挂死不误重建）HOST_VERIFIED；真实 SDK 挂死→重建恢复无法安全注入永久挂死，RUNTIME_UNVERIFIED，由 L1 FakeProvider 模拟验证（HIGH-02 收敛声明；R2/R3 收口：submit 原子 gate + 同进程 stop/start 不绕过 + stop 时 active Future 冻结 restart-required，threshold-before-stop 不绕过）。
+**已执行（麒麟 VM 真实 SDK）**：`scripts/verify_day12a_vm.sh` 7/7 ALL PASS（PASS 7 / FAIL 0）。原始日志 `evidence/l2-kylin-vm/day12a_verify_20260902_232744.log`（TD-059 统一后代码重跑）；证据索引 `D12A-L2-VERIFY`。真实 SDK 正常路径（embed dim=768、health executor 分项含 max_hang_rebuilds/restart_required、异常输入含空文本 dim=768、性能 avg=77.7ms p99=97.6ms ≤180ms、无挂死不误重建）HOST_VERIFIED；真实 SDK 挂死→重建恢复无法安全注入永久挂死，RUNTIME_UNVERIFIED，由 L1 FakeProvider 模拟验证（HIGH-02 收敛声明；R2/R3 收口：submit 原子 gate + 同进程 stop/start 不绕过 + stop 时 active Future 冻结 restart-required，threshold-before-stop 不绕过）。
 
 ## 性能影响
 
