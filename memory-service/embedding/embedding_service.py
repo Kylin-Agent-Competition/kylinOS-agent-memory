@@ -56,13 +56,13 @@ _executor_shutdown = False  # shutdown 标记：submit 前若已关闭则惰性�
 # 见 TD-A-005-01 Wontfix）——若 2 个 worker 被挂死调用占满，后续所有 embed 将
 # 排队并永久超时（性能抖动归零）直到进程重启。因此跟踪 in-flight future 的
 # 开始时间，一旦超过 hang 阈值仍未完成，判定为永久挂死并重建 executor
-# （恢复后续请求能力；旧挂死 worker 无法终止，残余风险见 TD-058）。
+# （恢复后续请求能力；旧挂死 worker 无法终止，残余风险见 TD-059）。
 _executor_lock = threading.Lock()  # 保护 executor 重建 + in-flight 跟踪
 _in_flight: Dict[Any, float] = {}  # future -> start time (monotonic)
 _embed_hang_threshold_ms = 60000.0  # 默认 60s：远大于单次超时（5s），只针对真正挂死
 _embed_hang_recovered = 0  # 统计：挂死恢复次数（可观测性）
 # [D12A Review HIGH-01] 有界挂死恢复：executor rebuild 无法终止已挂死的旧
-# worker（SDK 无 cancel API，TD-A-005-01 Wontfix；残余风险登记 TD-058），只能
+# worker（SDK 无 cancel API，TD-A-005-01 Wontfix；残余风险登记 TD-059），只能
 # “恢复后续请求能力”。为避免无界创建线程池，最多连续重建
 # _embed_max_hang_rebuilds 次；超限后置 _embed_restart_required，后续 embed
 # 快速失败并提示进程重启（不再继续新建 executor）。
@@ -76,7 +76,7 @@ def shutdown_executor() -> None:
     幂等；关闭后再 submit 会惰性重建（见 _submit_bridge），保持进程级单例语义。
 
     [D12A Review R3 HIGH-01] stop 时若存在未完成（active）Bridge Future：
-    `shutdown(wait=False)` 无法证明其已停止（旧 worker 无法终止，TD-058），
+    `shutdown(wait=False)` 无法证明其已停止（旧 worker 无法终止，TD-059），
     因此保守置 `_embed_restart_required=True`，冻结同进程 start——空闲状态 stop
     允许同进程 start，存在 active Future 的 stop 必须进程级重启清场，
     杜绝 threshold-before-stop 绕过有界恢复。
@@ -168,7 +168,7 @@ def recover_hung_bridge_executor() -> bool:
     """[D12A] 线程安全入口：检测 in-flight 是否挂死超过阈值并重建 executor。
 
     供 EmbeddingService.embed() 在每次请求入口调用（含合并等待路径），
-    恢复后续请求能力（无法终止旧挂死 worker；见 TD-058）。
+    恢复后续请求能力（无法终止旧挂死 worker；见 TD-059）。
     """
     with _executor_lock:
         return _maybe_recover_hung_executor()

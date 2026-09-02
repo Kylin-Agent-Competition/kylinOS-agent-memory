@@ -31,7 +31,7 @@
 **修复方案**：镜像 TD-A-D7-LLM-HANG-DEGRADE——
 
 - 跟踪 in-flight future 的提交时间（`_in_flight: Dict[Future, start_monotonic]`）。
-- 每次请求入口（含合并等待路径）调用 `recover_hung_bridge_executor()`：若任一 in-flight 超过 `_embed_hang_threshold_ms`（默认 60s，远大于单次超时 5s）仍未完成 → 判定永久挂死 → 重建 executor（仅恢复后续请求能力；旧挂死 worker 无法终止，SDK 无 cancel API，残余风险见 TD-058），并有界上限 `_embed_max_hang_rebuilds`=3，超限进入 restart-required 快速失败（HIGH-01）；`_submit_bridge` 在锁内原子执行 recover/检测 + restart 判定 + submit（R2 HIGH-01 收口），同进程 stop/start 不绕过上限。；stop 时存在未完成 active Bridge Future → 保守置 restart-required（R3，threshold-before-stop 不绕过），空闲 stop 才允许同进程 start。
+- 每次请求入口（含合并等待路径）调用 `recover_hung_bridge_executor()`：若任一 in-flight 超过 `_embed_hang_threshold_ms`（默认 60s，远大于单次超时 5s）仍未完成 → 判定永久挂死 → 重建 executor（仅恢复后续请求能力；旧挂死 worker 无法终止，SDK 无 cancel API，残余风险见 TD-059），并有界上限 `_embed_max_hang_rebuilds`=3，超限进入 restart-required 快速失败（HIGH-01）；`_submit_bridge` 在锁内原子执行 recover/检测 + restart 判定 + submit（R2 HIGH-01 收口），同进程 stop/start 不绕过上限。；stop 时存在未完成 active Bridge Future → 保守置 restart-required（R3，threshold-before-stop 不绕过），空闲 stop 才允许同进程 start。
 - 重建后 in-flight 清空、`_embed_hang_recovered` 计数递增；health 新增 `executor` 分项暴露可观测性；`_submit_bridge` 注册 `add_done_callback` 主动清理 in_flight（MEDIUM-01）。
 
 ### 1.3 范围外（本任务不做）
@@ -74,7 +74,7 @@
 
 - TD-A-005-01（Wontfix）：SDK 无 cancel API，`timeout_ms` 透传；本 PR 在 Service 层线程池提供挂死恢复（调用方超时保护之外的第二层保障）。
 - TD-A-D7-LLM-HANG-DEGRADE（Resolved）：本 PR 将同款挂死恢复模式扩展至 Embedding Bridge 线程池。
-- TD-058（新登记）：SDK 无 cancel API，旧 executor worker 无法回收；本 PR 以有界重建（上限 3）防无界线程，超限 restart-required；同进程 stop/start 不重置计数，仅进程级重启清场。
+- TD-059（新登记）：SDK 无 cancel API，旧 executor worker 无法回收；本 PR 以有界重建（上限 3）防无界线程，超限 restart-required；同进程 stop/start 不重置计数，仅进程级重启清场。
 - 新增候选：测试顺序依赖问题（`test_td_a_local_batch.py` `importlib.reload()` 污染），登记技术债。
 
 ## 六、验收标准
