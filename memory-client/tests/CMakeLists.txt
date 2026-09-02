@@ -262,3 +262,40 @@ add_test(
     NAME d10c_forgetting
     COMMAND test_d10c_forgetting
 )
+
+# ============================================================================
+# D11-C 同一虚拟机全功能联调 · E2E Orchestrator L0 Mock 契约测试
+# 范围（A~F 共 12 用例）：
+#   A. Step1 普通聊天：A1 三路原文隔离（D5）；A2 PostTurn 用 turn.finalized (ADR-010)
+#   B. Step2 跨会话：B1 切换 sessionId 仍成功 + 独立 pending 不串台
+#   C. Step3 Tool：C1 toolName 正确转发；C2 UNSUPPORTED_METHOD safeMessage 不含正文
+#   D. Step4 知识+生命周期：D1 conflictCandidates 非空；D2 lifecycleItems 非空
+#   E. Step5 精准遗忘：E1 Preview HIGH-01 selector 明文清除；E2 Execute completed+无漏删
+#   F. 编排器总体一致性：F1 未连接 fail-closed；F2 5 步完毕 busy=false + stage 一致
+# 注意：L0 Mock 契约验证，不代表麒麟宿主真实交互（L2 由 B/D 轨在 D11B VM 复测归档）。
+# ============================================================================
+add_executable(test_d11c_e2e_orchestrator
+    ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+    ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
+    mock_gateway_server.cpp
+    test_d11c_e2e_orchestrator.cpp
+)
+target_link_libraries(test_d11c_e2e_orchestrator
+    PRIVATE
+        Qt5::Core
+        Qt5::Network
+        Qt5::Test
+)
+target_include_directories(test_d11c_e2e_orchestrator
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_d11c_e2e_orchestrator
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME d11c_e2e_orchestrator
+    COMMAND test_d11c_e2e_orchestrator
+)

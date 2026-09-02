@@ -235,6 +235,98 @@ fail-closed）。**
 E 轨 ForgetPlan 业务 Gate 已 Runtime 接线**；Hard Delete / Cascade / Full Reset
 在跨轨闭环与麒麟 L2 证据前保持 fail-closed；L2 宿主验证需在麒麟 VM 另行执行。
 
+### D11-C 同一虚拟机全功能联调 · E2E Orchestrator（Demo / Prototype）
+
+**D11-C Demo / Prototype（CANDIDATE / Demo 编排骨架；不关闭 C-D5 ~ C-D10；
+不声称已接入真实 AI Assistant Hook / Chat DB / 跨轨持久化后端；
+L2 宿主 Runtime 证据由 B/D 轨在 D11B 最终 VM（同一 Commit `e9dba4f`）复测并归档
+`evidence/l2-kylin-vm/d11b_c_e2e_YYYYMMDD.md`）。**
+
+业务编排依据：
+  - 台账 15 天 D11 C 轨任务卡 #1~#3：主导 AI 助手 + MemoryClient + 全部 QML
+    页面联调；完成「普通聊天 / 跨会话 / Tool / 冲突 / 遗忘」5 条主演示路径；
+    修复用户交互和原文隔离问题。主演示路径必须在**同一 Commit、同一虚拟机**中完整通过。
+  - 2026-09-02 D11B 回填文档 `docs/day10/D11B_UNVERIFIED回填_服务OS重启与DC端到端_20260902_C轨已填.md`
+    中 C1-1 ~ C1-5 的样例输入 / 期望输出（见该文档 §三 · C1 主演示路径）：
+
+- **编排器页面**：`qml/pages/D11DemoOrchestratorPage.qml`
+  - 目标 Qt 5.12，ScrollView 防 960×640 溢出；5-Step Card + 公共参数区 +
+    安全汇总面板，方便 B/D 轨在 D11B VM 内一键复跑。
+  - Step 1 · 普通聊天（D5 Vertical Link）：user=local-user / session=session-demo-0001 /
+    scene=software_development / max_context_tokens=800 +
+    original_user_text=「帮我回忆昨天讨论的麒麟 OS Agent 记忆系统架构要点」→
+    Pre-Chat `memory.retrieve` → 三路原文隔离 PASS → Post-Turn `turn.finalized`
+    （ADR-010，`is_end=true`，`turn_id=turn-0001` / `traceId=tr-demo-0001`）。
+  - Step 2 · 跨会话召回持久化偏好+知识：session 切到 `session-demo-0002`，
+    user 保持 `local-user`，查询「Vector 删除一致性规则」→ context[] 应含
+    preference/knowledge 持久化条目（B 轨决定具体数量）；编排器侧保证
+    originalUserText / session 不会回退到 Step 1（独立 pending 防竞态）。
+  - Step 3 · Tool 调用事件入记忆（D6 Tool Adapter）：`tool.execution`
+    tool_name=memory_search / execution_status=success /
+    tool_input=`{"query":"qlatent 向量召回阈值"}` /
+    tool_output=`{"hits":5,"threshold":0.52}`；错误路径 safeMessage 只显
+    error_code + 通用文案，不得携带 tool_output 正文/JSON。
+  - Step 4 · 冲突对比 + 生命周期状态（D8-C）：memory_id=km-1，
+    include_resolved=false：`conflict.compare` 返回候选列表；
+    再跑 `lifecycle.status` 展示 km-1 的 active/archived 版本流转。
+  - Step 5 · 精准遗忘（D10-C Preview→Confirm→Execute）：
+    forget_mode=single_item / target_type=knowledge /
+    forget_plan_id=plan-demo-001 +
+    自然语言 selector（成功后 HIGH-01 明文立即清除、
+    `forgetSelectorCleared=true`）→ Execute 携带
+    confirmation_token=credential-demo-32b + delete_mode=soft →
+    completed 且 `forgetHasMissingDeletes=false`（MEDIUM-03 一致性）。
+  - 安全汇总板：D5 原文隔离 PASS / D10 HIGH-01 Selector 清除 PASS /
+    跨用户拦截默认未触发(OK) / 遗忘漏删一致性 OK /
+    Demo/Prototype 非真实 Runtime 的显式声明。
+- **导航入口**：`qml/main.qml` Drawer 新增「D11 E2E Orchestrator」按钮；
+  窗口标题更新为「Kylin Memory Client — D11 E2E Orchestrator (Demo/Prototype)」。
+- **QRC**：`qml/resources.qrc` 注册 `pages/D11DemoOrchestratorPage.qml`。
+- **L0 测试**：`tests/test_d11c_e2e_orchestrator.cpp`（A~F 共 **12 用例**），
+  使用 test_support::MockGatewayServer + setHandler(lambda) 注册 9 路活跃 handler
+  （memory.retrieve / turn.finalized / tool.execution / conflict.compare /
+  lifecycle.status / forget.preview / forget.execute / health / echo）。
+  - **A. Step1 普通聊天**：A1 PreChat → ready，三路原文隔离 textIsolationVerified=true
+    且 originalUserText（8 字以上前缀）不得出现在 injectedContextText /
+    modelRequestText；A2 PostTurn 发送的 envelope.method 必须是 ADR-010 的
+    `turn.finalized` 且不得回退为 `memory.store`（非 retry 路径下
+    retry_of_turn_id 必须为空）。
+  - **B. Step2 跨会话**：session=session-demo-0002 时 PreChat 仍 ready，
+    originalUserText 被重写为 Step 2 的新查询（「Vector 删除一致性规则」），
+    证明 session 切换生效、不会回退到 session-demo-0001。
+  - **C. Step3 Tool**：C1 toolStage=sent；Gateway 收到的
+    `metadata.tool_name=memory_search` / `metadata.execution_status=success`；
+    C2 UNSUPPORTED_METHOD 错误注入 → toolStage=failed + requestFailed 信号
+    safeMessage **不含** `PK0f3e2d_c2` 等 tool_output 正文。
+  - **D. Step4 知识+生命周期**：D1 conflictCompareStage=ready，
+    conflictCandidates.size()==2；D2 lifecycleStatusStage=ready，
+    lifecycleItems.size()==2，两条错误为空。
+  - **E. Step5 精准遗忘**：E1 Preview → awaiting_confirmation +
+    forgetSelectorCleared=true（HIGH-01），forgetMode/targetType 正确投影；
+    E2 Execute → completed + forgetExecutedCount==1 +
+    forgetHasMissingDeletes==false（MEDIUM-03）。
+  - **F. 编排器总体一致性**：F1 未连接时 5 步全部本地 fail-closed（stage=failed，
+    busy 不会挂死，至少 1 次 requestFailed 信号）；F2 依次跑完 5 步后
+    `QTRY_VERIFY_WITH_TIMEOUT(!vm.busy(), 3000)`，六个阶段最终值一致
+    （ready/sent/ready/ready/ready/completed）+ 三绿安全板
+    （textIsolationVerified / forgetSelectorCleared / !forgetHasMissingDeletes）。
+- **ctest 目标**：`d11c_e2e_orchestrator`。CI `memory-client-ctest.yml`
+  随 `d5 / d6c / d7c / d8c / d9c / d10c / d11c` 一起执行。
+
+**关键声明（D11-C）**：
+  - 本实现仅为 memory-client 侧的**编排 Harness / Demo**，不关闭 C-D5 ~ C-D10。
+  - **不声称 SEC-CTX-01 / SEC-CTX-02 / SEC-FORGET-01~05 已 Runtime 验证**。
+  - **尚未接入**：真实 AI Assistant Hook / Chat DB / ChatRecord /
+    source resolver / model request 真实注入 / 跨轨 B 轨混合检索 /
+    D 轨 SQLite 事务 / E 轨业务规则。
+  - D11B 最终 VM 的真实复测与 L2 证据归档（含 Wireshark/socat UDS 抓包、
+    journalctl 原文泄露扫描、5 路径截图与 SHA-256）必须由 B 轨在
+    同一 Commit（`tested_commit=e9dba4f`）与同一 VM
+    （`Kylin-V11-2603-D11B-ffd20b9-Test`）上执行并完成，
+    以 D11B 回填文档 `d11b_c_e2e_YYYYMMDD.md` 归档为唯一闭环依据。
+  - Hard Delete / Cascade / Full Reset Runtime Execute 在跨轨闭环 + L2 证据前
+    继续保持 fail-closed（D10-C 既有口径不变）。
+
 ## 明确不负责的内容
 
 * 不实现 Python 侧服务逻辑
@@ -310,9 +402,9 @@ cmake --build memory-client/build
 * **环境**：ubuntu-22.04（qtbase5-dev / qt5-qmake / qtdeclarative5-dev / Qt Quick 模块）
 
 * **Job 1 / L0 ctest**：cmake configure（QML OFF / tests ON）→ cmake --build → `ctest --output-on-failure --verbose`
-  * 覆盖 ctest 目标（共 7 个）：`protocol_adapter` / `memory_client_mock` / `d5_vertical_link_demo` /
+  * 覆盖 ctest 目标（共 8 个）：`protocol_adapter` / `memory_client_mock` / `d5_vertical_link_demo` /
     `d6c_multi_source_adapters` / `d7c_preference_editor` / `d8c_knowledge_conflict_lifecycle` /
-    `d9c_context_assemble`
+    `d9c_context_assemble` / `d10c_forgetting` / `d11c_e2e_orchestrator`
 
 * **Job 2 / QML build smoke**：cmake configure（QML ON / tests OFF）→ cmake --build → 产物存在校验
   * 验证 `resources.qrc` 可处理、`main.qml` Component 引用无误、
