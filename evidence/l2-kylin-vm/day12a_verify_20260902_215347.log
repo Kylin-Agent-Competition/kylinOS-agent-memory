@@ -1,0 +1,65 @@
+==============================================
+ D12A VM 功能冻结与缺陷清理验证
+ 时间: 2026-09-02T13:53:47Z
+ 提交: unknown
+==============================================
+
+=== 1. 系统环境 ===
+  Python 版本: Python 3.12.3
+  [PASS] Python 可用
+  SDK 包检测:   [PASS] SDK 包检测
+
+=== 2. Embedding Service health（executor 挂死恢复分项） ===
+[1788357229961] [33mwarn [0m Runtime protocol version is invalid: null , fallback to  1.0.0 
+[1788357229961] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1788357229961] [32minfo [0m Runtime version is  1.0.0  InitEngine call old init_v1 
+[1788357230038] [32minfo [0m Proxy init success,sessionId is: 2103900067 
+  service: ok
+  bridge_loaded: True
+  executor: {'max_workers': 2, 'in_flight': 0, 'hang_recovered': 0, 'hang_threshold_ms': 60000.0, 'max_hang_rebuilds': 3, 'restart_required': False}
+  executor 分项验证: ALL PASS
+  [PASS] health() executor 分项
+
+=== 3. 挂死恢复机制 ===
+[1788357231076] [33mwarn [0m Runtime protocol version is invalid: null , fallback to  1.0.0 
+[1788357231077] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1788357231077] [32minfo [0m Runtime version is  1.0.0  InitEngine call old init_v1 
+[1788357231092] [32minfo [0m Proxy init success,sessionId is: 301942346 
+  embed 正常: ok=True dim=768
+  挂死检测入口: recovered=False（无挂死应为 False）
+  in_flight 计数: 0（完成后应为 0）
+  挂死恢复机制: ALL PASS
+  [PASS] 挂死恢复机制
+
+=== 4. 异常输入回归（真实 SDK） ===
+[1788357232250] [33mwarn [0m Runtime protocol version is invalid: null , fallback to  1.0.0 
+[1788357232250] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1788357232250] [32minfo [0m Runtime version is  1.0.0  InitEngine call old init_v1 
+[1788357232264] [32minfo [0m Proxy init success,sessionId is: 937747157 
+  空文本/纯空白: PASS（真实 SDK dim=768）
+  超长文本(10KB): PASS
+  非 str 输入: PASS
+  embed_batch 非法: PASS
+  异常输入回归: ALL PASS
+  [PASS] 异常输入回归
+
+=== 5. 性能基准 ===
+[1788357245346] [33mwarn [0m Runtime protocol version is invalid: null , fallback to  1.0.0 
+[1788357245346] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1788357245346] [32minfo [0m Runtime version is  1.0.0  InitEngine call old init_v1 
+[1788357245357] [32minfo [0m Proxy init success,sessionId is: 1850622194 
+  延迟: avg=111.0ms p99=133.6ms samples=10
+  架构预算: ≤180ms（avg 且 p99）— OK
+  [PASS] 性能基准
+
+=== 6. 日志无正文残留 ===
+  bridge.log 不存在（无日志输出，符合预期）
+  [PASS] Bridge 日志无正文残留
+
+==============================================
+ 检测汇总
+  PASS: 7
+  FAIL: 0
+  日志: /home/yanmouren778/d12a/evidence/l2-kylin-vm/day12a_verify_20260902_215347.log
+==============================================
+结论: ALL PASS
