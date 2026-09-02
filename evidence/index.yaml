@@ -1353,15 +1353,15 @@ entries:
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "L2 麒麟 VM 证据已执行（真实 SDK 正常路径 HOST_VERIFIED；真实 SDK 挂死恢复 RUNTIME_UNVERIFIED，见 D12A-L2-VERIFY 条目标注）；22 项 D12A 专项 + A 轨 82 项回归通过（含 A-REQ-01 事件类型对齐、有界恢复 HIGH-01、done-callback 清理 MEDIUM-01，对应 #110 合并文档声明）；测试在 merge main @ 8cc4a89 后的分支重跑；挂死→重建恢复为 L1 FakeProvider 模拟验证（真实 SDK RUNTIME_UNVERIFIED，见 D12A-L2-VERIFY limitations）；既有测试顺序依赖（TD-046）在基线同样存在，非本 PR 引入"
+    limitations: "L2 麒麟 VM 证据已执行（真实 SDK 正常路径 HOST_VERIFIED；真实 SDK 挂死恢复 RUNTIME_UNVERIFIED，见 D12A-L2-VERIFY 条目标注）；24 项 D12A 专项 + A 轨 84 项回归通过（含 A-REQ-01 事件类型对齐、有界恢复 HIGH-01、done-callback 清理 MEDIUM-01，对应 #110 合并文档声明）；测试在 merge main @ 6058391 后的分支重跑；挂死→重建恢复为 L1 FakeProvider 模拟验证（真实 SDK RUNTIME_UNVERIFIED，见 D12A-L2-VERIFY limitations）；既有测试顺序依赖（TD-046）在基线同样存在，非本 PR 引入"
     checksum_sha256: "待回填"
     details: |
-      D12A 专项测试（test_embedding_d12a.py）: 22 passed（含有界恢复/回调清理 2 项）
+      D12A 专项测试（test_embedding_d12a.py）: 24 passed（含有界恢复/回调清理/stop-start/submit-gate 4 项）
       挂死恢复 7 项（超时→重建→恢复 / 未超阈值不误重建 / 恢复后路径畅通 / in-flight 清理 / 并发无死锁 / health executor 分项 / shutdown 幂等）
       A-REQ-01 事件类型对齐 1 项（forget.executed 权威 + memory.deletion/deletion 兼容别名被消费、payload/event_type 不一致 fail-closed、turn.finalized 拒绝）
       错误传播 3 项（错误码精确传播 / 未知异常 ERR_UNKNOWN / 失败不伪装成功）
       异常输入回归 9 项（空文本/纯空白 / 超长文本正常 / 超长+积压保护降级 / 错误模型 / 非法枚举 / 非 str / batch 非法 / 降级结构化 / 合法枚举正向）
-      A 轨回归: test_embedding_service + d9 + d10 + d12a = 82 passed（merge main @ 8cc4a89 后，返工验证）
+      A 轨回归: test_embedding_service + d9 + d10 + d12a = 84 passed（merge main @ 6058391 后，返工验证）
       scripts/test_d12a_all.py: 25/25 ALL PASS（VM 全量回归脚本本地验证）
       scripts/verify_day12a_vm.sh: 麒麟 VM 已执行 7/7 ALL PASS（见 D12A-L2-VERIFY）
       Bridge 假实现/吞异常检查清单: docs/day12/03_bridge_audit_checklist.md（无假实现、无吞异常）
@@ -1370,21 +1370,21 @@ entries:
     description: "D12A 麒麟 VM L2 验证——真实 SDK 正常路径 HOST_VERIFIED（health executor 可观测性 + 异常输入 + 性能 + 无挂死不误重建）；真实 SDK 挂死→重建恢复 RUNTIME_UNVERIFIED（HIGH-02 收敛声明，算法由 L1 FakeProvider 模拟）"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
-    source: "evidence/l2-kylin-vm/day12a_verify_20260902_215347.log"
-    tested_commit: "4b0721d703327d31fe3aded0b8093dad4bea1fd0"
-    evidence_commit: "8adc1ff1a91181e605d623958ad13e744ce67b56"
+    source: "evidence/l2-kylin-vm/day12a_verify_20260902_224252.log"
+    tested_commit: "422a03b0b200a3abe5437db9bccd8ac5db7c48e2"
+    evidence_commit: "EVID2_PENDING"
     date: "2026-09-02"
     reviewer: "待复审（D 主审）"
     runtime_result: "PASS（真实 SDK 正常路径；挂死恢复 L1 SIMULATED）"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "真实 SDK 正常路径 HOST_VERIFIED：embed dim=768、health executor 分项（max_workers/in_flight/hang_recovered/hang_threshold_ms/max_hang_rebuilds=3/restart_required）、异常输入（空文本 dim=768、超长 10KB 给 30s 超时、非 str、embed_batch 非法）、性能 avg=111.0ms p99=133.6ms samples=10（样本数=预期且 avg/p99≤180ms 才 PASS，MEDIUM-03）、无挂死不误重建。真实 SDK 挂死→重建恢复 RUNTIME_UNVERIFIED：无法安全注入永久挂死（SDK 无 cancel API，TD-A-005-01；旧 worker 不可回收风险登记 TD-056），有界重建上限 3 次、超限 restart-required（HIGH-01）、done-callback 清理 in_flight（MEDIUM-01）均以 L1 FakeProvider 验证。环境：克隆 /usr 只读 overlay，SDK 0k0.4 bind-mount（dpkg 0k0.3），runtime 1.1.0.1 fallback v1.0.0；源码绑定 manifest 见合入时回填"
-    checksum_sha256: "a356f0b829c54c140f8eca45724cc4a81ce7b1ba50c376afc404967b34a4d2f6"
+    limitations: "真实 SDK 正常路径 HOST_VERIFIED：embed dim=768、health executor 分项（max_workers/in_flight/hang_recovered/hang_threshold_ms/max_hang_rebuilds=3/restart_required）、异常输入（空文本 dim=768、超长 10KB 给 30s 超时、非 str、embed_batch 非法）、性能 avg=72.9ms p99=91.0ms samples=10（样本数=预期且 avg/p99≤180ms 才 PASS，MEDIUM-03）、无挂死不误重建；R2 收口：submit 原子 gate + 同进程 stop/start 不绕过 restart-required（HIGH-01 复验）。真实 SDK 挂死→重建恢复 RUNTIME_UNVERIFIED：无法安全注入永久挂死（SDK 无 cancel API，TD-A-005-01；旧 worker 不可回收风险登记 TD-058），有界重建上限 3 次、超限 restart-required（HIGH-01）、done-callback 清理 in_flight（MEDIUM-01）均以 L1 FakeProvider 验证。环境：克隆 /usr 只读 overlay，SDK 0k0.4 bind-mount（dpkg 0k0.3），runtime 1.1.0.1 fallback v1.0.0；源码绑定 manifest 见合入时回填"
+    checksum_sha256: "6398e3dcb8ef31c36b2102ddd741d41a0a56ebfb42e6c905852b2be15da5c20b"
     details: |
-      verify_day12a_vm.sh 全 6 节 + 汇总：ALL PASS（PASS: 7, FAIL: 0）— 日志 day12a_verify_20260902_215347.log
+      verify_day12a_vm.sh 全 6 节 + 汇总：ALL PASS（PASS: 7, FAIL: 0）— 日志 day12a_verify_20260902_224252.log（R2 代码重跑）
       1) 系统环境：Python 3.12.3 / SDK 包检测 PASS
       2) health executor 分项：service ok / bridge_loaded=True / executor{max_workers, in_flight, hang_recovered, hang_threshold_ms, max_hang_rebuilds:3, restart_required:False}
       3) 挂死恢复机制（真实 SDK 正常路径）：embed ok dim=768 / 无挂死不误重建（recovered=False）/ in_flight=0（done-callback 清理）
       4) 异常输入回归：空文本/纯空白 dim=768、超长 10KB（30s 超时）、非 str、embed_batch 非法 ALL PASS
-      5) 性能基准：avg=111.0ms p99=133.6ms samples=10（样本数=预期 且 avg/p99≤180ms 才 PASS）
+      5) 性能基准：avg=72.9ms p99=91.0ms samples=10（样本数=预期 且 avg/p99≤180ms 才 PASS）
       6) bridge.log 不存在（无正文残留）
