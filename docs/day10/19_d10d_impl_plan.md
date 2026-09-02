@@ -4,7 +4,7 @@
 - **日期**：2026-09-01
 - **状态**：Plan（**D 已决策（D1~D6 全部采用推荐方案），待 Reviewer E 签署**后进入 Phase 2 / Build）
 - **基线**：分支 `feat/d10d-impl` @ `ffd20b9`（已确认）
-- **对照**：契约 `docs/day10/16_d10d_forget_contract_plan_v0.3.md`（§〇~§十二）；ADR-015/019 草案 `docs/day10/17_d10d_adr015_016_draft.md`；任务卡 `docs/day10/18_d10d_impl_task_card.md`
+- **对照**：契约 `docs/day10/16_d10d_forget_contract_plan_v0.3.md`（§〇~§十二）；ADR-015/019 草案 `docs/day10/17_d10d_adr015_019_draft.md`；任务卡 `docs/day10/18_d10d_impl_task_card.md`
 - **产出**：本文档 + 17_（ADR 草案）+ 18_（任务卡）
 
 ---

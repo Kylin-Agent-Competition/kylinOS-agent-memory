@@ -7,7 +7,7 @@
 | 责任轨道 | D（周子腾）；Reviewer：E（谢嘉然） |
 | 基线分支 | `feat/d10d-impl`（基于 main @ `ffd20b9`，已切换） |
 | 基线 Commit | `ffd20b9` |
-| 对照文档版本 | 权威契约 `docs/day10/16_d10d_forget_contract_plan_v0.3.md`（Reviewer E 冻结回复 **APPROVED_WITH_STAGED_RUNTIME** + Review #99 REWORK 全闭合）；ADR-015/019 草案 `docs/day10/17_d10d_adr015_016_draft.md`（本任务前置，签署后实施）；ADR-005/006/007/010/011/013/014；FRZ-IPC-001~007 / FRZ-DB-001~005；技术栈基线 `[02 §2.1]`；VERSION_MAP 真源 |
+| 对照文档版本 | 权威契约 `docs/day10/16_d10d_forget_contract_plan_v0.3.md`（Reviewer E 冻结回复 **APPROVED_WITH_STAGED_RUNTIME** + Review #99 REWORK 全闭合）；ADR-015/019 草案 `docs/day10/17_d10d_adr015_019_draft.md`（本任务前置，签署后实施）；ADR-005/006/007/010/011/013/014；FRZ-IPC-001~007 / FRZ-DB-001~005；技术栈基线 `[02 §2.1]`；VERSION_MAP 真源 |
 | 前置 | ADR-015/019 经 D 决策 + Reviewer E 签署（Phase 2 开工条件）；契约 v0.3 已冻结业务语义（§〇~§五），**本任务卡定稿不改变契约** |
 | 交付边界 | **遗忘持久化层**（表 + 迁移 + Repository + 事务/令牌语义 + 测试 + outbox 优先级 + gateway 接线 seam）；**不接 Vector 清理**（TD-033，`has_vector_cleanup` 仅标记）；不改 IPC envelope |
 
