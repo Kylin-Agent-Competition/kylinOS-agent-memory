@@ -15,7 +15,7 @@ D11（同一虚拟机全功能联调，PR #84）已合并。D12 进入功能冻�
    - `embedding_service.py` 新增 `_in_flight` future 跟踪 + `_maybe_recover_hung_executor()`（超阈值重建 executor）+ `recover_hung_bridge_executor()`（每次请求入口调用，含合并等待路径）+ `_mark_future_complete()`（完成/失败自动清理）
    - `health()` 新增 `executor` 分项（max_workers/in_flight/hang_recovered/hang_threshold_ms）暴露可观测性
 2. **Bridge 假实现/吞异常检查**：`docs/day12/03_bridge_audit_checklist.md` 逐项核对（6 套 C++ 测试 + 逐 catch 核对 + 2 处 Wontfix 固定值判定）
-3. **异常输入回归**：`test_embedding_d12a.py` 24 项（挂死恢复 7 + 错误传播 3 + 异常输入回归 9 + A-REQ-01 事件类型对齐 1 + 有界恢复/回调清理 2：空文本/超长/错误模型/非法枚举/异常返回/非 str/batch 非法）
+3. **异常输入回归**：`test_embedding_d12a.py` 25 项（挂死恢复 7 + 错误传播 3 + 异常输入回归 9 + A-REQ-01 事件类型对齐 1 + 有界恢复/回调清理 2：空文本/超长/错误模型/非法枚举/异常返回/非 str/batch 非法）
 
 ## 明确不修改范围
 
@@ -44,7 +44,7 @@ D11（同一虚拟机全功能联调，PR #84）已合并。D12 进入功能冻�
 | 文件 | 变更类型 | 摘要 |
 |------|---------|------|
 | `memory-service/embedding/embedding_service.py` | 修改 | +挂死恢复机制 + health executor 分项 |
-| `memory-service/tests/test_embedding_d12a.py` | 新增 | 24 项 D12A 专项测试（含 A-REQ-01 事件类型对齐、有界恢复、回调清理） |
+| `memory-service/tests/test_embedding_d12a.py` | 新增 | 25 项 D12A 专项测试（含 A-REQ-01 事件类型对齐、有界恢复、回调清理） |
 | `docs/day12/01_task_card.md` | 新增 | D12-A 任务卡 |
 | `docs/day12/02_pr_description.md` | 新增 | 本文件 |
 | `docs/day12/03_bridge_audit_checklist.md` | 新增 | Bridge 假实现/吞异常检查清单 |
@@ -64,11 +64,11 @@ python -m py_compile memory-service/embedding/embedding_service.py  # OK
 ### L1（WSL）
 
 ```
-test_embedding_d12a.py: 24 passed
-test_embedding_service.py + d9 + d10 + d12a: 84 passed
+test_embedding_d12a.py: 25 passed
+test_embedding_service.py + d9 + d10 + d12a: 85 passed
 ```
 
-覆盖：挂死恢复（L1 FakeProvider 模拟：超时→重建→恢复 / 未超阈值不误重建 / 有界上限与 restart-required / 同进程 stop→start 不绕过 / submit 原子 gate / 并发无死锁 / in-flight 清理 / health 分项）、错误传播（错误码保留 / 未知异常不崩溃 / 失败不伪装成功）、异常输入（空文本/超长/错误模型/非法枚举/异常返回/非 str/batch 非法/降级结构化）。
+覆盖：挂死恢复（L1 FakeProvider 模拟：超时→重建→恢复 / 未超阈值不误重建 / 有界上限与 restart-required / 同进程 stop→start 不绕过 / stop 时 active Future 冻结（threshold-before-stop 不绕过，R3）/ submit 原子 gate / 并发无死锁 / in-flight 清理 / health 分项）、错误传播（错误码保留 / 未知异常不崩溃 / 失败不伪装成功）、异常输入（空文本/超长/错误模型/非法枚举/异常返回/非 str/batch 非法/降级结构化）。
 
 ### 安全与假实现审查
 

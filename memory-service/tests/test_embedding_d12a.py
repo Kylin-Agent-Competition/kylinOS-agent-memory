@@ -588,3 +588,40 @@ def test_submit_blocked_when_restart_required():
     with _executor_lock:
         assert len(_in_flight) == before
     shutdown_executor()
+def test_stop_with_active_futures_forces_restart_required():
+    """R3 HIGH-01：threshold 前 stop（存在 active Bridge Future）→ restart-required=True，
+    同进程 start 不得重建 executor（ERR_EMBED_FAILED），杜绝 threshold-before-stop 绕过有界恢复。"""
+    _reset_hang_threshold()
+    _es._embed_max_hang_rebuilds = 3
+    _es._embed_restart_required = False
+    _es._embed_hang_recovered = 0
+
+    def _hang_forever():
+        time.sleep(30.0)
+
+    # 2 个 active（尚未超过默认 60s threshold）Bridge Future
+    _submit_bridge(_hang_forever)
+    _submit_bridge(_hang_forever)
+    assert len(_in_flight) == 2
+    assert _es._embed_restart_required is False
+    assert _es._embed_hang_recovered == 0
+
+    # threshold 前 stop：不得丢失 active hung worker 风险 → 保守 restart-required
+    shutdown_executor()
+    assert _es._embed_restart_required is True
+    assert _es._embed_hang_recovered == 0  # 尚未触发 hang 计数（非 recovery 路径）
+
+    # 同进程 start/embed → ERR_EMBED_FAILED，且不得创建新的 Bridge Future / executor worker
+    with _executor_lock:
+        exec_id = id(_es._executor)
+    svc = EmbeddingService(provider=FakeProvider())
+    svc.start()
+    r = svc.embed("x", timeout_ms=200)
+    assert r["ok"] is False
+    assert r["error"]["code"] == "ERR_EMBED_FAILED"
+    assert "restart" in r["error"]["message"]
+    with _executor_lock:
+        assert len(_in_flight) == 0, "restart-required 下不得创建新 Bridge Future"
+        assert _es._executor_shutdown is True, "restart-required 下不得重建 executor"
+        assert id(_es._executor) == exec_id, "executor 实例不得被替换"
+    svc.close()

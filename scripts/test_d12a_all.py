@@ -87,7 +87,15 @@ class FakeProvider:
 
 def reset_hang_threshold():
     import embedding.embedding_service as es
-    es._embed_hang_threshold_ms = 60000.0
+    # R3：每次复位完整 executor 状态（含 restart-required/in_flight），
+    # 隔离 threshold-before-stop 冻结语义对后续段的影响
+    shutdown_executor()
+    with _executor_lock:
+        _in_flight.clear()
+        es._embed_hang_recovered = 0
+        es._embed_hang_threshold_ms = 60000.0
+        es._embed_restart_required = False
+        es._embed_max_hang_rebuilds = 3
 
 # ============================================================
 # 1. 挂死恢复

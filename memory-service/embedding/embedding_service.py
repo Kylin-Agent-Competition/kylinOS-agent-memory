@@ -74,17 +74,22 @@ def shutdown_executor() -> None:
     """关闭 Bridge 线程池（进程/服务停止时释放资源，审查报告 #3）。
 
     幂等；关闭后再 submit 会惰性重建（见 _submit_bridge），保持进程级单例语义。
+
+    [D12A Review R3 HIGH-01] stop 时若存在未完成（active）Bridge Future：
+    `shutdown(wait=False)` 无法证明其已停止（旧 worker 无法终止，TD-058），
+    因此保守置 `_embed_restart_required=True`，冻结同进程 start——空闲状态 stop
+    允许同进程 start，存在 active Future 的 stop 必须进程级重启清场，
+    杜绝 threshold-before-stop 绕过有界恢复。
     """
-    global _executor, _executor_shutdown
+    global _executor, _executor_shutdown, _embed_restart_required
     with _executor_lock:
         if _executor_shutdown:
             return
+        if any(not f.done() for f in list(_in_flight)):
+            _embed_restart_required = True
         _executor.shutdown(wait=False)
         _executor_shutdown = True
         _in_flight.clear()
-        # [D12A Review R2 HIGH-01] 同进程 stop/start 不得重置有界恢复计数与
-        # restart-required：旧 hung worker 无法终止（TD-058），只有进程级重启
-        # 才清场（模块重载自然复位）；测试通过 fixture/模块级复位隔离。
 
 
 def _maybe_recover_hung_executor() -> bool:
