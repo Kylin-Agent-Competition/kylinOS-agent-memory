@@ -972,6 +972,24 @@ def test_retrieve_graceful_exposes_redacted_filter_diagnostics():
             "unresolved_conflict": 1,
         },
     }
+    assert set(outcome.filter_diagnostics) == {
+        "policy_version",
+        "input_hit_count",
+        "deduplicated_hit_count",
+        "hard_filter_passed_hit_count",
+        "current_version_passed_hit_count",
+        "dropped_by_reason",
+    }
+    assert (
+        outcome.filter_diagnostics["current_version_passed_hit_count"]
+        <= outcome.filter_diagnostics["hard_filter_passed_hit_count"]
+        <= outcome.filter_diagnostics["deduplicated_hit_count"]
+        <= outcome.filter_diagnostics["input_hit_count"]
+    )
+    assert sum(outcome.filter_diagnostics["dropped_by_reason"].values()) == (
+        outcome.filter_diagnostics["deduplicated_hit_count"]
+        - outcome.filter_diagnostics["current_version_passed_hit_count"]
+    )
     assert sentinel not in repr(outcome.filter_diagnostics)
     assert "kept" not in repr(outcome.filter_diagnostics)
     # REWORK #111 MEDIUM-01 方案 A：公共返回不得出现 cross_user 存在性 oracle
