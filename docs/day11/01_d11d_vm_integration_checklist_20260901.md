@@ -8,7 +8,7 @@
 - 工作分支：`feat/D11D-vm-integration`（基线 `origin/main@47af2fa`）。
 - 本次范围：D 轨职责内的统一环境、服务生命周期、安装部署、日志诊断、权限与证据汇总；不代行 A/B/C/E 轨实现或审查。
 - 开始时间：2026-09-01（准备阶段）。最晚停止时间：进入实现前须由 D 轨负责人指定并确认。
-- 当前进度：8/9（89%）。
+- 当前进度：7/9（78%）。（第 8 项因 A 轨 bridge 未构建降级为 PARTIAL/BLOCKED_BY_A_RUNTIME，未计完成）
 
 ## 完成定义
 
@@ -25,8 +25,8 @@
 | 5 | 权限与安全：UDS socket 权限、KYSEC 授权（`kysec_authorize.sh`）、用户/组边界，失败关闭 | 工作项 3 | KYSEC 授权实测、越权/失败路径测试 | 已完成（config/share/state/RuntimeDir 0700、UDS/DB 0600、wrapper 0755、用户隔离；KYSEC 本 VM 不可见保持 UNVERIFIED） |
 | 6 | 汇总 trace、数据库与性能证据：trace 日志、`source_events`/outbox 数据库状态、延迟/吞吐性能基线 | 工作项 4、5 | 证据采集脚本、SHA-256、`evidence/index.yaml` 回填 | 已完成（DB head+0 行、trace 关联证据；性能引用 A 轨 D11A 实测 avg=41.3ms/p99=44.2ms） |
 | 7 | 修复启动、重启与部署问题：启动失败、服务重启、OS 重启、部署/回退问题定位与修复 | 工作项 3–6 | 同 Commit 同 VM 复测、回归测试、真实日志 | 已完成（麒麟 VM L2：服务重启 + OS 整机重启后自动启动 + 部署/回退可重复；见 `evidence/l2-kylin-vm/d11d_vm_reboot_l2_20260902.md`） |
-| 8 | 端到端联调：所有模块同 Commit 同 VM 启动并相互可追踪；与 A/B/C 轨输入联调 | 工作项 7；A/B/C 轨 D11 输入 | 全模块启动清单、trace 串联核对 | 已完成（D 侧：同 Commit 同 VM 全模块启动可追踪；B/C 端到端输入跨轨 pending，`memory.retrieve` 返回真实空上下文） |
-| 9 | 证据归档与审查：整理 L2 证据入 `evidence/l2-kylin-vm/` 与 `evidence/index.yaml`；交由 E 轨非作者 Reviewer 审查 | 工作项 1–8 | 证据可复跑、`git diff --check`、审查材料 | 进行中（证据已归档 4 项 + index.yaml 3 条；待 E 轨 review 与合并授权） |
+| 8 | 端到端联调：所有模块同 Commit 同 VM 启动并相互可追踪；与 A/B/C 轨输入联调 | 工作项 7；A/B/C 轨 D11 输入 | 全模块启动清单、trace 串联核对 | PARTIAL / BLOCKED_BY_A_RUNTIME（D 侧已完成：memory-service/vector/systemd/诊断统一环境验证；Embedding 真实 SDK 调用在 D11D VM 降级——A 轨 bridge 未构建，Runtime reboot 恢复待 A 轨闭环；B/C 端到端输入跨轨 pending） |
+| 9 | 证据归档与审查：整理 L2 证据入 `evidence/l2-kylin-vm/` 与 `evidence/index.yaml`；交由 E 轨非作者 Reviewer 审查 | 工作项 1–8 | 证据可复跑、`git diff --check`、审查材料 | 进行中（证据已归档 7 组 log + 摘要 md、index.yaml 5 条 `D11D-L2-*`；待 Reviewer 复审与合并授权） |
 
 ## 固定验收口径
 

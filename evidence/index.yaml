@@ -1171,7 +1171,7 @@ entries:
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d11d_vm_head_l2_20260902.log"
     tested_commit: "c18184a9816d04a20fec95e8c535816dc8acae22"
-    evidence_commit: "pending"
+    evidence_commit: "05fd8e6"
     date: "2026-09-02"
     reviewer: "pending"
     runtime_result: "PASS"
@@ -1185,6 +1185,26 @@ entries:
       诊断：health=ok/db=ok（outbox 含 D9D index_sync_lag/fatal_error，null 正常）；JSON 日志 trace 关联、PII 0；Alembic current=20260901_d10b_vector_ledger。
       OS 重启后服务自动启动（active，PID 1712）、socket 0600、health ok。重启后 runtime UDS 未出现（观察）。
       重启证据：d11d_vm_head_reboot_20260902.log（SHA-256 ed0e3627…）。
+  - id: "D11D-L2-EMBED-REBOOT-VERIFY"
+    task_id: "D11D"
+    description: "D11D 麒麟 VM L2——reboot 后 Embedding/SDK 真实调用验证（情况 B：A 轨 bridge 未构建，embed 降级）→ 工作项 8 收缩为 PARTIAL/BLOCKED_BY_A_RUNTIME"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d11d_vm_embed_reboot_verify_20260902.log"
+    tested_commit: "c18184a9816d04a20fec95e8c535816dc8acae22"
+    evidence_commit: "pending"
+    date: "2026-09-02"
+    reviewer: "pending"
+    runtime_result: "DEGRADED"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "真实 Embedding/SDK 调用降级（A 轨 cpp-bridge 未构建）；工作项 8 PARTIAL/BLOCKED_BY_A_RUNTIME；正式发行环境 systemd/KYSEC 未验证"
+    checksum_sha256: "486c372c4140ed6e58273e365617ca0950408665c9b3ecea8654b8904377b0c2"
+    details: |
+      HEAD=c18184a；SDK libkylin-coreai-embedding.so.1.0.0 存在（0k0.3）；cpp-bridge/build 不存在。
+      EmbeddingService.start()->health(): service=ok/provider=ready/bridge_loaded=false/sdk_missing=true/degraded=true；embed ok=true/degraded=true/dim=0（降级空向量）。
+      Runtime UDS 调用前后均存在（本次启动自动拉起）。判定：情况 B —— 真实 SDK 调用待 A 轨 bridge 构建后闭环。
+
   - id: "D11D-L2-REWORK-SERVICE"
     task_id: "D11D"
     description: "D11D 麒麟 VM L2（复审返工）——部署目录权限 0700 对齐冻结契约 + rollback 恢复安装前备份 + 完整生命周期转录（install/restart/rollback/reinstall）"
@@ -1192,7 +1212,7 @@ entries:
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d11d_vm_rework_l2_20260902.log"
     tested_commit: "47af2fa42edf45ab4dc227453c47ed784bf46e16"
-    evidence_commit: "pending"
+    evidence_commit: "9588382"
     date: "2026-09-02"
     reviewer: "pending"
     runtime_result: "PASS"
