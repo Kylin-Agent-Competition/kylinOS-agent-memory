@@ -31,11 +31,15 @@
 // ============================================================================
 
 #include <QGuiApplication>
+#include <QFile>
+#include <QLibraryInfo>
 #include <QLoggingCategory>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QQmlError>
 #include <QQuickItem>
 #include <QString>
+#include <QStringList>
 #include <QTest>
 #include <QUrl>
 
@@ -77,10 +81,34 @@ void TestD11cQmlLoad::initTestCase()
     // 严格模式：把 QML warning 记录到我们自己的 buffer，便于断言
     QLoggingCategory::setFilterRules(QStringLiteral("qt.qml.binding.removal.info=true"));
 
-    // import path：CI 安装的 qml-module-* 在系统默认位置即可解析，
-    // 但显式把 Qt5 默认 import 前缀加进 engine，增加对离线 QML 路径的
-    // 兼容。
-    engine_->addImportPath(QStringLiteral("qrc:/qt/qml"));
+    // import paths：显式补齐 Qt5 QML modules 默认安装路径，确保
+    // qtdeclarative5-dev + qml-module-qtquick-* 安装的运行时模块被
+    // QQmlEngine 找到，否则 D11 QML import QtQuick.Controls 2.12
+    // 会在 CI headless 环境报 module not found，导致
+    // QQmlComponent status() == Error 而 create() 永远返回 null。
+    {
+        QStringList extraImports;
+        // Qt 5 标准 QML 模块根（Ubuntu 下通常为 /usr/lib/x86_64-linux-gnu/qt5/qml
+        // 或 QLibraryInfo::location(QLibraryInfo::Qml2ImportsPath)）。
+        const QString sysImports =
+            QLibraryInfo::location(QLibraryInfo::Qml2ImportsPath);
+        if (!sysImports.isEmpty()) extraImports.append(sysImports);
+        // Ubuntu / Debian 打包的常见 fallback。
+        extraImports.append(QStringLiteral("/usr/lib/qt5/qml"));
+        extraImports.append(QStringLiteral("/usr/share/qt5/qml"));
+        // NixOS / Qt 在 /usr/local 下安装的兼容路径兜底。
+        extraImports.append(QStringLiteral("/usr/local/share/qt5/qml"));
+        // qrc 内前缀，便于其它模块把 qml 代码嵌入自身资源。
+        extraImports.append(QStringLiteral("qrc:/qt/qml"));
+        extraImports.append(QStringLiteral("qrc:/qml"));
+        // 去空后注册。
+        for (const QString& p : extraImports) {
+            if (!p.isEmpty()) engine_->addImportPath(p);
+        }
+        // 打印到 QTest log，便于 CI 失败时做路径诊断。
+        qDebug() << "[d11c_qml_load] QQmlEngine import paths="
+                 << engine_->importPathList();
+    }
 }
 
 void TestD11cQmlLoad::cleanupTestCase()
@@ -90,16 +118,66 @@ void TestD11cQmlLoad::cleanupTestCase()
 
 static const QUrl kD11PageUrl{
     QStringLiteral("qrc:/qt/qml/memory_client/pages/D11DemoOrchestratorPage.qml")};
+// 对应 qrc 文件系统内的"裸路径"；QFile 打开成功即意味着
+// qt5_add_resources 已把 resources.qrc 中的 D11 页面真正打进了
+// 本测试可执行文件的 Qt resource table。若失败则 QQmlComponent
+// 永远不会 Ready（会一直 Error 说无效 URL），先在此 fail-fast
+// 便于 CI 定位是 rcc 打包问题还是 QML parser 问题。
+static const char* kD11PageResourcePath =
+    ":/qt/qml/memory_client/pages/D11DemoOrchestratorPage.qml";
+
+// 小工具：把 QQmlComponent::errors() 里的每一条 (url/line/col/desc)
+// 格式化成可直接粘进 CI log 的单行字符串，避免 CI 只能看到
+// "status=Error" 却不知道具体是哪个 import / 哪一行出错。
+static QString formatErrors(const QQmlComponent& c)
+{
+    QString out;
+    const QList<QQmlError> errs = c.errors();
+    if (errs.isEmpty()) {
+        out = QStringLiteral("<QQmlComponent::errors() 空，可能是 qrc URL 指向资源不存在>");
+        return out;
+    }
+    for (int i = 0; i < errs.size(); ++i) {
+        if (!out.isEmpty()) out += QStringLiteral(" || ");
+        out += QStringLiteral("[%1] %2:%3:%4: %5")
+                   .arg(i)
+                   .arg(errs.at(i).url().toString())
+                   .arg(errs.at(i).line())
+                   .arg(errs.at(i).column())
+                   .arg(errs.at(i).description());
+    }
+    return out;
+}
 
 void TestD11cQmlLoad::resourceUrlResolves()
 {
     QVERIFY2(kD11PageUrl.isValid(), "D11 页面 qrc URL 格式必须合法");
 
+    // FAIL-FAST：先验证 QFile 可直接打开 qrc 裸路径。
+    // 若这里失败，说明 qt5_add_resources 没把 resources.qrc 编进
+    // test_d11c_qml_load 二进制，或者 qrc prefix 与 test 内路径
+    // 不一致；直接在这里报 ASSERT 就不会让后续 QQmlComponent
+    // 给出更晦涩的 "status=Error / errorString()=空" 了。
+    {
+        QFile f(QString::fromLatin1(kD11PageResourcePath));
+        const bool opened = f.open(QIODevice::ReadOnly);
+        if (!opened) {
+            qCritical() << "[d11c_qml_load] QResource 缺失："
+                        << kD11PageResourcePath
+                        << "exists=" << QFile::exists(QString::fromLatin1(kD11PageResourcePath));
+        }
+        QVERIFY2(opened,
+                 qPrintable(QStringLiteral(
+                                "qrc 资源表无 D11 页面（qt5_add_resources 是否正确执行？"
+                                "预期裸路径=%1。请查 resources.qrc 的 <qresource prefix>").arg(
+                                QString::fromLatin1(kD11PageResourcePath)))));
+    }
+
     QQmlComponent probe(engine_.data(), kD11PageUrl);
     QTRY_COMPARE_WITH_TIMEOUT(probe.status(), QQmlComponent::Ready, 3000);
     QVERIFY2(!probe.isError(),
              qPrintable(QStringLiteral("Component 加载不应有错误，当前错误: %1")
-                            .arg(probe.errorString())));
+                            .arg(formatErrors(probe))));
 }
 
 void TestD11cQmlLoad::componentCreatesWithoutErrors()
@@ -110,11 +188,11 @@ void TestD11cQmlLoad::componentCreatesWithoutErrors()
     QVERIFY2(component.isReady(),
              qPrintable(QStringLiteral("D11 Component 必须 Ready，当前 status=%1 错误=%2")
                             .arg(component.status())
-                            .arg(component.errorString())));
+                            .arg(formatErrors(component))));
 
     QScopedPointer<QObject> obj(component.create());
     QVERIFY2(!component.isError(),
-             qPrintable(QStringLiteral("create() 触发了错误: %1").arg(component.errorString())));
+             qPrintable(QStringLiteral("create() 触发了错误: %1").arg(formatErrors(component))));
     QVERIFY2(!obj.isNull(), "create() 返回对象必须非空");
 
     // ScrollView 继承自 QQuickItem
@@ -129,7 +207,7 @@ void TestD11cQmlLoad::viewModelAliasExistsAndInitiallyNull()
     QScopedPointer<QObject> obj(component.create());
     QVERIFY2(!obj.isNull(),
              qPrintable(QStringLiteral("create() 返回对象必须非空，错误=%1")
-                            .arg(component.errorString())));
+                            .arg(formatErrors(component))));
 
     // HIGH-01 修复：root 必须暴露 "viewModel" alias 属性
     const QMetaObject* meta = obj->metaObject();
@@ -155,11 +233,11 @@ void TestD11cQmlLoad::multipleInstantiationsDoNotLeak()
     QObject* first = component.create();
     QVERIFY2(first != nullptr,
              qPrintable(QStringLiteral("第 1 次 create() 必须成功，错误=%1")
-                            .arg(component.errorString())));
+                            .arg(formatErrors(component))));
     QObject* second = component.create();
     QVERIFY2(second != nullptr,
              qPrintable(QStringLiteral("第 2 次 create() 必须成功，错误=%1")
-                            .arg(component.errorString())));
+                            .arg(formatErrors(component))));
     QVERIFY2(first != second, "两次实例化必须返回不同对象");
 
     const QVariant vm1 = first->property("viewModel");

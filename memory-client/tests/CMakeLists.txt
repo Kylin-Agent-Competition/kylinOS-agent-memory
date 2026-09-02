@@ -11,16 +11,20 @@ cmake_minimum_required(VERSION 3.16)
 # not found" 报错而让整套 tests CMake Configure 失败、其它 9 个
 # ctest 目标也全部跳过，这里先显式 find_package 并在缺包时发 WARNING
 # 且不注册该目标，保证其余 L0 契约测试仍可编译运行。
-find_package(Qt5 5.12 QUIET COMPONENTS Gui Qml Quick)
+# 注意：Qt5::QuickControls2 是 QML import QtQuick.Controls 2.12 的
+#       IMPORTED target 入口；若缺失则 QML plugin 不会注册到
+#       QQmlEngine 的 import 路径，module "QtQuick.Controls" 找不到。
+find_package(Qt5 5.12 QUIET COMPONENTS Gui Qml Quick QuickControls2)
 set(D11C_QML_LOAD_AVAILABLE FALSE)
-if(Qt5Gui_FOUND AND Qt5Qml_FOUND AND Qt5Quick_FOUND)
+if(Qt5Gui_FOUND AND Qt5Qml_FOUND AND Qt5Quick_FOUND AND Qt5QuickControls2_FOUND)
     set(D11C_QML_LOAD_AVAILABLE TRUE)
 endif()
 if(NOT D11C_QML_LOAD_AVAILABLE)
-    message(WARNING "d11c_qml_load L0 测试跳过：Qt5::Gui/Qt5::Qml/Qt5::Quick "
-                    "IMPORTED targets 缺失。请在构建环境安装 qtdeclarative5-dev、"
-                    "qtquickcontrols2-5-dev 及对应运行时 QML 模块，以获得 Reviewer "
-                    "E HIGH-01 的真实 QQmlComponent 加载验证。其余 9 个 L0 ctest "
+    message(WARNING "d11c_qml_load L0 测试跳过：Qt5::Gui/Qt5::Qml/Qt5::Quick/"
+                    "Qt5::QuickControls2 IMPORTED targets 缺失。请在构建环境安装 "
+                    "qtdeclarative5-dev、qtquickcontrols2-5-dev 及对应运行时 QML "
+                    "模块（qml-module-qtquick-controls2 等），以获得 Reviewer E "
+                    "HIGH-01 的真实 QQmlComponent 加载验证。其余 9 个 L0 ctest "
                     "目标不受影响。")
 endif()
 
@@ -334,20 +338,23 @@ add_test(
 #           失败而全部不编译。
 # ============================================================================
 if(D11C_QML_LOAD_AVAILABLE)
-    # test_d11c_qml_load 需要 QML 资源被打包进可执行文件的 qrc，
-    # 否则 QUrl("qrc:/qt/qml/memory_client/pages/D11DemoOrchestratorPage.qml")
-    # 在纯 tests ON / QML OFF 的 ctest 配置下找不到资源。
-    # 使用 qt5_add_resources 把 resources.qrc 编进该测试可执行文件。
-    if(COMMAND qt5_add_resources)
-        qt5_add_resources(D11C_QML_LOAD_QRC_FILES
-            ${CMAKE_SOURCE_DIR}/qml/resources.qrc
-        )
-    else()
-        # 兼容极端环境：即便 qt5_add_resources 宏未暴露，也保证剩余
-        # 源文件可以编译；resources.qrc 缺失会让 L0 用例明确 QVERIFY 失败，
-        # 比链接期 undefined reference 更易诊断。
-        set(D11C_QML_LOAD_QRC_FILES "")
-    endif()
+    # d11c_qml_load 需要 D11 QML 页面能在运行时通过 qrc:/ URL 被
+    # QQmlComponent 解析。由于 ctest profile 是 -DBUILD_QML_APP=OFF，
+    # 顶层 CMakeLists 里的 qt5_add_resources 仅把 resources.qrc 编进
+    # kylin_memory_client_app 这个可执行文件，不会出现在 L0 测试
+    # 可执行文件里。
+    #
+    # 解决：显式使用 qt5_add_resources 宏把 <top>/qml/resources.qrc
+    # 编译成 qrc_resources.cpp 并加入测试 target 源文件列表。
+    # 相对于依赖 CMAKE_AUTORCC 自动处理 .qrc 源文件，显式调用
+    # qt5_add_resources() 更稳定：
+    #   * AUTORCC 对绝对路径的 .qrc 文件在部分 CMake 版本/CI 平台
+    #     上会静默跳过（Qt5CoreMacros 内的依赖探测失败）；
+    #   * qt5_add_resources 直接调用 Qt 安装的 rcc 二进制，生成的
+    #     源文件明明白白地参与 target 编译，不会出 bug。
+    qt5_add_resources(D11C_QML_LOAD_RCC_SOURCES
+        "${CMAKE_SOURCE_DIR}/qml/resources.qrc"
+    )
 
     add_executable(test_d11c_qml_load
         ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
@@ -355,7 +362,7 @@ if(D11C_QML_LOAD_AVAILABLE)
         ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
         mock_gateway_server.cpp
         test_d11c_qml_load.cpp
-        ${D11C_QML_LOAD_QRC_FILES}
+        ${D11C_QML_LOAD_RCC_SOURCES}
     )
     target_link_libraries(test_d11c_qml_load
         PRIVATE
@@ -364,6 +371,12 @@ if(D11C_QML_LOAD_AVAILABLE)
             Qt5::Network
             Qt5::Qml
             Qt5::Quick
+            # QtQuick.Controls 2.12 IMPORTED target：用于在 C++ 侧
+            # 触发 QQuickStyle plugin 的静态初始化，并确保
+            # QtQuick.Controls.2/qmldir 所在路径被添加到 QQmlEngine
+            # 默认 import 路径中；缺少则 QML import QtQuick.Controls
+            # 时一律报 "module not found"。
+            Qt5::QuickControls2
             Qt5::Test
     )
     target_include_directories(test_d11c_qml_load
