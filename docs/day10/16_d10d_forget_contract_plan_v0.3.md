@@ -341,7 +341,8 @@ Schema 已含 `delete_mode = soft / hard`，但 `ForgetPlan` 输入不含该字�
 | 幂等键复用 + 不同业务 payload → IdempotencyConflictError | 幂等冲突 |
 | 跨用户访问他人 forget_plan / 凭据 → INVALID_REQUEST | 隔离 |
 | forget_mode 与 selector 互斥（single_item 带 target_session_id 等）→ INVALID_REQUEST | 模式互斥 |
-| full_reset 携带 target_* → INVALID_REQUEST；full_reset Preview 全量 + 最高级确认 | full_reset 边界 |
+| full_reset 携带 target_* → INVALID_REQUEST；full_reset Preview/Execute 本期均 fail-closed | full_reset 本期边界 |
+| topic Preview 本期 fail-closed → INVALID_REQUEST；仅 single_item/session 提供真实确定性 Resolver | topic 本期边界 |
 | `affected_count != len(resolved_target_ids)` 不得进入 awaiting_confirmation | Preview 完整性 |
 | **executed_count 语义（v0.3/MEDIUM-03）**：`executed_count != affected_count`（漏删 / 部分失败）时不得进入 `completed` | Preview/Execute 一致性 |
 | **selector 明文生命周期（v0.3/HIGH-01）**：Preview 完成后 `forget_plan` 中原始 `target_selector` / `target_topic` 已清除或置安全占位；持久层仅存结构化 selector + `selection_hash`；Hard Delete 完成后无明文残留 | 安全 |

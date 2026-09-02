@@ -3,7 +3,7 @@
 - **编制**：opencode（D 轨开发 Agent）
 - **日期**：2026-09-01
 - **状态**：Plan（**D 已决策（D1~D6 全部采用推荐方案），待 Reviewer E 签署**后进入 Phase 2 / Build）
-- **基线**：分支 `feat/d10d-impl` @ `ffd20b9`（已确认）
+- **基线**：初始 Plan 基线 main @ `ffd20b9`；当前已同步 main @ `577c14c`（behind=0）
 - **对照**：契约 `docs/day10/16_d10d_forget_contract_plan_v0.3.md`（§〇~§十二）；ADR-015/019 草案 `docs/day10/17_d10d_adr015_019_draft.md`；任务卡 `docs/day10/18_d10d_impl_task_card.md`
 - **产出**：本文档 + 17_（ADR 草案）+ 18_（任务卡）
 
@@ -63,7 +63,7 @@ $ alembic -c migrations/alembic.ini history
 |---|------|------|------|
 | R1 | outbox `aggregate_type` CHECK 值域扩展需 SQLite 表重建，downgrade 数据保留复杂度 | 中 | D1 决策；手写重建迁移 + 往返测试；备选弱化（不改 CHECK 仅 priority 驱动） |
 | R2 | event 目标（source_events）无 `is_deleted` 列，消费者在 `pipeline/`（红线不可改）→ event-target 软删不可落 | 中 | D2 决策：Runtime fail-closed + 登记 TD-E（staged，`executed_count` 反映真实，不假完成）；或经独立变更新增 source_events 列（超出本任务红线范围，须 D 另行授权） |
-| R3 | preview resolver 覆盖范围（single_item/session 确定性；topic 依赖只读检索能力） | 中 | resolver seam 真实 scoped 解析；不支持模式 fail-closed；不做 Mock/固定返回（红线） |
+| R3 | preview resolver 覆盖范围（仅 single_item/session 确定性；topic/time_window/full_reset 本期不支持） | 中 | single_item/session 走真实 scoped 解析；topic/time_window/full_reset Preview 明确 fail-closed；不做 Mock/固定返回（红线） |
 | R4 | 凭据明文回传信道（响应回传一次 vs 独立确认信道） | 低 | D4 决策；服务端只存 SHA-256，明文生命周期收敛 |
 | R5 | request_fingerprint 敏感占位与 selection_hash 派生域边界 | 低 | D5 决策 + L1 用例 19；selection_hash 仅由结构化 ID 派生，不作用于正文 |
 | R6 | 对外状态：完整跨轨 + 麒麟 L2 证据闭环前一律 `PARTIAL / staged implementation`，不得写 D10 DONE | 硬性 | 报告与 PR 表述遵守；L2 只列清单不声称已执行 |

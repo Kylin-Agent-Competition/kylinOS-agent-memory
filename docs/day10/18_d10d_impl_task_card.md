@@ -5,8 +5,8 @@
 | 任务编号 | D10D（台账 R55，精准遗忘持久化） |
 | 任务标题 | ① `forget_plan`/`forget_audit` 两表 + 迁移（ADR-007 命名）+ Repository；② 确认凭据（preview/execute 分离，SHA-256 哈希存储，TTL 5 分钟）；③ Outbox 删除高优先级（方案 A：nullable `priority` 列 + 部分索引，worker `ORDER BY priority DESC, next_retry_at ASC`）；④ 幂等（复用 idempotency_cache）+ 最小审计（零正文）；⑤ Soft Delete 主路径（is_deleted=1），Hard Delete / Cascade / Full Reset Runtime fail-closed；⑥ 状态机 `pending → previewing → awaiting_confirmation → executing → completed / failed / rolled_back` |
 | 责任轨道 | D（周子腾）；Reviewer：E（谢嘉然） |
-| 基线分支 | `feat/d10d-impl`（基于 main @ `ffd20b9`，已切换） |
-| 基线 Commit | `ffd20b9` |
+| 初始 Plan 基线 | `feat/d10d-impl`，main @ `ffd20b9` |
+| 当前同步 main 基线 | `577c14c`（PR #113/#114/#109 合并后，当前 behind=0） |
 | 对照文档版本 | 权威契约 `docs/day10/16_d10d_forget_contract_plan_v0.3.md`（Reviewer E 冻结回复 **APPROVED_WITH_STAGED_RUNTIME** + Review #99 REWORK 全闭合）；ADR-015/019 草案 `docs/day10/17_d10d_adr015_019_draft.md`（本任务前置，签署后实施）；ADR-005/006/007/010/011/013/014；FRZ-IPC-001~007 / FRZ-DB-001~005；技术栈基线 `[02 §2.1]`；VERSION_MAP 真源 |
 | 前置 | ADR-015/019 经 D 决策 + Reviewer E 签署（Phase 2 开工条件）；契约 v0.3 已冻结业务语义（§〇~§五），**本任务卡定稿不改变契约** |
 | 交付边界 | **遗忘持久化层**（表 + 迁移 + Repository + 事务/令牌语义 + 测试 + outbox 优先级 + gateway 接线 seam）；**不接 Vector 清理**（TD-033，`has_vector_cleanup` 仅标记）；不改 IPC envelope |
@@ -61,7 +61,7 @@
 | 6 | `memory-service/outbox/worker.py` | Worker 取数顺序改为优先级驱动（消费 `claim_pending_outbox` 新排序，无需其他逻辑改动；短事务单写协调不变） | 修改 |
 | 7 | `memory-service/app.py` | **如需要（依赖 ADR-019 签署）**：新增 `--register-forget-handlers` seam（默认不注册 → `UNSUPPORTED_METHOD`，对齐 ADR-010/014 activation 方案 A+B） | 修改（如需） |
 | 8 | `memory-service/gateway/forget_handlers.py` | **新增（依赖 ADR-019 签署）**：`forget.preview` / `forget.execute` handler（固定编排顺序见 ADR-019 草案 §4.9）；**不修改**既有 handler 模块；**范围说明（MEDIUM-02，方案 2）**：v0.3/ADR 允许 ADR-019 签署后实施 forget_handlers.py + app.py activation seam，与「遗忘持久化层」主体同 PR 交付，不无谓拆分 | 新增（如需） |
-| 9 | `memory-service/service/forgetting.py` | **新增（Preview 规则引擎 seam）**：scoped 真实解析（single_item / session 确定性解析；topic 复用既有只读检索或 fail-closed；time_window/full_reset fail-closed）；非 Mock、非固定返回 | 新增（如需，D6 决策后） |
+| 9 | `memory-service/service/forgetting.py` | **新增（Preview 规则引擎 seam）**：仅 single_item / session 提供 scoped 真实确定性解析；topic / time_window / full_reset Preview 本期均 fail-closed；非 Mock、非固定返回 | 新增（如需，D6 决策后） |
 | 10 | `memory-service/tests/test_forget_persistence_d10d.py` | 新增 L0/L1 测试（契约 §九 逐项，见 §五） | 新增 |
 
 ## 三、禁止修改清单（红线，两个阶段都适用）
@@ -181,7 +181,7 @@ $ alembic -c migrations/alembic.ini history
 | 5 | 幂等键复用 + 不同业务 payload → IdempotencyConflictError | 幂等冲突 | S4 |
 | 6 | 跨用户访问他人 forget_plan / 凭据 → INVALID_REQUEST | 隔离 | S3/S4 |
 | 7 | forget_mode 与 selector 互斥（single_item 带 target_session_id 等）→ INVALID_REQUEST | 模式互斥 | S1/S4（Domain 复用） |
-| 8 | **full_reset 边界（MEDIUM-04，方案 A 冻结）**：携带 target_* → INVALID_REQUEST；full_reset Preview/Execute 本期均 fail-closed（Resolver 仅 single_item/session 确定性，topic/time_window/full_reset 不支持） | full_reset 边界 | S4/S5 |
+| 8 | **不支持 Resolver 边界（MEDIUM-04 / D6 冻结）**：full_reset 携带 target_* → INVALID_REQUEST；topic / time_window / full_reset Preview 本期均 fail-closed → INVALID_REQUEST；full_reset Execute 同样 fail-closed；仅 single_item/session 提供真实确定性 Resolver | topic/full_reset 边界 | S3/S4/S5 |
 | 9 | `affected_count != len(resolved_target_ids)` 不得进入 awaiting_confirmation | Preview 完整性 | S3/S4 |
 | 10 | **executed_count 语义（MEDIUM-03）**：`executed_count != affected_count`（漏删/部分失败）不得进入 completed | Preview/Execute 一致性 | S4/S5 |
 | 11 | **selector 明文生命周期（HIGH-01）**：Preview 完成后 `forget_plan` 原始 target_selector/target_topic 已清除/置安全占位；持久层仅存结构化 selector + selection_hash | 安全 | S3 |
