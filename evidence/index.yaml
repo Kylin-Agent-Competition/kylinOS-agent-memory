@@ -1515,3 +1515,98 @@ entries:
     checksum_sha256: "97d2a9bcf4c62d72335160cf3b6dddab998a11f354914b93d2f9f3d1cfd35840"
     details: |
       麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
+  - id: "D12D-POSTMERGE-BASELINE-READONLY"
+    task_id: "D12D-PostMerge-01"
+    description: "安装前只读基线：真实 checkout @ b70827c 的 KySec/部署前置/UDS/路径权限采集；当时 config 目录尚未创建，作为 install 前状态而非最终权限结论"
+    status: "HOST_OBSERVED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d-post-merge-verify-readonly-20260903_1831.log"
+    report: "evidence/l2-kylin-vm/d12d_post_merge_techdebt_b70827c_20260903.md"
+    commit: "b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9"
+    tested_commit: "b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9"
+    date: "2026-09-03"
+    reviewer: "pending"
+    runtime_result: "PARTIAL"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "仅为安装前基线；config 目录不存在使 stat 返回 RC=1，后续 install 与最终只读日志才验证 0700/0600。"
+    checksum_sha256: "0b717e30779e921d9a0dc88c3dc30462bcc55a10e0f8207a16b9d48a2cea2cbe"
+    details: |
+      原始日志含 tested_commit、用户、内核、KySec 运行状态和 UDS 请求结果。
+      不得用本项宣称 TD-049 最终权限已经满足。
+  - id: "D12D-POSTMERGE-DEPLOY-001"
+    task_id: "D12D-PostMerge-01"
+    description: "部署对齐 b70827c（fix/d12d-post-merge-techdebt）：旧 VM 树替换为真实 git checkout @ b70827c；unit 补 RuntimeDirectoryMode=0700；install_kylin_memory.sh install RC=0（wrapper/unit 已备份），config/share 0700、socket/DB 0600，服务 active + socket ok"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d-post-merge-install-b70827c-20260903.log"
+    report: "evidence/l2-kylin-vm/d12d_post_merge_techdebt_b70827c_20260903.md"
+    commit: "b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9"
+    tested_commit: "b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9"
+    date: "2026-09-03"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "install 后 journal '就绪' 匹配 WARN 为脚本时序竞态（人工 journal 复核已见就绪）；rollback 动作未在本批执行（.bak 备份资产已生成），TD-DEPLOY-001 关闭仍待 Reviewer E"
+    checksum_sha256: "f1d76957ab0d16a56da8a96e0e5b6689910e077f6a09029cb7f04b616bc3de1c"
+    details: |
+      麒麟 VM（kylin-agent-pc, 银河麒麟 V11, kernel 6.6.0-76-generic, tested b70827c）。
+      执行前快照 d12d-post-merge-pre-b70827c-20260903-1828（VirtualBox, revertible）。
+      部署目录已对齐 b70827c：git checkout clean（worktree_status 0），wrapper 指向新 checkout。
+  - id: "D12D-POSTMERGE-RO-VERIFY"
+    task_id: "D12D-PostMerge-01"
+    description: "只读 verify（部署对齐+install 后最终态）：unit 含 RuntimeDirectoryMode=0700，config/share 0700，RuntimeDir 0700，socket/DB 0600，legacy /tmp/kylin-memory/embedding.sock 无候选，UDS memory.retrieve ok(空上下文, degraded=false)"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d-post-merge-verify-final-readonly-20260903_1834.log"
+    report: "evidence/l2-kylin-vm/d12d_post_merge_techdebt_b70827c_20260903.md"
+    commit: "b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9"
+    tested_commit: "b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9"
+    date: "2026-09-03"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "跨 UID fail-closed 与 OS 重启未在本批执行；memory.retrieve 为真实空上下文降级（非生产级检索），TD-049/TD-055 关闭待后续与 Reviewer E"
+    checksum_sha256: "f0e0031b83036581f7bfe0a0dbc405da4713c53f9dbadbb0b4d2c4b82fcbd523"
+    details: |
+      verify_d12d_post_merge_techdebt_vm.sh --output（只读）RC=0。
+      journal 敏感标记扫描：0 命中（password/token/api_key/secret/private key 均无）。
+  - id: "D12D-POSTMERGE-RESTART"
+    task_id: "D12D-PostMerge-01"
+    description: "--service-restart 模式：systemctl --user restart kylin-memory 后 is-active=active，socket 存在，UDS memory.retrieve ok(空上下文)"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d-post-merge-verify-restart-20260903_1832.log"
+    report: "evidence/l2-kylin-vm/d12d_post_merge_techdebt_b70827c_20260903.md"
+    commit: "b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9"
+    tested_commit: "b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9"
+    date: "2026-09-03"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "OS 整机重启与 C→D→B 真实输入未在本批执行，TD-055 保持 Open"
+    checksum_sha256: "78dbd3e955a2a85694120d83cbb26321e8c91326cbfd045f003622c5fc6d79c0"
+    details: |
+      服务重启后 ExecMainPID 更新、journal 显示 alembic/Outbox/就绪/IPC Gateway 启动。
+  - id: "D12D-POSTMERGE-KYSEC-001"
+    task_id: "D12D-PostMerge-01"
+    description: "KySec 单二进制真实授权/执行/撤销（b70827c 绑定）：/bin/true 副本 exectl label unknown→authorize(verified)→execute ok→revoke→unknown；全局策略未改动（exec=off 不变），无密码写入日志"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d-post-merge-kysec-b70827c-20260903.log"
+    report: "evidence/l2-kylin-vm/d12d_post_merge_techdebt_b70827c_20260903.md"
+    commit: "b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9"
+    tested_commit: "b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9"
+    date: "2026-09-03"
+    reviewer: "pending"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "kysec exec 全局为 off（未开启，未写全局策略）；仅验证单文件 exectl 规则写入/显示/撤销，未做 exec 强制阻断验证；TD-KYSEC-001 关闭待 Reviewer E + D 主审确认"
+    checksum_sha256: "5d508ece82f3f01f1e422691f21499d0f3374deb6c5b6da0ad30e083b36111f1"
+    details: |
+      候选二进制 SHA-256: 3897d1f00041be1a0fecb71c7357547e37c548e57821c652ffe39a9583d01679（已删除）。
+      安全内核已运行：kysec_exectl/kysec_devctl/kysec2_kbox/ksaf_main；kernel cmdline lsm=ksaf；TPM-bypass 生效（无 TPM chip）。
