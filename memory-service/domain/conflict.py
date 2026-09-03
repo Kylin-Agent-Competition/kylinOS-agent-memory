@@ -54,11 +54,11 @@ class Conflict(BaseModel):
     detected_at: AwareDatetime
 
     # ── D3 §5.4 DEFERRED / FROZEN 可选字段 ──
-    involved_knowledge_ids: Optional[List[str]] = None  # 多知识冲突 ID
+    involved_knowledge_ids: Optional[List[NonEmptyStr]] = None  # 多知识冲突 ID；存在时元素须非空非纯空白
     resolution_strategy: Optional[str] = None  # DEFERRED：不冻结为枚举
     resolution_confidence: Optional[ConfidenceScore] = None  # DEFERRED，*禁止模型生成
     resolved_at: Optional[AwareDatetime] = None
-    resolved_by: Optional[str] = None  # 消解执行方标识，*禁止模型生成
+    resolved_by: Optional[NonEmptyStr] = None  # 消解执行方标识，*禁止模型生成；存在时须非空非纯空白
 
     @model_validator(mode="after")
     def _no_self_conflict(self) -> "Conflict":
