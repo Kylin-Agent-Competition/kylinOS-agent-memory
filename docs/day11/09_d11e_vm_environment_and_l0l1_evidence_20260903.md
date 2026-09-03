@@ -28,7 +28,7 @@
 ## 边界与结论口径
 
 - 本证据证明：E 业务语义与隔离/安全护栏在**麒麟宿主 Python 3.12** 上通过 L0/L1（单测/流程层）。
-- **不构成** D11E 完成证据：`kylin-memory` 服务、SQLite 真源/迁移、Vector/FTS5 真实检索、C 轨 QML 主演示与 A 轨真实 SDK 的**同 VM 端到端业务验收（工作清单项 5）仍未执行，保持 `UNVERIFIED`**；该项依赖 D 轨统一 VM 部署产物（`packaging/systemd/install_kylin_memory.sh`、`kylin-memory.service`、DB 迁移）与 A/B/C 轨同 Commit 输入。
+- **不构成** D11E 完成证据：`kylin-memory` 服务已在 D11E VM 按 D11D 产物部署并通过 health/IPC 冒烟（validation profile，见 `docs/day11/11_d11e_vm_service_deploy_e2e_probe_20260903.md`），但含真实数据与 A/B/C 输入的**同 VM 端到端业务验收（工作清单项 5，RC-01..07）仍未执行，保持 `UNVERIFIED`**；完整验收依赖 C 轨 QML 主演示、B 轨真实检索/删除输出与 A 轨真实 SDK 同 Commit 输入。
 - 复现路径见上文「部署方式」与「L0/L1 实测结果」；本批未修改任何生产代码、冻结契约或其他轨道交付物。
 
 ## 建议下一步（跨轨确认项）
