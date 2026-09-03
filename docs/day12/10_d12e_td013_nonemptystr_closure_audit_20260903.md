@@ -33,7 +33,7 @@
 | 正常字符串原值保留（不 strip） | `_ensure_non_blank` 仅做空白判定，命中有效字符后 `return value` 原样返回，不做 `strip()`；docstring 明确「含有效字符的原值原样保留，不做 strip」 | `common.py` 第 38–45 行、第 17–18 行 |
 | NonEmptyIdList 元素级继承 | `NonEmptyIdList = Annotated[List[NonEmptyStr], Field(min_length=1)]`：至少 1 个元素，且每个元素复用 `NonEmptyStr` 约束（空串/纯空白元素拒绝，含有效字符元素原值保留） | `common.py` 第 57 行 |
 
-语义基线：`docs/architecture/KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md`（commit `7b92490` 创建，158 行）为 E 轨业务语义层统一权威基线（Canonical Business Schema v1，`FROZEN`，限 E 轨职责范围）。NonEmptyStr 作为 E Domain 公共约束类型，承载该冻结语义层下业务字段「有效非空文本」的构造边界；本审计不声称该冻结文档单独冻结了 NonEmptyStr 的字符串校验细节，仅将其作为业务语义权威层引用。
+语义候选基线：`docs/architecture/KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md`（commit `7b92490` 创建）当前为 `CANDIDATE_FOR_FREEZE`，承载本轮 E 轨 Canonical 业务语义裁定候选。NonEmptyStr 作为 E Domain 公共约束类型，与该候选中的「有效非空文本」业务语义保持一致；本审计不将 Canonical 候选描述为团队级 `FROZEN` 或已生效最高权威，最终团队级权威关系仍待非作者 D Reviewer 批准、PR 合并及后续冻结治理。
 
 **结论**：TD-013 的代码能力（空串拒绝、纯空白拒绝、原值保留、NonEmptyIdList 元素继承）已在当前分支落地并提交，标记 `CODE_VERIFIED`。
 
