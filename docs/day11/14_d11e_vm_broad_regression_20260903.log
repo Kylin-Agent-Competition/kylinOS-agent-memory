@@ -1,0 +1,85 @@
+........................................................................ [  4%]
+........................................................................ [  8%]
+........................................................................ [ 12%]
+........................................................................ [ 16%]
+........................................................................ [ 20%]
+........................................................................ [ 24%]
+........................................................................ [ 28%]
+........................................................................ [ 32%]
+........................................................................ [ 36%]
+........................................................................ [ 40%]
+.............sssssssssssssssssssssssss.................................. [ 44%]
+........................................................................ [ 48%]
+............................................s........................... [ 52%]
+........................................................................ [ 56%]
+.........................sssssssssssss.................................. [ 60%]
+........................................................................ [ 64%]
+........................................................................ [ 68%]
+........................................................................ [ 72%]
+........................................................................ [ 76%]
+........................................................................ [ 80%]
+........................................................................ [ 84%]
+.........E.............................................................. [ 88%]
+........................................................................ [ 92%]
+........................................................................ [ 96%]
+........................................................                 [100%]
+==================================== ERRORS ====================================
+_________ ERROR at teardown of test_stop_rejects_new_business_request __________
+
+tmp_path = PosixPath('/var/tmp/pytest-of-yanmouren778/pytest-0/test_stop_rejects_new_business0')
+
+    @pytest.fixture
+    def server(tmp_path):
+        sock_path = str(tmp_path / "test.sock")
+        srv = EmbeddingUDSServer(sock_path, provider=FakeProvider())
+        t = threading.Thread(target=srv.start, daemon=True)
+        t.start()
+        _wait_listening(sock_path)
+        yield srv, sock_path
+>       srv.stop()
+
+memory-service/tests/test_server_lifecycle.py:89: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+memory-service/embedding/server.py:175: in stop
+    t.join(timeout=2.0)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Thread(Thread-71 (_handle_conn), stopped daemon 134728250271424)>
+timeout = 2.0
+
+    def join(self, timeout=None):
+        """Wait until the thread terminates.
+    
+        This blocks the calling thread until the thread whose join() method is
+        called terminates -- either normally or through an unhandled exception
+        or until the optional timeout occurs.
+    
+        When the timeout argument is present and not None, it should be a
+        floating point number specifying a timeout for the operation in seconds
+        (or fractions thereof). As join() always returns None, you must call
+        is_alive() after join() to decide whether a timeout happened -- if the
+        thread is still alive, the join() call timed out.
+    
+        When the timeout argument is not present or None, the operation will
+        block until the thread terminates.
+    
+        A thread can be join()ed many times.
+    
+        join() raises a RuntimeError if an attempt is made to join the current
+        thread as that would cause a deadlock. It is also an error to join() a
+        thread before it has been started and attempts to do so raises the same
+        exception.
+    
+        """
+        if not self._initialized:
+            raise RuntimeError("Thread.__init__() not called")
+        if not self._started.is_set():
+>           raise RuntimeError("cannot join thread before it is started")
+E           RuntimeError: cannot join thread before it is started
+
+/usr/lib/python3.12/threading.py:1142: RuntimeError
+---------------------------- Captured stdout setup -----------------------------
+[server] listening on /var/tmp/pytest-of-yanmouren778/pytest-0/test_stop_rejects_new_business0/test.sock
+=========================== short test summary info ============================
+ERROR memory-service/tests/test_server_lifecycle.py::test_stop_rejects_new_business_request
+1744 passed, 39 skipped, 1 error in 337.81s (0:05:37)
