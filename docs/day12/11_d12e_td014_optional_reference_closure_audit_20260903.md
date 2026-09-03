@@ -160,3 +160,33 @@ TD-014 关闭条件要求「Domain 与跨轨兼容测试定义/目标存在」�
 ## 6、结论
 
 TD-014 的**代码能力与测试定义**已在当前分支落地并提交（审计时 HEAD `5d1c4cacbda629f97934e52f7cd0d5cbcd81ba9f`，工作区干净）：Optional ID/Reference/Selector 字段已统一为 `Optional[NonEmptyStr]` 或等价元素级约束，对应负向与兼容测试定义存在。技术条件已具备关闭候选审计；业务流程上剩余 Controller Gate 执行、三处范围决策点确认与 D Reviewer 正式确认。登记表状态由 `Open` 推进为 `In Progress`（Closure Candidate pending D Reviewer），**不得直接标记 Resolved**。
+## 最终 L1 验证结果（2026-09-03）
+
+验证环境：
+
+- 环境：WSL2 / project `.venv`
+- 验证层级：`WSL_L1_VERIFIED`
+- Runtime / Host：`NOT_HOST_VERIFIED`
+- 本结果不构成银河麒麟 L2/L3 Runtime 证据
+
+执行命令：
+
+    python3 -m pytest \
+      -o pythonpath=memory-service \
+      memory-service/tests/test_domain_models_d4e.py \
+      memory-service/tests/test_knowledge_domain_mapping_d8e.py \
+      -q
+
+实际结果：
+
+    132 passed in 0.42s
+
+结论：
+
+- exit code：0
+- TD-013 / TD-014 直接相关 Domain 与 Knowledge 映射回归全部通过；
+- 无 failed；
+- 无新增 skip；
+- 该结果支持本技术债进入 `Closure Candidate / In Progress pending D Reviewer`；
+- 是否最终标记 `Resolved` 仍需非作者 D Reviewer 正式确认。
+> 更新（2026-09-03）：上述 L1 Gate 已在当前 PR 分支实际执行并通过，结果为 `132 passed in 0.42s`；状态由 `GATE_PENDING` 更新为 `WSL_L1_VERIFIED`。该结果不构成 `HOST_VERIFIED`。
