@@ -154,7 +154,10 @@ class EmbeddingUDSServer:
             t = threading.Thread(target=self._handle_conn, args=(conn,), daemon=True)
             with self._conn_lock:
                 self._conn_threads.append(t)
-            t.start()
+                # Keep registration and start atomic with respect to stop().
+                # Otherwise stop() can snapshot an unstarted thread and join()
+                # raises RuntimeError during the narrow startup window.
+                t.start()
 
     def stop(self) -> None:
         self._running = False
