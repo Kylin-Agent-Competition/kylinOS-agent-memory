@@ -58,9 +58,9 @@
 ## 当前状态与阻塞（准备阶段）
 
 - D11D（PR #115）已合并并含麒麟 VM L2 证据与 `packaging/systemd` 产物；C-D11（PR #116）5 步主演示编排已合并；D11B（PR #111）、D10D（PR #120）已合并；`main` 现为 `b70827c`（更新后新增 C-D12 PR #127、D8D 持久化 PR #128、D12D PR #131）。E 轨 L0/L1 在 `b70827c` 复跑仍 535 passed（见 05 log）。
-- D11E 验收用麒麟 VM/快照、同一 Commit 口径与最晚停止时间待 E 轨负责人确认；C 轨主演示在真实 VM 的运行结果与 B 轨真实检索输出需在同一 Commit 就绪后才能执行工作项 5。
+- 已确认 D11E 端到端验收**复用 D11D 统一 VM 环境**（D11D PR #115 部署产物：`packaging/systemd/install_kylin_memory.sh`、`kylin-memory.service`、DB 迁移与 `evidence/l2-kylin-vm/d11d_*`）；D11E 专用克隆 `Kylin-V11-2603-D11E-0820036-Test` 已建并完成 VM 侧 L0/L1（535 passed，见 09/10 证据）。C 轨主演示真实运行结果与 B 轨真实检索输出需在同一 Commit 就绪后才能执行工作项 5；具体执行 VM/快照与最晚停止时间以 D 轨在 D11E 验收时指定为准。
 - 本批为纯文档准备：UTF-8 无 BOM、LF 行尾、无尾随空白，`git diff --check` 通过；未改动既有生产链路、SQLite 真源、部署脚本、冻结文档或其他轨道交付物。
-- 未执行任何麒麟 VM 实测；凡涉及业务验收、真实案例证据与安全确认结论均保持 `UNVERIFIED`，直到对应环境与跨轨输入就绪并在同 Commit 同 VM 复测通过。
+- 已完成 VM 侧 E 轨 L0/L1 回归（535 passed，见 09/10）；**同 VM 端到端业务验收、真实案例证据与安全确认结论保持 `UNVERIFIED`**，直到 D 轨部署产物与 A/B/C 输入就绪并在同 Commit 同 VM 复测通过。
 
 ## Draft PR 正文（本批为开工工作清单 + 准备，合并/Ready 由用户手动决定）
 
