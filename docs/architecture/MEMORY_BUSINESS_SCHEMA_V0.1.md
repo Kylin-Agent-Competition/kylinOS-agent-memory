@@ -21,6 +21,7 @@
   - 本稿区分 `user_id` 与 `actor_id` 两个概念：**`user_id`** 表示数据归属与用户隔离键，是跨会话检索、偏好/知识/冲突/遗忘范围限定的业务硬约束；**`actor_id`** 表示事件的实际发起者（用户/系统/Tool），多个 actor 可能同属一个 user
   - 五个核心业务对象（MemorySourceEvent、Preference、Knowledge、Conflict、ForgetPlan）均须具备直接的 `user_id` 业务字段，用于用户级数据隔离
   - `user_id` 和 `actor_id` 的取值**禁止由模型/LLM 生成**，必须来自宿主侧业务事件或外部输入
+- **权威层级与兼容性声明**（2026-09-03 增补）：本稿为 v0.1 DRAFT 历史初稿，字段语义权威已由 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md`（Canonical Business Schema v1，业务语义层 `FROZEN`）与 `D3_MEMORY_BUSINESS_CONTRACT_V1.md`（`CANDIDATE_FOR_FREEZE`）承接。本稿降级为 compatibility/来源参照，与 Canonical 冲突时以 Canonical 为准，**不再单独声称业务语义最高权威**。本声明不改变本稿 DRAFT 状态与「冻结为 v1.0 的条件」。
 
 ---
 
@@ -133,7 +134,7 @@
 | `explicit` | 显式表达 | UNVERIFIED | 用户以直接、不含糊的文字表达偏好（如「以后都使用中文」），或通过手动配置面板、设置界面显式指定 |
 | `implicit` | 隐式表达 | UNVERIFIED | 从用户反复行为或选择倾向推断的偏好（需 ≥2 个 Turn 的行为证据）；模型辅助推断但尚未复核的候选偏好通过 `memory_status=candidate` 表达，不归入 `expression_type` 取值 |
 
-**与标注规范的关系**：标注规范 `ANNOTATION_GUIDELINE_V0.1.md` 当前使用 `explicit`/`implicit`/`candidate` 三值，与本稿 `explicit`/`implicit` 归一存在术语差异。本差异列为技术债（见 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md`），由独立任务统一术语。`candidate` 在本稿中通过 `memory_status` 表达候选生命周期，语义等价但不复用为 `expression_type` 取值。
+**与标注规范的关系**：标注规范 `ANNOTATION_GUIDELINE_V0.1.md` 修订2（2026-07-31）已同步归一为 `explicit`/`implicit` 二值、`candidate` 不作表达类型值（由 `memory_status=candidate` 表达），与本稿一致，原「标注规范当前使用 explicit/implicit/candidate 三值」的过时描述作废（由 day12-e-01 修正，见 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` R-2）。`candidate` 在本稿中通过 `memory_status` 表达候选生命周期，语义等价但不复用为 `expression_type` 取值。
 
 ### 2.6 knowledge_type（知识子类型）
 
@@ -167,7 +168,7 @@
 
 关联 REQ-06 短中长期流转，REQ-05 精准遗忘。
 
-**注意**：本枚举提供统一的记忆生命周期候选值，避免 Prefence 使用 `is_active`/`should_decay`、Knowledge 使用 `is_outdated`/`superseded_by_id` 等多布尔字段互相矛盾。`memory_status` 是正式生命周期状态的唯一优先字段；既有布尔字段（`is_active`、`is_outdated` 等）过渡保留，待 D/E 统一为 `memory_status` 后在 v1.0 中移除。
+**注意**：本枚举提供统一的记忆生命周期候选值，避免 Prefence 使用 `is_active`/`should_decay`、Knowledge 使用 `is_outdated`/`superseded_by_id` 等多布尔字段互相矛盾。`memory_status` 是正式生命周期状态的唯一优先字段；既有布尔字段（`is_active`、`is_outdated` 等）过渡保留，待 D/E 统一为 `memory_status` 后在 v1.0 中移除（权威裁定见 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` R-3）。
 
 | 候选值 | 中文含义 | 验证状态 | 备注 |
 |--------|---------|---------|------|
@@ -615,7 +616,7 @@ E 轨道在本稿中定义必须表达的业务含义：
 | HD-SCHEMA-11 | 导入架构设计审查报告（Copilot 独立审查报告）至 `docs/baseline/`，用报告建议复核本稿全部字段与约束，记录差异并决策是否追加修订 | REQ-01–07 | E | D3 Gate 前 |
 | HD-SCHEMA-12 | C 轨道在麒麟 VM 取证时确认宿主事件中 `user_id`/`actor_id` 字段是否存在及语义，回填本稿用户隔离约定的可行性 | REQ-01 | C | L2 取证窗口 |
 | HD-SCHEMA-13 | D/E 确认 `memory_status` 统一生命周期枚举与 SQLite 实现方案，决定是否在 v1.0 中移除 `is_active`/`is_outdated`/`should_decay` 等过渡布尔字段 | REQ-05、REQ-06 | D·E | D3 Gate 前 |
-| HD-SCHEMA-14 | E 确认 `expression_type` 已按任务规格归一为 `explicit`/`implicit`，待 SOP v1.1 导入后终审；同步更新标注规范 `ANNOTATION_GUIDELINE_V0.1.md` 术语（当前仍使用 `explicit`/`implicit`/`candidate` 三值，跨文档不一致列为技术债） | REQ-02 | E | D3 Gate 前 |
+| HD-SCHEMA-14 | E 确认 `expression_type` 已按任务规格归一为 `explicit`/`implicit`，待 SOP v1.1 导入后终审；标注规范 `ANNOTATION_GUIDELINE_V0.1.md` 修订2（2026-07-31）已对齐二值（`candidate` 不作表达类型值），历史术语差异已消除（由 day12-e-01 修正，见 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` R-2）；本项仅剩 SOP v1.1 导入后终审 | REQ-02 | E | D3 Gate 前 |
 | HD-SCHEMA-15 | 导入 SOP v1.1「总体架构、团队分工与标准开发 SOP」实体文件至 `docs/baseline/`，逐项复核本稿按任务规格回填的 `source_type` 七值规范集合、`event_type` 消息粒度分层、六档冲突优先级与 `expression_type` 归一结果 | REQ-01–07 | 团队/E | D3 Gate 前 |
 | HD-SCHEMA-16 | C 轨道在麒麟 VM 取证 `source_type` 七值（`chat`、`tool_result`、`manual_config`、`recollect`、`file`、`meeting`、`voice`）与 `event_type` 三值（`user_message`、`agent_response`、`system_message`）在宿主真实事件结构中的覆盖情况，回填验证状态 | REQ-01 | C | L2 取证窗口 |
 
@@ -630,6 +631,7 @@ E 轨道在本稿中定义必须表达的业务含义：
 | v0.1 | 2026-07-30 | DRAFT 初稿，建立五核心业务对象字段初稿、命名规则、八组候选枚举、反馈责任矩阵和未确认能力清单。基于 README、各模块 README 和赛题追踪矩阵 v0.1 事实编写。所有涉及官方宿主能力的字段均如实标记 UNVERIFIED/PARTIAL。 | E 轨道 |
 | v0.1（修订） | 2026-07-30 | 业务 Schema 用户隔离与字段一致性修复：新增 `user_id` 对所有核心对象的用户归属；区分 `user_id`/`actor_id` 语义；新增 `expression_type`、`knowledge_type`、`memory_status` 三组枚举；拆分来源业务状态与内部处理流水线状态；新增 `occurred_at`、`target_selector`、`resolved_target_ids` 等字段；Preference 新增版本化（`version`/`previous_version_id`）、临时边界（`is_temporary`/`should_persist`）；补敏感载荷红线、禁止模型生成字段清单、临时与正式偏好边界规则；conditional 字段写明触发条件。仍为 v0.1 DRAFT，未冻结任何技术实现。 | E 轨道 |
 | v0.1（修订2） | 2026-07-30 | 对齐统一事件模型与冲突优先级基线（PR #10 审查修订）：`source_type` 替换为 SOP v1.1 七值规范集合（`chat`、`tool_result`、`manual_config`、`recollect`、`file`、`meeting`、`voice`）；新增 `event_type` 消息粒度枚举（`user_message`/`agent_response`/`system_message`）并说明与 `source_type` 的层级差异；`MemorySourceEvent` 新增 `schema_version`、`trace_id`、`event_type`、`source_reference`、`consent_scope`、`idempotency_key` 六个字段；明确 `source_reference` 与 `raw_payload_ref` 语义区分；`idempotency_key` 补入禁止模型生成清单；`expression_type` 归一为 `explicit`/`implicit`，移除 `inferred`，`candidate` 状态由 `memory_status` 表述；Conflict 标注完整引用六档冲突优先级与作用域可共存规则；枚举编号因新增 2.2 整体顺延。依据 SOP v1.1（待人工导入）按任务规格回填，待 SOP 实体文件导入后复核。仍为 v0.1 DRAFT。 | E 轨道 |
+| v0.1（修订3） | 2026-09-03 | 权威层级与语义漂移收口（day12-e-01）：头部增补「权威层级与兼容性声明」（本稿降级为 compatibility/来源参照，字段语义权威由 Canonical v1 与 D3 契约承接）；§2.5 备注修正过时三值描述（标注规范修订2 已归一为 explicit/implicit 二值）；§2.8 注意追加权威裁定引用（R-3）；HD-SCHEMA-14 同步标注规范修订2 已对齐二值、仅剩 SOP v1.1 导入后终审。仍为 v0.1 DRAFT。 | E 轨道 |
 
 ### 冻结为 v1.0 的条件
 
