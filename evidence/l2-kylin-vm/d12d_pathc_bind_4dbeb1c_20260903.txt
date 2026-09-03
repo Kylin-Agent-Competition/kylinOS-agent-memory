@@ -1,22 +1,28 @@
-警告：远程 HEAD 指向一个不存在的引用，无法检出
+== binding rerun with explicit commands (commit 4dbeb1c) ==
 
-HEAD=4dbeb1c65e54809c2bc6ed0b67928b8bd870073d
+date: 2026-09-03T16:02:06+08:00
 
-REF=(detached)
+cmd: git rev-parse HEAD
 
-PACKAGING_SHA=2d2214e3d228d86da91a23018e8f8d9cc89a233c4b375f25a91a5c647d3af6e5
+4dbeb1c65e54809c2bc6ed0b67928b8bd870073d
 
-== binding run at commit 4dbeb1c ==
+cmd: git symbolic-ref -q --short HEAD || echo (detached)
 
-date: 2026-09-03T15:42:18+08:00
+(detached)
 
-HEAD: 4dbeb1c65e54809c2bc6ed0b67928b8bd870073d
+cmd: sha256sum packaging/systemd/install_kylin_memory.sh
+
+2d2214e3d228d86da91a23018e8f8d9cc89a233c4b375f25a91a5c647d3af6e5  packaging/systemd/install_kylin_memory.sh
 
 --- install ---
 
+cmd: bash packaging/systemd/install_kylin_memory.sh install --python ~/d12d-bin/python --repo ~/d12d-check
+
 INSTALL_RC=0
 
-   Main PID: 25521 (python3)
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+
+   Main PID: 30611 (python3)
 
       Tasks: 3 (limit: 9463)
 
@@ -26,13 +32,19 @@ INSTALL_RC=0
 
 --- restart ---
 
+cmd: bash packaging/systemd/install_kylin_memory.sh restart
+
 RESTART_RC=0
+
+   Main PID: 31282 (python3)
 
       Tasks: 3 (limit: 9463)
 
-[kylin-memory-install] journal: Memory Service 就绪 已出现
+[kylin-memory-install] WARN: 日志中未匹配到 'Memory Service 就绪'（请人工核对 journalctl --user -u kylin-memory）
 
 --- rollback ---
+
+cmd: bash packaging/systemd/install_kylin_memory.sh rollback --keep-unit
 
 ROLLBACK_RC=0
 
@@ -40,9 +52,13 @@ ROLLBACK_RC=0
 
 --- reinstall ---
 
+cmd: bash packaging/systemd/install_kylin_memory.sh install --python ~/d12d-bin/python --repo ~/d12d-check
+
 REINSTALL_RC=0
 
-   Main PID: 25986 (python3)
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+
+   Main PID: 37118 (python3)
 
       Tasks: 3 (limit: 9463)
 
@@ -52,7 +68,11 @@ REINSTALL_RC=0
 
 --- final ---
 
+cmd: systemctl --user is-active kylin-memory
+
 active
+
+cmd: test -S /run/user/1000/kylin-memory/memory.sock
 
 socket_ok=yes
 

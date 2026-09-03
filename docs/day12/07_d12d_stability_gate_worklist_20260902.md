@@ -6,7 +6,7 @@
 - 授权：已取得 D 轨负责人授权，由 B 轨（高翌哲）代行 D12D 限定范围（准备阶段，2026-09-02）。
 - 工作类型：`fix`（故障注入定位后的安装脚本/systemd/诊断页缺陷清理；稳定性 Gate 的组织与证据汇总）。
 - 工作分支：`fix/D12D-stability-gate`（基线 `origin/main@0820036`；2026-09-03 已 merge 同步 `origin/main@44d9474`，实测 tested_commit=0820036；按提交分支要求命名，不含 `codex`）。
-- 本次范围（准备阶段）：建立 D12D 工作清单、基线口径与验收边界；不包含麒麟 VM 故障注入实测、缺陷修复代码或稳定性 Gate 达标结论。
+- 本次范围：本 PR 为 **D12D 阶段性 Path C evidence batch**——准备基线 + 非 embed 同 Commit 实测 + install readiness 修复与重跑证据；完整故障注入、最终 Stability Gate 达标留后续（PARTIAL/PENDING）。
 - 开始时间：2026-09-02（准备阶段）。最晚停止时间：进入实测/实现前须由 D 轨负责人指定并确认。
 - 当前进度：Path C 非 embed 同 Commit（0820036）部分完成（2026-09-03）；完整故障注入与 Gate 未执行，详见 docs/day12/08。
 
@@ -62,10 +62,10 @@
 
 ## PR 状态与提交
 
-- PR 状态：Draft。本 PR 定位为 **D12D 阶段性 Path C evidence batch**（非最终 Stability Gate 收口）：工作清单（本文件）+ 非 embed 同 Commit 实测证据（docs/day12/08）+ 跨轨核对表（09）+ index 回填 + install readiness 修复。
+- PR 状态：open（Draft/Ready 由负责人管理）。本 PR 定位为 **D12D 阶段性 Path C evidence batch**（非最终 Stability Gate 收口）：工作清单（本文件）+ 非 embed 同 Commit 实测证据（docs/day12/08）+ 跨轨核对表（09）+ index 回填 + install readiness 修复。
 - 建议标题：`fix(D12D)：功能冻结——故障注入、缺陷清理与稳定性 Gate（开工工作清单 + 准备）`。
 - 分支名不含 `codex`；PR 正文、评论、提交信息均使用中文。
-- 后续代码/证据批次在取得单独 `commit`/`push` 授权后提交；Draft→Ready 与合并由用户手动决定。
+- 后续代码/证据批次在取得单独 `commit`/`push` 授权后提交；合并与 Ready 状态由负责人手动管理。
 
 ---
 

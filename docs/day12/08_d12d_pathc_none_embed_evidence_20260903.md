@@ -1,6 +1,6 @@
 # D12D Path C：非 embed 同 Commit 实测证据 + 采信 A 轨 D12A L2（2026-09-03）
 
-> 分支：fix/D12D-stability-gate（PR #131，Draft）。基线：origin/main@0820036（2026-09-03 已 merge 同步 origin/main@44d9474）。
+> 分支：fix/D12D-stability-gate（PR #131）。基线：origin/main@0820036（2026-09-03 已 merge 同步 origin/main@44d9474）。
 > 执行 VM：Kylin-V11-2603-Env-V2-Main（8 vCPU / 8GB / 256MB 显存）。
 > 定位：**D12D 阶段性 Path C evidence batch（非最终 Stability Gate 收口）**；完整故障注入与 Gate 未宣告完成。
 > 口径（Path C，经负责人确认）：真实 Embedding/SDK 调用采信 A 轨 D12A L2（D12A-L2-VERIFY）；本 VM 完成非 embed 的同 Commit 项。
