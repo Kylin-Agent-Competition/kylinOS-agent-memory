@@ -1,0 +1,7 @@
+RC=0
+Created symlink /home/yanmouren778/.config/systemd/user/default.target.wants/kylin-memory.service → /home/yanmouren778/.config/systemd/user/kylin-memory.service.
+
+[kylin-memory-install] ERROR: socket 未就绪: /run/user/1000/kylin-memory/memory.sock
+
+
+ERR:

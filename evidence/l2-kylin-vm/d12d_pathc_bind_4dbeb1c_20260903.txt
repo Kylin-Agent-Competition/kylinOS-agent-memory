@@ -1,0 +1,80 @@
+== binding rerun with explicit commands (commit 4dbeb1c) ==
+
+date: 2026-09-03T16:02:06+08:00
+
+cmd: git rev-parse HEAD
+
+4dbeb1c65e54809c2bc6ed0b67928b8bd870073d
+
+cmd: git symbolic-ref -q --short HEAD || echo (detached)
+
+(detached)
+
+cmd: sha256sum packaging/systemd/install_kylin_memory.sh
+
+2d2214e3d228d86da91a23018e8f8d9cc89a233c4b375f25a91a5c647d3af6e5  packaging/systemd/install_kylin_memory.sh
+
+--- install ---
+
+cmd: bash packaging/systemd/install_kylin_memory.sh install --python ~/d12d-bin/python --repo ~/d12d-check
+
+INSTALL_RC=0
+
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+
+   Main PID: 30611 (python3)
+
+      Tasks: 3 (limit: 9463)
+
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+
+[kylin-memory-install] 安装完成：wrapper=/home/yanmouren778/.local/bin/kylin-memory-server unit=/home/yanmouren778/.config/systemd/user/kylin-memory.service
+
+--- restart ---
+
+cmd: bash packaging/systemd/install_kylin_memory.sh restart
+
+RESTART_RC=0
+
+   Main PID: 31282 (python3)
+
+      Tasks: 3 (limit: 9463)
+
+[kylin-memory-install] WARN: 日志中未匹配到 'Memory Service 就绪'（请人工核对 journalctl --user -u kylin-memory）
+
+--- rollback ---
+
+cmd: bash packaging/systemd/install_kylin_memory.sh rollback --keep-unit
+
+ROLLBACK_RC=0
+
+[kylin-memory-install] 回退完成：已停止并禁用 kylin-memory（--keep-unit：保留 wrapper 与 unit）
+
+--- reinstall ---
+
+cmd: bash packaging/systemd/install_kylin_memory.sh install --python ~/d12d-bin/python --repo ~/d12d-check
+
+REINSTALL_RC=0
+
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+
+   Main PID: 37118 (python3)
+
+      Tasks: 3 (limit: 9463)
+
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+
+[kylin-memory-install] 安装完成：wrapper=/home/yanmouren778/.local/bin/kylin-memory-server unit=/home/yanmouren778/.config/systemd/user/kylin-memory.service
+
+--- final ---
+
+cmd: systemctl --user is-active kylin-memory
+
+active
+
+cmd: test -S /run/user/1000/kylin-memory/memory.sock
+
+socket_ok=yes
+
+
+ERR:

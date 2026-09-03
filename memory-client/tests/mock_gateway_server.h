@@ -64,6 +64,10 @@ public:
     // 仅在已有客户端连接时有效；无连接时返回 false。
     bool sendRawEnvelope(const QJsonObject& envelope);
 
+    // 测试后门：向第一个连接的 socket 直接写入任意原始字节。
+    // 用于注入畸形包（malformed length-prefix）触发客户端 decodePacket 协议错误。
+    bool sendRawBytes(const QByteArray& raw);
+
 private slots:
     void handleNewConnection();
 

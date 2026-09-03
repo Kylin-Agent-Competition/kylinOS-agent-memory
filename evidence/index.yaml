@@ -34,6 +34,28 @@ index_contract:
     - review_status
     - merge_qualified
 entries:
+  - id: "D8D-L2-VERIFY"
+    task_id: "D8D"
+    description: "ADR-017 relation/conflict/lifecycle SQLite 持久化的麒麟 V11 L2：完整迁移、direct-SQL truth gate、真实 SQLite 读写与跨进程重启一致性"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d8d_l2_2fa0ea5_20260903.log"
+    report: "evidence/l2-kylin-vm/d8d_l2_2fa0ea5_20260903.md"
+    tested_commit: "2fa0ea5a2e4a431b2995d0da614d63b19bfb0301"
+    evidence_commit: "006bccdd374d8f2f524dda146140d6a150c95b6a"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    date: "2026-09-03"
+    reviewer: "Reviewer E（PR #128 最终复审）"
+    limitations: "仅覆盖 Repository、Alembic、真实 SQLite 与独立 Python 进程重开同一数据库；不覆盖 systemd/DBus、ADR-018 IPC Runtime、真实 Vector/FTS Consumer 或端到端索引同步。"
+    checksum_sha256: "19068ec66e28ace3c53dc643afdf7b119c59c65bede5959b0c16deb46c53a158"
+    details: |
+      VM: 银河麒麟桌面操作系统 V11（VERSION_ID=v11，KYLIN_RELEASE_ID=2603），Python 3.12.3，Alembic 1.19.1，pytest 9.1.1。
+      Source archive SHA-256: caff153c64f7a57755c42f7e5d780d150921c2afcff10f3d7be4ea62abfb5014。
+      Alembic upgrade head → 20260902_add_memory_relation_conflict (head)：PASS。
+      migration direct-SQL truth gate：3 passed；relation/conflict/lifecycle 真实 SQLite：9 passed；独立进程 write/read：WRITE_PROCESS_OK / RESTART_READ_PROCESS_OK；与 forget persistence 组合回归：43 passed。
+
   - id: "GATE0-ENV-001"
     task_id: "Day1-1"
     description: "麒麟 VM 环境基线冻结 — 闭合版"
@@ -1388,3 +1410,108 @@ entries:
       4) 异常输入回归：空文本/纯空白 dim=768、超长 10KB（30s 超时）、非 str、embed_batch 非法 ALL PASS
       5) 性能基准：avg=77.7ms p99=97.6ms samples=10（样本数=预期 且 avg/p99≤180ms 才 PASS；gate 拦截抖动验证有效）
       6) bridge.log 不存在（无正文残留）
+  - id: "D12D-PATHC-01"
+    task_id: "D12D-PATHC"
+    description: "服务安装初测：install readiness timeout 缺陷实录（socket 未就绪 ERROR，真实退出码非0）"
+    status: "DEFECT_RECORDED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d_pathc_service_install_20260903.txt"
+    commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    date: "2026-09-03"
+    reviewer: "pending"
+    limitations: "缺陷已由 packaging/systemd/install_kylin_memory.sh readiness 修复解决；修复后重跑见 D12D-PATHC-07"
+    checksum_sha256: "8deea68cabdced558298b24fef5c97310c7e16de253514f3c319e847a1691b97"
+    details: |
+      麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
+  - id: "D12D-PATHC-02"
+    task_id: "D12D-PATHC"
+    description: "服务启动 journal（alembic 校验/Outbox/IPC Gateway/就绪）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d_pathc_service_journal_20260903.txt"
+    commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    date: "2026-09-03"
+    reviewer: "pending"
+    limitations: "journal 为文本日志（未启用 --json-logs）"
+    checksum_sha256: "2c66d51e23c8f5e34b0a4481dcf39229472827beaad763ae20a02b7c4bd671cf"
+    details: |
+      麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
+  - id: "D12D-PATHC-03"
+    task_id: "D12D-PATHC"
+    description: "服务重启后 active/socket/就绪（restart RC=0）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d_pathc_service_restart_20260903.txt"
+    commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    date: "2026-09-03"
+    reviewer: "pending"
+    limitations: "含 memory.retrieve=ok(桩)/memory.store=UNSUPPORTED_METHOD"
+    checksum_sha256: "43fc678ddf3620a4b5fe4e59579edc8ffd55ad5c8a99e0a0ca57ec78faeb110f"
+    details: |
+      麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
+  - id: "D12D-PATHC-04"
+    task_id: "D12D-PATHC"
+    description: "OS 整机重启后自启 active/vector/IPC 正常"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d_pathc_os_reboot_20260903.txt"
+    commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    date: "2026-09-03"
+    reviewer: "pending"
+    limitations: "OS 重启自启口径；真实 embed 采信 A 轨 D12A-L2"
+    checksum_sha256: "16a47115027847df9f13daa3607112290724298939ba232459deaa31d094bdb4"
+    details: |
+      麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
+  - id: "D12D-PATHC-05"
+    task_id: "D12D-PATHC"
+    description: "UDS IPC 回环与未注册方法 fail-closed（memory.health/ping 返回 UNSUPPORTED_METHOD）"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d_pathc_uds_ipc_20260903.txt"
+    commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    date: "2026-09-03"
+    reviewer: "pending"
+    limitations: "本文件仅 health/ping；retrieve/store 见 PATHC-03/04 对应文件"
+    checksum_sha256: "fd8f70983de25450839d6f96bc1e41259b9037fedde3bcf074eff4d867464f64"
+    details: |
+      麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
+  - id: "D12D-PATHC-06"
+    task_id: "D12D-PATHC"
+    description: "权限：config/share/state/RuntimeDir 0700；socket/DB 0600"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d_pathc_perms_20260903.txt"
+    commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
+    date: "2026-09-03"
+    reviewer: "pending"
+    limitations: "静态权限复核；越权/失败注入未执行"
+    checksum_sha256: "08d5daea84f0dd71a6c952bcee7ad611d7ac60098af142bef788d1ade7ae3563"
+    details: |
+      麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
+  - id: "D12D-PATHC-07"
+    task_id: "D12D-PATHC"
+    description: "install readiness 修复后（4dbeb1c 绑定）重跑：HEAD=4dbeb1c，install/restart/rollback/reinstall 均 RC=0，最终 active + socket ok"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d_pathc_bind_4dbeb1c_20260903.txt"
+    commit: "4dbeb1c65e54809c2bc6ed0b67928b8bd870073d"
+    tested_commit: "4dbeb1c65e54809c2bc6ed0b67928b8bd870073d"
+    evidence_commit: "8a1c718e48627d93e2f547757207846de8a37166"
+    date: "2026-09-03"
+    reviewer: "pending"
+    limitations: "修复提交 4dbeb1c；命令转录已补；evidence_commit=8a1c718 已回填"
+    checksum_sha256: "97d2a9bcf4c62d72335160cf3b6dddab998a11f354914b93d2f9f3d1cfd35840"
+    details: |
+      麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
