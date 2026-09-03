@@ -1,35 +1,36 @@
-# KMA 统一业务数据格式冻结 v1（Canonical Business Schema v1）
+# KMA 统一业务数据格式冻结候选 v1（Canonical Business Schema v1）
 
 - **版本**：v1
-- **状态**：`FROZEN`（业务语义层冻结，限 E 轨职责范围）
 - **日期**：2026-09-03
+- **状态**：`CANDIDATE_FOR_FREEZE`
 - **作者轨道**：E（记忆业务、安全、数据集与业务指标）
 - **Reviewer 轨道**：D（IPC、SQLite、Outbox、虚拟机成品化与发布）
-- **定位**：本文件是 KMA 记忆系统**业务语义层**的统一权威基线（Canonical Business Schema v1），用于收口 E 轨历史业务 Schema 文档中的字段语义漂移与权威层级冲突。本文件**只冻结业务语义**，不冻结任何宿主字段、IPC 线格式、SQLite 物理结构或 C++ 结构体。
+- **团队冻结条件**：只有非作者 D Reviewer 批准且承载本候选的 PR 合并后，本文件方可通过后续治理提交升级为团队级 `FROZEN` 业务语义基线；当前状态不代表团队冻结已经完成。
+- **定位**：本文件是 KMA 记忆系统 Canonical Business Schema v1 的统一业务语义**冻结候选**，用于收口 E 轨历史业务 Schema 文档中的字段语义漂移与权威层级冲突。当前 PR 阶段仅提出统一业务语义裁定候选，不代表团队级冻结已经完成；本文件也不冻结任何宿主字段、IPC 线格式、SQLite 物理结构或 C++ 结构体。
 - **KMA 前缀说明**：`KMA` 沿用仓库既有前缀用法（如 ADR-009 `KMA_SOCKET_PATH`、baseline v2 `KMA-CAPABILITY-*`），本文件不新造缩写全称定义。
 
 ---
 
 ## 0、定位与权威层级
 
-### 0.1 三层业务语义权威层级
+### 0.1 拟议三层业务语义权威层级
 
-仓库中承载业务 Schema 语义的文档按以下权威层级排列，**同一字段语义冲突时以高层级为准**：
+以下层级是本轮 E 轨提出的团队业务语义权威层级候选，**只有本文件经非作者 D Reviewer 批准并完成对应 PR 合并后方可生效**。在此之前，本文件不得以尚未冻结的候选身份覆盖现有团队级契约：
 
 | 层级 | 文档 | 状态 | 权威范围 |
 |------|------|------|----------|
-| **L1（最高）** | 本文件 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` | `FROZEN`（业务语义层，限 E 轨职责范围） | 统一业务字段语义裁定（R-1..R-6）、字段别名与映射边界、物理结构边界 |
-| **L2** | `D3_MEMORY_BUSINESS_CONTRACT_V1.md` | `CANDIDATE_FOR_FREEZE` | 承载 Canonical 未覆盖的详细业务语义（七类业务概念、对象关系、字段处置、业务规则）；字段语义冲突时以 Canonical v1 为准 |
-| **L3** | `MEMORY_BUSINESS_SCHEMA_V0.1.md` | `DRAFT` | 历史初稿，降级为 compatibility/来源参照；与 Canonical 冲突时以 Canonical 为准，不再单独声称业务语义最高权威 |
+| **拟议 L1** | 本文件 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` | `CANDIDATE_FOR_FREEZE` | 承载统一业务字段语义裁定候选（R-1..R-6）、字段别名与映射边界、物理结构边界；D Reviewer 批准且 PR 合并后方可升级为团队级最高业务语义权威 |
+| **拟议 L2** | `D3_MEMORY_BUSINESS_CONTRACT_V1.md` | `CANDIDATE_FOR_FREEZE` | 承载 Canonical 未覆盖的详细业务语义；当前两者均为候选，不建立“未审核 Canonical 自动覆盖 D3”的团队级关系 |
+| **拟议 L3** | `MEMORY_BUSINESS_SCHEMA_V0.1.md` | `DRAFT` | 历史初稿，作为 compatibility/来源参照；待 Canonical 完成团队冻结后，再按冻结后的权威关系处理冲突 |
 
 ### 0.2 superseded / compatibility 矩阵
 
 | 文档 | 与 Canonical v1 的关系 | 说明 |
 |------|------------------------|------|
-| `D3_MEMORY_BUSINESS_CONTRACT_V1.md` | **compatibility（兼容承接）** | 保持 `CANDIDATE_FOR_FREEZE`，继续承载 Canonical 未覆盖的详细业务语义；不改变其 §12.2 冻结条件；字段语义冲突时以 Canonical v1 为准 |
-| `MEMORY_BUSINESS_SCHEMA_V0.1.md` | **superseded（业务语义权威被承接）+ compatibility（来源参照）** | 作为历史初稿保留，字段语义权威已由 Canonical v1 与 D3 契约承接；与 Canonical 冲突时以 Canonical 为准 |
+| `D3_MEMORY_BUSINESS_CONTRACT_V1.md` | **compatibility 候选关系** | 保持 `CANDIDATE_FOR_FREEZE`，继续承载详细业务语义；不改变其 §12.2 冻结条件。Canonical v1 完成团队冻结前，不以候选文档身份覆盖 D3；完成冻结后按最终批准的权威层级处理冲突 |
+| `MEMORY_BUSINESS_SCHEMA_V0.1.md` | **proposed superseded + compatibility** | 作为历史初稿保留；“业务语义权威由 Canonical v1 承接”是本轮拟议关系，待 Canonical 完成团队冻结后生效；当前继续作为来源参照 |
 
-**约束**：三份文档不得同时声称业务语义最高权威。本文件冻结范围仅限 E 轨业务语义层，不改变 D3 的 `CANDIDATE_FOR_FREEZE` 状态，也不改变 Schema 的 `DRAFT` 状态。
+**约束**：三份文档不得同时声称业务语义最高权威。当前本文件仅为 `CANDIDATE_FOR_FREEZE`，不改变 D3 的 `CANDIDATE_FOR_FREEZE` 状态，也不改变 Schema 的 `DRAFT` 状态；只有 D Reviewer 批准且对应 PR 合并后，方可通过后续治理提交升级本文件状态并正式建立团队级权威关系。
 
 ---
 
@@ -49,7 +50,7 @@
 ### 1.2 局限声明
 
 - **本文件不新增任何 Runtime 证据**：本任务 `runtime_required=false`，不产生 `HOST_VERIFIED`、Runtime PASS 或性能达标声明。
-- **宿主映射保持待确认**：所有依赖 C 真实宿主取证的事项保持 `PENDING_C_CONFIRMATION`；所有依赖 D IPC/持久化证据的事项保持 `PENDING_D_CONFIRMATION`。本文件不把「业务语义冻结」写成「宿主字段已确认」。
+- **宿主映射保持待确认**：所有依赖 C 真实宿主取证的事项保持 `PENDING_C_CONFIRMATION`；所有依赖 D IPC/持久化证据的事项保持 `PENDING_D_CONFIRMATION`。本文件不把「业务语义冻结候选」写成「团队冻结已完成」或「宿主字段已确认」。
 - **不修改协议版本**：`protocol_version`（IPC）与业务事件 `schema_version`（"0.1"）均不由本文件改动。
 - **基线 DOCX 未导入**：赛题原文、总体架构 SOP v1.1、官方 SDK 与 OS Agent 能力边界基线文档仍未导入仓库，本文件不声称已从实体 DOCX 独立核验任何字段语义。
 
@@ -57,14 +58,14 @@
 
 ## 2、Canonical 裁定（R-1..R-6）
 
-以下六项裁定为业务语义层的统一裁决。每条含：裁定内容、在库依据、兼容性影响、责任轨道 handoff。
+以下六项为 E 轨提出的 Canonical 业务语义统一裁定候选。每条含：候选裁定内容、在库依据、兼容性影响、责任轨道 handoff。其具体语义在本 PR 中接受 D Reviewer 审查；本文件只有在 D Reviewer 批准并完成 PR 合并后的后续治理中，才可升级为团队级 `FROZEN` 权威基线。
 
 ### R-1：`captured_at` 为 Canonical 事件捕获时间字段；`collected_at` 仅为 legacy transport alias
 
 - **裁定内容**：`captured_at` 是 Canonical 事件捕获时间字段（事件捕获入库时间，系统生成）。`collected_at` 仅为 legacy transport alias，业务语义与 `captured_at` 一一对应；transport 层（IPC/事件承载）若使用 `collected_at`，必须经 Adapter/Mapping 映射到业务层 `captured_at`，不得在业务层引入第三种时间字段语义。
 - **在库依据**：Schema §3.1 `captured_at`（事件捕获入库时间）；D2 检查表第 60/206 行 `collected_at`（候选公共字段，语义差异待确认）；TD-039 记录 ADR-010 IPC Mapping metadata 含 `collected_at`；A Provider 前向草稿（D3 C-05）亦用 `collected_at`。
 - **兼容性影响**：不修改任何 ADR、D2 检查表或 A Provider 草稿；transport 层 `collected_at` 现状保留，采纳/更名属 C/D 实现 handoff（登记 TD-060）。
-- **责任轨道 handoff**：C/D（transport 层 Adapter/Mapping 或更名方案书面冻结，不修改 `protocol_version`）；E（语义权威已定）。
+- **责任轨道 handoff**：C/D（transport 层 Adapter/Mapping 或更名方案书面冻结，不修改 `protocol_version`）；E（业务语义候选已提出，待 D Reviewer 确认并完成团队冻结）。
 
 ### R-2：`expression_type` 仅允许 `explicit`/`implicit`；`candidate` 由 `memory_status=candidate` 表达
 
@@ -129,7 +130,7 @@
 
 ## 5、明确不裁定 / 不冻结清单
 
-以下事项**不在本文件裁定范围**，保持既有状态，不得因本文件冻结而改变：
+以下事项**不在本文件裁定范围**，保持既有状态，不得因本文件当前的冻结候选状态而改变：
 
 | 事项 | 保持状态 | 责任轨道 |
 |------|----------|----------|
@@ -151,8 +152,8 @@
 
 | 版本 | 日期 | 变更说明 | 作者 |
 |------|------|----------|------|
-| v1 | 2026-09-03 | 建立 KMA 业务语义 Canonical 权威层 v1：声明三层权威层级（Canonical > D3 契约 CANDIDATE > Schema V0.1 DRAFT）与 superseded/compatibility 矩阵；载入六项 Canonical 裁定（R-1..R-6）；附字段别名与映射边界表、物理结构边界、证据纪律与不裁定清单。状态 `FROZEN`（业务语义层，限 E 轨职责范围）。 | E 轨道 |
+| v1 | 2026-09-03 | 建立 KMA Canonical Business Schema v1 冻结候选：提出拟议三层权威层级、superseded/compatibility 候选关系与六项 Canonical 业务语义裁定候选（R-1..R-6）；附字段别名与映射边界表、物理结构边界、证据纪律与不裁定清单。状态 `CANDIDATE_FOR_FREEZE`；待非作者 D Reviewer 批准且对应 PR 合并后，再通过后续治理提交升级为团队级 `FROZEN`。 | E 轨道 |
 
 ---
 
-> **本文档到此结束。** 后续修订须经 D Reviewer 审查；任何宿主/物理层证据变化不得直接改写本文件业务语义，须先经对应轨道取证并更新证据状态。
+> **本文档到此结束。** 当前状态为 `CANDIDATE_FOR_FREEZE`。只有非作者 D Reviewer 批准且承载本候选的 PR 合并后，方可通过后续治理提交升级为团队级 `FROZEN`；任何宿主/物理层证据变化仍须先经对应轨道取证并更新证据状态。
