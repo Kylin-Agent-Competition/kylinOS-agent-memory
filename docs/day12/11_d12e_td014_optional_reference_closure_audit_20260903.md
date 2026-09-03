@@ -5,7 +5,7 @@
 - **分支**：`fix/e-d12-business-schema-drift-remediation`
 - **当前 HEAD**：`5d1c4cacbda629f97934e52f7cd0d5cbcd81ba9f`（工作区干净）
 - **审计对象**：TD-014「Domain Optional ID/字符串字段非空约束未统一」（`memory-service/domain/preference.py`、`knowledge.py`、`conflict.py`、`forgetting.py`）
-- **审计性质**：关闭候选审计（Closure Candidate），**非 Resolved 宣告**。本报告只陈述仓库中已落地并已提交的代码事实与测试定义，不预写本 Task 尚未执行的 L0/L1 结果，不虚构 Runtime 证据或 Reviewer 签署。
+- **审计性质**：关闭候选审计（Closure Candidate），**非 Resolved 宣告**。本报告陈述仓库中已落地并已提交的代码事实、测试定义，以及 2026-09-03 在 WSL2 project `.venv` 中实际取得的 L1 验证结果；不虚构银河麒麟 Runtime 证据或 Reviewer 签署。
 
 ---
 
@@ -17,7 +17,7 @@
 |----|----------|------|
 | 代码事实层 | `CODE_VERIFIED` | Optional ID/Reference/Selector 字段已在当前分支统一约束，引用文件与行号可核对 |
 | 测试定义层 | `TEST_DEFINED` | 对应负向/兼容测试用例已定义并已提交；**只陈述定义存在与断言意图，不写运行数值** |
-| Controller Gate 层 | `GATE_PENDING` | 本 Task 的 L0/L1 验收命令由 Controller 在 Implementer 返回后独立执行，结果另行记录 |
+| L1 验证层 | `WSL_L1_VERIFIED` | 2026-09-03 已在当前 PR 分支的 WSL2 project `.venv` 中执行 TD-013/TD-014 定向回归，结果 `132 passed in 0.42s`、exit code 0；该结果不构成 `HOST_VERIFIED` 或 L2/L3 Runtime 证据 |
 | Reviewer 关闭层 | `REVIEW_PENDING` | D 主审（周子腾）尚未签署，状态为 Closure Candidate / In Progress pending D Reviewer，**不得标记 Resolved** |
 | 范围决策层 | `GAP` | 盘点中发现的 Optional 字符串字段，标注为「未纳入 TD-014 统一约束」的范围决策点，交由 D 主审确认 |
 
@@ -125,15 +125,14 @@ TD-014 关闭条件要求「Domain 与跨轨兼容测试定义/目标存在」�
 
 ---
 
-## 3、Controller Gate 层（GATE_PENDING）
+## 3、L1 验证层（WSL_L1_VERIFIED）
 
-本 Task 的验收命令由 Controller 在 Implementer 返回后**独立执行**，结果按 `.local-agent-workflow/rules/runtime-validation.md` 证据规则另行记录并归档。本报告**不声称执行结果、不预写任何通过数值**。
+本报告已取得当前 PR 分支上的真实 WSL L1 验证结果。验证在 WSL2 project `.venv` 中执行，不等同于银河麒麟宿主 Runtime 验证；因此仅标记 `WSL_L1_VERIFIED`，不标记 `HOST_VERIFIED`。
 
-| Gate | 命令 | 说明 |
-|------|------|------|
-| L0 | `python3 -m pytest --version` | pytest 可达性冒烟 |
-| L1 | `python3 -m pytest -o pythonpath=memory-service memory-service/tests/test_domain_models_d4e.py memory-service/tests/test_knowledge_domain_mapping_d8e.py -q` | 覆盖 TD-014 负向/None 语义用例（`test_domain_models_d4e.py`）与跨轨映射兼容目标（`test_knowledge_domain_mapping_d8e.py`） |
-| L2/L3 | 无（`runtime_required=false`，`runtime_commands=[]`） | 不适用；TD-014 为纯 Pydantic 域模型约束，无银河麒麟系统能力依赖，本 Task 不产生也不虚构任何 Runtime 证据（`RUNTIME_NOT_REQUIRED`） |
+| Gate | 命令 / 状态 | 结果 |
+|------|-------------|------|
+| L1 | `python3 -m pytest -o pythonpath=memory-service memory-service/tests/test_domain_models_d4e.py memory-service/tests/test_knowledge_domain_mapping_d8e.py -q` | `132 passed in 0.42s`，exit code 0，`WSL_L1_VERIFIED` |
+| L2/L3 | 无（`runtime_required=false`） | `RUNTIME_NOT_REQUIRED`；本报告不产生 `HOST_VERIFIED` |
 
 ---
 
@@ -141,25 +140,24 @@ TD-014 关闭条件要求「Domain 与跨轨兼容测试定义/目标存在」�
 
 - **当前状态**：Closure Candidate / In Progress **pending D Reviewer**（周子腾，D 主审）。
 - **未完成事项**：
-  1. 本 Task 的 L0/L1 验收 Gate 尚未由 Controller 执行（结果未产生）；
-  2. §1.5 三处范围决策点（`extracted_entities` 实体标签性质、Knowledge 13 个结构化内容字段、`resolution_strategy` DEFERRED 字段）需 D 主审对「不在 TD-014 统一约束范围内」的认定；
-  3. D 主审尚未对关闭候选进行正式确认；
-  4. 登记表状态推进到 `Resolved` 需要 D Reviewer 确认验收标准达成（`代码合并 ≠ 技术债关闭`，见登记表管理规则第 3 条）。
+  1. §1.5 三处范围决策点（`extracted_entities` 实体标签性质、Knowledge 13 个结构化内容字段、`resolution_strategy` DEFERRED 字段）需 D 主审对「不在 TD-014 统一约束范围内」的认定；
+  2. D 主审尚未对关闭候选进行正式确认；
+  3. 登记表状态推进到 `Resolved` 需要 D Reviewer 确认验收标准达成（`代码合并 ≠ 技术债关闭`，见登记表管理规则第 3 条）。
 - **明确声明**：本报告**不标记 Resolved**，不虚构 Reviewer 签署，不把 WSL 测试描述为麒麟 Runtime 证据或 `HOST_VERIFIED`。
 
 ---
 
 ## 5、明确未完成 / 未验证事项
 
-1. 本 Task 的 L0/L1 命令尚未执行（由 Controller 在 Implementer 返回后独立执行并记录结果）。
-2. D Reviewer（周子腾）对 TD-014 关闭候选与 §1.5 范围决策点的正式确认尚未取得。
-3. 本报告不包含任何 Runtime 证据（`RUNTIME_NOT_REQUIRED`），也不包含任何虚构的测试运行数值或日志。
+1. D Reviewer（周子腾）对 TD-014 关闭候选与 §1.5 范围决策点的正式确认尚未取得。
+2. 本报告已取得 WSL L1 实际执行证据：`132 passed in 0.42s`、exit code 0。
+3. 本报告不包含银河麒麟 Host Runtime 证据；`HOST_VERIFIED`、L2/L3 Runtime PASS 均未声明。
 
 ---
 
 ## 6、结论
 
-TD-014 的**代码能力与测试定义**已在当前分支落地并提交（审计时 HEAD `5d1c4cacbda629f97934e52f7cd0d5cbcd81ba9f`，工作区干净）：Optional ID/Reference/Selector 字段已统一为 `Optional[NonEmptyStr]` 或等价元素级约束，对应负向与兼容测试定义存在。技术条件已具备关闭候选审计；业务流程上剩余 Controller Gate 执行、三处范围决策点确认与 D Reviewer 正式确认。登记表状态由 `Open` 推进为 `In Progress`（Closure Candidate pending D Reviewer），**不得直接标记 Resolved**。
+TD-014 的代码能力、测试定义及定向 WSL L1 验证均已完成：Optional ID/Reference/Selector 字段已统一为 `Optional[NonEmptyStr]` 或等价元素级约束；相关回归于 2026-09-03 实际执行并取得 `132 passed in 0.42s`、exit code 0，状态为 `WSL_L1_VERIFIED`。当前业务流程上仅剩 §1.5 三处范围决策点确认与 D Reviewer 正式确认；登记表继续保持 `In Progress`（Closure Candidate pending D Reviewer），**不得直接标记 Resolved**。该验证不构成银河麒麟 `HOST_VERIFIED` 或 L2/L3 Runtime 证据。
 ## 最终 L1 验证结果（2026-09-03）
 
 验证环境：
@@ -189,4 +187,3 @@ TD-014 的**代码能力与测试定义**已在当前分支落地并提交（审
 - 无新增 skip；
 - 该结果支持本技术债进入 `Closure Candidate / In Progress pending D Reviewer`；
 - 是否最终标记 `Resolved` 仍需非作者 D Reviewer 正式确认。
-> 更新（2026-09-03）：上述 L1 Gate 已在当前 PR 分支实际执行并通过，结果为 `132 passed in 0.42s`；状态由 `GATE_PENDING` 更新为 `WSL_L1_VERIFIED`。该结果不构成 `HOST_VERIFIED`。
