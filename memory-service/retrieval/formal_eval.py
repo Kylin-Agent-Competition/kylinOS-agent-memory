@@ -40,6 +40,9 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Optional
 
+from domain.enums import MemoryStatus
+from pipeline.schemas import SensitivityLevel
+
 from retrieval.evaluation import (
     ChannelMode,
     EvalConfig,
@@ -81,12 +84,24 @@ CRITICAL_ZERO_CATEGORIES: tuple[str, ...] = (
 # 显式采样统计方法白名单（未冻结项：TEAM_DEFINED，必须显式登记，禁止 UNKNOWN/PENDING）
 SUPPORTED_STATISTICS_METHODS = frozenset({"p50_and_p95", "p50", "p95"})
 
-_MEMORY_STATUSES = frozenset({"active", "candidate", "superseded", "expired", "removed", "deprecated"})
-_SENSITIVITIES = frozenset({"none", "low", "medium", "high", "critical"})
+# 评测接受的 memory_status / sensitivity 值集与运行时 Canonical 枚举同源
+# （memory_status：domain.enums.MemoryStatus 六值，D3 §5.6 FROZEN_BUSINESS_SEMANTIC；
+#  sensitivity：pipeline.schemas.SensitivityLevel 五级，D3 §2.10/§5.1 冻结），
+# 避免评测层出现第二套 status/type 业务语义（TD-SCHEMA-B-001 / D12 字段漂移治理）。
+_MEMORY_STATUSES = frozenset(status.value for status in MemoryStatus)
+_SENSITIVITIES = frozenset(level.value for level in SensitivityLevel)
+# conflict_state={none,resolved,unresolved} 仅属 evaluation normalization
+# （D9_RETRIEVAL_GOLD_SPEC_V2 第九章：NOT production shared enum，不新增生产 Enum）。
 _CONFLICT_STATES = frozenset({"none", "resolved", "unresolved"})
 
-_POSITIVE_MEMORY_STATUSES = frozenset({"active"})
-_POSITIVE_SENSITIVITIES = frozenset({"none", "low", "medium"})
+_POSITIVE_MEMORY_STATUSES = frozenset({MemoryStatus.ACTIVE.value})
+_POSITIVE_SENSITIVITIES = frozenset(
+    {
+        SensitivityLevel.NONE.value,
+        SensitivityLevel.LOW.value,
+        SensitivityLevel.MEDIUM.value,
+    }
+)
 _POSITIVE_CONFLICT_STATES = frozenset({"none", "resolved"})
 
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")

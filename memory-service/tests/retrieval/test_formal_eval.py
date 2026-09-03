@@ -12,6 +12,10 @@ import math
 
 import pytest
 
+from domain.enums import MemoryStatus
+from pipeline.schemas import SensitivityLevel
+
+import retrieval.formal_eval as formal_eval_module
 from retrieval.formal_eval import (
     CRITICAL_ZERO_CATEGORIES,
     FROZEN_CONFIG_VERSION,
@@ -509,3 +513,30 @@ def test_guardrail_accounting_no_participants_returns_none_rates():
     assert report["violation_query_count"] == 0
     assert report["per_category"]["cross_user"]["violation_query_rate"] is None
     assert report["critical_zero_ok"] is True
+
+
+# ── D12 字段漂移治理：评测接受的枚举必须与 Canonical 运行时枚举同源（TD-SCHEMA-B-001）──
+
+
+def test_eval_memory_status_set_matches_canonical_domain_enum():
+    """formal_eval 语料校验的 memory_status 值集必须等于 domain.enums.MemoryStatus 六值。"""
+    assert formal_eval_module._MEMORY_STATUSES == frozenset(
+        status.value for status in MemoryStatus
+    )
+    assert formal_eval_module._POSITIVE_MEMORY_STATUSES <= formal_eval_module._MEMORY_STATUSES
+
+
+def test_eval_sensitivity_set_matches_canonical_pipeline_enum():
+    """formal_eval 语料校验的 sensitivity 值集必须等于 pipeline SensitivityLevel 五级。"""
+    assert formal_eval_module._SENSITIVITIES == frozenset(
+        level.value for level in SensitivityLevel
+    )
+    assert formal_eval_module._POSITIVE_SENSITIVITIES <= formal_eval_module._SENSITIVITIES
+
+
+def test_eval_conflict_state_is_eval_only_normalization_not_production_enum():
+    """conflict_state 是 D9 v2 明确标注的评测归一化字段，不是生产共享枚举，禁止并入 Canonical。"""
+    assert formal_eval_module._CONFLICT_STATES == frozenset(
+        {"none", "resolved", "unresolved"}
+    )
+    assert not (formal_eval_module._CONFLICT_STATES & formal_eval_module._MEMORY_STATUSES)
