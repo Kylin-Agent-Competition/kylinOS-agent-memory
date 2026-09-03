@@ -1,0 +1,46 @@
+== rerun with explicit exit codes (fixed readiness) ==
+
+--- install ---
+
+INSTALL_RC=0
+
+      Tasks: 3 (limit: 9463)
+
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+
+[kylin-memory-install] 安装完成：wrapper=/home/yanmouren778/.local/bin/kylin-memory-server unit=/home/yanmouren778/.config/systemd/user/kylin-memory.service
+
+--- restart ---
+
+RESTART_RC=0
+
+      Tasks: 3 (limit: 9463)
+
+[kylin-memory-install] WARN: 日志中未匹配到 'Memory Service 就绪'（请人工核对 journalctl --user -u kylin-memory）
+
+--- rollback ---
+
+ROLLBACK_RC=0
+
+[kylin-memory-install] 回退完成：已停止并禁用 kylin-memory（--keep-unit：保留 wrapper 与 unit）
+
+--- reinstall ---
+
+REINSTALL_RC=0
+
+      Tasks: 3 (limit: 9463)
+
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+
+[kylin-memory-install] 安装完成：wrapper=/home/yanmouren778/.local/bin/kylin-memory-server unit=/home/yanmouren778/.config/systemd/user/kylin-memory.service
+
+--- final ---
+
+active
+
+socket_ok=yes
+
+4
+
+
+ERR:
