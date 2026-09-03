@@ -1508,10 +1508,10 @@ entries:
     source: "evidence/l2-kylin-vm/d12d_pathc_bind_4dbeb1c_20260903.txt"
     commit: "4dbeb1c65e54809c2bc6ed0b67928b8bd870073d"
     tested_commit: "4dbeb1c65e54809c2bc6ed0b67928b8bd870073d"
-    evidence_commit: "PENDING"
+    evidence_commit: "8a1c718e48627d93e2f547757207846de8a37166"
     date: "2026-09-03"
     reviewer: "pending"
-    limitations: "修复提交 4dbeb1c；命令转录已补；evidence_commit 待本轮授权提交后回填"
+    limitations: "修复提交 4dbeb1c；命令转录已补；evidence_commit=8a1c718 已回填"
     checksum_sha256: "97d2a9bcf4c62d72335160cf3b6dddab998a11f354914b93d2f9f3d1cfd35840"
     details: |
       麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
