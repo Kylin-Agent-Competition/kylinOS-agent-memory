@@ -78,7 +78,7 @@
 - **裁定内容**：`memory_status` 六值（`active`/`superseded`/`deprecated`/`expired`/`removed`/`candidate`）是生命周期唯一业务真值。`is_active`/`is_outdated`/`should_decay` 仅 compatibility/deprecated 过渡字段，冲突时以 `memory_status` 为准；过渡字段移除按 TD-016 既有条件由 D Reviewer 验收。
 - **在库依据**：Schema §2.8/§3.2/§3.3；D3 §3.6/§7.4；TD-016（Open，关闭条件含「⑤ D Reviewer 确认迁移完成」）。
 - **兼容性影响**：不改变 TD-016 状态；本裁定不替代或提前关闭 TD-016。
-- **责任轨道 handoff**：D/E（过渡字段移除验收，TD-016）。
+- **责任轨道 handoff**：D/E（过渡字段移除验收，TD-016）。全仓消费者矩阵见 `docs/day12/14_d12e_lifecycle_schema_drift_handoff_20260903.md`（2026-09-03 盘点，TD-016 关闭条件 ① 完成，条件 ②③④⑤ 开放，状态保持 Open；`vector_index_entries.is_active` 为同名异义 orthogonal 对象，冻结排除）。
 
 ### R-4：`processing_status` 仅属于 Runtime technical state，与 `source_business_status` 正交
 
