@@ -1397,9 +1397,10 @@ entries:
     source: "evidence/l2-kylin-vm/d12d_pathc_os_reboot_20260903.txt"
     commit: "0820036b19a52d137f8cd321500038bfda4130e9"
     tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
     date: "2026-09-03"
     reviewer: "pending"
-    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 待本提交后回填"
+    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 已回填"
     checksum_sha256: "16a47115027847df9f13daa3607112290724298939ba232459deaa31d094bdb4"
     details: |
       麒麟 VM（Kylin-V11-2603-Env-V2-Main，8 vCPU/8GB）main@0820036 实测；D 轨部署/重启/权限/日志口径。
@@ -1412,9 +1413,10 @@ entries:
     source: "evidence/l2-kylin-vm/d12d_pathc_perms_20260903.txt"
     commit: "0820036b19a52d137f8cd321500038bfda4130e9"
     tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
     date: "2026-09-03"
     reviewer: "pending"
-    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 待本提交后回填"
+    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 已回填"
     checksum_sha256: "08d5daea84f0dd71a6c952bcee7ad611d7ac60098af142bef788d1ade7ae3563"
     details: |
       麒麟 VM（Kylin-V11-2603-Env-V2-Main，8 vCPU/8GB）main@0820036 实测；D 轨部署/重启/权限/日志口径。
@@ -1427,9 +1429,10 @@ entries:
     source: "evidence/l2-kylin-vm/d12d_pathc_service_install_20260903.txt"
     commit: "0820036b19a52d137f8cd321500038bfda4130e9"
     tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
     date: "2026-09-03"
     reviewer: "pending"
-    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 待本提交后回填"
+    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 已回填"
     checksum_sha256: "8deea68cabdced558298b24fef5c97310c7e16de253514f3c319e847a1691b97"
     details: |
       麒麟 VM（Kylin-V11-2603-Env-V2-Main，8 vCPU/8GB）main@0820036 实测；D 轨部署/重启/权限/日志口径。
@@ -1442,9 +1445,10 @@ entries:
     source: "evidence/l2-kylin-vm/d12d_pathc_service_journal_20260903.txt"
     commit: "0820036b19a52d137f8cd321500038bfda4130e9"
     tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
     date: "2026-09-03"
     reviewer: "pending"
-    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 待本提交后回填"
+    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 已回填"
     checksum_sha256: "2c66d51e23c8f5e34b0a4481dcf39229472827beaad763ae20a02b7c4bd671cf"
     details: |
       麒麟 VM（Kylin-V11-2603-Env-V2-Main，8 vCPU/8GB）main@0820036 实测；D 轨部署/重启/权限/日志口径。
@@ -1457,9 +1461,10 @@ entries:
     source: "evidence/l2-kylin-vm/d12d_pathc_service_restart_20260903.txt"
     commit: "0820036b19a52d137f8cd321500038bfda4130e9"
     tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
     date: "2026-09-03"
     reviewer: "pending"
-    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 待本提交后回填"
+    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 已回填"
     checksum_sha256: "43fc678ddf3620a4b5fe4e59579edc8ffd55ad5c8a99e0a0ca57ec78faeb110f"
     details: |
       麒麟 VM（Kylin-V11-2603-Env-V2-Main，8 vCPU/8GB）main@0820036 实测；D 轨部署/重启/权限/日志口径。
@@ -1472,9 +1477,10 @@ entries:
     source: "evidence/l2-kylin-vm/d12d_pathc_uds_ipc_20260903.txt"
     commit: "0820036b19a52d137f8cd321500038bfda4130e9"
     tested_commit: "0820036b19a52d137f8cd321500038bfda4130e9"
+    evidence_commit: "f1838edbbb498697c89612f6575a4f117162e909"
     date: "2026-09-03"
     reviewer: "pending"
-    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 待本提交后回填"
+    limitations: "真实 Embedding/SDK 调用采信 A 轨 D12A-L2-VERIFY（本 VM 未重测 embed）；B/C 端到端跨轨 pending；evidence_commit 已回填"
     checksum_sha256: "fd8f70983de25450839d6f96bc1e41259b9037fedde3bcf074eff4d867464f64"
     details: |
       麒麟 VM（Kylin-V11-2603-Env-V2-Main，8 vCPU/8GB）main@0820036 实测；D 轨部署/重启/权限/日志口径。
