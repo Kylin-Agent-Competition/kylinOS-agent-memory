@@ -113,7 +113,20 @@ class TurnFinalizedEvent:
     # 禁止由 LLM 生成/覆盖；None 时由 Provider 用 session_id 派生并提示。
     source_event_id: Optional[str] = None
     occurred_at: datetime = field(default_factory=lambda: datetime.now().astimezone())
-    collected_at: datetime = field(default_factory=lambda: datetime.now().astimezone())
+    # DRIFT-001（Schema 漂移治理，2026-09-03）：统一采集时间 Canonical 字段为
+    # captured_at；collected_at 仅保留为只读 legacy alias（见下方 property），
+    # 禁止 Provider 内继续产生新 collected_at 写字段。旧 transport（D 轨 IPC
+    # payload）可保留 collected_at，经只读 Adapter 归一为 captured_at。
+    captured_at: datetime = field(default_factory=lambda: datetime.now().astimezone())
+
+    @property
+    def collected_at(self) -> datetime:
+        """DRIFT-001：legacy 只读 alias → captured_at（Canonical 采集时间唯一真值）。
+
+        保留仅为兼容旧构造/读取（读路径归一）；新 Canonical 写路径一律使用
+        captured_at，禁止以 collected_at 作为可写字段。
+        """
+        return self.captured_at
 
     @property
     def trusted_source_event_id(self) -> str:
