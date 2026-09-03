@@ -13,7 +13,7 @@
 | B-2 重启后索引一致性（TD-055/Issue #118） | B/D | 服务/OS 重启后 health/index/检索可用 | D 侧重启自启 PASS（本 VM）；检索一致性以 B 轨复测为准（跨轨 pending） | D VM：0820036 |
 | C-1 端到端演示调用路径 | C | D11C #116（5 Demo 路径）、C-D12 #127 修复 | 采信 C 轨输入；D VM 无 C 客户端，真实 VM 交互复测跨轨 pending | #116 合入 7ad9945；#127 合入 44d9474 |
 | E-1 安全/假实现/业务验收 | E | 独立 Review、假实现审计 | 交 E 非作者 Reviewer（本 PR 待审查） | — |
-| D-1 本 VM 实测（服务/重启/权限/IPC/日志） | D（代行） | install/start、服务重启、OS 整机重启自启、UDS IPC fail-closed、权限 0700/0600、日志脱敏 | **已完成**（证据 docs/day12/08 + evidence/l2-kylin-vm/d12d_pathc_* + index D12D-PATHC-01~06） | 0820036 |
+| D-1 本 VM 实测（服务/重启/权限/IPC/日志） | D（代行） | install/start、服务重启、OS 整机重启自启、UDS IPC fail-closed、权限 0700/0600、日志脱敏 | **已完成**（证据 docs/day12/08 + evidence/l2-kylin-vm/d12d_pathc_* + index D12D-PATHC-01~07；install readiness 已修复并重跑 RC=0） | 0820036 |
 
 ## 结论
 - A/C 输入采信并标注来源；B 检索一致性、C 真实 VM 交互为跨轨 pending，不代实现、不冒充本 VM 实测。
