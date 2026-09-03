@@ -5,10 +5,10 @@
 - 施工项：D12 D 轨「功能冻结、联调缓冲与缺陷清理」（台账 D12-D 行，负责人：D＝周子腾）。
 - 授权：已取得 D 轨负责人授权，由 B 轨（高翌哲）代行 D12D 限定范围（准备阶段，2026-09-02）。
 - 工作类型：`fix`（故障注入定位后的安装脚本/systemd/诊断页缺陷清理；稳定性 Gate 的组织与证据汇总）。
-- 工作分支：`fix/D12D-stability-gate`（基线 `origin/main@0820036`；按提交分支要求命名：`<类型>/<用途>`，不含 `codex`）。
+- 工作分支：`fix/D12D-stability-gate`（基线 `origin/main@0820036`；2026-09-03 已 merge 同步 `origin/main@44d9474`，实测 tested_commit=0820036；按提交分支要求命名，不含 `codex`）。
 - 本次范围（准备阶段）：建立 D12D 工作清单、基线口径与验收边界；不包含麒麟 VM 故障注入实测、缺陷修复代码或稳定性 Gate 达标结论。
 - 开始时间：2026-09-02（准备阶段）。最晚停止时间：进入实测/实现前须由 D 轨负责人指定并确认。
-- 当前进度：0/8（0%，准备阶段）。
+- 当前进度：Path C 非 embed 同 Commit（0820036）部分完成（2026-09-03）；完整故障注入与 Gate 未执行，详见 docs/day12/08。
 
 ## 完成定义
 
@@ -25,14 +25,14 @@
 
 | # | 工作项 | 依赖 | 验证方式 | 状态 |
 |---|---|---|---|---|
-| 1 | 基线与环境盘点（准备阶段）：记录 `origin/main@0820036`、D11D 已合并交付（PR #115：`packaging/systemd/install_kylin_memory.sh`、`kylin-memory.service`、JSON 日志/trace_id/脱敏诊断与 L2 证据）、D11D 专用 VM（`Kylin-V11-2603-D11D-47af2fa-Test`）与冻结环境、VERSION_MAP、UDS/权限基线与磁盘余量；确认 D12D 专用 VM/快照复用或新建 | `origin/main`；D11D 合并基线 | `git status`、仓库审阅、快照/版本/哈希核对 | 待开始（基线口径已记录于本清单；VM 实测待 D12D 专用环境复核） |
-| 2 | 服务/OS 重启故障注入与恢复：`systemctl --user stop/start/restart kylin-memory`、服务自启、OS 整机重启后自启与状态确认（active、UDS/socket、health、index/DB 状态、检索可调用）；定位并修复启动/重启问题 | 工作项 1；D11D systemd 部署产物 | 真实 VM 日志、重启前后状态对比、恢复路径复跑 | 待开始（无 VM 证据前为 `UNVERIFIED`） |
-| 3 | 权限/安全故障注入：UDS socket 与 DB 文件权限（0700/0600）、`RuntimeDirectoryMode`、用户/组隔离、socket 固定跨用户路径风险（呼应 TD-049）、KYSEC 授权；越权访问与失败关闭路径 | 工作项 1；D11D 权限加固 | 越权/失败路径实测、权限核对、KYSEC 实测或如实标 `UNVERIFIED` | 待开始 |
-| 4 | 磁盘故障注入：磁盘满/只读/数据目录缺失与写入失败场景下服务 fail-closed、日志不泄露、恢复后行为可重复 | 工作项 1 | 真实 VM 故障注入、日志断言、恢复复跑 | 待开始 |
-| 5 | SDK 故障注入（跨轨消费，只消费不实现）：Embedding/SDK 超时、挂死、异常返回、模型/Bridge 缺失时 memory-service 降级与恢复（A 轨 D12A PR #100 已合并：health executor 分项/挂死恢复与麒麟 VM L2 就绪） | A 轨 D12A（PR #100）合入并构建 | health 分项、降级/恢复真实日志、脱敏断言 | 待开始（前置已就绪；VM 实测待 D12D 专用环境） |
-| 6 | 安装脚本/systemd/诊断页缺陷修复：`install_kylin_memory.sh`、`kylin-memory.service`、health/诊断端点与诊断命令/脚本在故障注入暴露问题上的修复；L0/L1 回归（`py_compile`、相关 pytest、`git diff --check`） | 工作项 2–5 暴露的缺陷清单 | 复跑安装/回退/重启恢复、pytest 全绿、diff --check | 待开始 |
-| 7 | 稳定性 Gate 主持与证据收口：汇总故障注入矩阵（场景×结果×恢复）、修复清单与证据至 `evidence/l2-kylin-vm/`，`evidence/index.yaml` 登记 SHA-256 与 `tested_commit`；输出 Critical/High 清零核对表；交由 E 非作者 Reviewer 审查 | 工作项 1–6；证据目录与 `evidence/index.yaml` | 证据可复跑、checksum 一致、Gate 材料完整 | 待开始 |
-| 8 | 收口与跨轨核对：同 Commit 同 VM 复测；按固定口径核对 B（重启后检索一致性，TD-055 中 B 侧跟踪项）、C（D→C 端到端真实输入）与 E（安全/假实现）输入；Review 意见回填 | 工作项 1–7；B/C/E 输入 | 核对表 ☑、trace/DB 关联、Review 结论 | 待开始（跨轨 pending 部分如实标注） |
+| 1 | 基线与环境盘点（准备阶段）：记录 `origin/main@0820036`、D11D 已合并交付（PR #115：`packaging/systemd/install_kylin_memory.sh`、`kylin-memory.service`、JSON 日志/trace_id/脱敏诊断与 L2 证据）、D11D 专用 VM（`Kylin-V11-2603-D11D-47af2fa-Test`）与冻结环境、VERSION_MAP、UDS/权限基线与磁盘余量；确认 D12D 专用 VM/快照复用或新建 | `origin/main`；D11D 合并基线 | `git status`、仓库审阅、快照/版本/哈希核对 | 已完成（2026-09-03：tested_commit=origin/main@0820036 实测；仓库侧已 merge 同步 origin/main@44d9474，新 HEAD 复验待后续） |
+| 2 | 服务/OS 重启故障注入与恢复：`systemctl --user stop/start/restart kylin-memory`、服务自启、OS 整机重启后自启与状态确认（active、UDS/socket、health、index/DB 状态、检索可调用）；定位并修复启动/重启问题 | 工作项 1；D11D systemd 部署产物 | 真实 VM 日志、重启前后状态对比、恢复路径复跑 | PARTIAL（服务重启 + OS 整机重启自启 PASS，tested_commit=0820036；完整故障注入未执行） |
+| 3 | 权限/安全故障注入：UDS socket 与 DB 文件权限（0700/0600）、`RuntimeDirectoryMode`、用户/组隔离、socket 固定跨用户路径风险（呼应 TD-049）、KYSEC 授权；越权访问与失败关闭路径 | 工作项 1；D11D 权限加固 | 越权/失败路径实测、权限核对、KYSEC 实测或如实标 `UNVERIFIED` | PARTIAL（静态权限 0700/0600 复核 PASS；越权/失败注入与 KYSEC 未执行/不可见） |
+| 4 | 磁盘故障注入：磁盘满/只读/数据目录缺失与写入失败场景下服务 fail-closed、日志不泄露、恢复后行为可重复 | 工作项 1 | 真实 VM 故障注入、日志断言、恢复复跑 | PENDING（磁盘故障注入未执行） |
+| 5 | SDK 故障注入（跨轨消费，只消费不实现）：Embedding/SDK 超时、挂死、异常返回、模型/Bridge 缺失时 memory-service 降级与恢复（A 轨 D12A PR #100 已合并：health executor 分项/挂死恢复与麒麟 VM L2 就绪） | A 轨 D12A（PR #100）合入并构建 | health 分项、降级/恢复真实日志、脱敏断言 | 待开始（前置已就绪；VM 实测待 D12D 专用环境） | PARTIAL（真实 SDK 采信 A 轨 D12A-L2；D VM bridge 编译 + 降级路径验证，真实 SDK 注入未执行） |
+| 6 | 安装脚本/systemd/诊断页缺陷修复：`install_kylin_memory.sh`、`kylin-memory.service`、health/诊断端点与诊断命令/脚本在故障注入暴露问题上的修复；L0/L1 回归（`py_compile`、相关 pytest、`git diff --check`） | 工作项 2–5 暴露的缺陷清单 | 复跑安装/回退/重启恢复、pytest 全绿、diff --check | PARTIAL（install/restart/OS-reboot 复跑 PASS、diff --check 通过；无故障注入暴露缺陷需修复；诊断页业务受主链未接线限制） |
+| 7 | 稳定性 Gate 主持与证据收口：汇总故障注入矩阵（场景×结果×恢复）、修复清单与证据至 `evidence/l2-kylin-vm/`，`evidence/index.yaml` 登记 SHA-256 与 `tested_commit`；输出 Critical/High 清零核对表；交由 E 非作者 Reviewer 审查 | 工作项 1–6；证据目录与 `evidence/index.yaml` | 证据可复跑、checksum 一致、Gate 材料完整 | PARTIAL（证据已归档 index D12D-PATHC-01~06；Critical/High 清零结论未达成，待 E Review） |
+| 8 | 收口与跨轨核对：同 Commit 同 VM 复测；按固定口径核对 B（重启后检索一致性，TD-055 中 B 侧跟踪项）、C（D→C 端到端真实输入）与 E（安全/假实现）输入；Review 意见回填 | 工作项 1–7；B/C/E 输入 | 核对表 ☑、trace/DB 关联、Review 结论 | 待开始（跨轨 pending 部分如实标注） | PENDING（跨轨核对表未建；B/C/E 输入待回填） |
 
 ## 固定验收口径
 
