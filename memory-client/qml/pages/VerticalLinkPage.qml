@@ -24,6 +24,64 @@ Page {
     id: root
     property MemoryViewModel viewModel
 
+    // D12-C MEDIUM-02：一次性 toast（reconnectFinished 事件驱动），3.2s 后自动隐藏。
+    // 成功→绿色；达到最大重连次数失败→红色并提示 Retry。
+    Rectangle {
+        id: reconnectToast
+        x: 16
+        y: -height  // 初始在画面外
+        width: Math.min(root.width - 32, 520)
+        implicitHeight: reconnectToastText.height + 20
+        radius: 8
+        color: reconnectSuccess ? "#e8f5e9" : "#ffebee"
+        border.color: reconnectSuccess ? "#4caf50" : "#e53935"
+        border.width: 1
+        opacity: 0
+        z: 100
+        property bool reconnectSuccess: false
+        property int attempts: 0
+        // 3.2s 自动关闭（淡入 220ms → 展示 2.7s → 淡出 220ms）
+        Timer {
+            id: reconnectToastTimer
+            interval: 2700
+            onTriggered: reconnectToastHideAnim.start()
+        }
+        Label {
+            id: reconnectToastText
+            anchors.fill: parent
+            anchors.leftMargin: 12; anchors.rightMargin: 12
+            anchors.topMargin: 10; anchors.bottomMargin: 10
+            wrapMode: Text.WordWrap
+            text: {
+                if (reconnectToast.reconnectSuccess)
+                    return qsTr("✅ 重连成功：经过 %1 次尝试，Memory Service 连接已恢复。"
+                              ).arg(reconnectToast.attempts);
+                return qsTr("❌ 重连失败：经过 %1/3 次自动重试仍无法连接 Memory Service。" +
+                           "请检查服务状态后点击 Retry。").arg(reconnectToast.attempts);
+            }
+            color: reconnectToast.reconnectSuccess ? "#2e7d32" : "#c62828"
+            font.bold: true
+        }
+        NumberAnimation on y { id: reconnectToastShowAnim; to: 16; duration: 220; easing.type: Easing.OutCubic }
+        NumberAnimation on y { id: reconnectToastHideAnim; to: -reconnectToast.height; duration: 220; easing.type: Easing.InCubic
+            onStopped: { reconnectToast.opacity = 0 }
+        }
+        NumberAnimation on opacity {
+            id: reconnectToastFadeIn;
+            from: 0; to: 1; duration: 220
+        }
+    }
+    Connections {
+        target: viewModel
+        function onReconnectFinished(success, attempts) {
+            reconnectToast.reconnectSuccess = success
+            reconnectToast.attempts = attempts
+            reconnectToastFadeIn.start()
+            reconnectToastShowAnim.start()
+            reconnectToastTimer.restart()
+        }
+    }
+
     // 问题4/非阻断项：整个页面包一层 ScrollView，默认 960×640 不再溢出
     ScrollView {
         anchors.fill: parent
@@ -65,13 +123,78 @@ Page {
                 spacing: 10
                 Label {
                     text: qsTr("Gateway: ") + viewModel.connectionState
-                    color: viewModel.connectionState === "connected" ? "#2e7d32" : "#c62828"
+                    color: {
+                        const s = viewModel.connectionState
+                        if (s === "connected")   return "#2e7d32"
+                        if (s === "reconnecting") return "#ef6c00"
+                        if (s === "connecting" || s === "closing") return "#f57c00"
+                        return "#c62828"
+                    }
+                }
+                Label {
+                    text: qsTr("Reconnect attempts: %1 / 3").arg(viewModel.reconnectAttempts)
+                    color: (viewModel.reconnectAttempts > 0) ? "#ef6c00" : "#616161"
+                    visible: viewModel.connectionState === "reconnecting"
+                             || viewModel.reconnectAttempts > 0
                 }
                 Label {
                     text: qsTr("PreChat busy: ") + (viewModel.preChatBusy ? "yes" : "no")
                 }
                 Label {
                     text: qsTr("PostTurn busy: ") + (viewModel.postTurnBusy ? "yes" : "no")
+                }
+                Item { Layout.fillWidth: true }
+                // D12-C：Stop / Retry 按钮。Stop 必须可在 reconnecting/connecting 阶段随时按。
+                Button {
+                    text: qsTr("Stop")
+                    enabled: viewModel.connectionState !== "disconnected"
+                    onClicked: viewModel.disconnectFromService()
+                }
+                Button {
+                    text: qsTr("Retry")
+                    highlighted: true
+                    enabled: viewModel.connectionState === "disconnected"
+                              || viewModel.connectionState === "reconnecting"
+                    onClicked: viewModel.retryConnectService()
+                }
+            }
+
+            // D12-C：连接空状态提示（仅 disconnect/reconnect 阶段展示，不抢占正文）
+            RowLayout {
+                Layout.fillWidth: true
+                visible: viewModel.connectionState !== "connected"
+                Rectangle {
+                    Layout.fillWidth: true
+                    color: (viewModel.connectionState === "reconnecting"
+                            || viewModel.connectionState === "connecting")
+                           ? "#fff3e0" : "#ffebee"
+                    radius: 6
+                    implicitHeight: noticeLabel.height + 18
+
+                    Label {
+                        id: noticeLabel
+                        anchors.fill: parent
+                        anchors.margins: 9
+                        wrapMode: Text.WordWrap
+                        color: (viewModel.connectionState === "reconnecting"
+                                || viewModel.connectionState === "connecting")
+                               ? "#e65100" : "#c62828"
+                        text: {
+                            const s = viewModel.connectionState
+                            if (s === "reconnecting")
+                                return qsTr("⚠️  连接意外丢失：正在进行第 %1/3 次自动重连（指数退避）；Pre/Post 流水线已安全回落到 idle。"
+                                           ).arg(viewModel.reconnectAttempts)
+                            if (s === "connecting")
+                                return qsTr("正在连接 Memory Service …")
+                            if (s === "closing")
+                                return qsTr("正在停止连接 …")
+                            // disconnected
+                            if (viewModel.lastError && viewModel.lastError.length > 0)
+                                return qsTr("未连接：%1。点击「Retry」或「Connect」重试。"
+                                           ).arg(viewModel.lastError)
+                            return qsTr("未连接 Memory Service。点击「Retry」或「Connect」启动。")
+                        }
+                    }
                 }
             }
 
