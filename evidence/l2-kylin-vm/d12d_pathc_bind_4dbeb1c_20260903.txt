@@ -1,0 +1,60 @@
+警告：远程 HEAD 指向一个不存在的引用，无法检出
+
+HEAD=4dbeb1c65e54809c2bc6ed0b67928b8bd870073d
+
+REF=(detached)
+
+PACKAGING_SHA=2d2214e3d228d86da91a23018e8f8d9cc89a233c4b375f25a91a5c647d3af6e5
+
+== binding run at commit 4dbeb1c ==
+
+date: 2026-09-03T15:42:18+08:00
+
+HEAD: 4dbeb1c65e54809c2bc6ed0b67928b8bd870073d
+
+--- install ---
+
+INSTALL_RC=0
+
+   Main PID: 25521 (python3)
+
+      Tasks: 3 (limit: 9463)
+
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+
+[kylin-memory-install] 安装完成：wrapper=/home/yanmouren778/.local/bin/kylin-memory-server unit=/home/yanmouren778/.config/systemd/user/kylin-memory.service
+
+--- restart ---
+
+RESTART_RC=0
+
+      Tasks: 3 (limit: 9463)
+
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+
+--- rollback ---
+
+ROLLBACK_RC=0
+
+[kylin-memory-install] 回退完成：已停止并禁用 kylin-memory（--keep-unit：保留 wrapper 与 unit）
+
+--- reinstall ---
+
+REINSTALL_RC=0
+
+   Main PID: 25986 (python3)
+
+      Tasks: 3 (limit: 9463)
+
+[kylin-memory-install] journal: Memory Service 就绪 已出现
+
+[kylin-memory-install] 安装完成：wrapper=/home/yanmouren778/.local/bin/kylin-memory-server unit=/home/yanmouren778/.config/systemd/user/kylin-memory.service
+
+--- final ---
+
+active
+
+socket_ok=yes
+
+
+ERR:

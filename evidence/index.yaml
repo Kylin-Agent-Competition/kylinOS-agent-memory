@@ -1410,9 +1410,9 @@ entries:
       4) 异常输入回归：空文本/纯空白 dim=768、超长 10KB（30s 超时）、非 str、embed_batch 非法 ALL PASS
       5) 性能基准：avg=77.7ms p99=97.6ms samples=10（样本数=预期 且 avg/p99≤180ms 才 PASS；gate 拦截抖动验证有效）
       6) bridge.log 不存在（无正文残留）
-- id: "D12D-PATHC-01"
+  - id: "D12D-PATHC-01"
     task_id: "D12D-PATHC"
-    description: "服务安装初测：install readiness timeout 缺陷实录（socket 未就绪 ERROR，真实退出码≠0）"
+    description: "服务安装初测：install readiness timeout 缺陷实录（socket 未就绪 ERROR，真实退出码非0）"
     status: "DEFECT_RECORDED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d12d_pathc_service_install_20260903.txt"
@@ -1472,7 +1472,7 @@ entries:
       麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
   - id: "D12D-PATHC-05"
     task_id: "D12D-PATHC"
-    description: "UDS IPC 回环与未注册方法 fail-closed（memory.health/ping → UNSUPPORTED_METHOD）"
+    description: "UDS IPC 回环与未注册方法 fail-closed（memory.health/ping 返回 UNSUPPORTED_METHOD）"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d12d_pathc_uds_ipc_20260903.txt"
@@ -1502,16 +1502,16 @@ entries:
       麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
   - id: "D12D-PATHC-07"
     task_id: "D12D-PATHC"
-    description: "install readiness 修复后重跑：install/restart/rollback/reinstall 均 RC=0，最终 active + socket ok"
+    description: "install readiness 修复后（4dbeb1c 绑定）重跑：HEAD=4dbeb1c，install/restart/rollback/reinstall 均 RC=0，最终 active + socket ok"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
-    source: "evidence/l2-kylin-vm/d12d_pathc_rerun_rc_20260903.txt"
+    source: "evidence/l2-kylin-vm/d12d_pathc_bind_4dbeb1c_20260903.txt"
     commit: "4dbeb1c65e54809c2bc6ed0b67928b8bd870073d"
     tested_commit: "4dbeb1c65e54809c2bc6ed0b67928b8bd870073d"
-    evidence_commit: "4dbeb1c65e54809c2bc6ed0b67928b8bd870073d"
+    evidence_commit: "PENDING"
     date: "2026-09-03"
     reviewer: "pending"
-    limitations: "修复提交 4dbeb1c；重跑绑定修复后代码"
-    checksum_sha256: "a65d00358dfa96772a7db24637d407d0fcff234b70cbcdfdc06bcd6cf96ae9ec"
+    limitations: "修复提交 4dbeb1c；evidence_commit 待授权提交后回填"
+    checksum_sha256: "b8dab8a473aa4cabb2270646f8825853da4a8ace1ded4bc50fa1afaed2690d5e"
     details: |
       麒麟 VM（Kylin-V11-2603-Env-V2-Main）实测；D 轨部署/重启/权限/IPC/日志口径，非 embed。
