@@ -66,3 +66,12 @@
 - 建议标题：`fix(D12D)：功能冻结——故障注入、缺陷清理与稳定性 Gate（开工工作清单 + 准备）`。
 - 分支名不含 `codex`；PR 正文、评论、提交信息均使用中文。
 - 后续代码/证据批次在取得单独 `commit`/`push` 授权后提交；Draft→Ready 与合并由用户手动决定。
+
+---
+
+## 2026-09-03 Path C 进展（负责人确认口径）
+
+- 口径：真实 Embedding/SDK 调用**采信 A 轨 D12A L2**（D12A-L2-VERIFY，HOST_VERIFIED/E4）；D 轨 VM 完成非 embed 的同 Commit（0820036）项。
+- 已完成（麒麟 VM Kylin-V11-2603-Env-V2-Main）：kylin-memory 安装/启动、服务重启、**OS 整机重启自启**、UDS IPC fail-closed、Vector active、权限 0700/0600、日志含 trace 无正文。
+- 证据：docs/day12/08_d12d_pathc_none_embed_evidence_20260903.md + evidence/l2-kylin-vm/d12d_pathc_*.txt + evidence/index.yaml（D12D-PATHC-01~06）。
+- 尚未进入 D12D 工作项 2–8 的完整故障注入实测；相关结论以 08 文档边界为准（不冒充业务闭环/真实 embed 本 VM 实测）。
