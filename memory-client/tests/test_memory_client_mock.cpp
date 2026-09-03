@@ -163,6 +163,11 @@ void MemoryClientMockTest::connectToMissingServerEmitsConnectionError()
     client::MemoryClient client;
     client.setSocketPath(QStringLiteral("/tmp/kylin-mock-missing-"
                                         "d4-test-not-a-socket.sock"));
+    // D12-C FAIL-1 回归修复：本用例关注"连接不存在路径 → connectionError"
+    //   的基础语义，并非 auto-reconnect 路径。显式禁用 auto-reconnect 使
+    //   最终状态为 Disconnected（而不是 Reconnecting 退避窗口），与该用
+    //   例历史断言保持一致。
+    client.setAutoReconnectEnabled(false);
     QSignalSpy errorSpy(&client, &client::MemoryClient::connectionError);
     QSignalSpy stateSpy(&client, &client::MemoryClient::connectionStateChanged);
 
@@ -418,8 +423,14 @@ void MemoryClientMockTest::disconnectWhileAutoReconnectSuppressesFurtherRetries(
     QVERIFY(client.reconnectAttempts() <= 3);
 
     // 显式 Stop：退避窗口应立即停止，重连次数不再增加。
+    // D12-C FAIL-4 修复：QLocalSocket::abort() 在 Qt 下异步在事件循环下一轮
+    //   emit disconnected（所以这里用 QTRY 等 3s 内落到 Disconnected；与真实
+    //   Stop 用户体验一致）。
     client.disconnectFromService();
-    QCOMPARE(client.connectionState(), client::MemoryClient::ConnectionState::Disconnected);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        client.connectionState(),
+        client::MemoryClient::ConnectionState::Disconnected,
+        3000);
     const int attemptsAtStop = client.reconnectAttempts();
 
     // 再等待 3s（应覆盖 attempt2/3 的退避窗口总和 3000ms）；尝试次数必须不变。

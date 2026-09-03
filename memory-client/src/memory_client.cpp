@@ -189,7 +189,23 @@ void MemoryClient::disconnectFromService()
     manualDisconnectInProgress_ = true;
     setConnectionState(ConnectionState::Closing);
     failInFlightRequests(kErrConnectionClosing, QStringLiteral("Connection is closing."));
+    // D12-C FAIL-4 修复：若 socket 仍在 Connecting / Connected / Closing
+    // 中的任一非 Unconnected 状态，disconnectFromServer 可能不会立即 emit
+    // disconnected。统一使用 abort() 兜底（无论当前状态都会同步关闭 fd，
+    // 且异步地在事件循环下一轮触发 disconnected），保证测试与 UI 的 Stop
+    // 语义是"立即断开"。
+    if (socket_ && socket_->state() != QLocalSocket::UnconnectedState) {
+        socket_->abort();
+    }
     socket_->disconnectFromServer();
+    // 兜底：若 socket 本来就断开（例如连接失败 → 退避窗口中 Stop：此时
+    // socket->state() == UnconnectedState），abort/disconnectFromServer 都
+    // 不会再触发 handleSocketDisconnected。这里手动落回 Disconnected，使
+    // Stop 的外部语义在任何上下文下都同步可观察（+3 秒 QTRY 断言可过）。
+    if (socket_ && socket_->state() == QLocalSocket::UnconnectedState) {
+        manualDisconnectInProgress_ = false;
+        setConnectionState(ConnectionState::Disconnected);
+    }
 }
 
 void MemoryClient::retryConnect()
@@ -417,10 +433,15 @@ void MemoryClient::handleSocketConnected()
 {
     setConnectionState(ConnectionState::Connected);
     setLastError({});
+    const int attemptsBeforeReset = reconnectAttempts_;
     reconnectAttempts_ = 0;       // 连接成功，重连计数清零
     emit reconnectAttemptsChanged();
-    // TD-IPC-004：重连成功通知（success=true）
-    emit reconnectFinished(true, reconnectAttempts_);
+    // D12-C：仅在"真经历过至少一次重连"时发射 reconnectFinished。
+    //        首次 connectToService()（attempts==0）不应触发"重连成功"事件，
+    //        否则 ViewModel/QML 的 reconnectFinished toast 会在非重连场景误弹。
+    if (attemptsBeforeReset >= 1) {
+        emit reconnectFinished(true, attemptsBeforeReset);
+    }
 }
 
 void MemoryClient::handleSocketDisconnected()
