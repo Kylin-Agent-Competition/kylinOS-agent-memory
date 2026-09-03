@@ -13,6 +13,8 @@ test_domain_models_d4e.py — Day4 E 轨业务 Domain Schema 骨架单元测试
   - Conflict 自冲突拒绝、已消解状态缺 resolved_at/resolved_by 拒绝
   - ForgetPlan 缺模式条件字段拒绝、终态缺 executed_at 拒绝
   - extra="forbid" 拒绝未声明字段
+  - 共享 NonEmptyStr 约束（TD-013）：空串与纯空白（空格/Tab/换行/混合）拒绝，
+    含有效字符的原值逐字保留（不 strip）；NonEmptyIdList 元素级同规则。
 - 导入契约：domain 不导出/不定义 MemorySourceEvent、NormalizedEvent、
   PreferenceCandidate、KnowledgeCandidate；MemoryType 复用自 pipeline.schemas。
 
@@ -26,7 +28,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -45,6 +47,7 @@ from domain import (  # noqa: E402
     ResolutionStatus,
     TargetType,
 )
+from domain.common import NonEmptyIdList, NonEmptyStr  # noqa: E402
 from pipeline.schemas import MemoryType  # noqa: E402
 
 # ── 合成数据基座（不含任何真实用户数据/密钥） ──
@@ -653,6 +656,93 @@ def test_forget_plan_executed_before_created_rejected():
 def test_forget_plan_extra_field_rejected():
     with pytest.raises(ValidationError):
         ForgetPlan(**base_forget_plan(unexpected_field="x"))
+
+
+# ── 共享 NonEmptyStr 约束（TD-013）：空串与纯空白拒绝，原值不 strip ──
+
+
+@pytest.mark.parametrize(
+    "blank_value",
+    [
+        "",
+        " ",
+        "\t",
+        "\n",
+        "\r",
+        " \t\n\r ",
+        "\u3000",  # 全角空格（str.strip 口径）
+        " \u3000\t ",
+    ],
+)
+def test_non_empty_str_rejects_empty_and_whitespace_only(blank_value):
+    """TD-013：空串与纯空白（空格/Tab/换行/混合/全角空格）一律拒绝。"""
+    with pytest.raises(ValidationError):
+        TypeAdapter(NonEmptyStr).validate_python(blank_value)
+
+
+@pytest.mark.parametrize(
+    "valid_value",
+    [
+        "pref_d4e_01",
+        "  padded  ",  # 带首尾空格但含有效字符：必须原值保留，不得 strip
+        "\tleading-tab",
+        "trailing-newline\n",
+        " 中 文 空 格 内 部 ",
+    ],
+)
+def test_non_empty_str_preserves_original_value(valid_value):
+    """TD-013：含有效字符的输入通过，且返回值与输入逐字相等（不 strip）。"""
+    assert TypeAdapter(NonEmptyStr).validate_python(valid_value) == valid_value
+
+
+def test_non_empty_id_list_rejects_whitespace_only_element():
+    """TD-013：NonEmptyIdList 元素级继承收紧——纯空白元素拒绝。"""
+    with pytest.raises(ValidationError):
+        TypeAdapter(NonEmptyIdList).validate_python(["pref_d4e_01", "  "])
+    with pytest.raises(ValidationError):
+        TypeAdapter(NonEmptyIdList).validate_python(["\t"])
+
+
+def test_non_empty_id_list_preserves_padded_element():
+    """TD-013：NonEmptyIdList 含有效字符的元素原值保留。"""
+    result = TypeAdapter(NonEmptyIdList).validate_python(["  pref_d4e_01  "])
+    assert result == ["  pref_d4e_01  "]
+
+
+@pytest.mark.parametrize(
+    "model_factory, field, base_data",
+    [
+        (Preference, "preference_id", base_preference()),
+        (Knowledge, "knowledge_id", base_knowledge()),
+        (Conflict, "conflict_id", base_conflict()),
+        (ForgetPlan, "forget_plan_id", base_forget_plan()),
+    ],
+)
+def test_domain_rejects_whitespace_only_non_empty_str_field(
+    model_factory, field, base_data
+):
+    """TD-013：四模型 NonEmptyStr 字段传纯空白 → ValidationError。"""
+    for blank in (" ", "\t", "\n", " \t\n "):
+        with pytest.raises(ValidationError):
+            model_factory(**{**base_data, field: blank})
+
+
+@pytest.mark.parametrize(
+    "model_factory, field, base_data",
+    [
+        (Preference, "preference_key", base_preference()),
+        (Knowledge, "content_summary", base_knowledge()),
+        (Conflict, "conflict_summary", base_conflict()),
+        (ForgetPlan, "target_selector", base_forget_plan()),
+    ],
+)
+def test_domain_preserves_padded_non_empty_str_field(
+    model_factory, field, base_data
+):
+    """TD-013：含首尾空格但含有效字符的字段值构造成功且逐字保留。"""
+    padded = "  padded-value  "
+    obj = model_factory(**{**base_data, field: padded})
+    assert getattr(obj, field) == padded
 
 
 # ── 导入契约：domain 不承载第二套共享类型 ──
