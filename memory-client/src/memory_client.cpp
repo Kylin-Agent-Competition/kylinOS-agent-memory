@@ -1,4 +1,4 @@
-#include "memory_client.h"
+﻿#include "memory_client.h"
 
 #include <QDateTime>
 #include <QJsonDocument>
@@ -17,7 +17,7 @@ constexpr const char* kErrClientTimeout = "TIMEOUT";  // TD-022：与服务端�
 constexpr const char* kErrReconnectMax = "ERR_RECONNECT_MAX";
 
 // FRZ-IPC-006 §6.1: deadline_ms 必填；默认 5000ms（客户端侧）。
-constexpr int kDefaultDeadlineMs = 5000;
+constexpr int deadlineMs_ = 5000;
 // TD-022：客户端 deadline 追加 100ms 容差（网络/调度抖动）。
 constexpr int kClientDeadlineGraceMs = 100;
 
@@ -159,6 +159,13 @@ void MemoryClient::setAutoReconnectEnabled(bool enabled)
     }
 }
 
+void MemoryClient::setDeadlineMs(int ms)
+{
+    if (ms > 0) {
+        deadlineMs_ = ms;
+    }
+}
+
 void MemoryClient::connectToService()
 {
     if (connectionState_ == ConnectionState::Connected
@@ -238,7 +245,7 @@ QString MemoryClient::sendRequest(const QString& method, const QJsonObject& payl
 
     const QString requestId = generateRequestId();
     const QJsonObject envelope = buildEnvelope(
-        method, payload, requestId, requestId, kDefaultDeadlineMs);
+        method, payload, requestId, requestId, deadlineMs_);
     const auto packet = encodeEnvelope(envelope);
     if (!packet.has_value()) {
         emit requestFailed(requestId, kErrEncodeFailed,
@@ -259,9 +266,9 @@ QString MemoryClient::sendRequest(const QString& method, const QJsonObject& payl
     pr.method = method;
     pr.traceId = requestId;
     pr.deadlineEpochMs = QDateTime::currentMSecsSinceEpoch()
-                         + static_cast<qint64>(kDefaultDeadlineMs) + kClientDeadlineGraceMs;
+                         + static_cast<qint64>(deadlineMs_) + kClientDeadlineGraceMs;
     pendingRequests_.emplace(requestId.toStdString(), pr);
-    startClientDeadlineTimer(requestId, kDefaultDeadlineMs + kClientDeadlineGraceMs);
+    startClientDeadlineTimer(requestId, deadlineMs_ + kClientDeadlineGraceMs);
     return requestId;
 }
 
@@ -295,7 +302,7 @@ QString MemoryClient::sendTurnFinalizedEvent(const QJsonObject& eventJson)
     }
 
     const QJsonObject envelope = buildEnvelope(
-        methods::kTurnFinalized, eventJson, requestId, traceId, kDefaultDeadlineMs);
+        methods::kTurnFinalized, eventJson, requestId, traceId, deadlineMs_);
     const auto packet = encodeEnvelope(envelope);
     if (!packet.has_value()) {
         emit requestFailed(requestId, kErrEncodeFailed,
@@ -315,9 +322,9 @@ QString MemoryClient::sendTurnFinalizedEvent(const QJsonObject& eventJson)
     pr.method = methods::kTurnFinalized;
     pr.traceId = traceId;
     pr.deadlineEpochMs = QDateTime::currentMSecsSinceEpoch()
-                         + static_cast<qint64>(kDefaultDeadlineMs) + kClientDeadlineGraceMs;
+                         + static_cast<qint64>(deadlineMs_) + kClientDeadlineGraceMs;
     pendingRequests_.emplace(requestId.toStdString(), pr);
-    startClientDeadlineTimer(requestId, kDefaultDeadlineMs + kClientDeadlineGraceMs);
+    startClientDeadlineTimer(requestId, deadlineMs_ + kClientDeadlineGraceMs);
     return requestId;
 }
 
@@ -374,7 +381,7 @@ QString MemoryClient::sendEventEnvelope(const QString& method, const QJsonObject
     }
 
     const QJsonObject envelope = buildEnvelope(
-        method, eventJson, requestId, traceId, kDefaultDeadlineMs);
+        method, eventJson, requestId, traceId, deadlineMs_);
     const auto packet = encodeEnvelope(envelope);
     if (!packet.has_value()) {
         emit requestFailed(requestId, kErrEncodeFailed,
@@ -394,9 +401,9 @@ QString MemoryClient::sendEventEnvelope(const QString& method, const QJsonObject
     pr.method = method;
     pr.traceId = traceId;
     pr.deadlineEpochMs = QDateTime::currentMSecsSinceEpoch()
-                         + static_cast<qint64>(kDefaultDeadlineMs) + kClientDeadlineGraceMs;
+                         + static_cast<qint64>(deadlineMs_) + kClientDeadlineGraceMs;
     pendingRequests_.emplace(requestId.toStdString(), pr);
-    startClientDeadlineTimer(requestId, kDefaultDeadlineMs + kClientDeadlineGraceMs);
+    startClientDeadlineTimer(requestId, deadlineMs_ + kClientDeadlineGraceMs);
     return requestId;
 }
 
@@ -463,6 +470,14 @@ void MemoryClient::handleSocketDisconnected()
         return;
     }
 
+    // D12-C MEDIUM-01：协议错误导致的 abort→disconnected 不得触发 auto-reconnect。
+    // 对端不兼容或被攻击时重连无意义，直接 Disconnected。
+    if (protocolFatalDisconnect_) {
+        protocolFatalDisconnect_ = false;
+        setConnectionState(ConnectionState::Disconnected);
+        return;
+    }
+
     // 意外断开：autoReconnectEnabled → 尝试 3 次指数退避。
     if (autoReconnectEnabled_ && reconnectAttempts_ < maxReconnectAttempts_) {
         startReconnectBackoff();
@@ -486,6 +501,7 @@ void MemoryClient::handleSocketErrorOccurred(QLocalSocket::LocalSocketError erro
         // 连接失败 → 触发重连逻辑（走 disconnected 路径可能不来，直接处理）
         cancelReconnectTimer();
         if (!manualDisconnectInProgress_
+            && !protocolFatalDisconnect_
             && autoReconnectEnabled_
             && reconnectAttempts_ < maxReconnectAttempts_) {
             startReconnectBackoff();
@@ -514,9 +530,10 @@ void MemoryClient::handleSocketReadyRead()
             setLastError(decoded.error.safeMessage);
             emit connectionError(decoded.error.safeMessage);
             receiveBuffer_.clear();
+            // D12-C MEDIUM-01：协议错误不触发重连（对端不兼容或被攻击）。
+            // 先设置 flag 再 abort()，因为 abort() 可能同步触发 disconnected() 信号。
+            protocolFatalDisconnect_ = true;
             socket_->abort();
-            // 协议错误不触发重连（可能是对端不兼容或被攻击），直接断开。
-            manualDisconnectInProgress_ = false;
             setConnectionState(ConnectionState::Disconnected);
             failInFlightRequests(kErrProtocol, decoded.error.safeMessage);
             return;
@@ -530,8 +547,10 @@ void MemoryClient::handleSocketReadyRead()
                 setLastError(parseError.safeMessage);
                 emit connectionError(parseError.safeMessage);
                 receiveBuffer_.clear();
+                // D12-C MEDIUM-01：parseResponse 协议错误同样禁止 auto-reconnect。
+                // 先设置 flag 再 abort()，因为 abort() 可能同步触发 disconnected() 信号。
+                protocolFatalDisconnect_ = true;
                 socket_->abort();
-                manualDisconnectInProgress_ = false;
                 setConnectionState(ConnectionState::Disconnected);
                 failInFlightRequests(kErrProtocol, parseError.safeMessage);
                 return;

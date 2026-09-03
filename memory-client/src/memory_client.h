@@ -78,6 +78,10 @@ public:
     [[nodiscard]] bool autoReconnectEnabled() const { return autoReconnectEnabled_; }
     void setAutoReconnectEnabled(bool enabled);
 
+    // D12-C MEDIUM-02：允许覆盖默认 deadline_ms（测试可设短值加速 timing boundary 验证）。
+    [[nodiscard]] int deadlineMs() const { return deadlineMs_; }
+    void setDeadlineMs(int ms);
+
     // 连接 Memory Service。异步：连接成功/失败通过 connectionStateChanged 信号回报。
     // 重复调用在已连接时为 no-op。
     Q_INVOKABLE void connectToService();
@@ -180,8 +184,10 @@ private:
     QString lastError_;
     bool autoReconnectEnabled_ = true;     // 默认开启；显式 disconnect 关闭且不触发
     bool manualDisconnectInProgress_ = false;  // Stop 时置 true，避免触发自动重连
+    bool protocolFatalDisconnect_ = false;     // D12-C MEDIUM-01：协议错误 abort 后置 true，抑制后续 disconnected 信号的 auto-reconnect
     int reconnectAttempts_ = 0;
     int maxReconnectAttempts_ = 3;        // TD-IPC-004：3 次指数退避
+    int deadlineMs_ = 5000;               // D12-C MEDIUM-02：可覆盖 deadline_ms（测试加速）
     std::chrono::milliseconds reconnectBaseDelay_{500};  // 初始延迟 500ms（2^0*500）
     QPointer<QTimer> reconnectTimer_;
 

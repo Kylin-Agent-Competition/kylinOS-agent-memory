@@ -42,6 +42,10 @@ private slots:
     void intentionalStopDoesNotTriggerAutoReconnect();
     // D12-C TD-IPC-004：重连成功时 reconnectAttempts 归零
     void disconnectWhileAutoReconnectSuppressesFurtherRetries();
+    // D12-C MEDIUM-01：协议错误（malformed packet）后不得触发 auto-reconnect
+    void protocolErrorDoesNotTriggerAutoReconnect();
+    // D12-C MEDIUM-02：deadline+100ms grace 边界 — 短 deadline timing test
+    void deadlineGraceBoundaryShortDeadlineTest();
 
 private:
     QString uniqueSocketName(const QString& prefix);
@@ -438,6 +442,89 @@ void MemoryClientMockTest::disconnectWhileAutoReconnectSuppressesFurtherRetries(
     QCOMPARE(client.reconnectAttempts(), attemptsAtStop);
     QCOMPARE(client.connectionState(), client::MemoryClient::ConnectionState::Disconnected);
     Q_UNUSED(stateSpy);
+}
+
+// D12-C MEDIUM-01：协议错误（malformed packet）后 abort→disconnected 不得触发 auto-reconnect。
+//   验证：malformed → connectionError → 等待 > 第一轮 500ms backoff →
+//   reconnectAttempts == 0, ConnectionState == Disconnected。
+void MemoryClientMockTest::protocolErrorDoesNotTriggerAutoReconnect()
+{
+    test_support::MockGatewayServer mock;
+    // __malformed__ 后门：服务端回包时写入超大 length header（DeclaredLengthTooLarge）。
+    mock.setHandler([](const client::EnvelopeParts&) -> QJsonObject {
+        return QJsonObject{{QStringLiteral("__malformed__"), true}};
+    });
+    const QString socket = mock.listen(uniqueSocketName("proto-fatal-no-reconnect"));
+    QVERIFY(!socket.isEmpty());
+
+    client::MemoryClient client;
+    client.setSocketPath(socket);
+    QVERIFY(client.autoReconnectEnabled());
+
+    QSignalSpy errorSpy(&client, &client::MemoryClient::connectionError);
+    QSignalSpy reconnectFinishedSpy(&client, &client::MemoryClient::reconnectFinished);
+
+    client.connectToService();
+    QTRY_COMPARE_WITH_TIMEOUT(
+        client.connectionState(),
+        client::MemoryClient::ConnectionState::Connected,
+        5000);
+
+    // 记录初始连接后的信号计数（handleSocketConnected 会 emit reconnectAttemptsChanged
+    // 即使值未变，所以不能用 spy.count()==0 断言）。
+    const int baselineReconnectFinished = reconnectFinishedSpy.count();
+
+    // 发送请求 → handler 返回 __malformed__ → 服务端写入畸形包 →
+    // 客户端 decodePacket 检测到 DeclaredLengthTooLarge → connectionError + abort。
+    client.sendHealthRequest();
+    QTRY_COMPARE_WITH_TIMEOUT(errorSpy.count() >= 1, true, 5000);
+
+    // 等待超过第一轮 backoff 窗口（500ms），确认未触发 auto-reconnect。
+    QTest::qWait(800);
+
+    QCOMPARE(client.reconnectAttempts(), 0);
+    QCOMPARE(client.connectionState(),
+             client::MemoryClient::ConnectionState::Disconnected);
+    QCOMPARE(reconnectFinishedSpy.count(), baselineReconnectFinished);
+}
+
+// D12-C MEDIUM-02：deadline + 100ms grace timing boundary。
+//   deadline=100ms → 客户端 timer 在 200ms（100+100 grace）后触发 TIMEOUT。
+//   验证：< 200ms 时 requestFailed == 0；>= 200ms 后 requestFailed(TIMEOUT) == 1。
+void MemoryClientMockTest::deadlineGraceBoundaryShortDeadlineTest()
+{
+    test_support::MockGatewayServer mock;
+    // __hold__ 后门：服务端不回包，由客户端 deadline 超时。
+    mock.setHandler([](const client::EnvelopeParts&) -> QJsonObject {
+        return QJsonObject{{QStringLiteral("__hold__"), true}};
+    });
+    const QString socket = mock.listen(uniqueSocketName("deadline-boundary"));
+    QVERIFY(!socket.isEmpty());
+
+    client::MemoryClient client;
+    client.setSocketPath(socket);
+    client.setDeadlineMs(100);  // 短 deadline：100ms + 100ms grace = 200ms
+
+    QSignalSpy failedSpy(&client, &client::MemoryClient::requestFailed);
+
+    client.connectToService();
+    QTRY_COMPARE_WITH_TIMEOUT(
+        client.connectionState(),
+        client::MemoryClient::ConnectionState::Connected,
+        5000);
+
+    const QString requestId = client.sendHealthRequest();
+    QVERIFY(!requestId.isEmpty());
+
+    // 验证 grace 边界：150ms（< 200ms）时不得 TIMEOUT。
+    QTest::qWait(150);
+    QCOMPARE(failedSpy.count(), 0);
+
+    // 等到 200ms+ 后 TIMEOUT 必须触发。
+    QTRY_COMPARE_WITH_TIMEOUT(failedSpy.count(), 1, 3000);
+    const auto args = failedSpy.takeFirst();
+    QCOMPARE(args.at(0).toString(), requestId);
+    QCOMPARE(args.at(1).toString(), QStringLiteral("TIMEOUT"));
 }
 
 QTEST_MAIN(MemoryClientMockTest)

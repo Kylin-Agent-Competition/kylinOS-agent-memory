@@ -81,6 +81,18 @@ bool MockGatewayServer::sendRawEnvelope(const QJsonObject& envelope)
     return false;
 }
 
+bool MockGatewayServer::sendRawBytes(const QByteArray& raw)
+{
+    for (auto& conn : connections_) {
+        if (conn->socket && conn->socket->state() == QLocalSocket::ConnectedState) {
+            conn->socket->write(raw);
+            conn->socket->flush();
+            return true;
+        }
+    }
+    return false;
+}
+
 void MockGatewayServer::handleNewConnection()
 {
     QLocalSocket* socket = server_.nextPendingConnection();
