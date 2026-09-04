@@ -1,7 +1,7 @@
 # fix(C): align C-track fields with KMA canonical v1 CANDIDATE (Adapter Window)
 
 **轨道 (Track)**：C 轨（memory-client ViewModel + os-agent-integration 契约层 + 双端 L0/L1 测试）
-**Head**：`e22d111`（on branch `fix/c-d12-schema-drift-canonical-adapter`，rebased on latest main `d5e3b0f`）
+**Head**：`60aa788`（on branch `fix/c-d12-schema-drift-canonical-adapter`，rebased on latest main `d5e3b0f`）
 **Base**：`main@d5e3b0f`
 
 > **治理口径**：本 PR 是对 `docs/architecture/KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md`（当前状态 **CANDIDATE\_FOR\_FREEZE**，§0 / §R-1 handoff / §结尾明确）的 Candidate **Adapter Window** 对齐。本文任何地方不宣称 Canonical v1 已进入 `FROZEN` 团队级权威基线；transport 层不单方面停止 ADR-010/TD-039 的 `collected_at` 名称（按 R-1 handoff 登记 **TD-060 由 C/D 书面冻结后才允许删除 legacy alias**）。
@@ -160,7 +160,7 @@ E 轨在 D12E 审计与 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` 中提出了 6 �
 | 检查项                                                     | 结果                        | 证据/备注                                                                                                                                                                            |
 | ------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `git diff --check origin/main...HEAD`                   | ✅ Clean                   | 只剩 workflow EOF 末尾空行 warning（合法 YAML newline at EOF 需求）                                                                                                                          |
-| Diff stat                                               | ✅ 真实                      | 累计 13 files changed, 526 insertions(+), 39 deletions(-)（`git diff --stat origin/main...HEAD`）                                                                                    |
+| Diff stat                                               | ✅ 真实                      | 累计 14 files changed, 527 insertions(+), 39 deletions(-)（含 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` TD-060 关联 PR 回写）                                                      |
 | Rebased on latest main                                  | ✅ Behind 0                | main `d5e3b0f`（fetch + rebase 完）                                                                                                                                                 |
 | **CI — Repository Baseline Check**                      | ✅ PASS                    | `.github/workflows/baseline-check.yml`                                                                                                                                           |
 | **CI — Memory Client L0 ctest**                         | ✅ PASS                    | memory-client build + ctest + QML smoke build 全 PASS                                                                                                                             |
@@ -176,7 +176,7 @@ E 轨在 D12E 审计与 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` 中提出了 6 �
 1. **CI 绿灯** ✅ — `memory-client-ctest.yml` 3 job 全 PASS：Baseline + memory-client L0 + standalone os-agent-integration contract ctest。GitHub Actions 四项检查均为 SUCCESS。
 2. **TD-060（C/D 书面冻结 R-1 transport Adapter/Mapping 或更名方案）**——本 PR 仅做 Candidate Adapter Window 双写；在 KMA\_UNIFIED\_DATA\_FORMAT\_FREEZE\_V1 升级为 `FROZEN` + TD-060 被书面冻结**之前**，**不得**删除 `metadata.collected_at` legacy alias；相应 follow-on："删除 legacy alias"的 PR 必须引用本条目。
 
-   - **正式登记位置**：`docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` line 136（TD-060，状态 Open，D 主审，计划日期 2026-09-10）。
+   - **正式登记位置**：`docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` line 136（TD-060，状态 Open，D 主审，计划日期 2026-09-10）。**本 PR diff 已包含该文件回写**：在 TD-060 关联 PR 列追加 "PR #140（C 轨 Adapter Window 双写，依赖 TD-060 冻结后才可删除 legacy alias）"。
 3. **E 轨 D021 user\_action 最终 SourceType**：`PENDING_E_DECISION_D021_user_action`（仍占位）。
 4. **可信** **`actor_id`** **注入来源**：Canonical Adapter 生产环境必须显式注入可信 host identity（或 fail-closed）。Demo 长期不得保留 `PENDING_HOST_IDENTITY`。
 
