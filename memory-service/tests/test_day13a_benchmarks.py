@@ -24,6 +24,7 @@ from bench_utils import (  # noqa: E402
     merge_collection,
     merge_run,
     percentile,
+    validate_run_completeness,
 )
 from benchmark_embedding import main as embedding_main  # noqa: E402
 from benchmark_ipc import main as ipc_main  # noqa: E402
@@ -32,6 +33,70 @@ from db.engine import create_db_engine, init_schema  # noqa: E402
 from gateway.handlers import register_default_handlers  # noqa: E402
 from gateway.registry import HandlerRegistry  # noqa: E402
 from gateway.server import UDSGatewayServer  # noqa: E402
+
+
+def _formal_environment(*, commit: str = "abc123") -> dict:
+    return {
+        "git_commit": commit,
+        "git_branch": "perf/D13A-baseline-load",
+        "git_dirty": False,
+        "embedding_sdk_so_path": "/usr/lib/libkysdk-coreai-embedding.so.1.0.0",
+        "embedding_sdk_so_is_file": True,
+        "embedding_sdk_so_sha256": "a" * 64,
+        "embedding_model_version": "ensemble-embd_gte-base_uint8-text",
+        "commands": {
+            "git_rev_parse_HEAD": {"returncode": 0},
+            "git_status_porcelain": {"returncode": 0},
+        },
+    }
+
+
+def _rounds(concurrency: tuple[int, ...]) -> dict:
+    return {
+        str(level): {
+            "requests": 1,
+            "p50_ms": 1.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "success_throughput_req_s": 1.0,
+            "success_rate": 1.0,
+            "error_rate": 0.0,
+        }
+        for level in concurrency
+    }
+
+
+def _complete_run(*, index_status: str = "measured") -> dict:
+    return {
+        "git_commit": "abc123",
+        "environment": _formal_environment(),
+        "embedding": {"formal_run": True, "rounds": _rounds((1, 4, 8))},
+        "bridge": {"formal_run": True, "rounds": _rounds((1, 4, 8))},
+        "ipc": {
+            "formal_run": True,
+            "methods": {
+                "echo": {
+                    "formal_run": True,
+                    "measurement_scope": "gateway_ipc_round_trip_baseline",
+                    "rounds": _rounds((1, 4, 8, 16)),
+                },
+                "memory_retrieve": {
+                    "formal_run": True,
+                    "measurement_scope": "gateway_empty_context_ipc_baseline",
+                    "knowledge_retrieval_latency_eligible": False,
+                    "rounds": _rounds((1, 4, 8, 16)),
+                },
+            },
+        },
+        "outbox": {
+            "formal_run": True,
+            "measurement_scope": "outbox_queue_backlog_drain",
+            "events_submitted": 1,
+            "events_processed": 1,
+            "dead_letters": 0,
+            "index_backlog_measurement": {"status": index_status},
+        },
+    }
 
 
 def test_percentile_and_summary_distinguish_attempts_from_successes() -> None:
@@ -49,16 +114,13 @@ def test_percentile_and_summary_distinguish_attempts_from_successes() -> None:
 
 
 def test_formal_environment_requires_verifiable_clean_git_state() -> None:
-    assert formal_environment_errors({
-        "git_commit": "abc123",
-        "git_branch": "perf/D13A-baseline-load",
-        "git_dirty": False,
-        "commands": {
-            "git_rev_parse_HEAD": {"returncode": 0},
-            "git_status_porcelain": {"returncode": 0},
-        },
-    }) == []
-    assert formal_environment_errors({
+    assert formal_environment_errors(
+        _formal_environment(),
+        expected_commit="abc123",
+        expected_branch="perf/D13A-baseline-load",
+    ) == []
+    errors = formal_environment_errors({
+        **_formal_environment(),
         "git_commit": None,
         "git_branch": None,
         "git_dirty": None,
@@ -66,13 +128,81 @@ def test_formal_environment_requires_verifiable_clean_git_state() -> None:
             "git_rev_parse_HEAD": {"returncode": 128},
             "git_status_porcelain": {"returncode": 128},
         },
-    }) == [
-        "git_commit 缺失或不可验证",
-        "git_branch 缺失或不可验证",
-        "git_dirty 不是已验证的 clean 状态",
-        "git rev-parse HEAD 失败",
-        "git status --porcelain 失败",
-    ]
+    }, expected_commit="abc123", expected_branch="perf/D13A-baseline-load")
+    assert "git_commit 缺失或不可验证" in errors
+    assert "git_branch 缺失或不可验证" in errors
+    assert "git_dirty 不是已验证的 clean 状态" in errors
+    assert "git rev-parse HEAD 失败" in errors
+    assert "git status --porcelain 失败" in errors
+
+
+def test_formal_environment_requires_frozen_expected_identity() -> None:
+    assert "expected_git_commit 缺失或不可验证" in formal_environment_errors(
+        _formal_environment(), expected_branch="perf/D13A-baseline-load"
+    )
+    assert "expected_git_branch 缺失或不可验证" in formal_environment_errors(
+        _formal_environment(), expected_commit="abc123"
+    )
+
+
+def test_formal_environment_binds_expected_identity_and_sdk_provenance() -> None:
+    environment = _formal_environment()
+    assert formal_environment_errors(
+        environment,
+        expected_commit="abc123",
+        expected_branch="perf/D13A-baseline-load",
+    ) == []
+
+    errors = formal_environment_errors(
+        {**environment, "embedding_sdk_so_sha256": None},
+        expected_commit="different",
+        expected_branch="main",
+    )
+    assert "git_commit 与预期 commit 不一致" in errors
+    assert "git_branch 与预期 branch 不一致" in errors
+    assert "embedding_sdk_so_sha256 缺失或格式非法" in errors
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected_error"),
+    [
+        (lambda summary: summary.pop("embedding"), "embedding 缺失"),
+        (lambda summary: summary.pop("bridge"), "bridge 缺失"),
+        (lambda summary: summary["ipc"]["methods"].pop("echo"), "ipc.echo 缺失"),
+        (
+            lambda summary: summary["ipc"]["methods"]["memory_retrieve"].pop(
+                "knowledge_retrieval_latency_eligible"
+            ),
+            "ipc.memory_retrieve 必须明确不可作为知识检索延迟",
+        ),
+        (
+            lambda summary: summary["embedding"]["rounds"].pop("8"),
+            "embedding 缺少并发档位 8",
+        ),
+        (lambda summary: summary.pop("outbox"), "outbox 缺失"),
+        (
+            lambda summary: summary["outbox"].update(
+                {"index_backlog_measurement": {"status": "not_measured"}}
+            ),
+            "未测量真实索引积压",
+        ),
+    ],
+)
+def test_full_run_requires_each_core_benchmark(
+    mutate, expected_error: str
+) -> None:
+    summary = _complete_run()
+    mutate(summary)
+    assert expected_error in validate_run_completeness(summary, mode="full")
+
+
+def test_partial_run_can_be_complete_without_real_index_measurement() -> None:
+    assert validate_run_completeness(
+        _complete_run(index_status="not_measured"),
+        mode="partial",
+        expected_commit="abc123",
+        expected_branch="perf/D13A-baseline-load",
+    ) == []
 
 
 def test_merge_collection_indexes_all_completed_runs(tmp_path: Path) -> None:
@@ -80,26 +210,36 @@ def test_merge_collection_indexes_all_completed_runs(tmp_path: Path) -> None:
         run_dir = tmp_path / run_id
         run_dir.mkdir()
         (run_dir / "summary.json").write_text(
-            json.dumps({
-                "git_commit": "abc123",
-                "run_id": run_id,
-                "environment": {
-                    "git_commit": "abc123",
-                    "git_branch": "perf/D13A-baseline-load",
-                    "git_dirty": False,
-                    "commands": {
-                        "git_rev_parse_HEAD": {"returncode": 0},
-                        "git_status_porcelain": {"returncode": 0},
-                    },
-                },
-                "outbox": {"index_backlog_measurement": {"status": "measured"}},
-            }), encoding="utf-8"
+            json.dumps({**_complete_run(), "run_id": run_id}), encoding="utf-8"
         )
-    result = merge_collection(tmp_path)
+    result = merge_collection(
+        tmp_path,
+        expected_commit="abc123",
+        expected_branch="perf/D13A-baseline-load",
+    )
     assert result["run_count"] == 3
     assert result["git_commits"] == ["abc123"]
     assert len(result["runs"]) == 3
     assert result["formal_baseline_complete"] is True
+
+
+def test_merge_collection_reports_partial_completion_separately(tmp_path: Path) -> None:
+    for run_id in ("run_01", "run_02", "run_03"):
+        run_dir = tmp_path / run_id
+        run_dir.mkdir()
+        (run_dir / "summary.json").write_text(
+            json.dumps({**_complete_run(index_status="not_measured"), "run_id": run_id}),
+            encoding="utf-8",
+        )
+    result = merge_collection(
+        tmp_path,
+        mode="partial",
+        expected_commit="abc123",
+        expected_branch="perf/D13A-baseline-load",
+    )
+    assert result["collection_complete"] is True
+    assert result["formal_baseline_complete"] is False
+    assert result["collection_status"] == "partial"
 
 
 def test_merge_collection_marks_unverifiable_or_non_index_runs_incomplete(tmp_path: Path) -> None:
@@ -122,16 +262,11 @@ def test_merge_collection_marks_unverifiable_or_non_index_runs_incomplete(tmp_pa
     )
     result = merge_collection(tmp_path)
     assert result["formal_baseline_complete"] is False
-    assert result["formal_baseline_blockers"] == [
-        "正式基线必须至少包含 3 轮运行",
-        "run_01: git_commit 缺失或不可验证",
-        "run_01: git_branch 缺失或不可验证",
-        "run_01: git_dirty 不是已验证的 clean 状态",
-        "run_01: git rev-parse HEAD 失败",
-        "run_01: git status --porcelain 失败",
-        "run_01: 未测量真实索引积压",
-        "全部运行必须绑定唯一、非空的 Git commit",
-    ]
+    assert "正式基线必须至少包含 3 轮运行" in result["formal_baseline_blockers"]
+    assert "run_01: environment: git_commit 缺失或不可验证" in result["formal_baseline_blockers"]
+    assert "run_01: embedding 缺失" in result["formal_baseline_blockers"]
+    assert "run_01: 未测量真实索引积压" in result["formal_baseline_blockers"]
+    assert "全部运行必须绑定唯一、非空的 Git commit" in result["formal_baseline_blockers"]
 
 
 def test_merge_run_collects_both_ipc_methods(tmp_path: Path) -> None:

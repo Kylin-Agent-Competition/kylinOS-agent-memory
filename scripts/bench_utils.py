@@ -13,6 +13,7 @@ import json
 import math
 import os
 import platform
+import re
 import statistics
 import subprocess
 import sys
@@ -21,6 +22,11 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence
+
+
+_REQUIRED_EMBEDDING_CONCURRENCY = (1, 4, 8)
+_REQUIRED_IPC_CONCURRENCY = (1, 4, 8, 16)
+_SDK_SHA256_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 
 
 def percentile(values: Iterable[float], fraction: float) -> float:
@@ -261,8 +267,36 @@ def _cpu_details(lscpu_output: str) -> tuple[Optional[str], Optional[int]]:
     return model, physical
 
 
-def formal_environment_errors(environment: Mapping[str, Any]) -> list[str]:
-    """返回使一次 D13A 正式运行不可复现的 Git 溯源缺陷。
+def formal_sdk_environment_errors(environment: Mapping[str, Any]) -> list[str]:
+    """返回使 SDK 二进制身份不可复现的缺陷。
+
+    收集端在 VM 上通过实际文件计算 hash；汇总端只验证被捕获的、可复算的
+    身份字段，避免离线复审时错误地依赖本机路径是否存在。
+    """
+    errors: list[str] = []
+    sdk_path = environment.get("embedding_sdk_so_path")
+    if not isinstance(sdk_path, str) or not sdk_path:
+        errors.append("embedding_sdk_so_path 缺失或不可验证")
+    if environment.get("embedding_sdk_so_is_file") is not True:
+        errors.append("embedding_sdk_so_path 未确认是常规文件")
+    sdk_hash = environment.get("embedding_sdk_so_sha256")
+    if not isinstance(sdk_hash, str) or not _SDK_SHA256_RE.fullmatch(sdk_hash):
+        errors.append("embedding_sdk_so_sha256 缺失或格式非法")
+    model_version = environment.get("embedding_model_version")
+    model_hash = environment.get("embedding_model_sha256")
+    if not isinstance(model_version, str) or not model_version:
+        if not isinstance(model_hash, str) or not _SDK_SHA256_RE.fullmatch(model_hash):
+            errors.append("embedding_model_version 或 embedding_model_sha256 必须可验证")
+    return errors
+
+
+def formal_environment_errors(
+    environment: Mapping[str, Any],
+    *,
+    expected_commit: Optional[str] = None,
+    expected_branch: Optional[str] = None,
+) -> list[str]:
+    """返回使一次 D13A 正式运行不可复现的 Git/SDK 身份缺陷。
 
     Git 命令失败时不能把 unknown 归约为 clean；该函数同时供 runner 与
     collection 汇总使用，保证两处都是 fail-closed。
@@ -278,10 +312,19 @@ def formal_environment_errors(environment: Mapping[str, Any]) -> list[str]:
         errors.append("git_branch 缺失或不可验证")
     if environment.get("git_dirty") is not False:
         errors.append("git_dirty 不是已验证的 clean 状态")
+    if not isinstance(expected_commit, str) or not expected_commit:
+        errors.append("expected_git_commit 缺失或不可验证")
+    if not isinstance(expected_branch, str) or not expected_branch:
+        errors.append("expected_git_branch 缺失或不可验证")
     if not _command_succeeded(commands.get("git_rev_parse_HEAD")):
         errors.append("git rev-parse HEAD 失败")
     if not _command_succeeded(commands.get("git_status_porcelain")):
         errors.append("git status --porcelain 失败")
+    if isinstance(expected_commit, str) and expected_commit and commit != expected_commit:
+        errors.append("git_commit 与预期 commit 不一致")
+    if isinstance(expected_branch, str) and expected_branch and branch != expected_branch:
+        errors.append("git_branch 与预期 branch 不一致")
+    errors.extend(formal_sdk_environment_errors(environment))
     return errors
 
 
@@ -336,9 +379,11 @@ def environment_snapshot(repo_root: Path | str) -> dict[str, Any]:
         "embedding_sdk_version": sdk_version,
         "embedding_runtime_version": runtime_version,
         "embedding_sdk_so_path": sdk_so_path,
+        "embedding_sdk_so_is_file": bool(sdk_so_path and Path(sdk_so_path).is_file()),
         "embedding_sdk_so_sha256": _file_sha256(sdk_so_path),
         "embedding_sdk_so_soname": sdk_so_soname,
         "embedding_model_version": os.environ.get("KYLIN_EMBEDDING_MODEL_VERSION") or None,
+        "embedding_model_sha256": os.environ.get("KYLIN_EMBEDDING_MODEL_SHA256") or None,
         "bridge_build_type": os.environ.get("KYLIN_EMBEDDING_BUILD_TYPE", "Release"),
         "commands": {
             "git_rev_parse_HEAD": git_head,
@@ -389,7 +434,130 @@ def benchmark_summary(
     return result
 
 
-def merge_run(run_dir: Path | str) -> dict[str, Any]:
+def _round_completeness_errors(
+    summary: Any,
+    *,
+    label: str,
+    required_concurrency: Sequence[int],
+) -> list[str]:
+    if not isinstance(summary, Mapping):
+        return [f"{label} 缺失"]
+    if summary.get("formal_run") is not True:
+        return [f"{label}.formal_run 不是 true"]
+    rounds = summary.get("rounds")
+    if not isinstance(rounds, Mapping):
+        return [f"{label}.rounds 缺失"]
+    errors: list[str] = []
+    required_metrics = (
+        "requests", "p50_ms", "p95_ms", "p99_ms",
+        "success_throughput_req_s", "success_rate", "error_rate",
+    )
+    for concurrency in required_concurrency:
+        round_summary = rounds.get(str(concurrency))
+        if not isinstance(round_summary, Mapping):
+            errors.append(f"{label} 缺少并发档位 {concurrency}")
+            continue
+        requests = round_summary.get("requests")
+        if not isinstance(requests, int) or isinstance(requests, bool) or requests <= 0:
+            errors.append(f"{label} 并发档位 {concurrency} requests 非正整数")
+        for metric in required_metrics[1:]:
+            value = round_summary.get(metric)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                errors.append(f"{label} 并发档位 {concurrency} 缺少指标 {metric}")
+    return errors
+
+
+def validate_run_completeness(
+    summary: Mapping[str, Any],
+    *,
+    mode: str = "full",
+    expected_commit: Optional[str] = None,
+    expected_branch: Optional[str] = None,
+) -> list[str]:
+    """验证一次 D13A 运行是否具备指定模式的完整证据。
+
+    ``partial`` 仍要求所有非索引核心 benchmark 与环境身份，只允许真实索引
+    积压尚未测量；``full`` 额外要求真实索引积压已测量。
+    """
+    if mode not in {"partial", "full"}:
+        raise ValueError("mode 必须为 partial 或 full")
+    errors: list[str] = []
+    environment = summary.get("environment")
+    environment = environment if isinstance(environment, Mapping) else {}
+    errors.extend(
+        f"environment: {error}"
+        for error in formal_environment_errors(
+            environment,
+            expected_commit=expected_commit,
+            expected_branch=expected_branch,
+        )
+    )
+    if summary.get("git_commit") != environment.get("git_commit"):
+        errors.append("summary.git_commit 与 environment.git_commit 不一致")
+    errors.extend(_round_completeness_errors(
+        summary.get("embedding"),
+        label="embedding",
+        required_concurrency=_REQUIRED_EMBEDDING_CONCURRENCY,
+    ))
+    errors.extend(_round_completeness_errors(
+        summary.get("bridge"),
+        label="bridge",
+        required_concurrency=_REQUIRED_EMBEDDING_CONCURRENCY,
+    ))
+
+    ipc = summary.get("ipc")
+    ipc = ipc if isinstance(ipc, Mapping) else {}
+    methods = ipc.get("methods")
+    methods = methods if isinstance(methods, Mapping) else {}
+    echo = methods.get("echo")
+    memory_retrieve = methods.get("memory_retrieve")
+    errors.extend(_round_completeness_errors(
+        echo, label="ipc.echo", required_concurrency=_REQUIRED_IPC_CONCURRENCY,
+    ))
+    if isinstance(echo, Mapping) and echo.get("measurement_scope") != "gateway_ipc_round_trip_baseline":
+        errors.append("ipc.echo measurement_scope 不正确")
+    errors.extend(_round_completeness_errors(
+        memory_retrieve,
+        label="ipc.memory_retrieve",
+        required_concurrency=_REQUIRED_IPC_CONCURRENCY,
+    ))
+    if isinstance(memory_retrieve, Mapping):
+        if memory_retrieve.get("measurement_scope") != "gateway_empty_context_ipc_baseline":
+            errors.append("ipc.memory_retrieve measurement_scope 不正确")
+        if memory_retrieve.get("knowledge_retrieval_latency_eligible") is not False:
+            errors.append("ipc.memory_retrieve 必须明确不可作为知识检索延迟")
+
+    outbox = summary.get("outbox")
+    if not isinstance(outbox, Mapping):
+        errors.append("outbox 缺失")
+    else:
+        if outbox.get("formal_run") is not True:
+            errors.append("outbox.formal_run 不是 true")
+        if outbox.get("measurement_scope") != "outbox_queue_backlog_drain":
+            errors.append("outbox measurement_scope 不正确")
+        submitted = outbox.get("events_submitted")
+        if not isinstance(submitted, int) or isinstance(submitted, bool) or submitted <= 0:
+            errors.append("outbox.events_submitted 非正整数")
+        for field in ("events_processed", "dead_letters"):
+            value = outbox.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                errors.append(f"outbox.{field} 缺失或非法")
+        index_measurement = outbox.get("index_backlog_measurement")
+        if mode == "full" and (
+            not isinstance(index_measurement, Mapping)
+            or index_measurement.get("status") != "measured"
+        ):
+            errors.append("未测量真实索引积压")
+    return errors
+
+
+def merge_run(
+    run_dir: Path | str,
+    *,
+    mode: str = "full",
+    expected_commit: Optional[str] = None,
+    expected_branch: Optional[str] = None,
+) -> dict[str, Any]:
     root = Path(run_dir)
     environment = read_json(root / "environment.json", {})
     ipc = read_json(root / "ipc.summary.json")
@@ -402,17 +570,11 @@ def merge_run(run_dir: Path | str) -> dict[str, Any]:
         ipc = {"benchmark": "ipc", "formal_run": True, "methods": method_runs}
     if ipc is None:
         ipc = {"status": "not_run"}
-    run_blockers = formal_environment_errors(environment)
     outbox = read_json(root / "outbox.summary.json", {"status": "not_run"})
-    index_measurement = outbox.get("index_backlog_measurement") if isinstance(outbox, Mapping) else None
-    if not isinstance(index_measurement, Mapping) or index_measurement.get("status") != "measured":
-        run_blockers.append("未测量真实索引积压")
     result: dict[str, Any] = {
         "schema_version": "day13a.v1",
         "generated_at": utc_now(),
         "git_commit": environment.get("git_commit"),
-        "formal_run_eligible": not run_blockers,
-        "formal_run_blockers": run_blockers,
         "environment": environment,
         "embedding": read_json(root / "embedding.summary.json", {"status": "not_run"}),
         "bridge": read_json(root / "bridge.summary.json", {"status": "not_run"}),
@@ -422,11 +584,29 @@ def merge_run(run_dir: Path | str) -> dict[str, Any]:
             "raw": sorted(str(path.relative_to(root)) for path in root.rglob("*.jsonl")),
         },
     }
+    run_blockers = validate_run_completeness(
+        result,
+        mode=mode,
+        expected_commit=expected_commit,
+        expected_branch=expected_branch,
+    )
+    result["baseline_mode"] = mode
+    result["expected_git_commit"] = expected_commit
+    result["expected_git_branch"] = expected_branch
+    result["formal_run_eligible"] = not run_blockers and mode == "full"
+    result["run_complete"] = not run_blockers
+    result["formal_run_blockers"] = run_blockers
     write_json(root / "summary.json", result)
     return result
 
 
-def merge_collection(collection_dir: Path | str) -> dict[str, Any]:
+def merge_collection(
+    collection_dir: Path | str,
+    *,
+    mode: str = "full",
+    expected_commit: Optional[str] = None,
+    expected_branch: Optional[str] = None,
+) -> dict[str, Any]:
     """汇总 ``run_01``…``run_N``，形成 D13A 根目录单一索引。"""
     root = Path(collection_dir)
     runs: list[dict[str, Any]] = []
@@ -445,21 +625,33 @@ def merge_collection(collection_dir: Path | str) -> dict[str, Any]:
     for item in runs:
         run_id = item["run_id"]
         summary = item["summary"]
-        environment = summary.get("environment")
-        environment = environment if isinstance(environment, Mapping) else {}
-        blockers.extend(f"{run_id}: {error}" for error in formal_environment_errors(environment))
-        outbox = summary.get("outbox")
-        index_measurement = outbox.get("index_backlog_measurement") if isinstance(outbox, Mapping) else None
-        if not isinstance(index_measurement, Mapping) or index_measurement.get("status") != "measured":
-            blockers.append(f"{run_id}: 未测量真实索引积压")
+        blockers.extend(
+            f"{run_id}: {error}"
+            for error in validate_run_completeness(
+                summary,
+                mode=mode,
+                expected_commit=expected_commit,
+                expected_branch=expected_branch,
+            )
+        )
     if len(commits) != 1:
         blockers.append("全部运行必须绑定唯一、非空的 Git commit")
+    collection_complete = not blockers
     result = {
         "schema_version": "day13a.collection.v1",
         "generated_at": utc_now(),
         "run_count": len(runs),
         "git_commits": commits,
-        "formal_baseline_complete": not blockers,
+        "baseline_mode": mode,
+        "expected_git_commit": expected_commit,
+        "expected_git_branch": expected_branch,
+        "collection_complete": collection_complete,
+        "collection_status": (
+            "complete" if mode == "full" and collection_complete
+            else "partial" if mode == "partial" and collection_complete
+            else "incomplete"
+        ),
+        "formal_baseline_complete": mode == "full" and collection_complete,
         "formal_baseline_blockers": blockers,
         "runs": runs,
     }
@@ -474,28 +666,49 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--merge-run", type=Path)
     parser.add_argument("--merge-collection", type=Path)
     parser.add_argument("--validate-formal-environment", type=Path)
+    parser.add_argument("--mode", choices=("partial", "full"), default="full")
+    parser.add_argument("--expected-commit")
+    parser.add_argument("--expected-branch")
     args = parser.parse_args(argv)
     if args.merge_collection is not None:
-        result = merge_collection(args.merge_collection)
-        if not result["formal_baseline_complete"]:
+        result = merge_collection(
+            args.merge_collection,
+            mode=args.mode,
+            expected_commit=args.expected_commit,
+            expected_branch=args.expected_branch,
+        )
+        if not result["collection_complete"]:
             print(json.dumps({
-                "formal_baseline_complete": False,
+                "collection_complete": False,
+                "formal_baseline_complete": result["formal_baseline_complete"],
                 "blockers": result["formal_baseline_blockers"],
             }, ensure_ascii=False), file=sys.stderr)
             return 2
         return 0
     if args.merge_run is not None:
-        merge_run(args.merge_run)
+        merge_run(
+            args.merge_run,
+            mode=args.mode,
+            expected_commit=args.expected_commit,
+            expected_branch=args.expected_branch,
+        )
         return 0
     if args.validate_formal_environment is not None:
-        errors = formal_environment_errors(read_json(args.validate_formal_environment, {}))
+        errors = formal_environment_errors(
+            read_json(args.validate_formal_environment, {}),
+            expected_commit=args.expected_commit,
+            expected_branch=args.expected_branch,
+        )
         if errors:
             print(json.dumps({"formal_environment_valid": False, "blockers": errors}, ensure_ascii=False), file=sys.stderr)
             return 2
         return 0
     if args.output is None:
         parser.error("--output is required unless --merge-run is used")
-    write_json(args.output, environment_snapshot(args.repo_root))
+    snapshot = environment_snapshot(args.repo_root)
+    snapshot["expected_git_commit"] = args.expected_commit
+    snapshot["expected_git_branch"] = args.expected_branch
+    write_json(args.output, snapshot)
     return 0
 
 

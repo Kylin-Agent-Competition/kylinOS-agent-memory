@@ -1,6 +1,6 @@
 # D13A 性能基线与高压负载测试
 
-本目录只保存可复现的测试工具说明；正式结果默认放在 `run_01`、`run_02`、`run_03` 运行目录中，避免不同硬件、SDK 或 Git commit 的数据混在一起。
+本目录保存说明、已审阅后导入的证据和历史失效声明；正式 runner **绝不**写入 Git worktree。它默认将三轮产物写到 `/tmp/kylin-day13a/<commit>/<run-id>/`，避免 benchmark 自身污染 Git clean 校验。
 
 ## 范围与指标
 
@@ -21,21 +21,23 @@
 
 ## 麒麟 VM 正式运行
 
-先在固定的银河麒麟 VM 中，从真实、干净的 Git worktree checkout 固定 commit，安装仓库依赖、构建 `kylin_embedding`，并启动真实 Memory Service。正式 runner 会在任何负载开始前验证非空 `git_commit`、非空 branch、`git status --porcelain` 为 clean，且 Git 命令返回成功；任一条件不满足都会 fail-closed。
+先在固定的银河麒麟 VM 中，从真实、干净的 Git worktree checkout 固定 commit，安装仓库依赖、构建 `kylin_embedding`，并启动真实 Memory Service。runner 启动时冻结 `DAY13A_EXPECTED_COMMIT` 和 `DAY13A_EXPECTED_BRANCH`（未设置时取当前 HEAD/branch）；每轮都验证实际值与冻结身份一致、`git status --porcelain` 为 clean，且 Git 命令返回成功。任一条件不满足都会 fail-closed。
 
 ```bash
 cd /path/to/kylinOS-agent-memory
 export DAY13A_IPC_SOCKET=/run/user/$(id -u)/kylin-memory.sock
-export DAY13A_SDK_SO=/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1
+export DAY13A_SDK_SO=/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0
+export DAY13A_MODEL_VERSION=ensemble-embd_gte-base_uint8-text
+export DAY13A_OUTPUT_DIR=/tmp/kylin-day13a/$(git rev-parse HEAD)
 PYTHONPATH=memory-service:scripts ./scripts/run_day13a_benchmarks.sh
 ```
 
-`DAY13A_SDK_SO` 是正式运行的必填参数；环境快照会记录实际 `.so` 路径、SHA-256 和 SONAME。可选参数：`DAY13A_PYTHON`、`DAY13A_OUTPUT_DIR`、`DAY13A_RUN_ID`、`DAY13A_RUN_COUNT`、`DAY13A_TEXTS`、`DAY13A_IPC_REQUESTS`、`DAY13A_IPC_PAYLOAD`、`DAY13A_IPC_PID`、`DAY13A_OUTBOX_EVENTS`。默认连续跑 3 轮；本地只验证一轮可设置 `DAY13A_RUN_COUNT=1`。每轮 IPC 都会分别运行 `echo` 和 `memory.retrieve`；业务请求默认 payload 为 `schema_version=1.0,user_id=day13a-benchmark`，Gateway validation profile 的可信身份应匹配该用户，或通过 `DAY13A_IPC_PAYLOAD` 覆盖。`DAY13A_IPC_PID` 可指向 Gateway 服务 PID，使 CPU/RSS 采样服务进程；未设置时采样 benchmark 客户端。脚本不会自动启动/停止服务，不会安装软件，也不会删除已有 DB。
+`DAY13A_SDK_SO` 与 `DAY13A_MODEL_VERSION`（或 `DAY13A_MODEL_SHA256`）是正式运行的必填身份资料；环境快照会记录实际 `.so` 路径、文件存在性、SHA-256、SONAME、SDK/runtime 版本线索和模型身份。`DAY13A_OUTPUT_DIR` 是所有轮次共用的**外部**根目录；若位于 Git worktree 内，runner 会拒绝运行。可选参数：`DAY13A_PYTHON`、`DAY13A_RUN_ID`、`DAY13A_RUN_COUNT`、`DAY13A_BASELINE_MODE`、`DAY13A_EXPECTED_COMMIT`、`DAY13A_EXPECTED_BRANCH`、`DAY13A_TEXTS`、`DAY13A_IPC_REQUESTS`、`DAY13A_IPC_PAYLOAD`、`DAY13A_IPC_PID`、`DAY13A_OUTBOX_EVENTS`。默认连续跑 3 轮；本地只验证一轮可设置 `DAY13A_RUN_COUNT=1`。每轮 IPC 都会分别运行 `echo` 和 `memory.retrieve`；业务请求默认 payload 为 `schema_version=1.0,user_id=day13a-benchmark`，Gateway validation profile 的可信身份应匹配该用户，或通过 `DAY13A_IPC_PAYLOAD` 覆盖。`DAY13A_IPC_PID` 可指向 Gateway 服务 PID，使 CPU/RSS 采样服务进程；未设置时采样 benchmark 客户端。脚本不会自动启动/停止服务，不会安装软件，也不会删除已有 DB。
 
-运行目录结构如下（`DAY13A_RUN_COUNT=1` 时也可以使用 UTC 时间戳目录）：
+运行目录结构如下（所有目录均在 `DAY13A_OUTPUT_DIR` 或默认的 `/tmp` 路径下）：
 
 ```text
-perf/day13a/run_01/
+/tmp/kylin-day13a/<commit>/<run-id>/run_01/
 ├── environment.json
 ├── summary.json
 ├── embedding.summary.json
@@ -54,9 +56,11 @@ perf/day13a/run_01/
     └── resources.jsonl
 ```
 
-三轮完成后，`perf/day13a/summary.json` 还会索引全部运行目录、Git commit 和每轮汇总。只有全部运行绑定唯一、非空、clean 的 Git commit，且每轮存在真实索引积压测量时，`formal_baseline_complete` 才为 `true`；否则会输出 `formal_baseline_blockers` 并以非零状态退出。单轮调试时统一汇总位于该轮目录内。
+三轮完成后，外部运行根目录的 `summary.json` 会索引全部运行目录、expected/actual Git identity 和每轮汇总。`full`（默认）只有在三轮绑定唯一且符合冻结身份的 clean Git commit、SDK/模型身份完整、Embedding/Bridge/两类 IPC/Outbox queue 核心矩阵完整、且每轮存在真实索引积压测量时，才会写出 `formal_baseline_complete=true`；否则会输出 `formal_baseline_blockers` 并以非零状态退出。`partial` 模式允许尚未测量真实索引积压，但只会写出 `collection_status=partial` 和 `formal_baseline_complete=false`，不能用于 D13A 完成或合并判断。
 
-`environment.json` 绑定 Git commit、branch、dirty 状态、OS/kernel、CPU/RAM、Python、SDK/runtime 版本、实际 SDK `.so` 路径/SHA-256/SONAME 和模型版本线索，并保留 `git rev-parse HEAD`、`git status --porcelain`、`uname -a`、`LC_ALL=C lscpu`、`free -m`、`python --version` 原始输出。正式基线必须在干净 commit 上运行；Git 命令失败时 `git_dirty` 为 `null`（unknown），绝不解释为 clean；Windows/Ubuntu/银河麒麟结果不能合并为同一条基线。
+正式运行结束后，先在 repo 外审阅 `summary.json`、原始 JSONL、Git/SDK identity 和完整性状态；只有经人工确认的完整证据才可通过独立 import 步骤加入仓库。不得直接覆盖本目录中的历史 run 目录。
+
+`environment.json` 绑定 Git commit、branch、dirty 状态、冻结的 expected identity、OS/kernel、CPU/RAM、Python、SDK/runtime 版本、实际 SDK `.so` 路径/文件身份/SHA-256/SONAME 和模型版本或 hash，并保留 `git rev-parse HEAD`、`git status --porcelain`、`uname -a`、`LC_ALL=C lscpu`、`free -m`、`python --version` 原始输出。正式基线必须在干净 commit 上运行；Git 命令失败时 `git_dirty` 为 `null`（unknown），绝不解释为 clean；Windows/Ubuntu/银河麒麟结果不能合并为同一条基线。
 
 ## 本地冒烟与限制
 
