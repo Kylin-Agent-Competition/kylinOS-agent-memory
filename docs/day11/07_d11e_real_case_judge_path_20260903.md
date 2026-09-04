@@ -105,4 +105,4 @@
 ## 结论口径
 
 - 在取得同 Commit 同 VM 实测证据前，本文件所有案例卡结论保持 `UNVERIFIED`，不作为 D11E 完成证据。
-- 案例卡对应的 L0/L1 业务锚点已在 `origin/main@b70827c` 复跑通过（535 passed，见 `docs/day11/05_d11e_l0l1_regression_20260903.log`）。
+- 案例卡对应的 L0/L1 业务锚点已在 `origin/main@f263d5b` 复跑通过（571 passed，见 `docs/day11/17_d11e_e_l0l1_regression_f263d5b_20260904.log`；历史 535 见 05 log）。
