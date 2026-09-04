@@ -312,27 +312,42 @@ void D6cMultiSourceAdaptersTest::manualConfigLongTermPersisted()  // B1
             const QJsonValue cfgVal = parts.payload.value(QStringLiteral("config"));
             const bool hasCfg = cfgVal.isObject();
             const QJsonObject cfg = hasCfg ? cfgVal.toObject() : QJsonObject{};
-            // KMA R-3 / DRIFT-007 / DRIFT-008 / DRIFT-009 / KMA R-5:
-            // Accept either legacy (scope/key/value/sensitivity_level) or
-            // Canonical (config_kind+preference_scope / preference_key /
-            // preference_value / sensitivity). Dual-write keeps both present
-            // so this mock validates the "at least one side present" contract.
-            const bool hasScopeEither =
-                cfg.contains(QStringLiteral("scope"))
-                || (cfg.contains(QStringLiteral("config_kind"))
-                    && cfg.contains(QStringLiteral("preference_scope")));
-            const bool hasKeyEither = cfg.contains(QStringLiteral("key"))
-                                     || cfg.contains(QStringLiteral("preference_key"));
-            const bool hasValueEither = cfg.contains(QStringLiteral("value"))
-                                       || cfg.contains(QStringLiteral("preference_value"));
-            const bool hasSensitivityEither =
+            // KMA DRIFT-007 / DRIFT-008 / DRIFT-009 / KMA R-5 dual-write contract
+            // (review HIGH-01): Client Demo MUST emit both legacy (host-DTO short
+            // names) AND Canonical names so existing host consumers AND the new
+            // KMA canonical pipeline read the same payload. Any missing side is
+            // an invalid payload.
+            //   - scope                (legacy, host DTO "kind of config")
+            //   - config_kind          (canonical = same raw semantic)
+            //   - preference_scope     (canonical; emitted only when config_kind
+            //                          == "preference", Client Demo defaults global)
+            //   - key / value          (legacy host-DTO short names)
+            //   - preference_key / preference_value  (canonical)
+            //   - sensitivity_level    (legacy alias)
+            //   - sensitivity          (canonical, normalized lowercase)
+            const bool hasLegacyScope = cfg.contains(QStringLiteral("scope"));
+            const bool hasConfigKind = cfg.contains(QStringLiteral("config_kind"));
+            const bool preferenceScopeOk =
+                (cfg.value(QStringLiteral("config_kind")).toString()
+                 == QStringLiteral("preference"))
+                    ? cfg.contains(QStringLiteral("preference_scope"))
+                    : true;  // not required for non-preference kinds
+            const bool hasScopeSideOk =
+                hasLegacyScope && hasConfigKind && preferenceScopeOk;
+            const bool hasKeySideOk =
+                cfg.contains(QStringLiteral("key"))
+                && cfg.contains(QStringLiteral("preference_key"));
+            const bool hasValueSideOk =
+                cfg.contains(QStringLiteral("value"))
+                && cfg.contains(QStringLiteral("preference_value"));
+            const bool hasSensitivitySideOk =
                 cfg.contains(QStringLiteral("sensitivity_level"))
-                || cfg.contains(QStringLiteral("sensitivity"));
+                && cfg.contains(QStringLiteral("sensitivity"));
             const bool missingRequired =
-                !hasScopeEither || !hasKeyEither || !hasValueEither
+                !hasScopeSideOk || !hasKeySideOk || !hasValueSideOk
                 || !cfg.contains(QStringLiteral("is_temporary"))
                 || !cfg.contains(QStringLiteral("should_persist"))
-                || !hasSensitivityEither;
+                || !hasSensitivitySideOk;
             if (!hasCfg || missingRequired) {
                 return client::buildErrorResponse(
                     parts.requestId, parts.traceId,
