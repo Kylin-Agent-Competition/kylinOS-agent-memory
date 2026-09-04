@@ -25,7 +25,7 @@ export DAY13A_IPC_SOCKET=/run/user/$(id -u)/kylin-memory.sock
 PYTHONPATH=memory-service:scripts ./scripts/run_day13a_benchmarks.sh
 ```
 
-可选参数：`DAY13A_PYTHON`、`DAY13A_SDK_SO`、`DAY13A_OUTPUT_DIR`、`DAY13A_RUN_ID`、`DAY13A_RUN_COUNT`、`DAY13A_TEXTS`、`DAY13A_IPC_REQUESTS`、`DAY13A_IPC_PID`、`DAY13A_OUTBOX_EVENTS`。默认连续跑 3 轮；本地只验证一轮可设置 `DAY13A_RUN_COUNT=1`。每轮 IPC 都会分别运行 `echo` 和 `memory.retrieve`。`DAY13A_IPC_PID` 可指向 Gateway 服务 PID，使 CPU/RSS 采样服务进程；未设置时采样 benchmark 客户端。脚本不会自动启动/停止服务，不会安装软件，也不会删除已有 DB。
+可选参数：`DAY13A_PYTHON`、`DAY13A_SDK_SO`、`DAY13A_OUTPUT_DIR`、`DAY13A_RUN_ID`、`DAY13A_RUN_COUNT`、`DAY13A_TEXTS`、`DAY13A_IPC_REQUESTS`、`DAY13A_IPC_PAYLOAD`、`DAY13A_IPC_PID`、`DAY13A_OUTBOX_EVENTS`。默认连续跑 3 轮；本地只验证一轮可设置 `DAY13A_RUN_COUNT=1`。每轮 IPC 都会分别运行 `echo` 和 `memory.retrieve`；业务请求默认 payload 为 `schema_version=1.0,user_id=day13a-benchmark`，Gateway validation profile 的可信身份应匹配该用户，或通过 `DAY13A_IPC_PAYLOAD` 覆盖。`DAY13A_IPC_PID` 可指向 Gateway 服务 PID，使 CPU/RSS 采样服务进程；未设置时采样 benchmark 客户端。脚本不会自动启动/停止服务，不会安装软件，也不会删除已有 DB。
 
 运行目录结构如下（`DAY13A_RUN_COUNT=1` 时也可以使用 UTC 时间戳目录）：
 

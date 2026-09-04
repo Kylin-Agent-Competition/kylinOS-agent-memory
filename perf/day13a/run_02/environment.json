@@ -1,0 +1,76 @@
+{
+  "architecture": "x86_64",
+  "bridge_build_type": "Release",
+  "captured_at": "2026-09-04T15:28:47.128978+00:00",
+  "commands": {
+    "free_m": {
+      "command": [
+        "free",
+        "-m"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "               total        used        free      shared  buff/cache   available\n内存：          7941        3848         264          45        4170        4093\n交换：          9527          19        9508\n"
+    },
+    "git_rev_parse_HEAD": {
+      "command": [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      "returncode": 128,
+      "stderr": "致命错误：不是 git 仓库（或者直至挂载点 / 的任何父目录）\n停止在文件系统边界（未设置 GIT_DISCOVERY_ACROSS_FILESYSTEM）。\n",
+      "stdout": ""
+    },
+    "git_status_porcelain": {
+      "command": [
+        "git",
+        "status",
+        "--porcelain"
+      ],
+      "returncode": 128,
+      "stderr": "致命错误：不是 git 仓库（或者直至挂载点 / 的任何父目录）\n停止在文件系统边界（未设置 GIT_DISCOVERY_ACROSS_FILESYSTEM）。\n",
+      "stdout": ""
+    },
+    "lscpu": {
+      "command": [
+        "lscpu"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "架构：                                   x86_64\nCPU 运行模式：                           32-bit, 64-bit\nAddress sizes:                           39 bits physical, 48 bits virtual\n字节序：                                 Little Endian\nCPU:                                     4\n在线 CPU 列表：                          0-3\n厂商 ID：                                GenuineIntel\n型号名称：                               13th Gen Intel(R) Core(TM) i7-13650HX\nCPU 系列：                               6\n型号：                                   183\n每个核的线程数：                         1\n每个座的核数：                           4\n座：                                     1\n步进：                                   1\nBogoMIPS：                               5606.39\n标记：                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ibrs_enhanced fsgsbase bmi1 avx2 bmi2 invpcid rdseed adx clflushopt sha_ni arat md_clear flush_l1d arch_capabilities\n超管理器厂商：                           KVM\n虚拟化类型：                             完全\nL1d 缓存：                               192 KiB (4 instances)\nL1i 缓存：                               128 KiB (4 instances)\nL2 缓存：                                5 MiB (4 instances)\nL3 缓存：                                96 MiB (4 instances)\nNUMA 节点：                              1\nNUMA 节点0 CPU：                         0-3\nVulnerability Gather data sampling:      Not affected\nVulnerability Indirect target selection: Vulnerable\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Reg file data sampling:    Mitigation; Clear Register File\nVulnerability Retbleed:                  Mitigation; Enhanced IBRS\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Vulnerable\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Vulnerable: eIBRS with unprivileged eBPF\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\n"
+    },
+    "python_version": {
+      "command": [
+        "/home/yanmouren778/d11e-venv/bin/python",
+        "--version"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "Python 3.12.3\n"
+    },
+    "uname_a": {
+      "command": [
+        "uname",
+        "-a"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "Linux yanmouren778-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux\n"
+    }
+  },
+  "cpu_model": "x86_64",
+  "embedding_runtime_version": null,
+  "embedding_sdk_version": null,
+  "git_branch": null,
+  "git_commit": null,
+  "git_dirty": false,
+  "hostname": "yanmouren778-pc",
+  "kernel": "6.6.0-63-generic",
+  "logical_cores": 4,
+  "memory_total_mb": 7941.992,
+  "os_name": "Linux",
+  "os_version": "#63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026",
+  "physical_cores": null,
+  "python_version": "3.12.3"
+}

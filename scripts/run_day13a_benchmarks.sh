@@ -11,6 +11,7 @@ IPC_SOCKET="${DAY13A_IPC_SOCKET:-}"
 TEXTS="${DAY13A_TEXTS:-1000}"
 IPC_REQUESTS="${DAY13A_IPC_REQUESTS:-2000}"
 OUTBOX_EVENTS="${DAY13A_OUTBOX_EVENTS:-5000}"
+IPC_PAYLOAD=${DAY13A_IPC_PAYLOAD:-'{"schema_version":"1.0","user_id":"day13a-benchmark"}'}
 
 if [[ -z "${IPC_SOCKET}" ]]; then
   echo "必须设置 DAY13A_IPC_SOCKET（指向已启动的真实 Gateway UDS）" >&2
@@ -46,6 +47,7 @@ run_one() {
     ipc_dir="${run_dir}/ipc_${ipc_method//./_}"
     "${PYTHON_BIN}" "${ROOT_DIR}/scripts/benchmark_ipc.py" \
       --socket "${IPC_SOCKET}" --method "${ipc_method}" \
+      --payload "${IPC_PAYLOAD}" \
       --requests "${IPC_REQUESTS}" --concurrency 1 4 8 16 --warmup 50 \
       "${IPC_ARGS[@]}" \
       --output-dir "${ipc_dir}"
