@@ -189,6 +189,120 @@ def test_candidate_models_have_no_second_status_field():
         )
 
 
+# ── DRIFT-001 REWORK-R1：legacy collected_at 输入归一 + 双字段冲突拒绝 ──
+
+
+def test_legacy_collected_at_constructor_normalizes_to_captured_at():
+    """REWORK-R1：legacy 构造输入 collected_at=ts 归一为 captured_at（不抛 TypeError）。"""
+    ts = datetime(2026, 9, 3, 8, 0, 0, tzinfo=timezone.utc)
+    ev = TurnFinalizedEvent(
+        session_id="sess_drift",
+        user_text="你好",
+        assistant_text="好的",
+        collected_at=ts,
+    )
+    assert ev.captured_at == ts
+    assert ev.collected_at == ts
+
+
+def test_legacy_payload_with_collected_at_normalizes_via_kwargs_unpack():
+    """REWORK-R1：legacy transport payload（含 collected_at 键）经 **payload 构造归一。"""
+    ts = datetime(2026, 9, 3, 8, 0, 0, tzinfo=timezone.utc)
+    payload = {
+        "session_id": "sess_drift",
+        "user_text": "你好",
+        "assistant_text": "好的",
+        "collected_at": ts,
+    }
+    ev = TurnFinalizedEvent(**payload)
+    assert ev.captured_at == ts
+    assert ev.collected_at == ts
+
+
+def test_both_collected_at_and_captured_at_equal_accepted():
+    """REWORK-R1：两字段同给且一致 → 接受（alias 一致，无冲突）。"""
+    ts = datetime(2026, 9, 3, 8, 0, 0, tzinfo=timezone.utc)
+    ev = TurnFinalizedEvent(
+        session_id="sess_drift",
+        user_text="你好",
+        assistant_text="好的",
+        captured_at=ts,
+        collected_at=ts,
+    )
+    assert ev.captured_at == ts
+
+
+def test_both_collected_at_and_captured_at_conflict_rejected():
+    """REWORK-R1：两字段同给且不一致 → 冻结纪律拒绝（fail-closed）。"""
+    ts1 = datetime(2026, 9, 3, 8, 0, 0, tzinfo=timezone.utc)
+    ts2 = datetime(2026, 9, 3, 8, 0, 1, tzinfo=timezone.utc)
+    with pytest_raises(ValueError):
+        TurnFinalizedEvent(
+            session_id="sess_drift",
+            user_text="你好",
+            assistant_text="好的",
+            captured_at=ts1,
+            collected_at=ts2,
+        )
+
+
+# ── DRIFT-001 REWORK-R3：A 轨 providers 反向门禁扩展（AST/allowlist） ──
+
+
+def _providers_dir() -> Path:
+    """memory-service/providers 目录（A 轨受控 Provider 模块）。"""
+    return Path(__file__).resolve().parents[1] / "providers"
+
+
+def _scan_providers_for_collected_at_write() -> list:
+    """AST 扫描 memory-service/providers/*.py 的可写 collected_at 声明/赋值。
+
+    违规（Schema 漂移回归）：
+    - 类级 `collected_at: <类型> = ...`（dataclass/Pydantic 可写字段声明）；
+    - 任意 `<obj>.collected_at = ...` 写路径。
+    TurnFinalizedEvent 的只读 `def collected_at` property 属合法读别名，不在此列。
+    """
+    import ast
+
+    offenders = []
+    providers = _providers_dir()
+    for path in sorted(providers.glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                for stmt in node.body:
+                    if (
+                        isinstance(stmt, ast.AnnAssign)
+                        and isinstance(stmt.target, ast.Name)
+                        and stmt.target.id == "collected_at"
+                    ):
+                        offenders.append(
+                            f"{path.name}:{stmt.lineno}: 类级可写字段 collected_at"
+                        )
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for t in targets:
+                    if (
+                        isinstance(t, ast.Attribute)
+                        and t.attr == "collected_at"
+                    ):
+                        offenders.append(
+                            f"{path.name}:{node.lineno}: 可写路径 {type(t.value).__name__}.collected_at"
+                        )
+    return offenders
+
+
+def test_providers_have_no_writable_collected_at_field():
+    """REWORK-R3：memory-service/providers 不得重新出现可写 collected_at 业务字段。"""
+    offenders = _scan_providers_for_collected_at_write()
+    assert not offenders, (
+        "Schema 漂移回归：A 轨 providers 出现可写 collected_at：\n"
+        + "\n".join(offenders)
+    )
+
+
 def pytest_raises(exc_type):
     """最小断言辅助（不依赖 pytest fixture 导入顺序）。"""
     from contextlib import contextmanager
