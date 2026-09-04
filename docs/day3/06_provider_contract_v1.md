@@ -213,7 +213,7 @@ class TurnFinalizedEvent:
     tool_results: list[ToolResult] | None
     source: Literal["chat", "tool_result", "manual_config"]  # 事件来源
     occurred_at: datetime
-    collected_at: datetime
+    captured_at: datetime  # DRIFT-001：Canonical 采集时间写字段（唯一真源）
 
 @dataclass
 class ToolResult:
@@ -247,6 +247,11 @@ class KnowledgeCandidate:
     # template_body/parameters（template）、priority（constraint）、
     # failure_reason/avoid_condition/alternative（failure）
 ```
+
+> **DRIFT-001 字段演进说明（2026-09-03，Schema 漂移治理）**
+> - `TurnFinalizedEvent` 采集时间 **Canonical 写字段为 `captured_at`**；`collected_at` 不再是 dataclass 可写字段，仅保留为 **legacy 只读 alias**（读 `event.collected_at` 返回 `event.captured_at`）。
+> - **legacy 输入兼容**：构造/传输仍可传 `collected_at=`（含 `TurnFinalizedEvent(**payload)`），实现层将其归一为 `captured_at`；两字段同时提供且不一致时按冻结纪律拒绝（fail-closed）。
+> - **边界**：D 轨 IPC metadata 的 `collected_at` 为 legacy transport 名称，由 transport→business Adapter 归一（TD-060，C/D 实现 handoff）；本契约只收敛 A 轨 Provider 对象字段，不改变 transport 层。
 
 > **ExtractionProvider 所有接口状态：UNTESTED** — 需 LLM 集成和标注数据集完成后才能验证。
 
