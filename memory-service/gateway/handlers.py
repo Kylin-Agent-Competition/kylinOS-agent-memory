@@ -418,8 +418,8 @@ _HOST_IDENTITY_PLACEHOLDER = "PENDING_HOST_IDENTITY"
 _SOURCE_TYPE_PLACEHOLDERS = frozenset({"PENDING_C_CONFIRMATION"})
 
 
-def _normalized_aware_utc_timestamp(value: Any, field: str) -> str:
-    """Return a canonical timestamp or reject malformed compatibility input."""
+def _parse_aware_utc_timestamp(value: Any, field: str) -> datetime:
+    """Parse a compatibility timestamp without losing sub-millisecond precision."""
     if not isinstance(value, str):
         raise RequestValidationError(f"invalid_type: {field}")
     try:
@@ -428,29 +428,24 @@ def _normalized_aware_utc_timestamp(value: Any, field: str) -> str:
         raise RequestValidationError(f"invalid_timestamp: {field}") from None
     if timestamp.tzinfo is None:
         raise RequestValidationError(f"invalid_timestamp: {field} (timezone required)")
-    return timestamp.astimezone(timezone.utc).isoformat(timespec="milliseconds")
+    return timestamp.astimezone(timezone.utc)
 
 
 def _validate_event_ingest_schema_guard(payload: Dict[str, Any]) -> None:
     """Fail closed before Pipeline/UoW when known transport drift reaches event.ingest.
 
     `event.ingest` only accepts Canonical business input. During the TD-060
-    transport compatibility window, a legacy `collected_at` may accompany
-    `captured_at` only when it denotes the same aware UTC timestamp.
+    transport compatibility window, `captured_at` is canonical.  A legacy
+    `collected_at` may accompany it, but cannot override or invalidate the
+    canonical value.  TD-060 remains the authority for a future stricter
+    transport mapping; this ingress guard does not freeze one unilaterally.
     """
     if _LEGACY_COLLECTED_AT in payload:
         if _CANONICAL_CAPTURED_AT not in payload:
             raise RequestValidationError(
                 "legacy field collected_at requires canonical captured_at"
             )
-        if _normalized_aware_utc_timestamp(
-            payload[_LEGACY_COLLECTED_AT], _LEGACY_COLLECTED_AT
-        ) != _normalized_aware_utc_timestamp(
-            payload[_CANONICAL_CAPTURED_AT], _CANONICAL_CAPTURED_AT
-        ):
-            raise RequestValidationError(
-                "inconsistent_value: captured_at and collected_at"
-            )
+        _parse_aware_utc_timestamp(payload[_CANONICAL_CAPTURED_AT], _CANONICAL_CAPTURED_AT)
 
     if payload.get("actor_id") == _HOST_IDENTITY_PLACEHOLDER:
         raise RequestValidationError("untrusted placeholder actor_id")

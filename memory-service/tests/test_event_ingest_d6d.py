@@ -403,11 +403,6 @@ def test_schema_version_invalid(env, mutate):
             "legacy field collected_at requires canonical captured_at",
         ),
         (
-            "conflicting_time_aliases",
-            lambda p: p.__setitem__("collected_at", "2026-09-04T08:00:00Z"),
-            "inconsistent_value: captured_at and collected_at",
-        ),
-        (
             "legacy_failure_status",
             lambda p: p.__setitem__("source_business_status", "failure"),
             "invalid source_business_status",
@@ -442,20 +437,38 @@ def test_schema_drift_guard_rejects_without_persistence(env, name, mutate, error
         ) is None
 
 
-def test_schema_drift_guard_accepts_matching_timestamp_aliases(env):
-    """A legacy alias remains compatible only when it names the same instant."""
+@pytest.mark.parametrize(
+    "collected_at",
+    [
+        "2026-09-04T00:00:00Z",
+        "not-a-timestamp",
+        42,
+    ],
+)
+def test_schema_drift_guard_canonical_timestamp_wins_over_legacy_alias(env, collected_at):
+    """TD-060 adapter window: a valid canonical value controls the ingress."""
     payload = _payload(
-        event_id="evt-matching-time-aliases",
-        idempotency_key="idem-matching-time-aliases",
+        event_id=f"evt-canonical-wins-{str(collected_at).replace(':', '-')}",
+        idempotency_key=f"idem-canonical-wins-{str(collected_at).replace(':', '-')}",
         occurred_at="2026-09-03T23:00:00Z",
         captured_at="2026-09-04T08:00:00+08:00",
-        collected_at="2026-09-04T00:00:00Z",
+        collected_at=collected_at,
     )
 
     response = env["invoke"](payload)
 
     assert response["admission_decision"] == "allow_extraction"
     assert len(_rows(env["engine"])) == 1
+
+
+def test_schema_drift_guard_preserves_submillisecond_timestamp_precision():
+    """Timestamp parsing must retain precision if TD-060 later freezes comparison."""
+    from gateway.handlers import _parse_aware_utc_timestamp
+
+    earlier = _parse_aware_utc_timestamp("2026-09-04T00:00:00.000100Z", "captured_at")
+    later = _parse_aware_utc_timestamp("2026-09-04T00:00:00.000900Z", "captured_at")
+
+    assert earlier != later
 
 
 def test_trace_id_mismatch(env):
