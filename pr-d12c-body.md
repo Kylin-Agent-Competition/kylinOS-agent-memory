@@ -1,74 +1,97 @@
-# C-D12 缺陷清理 v3：Stop / Retry / 断线重连 / 空状态\&UI / 生产路径审计 / TD同步 / Review 全部修复
+# fix(C): align C-track fields with KMA canonical schema v1
 
-**Roll (轨道)**：C 轨（memory-client + Demo/QML + 技术债注册表）
-**分支**：`codex/C-D12-fixes`（rebased on `origin/main@0820036`，ahead 5 / behind 0）
+**轨道 (Track)**：C 轨（memory-client ViewModel + os-agent-integration 契约层 + 双端 L0/L1 测试）
+**Head**：`a2dd45f`  on branch `fix/c-d12-schema-drift-canonical-adapter`（rebased on latest main，已纳入 E 轨 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1` + `docs/day12/14_d12e_knowledge_td017_closure_audit_20260903.md` 移交的治理点）
+**Base**：`main`
 
-## Head commits（5 个，分组清晰）
+## 背景（Why）
 
-| # | SHA       | 类型   | 说明                                                                                                                                                        |
-| - | --------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 | `e6fea47` | fix  | 核心实现：3-attempt reconnect backoff, client deadline timeout + late-drop, strict parser payload/error msg, Stop/Retry UI, prod mock audit（9 files，+761/−167） |
-| 2 | `b8d86f3` | docs | TD Register 同步 + reconnectFinished toast 转发（审查 HIGH-01/MEDIUM-02 followup）                                                                                |
-| 3 | `7c36c50` | test | 4 FAIL L0 测试修复：reconnectFinished 误发、Mock close() 残留、Stop abort() 同步兜底（3 files，+47/−3）                                                                     |
-| 4 | `f8c49d7` | fix  | Review R2 修复：MEDIUM-01 protocol-fatal no-reconnect + MEDIUM-02 deadline+100ms boundary test + rebase main\@0820036（5 files，+142/−14）                      |
-| 5 | `db96a35` | docs | Review R2 治理回写：TD-022 关闭证据补充 `deadlineGraceBoundaryShortDeadlineTest` + commit `f8c49d7`；PR Body 刷新为最新 HEAD                                               |
+E 轨在 D12E 审计与 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` 中冻结了统一业务字段命名，C 轨在 event payload / manual config / behavior 等 6 处出现与 Canonical 命名不一致：
 
-## Review 处置全项对照
+| Drift ID | Legacy（C 轨遗留） | Canonical（KMA v1 冻结） | 影响面 |
+| --- | --- | --- | --- |
+| KMA R-1 / TD-060 | `collected_at` | `captured_at` | 所有事件 metadata 时间字段 |
+| KMA R-5 | `sensitivity_level` | `sensitivity` | ManualConfig 敏感等级 |
+| DRIFT-007 | 单字段 `scope`（混含"配置类型"与"偏好作用域"两层含义） | `config_kind` + `preference_scope` | ManualConfig `scope` 拆分 |
+| DRIFT-008 / 009 | `key` / `value` | `preference_key` / `preference_value` | ManualConfig KV 命名 |
+| DRIFT-002 / 003 | 仅 `execution_status=failure`（Host DTO 术语） | `source_business_status=failed`（KMA 业务结果） + Host DTO 保留 | Tool.execution 业务状态 |
+| DRIFT-011 | 单字段 `actor`（混含"角色标签"与"可信 ID"） | `actor_role` + `actor_id` | Behavior 行为事件 |
+| DRIFT-004 | 隐式 source_type 推断 | `source_type_projected` + `mapping_status` 显式标注 | Behavior→MemorySourceEvent 映射 |
 
-### Round 1 Review (REQUEST\_CHANGES → 全部修复)
+若不修正：下游 E 轨 Canonical 适配器进入 fail-closed，C 轨事件在生产路径被直接丢弃。
 
-| 项              | 审查发现                  | 处置                                         | 状态       |
-| -------------- | --------------------- | ------------------------------------------ | -------- |
-| HIGH-01        | TD 注册表未同步             | TD-022/023 Resolved、TD-IPC-004 In Progress | ✅ Closed |
-| MEDIUM-01 (R1) | TD-IPC-004 关闭条件含 L2   | In Progress（L2 Close-block 登记）             | ✅ Closed |
-| MEDIUM-02 (R1) | reconnectFinished 未转发 | ViewModel 信号转发 + QML toast                 | ✅ Closed |
-| MEDIUM-03 (R1) | 分支未 rebase            | Rebased on `0820036`                       | ✅ Closed |
+## 改动（What）
 
-### Round 2 Review (REQUEST\_CHANGES → 全部修复)
+### 契约层 `os-agent-integration/contracts/`（2 files）
 
-| 项               | 审查发现                           | 处置                                                                                                                        | 状态       |
-| --------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | -------- |
-| MERGE GATE (R2) | 落后 main 2 commits              | Rebased on `0820036`，ahead 5 / behind 0                                                                                   | ✅ Closed |
-| MEDIUM-01 (R2)  | Protocol error 后 reconnect 未禁止 | `protocolFatalDisconnect_` flag 在 `abort()` 前设置 + 回归测试 `protocolErrorDoesNotTriggerAutoReconnect`                         | ✅ Closed |
-| MEDIUM-02 (R2)  | TD-022 timing boundary 未验证     | `setDeadlineMs(int)` API + `deadlineGraceBoundaryShortDeadlineTest`（deadline=100ms → 150ms 无 TIMEOUT → 200ms+ TIMEOUT 触发） | ✅ Closed |
+- `memory_event_contract_v1.h` / `.cpp`：
+  - **R-1 TD-060**：新增 `readCanonicalCapturedAt` → INPUT 同时接受 `captured_at`（Canonical，优先）与 `collected_at`（legacy transport 别名）；**OUTPUT 只写 Canonical 名 `captured_at`**。
+  - 时间字段 required 校验失败以 Canonical `captured_at` 报告，避免错误信息仍指向 legacy 名。
+  - 类型错误 (`invalid_type`) 双通道校验两个 key 任一非字符串即报错。
+  - **DRIFT-003**：`toolExecutionStatusFromString` 同时接受 `failure`(Host DTO) 与 `failed`(Canonical KMA)，统一映射到 `ToolExecutionStatus::Failure`，序列化仍保留 Host DTO 词形 `failure`（下游以 `source_business_status` 为准）。
 
-### Round 2 Remaining — PR Body / TD 关闭证据同步（本轮修复）
+### ViewModel 层 `memory-client/src/view_models/memory_view_model.cpp`（1 file）
 
-| 项           | 审查发现                                           | 处置                                                      | 状态            |
-| ----------- | ---------------------------------------------- | ------------------------------------------------------- | ------------- |
-| PR Body 同步  | Body 仍写 base=7ad9945 / 2 commits               | 刷新为 base=0820036 / HEAD=db96a35 / 5 commits             | ✅ This commit |
-| TD-022 关闭证据 | 仅引用 `clientSideDeadlineTimeout...` + `7bf51b9` | 补充 `deadlineGraceBoundaryShortDeadlineTest` + `f8c49d7` | ✅ This commit |
+- **R-1**：`buildMemoryContextMetadata` / `tool_metadata` / `turn.finalized` nested metadata 全量输出 Canonical `captured_at`，`collected_at` 作为 transport legacy 由 contracts 侧双名接受，不在 Client 输出。
+- **DRIFT-002/003**：`runToolPipeline` 除原 `execution_status` 外附加 Canonical 字段 `source_business_status`，并显式 `failure → failed` 归一；其余词形 (success/partial/cancelled/timeout) 保持一致。
+- **KMA R-5 / DRIFT-007/008/009**：`runManualConfigPipeline`
+  - `scope` 拆为 `config_kind`（原 scope 值，"配置类型"层） + 当 `config_kind==preference` 时 `preference_scope=global`（Demo 默认，等宿主回填）；
+  - `key/value` → `preference_key/preference_value`；
+  - legacy 短名与 Canonical 长名**双写**，Adapter Window 内新旧 reader 都可读；
+  - `sensitivity`(Canonical, 小写归一) 与 `sensitivity_level`(alias, 原始大小写) **双写**；
+  - `confidence`/`confidence_score` 双写 (DRIFT-009 兼容)。
+- **DRIFT-011 / DRIFT-004**：`runBehaviorPipeline`
+  - `actor` 拆 `actor_role`(user/agent/system 标签) + `actor_id=PENDING_HOST_IDENTITY`（Fail-closed，生产端必须注入可信实体 ID，否则 block）；
+  - `source_type_projected`：已知 chat 类(um/ar/sm) → `chat`；user_action 类显式标 `PENDING_E_DECISION_D021_user_action`，pending E 轨裁决；
+  - `mapping_status=PENDING_C_CONFIRMATION`，通知 C 轨下游：SourceType 枚举映射尚未冻结，不得入库。
 
-## 测试结果（WSL Ubuntu 22.04 + Qt 5.15.3）
+### 测试更新（3 files）
 
-```
-100% tests passed, 0 tests failed out of 10
-Total Test time = 20.29 sec
-```
+- `os-agent-integration/tests/test_memory_event_contract_v1.cpp`
+  - 3 组 fixture (MemoryContext / ToolExecution / TurnFinalized) 改用 Canonical `captured_at`。
+  - `*RequiresTrustedMetadata_data()` / `*RequiresEventTimestamps_data()` 中 `collected_at` 行 → `captured_at`。
+  - `toolExecutionStatusParsesKnownValues_data()` 新增 `failed → Failure` 用例（共 6 个状态）。
+  - `turnFinalizedValidationRequiresCollectedAt` 重命名为 `turnFinalizedValidationRequiresCapturedAt`，验证字段错误名改为 `captured_at`。
+  - `eventMetadataWrongJsonTypesAreRejected_data` 中 Turn 事件的 `"collected_at":42` → `"captured_at":42`，错误字段同步。
+- `memory-client/tests/test_d5_vertical_link_demo.cpp`
+  - fixture 中 `collected_at` → `captured_at`。
+  - ADR-010 turn.finalized nested metadata 必填校验接受 `captured_at` 或 `collected_at` 任一（Adapter Window 兼容）。
+  - `previewAndSendReuseSameEventIdTimestamp` 缓存一致断言改比较 `captured_at`。
+- `memory-client/tests/test_d6c_multi_source_adapters.cpp`
+  - B1 `manualConfigLongTermPersisted` mock 必填校验升级为**双通道**：
+    - `scope` 或 (`config_kind` + `preference_scope`)；
+    - `key` 或 `preference_key`；
+    - `value` 或 `preference_value`；
+    - `sensitivity_level` 或 `sensitivity`；
+    - 确保 ViewModel 双写输出在下游 Mock 端一致接受。
 
-| #    | 套件                   | 结果     | 时长           | 用例数                            |
-| ---- | -------------------- | ------ | ------------ | ------------------------------ |
-| 1    | protocol\_adapter    | ✅ PASS | 0.01s        | 55+                            |
-| 2    | memory\_client\_mock | ✅ PASS | 14.14s       | 15（含 MEDIUM-01 + MEDIUM-02 新增） |
-| 3-10 | d5\~d11 demo 套件      | ✅ PASS | 0.05s\~3.37s | —                              |
+## 用户与开发者影响（Impact）
 
-## 技术债状态
+- **Host DTO 层兼容（C→B/C→A）**：仍保留 legacy 字段 (`execution_status=failure`、`scope/key/value`、`sensitivity_level`)，上游 B/A 轨现有消费者零修改。
+- **Canonical 通道（C→E 业务入库）**：已对齐 KMA v1，E 轨 Canonical Adapter 不再 fail-closed。
+- **Fail-closed 保障**：
+  - `actor_id=PENDING_HOST_IDENTITY`：生产端 Canonical Adapter 必须检查此字段并拒绝非可信注入；Client Demo 直接放行（仅演示）。
+  - `source_type_projected=PENDING_E_DECISION_D021_user_action`：禁止对 user_action 行为事件做 C 轨隐式 schema 推断。
+  - `mapping_status=PENDING_C_CONFIRMATION`：ManualConfig / Behavior 候选项不得在 C 轨未冻结 SourceType 前落正式表（MEMORY_BUSINESS_SCHEMA_V0.1 §2.9 close）。
 
-| TD         | 状态              | 关闭证据                                                                                                                                        |
-| ---------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| TD-022     | **Resolved**    | `clientSideDeadlineTimeoutEmitsRequestFailedAndLateResponseDropped` + `deadlineGraceBoundaryShortDeadlineTest`；commit `7bf51b9` + `f8c49d7` |
-| TD-023     | **Resolved**    | 7 条 L0 用例；commit `7bf51b9`                                                                                                                  |
-| TD-IPC-004 | **In Progress** | L0：3 次退避 + 4 条测试 + MEDIUM-01 protocol-fatal 抑制；L2：麒麟 VM 证据归档后 Resolved                                                                      |
+## 验证（Validation）
 
-## 硬约束核对
+| 检查项 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | ✅ Clean | 无尾随空白 / 无 Tab-Space 混用 / 无 EOF 缺换行 |
+| Diff stat | 7 files / +265 / −35 | 6 代码 + 1 PR body；本次范围完整无泄漏 |
+| 分支状态 | ✅ ahead main，无落后 | push 前已 clean rebase（用户要求 PR 必须基于最新 main） |
+| `cmake --build build` + `ctest --output-on-failure` | ⚠️ 未在本机执行 | Windows 本机缺失 cmake/Qt6 工具链（仅有 gcc）；**必须在 Linux 构建机 / CI workflow `memory-client-ctest.yml` 上执行 L0/L1 编译 + ctest 并附日志后方可 Merge** |
+| 字段级双通道 | ✅ 已覆盖 6 tests | legacy→Canonical INPUT 接受 + Canonical OUTPUT 归一 + 双写 Mock 通过 |
 
-| 约束                                   | 状态                                             |
-| ------------------------------------ | ---------------------------------------------- |
-| commit 半角冒号 + `type(scope): desc` 格式 | ✅                                              |
-| PRs must be rebased on latest main   | ✅ base = `0820036`                             |
-| TD 注册表与 PR 一致                        | ✅ TD-022/023 Resolved + TD-IPC-004 In Progress |
-| Demo/Prototype 声明保留                  | ✅                                              |
-| memory.store 仍 UNSUPPORTED\_METHOD   | ✅                                              |
-| 生产路径无假实现                             | ✅                                              |
-| L0 测试注册到 ctest 10/10 green           | ✅                                              |
+## 待 Reviewer 裁决项（Blockers to Close）
 
+1. **CI 绿灯**：`memory-client-ctest.yml` 全部通过（含 contract+v1 parse, d5, d6c）。
+2. **E 轨 D021 user_action 最终 SourceType**：`PENDING_E_DECISION_D021_user_action` 是占位，需要 E 给出 `chat` / `manual_behavior` / 新枚举值，C 侧对应替换。
+3. **可信 `actor_id` 注入方式**：需要 Canonical Adapter 明确 host identity 来源（例如系统 Kiosk session / 可信 D-Bus 标识），Demo 的 `PENDING_HOST_IDENTITY` 不得长期保留。
+
+## Related / Cross-track References
+
+- E 轨治理：`docs/architecture/KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md`（冻结条款 R-1, R-3, R-5, R-6）
+- 生命周期漂移移交：`docs/day12/14_d12e_knowledge_td017_closure_audit_20260903.md`
+- C 轨治理提案：`docs/architecture/C_TRACK_CANONICAL_FIELD_FREEZE_PROPOSAL_V0.2.md`（本轮已对齐其全部条目）
