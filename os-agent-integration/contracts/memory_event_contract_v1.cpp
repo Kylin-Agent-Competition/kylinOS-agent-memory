@@ -151,6 +151,43 @@ std::optional<ContractError> firstMissingRequiredEventMetadataField(
 
 std::optional<ContractError> firstInvalidEventMetadataJsonType(const QJsonObject& object)
 {
+    // KMA R-1 (TD-060, review MEDIUM-01): the event-metadata time key has a
+    // transport alias pair — Canonical `captured_at` and legacy
+    // `collected_at`. The semantic rule is "Canonical wins on INPUT", meaning:
+    //   - If the payload carries BOTH keys, we only validate the Canonical
+    //     one. A malformed legacy alias must NOT cause a rejection when the
+    //     Canonical key is already well-formed. This matches the behaviour of
+    //     `readCanonicalCapturedAt()` which ignores the legacy key in the
+    //     "both present" path.
+    //   - If ONLY the legacy key is present, we validate its type and surface
+    //     the error under the **Canonical** field name so callers do not start
+    //     depending on the legacy transport name in error surfaces.
+    //   - If NEITHER is present, we skip the type check — the
+    //     "firstMissingRequiredEventMetadataField" check handles the
+    //     required-field gate separately.
+    const bool hasCanonical = object.contains(QStringLiteral("captured_at"));
+    const bool hasLegacy = object.contains(QStringLiteral("collected_at"));
+    if (hasCanonical) {
+        if (object.value(QStringLiteral("captured_at")).type() != QJsonValue::String) {
+            return ContractError{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("captured_at"),
+                QStringLiteral("Field has an invalid JSON type."),
+            };
+        }
+    } else if (hasLegacy) {
+        // Legacy-only ingress — type-check it but report the Canonical name
+        // (keeps the adapter-window "inputs are normalised to canonical names"
+        // contract that downstream error handlers already depend on).
+        if (object.value(QStringLiteral("collected_at")).type() != QJsonValue::String) {
+            return ContractError{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("captured_at"),
+                QStringLiteral("Field has an invalid JSON type."),
+            };
+        }
+    }
+    // All other metadata fields — single canonical key, no aliases.
     return firstInvalidJsonType(
         object,
         {
@@ -161,9 +198,7 @@ std::optional<ContractError> firstInvalidEventMetadataJsonType(const QJsonObject
             {QStringLiteral("session_id"), QJsonValue::String},
             {QStringLiteral("turn_id"), QJsonValue::String},
             {QStringLiteral("occurred_at"), QJsonValue::String},
-            // KMA R-1: both names accepted; type check applies to whichever exists
-            {QStringLiteral("captured_at"), QJsonValue::String},
-            {QStringLiteral("collected_at"), QJsonValue::String},
+            // `captured_at` / `collected_at` — handled above (aliased pair).
             {QStringLiteral("source_reference"), QJsonValue::String},
             {QStringLiteral("idempotency_key"), QJsonValue::String},
         });

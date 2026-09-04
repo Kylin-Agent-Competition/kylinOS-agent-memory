@@ -616,6 +616,18 @@ void MemoryViewModel::runManualConfigPipeline(
         /*traceId=*/QStringLiteral(""), idempotencyKey, srcRef);
 
     QJsonObject config;
+    // KMA DRIFT-007 dual-write contract (review HIGH-01):
+    // Legacy host-DTO consumers read `config.scope` (D3 manual_config_event.v1.json
+    // frozen short name). The same payload also carries two Canonical fields:
+    //   - `config_kind`        = raw host `scope` value (Semantic layer = what
+    //                            kind of config this is, e.g. "preference").
+    //   - `preference_scope`   = Canonical Preference scope (global/topic/tool/
+    //                            session/time_window per KMA R-3 §2.9) — emitted
+    //                            only when `config_kind == "preference"`.
+    // Keeping the legacy short name `scope` alive lets the existing host DTO
+    // consumer (Adapter legacy reader + server handlers.py `scope` accessor)
+    // continue working without code changes during the TD-060 adapter window.
+    config.insert(QStringLiteral("scope"), scope);
     // DRIFT-007: legacy `scope` is "kind of config" (e.g. "preference"), not the
     // Canonical Preference `preference_scope` (作用域五值 global/topic/tool/
     // session/time_window — 见 KMA 冻结 R-3，MEMORY_BUSINESS_SCHEMA_V0.1 §2.9）。

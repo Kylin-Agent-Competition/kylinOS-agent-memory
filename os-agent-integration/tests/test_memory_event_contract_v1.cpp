@@ -222,6 +222,11 @@ private slots:
     void wrongJsonTypesAreRejected();
     void eventMetadataWrongJsonTypesAreRejected_data();
     void eventMetadataWrongJsonTypesAreRejected();
+    // KMA R-1 (TD-060, review MEDIUM-01): verifies that when both the Canonical
+    // `captured_at` key AND the legacy transport alias `collected_at` are
+    // present, a malformed legacy alias does NOT cause an invalid_type
+    // rejection — because the Canonical key wins per `readCanonicalCapturedAt()`.
+    void capturedAtCanonicalWinsOverBadLegacyAliasType();
     void idArraysRejectNonStringElements_data();
     void idArraysRejectNonStringElements();
     void integerFieldsRejectFractionalValues();
@@ -1119,6 +1124,12 @@ void MemoryEventContractV1Test::eventMetadataWrongJsonTypesAreRejected_data()
     // KMA R-1: overwrite captured_at (Canonical) with a non-string to trigger
     // invalid_type rejection.
     turnEvent.insert(QStringLiteral("captured_at"), 42);
+    // MEDIUM-01 case 1: legacy-only ingress (captured_at removed; collected_at
+    // re-inserted with a bad type). The error must be reported under the
+    // *Canonical* field name, not the legacy alias.
+    QJsonObject turnLegacyOnly = knownTurnFinalizedPayload();
+    turnLegacyOnly.remove(QStringLiteral("captured_at"));
+    turnLegacyOnly.insert(QStringLiteral("collected_at"), 42);
 
     QTest::newRow("MemoryContext.trace_id")
         << static_cast<int>(ContractObjectKind::MemoryContext)
@@ -1129,6 +1140,11 @@ void MemoryEventContractV1Test::eventMetadataWrongJsonTypesAreRejected_data()
     QTest::newRow("TurnFinalizedEvent.captured_at")
         << static_cast<int>(ContractObjectKind::TurnFinalizedEvent)
         << turnEvent << QStringLiteral("captured_at");
+    // MEDIUM-01: legacy-only wrong type reports canonical `captured_at` so
+    // error surfaces never grow a dependency on the transport alias name.
+    QTest::newRow("TurnFinalizedEvent.legacy_collected_at_only_invalid_type")
+        << static_cast<int>(ContractObjectKind::TurnFinalizedEvent)
+        << turnLegacyOnly << QStringLiteral("captured_at");
 }
 
 void MemoryEventContractV1Test::eventMetadataWrongJsonTypesAreRejected()
@@ -1196,6 +1212,40 @@ void MemoryEventContractV1Test::integerFieldsRejectFractionalValues()
     QCOMPARE(parsed.errors.first().code, QStringLiteral("invalid_value"));
     QCOMPARE(parsed.errors.first().field, QStringLiteral("max_context_tokens"));
     QCOMPARE(parsed.errors.first().safeMessage, QStringLiteral("Field must be an integer."));
+}
+
+// KMA R-1 (TD-060, review MEDIUM-01): captured_at (Canonical) wins over
+// legacy collected_at during JSON type check. If both keys are present and
+// captured_at is a correctly-formed ISO-8601 string while the legacy alias
+// is a non-string, the parser must accept the payload (the legacy alias is
+// defined to be a *transport-side* adapter window: malformed bytes on the
+// transport adapter must NOT contaminate the canonical ingest result).
+void MemoryEventContractV1Test::capturedAtCanonicalWinsOverBadLegacyAliasType()
+{
+    // 1) MemoryContext
+    QJsonObject ctx = knownMemoryContextPayload();
+    QVERIFY(ctx.contains(QStringLiteral("captured_at")));
+    ctx.insert(QStringLiteral("collected_at"), 666);  // non-string garbage
+    auto ctxParsed = contract::memoryContextFromJson(ctx);
+    QVERIFY2(ctxParsed.ok,
+        "MemoryContext with good captured_at + bad collected_at must parse OK");
+    QCOMPARE(contract::toJson(ctxParsed.value->metadata)
+                 .value(QStringLiteral("captured_at")).toString(),
+        ctx.value(QStringLiteral("captured_at")).toString());
+
+    // 2) ToolExecutionEvent
+    QJsonObject tool = knownToolExecutionPayload();
+    tool.insert(QStringLiteral("collected_at"), QJsonValue(QJsonObject{}));
+    auto toolParsed = contract::toolExecutionEventFromJson(tool);
+    QVERIFY2(toolParsed.ok,
+        "ToolExecutionEvent with good captured_at + bad collected_at must parse OK");
+
+    // 3) TurnFinalizedEvent
+    QJsonObject turn = knownTurnFinalizedPayload();
+    turn.insert(QStringLiteral("collected_at"), QJsonValue(QJsonArray{1, 2, 3}));
+    auto turnParsed = contract::turnFinalizedEventFromJson(turn);
+    QVERIFY2(turnParsed.ok,
+        "TurnFinalizedEvent with good captured_at + bad collected_at must parse OK");
 }
 
 void MemoryEventContractV1Test::timestampsAcceptIsoWithoutMilliseconds()
