@@ -434,6 +434,18 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
         {QStringLiteral("turn_id"), turnId},
         {QStringLiteral("idempotency_key"), idempotencyKey},
         {QStringLiteral("occurred_at"), now},
+        // KMA v1 status: CANDIDATE_FOR_FREEZE (see KMA_UNIFIED_DATA_FORMAT_FREEZE_V1 §0 / §R-1
+        // handoff TD-060). R-1 explicitly says the transport-side `collected_at`
+        // alias SHALL stay in place until C/D write-freeze TD-060. This PR only
+        // introduces an **Adapter-Window candidate**: it emits BOTH names so
+        //   - existing ADR-010 IPC transport consumers continue reading
+        //     `collected_at` without change, and
+        //   - downstream E Canonical Adapter can start consuming candidate
+        //     `captured_at` in production-fail-closed mode.
+        // Legacy `collected_at` MUST be removed ONLY after TD-060 is write-frozen
+        // by C/D track owners AND KMA_UNIFIED_DATA_FORMAT_FREEZE_V1 is upgraded
+        // to FROZEN via the mandated governance PR (see §0 / §R-1 handoff / §end).
+        {QStringLiteral("collected_at"), now},
         {QStringLiteral("captured_at"), now},
         {QStringLiteral("source_reference"), srcRef},
     };
@@ -468,9 +480,16 @@ QJsonObject MemoryViewModel::buildEventMetadata(
     const QString& sourceReference) const
 {
     // 共享 metadata 构造：对齐 ADR-010 IPC 映射契约的 metadata 嵌套对象。
-    // trace_id 若提供则写入；occurred_at / captured_at 取同一 UTC 毫秒时间戳。
-    // KMA R-1 (TD-060)：输出统一 Canonical 名 captured_at；若上游仍使用
-    // collected_at 别名，contracts 解析层已做双名接受。
+    // trace_id 若提供则写入；occurred_at 与时间戳字段取同一 UTC 毫秒时间戳。
+    // KMA R-1 (TD-060) — 当前 KMA_UNIFIED_DATA_FORMAT_FREEZE_V1 status ==
+    // CANDIDATE_FOR_FREEZE → transport 仍须保留 legacy `collected_at`
+    // （见 R-1 handoff + §责任分工 TD-060）。
+    // 本 PR 作为 Adapter Window candidate 双名出站：
+    //   - `collected_at`：ADR-010 / TD-039 既有 IPC transport 契约不变；
+    //   - `captured_at`   ：E Canonical Adapter candidate 消费名；
+    // 等 C/D 书面冻结 TD-060 + 文档升级到 FROZEN 后，再删除 legacy alias。
+    // contracts 解析层已对 captured_at/collected_at 做双名接受（INPUT），
+    // 并 canonical wins 的类型校验逻辑；OUTPUT 侧这里双写。
     const QString now = nowIso8601UtcMs();
     QJsonObject metadata{
         {QStringLiteral("schema_version"), QStringLiteral("1.0")},
@@ -481,6 +500,7 @@ QJsonObject MemoryViewModel::buildEventMetadata(
         {QStringLiteral("turn_id"), turnId},
         {QStringLiteral("idempotency_key"), idempotencyKey},
         {QStringLiteral("occurred_at"), now},
+        {QStringLiteral("collected_at"), now},
         {QStringLiteral("captured_at"), now},
         {QStringLiteral("source_reference"), sourceReference},
     };

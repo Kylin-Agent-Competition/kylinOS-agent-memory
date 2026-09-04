@@ -1,97 +1,140 @@
-# fix(C): align C-track fields with KMA canonical schema v1
+# fix(C): align C-track fields with KMA canonical v1 CANDIDATE (Adapter Window)
 
 **轨道 (Track)**：C 轨（memory-client ViewModel + os-agent-integration 契约层 + 双端 L0/L1 测试）
-**Head**：`a2dd45f`  on branch `fix/c-d12-schema-drift-canonical-adapter`（rebased on latest main，已纳入 E 轨 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1` + `docs/day12/14_d12e_knowledge_td017_closure_audit_20260903.md` 移交的治理点）
-**Base**：`main`
+**Head**：`acfe89c`（on branch `fix/c-d12-schema-drift-canonical-adapter`，rebased on latest main `d5e3b0f`）
+**Base**：`main@d5e3b0f`
 
-## 背景（Why）
+> **治理口径**：本 PR 是对 `docs/architecture/KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md`（当前状态 **CANDIDATE_FOR_FREEZE**，§0 / §R-1 handoff / §结尾明确）的 Candidate **Adapter Window** 对齐。本文任何地方不宣称 Canonical v1 已进入 `FROZEN` 团队级权威基线；transport 层不单方面停止 ADR-010/TD-039 的 `collected_at` 名称（按 R-1 handoff 登记 **TD-060 由 C/D 书面冻结后才允许删除 legacy alias**）。
 
-E 轨在 D12E 审计与 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` 中冻结了统一业务字段命名，C 轨在 event payload / manual config / behavior 等 6 处出现与 Canonical 命名不一致：
+---
 
-| Drift ID | Legacy（C 轨遗留） | Canonical（KMA v1 冻结） | 影响面 |
-| --- | --- | --- | --- |
-| KMA R-1 / TD-060 | `collected_at` | `captured_at` | 所有事件 metadata 时间字段 |
-| KMA R-5 | `sensitivity_level` | `sensitivity` | ManualConfig 敏感等级 |
-| DRIFT-007 | 单字段 `scope`（混含"配置类型"与"偏好作用域"两层含义） | `config_kind` + `preference_scope` | ManualConfig `scope` 拆分 |
-| DRIFT-008 / 009 | `key` / `value` | `preference_key` / `preference_value` | ManualConfig KV 命名 |
-| DRIFT-002 / 003 | 仅 `execution_status=failure`（Host DTO 术语） | `source_business_status=failed`（KMA 业务结果） + Host DTO 保留 | Tool.execution 业务状态 |
-| DRIFT-011 | 单字段 `actor`（混含"角色标签"与"可信 ID"） | `actor_role` + `actor_id` | Behavior 行为事件 |
-| DRIFT-004 | 隐式 source_type 推断 | `source_type_projected` + `mapping_status` 显式标注 | Behavior→MemorySourceEvent 映射 |
+## 背景（Why — Candidate Adapter Window 动机）
 
-若不修正：下游 E 轨 Canonical 适配器进入 fail-closed，C 轨事件在生产路径被直接丢弃。
+E 轨在 D12E 审计与 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` 中提出了 6 条统一业务字段命名**候选**（R-1..R-6）。该文档当前为 **CANDIDATE_FOR_FREEZE**，需经非作者 D Reviewer 批准 + PR 合并 + 后续治理升级后才是团队级冻结基线（§0 / §end 声明）。其 R-1 handoff + §责任分工表明确：
+
+- Transport 层 legacy `collected_at` 现状保留；
+- Adapter/Mapping 或更名方案必须经 **C/D 书面冻结 TD-060** 后才允许改 transport；
+- 未完成前，不得以 Candidate 文档身份覆盖 D3 / IPC 已有团队级契约。
+
+因此本 PR 不把 transport 出站直接从 collected_at 改到 captured_at，而是走 **Candidate Adapter Window 双写**：payload 同时携带 **Canonical 候选名**（对齐 R-1/R-3/R-5/R-6 提案语义）+ **transport/host DTO 既有短名**，如此：
+- ADR-010 IPC consumer、Host DTO handlers、D3 contract reader 继续读 legacy 字段，零改动；
+- 下游 E 轨 Canonical Adapter 可在 production fail-closed 模式下消费 Canonical 候选名；
+- 等 D Reviewer 对 Candidate → FROZEN 升级 + C/D 书面冻结 TD-060 冻结完毕后，在独立 follow-on PR 删除 legacy alias 即可。
+
+本 PR 在 4 个行为域做了 Candidate Adapter Window 对齐（R-1 时间、KMA R-5 + DRIFT-007/008/009 ManualConfig、DRIFT-002/003 Tool 业务结果、DRIFT-004/011 Behavior 拆分）：
+
+| Drift ID | Legacy（Host / IPC 既有） | Canonical Candidate（E KMA v1 候选） | Adapter Window 做法 |
+| -- | -- | -- | -- |
+| KMA R-1 / TD-060 | `metadata.collected_at`（ADR-010 / TD-039） | `metadata.captured_at`（业务入库事件捕获时间） | **双名出站**（不切换 transport） |
+| KMA R-5 | `sensitivity_level` | `sensitivity` | **双写**，归一 lowercase |
+| DRIFT-007 | `scope`（混用"配置种类+偏好作用域"） | `config_kind` + `preference_scope`（R-3 五值 global/topic/tool/session/time_window） | **双写**：scope+config_kind；当 config_kind==preference 加 preference_scope |
+| DRIFT-008 / 009 | `key` / `value` / `confidence` | `preference_key` / `preference_value` / `confidence_score` | **双写** |
+| DRIFT-002 / 003 | Host DTO `execution_status=failure` | Canonical `source_business_status=failed` | Tool event 同时携带 execution_status + 归一后的 source_business_status |
+| DRIFT-011 | 单字段 `actor`（角色标签） | `actor_role` + `actor_id`（可信实体 ID，Demo 缺则显式 PENDING_HOST_IDENTITY） | behavior 同时携带 actor（legacy）+ actor_role / actor_id |
+| DRIFT-004 | 隐式 source_type 推断 | `source_type_projected` + `mapping_status=PENDING_C_CONFIRMATION` | 已知 chat 类写 "chat"；user_action 写 PENDING_E_DECISION_D021_user_action；都附 mapping_status |
+
+---
 
 ## 改动（What）
 
 ### 契约层 `os-agent-integration/contracts/`（2 files）
 
-- `memory_event_contract_v1.h` / `.cpp`：
-  - **R-1 TD-060**：新增 `readCanonicalCapturedAt` → INPUT 同时接受 `captured_at`（Canonical，优先）与 `collected_at`（legacy transport 别名）；**OUTPUT 只写 Canonical 名 `captured_at`**。
-  - 时间字段 required 校验失败以 Canonical `captured_at` 报告，避免错误信息仍指向 legacy 名。
-  - 类型错误 (`invalid_type`) 双通道校验两个 key 任一非字符串即报错。
-  - **DRIFT-003**：`toolExecutionStatusFromString` 同时接受 `failure`(Host DTO) 与 `failed`(Canonical KMA)，统一映射到 `ToolExecutionStatus::Failure`，序列化仍保留 Host DTO 词形 `failure`（下游以 `source_business_status` 为准）。
+- **`memory_event_contract_v1.{h,cpp}` — INPUT 接受双名；Canonical wins**
+  - `readCanonicalCapturedAt()`：INPUT 同时接受 `captured_at`（Canonical，优先级高）与 `collected_at`（legacy transport alias）；当两者都提供且 Canonical 存在时，忽略 legacy 值。
+  - `firstMissingRequiredEventMetadataField()`：required 检查接受 `captured_at ∨ collected_at` 任一；错误字段名统一报 Canonical 的 `captured_at`（让下游 error handler 不依赖 transport alias 名）。
+  - **（MEDIUM-01 修复）** `firstInvalidEventMetadataJsonType()`：改到与 "canonical wins" 完全对称：
+    - both present → **只 type-check Canonical captured_at**（malformed legacy alias 不再能反向污染 Canonical ingest 结果）；
+    - legacy only present → type-check collected_at，但错误**仍报 Canonical captured_at 字段名**；
+    - neither → 跳过，交给 required check 单独报错。
+  - `toolExecutionStatusFromString()`：Host DTO `failure` + Canonical `failed` 都映射到同一个 Failure 枚举。
+
+### Candidate packaged examples（2 files — MEDIUM-02 修复）
+
+本 PR 的目标就是消除这些字段漂移，因此 candidate schema 示例必须同步。**legacy + canonical 双写**如下（core 3 个 packaged 在 HIGH-02 前次已同步）：
+
+- `contracts/examples/manual_config_event.v1.json`：
+  - `metadata.collected_at` → 保留；新增 `metadata.captured_at`；
+  - `config`：保留 `scope/key/value/confidence/sensitivity_level`；
+    新增 `config_kind/preference_scope/preference_key/preference_value/confidence_score/sensitivity`；
+    双名并存，与 HIGH-01 修复后的 ViewModel 输出 + D6c mock both-side 断言严格一致。
+- `contracts/examples/behavior_event.v1.json`：
+  - `metadata.captured_at` + legacy `collected_at`；
+  - `behavior`：保留 `actor`；新增 `actor_role=user / actor_id=PENDING_HOST_IDENTITY / source_type_projected=chat`（对应当 behavior_kind==user_message）。
 
 ### ViewModel 层 `memory-client/src/view_models/memory_view_model.cpp`（1 file）
 
-- **R-1**：`buildMemoryContextMetadata` / `tool_metadata` / `turn.finalized` nested metadata 全量输出 Canonical `captured_at`，`collected_at` 作为 transport legacy 由 contracts 侧双名接受，不在 Client 输出。
-- **DRIFT-002/003**：`runToolPipeline` 除原 `execution_status` 外附加 Canonical 字段 `source_business_status`，并显式 `failure → failed` 归一；其余词形 (success/partial/cancelled/timeout) 保持一致。
-- **KMA R-5 / DRIFT-007/008/009**：`runManualConfigPipeline`
-  - `scope` 拆为 `config_kind`（原 scope 值，"配置类型"层） + 当 `config_kind==preference` 时 `preference_scope=global`（Demo 默认，等宿主回填）；
-  - `key/value` → `preference_key/preference_value`；
-  - legacy 短名与 Canonical 长名**双写**，Adapter Window 内新旧 reader 都可读；
-  - `sensitivity`(Canonical, 小写归一) 与 `sensitivity_level`(alias, 原始大小写) **双写**；
-  - `confidence`/`confidence_score` 双写 (DRIFT-009 兼容)。
-- **DRIFT-011 / DRIFT-004**：`runBehaviorPipeline`
-  - `actor` 拆 `actor_role`(user/agent/system 标签) + `actor_id=PENDING_HOST_IDENTITY`（Fail-closed，生产端必须注入可信实体 ID，否则 block）；
-  - `source_type_projected`：已知 chat 类(um/ar/sm) → `chat`；user_action 类显式标 `PENDING_E_DECISION_D021_user_action`，pending E 轨裁决；
-  - `mapping_status=PENDING_C_CONFIRMATION`，通知 C 轨下游：SourceType 枚举映射尚未冻结，不得入库。
+- **（GOVERNANCE-01 策略 A 修复）R-1 OUTPUT 回退到 Adapter Window 双名**：
+  - `buildTurnFinalizedEventJson()` / `buildEventMetadata()`：**同时写 `collected_at` + `captured_at`**，并在注释里注明："仅 Candidate Adapter Window；等 TD-060 C/D 书面冻结 + KMA 文档升 FROZEN 才删 legacy"。
+  - 原错误：只写 `captured_at` 并宣称 transport 已切换 → 违反 §R-1 handoff。
+- **R-1**：其余 metadata 字段照旧；Canonical `captured_at` 保持输出（Candidate 消费）。
+- **DRIFT-002 / 003**：Tool execution event 继续输出 Canonical `source_business_status`（failure→failed 归一）+ Host DTO `execution_status` 双名。
+- **R-5 / DRIFT-007/008/009**：Manual config 继续 scope/config_kind+preference_scope / key/preference_key / value/preference_value / confidence/confidence_score / sensitivity_level/sensitivity 双写。
+- **DRIFT-011 / DRIFT-004**：Behavior 继续 actor/actor_role + actor_id(PENDING_HOST_IDENTITY) / source_type_projected + mapping_status 双写。
 
 ### 测试更新（3 files）
 
-- `os-agent-integration/tests/test_memory_event_contract_v1.cpp`
-  - 3 组 fixture (MemoryContext / ToolExecution / TurnFinalized) 改用 Canonical `captured_at`。
-  - `*RequiresTrustedMetadata_data()` / `*RequiresEventTimestamps_data()` 中 `collected_at` 行 → `captured_at`。
-  - `toolExecutionStatusParsesKnownValues_data()` 新增 `failed → Failure` 用例（共 6 个状态）。
-  - `turnFinalizedValidationRequiresCollectedAt` 重命名为 `turnFinalizedValidationRequiresCapturedAt`，验证字段错误名改为 `captured_at`。
-  - `eventMetadataWrongJsonTypesAreRejected_data` 中 Turn 事件的 `"collected_at":42` → `"captured_at":42`，错误字段同步。
-- `memory-client/tests/test_d5_vertical_link_demo.cpp`
-  - fixture 中 `collected_at` → `captured_at`。
-  - ADR-010 turn.finalized nested metadata 必填校验接受 `captured_at` 或 `collected_at` 任一（Adapter Window 兼容）。
-  - `previewAndSendReuseSameEventIdTimestamp` 缓存一致断言改比较 `captured_at`。
-- `memory-client/tests/test_d6c_multi_source_adapters.cpp`
-  - B1 `manualConfigLongTermPersisted` mock 必填校验升级为**双通道**：
-    - `scope` 或 (`config_kind` + `preference_scope`)；
-    - `key` 或 `preference_key`；
-    - `value` 或 `preference_value`；
-    - `sensitivity_level` 或 `sensitivity`；
-    - 确保 ViewModel 双写输出在下游 Mock 端一致接受。
+1. **`os-agent-integration/tests/test_memory_event_contract_v1.cpp`**
+   - **（HIGH-03 编译错误修复）** `capturedAtCanonicalWinsOverBadLegacyAliasType()`：
+     - `ctxParsed.ok` → `ctxParsed.ok()`（×3，ParseResult<T>::ok 是 const 成员函数，非静态成员）；
+     - 原 `toJson(ctxParsed.value->metadata)`（无该公开重载）改为：对完整 `MemoryContext` 调 `toJson(*ctxParsed.value)` 后从 `metadata.captured_at` 取值比较；Tool/Turn 正路径只断言 `.ok()`，避免堆叠新 API。
+   - `eventMetadataWrongJsonTypesAreRejected_data()`：新增行 "legacy_collected_at_only_invalid_type"，错误字段要求为 canonical `captured_at`。
+   - HIGH-02 行：`TurnFinalizedEvent.captured_at` 仍然验证 Canonical wrong-type 为 invalid_type。
+
+2. **`memory-client/tests/test_d5_vertical_link_demo.cpp`**
+   - turn.finalized ingress 必填：继续 `captured_at ∨ collected_at`（Adapter Window 双通道接受）；
+   - `previewAndSendReuseSameEventIdTimestamp()` 比较 `captured_at`（Canonical）即可（因为 Demo 客户端对象构造函数实际是同一个 now 值写入两个字段）。
+
+3. **`memory-client/tests/test_d6c_multi_source_adapters.cpp`（HIGH-01 D6c mock 从 either/or 收紧为 both-side contract）**
+   - 之前 either/or 会漏 "ViewModel 只写 Canonical 没写 legacy" 的回归（正是 HIGH-01 的 bug）。
+   - 现在要求：
+     - `cfg.scope && cfg.config_kind`（scope 无论是否 preference，都必须有 config_kind）；
+     - 当 `config_kind == preference` 时必须有 `cfg.preference_scope`；
+     - `cfg.key && cfg.preference_key`、`cfg.value && cfg.preference_value`、
+       `cfg.sensitivity_level && cfg.sensitivity`。
+
+---
 
 ## 用户与开发者影响（Impact）
 
-- **Host DTO 层兼容（C→B/C→A）**：仍保留 legacy 字段 (`execution_status=failure`、`scope/key/value`、`sensitivity_level`)，上游 B/A 轨现有消费者零修改。
-- **Canonical 通道（C→E 业务入库）**：已对齐 KMA v1，E 轨 Canonical Adapter 不再 fail-closed。
-- **Fail-closed 保障**：
-  - `actor_id=PENDING_HOST_IDENTITY`：生产端 Canonical Adapter 必须检查此字段并拒绝非可信注入；Client Demo 直接放行（仅演示）。
-  - `source_type_projected=PENDING_E_DECISION_D021_user_action`：禁止对 user_action 行为事件做 C 轨隐式 schema 推断。
-  - `mapping_status=PENDING_C_CONFIRMATION`：ManualConfig / Behavior 候选项不得在 C 轨未冻结 SourceType 前落正式表（MEMORY_BUSINESS_SCHEMA_V0.1 §2.9 close）。
+- **Host / IPC Transport（C→B/A，既有 DTO）零破坏**：scope/key/value/sensitivity_level/confidence/actor/collected_at/execution_status 全部保留为 legacy 短名出槽；ADR-010/handlers.py 不用改。
+- **Canonical 通道（C→E 业务，Candidate Adapter Window）**：captured_at / source_business_status / config_kind / preference_scope / preference_key / preference_value / confidence_score / sensitivity / actor_role / actor_id / source_type_projected / mapping_status 全部携带；下游 E Canonical Adapter 可以 Candidate 身份消费（生产 fail-closed；若检测到仍为 Candidate 但字段有冲突就 block）。
+- **Fail-closed / Pending Marker（仍保持）**：
+  - `actor_id = PENDING_HOST_IDENTITY`：仍要求可信宿主注入；
+  - `source_type_projected = PENDING_E_DECISION_D021_user_action`：user_action 的 MemorySourceEvent.source_type 仍等 E 裁决；
+  - `mapping_status = PENDING_C_CONFIRMATION`：C 轨 SourceType 未冻结；
+  - **新增 Blocker 条目 TD-060**：CANDIDATE Adapter Window 保留 `collected_at`；只有在 **C/D 书面冻结 TD-060（transport adapter/mapping 或更名方案）+ KMA 文档升级到 FROZEN** 之后，**在独立 follow-on PR 删除 `metadata.collected_at` legacy alias**，不得在本 PR 删除。
+
+---
 
 ## 验证（Validation）
 
-| 检查项 | 结果 | 备注 |
+| 检查项 | 结果 | 证据/备注 |
 | --- | --- | --- |
-| `git diff --check` | ✅ Clean | 无尾随空白 / 无 Tab-Space 混用 / 无 EOF 缺换行 |
-| Diff stat | 7 files / +265 / −35 | 6 代码 + 1 PR body；本次范围完整无泄漏 |
-| 分支状态 | ✅ ahead main，无落后 | push 前已 clean rebase（用户要求 PR 必须基于最新 main） |
-| `cmake --build build` + `ctest --output-on-failure` | ⚠️ 未在本机执行 | Windows 本机缺失 cmake/Qt6 工具链（仅有 gcc）；**必须在 Linux 构建机 / CI workflow `memory-client-ctest.yml` 上执行 L0/L1 编译 + ctest 并附日志后方可 Merge** |
-| 字段级双通道 | ✅ 已覆盖 6 tests | legacy→Canonical INPUT 接受 + Canonical OUTPUT 归一 + 双写 Mock 通过 |
+| `git diff --check origin/main...HEAD` | ✅ Clean | 只剩 workflow EOF 末尾空行 warning（合法 YAML newline at EOF 需求） |
+| Diff stat | ✅ 真实 | 累计 13 files changed, 526 insertions(+), 39 deletions(-)（`git diff --stat origin/main...HEAD` HEAD=acfe89c 结果） |
+| Rebased on latest main | ✅ Behind 0 | main `d5e3b0f`（fetch + rebase 完） |
+| **CI — Repository Baseline Check**（已有 job baseline-check） | ✅ 已有绿灯，PR 触发后重跑 | `.github/workflows/baseline-check.yml` |
+| **CI — Memory Client L0 ctest**（已有 job memory-client-ctest） | ✅ 已有绿灯，PR 触发后重跑 | 包含 memory-client build tests + ctest + QML smoke build |
+| **CI — os-agent-integration standalone ctest （本 PR 新增 job，CI 盲区 HIGH-02 / HIGH-03 修复）** | ✅ **新合入到 memory-client-ctest.yml**：在同一 workflow 末尾追加 3 steps：<br>1. `cmake -S os-agent-integration -B os-agent-integration/build -DBUILD_TESTING=ON`<br>2. `cmake --build os-agent-integration/build --target test_memory_event_contract_v1`<br>3. `ctest --test-dir os-agent-integration/build --output-on-failure`<br>Qt5 Core + Test 依赖（qtbase5-dev）已在前半 job 装好；PR 绿灯会同时给出 contract ctest 证据链，不再漏 HIGH-02 packaged examples 不匹配、HIGH-03 测试不编译。 |
+| **standalone os-agent-integration ctest（本地构建机复现命令，Linux / 有 cmake + qtbase5-dev）** | ⚠️ 提供命令、等 CI 运行或构建机附日志：<br>`cmake -S os-agent-integration -B build-ct -DBUILD_TESTING=ON && cmake --build build-ct --target test_memory_event_contract_v1 && ctest --test-dir build-ct --output-on-failure` | 必须关闭：<br>- packagedExamplesMatchKnownPayloads() 4/4 PASS（MemoryQuery + MemoryContext + ToolExec + TurnFinalized）<br>- capturedAtCanonicalWinsOverBadLegacyAliasType PASS（3 对象 canonical-wins + MemoryContext round-trip captured_at 值校验）<br>- legacy_collected_at_only_invalid_type 错误字段 == captured_at |
 
-## 待 Reviewer 裁决项（Blockers to Close）
+> ⚠️ Windows 本机无 cmake/Qt6/Qt5，无法本地编译 contract target；本 PR 把 os-agent-integration standalone ctest **纳入同一个 CI workflow** 直接提供绿灯证据链，若 runner 侧 Qt 依赖有问题请在 CI 失败后启动 `gh-fix-ci` 流程。
 
-1. **CI 绿灯**：`memory-client-ctest.yml` 全部通过（含 contract+v1 parse, d5, d6c）。
-2. **E 轨 D021 user_action 最终 SourceType**：`PENDING_E_DECISION_D021_user_action` 是占位，需要 E 给出 `chat` / `manual_behavior` / 新枚举值，C 侧对应替换。
-3. **可信 `actor_id` 注入方式**：需要 Canonical Adapter 明确 host identity 来源（例如系统 Kiosk session / 可信 D-Bus 标识），Demo 的 `PENDING_HOST_IDENTITY` 不得长期保留。
+---
+
+## Blocker Pending（待 Close / 待后续治理）
+
+1. **CI 绿灯**（`memory-client-ctest.yml` 3 job：Baseline + memory-client L0 + **新增 standalone os-agent-integration ctest**）—— 在本 PR 新增 job 之后才算关闭；
+2. **TD-060（C/D 书面冻结 R-1 transport Adapter/Mapping 或更名方案）**——本 PR 仅做 Candidate Adapter Window 双写；在 KMA_UNIFIED_DATA_FORMAT_FREEZE_V1 升级为 `FROZEN` + TD-060 被书面冻结**之前**，**不得**删除 `metadata.collected_at` legacy alias；相应 follow-on："删除 legacy alias"的 PR 必须引用本条目。
+3. **E 轨 D021 user_action 最终 SourceType**：`PENDING_E_DECISION_D021_user_action`（仍占位）。
+4. **可信 `actor_id` 注入来源**：Canonical Adapter 生产环境必须显式注入可信 host identity（或 fail-closed）。Demo 长期不得保留 `PENDING_HOST_IDENTITY`。
+
+---
 
 ## Related / Cross-track References
 
-- E 轨治理：`docs/architecture/KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md`（冻结条款 R-1, R-3, R-5, R-6）
-- 生命周期漂移移交：`docs/day12/14_d12e_knowledge_td017_closure_audit_20260903.md`
-- C 轨治理提案：`docs/architecture/C_TRACK_CANONICAL_FIELD_FREEZE_PROPOSAL_V0.2.md`（本轮已对齐其全部条目）
+- E 轨治理（Candidate）：`docs/architecture/KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md`
+  - **状态：CANDIDATE_FOR_FREEZE**（R-1..R-6 候选裁定；§0 + §end 升级门槛；§R-1 handoff：transport collected_at 现状保留 + TD-060 由 C/D 书面冻结）。
+- D 轨 IPC / SQLite / Outbox / 成品化：`TD-060` 为 C/D 冻结 handoff，未在本 PR 提供书面冻结证据。
+- E 轨生命周期漂移移交：`docs/day12/14_d12e_knowledge_td017_closure_audit_20260903.md`。
+- C 轨 Candidate 提案（仅工作区参考，**不作为团队级冻结依据**）：`docs/architecture/C_TRACK_CANONICAL_FIELD_FREEZE_PROPOSAL_V0.2.md`（未入仓；不作为本 PR 已冻结依据）。
