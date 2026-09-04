@@ -1765,3 +1765,23 @@ entries:
     reviewer: "D 轨 Reviewer（PR #132，索引回填待复审）"
     limitations: "实际运行提交为 2698f7c，生产运行时代码为 main@cc4acf6。A SDK 用例仍跳过；memory.retrieve 主链、C GUI、硬删除无明文残留和 RC-01..07 全量仍未验证，不能宣告 D11E 完成；当前 PR 审查 head 为 6acfe455cb454e5d38f3ac617db655797071dce1。L0/L1 日志 SHA-256: cfc0fdb550e3ad18de4f8e60645d19282de077c91b201938720a0c3973844d52；广回归日志 SHA-256: 98e98d1e722582a54a7e2066c2682633286e948ae73927d2f1d7d0ccb16ecf36。"
     checksum_sha256: "4599c243acd41b1c7b3a32e1797699cd854b55be3cc95e81942867cbe81b54b3"
+  - id: "D12D-AGT006-KAIMING-503-NONINTERFERENCE"
+    task_id: "D12D-PostMerge-01"
+    description: "AGT-006 Kaiming 5.0.3 新层布局复验：项目用户服务 rollback -> install 后，官方 AI Assistant 层树摘要不变，Kaiming info 与运行中容器均保留"
+    status: "PARTIAL"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d_agt006_kaiming_503_deploy_noninterference_20260904.log"
+    report: "docs/day12/17_d12d_agt006_kaiming_503_reverification_20260904.md"
+    tested_commit: "b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9"
+    artifact_equivalent_main_commit: "cc4acf6"
+    date: "2026-09-04"
+    reviewer: "pending"
+    runtime_result: "PARTIAL_PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "最小 KySec 授权/ACL 的 5.0.3 部署路径复验尚未完成；TD-KYSEC-001 与 TD-DEPLOY-001 均保持 In Progress。本项不宣称官方 Hook 注入或债务关闭。"
+    checksum_sha256: "859d7f1fc787c9be3d6ccbc99dee23f4d5de386671cfee1f934401dfd30d85be"
+    details: |
+      Kaiming app: cn.kylin.kylin-aiassistant, binary/5.0.3, runtime stable:top.openkylin.ukui/1.1.43-aipc.7/x86_64.
+      层根目录 /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-aiassistant/binary/5.0.3 完整文件树 SHA-256 前后均为 3d3926c91e94430e187a99efae5edd3a5ea0a5db38aadcd2289169f1a7a78c75。
+      rollback 后 service inactive；reinstall 后 active 且 /run/user/1000/kylin-memory/memory.sock 存在；kaiming ps 仍显示 AI Assistant 容器。
