@@ -109,7 +109,9 @@ QJsonObject D5VerticalLinkDemoTest::makeValidContext(
         {QStringLiteral("turn_id"), QStringLiteral("turn-test")},
         {QStringLiteral("occurred_at"),
          QStringLiteral("2026-08-14T04:59:59.900Z")},
-        {QStringLiteral("collected_at"),
+        // KMA R-1 (TD-060): Canonical captured_at. Legacy collected_at still
+        // accepted on INPUT via contract adapter.
+        {QStringLiteral("captured_at"),
          QStringLiteral("2026-08-14T05:00:00.000Z")},
         {QStringLiteral("source_reference"),
          QStringLiteral("ref:context-build:test")},
@@ -235,7 +237,10 @@ void D5VerticalLinkDemoTest::turnFinalizedWithUnsupportedMethodRoutesPostTurnToF
                 || !metadata.contains(QStringLiteral("turn_id"))
                 || !metadata.contains(QStringLiteral("idempotency_key"))
                 || !metadata.contains(QStringLiteral("occurred_at"))
-                || !metadata.contains(QStringLiteral("collected_at"))
+                // KMA R-1: Canonical captured_at required; legacy collected_at
+                // accepted via TD-060 adapter window. Either present = ok.
+                || (!metadata.contains(QStringLiteral("captured_at"))
+                    && !metadata.contains(QStringLiteral("collected_at")))
                 || !metadata.contains(QStringLiteral("source_reference"));
 
             // 4) 事件层必填字段
@@ -587,7 +592,7 @@ void D5VerticalLinkDemoTest::previewAndSendReuseSameEventIdTimestamp()
     client::MemoryViewModel vm;
 
     // 纯函数调用，不依赖连接：buildTurnFinalizedEventJson 在相同参数下
-    // 应返回同一个缓存对象（event_id / occurred_at / collected_at 一致）
+    // 应返回同一个缓存对象（event_id / occurred_at / captured_at 一致）
     const QJsonObject a = vm.buildTurnFinalizedEventJson(
         "u", "s", "t", "tr", "m",
         "final text", "completed", "stop");
@@ -604,8 +609,8 @@ void D5VerticalLinkDemoTest::previewAndSendReuseSameEventIdTimestamp()
              bMeta.value(QStringLiteral("event_id")).toString());
     QCOMPARE(aMeta.value(QStringLiteral("occurred_at")).toString(),
              bMeta.value(QStringLiteral("occurred_at")).toString());
-    QCOMPARE(aMeta.value(QStringLiteral("collected_at")).toString(),
-             bMeta.value(QStringLiteral("collected_at")).toString());
+    QCOMPARE(aMeta.value(QStringLiteral("captured_at")).toString(),
+             bMeta.value(QStringLiteral("captured_at")).toString());
 
     // 参数变化 → 缓存失效 → 不同对象（至少 event_id 不同）
     const QJsonObject c = vm.buildTurnFinalizedEventJson(

@@ -421,7 +421,9 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
 
     // ADR-010 IPC 映射契约：payload 分为 metadata（嵌套对象）+ 事件字段（顶层）。
     // metadata 包含 schema_version / event_id / user_id / session_id / turn_id /
-    // idempotency_key / trace_id? / occurred_at / collected_at / source_reference。
+    // idempotency_key / trace_id? / occurred_at / captured_at / source_reference。
+    // KMA R-1 (TD-060)：业务层统一使用 captured_at；collected_at 作为 transport
+    // legacy alias 仅在需要时由 Adapter 层接受读取。
     // 事件层包含 is_final / finalized_at / final_message_id? /
     // finalization_reason? / stop_reason? / tool_call_ids?。
     QJsonObject metadata{
@@ -432,7 +434,7 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
         {QStringLiteral("turn_id"), turnId},
         {QStringLiteral("idempotency_key"), idempotencyKey},
         {QStringLiteral("occurred_at"), now},
-        {QStringLiteral("collected_at"), now},
+        {QStringLiteral("captured_at"), now},
         {QStringLiteral("source_reference"), srcRef},
     };
     if (!traceId.isEmpty()) metadata.insert(QStringLiteral("trace_id"), traceId);
@@ -466,7 +468,9 @@ QJsonObject MemoryViewModel::buildEventMetadata(
     const QString& sourceReference) const
 {
     // 共享 metadata 构造：对齐 ADR-010 IPC 映射契约的 metadata 嵌套对象。
-    // trace_id 若提供则写入；occurred_at / collected_at 取同一 UTC 毫秒时间戳。
+    // trace_id 若提供则写入；occurred_at / captured_at 取同一 UTC 毫秒时间戳。
+    // KMA R-1 (TD-060)：输出统一 Canonical 名 captured_at；若上游仍使用
+    // collected_at 别名，contracts 解析层已做双名接受。
     const QString now = nowIso8601UtcMs();
     QJsonObject metadata{
         {QStringLiteral("schema_version"), QStringLiteral("1.0")},
@@ -477,7 +481,7 @@ QJsonObject MemoryViewModel::buildEventMetadata(
         {QStringLiteral("turn_id"), turnId},
         {QStringLiteral("idempotency_key"), idempotencyKey},
         {QStringLiteral("occurred_at"), now},
-        {QStringLiteral("collected_at"), now},
+        {QStringLiteral("captured_at"), now},
         {QStringLiteral("source_reference"), sourceReference},
     };
     if (!traceId.isEmpty()) metadata.insert(QStringLiteral("trace_id"), traceId);
@@ -500,6 +504,12 @@ QJsonObject MemoryViewModel::buildToolExecutionEventJson(
 {
     // 对齐 contracts/examples/tool_execution_event.v1.json（D3 已冻结）。
     // rollback_status 默认 not_applicable；rollbackRequired=true 时为 required。
+    // DRIFT-002（E 冻结 v1 R-6 / 漂移方案 §4 DRIFT-002/003）：
+    //   Host DTO 层保留 execution_status（success/partial/failure/...），
+    //   同时在事件内显式附带 Canonical 字段 source_business_status，
+    //   并将 Host 词形 failure 映射为 Canonical failed。
+    //   其余词形 success→success、partial→partial、cancelled→cancelled、
+    //   timeout→timeout 保持一致。
     const QString idempotencyKey = QStringLiteral("tool-execution:%1:%2")
                                        .arg(sessionId, toolCallId);
     const QString srcRef = QStringLiteral("ref:tool-event:%1").arg(toolCallId);
@@ -507,6 +517,12 @@ QJsonObject MemoryViewModel::buildToolExecutionEventJson(
     QJsonObject metadata = buildEventMetadata(
         userId, sessionId, turnId, /*traceId=*/QStringLiteral(""),
         idempotencyKey, srcRef);
+
+    // KMA R-6 / DRIFT-003: Host status `failure` → Canonical business `failed`.
+    QString canonicalBusinessStatus = executionStatus;
+    if (canonicalBusinessStatus == QStringLiteral("failure")) {
+        canonicalBusinessStatus = QStringLiteral("failed");
+    }
 
     const QString now = nowIso8601UtcMs();
     QJsonObject event;
@@ -517,6 +533,8 @@ QJsonObject MemoryViewModel::buildToolExecutionEventJson(
     event.insert(QStringLiteral("started_at"), now);
     event.insert(QStringLiteral("finished_at"), now);
     event.insert(QStringLiteral("execution_status"), executionStatus);
+    // Canonical business result field (per KMA drift freeze R-6).
+    event.insert(QStringLiteral("source_business_status"), canonicalBusinessStatus);
     if (!resultRef.isEmpty()) event.insert(QStringLiteral("result_ref"), resultRef);
     if (!errorType.isEmpty()) event.insert(QStringLiteral("error_type"), errorType);
     if (!errorMessageSafe.isEmpty())
@@ -598,13 +616,33 @@ void MemoryViewModel::runManualConfigPipeline(
         /*traceId=*/QStringLiteral(""), idempotencyKey, srcRef);
 
     QJsonObject config;
-    config.insert(QStringLiteral("scope"), scope);
+    // DRIFT-007: legacy `scope` is "kind of config" (e.g. "preference"), not the
+    // Canonical Preference `preference_scope` (作用域五值 global/topic/tool/
+    // session/time_window — 见 KMA 冻结 R-3，MEMORY_BUSINESS_SCHEMA_V0.1 §2.9）。
+    // 拆分为 config_kind + 当 config_kind==preference 时设置 preference_scope
+    // （当前 Client Demo 默认作用域 global；真实宿主若提供具体作用域则填入）。
+    config.insert(QStringLiteral("config_kind"), scope);
+    if (scope == QStringLiteral("preference")) {
+        // Demo/Prototype 默认作用域 global（待真实宿主接入后回填）。
+        config.insert(QStringLiteral("preference_scope"), QStringLiteral("global"));
+    }
+    // DRIFT-008: Canonical preference_key / preference_value 命名。
+    config.insert(QStringLiteral("preference_key"), key);
+    config.insert(QStringLiteral("preference_value"), value);
+    // 同时保留 host DTO 层 key/value 短名（下游 Adapter 通过双名做 legacy_read）。
     config.insert(QStringLiteral("key"), key);
     config.insert(QStringLiteral("value"), value);
     config.insert(QStringLiteral("is_temporary"), isTemporary);
     config.insert(QStringLiteral("should_persist"), shouldPersist);
+    // DRIFT-009: Canonical confidence_score（strict [0,1]）；同时保留候选层
+    // confidence 别名。
     config.insert(QStringLiteral("confidence"), confidence);
+    config.insert(QStringLiteral("confidence_score"), confidence);
+    // KMA R-5: Canonical 使用 sensitivity（none/low/medium/high/critical）；
+    // sensitivity_level 仅为注解层 1:1 alias。两者并行输出保证 legacy
+    // reader 仍可读；Canonical 层以 sensitivity 为真源。
     config.insert(QStringLiteral("sensitivity_level"), sensitivityLevel);
+    config.insert(QStringLiteral("sensitivity"), sensitivityLevel.trimmed().toLower());
     // TB-D6C-08：与 Behavior 对称，候选手动配置事件也标记 PENDING_C_CONFIRMATION
     // （C 轨未冻结 manual.config.ingest → 正式 schema / SourceType）。
     config.insert(QStringLiteral("mapping_status"),
@@ -659,7 +697,27 @@ void MemoryViewModel::runBehaviorPipeline(
     behavior.insert(QStringLiteral("behavior_kind"), behaviorKind);
     behavior.insert(QStringLiteral("observed_action"), observedAction);
     behavior.insert(QStringLiteral("context_ref"), contextRef);
-    behavior.insert(QStringLiteral("actor"), actor);
+    // DRIFT-011: Behavior 的 `actor` 是角色标签（user/agent/system），
+    // 不得冒充 Canonical actor_id（可信实体 ID）。拆分：
+    //   actor_role = user/agent/system（辅助标签）；
+    //   actor_id  = 可信宿主实体 ID（当前 Demo 缺真实注入，显式标注缺失，
+    //              下游 Adapter 在 production 模式下 fail-closed）。
+    behavior.insert(QStringLiteral("actor_role"), actor);
+    behavior.insert(QStringLiteral("actor_id"), QStringLiteral("PENDING_HOST_IDENTITY"));
+    // DRIFT-004: 能确定的 source_type 显式投影，其余保持
+    // PENDING_C_CONFIRMATION（E 冻结提案 v0.2 §三.3 已提请 E 裁决）：
+    //   user_message / agent_response / system_message → chat；
+    //   user_action（DRIFT-011-EXT / 提案 v0.2 §三.2）→ 待定，默认
+    //     建议归入 manual_config（待 E 裁决，先标 PENDING_E_DECISION）。
+    QString sourceType = QStringLiteral("PENDING_C_CONFIRMATION");
+    if (behaviorKind == QStringLiteral("user_message")
+        || behaviorKind == QStringLiteral("agent_response")
+        || behaviorKind == QStringLiteral("system_message")) {
+        sourceType = QStringLiteral("chat");
+    } else if (behaviorKind == QStringLiteral("user_action")) {
+        sourceType = QStringLiteral("PENDING_E_DECISION_D021_user_action");
+    }
+    behavior.insert(QStringLiteral("source_type_projected"), sourceType);
     behavior.insert(QStringLiteral("occurred_at"), metaOccurredAt);
     // C 轨未冻结 behavior → MemorySourceEvent.source_type 映射；
     // 显式注入 PENDING_C_CONFIRMATION 字段，不擅自新增 SourceType 枚举。

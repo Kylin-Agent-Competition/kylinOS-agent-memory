@@ -60,6 +60,12 @@ struct EventMetadata {
     QString sessionId;
     QString turnId;
     QDateTime occurredAt;
+    // Host/transport alias: `collectedAt` still holds the value read or assigned by
+    // host callers. On the business/Canonical side (per KMA R-1) the field name is
+    // `captured_at`. JSON parsing accepts both `captured_at` (canonical) and
+    // `collected_at` (legacy transport alias, TD-060). JSON serialization always
+    // emits the canonical `captured_at` field name; legacy callers can still write
+    // via `collected_at` transport alias during the adapter window.
     QDateTime collectedAt;
     QString sourceReference;
     QString idempotencyKey;
