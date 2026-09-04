@@ -537,13 +537,41 @@ def test_eval_memory_status_classification_is_canonical_and_exhaustive():
 
 
 def test_eval_sensitivity_classification_is_canonical_and_exhaustive():
-    """sensitivity 语料值集 == SensitivityLevel 五级，且 positive ∪ prohibited 完备、互斥。"""
+    """sensitivity 语料值集 == SensitivityLevel 五级，且 positive ∪ prohibited 完备、互斥。
+
+    positive 必须是显式策略集合（none/low/medium），禁止用“非 prohibited 补集”推导，
+    否则未来新增未分类级别会被自动当 positive 而绕过 fail-closed（P2-R2）。
+    """
     canonical = frozenset(level.value for level in SensitivityLevel)
     assert formal_eval_module._SENSITIVITIES == canonical
     positive = formal_eval_module._POSITIVE_SENSITIVITIES
     prohibited = formal_eval_module._PROHIBITED_SENSITIVITY_LEVELS
+    assert positive == frozenset(
+        {
+            SensitivityLevel.NONE.value,
+            SensitivityLevel.LOW.value,
+            SensitivityLevel.MEDIUM.value,
+        }
+    )
     assert positive & prohibited == frozenset()
     assert positive | prohibited == canonical
+
+
+def test_unclassified_new_sensitivity_fails_closed_not_auto_positive(monkeypatch):
+    """未来 Canonical 新增未分类 sensitivity 时，穷尽守卫必须失败，且不得自动进入 positive。
+
+    模拟 SensitivityLevel 增加一个新成员（如 ``ultra_critical``）：_SENSITIVITIES 自动
+    包含新值，但由于 positive 是显式集合，positive ∪ prohibited != canonical，
+    _assert_policy_classification_exhaustive() 必须抛 RuntimeError（fail-closed），
+    而不是让新值静默落入正向分母。
+    """
+    new_value = "ultra_critical"
+    expanded = formal_eval_module._SENSITIVITIES | frozenset({new_value})
+    monkeypatch.setattr(formal_eval_module, "_SENSITIVITIES", expanded)
+    # 新值不得自动成为 positive（显式策略集合不受影响）
+    assert new_value not in formal_eval_module._POSITIVE_SENSITIVITIES
+    with pytest.raises(RuntimeError, match="sensitivity policy 分类不穷尽"):
+        formal_eval_module._assert_policy_classification_exhaustive()
 
 
 def test_eval_conflict_state_is_fixed_eval_normalization_and_exhaustive():

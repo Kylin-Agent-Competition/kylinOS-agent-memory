@@ -106,11 +106,20 @@ _MEMORY_STATUS_GUARDRAIL_CATEGORY: dict[str, str] = {
 }
 
 # sensitivity：high/critical 触发 sensitive_recall_prohibited（D9 critical 零容忍）；
-# positive 仅 none/low/medium。
+# positive 仅 none/low/medium。positive 与 prohibited 都必须是**显式策略集合**
+# （不用“非 prohibited 的补集”推导），否则未来新增未分类级别会被自动当 positive，
+# 使穷尽断言仍然成立而失去 fail-closed（PR #138 Rework P2-R2）。
 _PROHIBITED_SENSITIVITY_LEVELS: frozenset[str] = frozenset(
     {
         SensitivityLevel.HIGH.value,
         SensitivityLevel.CRITICAL.value,
+    }
+)
+_POSITIVE_SENSITIVITIES: frozenset[str] = frozenset(
+    {
+        SensitivityLevel.NONE.value,
+        SensitivityLevel.LOW.value,
+        SensitivityLevel.MEDIUM.value,
     }
 )
 
@@ -118,11 +127,6 @@ _PROHIBITED_SENSITIVITY_LEVELS: frozenset[str] = frozenset(
 _UNRESOLVED_CONFLICT_STATES: frozenset[str] = frozenset({"unresolved"})
 
 _POSITIVE_MEMORY_STATUSES = frozenset({MemoryStatus.ACTIVE.value})
-_POSITIVE_SENSITIVITIES = frozenset(
-    level.value
-    for level in SensitivityLevel
-    if level.value not in _PROHIBITED_SENSITIVITY_LEVELS
-)
 _POSITIVE_CONFLICT_STATES = frozenset({"none", "resolved"})
 
 
