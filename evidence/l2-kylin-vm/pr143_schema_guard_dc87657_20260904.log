@@ -1,0 +1,24 @@
+tested_commit=dc8765782e4fba07079fd4e7fad41ba5cccede3e
+5bbfc95d03f1e7b47ac7881f748be49999cfd6aa61c9eb954ade20d31bbf81bd  /home/kylin-agent/pr143-dc87657.tar
+c7d50598ce1a168b917c1b12d02f7f08e557207a5440bc65b32eabeca12ca9bf  /home/kylin-agent/pr143_uds_probe.py
+Python 3.12.3
+Linux kylin-agent-pc 6.6.0-76-generic #86r2-KYLINOS SMP PREEMPT_DYNAMIC Tue Aug  4 06:44:37 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+PRETTY_NAME=Kylin V11 VERSION_ID=v11
+...................................                                      [100%]
+35 passed in 18.52s
+REJECT_OK legacy_only source_events=0 idempotency_cache=0
+REJECT_OK legacy_failure source_events=0 idempotency_cache=0
+REJECT_OK placeholder_actor source_events=0 idempotency_cache=0
+REJECT_OK placeholder_source source_events=0 idempotency_cache=0
+REJECT_OK c_status_divergence source_events=0 idempotency_cache=0
+CANONICAL_WINS_OK source_events=1 idempotency_cache=1
+PR143_UDS_PROBE_PASS
+SERVER_LOG
+配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+2026-09-04T21:46:20+0800 WARNING db.engine [MainThread] 收紧 DB 文件权限 0600 失败（不阻断启动）: /tmp/pr143-dc87657-l2-final/event-ingest.sqlite3 ([Errno 2] No such file or directory: '/tmp/pr143-dc87657-l2-final/event-ingest.sqlite3')
+2026-09-04T21:46:20+0800 INFO __main__ [MainThread] schema 就绪: /tmp/pr143-dc87657-l2-final/event-ingest.sqlite3
+2026-09-04T21:46:20+0800 WARNING __main__ [MainThread] 开发模式建库（init_schema=create_all，绕过 Alembic）。生产环境必须先 `alembic upgrade head`，再以 `--no-migrate` 启动，避免两套建表路径 default 语义分叉（PR#52 Issue 6）。
+2026-09-04T21:46:20+0800 WARNING __main__ [MainThread] event.ingest 已注册（test/validation profile，trusted_identity=None）。production 禁止使用此参数（BLOCKED_BY_HOST_MAPPING）
+2026-09-04T21:46:20+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/tmp/pr143-dc87657-l2-final/memory.sock）
+2026-09-04T21:46:20+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /tmp/pr143-dc87657-l2-final/memory.sock
+2026-09-04T21:46:20+0800 INFO gateway.handlers [Thread-6 (_handle_connection)] event.ingest success source_event_id=1 event_id=pr143-canonical_wins admission_decision=allow_extraction
