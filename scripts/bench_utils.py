@@ -1,0 +1,375 @@
+#!/usr/bin/env python3
+"""D13A 公共 benchmark 工具。
+
+这里集中处理三件容易漂移的事情：延迟分位数、进程资源采样和运行环境快照。
+脚本只写运行目录，不修改业务数据库；真实 SDK/VM 的结果由调用者显式提供。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import platform
+import statistics
+import subprocess
+import sys
+import threading
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Iterable, Mapping, Optional, Sequence
+
+
+def percentile(values: Iterable[float], fraction: float) -> float:
+    """返回 nearest-rank 分位数；空输入返回 ``0.0``。"""
+    ordered = sorted(float(value) for value in values)
+    if not ordered:
+        return 0.0
+    if not 0.0 <= fraction <= 1.0:
+        raise ValueError("fraction must be between 0 and 1")
+    index = min(len(ordered) - 1, int(len(ordered) * fraction))
+    return ordered[index]
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def write_json(path: Path | str, value: Any) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_jsonl(path: Path | str, rows: Iterable[Mapping[str, Any]]) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8") as stream:
+        for row in rows:
+            stream.write(json.dumps(dict(row), ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def append_jsonl(path: Path | str, rows: Iterable[Mapping[str, Any]]) -> None:
+    """追加 JSONL，供多个 benchmark 共享 ``raw/resources.jsonl``。"""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as stream:
+        for row in rows:
+            stream.write(json.dumps(dict(row), ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def read_json(path: Path | str, default: Any = None) -> Any:
+    target = Path(path)
+    if not target.exists():
+        return default
+    return json.loads(target.read_text(encoding="utf-8"))
+
+
+def _read_proc_status_rss_mb(pid: int) -> Optional[float]:
+    try:
+        status = Path(f"/proc/{pid}/status").read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return None
+    for line in status.splitlines():
+        if line.startswith("VmRSS:"):
+            parts = line.split()
+            if len(parts) >= 2:
+                return float(parts[1]) / 1024.0
+    return None
+
+
+def _read_proc_cpu_seconds(pid: int) -> Optional[float]:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return None
+    # comm may contain spaces and parentheses; the fields after the final ')'
+    # have the stable layout required here (utime=14, stime=15).
+    try:
+        fields = stat[stat.rfind(")") + 2 :].split()
+        ticks = os.sysconf("SC_CLK_TCK")
+        return (int(fields[11]) + int(fields[12])) / float(ticks)
+    except (IndexError, ValueError, OSError):
+        return None
+
+
+def _rss_mb(pid: int) -> Optional[float]:
+    rss = _read_proc_status_rss_mb(pid)
+    if rss is not None:
+        return rss
+    try:
+        import psutil  # type: ignore
+
+        return float(psutil.Process(pid).memory_info().rss) / (1024.0 * 1024.0)
+    except (ImportError, OSError, ValueError):
+        return None
+
+
+class ResourceSampler:
+    """以固定周期采样当前进程（或指定 pid）的 RSS 和 CPU。"""
+
+    def __init__(self, *, pid: Optional[int] = None, interval_s: float = 0.1) -> None:
+        if interval_s <= 0:
+            raise ValueError("interval_s must be positive")
+        self.pid = pid or os.getpid()
+        self.interval_s = interval_s
+        self.samples: list[dict[str, Any]] = []
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._previous_cpu: Optional[float] = None
+        self._previous_time: Optional[float] = None
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._sample()
+        self._thread = threading.Thread(target=self._run, name="day13a-resource-sampler", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> list[dict[str, Any]]:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=max(1.0, self.interval_s * 4))
+        self._sample()
+        return list(self.samples)
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval_s):
+            self._sample()
+
+    def _sample(self) -> None:
+        now = time.monotonic()
+        cpu_seconds = _read_proc_cpu_seconds(self.pid)
+        cpu_percent: Optional[float] = None
+        if cpu_seconds is not None and self._previous_cpu is not None and self._previous_time is not None:
+            elapsed = now - self._previous_time
+            if elapsed > 0:
+                cpu_percent = max(0.0, (cpu_seconds - self._previous_cpu) / elapsed * 100.0)
+        self._previous_cpu = cpu_seconds
+        self._previous_time = now
+        self.samples.append({
+            "timestamp": utc_now(),
+            "elapsed_monotonic_s": now,
+            "rss_mb": _rss_mb(self.pid),
+            "cpu_percent": cpu_percent,
+        })
+
+
+def resource_metrics(samples: Sequence[Mapping[str, Any]]) -> dict[str, Optional[float]]:
+    rss = [float(row["rss_mb"]) for row in samples if row.get("rss_mb") is not None]
+    cpu = [float(row["cpu_percent"]) for row in samples if row.get("cpu_percent") is not None]
+    return {
+        "rss_start_mb": round(rss[0], 3) if rss else None,
+        "rss_peak_mb": round(max(rss), 3) if rss else None,
+        "rss_end_mb": round(rss[-1], 3) if rss else None,
+        "cpu_avg_percent": round(statistics.fmean(cpu), 3) if cpu else None,
+        "cpu_peak_percent": round(max(cpu), 3) if cpu else None,
+    }
+
+
+def _command(command: Sequence[str], cwd: Optional[Path] = None) -> dict[str, Any]:
+    try:
+        completed = subprocess.run(
+            list(command), cwd=cwd, check=False, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+        )
+        return {
+            "command": list(command),
+            "returncode": completed.returncode,
+            "stdout": completed.stdout,
+            "stderr": completed.stderr,
+        }
+    except OSError as exc:
+        return {"command": list(command), "returncode": None, "stdout": "", "stderr": str(exc)}
+
+
+def _git(repo_root: Path, *args: str) -> str:
+    result = _command(["git", *args], cwd=repo_root)
+    return result["stdout"].strip()
+
+
+def _linux_memory_total_mb() -> Optional[float]:
+    try:
+        text = Path("/proc/meminfo").read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return None
+    for line in text.splitlines():
+        if line.startswith("MemTotal:"):
+            parts = line.split()
+            return round(float(parts[1]) / 1024.0, 3)
+    return None
+
+
+def _cpu_details(lscpu_output: str) -> tuple[Optional[str], Optional[int]]:
+    values: dict[str, str] = {}
+    for line in lscpu_output.splitlines():
+        if ":" in line:
+            key, value = line.split(":", 1)
+            values[key.strip()] = value.strip()
+    model = values.get("Model name") or values.get("Model")
+    try:
+        sockets = int(values.get("Socket(s)", "1"))
+        cores_per_socket = int(values.get("Core(s) per socket", "0"))
+        physical = sockets * cores_per_socket if cores_per_socket else None
+    except ValueError:
+        physical = None
+    return model, physical
+
+
+def environment_snapshot(repo_root: Path | str) -> dict[str, Any]:
+    """收集可复现所需的代码、系统、Python 和 SDK 线索。"""
+    root = Path(repo_root).resolve()
+    sdk_version = os.environ.get("KYLIN_EMBEDDING_SDK_VERSION")
+    runtime_version = os.environ.get("KYLIN_EMBEDDING_RUNTIME_VERSION")
+    try:
+        import importlib.metadata
+
+        sdk_version = sdk_version or importlib.metadata.version("kylin-embedding")
+    except Exception:
+        pass
+    try:
+        import kylin_embedding  # type: ignore
+
+        runtime_version = runtime_version or str(getattr(kylin_embedding, "__version__", "")) or None
+    except Exception:
+        pass
+
+    uname = _command(["uname", "-a"])
+    lscpu = _command(["lscpu"])
+    free = _command(["free", "-m"])
+    cpu_model, physical_cores = _cpu_details(lscpu["stdout"])
+    return {
+        "captured_at": utc_now(),
+        "git_commit": _git(root, "rev-parse", "HEAD") or None,
+        "git_branch": _git(root, "branch", "--show-current") or None,
+        "git_dirty": bool(_git(root, "status", "--porcelain")),
+        "hostname": platform.node(),
+        "os_name": platform.system(),
+        "os_version": platform.version(),
+        "kernel": platform.release(),
+        "architecture": platform.machine(),
+        "cpu_model": cpu_model or platform.processor() or None,
+        "physical_cores": physical_cores,
+        "logical_cores": os.cpu_count(),
+        "memory_total_mb": _linux_memory_total_mb(),
+        "python_version": platform.python_version(),
+        "embedding_sdk_version": sdk_version,
+        "embedding_runtime_version": runtime_version,
+        "bridge_build_type": os.environ.get("KYLIN_EMBEDDING_BUILD_TYPE", "Release"),
+        "commands": {
+            "git_rev_parse_HEAD": _command(["git", "rev-parse", "HEAD"], cwd=root),
+            "git_status_porcelain": _command(["git", "status", "--porcelain"], cwd=root),
+            "uname_a": uname,
+            "lscpu": lscpu,
+            "free_m": free,
+            "python_version": _command([sys.executable, "--version"]),
+        },
+    }
+
+
+def benchmark_summary(
+    *,
+    name: str,
+    requests: int,
+    errors: int,
+    wall_seconds: float,
+    latencies_s: Iterable[float],
+    resources: Mapping[str, Any],
+    **extra: Any,
+) -> dict[str, Any]:
+    latencies = list(latencies_s)
+    result: dict[str, Any] = {
+        "benchmark": name,
+        "requests": requests,
+        "errors": errors,
+        "wall_seconds": round(wall_seconds, 6),
+        "throughput_req_s": round(requests / wall_seconds, 3) if wall_seconds > 0 else 0.0,
+        "p50_ms": round(percentile(latencies, 0.50) * 1000.0, 3),
+        "p95_ms": round(percentile(latencies, 0.95) * 1000.0, 3),
+        "p99_ms": round(percentile(latencies, 0.99) * 1000.0, 3),
+        **dict(resources),
+        **extra,
+    }
+    return result
+
+
+def merge_run(run_dir: Path | str) -> dict[str, Any]:
+    root = Path(run_dir)
+    environment = read_json(root / "environment.json", {})
+    ipc = read_json(root / "ipc.summary.json")
+    method_runs = {
+        path.parent.name.removeprefix("ipc_"): summary
+        for path in sorted(root.glob("ipc_*/ipc.summary.json"))
+        if (summary := read_json(path)) is not None
+    }
+    if method_runs:
+        ipc = {"benchmark": "ipc", "formal_run": True, "methods": method_runs}
+    if ipc is None:
+        ipc = {"status": "not_run"}
+    result: dict[str, Any] = {
+        "schema_version": "day13a.v1",
+        "generated_at": utc_now(),
+        "git_commit": environment.get("git_commit"),
+        "environment": environment,
+        "embedding": read_json(root / "embedding.summary.json", {"status": "not_run"}),
+        "bridge": read_json(root / "bridge.summary.json", {"status": "not_run"}),
+        "ipc": ipc,
+        "outbox": read_json(root / "outbox.summary.json", {"status": "not_run"}),
+        "artifacts": {
+            "raw": sorted(str(path.relative_to(root)) for path in root.rglob("*.jsonl")),
+        },
+    }
+    write_json(root / "summary.json", result)
+    return result
+
+
+def merge_collection(collection_dir: Path | str) -> dict[str, Any]:
+    """汇总 ``run_01``…``run_N``，形成 D13A 根目录单一索引。"""
+    root = Path(collection_dir)
+    runs: list[dict[str, Any]] = []
+    for run_dir in sorted(path for path in root.glob("run_*") if path.is_dir()):
+        summary = read_json(run_dir / "summary.json")
+        if summary is not None:
+            runs.append({"run_id": run_dir.name, "summary": summary})
+    commits = sorted({
+        str(item["summary"].get("git_commit"))
+        for item in runs
+        if item["summary"].get("git_commit")
+    })
+    result = {
+        "schema_version": "day13a.collection.v1",
+        "generated_at": utc_now(),
+        "run_count": len(runs),
+        "git_commits": commits,
+        "runs": runs,
+    }
+    write_json(root / "summary.json", result)
+    return result
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description="D13A environment/summary helper")
+    parser.add_argument("--repo-root", default=str(Path(__file__).resolve().parents[1]))
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--merge-run", type=Path)
+    parser.add_argument("--merge-collection", type=Path)
+    args = parser.parse_args(argv)
+    if args.merge_collection is not None:
+        merge_collection(args.merge_collection)
+        return 0
+    if args.merge_run is not None:
+        merge_run(args.merge_run)
+        return 0
+    if args.output is None:
+        parser.error("--output is required unless --merge-run is used")
+    write_json(args.output, environment_snapshot(args.repo_root))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
