@@ -106,6 +106,7 @@ struct ToolExecutionEvent {
     std::optional<bool> sideEffect;
     bool rollbackRequired = false;
     QString rollbackStatus;
+    QString sourceBusinessStatus;  // KMA R-6 / DRIFT-002: canonical business result (failed vs legacy failure)
 };
 
 struct TurnFinalizedEvent {

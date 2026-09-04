@@ -7,6 +7,7 @@
     "session_id": "session-mc-001",
     "turn_id": "",
     "occurred_at": "2026-08-31T05:00:00.000Z",
+    "collected_at": "2026-08-31T05:00:00.050Z",
     "captured_at": "2026-08-31T05:00:00.050Z",
     "source_reference": "ref:manual-config:preference:language",
     "idempotency_key": "manual-config:session-mc-001:preference:language"

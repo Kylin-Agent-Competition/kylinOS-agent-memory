@@ -851,6 +851,7 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
             {QStringLiteral("side_effect"), QJsonValue::Bool},
             {QStringLiteral("rollback_required"), QJsonValue::Bool},
             {QStringLiteral("rollback_status"), QJsonValue::String},
+            {QStringLiteral("source_business_status"), QJsonValue::String},
         });
     if (invalidType.has_value()) {
         return {std::nullopt, {*invalidType}};
@@ -883,6 +884,7 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
     event.sideEffect = object.value(QStringLiteral("side_effect")).toBool();
     event.rollbackRequired = object.value(QStringLiteral("rollback_required")).toBool();
     event.rollbackStatus = object.value(QStringLiteral("rollback_status")).toString();
+    event.sourceBusinessStatus = object.value(QStringLiteral("source_business_status")).toString();
 
     const ValidationResult validation = validate(event);
     if (!validation.ok()) {
@@ -922,6 +924,11 @@ QJsonObject toJson(const ToolExecutionEvent& event)
     }
     if (!event.errorMessageSafe.isEmpty()) {
         object.insert(QStringLiteral("error_message_safe"), event.errorMessageSafe);
+    }
+
+    // KMA R-6 / DRIFT-002: canonical business result field (e.g. "failed" vs legacy "failure")
+    if (!event.sourceBusinessStatus.isEmpty()) {
+        object.insert(QStringLiteral("source_business_status"), event.sourceBusinessStatus);
     }
 
     return object;
