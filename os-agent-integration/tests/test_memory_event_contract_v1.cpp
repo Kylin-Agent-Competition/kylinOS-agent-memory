@@ -1222,29 +1222,32 @@ void MemoryEventContractV1Test::integerFieldsRejectFractionalValues()
 // transport adapter must NOT contaminate the canonical ingest result).
 void MemoryEventContractV1Test::capturedAtCanonicalWinsOverBadLegacyAliasType()
 {
-    // 1) MemoryContext
+    // 1) MemoryContext: round-trip via public toJson(MemoryContext) API,
+    //    then pull the captured_at out of the nested metadata object.
     QJsonObject ctx = knownMemoryContextPayload();
     QVERIFY(ctx.contains(QStringLiteral("captured_at")));
     ctx.insert(QStringLiteral("collected_at"), 666);  // non-string garbage
     auto ctxParsed = contract::memoryContextFromJson(ctx);
-    QVERIFY2(ctxParsed.ok,
+    QVERIFY2(ctxParsed.ok(),
         "MemoryContext with good captured_at + bad collected_at must parse OK");
-    QCOMPARE(contract::toJson(ctxParsed.value->metadata)
-                 .value(QStringLiteral("captured_at")).toString(),
-        ctx.value(QStringLiteral("captured_at")).toString());
+    const QJsonObject ctxRoundTrip = contract::toJson(*ctxParsed.value);
+    const QJsonObject ctxMeta = ctxRoundTrip.value(QStringLiteral("metadata")).toObject();
+    QCOMPARE(ctxMeta.value(QStringLiteral("captured_at")).toString(),
+             ctx.value(QStringLiteral("captured_at")).toString());
 
-    // 2) ToolExecutionEvent
+    // 2) ToolExecutionEvent: only assert .ok() on the canonical-wins
+    //    branch (value shape is already covered by the round-trip tests).
     QJsonObject tool = knownToolExecutionPayload();
     tool.insert(QStringLiteral("collected_at"), QJsonValue(QJsonObject{}));
     auto toolParsed = contract::toolExecutionEventFromJson(tool);
-    QVERIFY2(toolParsed.ok,
+    QVERIFY2(toolParsed.ok(),
         "ToolExecutionEvent with good captured_at + bad collected_at must parse OK");
 
-    // 3) TurnFinalizedEvent
+    // 3) TurnFinalizedEvent: same canonical-wins positive path.
     QJsonObject turn = knownTurnFinalizedPayload();
     turn.insert(QStringLiteral("collected_at"), QJsonValue(QJsonArray{1, 2, 3}));
     auto turnParsed = contract::turnFinalizedEventFromJson(turn);
-    QVERIFY2(turnParsed.ok,
+    QVERIFY2(turnParsed.ok(),
         "TurnFinalizedEvent with good captured_at + bad collected_at must parse OK");
 }
 
