@@ -1,0 +1,40 @@
+D12D post-merge TD-KYSEC-001 single-binary authorize/execute/revoke bound to b70827c
+=== identity ===
+2026-09-03 18:32:35 CST
+kylin-agent
+1000
+b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9
+=== global policy state (unchanged, exec off) ===
+kysec status : enable
+    exec        : off
+    exec script : off
+    net         : off
+    kmod        : off
+    file        : off
+    proc        : off
+    priv        : on
+=== candidate disposable binary ===
+3897d1f00041be1a0fecb71c7357547e37c548e57821c652ffe39a9583d01679  /home/kylin-agent/.local/share/kylin-memory/kysec_probe_true
+=== step1 label BEFORE ===
+/home/kylin-agent/.local/share/kylin-memory/kysec_probe_true: unknown
+=== step2 authorize (sudo -n kysec_set -n exectl -v verified) ===
+authorize_rc=0
+=== step3 label AFTER authorize ===
+/home/kylin-agent/.local/share/kylin-memory/kysec_probe_true: verified
+=== step4 execute ===
+execute_ok
+=== step5 revoke (sudo -n kysec_set -n exectl -x) ===
+revoke_rc=0
+=== step6 label AFTER revoke ===
+/home/kylin-agent/.local/share/kylin-memory/kysec_probe_true: unknown
+=== step7 cleanup ===
+cleaned
+=== global policy state AFTER (unchanged) ===
+kysec status : enable
+    exec        : off
+    exec script : off
+    net         : off
+    kmod        : off
+    file        : off
+    proc        : off
+    priv        : on
