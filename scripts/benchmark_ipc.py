@@ -180,6 +180,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     output = {
         "benchmark": "ipc",
         "formal_run": True,
+        # 当前 memory.retrieve handler 返回 empty context；它只说明 Gateway IPC
+        # 路径的基线，不可引用为知识检索主链的延迟或比赛 500ms 达标证据。
+        "measurement_scope": (
+            "gateway_empty_context_ipc_baseline"
+            if args.method == "memory.retrieve"
+            else "gateway_ipc_round_trip_baseline"
+        ),
+        "knowledge_retrieval_latency_eligible": False,
         "socket": args.socket,
         "method": args.method,
         "requests": args.requests,

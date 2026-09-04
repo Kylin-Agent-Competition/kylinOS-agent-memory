@@ -18,7 +18,13 @@ for path in (SERVICE, SCRIPTS):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from bench_utils import benchmark_summary, merge_collection, merge_run, percentile  # noqa: E402
+from bench_utils import (  # noqa: E402
+    benchmark_summary,
+    formal_environment_errors,
+    merge_collection,
+    merge_run,
+    percentile,
+)
 from benchmark_embedding import main as embedding_main  # noqa: E402
 from benchmark_ipc import main as ipc_main  # noqa: E402
 from benchmark_outbox import main as outbox_main  # noqa: E402
@@ -28,14 +34,45 @@ from gateway.registry import HandlerRegistry  # noqa: E402
 from gateway.server import UDSGatewayServer  # noqa: E402
 
 
-def test_percentile_and_summary_use_successful_samples() -> None:
-    assert percentile([1, 2, 3, 4], 0.50) == 3.0
+def test_percentile_and_summary_distinguish_attempts_from_successes() -> None:
+    assert percentile([1, 2, 3, 4], 0.50) == 2.0
     summary = benchmark_summary(
         name="test", requests=3, errors=1, wall_seconds=1.0,
         latencies_s=[0.001, 0.002], resources={},
     )
-    assert summary["p50_ms"] == 2.0
-    assert summary["throughput_req_s"] == 3.0
+    assert summary["p50_ms"] == 1.0
+    assert summary["attempt_rate_req_s"] == 3.0
+    assert summary["success_throughput_req_s"] == 2.0
+    assert summary["throughput_req_s"] == 2.0
+    assert summary["success_rate"] == pytest.approx(2 / 3)
+    assert summary["error_rate"] == pytest.approx(1 / 3)
+
+
+def test_formal_environment_requires_verifiable_clean_git_state() -> None:
+    assert formal_environment_errors({
+        "git_commit": "abc123",
+        "git_branch": "perf/D13A-baseline-load",
+        "git_dirty": False,
+        "commands": {
+            "git_rev_parse_HEAD": {"returncode": 0},
+            "git_status_porcelain": {"returncode": 0},
+        },
+    }) == []
+    assert formal_environment_errors({
+        "git_commit": None,
+        "git_branch": None,
+        "git_dirty": None,
+        "commands": {
+            "git_rev_parse_HEAD": {"returncode": 128},
+            "git_status_porcelain": {"returncode": 128},
+        },
+    }) == [
+        "git_commit 缺失或不可验证",
+        "git_branch 缺失或不可验证",
+        "git_dirty 不是已验证的 clean 状态",
+        "git rev-parse HEAD 失败",
+        "git status --porcelain 失败",
+    ]
 
 
 def test_merge_collection_indexes_all_completed_runs(tmp_path: Path) -> None:
@@ -43,12 +80,58 @@ def test_merge_collection_indexes_all_completed_runs(tmp_path: Path) -> None:
         run_dir = tmp_path / run_id
         run_dir.mkdir()
         (run_dir / "summary.json").write_text(
-            json.dumps({"git_commit": "abc123", "run_id": run_id}), encoding="utf-8"
+            json.dumps({
+                "git_commit": "abc123",
+                "run_id": run_id,
+                "environment": {
+                    "git_commit": "abc123",
+                    "git_branch": "perf/D13A-baseline-load",
+                    "git_dirty": False,
+                    "commands": {
+                        "git_rev_parse_HEAD": {"returncode": 0},
+                        "git_status_porcelain": {"returncode": 0},
+                    },
+                },
+                "outbox": {"index_backlog_measurement": {"status": "measured"}},
+            }), encoding="utf-8"
         )
     result = merge_collection(tmp_path)
     assert result["run_count"] == 3
     assert result["git_commits"] == ["abc123"]
     assert len(result["runs"]) == 3
+    assert result["formal_baseline_complete"] is True
+
+
+def test_merge_collection_marks_unverifiable_or_non_index_runs_incomplete(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run_01"
+    run_dir.mkdir()
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "git_commit": None,
+            "environment": {
+                "git_commit": None,
+                "git_branch": None,
+                "git_dirty": None,
+                "commands": {
+                    "git_rev_parse_HEAD": {"returncode": 128},
+                    "git_status_porcelain": {"returncode": 128},
+                },
+            },
+            "outbox": {"index_backlog_measurement": {"status": "not_measured"}},
+        }), encoding="utf-8"
+    )
+    result = merge_collection(tmp_path)
+    assert result["formal_baseline_complete"] is False
+    assert result["formal_baseline_blockers"] == [
+        "正式基线必须至少包含 3 轮运行",
+        "run_01: git_commit 缺失或不可验证",
+        "run_01: git_branch 缺失或不可验证",
+        "run_01: git_dirty 不是已验证的 clean 状态",
+        "run_01: git rev-parse HEAD 失败",
+        "run_01: git status --porcelain 失败",
+        "run_01: 未测量真实索引积压",
+        "全部运行必须绑定唯一、非空的 Git commit",
+    ]
 
 
 def test_merge_run_collects_both_ipc_methods(tmp_path: Path) -> None:
@@ -65,6 +148,8 @@ def test_merge_run_collects_both_ipc_methods(tmp_path: Path) -> None:
         (method_dir / "raw" / "ipc.jsonl").write_text("{}\n", encoding="utf-8")
     result = merge_run(tmp_path)
     assert set(result["ipc"]["methods"]) == {"echo", "memory_retrieve"}
+    assert result["formal_run_eligible"] is False
+    assert "未测量真实索引积压" in result["formal_run_blockers"]
     artifacts = {path.replace("\\", "/") for path in result["artifacts"]["raw"]}
     assert "ipc_echo/raw/ipc.jsonl" in artifacts
 
@@ -114,6 +199,8 @@ def test_ipc_uses_real_uds_round_trip(gateway: str, tmp_path: Path) -> None:
     summary = json.loads((output / "ipc.summary.json").read_text(encoding="utf-8"))
     assert summary["rounds"]["1"]["errors"] == 0
     assert summary["rounds"]["2"]["errors"] == 0
+    assert summary["measurement_scope"] == "gateway_ipc_round_trip_baseline"
+    assert summary["knowledge_retrieval_latency_eligible"] is False
     assert len((output / "raw" / "ipc.jsonl").read_text(encoding="utf-8").splitlines()) == 8
 
 
@@ -129,4 +216,6 @@ def test_outbox_stress_drains_real_worker(tmp_path: Path) -> None:
     assert summary["events_processed"] == 20
     assert summary["max_backlog"] == 20
     assert summary["dead_letters"] == 0
+    assert summary["measurement_scope"] == "outbox_queue_backlog_drain"
+    assert summary["index_backlog_measurement"]["status"] == "not_measured"
     assert (output / "raw" / "outbox.jsonl").exists()

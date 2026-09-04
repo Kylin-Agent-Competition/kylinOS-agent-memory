@@ -8,7 +8,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import platform
 import statistics
@@ -28,7 +30,9 @@ def percentile(values: Iterable[float], fraction: float) -> float:
         return 0.0
     if not 0.0 <= fraction <= 1.0:
         raise ValueError("fraction must be between 0 and 1")
-    index = min(len(ordered) - 1, int(len(ordered) * fraction))
+    # nearest-rank: rank = ceil(p * n)，再换算成从 0 开始的下标。
+    # 对 p=0 保持首项语义，避免 rank=0 导致负下标。
+    index = max(0, min(len(ordered) - 1, math.ceil(len(ordered) * fraction) - 1))
     return ordered[index]
 
 
@@ -172,10 +176,15 @@ def resource_metrics(samples: Sequence[Mapping[str, Any]]) -> dict[str, Optional
     }
 
 
-def _command(command: Sequence[str], cwd: Optional[Path] = None) -> dict[str, Any]:
+def _command(
+    command: Sequence[str],
+    cwd: Optional[Path] = None,
+    env: Optional[Mapping[str, str]] = None,
+) -> dict[str, Any]:
     try:
         completed = subprocess.run(
-            list(command), cwd=cwd, check=False, capture_output=True, text=True,
+            list(command), cwd=cwd, env=dict(env) if env is not None else None,
+            check=False, capture_output=True, text=True,
             encoding="utf-8", errors="replace",
         )
         return {
@@ -188,9 +197,40 @@ def _command(command: Sequence[str], cwd: Optional[Path] = None) -> dict[str, An
         return {"command": list(command), "returncode": None, "stdout": "", "stderr": str(exc)}
 
 
-def _git(repo_root: Path, *args: str) -> str:
-    result = _command(["git", *args], cwd=repo_root)
-    return result["stdout"].strip()
+def _command_output(command: Mapping[str, Any] | Any) -> str:
+    return str(command.get("stdout", "")).strip() if isinstance(command, Mapping) else ""
+
+
+def _command_succeeded(command: Mapping[str, Any] | Any) -> bool:
+    return isinstance(command, Mapping) and command.get("returncode") == 0
+
+
+def _file_sha256(path: Optional[str]) -> Optional[str]:
+    if not path:
+        return None
+    target = Path(path)
+    if not target.is_file():
+        return None
+    digest = hashlib.sha256()
+    try:
+        with target.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
+
+
+def _shared_object_soname(path: Optional[str]) -> Optional[str]:
+    if not path or not Path(path).is_file():
+        return None
+    output = _command(["readelf", "-d", path])
+    if output.get("returncode") != 0:
+        return None
+    for line in _command_output(output).splitlines():
+        if "SONAME" in line and "[" in line and "]" in line:
+            return line.split("[", 1)[1].split("]", 1)[0]
+    return None
 
 
 def _linux_memory_total_mb() -> Optional[float]:
@@ -221,6 +261,30 @@ def _cpu_details(lscpu_output: str) -> tuple[Optional[str], Optional[int]]:
     return model, physical
 
 
+def formal_environment_errors(environment: Mapping[str, Any]) -> list[str]:
+    """返回使一次 D13A 正式运行不可复现的 Git 溯源缺陷。
+
+    Git 命令失败时不能把 unknown 归约为 clean；该函数同时供 runner 与
+    collection 汇总使用，保证两处都是 fail-closed。
+    """
+    errors: list[str] = []
+    commit = environment.get("git_commit")
+    branch = environment.get("git_branch")
+    commands = environment.get("commands")
+    commands = commands if isinstance(commands, Mapping) else {}
+    if not isinstance(commit, str) or not commit:
+        errors.append("git_commit 缺失或不可验证")
+    if not isinstance(branch, str) or not branch:
+        errors.append("git_branch 缺失或不可验证")
+    if environment.get("git_dirty") is not False:
+        errors.append("git_dirty 不是已验证的 clean 状态")
+    if not _command_succeeded(commands.get("git_rev_parse_HEAD")):
+        errors.append("git rev-parse HEAD 失败")
+    if not _command_succeeded(commands.get("git_status_porcelain")):
+        errors.append("git status --porcelain 失败")
+    return errors
+
+
 def environment_snapshot(repo_root: Path | str) -> dict[str, Any]:
     """收集可复现所需的代码、系统、Python 和 SDK 线索。"""
     root = Path(repo_root).resolve()
@@ -239,15 +303,26 @@ def environment_snapshot(repo_root: Path | str) -> dict[str, Any]:
     except Exception:
         pass
 
+    sdk_so_path = os.environ.get("KYLIN_EMBEDDING_SDK_SO_PATH") or os.environ.get("DAY13A_SDK_SO")
+    sdk_so_soname = _shared_object_soname(sdk_so_path)
+    # 某些麒麟 SDK 没有 Python package metadata；SONAME 仍是可比较的版本线索。
+    sdk_version = sdk_version or sdk_so_soname
+    runtime_version = runtime_version or sdk_so_soname
     uname = _command(["uname", "-a"])
-    lscpu = _command(["lscpu"])
+    locale_env = dict(os.environ)
+    locale_env["LC_ALL"] = "C"
+    locale_env["LANG"] = "C"
+    lscpu = _command(["lscpu"], env=locale_env)
     free = _command(["free", "-m"])
+    git_head = _command(["git", "rev-parse", "HEAD"], cwd=root)
+    git_branch = _command(["git", "branch", "--show-current"], cwd=root)
+    git_status = _command(["git", "status", "--porcelain"], cwd=root)
     cpu_model, physical_cores = _cpu_details(lscpu["stdout"])
     return {
         "captured_at": utc_now(),
-        "git_commit": _git(root, "rev-parse", "HEAD") or None,
-        "git_branch": _git(root, "branch", "--show-current") or None,
-        "git_dirty": bool(_git(root, "status", "--porcelain")),
+        "git_commit": _command_output(git_head) if _command_succeeded(git_head) else None,
+        "git_branch": _command_output(git_branch) if _command_succeeded(git_branch) else None,
+        "git_dirty": bool(_command_output(git_status)) if _command_succeeded(git_status) else None,
         "hostname": platform.node(),
         "os_name": platform.system(),
         "os_version": platform.version(),
@@ -260,10 +335,15 @@ def environment_snapshot(repo_root: Path | str) -> dict[str, Any]:
         "python_version": platform.python_version(),
         "embedding_sdk_version": sdk_version,
         "embedding_runtime_version": runtime_version,
+        "embedding_sdk_so_path": sdk_so_path,
+        "embedding_sdk_so_sha256": _file_sha256(sdk_so_path),
+        "embedding_sdk_so_soname": sdk_so_soname,
+        "embedding_model_version": os.environ.get("KYLIN_EMBEDDING_MODEL_VERSION") or None,
         "bridge_build_type": os.environ.get("KYLIN_EMBEDDING_BUILD_TYPE", "Release"),
         "commands": {
-            "git_rev_parse_HEAD": _command(["git", "rev-parse", "HEAD"], cwd=root),
-            "git_status_porcelain": _command(["git", "status", "--porcelain"], cwd=root),
+            "git_rev_parse_HEAD": git_head,
+            "git_branch_show_current": git_branch,
+            "git_status_porcelain": git_status,
             "uname_a": uname,
             "lscpu": lscpu,
             "free_m": free,
@@ -283,12 +363,23 @@ def benchmark_summary(
     **extra: Any,
 ) -> dict[str, Any]:
     latencies = list(latencies_s)
+    if requests < 0 or errors < 0 or errors > requests:
+        raise ValueError("requests/errors 必须满足 0 <= errors <= requests")
+    successful_requests = requests - errors
+    attempt_rate = requests / wall_seconds if wall_seconds > 0 else 0.0
+    success_throughput = successful_requests / wall_seconds if wall_seconds > 0 else 0.0
     result: dict[str, Any] = {
         "benchmark": name,
         "requests": requests,
+        "successful_requests": successful_requests,
         "errors": errors,
         "wall_seconds": round(wall_seconds, 6),
-        "throughput_req_s": round(requests / wall_seconds, 3) if wall_seconds > 0 else 0.0,
+        "attempt_rate_req_s": round(attempt_rate, 3),
+        "success_throughput_req_s": round(success_throughput, 3),
+        "throughput_req_s": round(success_throughput, 3),
+        "throughput_semantics": "successful_requests_per_wall_second",
+        "success_rate": round(successful_requests / requests, 6) if requests else 0.0,
+        "error_rate": round(errors / requests, 6) if requests else 0.0,
         "p50_ms": round(percentile(latencies, 0.50) * 1000.0, 3),
         "p95_ms": round(percentile(latencies, 0.95) * 1000.0, 3),
         "p99_ms": round(percentile(latencies, 0.99) * 1000.0, 3),
@@ -311,15 +402,22 @@ def merge_run(run_dir: Path | str) -> dict[str, Any]:
         ipc = {"benchmark": "ipc", "formal_run": True, "methods": method_runs}
     if ipc is None:
         ipc = {"status": "not_run"}
+    run_blockers = formal_environment_errors(environment)
+    outbox = read_json(root / "outbox.summary.json", {"status": "not_run"})
+    index_measurement = outbox.get("index_backlog_measurement") if isinstance(outbox, Mapping) else None
+    if not isinstance(index_measurement, Mapping) or index_measurement.get("status") != "measured":
+        run_blockers.append("未测量真实索引积压")
     result: dict[str, Any] = {
         "schema_version": "day13a.v1",
         "generated_at": utc_now(),
         "git_commit": environment.get("git_commit"),
+        "formal_run_eligible": not run_blockers,
+        "formal_run_blockers": run_blockers,
         "environment": environment,
         "embedding": read_json(root / "embedding.summary.json", {"status": "not_run"}),
         "bridge": read_json(root / "bridge.summary.json", {"status": "not_run"}),
         "ipc": ipc,
-        "outbox": read_json(root / "outbox.summary.json", {"status": "not_run"}),
+        "outbox": outbox,
         "artifacts": {
             "raw": sorted(str(path.relative_to(root)) for path in root.rglob("*.jsonl")),
         },
@@ -341,11 +439,28 @@ def merge_collection(collection_dir: Path | str) -> dict[str, Any]:
         for item in runs
         if item["summary"].get("git_commit")
     })
+    blockers: list[str] = []
+    if len(runs) < 3:
+        blockers.append("正式基线必须至少包含 3 轮运行")
+    for item in runs:
+        run_id = item["run_id"]
+        summary = item["summary"]
+        environment = summary.get("environment")
+        environment = environment if isinstance(environment, Mapping) else {}
+        blockers.extend(f"{run_id}: {error}" for error in formal_environment_errors(environment))
+        outbox = summary.get("outbox")
+        index_measurement = outbox.get("index_backlog_measurement") if isinstance(outbox, Mapping) else None
+        if not isinstance(index_measurement, Mapping) or index_measurement.get("status") != "measured":
+            blockers.append(f"{run_id}: 未测量真实索引积压")
+    if len(commits) != 1:
+        blockers.append("全部运行必须绑定唯一、非空的 Git commit")
     result = {
         "schema_version": "day13a.collection.v1",
         "generated_at": utc_now(),
         "run_count": len(runs),
         "git_commits": commits,
+        "formal_baseline_complete": not blockers,
+        "formal_baseline_blockers": blockers,
         "runs": runs,
     }
     write_json(root / "summary.json", result)
@@ -358,12 +473,25 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--merge-run", type=Path)
     parser.add_argument("--merge-collection", type=Path)
+    parser.add_argument("--validate-formal-environment", type=Path)
     args = parser.parse_args(argv)
     if args.merge_collection is not None:
-        merge_collection(args.merge_collection)
+        result = merge_collection(args.merge_collection)
+        if not result["formal_baseline_complete"]:
+            print(json.dumps({
+                "formal_baseline_complete": False,
+                "blockers": result["formal_baseline_blockers"],
+            }, ensure_ascii=False), file=sys.stderr)
+            return 2
         return 0
     if args.merge_run is not None:
         merge_run(args.merge_run)
+        return 0
+    if args.validate_formal_environment is not None:
+        errors = formal_environment_errors(read_json(args.validate_formal_environment, {}))
+        if errors:
+            print(json.dumps({"formal_environment_valid": False, "blockers": errors}, ensure_ascii=False), file=sys.stderr)
+            return 2
         return 0
     if args.output is None:
         parser.error("--output is required unless --merge-run is used")

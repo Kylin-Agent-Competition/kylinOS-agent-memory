@@ -39,6 +39,8 @@ def _record(worker: OutboxWorker, resource_samples: list[dict[str, Any]], *, pha
         "backlog": metrics.get("backlog"),
         "processed": metrics.get("processed"),
         "dead_letters": metrics.get("dead_letters"),
+        "index_sync_lag": metrics.get("index_sync_lag"),
+        "index_sync_lag_seconds": metrics.get("index_sync_lag_seconds"),
         "rss_mb": resource.get("rss_mb"),
         "cpu_percent": resource.get("cpu_percent"),
     }
@@ -137,8 +139,16 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     processed = int(final.get("processed") or 0)
     output = {
-        "benchmark": "outbox",
+        "benchmark": "outbox_queue_backlog_drain",
         "formal_run": True,
+        "measurement_scope": "outbox_queue_backlog_drain",
+        "index_backlog_measurement": {
+            "status": "not_measured",
+            "reason": (
+                "当前 workload 写入 turn.finalized，并使用可控 sleep consumer；"
+                "未经过 memory.upserted → index consumer → Vector/Embedding backend。"
+            ),
+        },
         "db": str(args.db),
         "events_submitted": submitted,
         "events_processed": processed,
@@ -153,6 +163,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         ) if max_row is not None else None,
         "drain_time_seconds": round(drain_seconds, 3),
         "dead_letters": int(final.get("dead_letters") or 0),
+        "index_sync_lag": final.get("index_sync_lag"),
+        "index_sync_lag_seconds": final.get("index_sync_lag_seconds"),
         **resource_metrics(resources),
     }
     # 保留任务清单中的字段名，同时提供带单位的明确别名。

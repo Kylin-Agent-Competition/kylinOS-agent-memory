@@ -64,7 +64,7 @@
   "embedding_sdk_version": null,
   "git_branch": null,
   "git_commit": null,
-  "git_dirty": false,
+  "git_dirty": null,
   "hostname": "yanmouren778-pc",
   "kernel": "6.6.0-63-generic",
   "logical_cores": 4,

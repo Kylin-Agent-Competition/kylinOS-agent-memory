@@ -17,8 +17,13 @@ if [[ -z "${IPC_SOCKET}" ]]; then
   echo "必须设置 DAY13A_IPC_SOCKET（指向已启动的真实 Gateway UDS）" >&2
   exit 2
 fi
+if [[ -z "${DAY13A_SDK_SO:-}" ]]; then
+  echo "正式 D13A 必须设置 DAY13A_SDK_SO，以记录实际加载 SDK .so 的路径与 SHA-256" >&2
+  exit 2
+fi
 
 export PYTHONPATH="${ROOT_DIR}/memory-service:${ROOT_DIR}/scripts${PYTHONPATH:+:${PYTHONPATH}}"
+export KYLIN_EMBEDDING_SDK_SO_PATH="${DAY13A_SDK_SO}"
 
 run_one() {
   local run_dir="$1"
@@ -26,18 +31,16 @@ run_one() {
 
   "${PYTHON_BIN}" "${ROOT_DIR}/scripts/bench_utils.py" \
     --repo-root "${ROOT_DIR}" --output "${run_dir}/environment.json"
+  "${PYTHON_BIN}" "${ROOT_DIR}/scripts/bench_utils.py" \
+    --validate-formal-environment "${run_dir}/environment.json"
 
   "${PYTHON_BIN}" "${ROOT_DIR}/scripts/benchmark_embedding.py" \
     --texts "${TEXTS}" --concurrency 1 4 8 --warmup 50 \
     --output-dir "${run_dir}"
 
-  BRIDGE_ARGS=()
-  if [[ -n "${DAY13A_SDK_SO:-}" ]]; then
-    BRIDGE_ARGS+=(--so-path "${DAY13A_SDK_SO}")
-  fi
   "${PYTHON_BIN}" "${ROOT_DIR}/scripts/benchmark_bridge.py" \
     --texts "${TEXTS}" --concurrency 1 4 8 --warmup 50 \
-    "${BRIDGE_ARGS[@]}" --output-dir "${run_dir}"
+    --so-path "${DAY13A_SDK_SO}" --output-dir "${run_dir}"
 
   IPC_ARGS=()
   if [[ -n "${DAY13A_IPC_PID:-}" ]]; then

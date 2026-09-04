@@ -1,14 +1,14 @@
 {
   "artifacts": {
     "raw": [
-      "ipc_echo/raw/ipc.jsonl",
-      "ipc_echo/raw/resources.jsonl",
-      "ipc_memory_retrieve/raw/ipc.jsonl",
-      "ipc_memory_retrieve/raw/resources.jsonl",
-      "raw/bridge.jsonl",
-      "raw/embedding.jsonl",
-      "raw/outbox.jsonl",
-      "raw/resources.jsonl"
+      "ipc_echo\\raw\\ipc.jsonl",
+      "ipc_echo\\raw\\resources.jsonl",
+      "ipc_memory_retrieve\\raw\\ipc.jsonl",
+      "ipc_memory_retrieve\\raw\\resources.jsonl",
+      "raw\\bridge.jsonl",
+      "raw\\embedding.jsonl",
+      "raw\\outbox.jsonl",
+      "raw\\resources.jsonl"
     ]
   },
   "bridge": {
@@ -199,7 +199,7 @@
     "embedding_sdk_version": null,
     "git_branch": null,
     "git_commit": null,
-    "git_dirty": false,
+    "git_dirty": null,
     "hostname": "yanmouren778-pc",
     "kernel": "6.6.0-63-generic",
     "logical_cores": 4,
@@ -209,7 +209,16 @@
     "physical_cores": null,
     "python_version": "3.12.3"
   },
-  "generated_at": "2026-09-04T15:43:06.983935+00:00",
+  "formal_run_blockers": [
+    "git_commit 缺失或不可验证",
+    "git_branch 缺失或不可验证",
+    "git_dirty 不是已验证的 clean 状态",
+    "git rev-parse HEAD 失败",
+    "git status --porcelain 失败",
+    "未测量真实索引积压"
+  ],
+  "formal_run_eligible": false,
+  "generated_at": "2026-09-04T16:36:13.569332+00:00",
   "git_commit": null,
   "ipc": {
     "benchmark": "ipc",

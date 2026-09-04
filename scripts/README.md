@@ -16,7 +16,7 @@
 | `benchmark_embedding.py` | D13A Embedding Service/Provider 基线（真实 SDK；`--fake` 仅冒烟） |
 | `benchmark_bridge.py` | D13A 直接压测 pybind11/C++ `EmbeddingBridge` |
 | `benchmark_ipc.py` | D13A 真实 UDS Gateway round-trip 基线 |
-| `benchmark_outbox.py` | D13A 真实 SQLite OutboxWorker 积压与恢复测试 |
+| `benchmark_outbox.py` | D13A 真实 SQLite OutboxWorker 队列积压与恢复测试（不等同于索引积压） |
 | `run_day13a_benchmarks.sh` | D13A 麒麟 VM 一键顺序运行与汇总 |
 
 ## 当前状态
