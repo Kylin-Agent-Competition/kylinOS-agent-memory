@@ -69,14 +69,18 @@ E 轨在 D12E 审计与 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` 中提出了 6 �
 - **R-1**：其余 metadata 字段照旧；Canonical `captured_at` 保持输出（Candidate 消费）。
 - **DRIFT-002 / 003**：Tool execution event 继续输出 Canonical `source_business_status`（failure→failed 归一）+ Host DTO `execution_status` 双名。
 - **R-5 / DRIFT-007/008/009**：Manual config 继续 scope/config_kind+preference_scope / key/preference_key / value/preference_value / confidence/confidence_score / sensitivity_level/sensitivity 双写。
-- **DRIFT-011 / DRIFT-004**：Behavior 继续 actor/actor_role + actor_id(PENDING_HOST_IDENTITY) / source_type_projected + mapping_status 双写。
+- **（MEDIUM-03 修复）DRIFT-011 / DRIFT-004**：Behavior 保留 legacy `actor` + 新增 `actor_role` + `actor_id`(PENDING_HOST_IDENTITY) + `source_type_projected` + `mapping_status` 三写（legacy 兼容 + canonical 候选 + pending marker）。`runBehaviorPipeline()` 中 `behavior.insert("actor", actor)` 已恢复，与 `behavior_event.v1.json` candidate example 严格一致。
 
 ### 测试更新（3 files）
 
 1. **`os-agent-integration/tests/test_memory_event_contract_v1.cpp`**
    - **（HIGH-03 编译错误修复）** `capturedAtCanonicalWinsOverBadLegacyAliasType()`：
      - `ctxParsed.ok` → `ctxParsed.ok()`（×3，ParseResult<T>::ok 是 const 成员函数，非静态成员）；
-     - 原 `toJson(ctxParsed.value->metadata)`（无该公开重载）改为：对完整 `MemoryContext` 调 `toJson(*ctxParsed.value)` 后从 `metadata.captured_at` 取值比较；Tool/Turn 正路径只断言 `.ok()`，避免堆叠新 API。
+     - 原 `toJson(ctxParsed.value->metadata)`（无该公开重载）改为：对完整 `MemoryContext` 调 `toJson(*ctxParsed.value)`。
+   - **（HIGH-04 round-trip flat JSON 修复）** 同一个测试中：
+     - `toJson(MemoryContext)` 返回的是 **flat JSON**（`captured_at` 在顶层，不在 `metadata` 嵌套对象内）；
+     - 修正：直接从 `ctxRoundTrip.value("captured_at")` 读取，而非 `ctxRoundTrip["metadata"]["captured_at"]`；
+     - Tool/Turn 正路径只断言 `.ok()`，避免堆叠新 API。
    - `eventMetadataWrongJsonTypesAreRejected_data()`：新增行 "legacy_collected_at_only_invalid_type"，错误字段要求为 canonical `captured_at`。
    - HIGH-02 行：`TurnFinalizedEvent.captured_at` 仍然验证 Canonical wrong-type 为 invalid_type。
 
@@ -111,12 +115,12 @@ E 轨在 D12E 审计与 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` 中提出了 6 �
 | 检查项 | 结果 | 证据/备注 |
 | --- | --- | --- |
 | `git diff --check origin/main...HEAD` | ✅ Clean | 只剩 workflow EOF 末尾空行 warning（合法 YAML newline at EOF 需求） |
-| Diff stat | ✅ 真实 | 累计 13 files changed, 526 insertions(+), 39 deletions(-)（`git diff --stat origin/main...HEAD` HEAD=970cd55 结果） |
+| Diff stat | ✅ 真实 | 累计 13 files changed, 526 insertions(+), 39 deletions(-)（`git diff --stat origin/main...HEAD`） |
 | Rebased on latest main | ✅ Behind 0 | main `d5e3b0f`（fetch + rebase 完） |
-| **CI — Repository Baseline Check**（已有 job baseline-check） | ✅ 已有绿灯，PR 触发后重跑 | `.github/workflows/baseline-check.yml` |
-| **CI — Memory Client L0 ctest**（已有 job memory-client-ctest） | ✅ 已有绿灯，PR 触发后重跑 | 包含 memory-client build tests + ctest + QML smoke build |
-| **CI — os-agent-integration standalone ctest （本 PR 新增 job，CI 盲区 HIGH-02 / HIGH-03 修复）** | ✅ **新合入到 memory-client-ctest.yml**：在同一 workflow 末尾追加 3 steps：<br>1. `cmake -S os-agent-integration -B os-agent-integration/build -DBUILD_TESTING=ON`<br>2. `cmake --build os-agent-integration/build --target test_memory_event_contract_v1`<br>3. `ctest --test-dir os-agent-integration/build --output-on-failure`<br>Qt5 Core + Test 依赖（qtbase5-dev）已在前半 job 装好；PR 绿灯会同时给出 contract ctest 证据链，不再漏 HIGH-02 packaged examples 不匹配、HIGH-03 测试不编译。 |
-| **standalone os-agent-integration ctest（本地构建机复现命令，Linux / 有 cmake + qtbase5-dev）** | ⚠️ 提供命令、等 CI 运行或构建机附日志：<br>`cmake -S os-agent-integration -B build-ct -DBUILD_TESTING=ON && cmake --build build-ct --target test_memory_event_contract_v1 && ctest --test-dir build-ct --output-on-failure` | 必须关闭：<br>- packagedExamplesMatchKnownPayloads() 4/4 PASS（MemoryQuery + MemoryContext + ToolExec + TurnFinalized）<br>- capturedAtCanonicalWinsOverBadLegacyAliasType PASS（3 对象 canonical-wins + MemoryContext round-trip captured_at 值校验）<br>- legacy_collected_at_only_invalid_type 错误字段 == captured_at |
+| **CI — Repository Baseline Check** | ✅ PASS | `.github/workflows/baseline-check.yml` |
+| **CI — Memory Client L0 ctest** | ✅ PASS | memory-client build + ctest + QML smoke build 全 PASS |
+| **CI — os-agent-integration standalone contract ctest** | 🔴 → 🟢 修复 | **第三轮 CI 结果**：configure ✅ / build ✅ / ctest ❌（HIGH-04 flat JSON round-trip bug）。<br>**本轮修复**：`ctxRoundTrip.value("captured_at")` 直接从 flat object 读取（不再走 nested `metadata`）。修复后 ctest 应 PASS。<br>Job `contract-ctest` 3 steps：`cmake -S os-agent-integration` + `cmake --build --target test_memory_event_contract_v1` + `ctest --output-on-failure` |
+| **standalone os-agent-integration ctest（Linux 复现命令）** | ⚠️ Windows 宿主机无 cmake/Qt5 | `cmake -S os-agent-integration -B build-ct -DBUILD_TESTING=ON && cmake --build build-ct --target test_memory_event_contract_v1 && ctest --test-dir build-ct --output-on-failure` |
 
 > ⚠️ Windows 本机无 cmake/Qt6/Qt5，无法本地编译 contract target；本 PR 把 os-agent-integration standalone ctest **纳入同一个 CI workflow** 直接提供绿灯证据链，若 runner 侧 Qt 依赖有问题请在 CI 失败后启动 `gh-fix-ci` 流程。
 
@@ -137,4 +141,3 @@ E 轨在 D12E 审计与 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` 中提出了 6 �
   - **状态：CANDIDATE_FOR_FREEZE**（R-1..R-6 候选裁定；§0 + §end 升级门槛；§R-1 handoff：transport collected_at 现状保留 + TD-060 由 C/D 书面冻结）。
 - D 轨 IPC / SQLite / Outbox / 成品化：`TD-060` 为 C/D 冻结 handoff，未在本 PR 提供书面冻结证据。
 - E 轨生命周期漂移移交：`docs/day12/14_d12e_knowledge_td017_closure_audit_20260903.md`。
-- C 轨 Candidate 提案（仅工作区参考，**不作为团队级冻结依据**）：`docs/architecture/C_TRACK_CANONICAL_FIELD_FREEZE_PROPOSAL_V0.2.md`（未入仓；不作为本 PR 已冻结依据）。
