@@ -515,28 +515,54 @@ def test_guardrail_accounting_no_participants_returns_none_rates():
     assert report["critical_zero_ok"] is True
 
 
-# ── D12 字段漂移治理：评测接受的枚举必须与 Canonical 运行时枚举同源（TD-SCHEMA-B-001）──
+# ── D12 字段漂移治理：评测接受的枚举与 Canonical 同源 + policy 分类穷尽（TD-SCHEMA-B-001 / PR #138 Rework P2）──
 
 
-def test_eval_memory_status_set_matches_canonical_domain_enum():
-    """formal_eval 语料校验的 memory_status 值集必须等于 domain.enums.MemoryStatus 六值。"""
-    assert formal_eval_module._MEMORY_STATUSES == frozenset(
-        status.value for status in MemoryStatus
+def test_eval_memory_status_classification_is_canonical_and_exhaustive():
+    """memory_status 语料值集 == Canonical 六值，且 positive ∪ guardrail 完备、互斥。
+
+    未来 Canonical 新增值但未同步 D9 policy 分类时，import 即失败（fail-closed），
+    不会静默落为 not_positive。
+    """
+    canonical = frozenset(status.value for status in MemoryStatus)
+    assert formal_eval_module._MEMORY_STATUSES == canonical
+    positive = formal_eval_module._POSITIVE_MEMORY_STATUSES
+    guardrail = frozenset(formal_eval_module._MEMORY_STATUS_GUARDRAIL_CATEGORY)
+    assert positive & guardrail == frozenset()
+    assert positive | guardrail == canonical
+    # 每个 guardrail memory_status 必须映射到 D9 负向护栏类别
+    assert set(formal_eval_module._MEMORY_STATUS_GUARDRAIL_CATEGORY.values()) <= set(
+        formal_eval_module.GUARDRAIL_CATEGORIES
     )
-    assert formal_eval_module._POSITIVE_MEMORY_STATUSES <= formal_eval_module._MEMORY_STATUSES
 
 
-def test_eval_sensitivity_set_matches_canonical_pipeline_enum():
-    """formal_eval 语料校验的 sensitivity 值集必须等于 pipeline SensitivityLevel 五级。"""
-    assert formal_eval_module._SENSITIVITIES == frozenset(
-        level.value for level in SensitivityLevel
-    )
-    assert formal_eval_module._POSITIVE_SENSITIVITIES <= formal_eval_module._SENSITIVITIES
+def test_eval_sensitivity_classification_is_canonical_and_exhaustive():
+    """sensitivity 语料值集 == SensitivityLevel 五级，且 positive ∪ prohibited 完备、互斥。"""
+    canonical = frozenset(level.value for level in SensitivityLevel)
+    assert formal_eval_module._SENSITIVITIES == canonical
+    positive = formal_eval_module._POSITIVE_SENSITIVITIES
+    prohibited = formal_eval_module._PROHIBITED_SENSITIVITY_LEVELS
+    assert positive & prohibited == frozenset()
+    assert positive | prohibited == canonical
 
 
-def test_eval_conflict_state_is_eval_only_normalization_not_production_enum():
-    """conflict_state 是 D9 v2 明确标注的评测归一化字段，不是生产共享枚举，禁止并入 Canonical。"""
+def test_eval_conflict_state_is_fixed_eval_normalization_and_exhaustive():
+    """conflict_state 是 D9 v2 明确标注的评测归一化字段（三值固定），非生产共享枚举。
+
+    本测试只守护两件事，避免名称暗示超出实际断言范围：
+    1. 值集固定为 {none,resolved,unresolved}；
+    2. positive ∪ unresolved == 全值集且与 memory_status 值域不相交。
+    """
     assert formal_eval_module._CONFLICT_STATES == frozenset(
         {"none", "resolved", "unresolved"}
     )
+    positive = formal_eval_module._POSITIVE_CONFLICT_STATES
+    unresolved = formal_eval_module._UNRESOLVED_CONFLICT_STATES
+    assert positive & unresolved == frozenset()
+    assert positive | unresolved == formal_eval_module._CONFLICT_STATES
     assert not (formal_eval_module._CONFLICT_STATES & formal_eval_module._MEMORY_STATUSES)
+
+
+def test_policy_classification_exhaustive_guard_importable():
+    """穷尽性守卫函数可调用且不抛错（当前 Canonical 值集完备）；未来扩展应先失败。"""
+    formal_eval_module._assert_policy_classification_exhaustive()

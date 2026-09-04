@@ -94,15 +94,76 @@ _SENSITIVITIES = frozenset(level.value for level in SensitivityLevel)
 # （D9_RETRIEVAL_GOLD_SPEC_V2 第九章：NOT production shared enum，不新增生产 Enum）。
 _CONFLICT_STATES = frozenset({"none", "resolved", "unresolved"})
 
-_POSITIVE_MEMORY_STATUSES = frozenset({MemoryStatus.ACTIVE.value})
-_POSITIVE_SENSITIVITIES = frozenset(
+# ── D9 policy 分类：一律由 Canonical Enum 常量派生，禁止第二套业务值字符串 ──
+
+# memory_status：positive 仅 active；其余五值按 D9 negative_guardrail 归入对应类别。
+_MEMORY_STATUS_GUARDRAIL_CATEGORY: dict[str, str] = {
+    MemoryStatus.REMOVED.value: "removed_or_forgotten",
+    MemoryStatus.EXPIRED.value: "expired",
+    MemoryStatus.SUPERSEDED.value: "superseded",
+    MemoryStatus.DEPRECATED.value: "deprecated",
+    MemoryStatus.CANDIDATE.value: "candidate",
+}
+
+# sensitivity：high/critical 触发 sensitive_recall_prohibited（D9 critical 零容忍）；
+# positive 仅 none/low/medium。
+_PROHIBITED_SENSITIVITY_LEVELS: frozenset[str] = frozenset(
     {
-        SensitivityLevel.NONE.value,
-        SensitivityLevel.LOW.value,
-        SensitivityLevel.MEDIUM.value,
+        SensitivityLevel.HIGH.value,
+        SensitivityLevel.CRITICAL.value,
     }
 )
+
+# conflict_state 为评测归一化字段：positive=none/resolved；guardrail=unresolved。
+_UNRESOLVED_CONFLICT_STATES: frozenset[str] = frozenset({"unresolved"})
+
+_POSITIVE_MEMORY_STATUSES = frozenset({MemoryStatus.ACTIVE.value})
+_POSITIVE_SENSITIVITIES = frozenset(
+    level.value
+    for level in SensitivityLevel
+    if level.value not in _PROHIBITED_SENSITIVITY_LEVELS
+)
 _POSITIVE_CONFLICT_STATES = frozenset({"none", "resolved"})
+
+
+def _assert_policy_classification_exhaustive() -> None:
+    """穷尽性守卫：Canonical 全值必须被 positive/guardrail 完备且互斥分类。
+
+    未来 Canonical 新增枚举成员但未同步 D9 policy 分类时，本模块 import 即失败
+    （fail-closed），而不是把新值静默归入 ``not_positive`` / 漏记 critical
+    guardrail（如 ``sensitive_recall_prohibited``）。
+    """
+    positive_memory = _POSITIVE_MEMORY_STATUSES
+    guardrail_memory = frozenset(_MEMORY_STATUS_GUARDRAIL_CATEGORY)
+    if (positive_memory & guardrail_memory) or (positive_memory | guardrail_memory != _MEMORY_STATUSES):
+        raise RuntimeError(
+            "memory_status policy 分类不穷尽/重叠："
+            f"canonical={sorted(_MEMORY_STATUSES)} "
+            f"positive={sorted(positive_memory)} guardrail={sorted(guardrail_memory)}"
+        )
+    positive_sensitivity = _POSITIVE_SENSITIVITIES
+    if (positive_sensitivity & _PROHIBITED_SENSITIVITY_LEVELS) or (
+        positive_sensitivity | _PROHIBITED_SENSITIVITY_LEVELS != _SENSITIVITIES
+    ):
+        raise RuntimeError(
+            "sensitivity policy 分类不穷尽/重叠："
+            f"canonical={sorted(_SENSITIVITIES)} "
+            f"positive={sorted(positive_sensitivity)} "
+            f"prohibited={sorted(_PROHIBITED_SENSITIVITY_LEVELS)}"
+        )
+    positive_conflict = _POSITIVE_CONFLICT_STATES
+    if (positive_conflict & _UNRESOLVED_CONFLICT_STATES) or (
+        positive_conflict | _UNRESOLVED_CONFLICT_STATES != _CONFLICT_STATES
+    ):
+        raise RuntimeError(
+            "conflict_state policy 分类不穷尽/重叠："
+            f"canonical={sorted(_CONFLICT_STATES)} "
+            f"positive={sorted(positive_conflict)} "
+            f"unresolved={sorted(_UNRESOLVED_CONFLICT_STATES)}"
+        )
+
+
+_assert_policy_classification_exhaustive()
 
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -157,22 +218,20 @@ class CorpusRow:
         )
 
     def guardrail_category(self, query_user_id: Optional[str] = None) -> Optional[str]:
-        """按 D9 negative_guardrail_scope 判定该行的禁止类别；无则 None。"""
+        """按 D9 negative_guardrail_scope 判定该行的禁止类别；无则 None。
+
+        分类只消费 Canonical Enum 常量派生的映射（``_MEMORY_STATUS_GUARDRAIL_CATEGORY``
+        / ``_PROHIBITED_SENSITIVITY_LEVELS`` / ``_UNRESOLVED_CONFLICT_STATES``），
+        不保留第二套业务值字符串。
+        """
         if query_user_id is not None and self.user_id != query_user_id:
             return "cross_user"
-        if self.sensitivity in ("high", "critical"):
+        if self.sensitivity in _PROHIBITED_SENSITIVITY_LEVELS:
             return "sensitive_recall_prohibited"
-        if self.memory_status == "removed":
-            return "removed_or_forgotten"
-        if self.memory_status == "expired":
-            return "expired"
-        if self.memory_status == "superseded":
-            return "superseded"
-        if self.memory_status == "deprecated":
-            return "deprecated"
-        if self.memory_status == "candidate":
-            return "candidate"
-        if self.conflict_state == "unresolved":
+        memory_category = _MEMORY_STATUS_GUARDRAIL_CATEGORY.get(self.memory_status)
+        if memory_category is not None:
+            return memory_category
+        if self.conflict_state in _UNRESOLVED_CONFLICT_STATES:
             return "unresolved_conflict"
         return None
 
