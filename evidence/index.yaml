@@ -1518,7 +1518,7 @@ entries:
   - id: "D12D-POSTMERGE-BASELINE-READONLY"
     task_id: "D12D-PostMerge-01"
     description: "安装前只读基线：真实 checkout @ b70827c 的 KySec/部署前置/UDS/路径权限采集；当时 config 目录尚未创建，作为 install 前状态而非最终权限结论"
-    status: "HOST_OBSERVED"
+    status: "PARTIAL"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d12d-post-merge-verify-readonly-20260903_1831.log"
     report: "evidence/l2-kylin-vm/d12d_post_merge_techdebt_b70827c_20260903.md"

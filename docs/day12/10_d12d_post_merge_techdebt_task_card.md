@@ -34,7 +34,7 @@
 | `TD-KYSEC-001` | 当前 KySec 状态、实际 CLI 帮助、候选二进制 SHA-256、日志脱敏检查 | 仅内核模块/服务运行；未完成单二进制授权和撤销 |
 | `TD-DEPLOY-001` | 当前 Commit 的 preflight、wrapper/unit、服务状态和回退计划 | 仅引用历史 D11D 安装日志 |
 | `TD-049` | 当前路径/权限/旧路径不存在或不可访问的证据 | 仅文件存在性；未验证跨 UID fail-closed |
-| `TD-055` | 当前 Commit 服务重启后 UDS `memory.retrieve`、health/DB/索引状态 | 未做 OS 重启或 C 轨真实输入，不能关闭 |
+| `TD-055` | 当前 Commit 服务重启后 active、Socket 与 UDS `memory.retrieve` | 未做 OS 重启或 C 轨真实输入，不能关闭 |
 
 ## L2 执行顺序
 
