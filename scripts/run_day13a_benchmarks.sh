@@ -22,6 +22,14 @@ if [[ -z "${DAY13A_SDK_SO:-}" ]]; then
   echo "正式 D13A 必须设置 DAY13A_SDK_SO，以记录实际加载 SDK .so 的路径与 SHA-256" >&2
   exit 2
 fi
+if [[ -z "${DAY13A_IPC_PID:-}" ]]; then
+  echo "正式 D13A 必须设置 DAY13A_IPC_PID，以采样真实 Gateway/Memory Service 资源" >&2
+  exit 2
+fi
+if ! [[ "${DAY13A_IPC_PID}" =~ ^[1-9][0-9]*$ ]] || ! kill -0 "${DAY13A_IPC_PID}" 2>/dev/null; then
+  echo "DAY13A_IPC_PID 必须是当前可见的正整数 Gateway/Memory Service PID" >&2
+  exit 2
+fi
 if [[ -z "${DAY13A_MODEL_VERSION:-${KYLIN_EMBEDDING_MODEL_VERSION:-}}" && -z "${DAY13A_MODEL_SHA256:-${KYLIN_EMBEDDING_MODEL_SHA256:-}}" ]]; then
   echo "正式 D13A 必须设置 DAY13A_MODEL_VERSION 或 DAY13A_MODEL_SHA256，以记录模型身份" >&2
   exit 2

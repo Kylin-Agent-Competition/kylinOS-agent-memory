@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import sys
 import threading
@@ -28,7 +29,10 @@ from bench_utils import (  # noqa: E402
     validate_run_completeness,
 )
 from benchmark_embedding import main as embedding_main  # noqa: E402
-from benchmark_ipc import main as ipc_main  # noqa: E402
+from benchmark_ipc import (  # noqa: E402
+    main as ipc_main,
+    resource_sample_identity,
+)
 from benchmark_outbox import main as outbox_main  # noqa: E402
 from db.engine import create_db_engine, init_schema  # noqa: E402
 from gateway.handlers import register_default_handlers  # noqa: E402
@@ -206,6 +210,17 @@ def test_partial_run_can_be_complete_without_real_index_measurement() -> None:
     ) == []
 
 
+def test_ipc_resource_sample_identity_distinguishes_gateway_from_client() -> None:
+    assert resource_sample_identity(None) == {
+        "resource_sample_target": "benchmark_client",
+        "resource_sample_pid": os.getpid(),
+    }
+    assert resource_sample_identity(4321) == {
+        "resource_sample_target": "gateway_service",
+        "resource_sample_pid": 4321,
+    }
+
+
 def test_merge_collection_indexes_all_completed_runs(tmp_path: Path) -> None:
     for run_id in ("run_01", "run_02", "run_03"):
         run_dir = tmp_path / run_id
@@ -351,6 +366,8 @@ def test_ipc_uses_real_uds_round_trip(gateway: str, tmp_path: Path) -> None:
     assert summary["rounds"]["2"]["errors"] == 0
     assert summary["measurement_scope"] == "gateway_ipc_round_trip_baseline"
     assert summary["knowledge_retrieval_latency_eligible"] is False
+    assert summary["resource_sample_target"] == "benchmark_client"
+    assert summary["resource_sample_pid"] == os.getpid()
     assert len((output / "raw" / "ipc.jsonl").read_text(encoding="utf-8").splitlines()) == 8
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import sys
 import threading
@@ -29,6 +30,14 @@ if str(_SCRIPTS) not in sys.path:
 from bench_utils import (ResourceSampler, append_jsonl, benchmark_summary,
                           resource_metrics, write_json, write_jsonl)
 from gateway import protocol
+
+
+def resource_sample_identity(pid: Optional[int]) -> dict[str, Any]:
+    """声明 CPU/RSS 采样归属，避免由运行命令反推资源数据来源。"""
+    return {
+        "resource_sample_target": "gateway_service" if pid is not None else "benchmark_client",
+        "resource_sample_pid": pid if pid is not None else os.getpid(),
+    }
 
 
 def _request(socket_path: str, *, method: str, payload: dict[str, Any], request_no: int,
@@ -194,6 +203,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "warmup": args.warmup,
         "concurrency": args.concurrency,
         "rounds": summaries,
+        **resource_sample_identity(args.pid),
     }
     if args.output_dir:
         write_jsonl(args.output_dir / "raw" / "ipc.jsonl", all_rows)
