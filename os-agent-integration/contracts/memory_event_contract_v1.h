@@ -93,16 +93,17 @@ enum class ToolExecutionStatus {
 };
 
 // KMA R-6 / DRIFT-002: Canonical business status (8-value white-list).
+// Aligned with memory-service/pipeline/schemas.py SourceBusinessStatus (D3 §2.3 frozen).
 // Strongly-typed: contract parser rejects unknown values; serializer outputs canonical names only.
 enum class BusinessStatus {
+    Raw,        // "raw"
+    Completed,  // "completed"
     Success,    // "success"
     Partial,    // "partial"
     Failed,     // "failed" (canonical; legacy "failure" maps here but is NOT canonical)
     Cancelled,  // "cancelled"
     Timeout,    // "timeout"
-    Queued,     // "queued" (new R-6 value)
-    Running,    // "running" (new R-6 value)
-    Skipped,    // "skipped" (new R-6 value)
+    Ignored,    // "ignored"
 };
 
 struct ToolExecutionEvent {

@@ -240,6 +240,12 @@ private slots:
     void toolExecutionValidationRejectsBusinessStatusContradiction();
     // KMA R-6 / DRIFT-A-4: Host failure (DTO) → canonical "failed" round-trip
     void toolExecutionFailureHostAliasRoundTripsCanonicalFailed();
+    // KMA R-6 / DRIFT-A-5: Cross-layer enum alignment — all 8 Canonical
+    // SourceBusinessStatus values (per memory-service/pipeline/schemas.py
+    // D3 §2.3) MUST be accepted; Host-only values queued/running/skipped
+    // MUST be rejected as invalid_enum.
+    void toolExecutionBusinessStatusCanonicalEnumAlignment_data();
+    void toolExecutionBusinessStatusCanonicalEnumAlignment();
 };
 
 void MemoryEventContractV1Test::memoryQueryRoundTripsKnownPayload()
@@ -1326,31 +1332,19 @@ void MemoryEventContractV1Test::toolExecutionJsonRejectsUnknownSourceBusinessSta
 
 void MemoryEventContractV1Test::toolExecutionValidationRejectsBusinessStatusContradiction()
 {
-    // Host says execution_status="failure", but canonical says business="success" → contradiction.
+    // Host says execution_status="failure", but canonical says business="success"
+    // → contradiction. result_ref is present to satisfy both success/failure result
+    // requirements so that the ONLY error is the status inconsistency.
     QJsonObject payload = knownToolExecutionPayload();
     payload.insert(QStringLiteral("execution_status"), QStringLiteral("failure"));
     payload.insert(QStringLiteral("source_business_status"), QStringLiteral("success"));
-    // success requires result_ref → keep existing one
-    // But execution_status=failure is legit (accepted), the problem is canonical "success" being contradictory.
-    // We need a variant where both are well-formed but contradictory:
-    QCOMPARE(payload.value(QStringLiteral("execution_status")).toString(),
-             QStringLiteral("failure"));
+    payload.insert(QStringLiteral("result_ref"), QStringLiteral("ref:tool-result:002"));
 
     const auto parsed = contract::toolExecutionEventFromJson(payload);
-    QVERIFY2(!parsed.ok(), "Contradictory execution_status/source_business_status MUST fail");
-    // Either "required/result_ref" for failure or "inconsistent_value" for contradiction —
-    // but in our known payload result_ref IS present for success, so we need a clean contradiction.
-    // Make a new payload with failure + result_ref present + business=success:
-    QJsonObject clean = knownToolExecutionPayload();
-    clean.insert(QStringLiteral("execution_status"), QStringLiteral("failure"));
-    clean.insert(QStringLiteral("source_business_status"), QStringLiteral("success"));
-    clean.insert(QStringLiteral("result_ref"), QStringLiteral("ref:tool-result:002")); // satisfy both requirements
-
-    const auto parsed2 = contract::toolExecutionEventFromJson(clean);
-    QVERIFY2(!parsed2.ok(), "Host failure + business success MUST be rejected as inconsistent");
-    QVERIFY(parsed2.errors.size() > 0);
+    QVERIFY2(!parsed.ok(), "Host failure + business success MUST be rejected as inconsistent");
+    QVERIFY(!parsed.errors.isEmpty());
     bool foundInconsistent = false;
-    for (const auto& e : parsed2.errors) {
+    for (const auto& e : parsed.errors) {
         if (e.code == QStringLiteral("inconsistent_value")
             && e.field == QStringLiteral("source_business_status")) {
             foundInconsistent = true;
@@ -1393,6 +1387,74 @@ void MemoryEventContractV1Test::toolExecutionFailureHostAliasRoundTripsCanonical
     const QJsonObject rtGood = contract::toJson(*parsedGood.value);
     QCOMPARE(rtGood.value(QStringLiteral("source_business_status")).toString(),
              QStringLiteral("success"));
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// KMA R-6 / DRIFT-A-5: Cross-layer enum alignment.
+// Verifies the C++ BusinessStatus parser accepts ALL 8 Canonical values defined
+// in memory-service/pipeline/schemas.py SourceBusinessStatus (D3 §2.3 frozen):
+//   raw / completed / success / partial / failed / cancelled / timeout / ignored
+// and rejects Host-only values NOT in the Canonical enum: queued / running / skipped.
+// This guards against reverse drift (C++ accepting values Canonical forbids, or
+// rejecting values Canonical allows).
+// ═════════════════════════════════════════════════════════════════════════════
+
+void MemoryEventContractV1Test::toolExecutionBusinessStatusCanonicalEnumAlignment_data()
+{
+    // Columns: business status under test, matching execution_status (to pass the
+    // consistency matrix when the value has a Host DTO projection), expected pass.
+    QTest::addColumn<QString>("businessStatus");
+    QTest::addColumn<QString>("executionStatus");
+    QTest::addColumn<bool>("shouldPass");
+
+    // --- 8 Canonical values (MUST pass) ---
+    // raw/completed/ignored have no Host DTO projection — any valid execution_status
+    // is consistent. Use "success" (with result_ref present in the base payload).
+    QTest::newRow("canonical:raw")       << QStringLiteral("raw")       << QStringLiteral("success")  << true;
+    QTest::newRow("canonical:completed") << QStringLiteral("completed") << QStringLiteral("success")  << true;
+    QTest::newRow("canonical:success")   << QStringLiteral("success")   << QStringLiteral("success")  << true;
+    QTest::newRow("canonical:partial")   << QStringLiteral("partial")   << QStringLiteral("partial")  << true;
+    QTest::newRow("canonical:failed")    << QStringLiteral("failed")     << QStringLiteral("failure")  << true;
+    QTest::newRow("canonical:cancelled") << QStringLiteral("cancelled") << QStringLiteral("cancelled") << true;
+    QTest::newRow("canonical:timeout")   << QStringLiteral("timeout")    << QStringLiteral("timeout")  << true;
+    QTest::newRow("canonical:ignored")   << QStringLiteral("ignored")   << QStringLiteral("success")  << true;
+
+    // --- 3 Host-only values (MUST fail as invalid_enum) ---
+    QTest::newRow("host_only:queued")    << QStringLiteral("queued")    << QStringLiteral("success")  << false;
+    QTest::newRow("host_only:running")   << QStringLiteral("running")    << QStringLiteral("success")  << false;
+    QTest::newRow("host_only:skipped")   << QStringLiteral("skipped")    << QStringLiteral("success")  << false;
+}
+
+void MemoryEventContractV1Test::toolExecutionBusinessStatusCanonicalEnumAlignment()
+{
+    QFETCH(QString, businessStatus);
+    QFETCH(QString, executionStatus);
+    QFETCH(bool, shouldPass);
+
+    QJsonObject payload = knownToolExecutionPayload();
+    payload.insert(QStringLiteral("execution_status"), executionStatus);
+    payload.insert(QStringLiteral("source_business_status"), businessStatus);
+    // result_ref already present in known payload → satisfies success requirement.
+
+    const auto parsed = contract::toolExecutionEventFromJson(payload);
+
+    if (shouldPass) {
+        QVERIFY2(parsed.ok(),
+                 qPrintable(QStringLiteral("Canonical business_status '%1' MUST be accepted by parser")
+                            .arg(businessStatus)));
+        QVERIFY(parsed.value.has_value());
+        QVERIFY(parsed.value->sourceBusinessStatus.has_value());
+        // Round-trip: serializer must output the canonical name unchanged.
+        const QJsonObject rt = contract::toJson(*parsed.value);
+        QCOMPARE(rt.value(QStringLiteral("source_business_status")).toString(), businessStatus);
+    } else {
+        QVERIFY2(!parsed.ok(),
+                 qPrintable(QStringLiteral("Host-only business_status '%1' MUST be rejected as invalid_enum")
+                            .arg(businessStatus)));
+        QVERIFY(!parsed.errors.isEmpty());
+        QCOMPARE(parsed.errors.first().code, QStringLiteral("invalid_enum"));
+        QCOMPARE(parsed.errors.first().field, QStringLiteral("source_business_status"));
+    }
 }
 
 QTEST_APPLESS_MAIN(MemoryEventContractV1Test)

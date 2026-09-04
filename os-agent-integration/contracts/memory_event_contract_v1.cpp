@@ -854,21 +854,22 @@ QString toString(ToolExecutionStatus status)
 ParseResult<BusinessStatus> businessStatusFromString(const QString& value)
 {
     // KMA R-6 canonical 8-value white-list. Canonical names ONLY.
+    // Aligned with memory-service/pipeline/schemas.py SourceBusinessStatus (D3 §2.3 frozen).
+    if (value == QStringLiteral("raw"))       return {BusinessStatus::Raw, {}};
+    if (value == QStringLiteral("completed")) return {BusinessStatus::Completed, {}};
     if (value == QStringLiteral("success"))   return {BusinessStatus::Success, {}};
     if (value == QStringLiteral("partial"))   return {BusinessStatus::Partial, {}};
-    if (value == QStringLiteral("failed"))    return {BusinessStatus::Failed, {}};     // canonical; legacy "failure" NOT accepted
+    if (value == QStringLiteral("failed"))    return {BusinessStatus::Failed, {}};
     if (value == QStringLiteral("cancelled")) return {BusinessStatus::Cancelled, {}};
     if (value == QStringLiteral("timeout"))   return {BusinessStatus::Timeout, {}};
-    if (value == QStringLiteral("queued"))    return {BusinessStatus::Queued, {}};
-    if (value == QStringLiteral("running"))   return {BusinessStatus::Running, {}};
-    if (value == QStringLiteral("skipped"))   return {BusinessStatus::Skipped, {}};
+    if (value == QStringLiteral("ignored"))   return {BusinessStatus::Ignored, {}};
 
     return {
         std::nullopt,
         {{
             QStringLiteral("invalid_enum"),
             QStringLiteral("source_business_status"),
-            QStringLiteral("Unknown canonical business status (must be one of 8 KMA R-6 values)."),
+            QStringLiteral("Unknown canonical business status (must be one of 8 D3 §2.3 values: raw/completed/success/partial/failed/cancelled/timeout/ignored)."),
         }},
     };
 }
@@ -876,14 +877,14 @@ ParseResult<BusinessStatus> businessStatusFromString(const QString& value)
 QString toString(BusinessStatus status)
 {
     switch (status) {
-    case BusinessStatus::Success:   return QStringLiteral("success");
-    case BusinessStatus::Partial:   return QStringLiteral("partial");
-    case BusinessStatus::Failed:    return QStringLiteral("failed");
-    case BusinessStatus::Cancelled: return QStringLiteral("cancelled");
-    case BusinessStatus::Timeout:   return QStringLiteral("timeout");
-    case BusinessStatus::Queued:    return QStringLiteral("queued");
-    case BusinessStatus::Running:   return QStringLiteral("running");
-    case BusinessStatus::Skipped:   return QStringLiteral("skipped");
+    case BusinessStatus::Raw:        return QStringLiteral("raw");
+    case BusinessStatus::Completed:  return QStringLiteral("completed");
+    case BusinessStatus::Success:    return QStringLiteral("success");
+    case BusinessStatus::Partial:    return QStringLiteral("partial");
+    case BusinessStatus::Failed:     return QStringLiteral("failed");
+    case BusinessStatus::Cancelled:  return QStringLiteral("cancelled");
+    case BusinessStatus::Timeout:    return QStringLiteral("timeout");
+    case BusinessStatus::Ignored:    return QStringLiteral("ignored");
     }
     Q_UNREACHABLE();
     return {};
@@ -892,20 +893,23 @@ QString toString(BusinessStatus status)
 // KMA R-6 / DRIFT-002: consistency check between Host DTO status and canonical business status.
 // Host DTO uses "failure" as alias but canonical business status MUST report "failed".
 // Returns true when (executionStatus, businessStatus) is an allowed tuple.
+// raw/completed/ignored have no direct Host DTO execution_status mapping — they are
+// canonical-only states that may coexist with any execution_status (non-terminal or
+// upstream states not yet projected to Host DTO).
 static bool businessStatusConsistentWithExecution(
     ToolExecutionStatus executionStatus, BusinessStatus businessStatus)
 {
     switch (businessStatus) {
     case BusinessStatus::Success:   return executionStatus == ToolExecutionStatus::Success;
     case BusinessStatus::Partial:   return executionStatus == ToolExecutionStatus::Partial;
-    case BusinessStatus::Failed:    return executionStatus == ToolExecutionStatus::Failure; // "failure"/"failed" → Failure
+    case BusinessStatus::Failed:    return executionStatus == ToolExecutionStatus::Failure;
     case BusinessStatus::Cancelled: return executionStatus == ToolExecutionStatus::Cancelled;
     case BusinessStatus::Timeout:   return executionStatus == ToolExecutionStatus::Timeout;
-    case BusinessStatus::Queued:    // no direct Host DTO mapping — allowed (non-terminal states)
+    case BusinessStatus::Raw:       // canonical-only, no Host DTO projection
         [[fallthrough]];
-    case BusinessStatus::Running:
+    case BusinessStatus::Completed:  // canonical-only, no Host DTO projection
         [[fallthrough]];
-    case BusinessStatus::Skipped:
+    case BusinessStatus::Ignored:   // canonical-only, no Host DTO projection
         return true;
     }
     Q_UNREACHABLE();
