@@ -1,0 +1,24 @@
+D12D TD-049 cross-UID fail-closed verification
+date=2026-09-04
+tested_commit=cc4acf6ec67de50ca6fbb60bb7044cff46f7d4a5
+vm=Kylin-desktop-neo D12-TDR
+user=kylin-agent uid=1000
+socket=/run/user/1000/kylin-memory/memory.sock
+
+PRECONDITION
+service=active
+socket_mode=600
+runtime_directory_mode=700
+
+COMMAND
+sudo useradd -m -s /bin/bash d12d_uid_probe
+sudo runuser -u d12d_uid_probe -- /usr/bin/python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); rc=s.connect_ex(sys.argv[1]); print("CONNECT_ERRNO="+str(rc)); raise SystemExit(0 if rc else 1)' /run/user/1000/kylin-memory/memory.sock
+sudo userdel -r d12d_uid_probe
+
+OUTPUT
+CONNECT_ERRNO=13
+CROSS_UID_FAIL_CLOSED_PASS
+UID_PROBE_CLEANED
+
+RESULT=PASS
+LIMITATION=This proves the current user-scoped UDS path rejects a different local UID. It does not validate C-to-D-to-B retrieval or KySec execution enforcement.

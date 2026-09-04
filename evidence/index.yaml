@@ -1610,6 +1610,25 @@ entries:
     details: |
       候选二进制 SHA-256: 3897d1f00041be1a0fecb71c7357547e37c548e57821c652ffe39a9583d01679（已删除）。
       安全内核已运行：kysec_exectl/kysec_devctl/kysec2_kbox/ksaf_main；kernel cmdline lsm=ksaf；TPM-bypass 生效（无 TPM chip）。
+  - id: "D12D-TD049-CROSS-UID"
+    task_id: "D12D-PostMerge-01"
+    description: "TD-049 跨 UID Socket 隔离：一次性测试用户连接 uid 1000 的 production UDS 得到 EACCES，用户已清理"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/d12d_td049_cross_uid_20260904.log"
+    report: "docs/day12/16_d12d_td049_closure_candidate_20260904.md"
+    tested_commit: "cc4acf6ec67de50ca6fbb60bb7044cff46f7d4a5"
+    date: "2026-09-04"
+    reviewer: "pending D Reviewer"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "仅证明不同本地 UID 对当前 UDS 路径 fail-closed；不证明 C→D→B 检索闭环或 KySec exec 强制阻断。"
+    checksum_sha256: "e20bc242b730e429be97c756d2da84acc49cb12ebacf0d9b35f070e4d9d079ff"
+    details: |
+      VM: Kylin-desktop-neo D12-TDR，Kylin V11，kernel 6.6.0-76-generic。
+      Snapshot: d12d-pre-main-cc4acf6-20260904；socket=/run/user/1000/kylin-memory/memory.sock。
+      disposable UID 的 connect_ex 结果为 errno=13 (EACCES)，随后 userdel -r 清理完成。
 
   - id: "D11E-HOST-L0L1-B70827C-20260903"
     task_id: "D11E"
