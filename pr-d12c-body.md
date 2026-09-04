@@ -1,8 +1,8 @@
 # fix(C): align C-track fields with KMA canonical v1 CANDIDATE (Adapter Window)
 
 **轨道 (Track)**：C 轨（memory-client ViewModel + os-agent-integration 契约层 + 双端 L0/L1 测试）
-**Head**：`60aa788`（on branch `fix/c-d12-schema-drift-canonical-adapter`，rebased on latest main `d5e3b0f`）
-**Base**：`main@d5e3b0f`
+**Head**：`9237ae5`（on branch `fix/c-d12-schema-drift-canonical-adapter`，rebased on latest main `889b755`）
+**Base**：`main@889b755`
 
 > **治理口径**：本 PR 是对 `docs/architecture/KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md`（当前状态 **CANDIDATE\_FOR\_FREEZE**，§0 / §R-1 handoff / §结尾明确）的 Candidate **Adapter Window** 对齐。本文任何地方不宣称 Canonical v1 已进入 `FROZEN` 团队级权威基线；transport 层不单方面停止 ADR-010/TD-039 的 `collected_at` 名称（按 R-1 handoff 登记 **TD-060 由 C/D 书面冻结后才允许删除 legacy alias**）。
 
@@ -160,8 +160,8 @@ E 轨在 D12E 审计与 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` 中提出了 6 �
 | 检查项                                                     | 结果                        | 证据/备注                                                                                                                                                                            |
 | ------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `git diff --check origin/main...HEAD`                   | ✅ Clean                   | 只剩 workflow EOF 末尾空行 warning（合法 YAML newline at EOF 需求）                                                                                                                          |
-| Diff stat                                               | ✅ 真实                      | 累计 14 files changed, 527 insertions(+), 39 deletions(-)（含 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` TD-060 关联 PR 回写）                                                      |
-| Rebased on latest main                                  | ✅ Behind 0                | main `d5e3b0f`（fetch + rebase 完）                                                                                                                                                 |
+| Diff stat                                               | ✅ 真实                      | 累计 14 files changed, 584 insertions(+), 39 deletions(-)（含 `docs/technical-debt/TECHNICAL_DEBT_REGISTER.md` TD-060 关联 PR 回写）                                                      |
+| Rebased on latest main                                  | ✅ Behind 0                | main `889b755`（fetch + rebase 完，behind=0）                                                                                                                                        |
 | **CI — Repository Baseline Check**                      | ✅ PASS                    | `.github/workflows/baseline-check.yml`                                                                                                                                           |
 | **CI — Memory Client L0 ctest**                         | ✅ PASS                    | memory-client build + ctest + QML smoke build 全 PASS                                                                                                                             |
 | **CI — os-agent-integration standalone contract ctest** | ✅ PASS                    | Job `contract-ctest` 3 steps 全 PASS：configure + build `test_memory_event_contract_v1` + ctest `--output-on-failure`。HIGH-04 flat JSON round-trip 修复后 ctest PASS。                 |
