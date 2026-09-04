@@ -686,12 +686,19 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 2
         return 0
     if args.merge_run is not None:
-        merge_run(
+        result = merge_run(
             args.merge_run,
             mode=args.mode,
             expected_commit=args.expected_commit,
             expected_branch=args.expected_branch,
         )
+        if not result["run_complete"]:
+            print(json.dumps({
+                "run_complete": False,
+                "formal_run_eligible": result["formal_run_eligible"],
+                "blockers": result["formal_run_blockers"],
+            }, ensure_ascii=False), file=sys.stderr)
+            return 2
         return 0
     if args.validate_formal_environment is not None:
         errors = formal_environment_errors(

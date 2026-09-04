@@ -28,11 +28,17 @@ cd /path/to/kylinOS-agent-memory
 export DAY13A_IPC_SOCKET=/run/user/$(id -u)/kylin-memory.sock
 export DAY13A_SDK_SO=/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0
 export DAY13A_MODEL_VERSION=ensemble-embd_gte-base_uint8-text
-export DAY13A_OUTPUT_DIR=/tmp/kylin-day13a/$(git rev-parse HEAD)
+export DAY13A_EXPECTED_COMMIT=$(git rev-parse HEAD)
+export DAY13A_EXPECTED_BRANCH=perf/D13A-baseline-load
+export DAY13A_RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
+export DAY13A_OUTPUT_DIR=/tmp/kylin-day13a/${DAY13A_EXPECTED_COMMIT}/${DAY13A_RUN_ID}
+export DAY13A_BASELINE_MODE=partial
 PYTHONPATH=memory-service:scripts ./scripts/run_day13a_benchmarks.sh
 ```
 
-`DAY13A_SDK_SO` 与 `DAY13A_MODEL_VERSION`（或 `DAY13A_MODEL_SHA256`）是正式运行的必填身份资料；环境快照会记录实际 `.so` 路径、文件存在性、SHA-256、SONAME、SDK/runtime 版本线索和模型身份。`DAY13A_OUTPUT_DIR` 是所有轮次共用的**外部**根目录；若位于 Git worktree 内，runner 会拒绝运行。可选参数：`DAY13A_PYTHON`、`DAY13A_RUN_ID`、`DAY13A_RUN_COUNT`、`DAY13A_BASELINE_MODE`、`DAY13A_EXPECTED_COMMIT`、`DAY13A_EXPECTED_BRANCH`、`DAY13A_TEXTS`、`DAY13A_IPC_REQUESTS`、`DAY13A_IPC_PAYLOAD`、`DAY13A_IPC_PID`、`DAY13A_OUTBOX_EVENTS`。默认连续跑 3 轮；本地只验证一轮可设置 `DAY13A_RUN_COUNT=1`。每轮 IPC 都会分别运行 `echo` 和 `memory.retrieve`；业务请求默认 payload 为 `schema_version=1.0,user_id=day13a-benchmark`，Gateway validation profile 的可信身份应匹配该用户，或通过 `DAY13A_IPC_PAYLOAD` 覆盖。`DAY13A_IPC_PID` 可指向 Gateway 服务 PID，使 CPU/RSS 采样服务进程；未设置时采样 benchmark 客户端。脚本不会自动启动/停止服务，不会安装软件，也不会删除已有 DB。
+`DAY13A_SDK_SO` 与 `DAY13A_MODEL_VERSION`（或 `DAY13A_MODEL_SHA256`）是正式运行的必填身份资料；环境快照会记录实际 `.so` 路径、文件存在性、SHA-256、SONAME、SDK/runtime 版本线索和模型身份。`DAY13A_OUTPUT_DIR` 是所有轮次共用的**外部**根目录，必须不存在或为空；若位于 Git worktree 内或已含旧产物，runner 会拒绝运行。可选参数：`DAY13A_PYTHON`、`DAY13A_RUN_ID`、`DAY13A_RUN_COUNT`、`DAY13A_BASELINE_MODE`、`DAY13A_EXPECTED_COMMIT`、`DAY13A_EXPECTED_BRANCH`、`DAY13A_TEXTS`、`DAY13A_IPC_REQUESTS`、`DAY13A_IPC_PAYLOAD`、`DAY13A_IPC_PID`、`DAY13A_OUTBOX_EVENTS`。默认连续跑 3 轮；本地只验证一轮可设置 `DAY13A_RUN_COUNT=1`。每轮 IPC 都会分别运行 `echo` 和 `memory.retrieve`；业务请求默认 payload 为 `schema_version=1.0,user_id=day13a-benchmark`，Gateway validation profile 的可信身份应匹配该用户，或通过 `DAY13A_IPC_PAYLOAD` 覆盖。`DAY13A_IPC_PID` 可指向 Gateway 服务 PID，使 CPU/RSS 采样服务进程；未设置时采样 benchmark 客户端。脚本不会自动启动/停止服务，不会安装软件，也不会删除已有 DB。
+
+目前仓库尚未包含真实 index backlog benchmark，因此应显式设置 `DAY13A_BASELINE_MODE=partial` 执行 VM 采集。`full` 模式必须显式提供 `DAY13A_EXPECTED_COMMIT` 与 `DAY13A_EXPECTED_BRANCH`，且会在性能负载前检查真实 index benchmark 是否存在；不具备该能力时立即退出，不会先浪费三轮 VM 测试时间。
 
 运行目录结构如下（所有目录均在 `DAY13A_OUTPUT_DIR` 或默认的 `/tmp` 路径下）：
 

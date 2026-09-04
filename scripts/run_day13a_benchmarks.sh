@@ -43,10 +43,22 @@ if [[ -z "${EXPECTED_COMMIT}" || -z "${EXPECTED_BRANCH}" ]]; then
   echo "无法冻结 D13A 被测 Git commit/branch；请在具名分支的 Git worktree 执行" >&2
   exit 2
 fi
+if [[ "${BASELINE_MODE}" == "full" && ( -z "${DAY13A_EXPECTED_COMMIT:-}" || -z "${DAY13A_EXPECTED_BRANCH:-}" ) ]]; then
+  echo "full D13A 必须显式设置 DAY13A_EXPECTED_COMMIT 与 DAY13A_EXPECTED_BRANCH" >&2
+  exit 2
+fi
+if [[ "${BASELINE_MODE}" == "full" && ! -f "${ROOT_DIR}/scripts/benchmark_index_backlog.py" ]]; then
+  echo "当前 HEAD 尚无真实 index backlog benchmark；请使用 DAY13A_BASELINE_MODE=partial 或先接通真实索引链路" >&2
+  exit 2
+fi
 RUN_ROOT="${DAY13A_OUTPUT_DIR:-${TMPDIR:-/tmp}/kylin-day13a/${EXPECTED_COMMIT}/${RUN_ID}}"
 RUN_ROOT="$(realpath -m "${RUN_ROOT}")"
 if [[ "${RUN_ROOT}" == "${ROOT_DIR}" || "${RUN_ROOT}" == "${ROOT_DIR}/"* ]]; then
   echo "正式 D13A 输出目录必须位于 Git worktree 外：${RUN_ROOT}" >&2
+  exit 2
+fi
+if [[ -e "${RUN_ROOT}" && ( ! -d "${RUN_ROOT}" || -n "$(find "${RUN_ROOT}" -mindepth 1 -print -quit)" ) ]]; then
+  echo "D13A 输出目录已存在内容，拒绝混入旧证据：${RUN_ROOT}" >&2
   exit 2
 fi
 mkdir -p "${RUN_ROOT}"

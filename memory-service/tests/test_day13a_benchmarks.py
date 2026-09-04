@@ -21,6 +21,7 @@ for path in (SERVICE, SCRIPTS):
 from bench_utils import (  # noqa: E402
     benchmark_summary,
     formal_environment_errors,
+    main as bench_utils_main,
     merge_collection,
     merge_run,
     percentile,
@@ -287,6 +288,20 @@ def test_merge_run_collects_both_ipc_methods(tmp_path: Path) -> None:
     assert "未测量真实索引积压" in result["formal_run_blockers"]
     artifacts = {path.replace("\\", "/") for path in result["artifacts"]["raw"]}
     assert "ipc_echo/raw/ipc.jsonl" in artifacts
+
+
+def test_merge_run_cli_fails_immediately_when_partial_evidence_is_incomplete(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "environment.json").write_text(
+        json.dumps(_formal_environment()), encoding="utf-8"
+    )
+    assert bench_utils_main([
+        "--merge-run", str(tmp_path), "--mode", "partial",
+        "--expected-commit", "abc123",
+        "--expected-branch", "perf/D13A-baseline-load",
+    ]) == 2
+    assert '"run_complete": false' in capsys.readouterr().err
 
 
 def test_embedding_fake_writes_raw_and_summary(tmp_path: Path) -> None:
