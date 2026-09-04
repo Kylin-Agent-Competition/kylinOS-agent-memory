@@ -1,0 +1,71 @@
+D12D AGT-006 Kaiming 5.0.3 deployment-layout / rollback non-interference L2 transcript
+Date: 2026-09-04
+VM: Kylin-desktop-neo D12-TDR (Kylin V11)
+VirtualBox pre-test snapshot: d12d-agt006-pre-20260904 (b353ef16-0620-4881-bbe8-16df8759a88e)
+
+Scope and safety boundary
+- Official Kaiming layer was read-only throughout. No file under /opt/kaiming was modified.
+- The only deployment mutation was the project-owned systemd --user rollback/install lifecycle.
+- Direct execution of the ELF under the layer is not used as an availability check: it needs Kaiming's runtime layer.
+
+Kaiming registration and layout baseline
+$ kaiming list | grep cn.kylin.kylin-aiassistant
+cn.kylin.kylin-aiassistant  kylin-aiassistant  5.0.3  x86_64  stable  492.8 MB  binary
+
+$ kaiming info cn.kylin.kylin-aiassistant
+Name                  Id                             Branch     Module     Version     Size         Description           Runtime
+kylin-aiassistant     cn.kylin.kylin-aiassistant     stable     binary     5.0.3       492.8 MB     kylin-aiassistant     stable:top.openkylin.ukui/1.1.43-aipc.7/x86_64
+
+Layer root:
+/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-aiassistant/binary/5.0.3
+
+Layer complete file-tree digest before lifecycle:
+3d3926c91e94430e187a99efae5edd3a5ea0a5db38aadcd2289169f1a7a78c75
+
+Critical files before lifecycle:
+6a13dd3aee2f30a963a49f701031df88c03a930d0a9db416b59ee11199874ebd  files/bin/kylin-aiassistant
+1e08e1f0423ec83ef60384f55aa6ba4044cdc03acaf2776ff5399a8094d6ea4c  files/share/applications/kylin-aiassistant.desktop
+94e572f2b2a0083ae0965fb19669adf52e101c247694ed592edd6b35dbb3af3a  KAIMING/depends
+
+Deployment source binding
+TESTED_COMMIT=b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9
+DEPLOY_SCRIPT_BLOB=be239e0ef481eb4908f40a62b54353fe1eef1f6e
+UNIT_BLOB=39612b72125bc8bc19e7f972393e492e70d28ed6
+Comparison performed locally: cc4acf6 has the same two Git blobs for packaging/systemd/install_kylin_memory.sh and packaging/systemd/kylin-memory.service.
+
+Lifecycle
+$ bash packaging/systemd/install_kylin_memory.sh rollback
+[kylin-memory-install] restored prior unit backup
+[kylin-memory-install] restored prior wrapper backup
+[kylin-memory-install] rollback complete: stopped and disabled kylin-memory; restored pre-install wrapper/unit
+inactive
+ROLLBACK_SERVICE_INACTIVE_OK
+
+$ bash packaging/systemd/install_kylin_memory.sh install --repo /home/kylin-agent/kylinOS-agent-memory --python /home/kylin-agent/d4d-venv/bin/python
+[kylin-memory-install] backed up existing wrapper
+[kylin-memory-install] backed up existing unit
+Created symlink .../default.target.wants/kylin-memory.service -> .../kylin-memory.service.
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+Active: active (running)
+[kylin-memory-install] restart verification
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+Active: active (running)
+[kylin-memory-install] journal: Memory Service ready found
+[kylin-memory-install] install complete
+
+Post-lifecycle checks
+active
+MEMORY_SOCKET_PRESENT
+LAYER_DIGEST=3d3926c91e94430e187a99efae5edd3a5ea0a5db38aadcd2289169f1a7a78c75
+
+$ kaiming info cn.kylin.kylin-aiassistant
+kylin-aiassistant     cn.kylin.kylin-aiassistant     stable     binary     5.0.3       492.8 MB     kylin-aiassistant     stable:top.openkylin.ukui/1.1.43-aipc.7/x86_64
+
+$ kaiming ps | grep cn.kylin.kylin-aiassistant
+cn.kylin.kylin-aiassistant  7c992f7c-a848-11f1-9c44-08002774a555  10144  /run/user/1000/kaiming/cn.kylin.kylin-aiassistant/7c992f7c-a848-11f1-9c44-08002774a555
+
+Result
+AGT006_PARTIAL_PASS_LAYOUT_AND_NONINTERFERENCE
+
+Unmet closure condition
+The AGT-006 minimum KySec authorization/ACL proof for the 5.0.3 deployment path was not rerun. TD-KYSEC-001 remains In Progress; therefore TD-DEPLOY-001 remains In Progress and this transcript is not a debt closure claim.
