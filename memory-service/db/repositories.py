@@ -21,7 +21,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, delete, func, insert, select, update
+from sqlalchemy import and_, delete, exists, func, insert, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from db.engine import DatabaseLockedError, is_locked_error
@@ -31,6 +31,9 @@ from db.schema import (
     forget_plan,
     idempotency_cache,
     memory_entries,
+    memory_conflict,
+    memory_conflict_member,
+    memory_relation,
     memory_items,
     memory_version_receipts,
     memory_versions,
@@ -87,6 +90,19 @@ class EventIdentityConflict(Exception):
 EVENT_TURN_FINALIZED = "turn.finalized"
 EVENT_MEMORY_UPSERTED = "memory.upserted"
 EVENT_FORGET_EXECUTED = "forget.executed"
+EVENT_MEMORY_RELATION_CHANGED = "memory.relation.changed"
+EVENT_MEMORY_CONFLICT_CHANGED = "memory.conflict.changed"
+EVENT_MEMORY_LIFECYCLE_CHANGED = "memory.lifecycle.changed"
+EVENT_MEMORY_LIFECYCLE_ARCHIVE_REQUESTED = "memory.lifecycle.archive_requested"
+
+_RELATION_TYPES = {"version", "evidence", "derived"}
+_CONFLICT_TYPES = {"contradiction", "temporal_inconsistency", "source_conflict", "preference_conflict", "scope_ambiguity"}
+_RESOLUTION_STATUSES = {"detected", "analyzing", "resolved_auto", "resolved_manual", "deferred", "unresolvable"}
+_DECISION_ACTIONS = {"keep_left", "keep_right", "coexist", "defer", "reject"}
+_MEMORY_STATUSES = {"active", "candidate", "superseded", "deprecated", "expired", "removed"}
+_MEMORY_TYPES = {"short_term", "medium_term", "long_term", "ephemeral"}
+_EVIDENCE_TIERS = {"user_explicit_config_latest", "user_confirmed", "tool_execution_result", "consistent_behavior_multiple", "behavior_inference_single", "model_inference"}
+_KNOWLEDGE_TYPES = {"workflow", "case", "template", "fact", "constraint", "failure_experience"}
 
 
 # ── D10D 精准遗忘持久化（ADR-015/019） ──
@@ -352,6 +368,7 @@ def insert_memory_entry(
                 source_turn_id=source_turn_id,
                 confidence=confidence,
                 version=1,
+                row_revision=1,
                 is_deleted=0,
                 created_at=now,
                 updated_at=now,
@@ -364,13 +381,29 @@ def insert_memory_entry(
 
 
 def soft_delete_memory_entry(
-    conn, *, entry_id: int, user_id: str, current_version: int
+    conn, *, entry_id: int, user_id: str, current_version: Optional[int] = None,
+    current_row_revision: Optional[int] = None,
 ) -> int:
-    """乐观锁软删除：is_deleted 0→1 + version+1（FTS 由触发器同步删除）。
+    """乐观锁软删除：D8D 后仅 row_revision 是 CAS token。
 
     Returns:
         受影响行数；0 = 版本冲突（调用方重试或放弃，FRZ-DB-001 乐观锁规范）。
     """
+    entry = _get_memory_entry(conn, entry_id=entry_id, user_id=user_id)
+    if entry is None:
+        return 0
+    expected = current_row_revision if current_row_revision is not None else current_version
+    if expected is None:
+        raise ValueError("current_row_revision is required")
+    if int(entry.get("row_revision") or 0) != int(expected):
+        return 0
+    values: Dict[str, Any] = {
+        "is_deleted": 1,
+        "row_revision": int(expected) + 1,
+        "updated_at": _now_iso(),
+    }
+    if entry["entry_type"] == "knowledge":
+        values["memory_status"] = "removed"
     try:
         res = conn.execute(
             update(memory_entries)
@@ -378,11 +411,11 @@ def soft_delete_memory_entry(
                 and_(
                     memory_entries.c.id == entry_id,
                     memory_entries.c.user_id == user_id,
-                    memory_entries.c.version == current_version,
+                    memory_entries.c.row_revision == expected,
                     memory_entries.c.is_deleted == 0,
                 )
             )
-            .values(is_deleted=1, version=current_version + 1, updated_at=_now_iso())
+            .values(**values)
         )
     except OperationalError as exc:
         raise _wrap_locked(exc) from exc
@@ -1790,7 +1823,11 @@ def soft_delete_resolved_targets(
                 conn,
                 entry_id=entry_id,
                 user_id=user_id,
-                current_version=int(entry["version"]),
+                # ``version`` is the stable retrieval/index identity.  D8D
+                # lifecycle mutations intentionally advance only
+                # ``row_revision``; passing ``version`` here would make a
+                # later forget CAS fail after any lifecycle transition.
+                current_row_revision=int(entry["row_revision"]),
             )
         return executed, []
     if target_type == "preference":
@@ -1814,3 +1851,320 @@ def soft_delete_resolved_targets(
     raise UnsupportedForgetScopeError(
         f"soft delete not supported for target_type={target_type!r}"
     )
+
+
+# ── D8D relation / conflict / lifecycle persistence (ADR-017) ──
+
+
+def _d8d_nonempty(**fields: str) -> None:
+    invalid = [name for name, value in fields.items() if not isinstance(value, str) or not value.strip()]
+    if invalid:
+        raise ValueError(f"D8D required fields must be non-empty: {', '.join(sorted(invalid))}")
+
+
+def _knowledge_row(conn, *, user_id: str, knowledge_id: str, eligible_only: bool = False) -> Optional[Dict[str, Any]]:
+    stmt = select(memory_entries).where(and_(memory_entries.c.user_id == user_id, memory_entries.c.entry_type == "knowledge", memory_entries.c.knowledge_id == knowledge_id))
+    if eligible_only:
+        stmt = stmt.where(memory_entries.c.lifecycle_eligibility == "eligible")
+    row = conn.execute(stmt).mappings().first()
+    return dict(row) if row else None
+
+
+def _source_event_row(conn, *, user_id: str, event_id: str) -> Optional[Dict[str, Any]]:
+    row = conn.execute(select(source_events).where(and_(source_events.c.user_id == user_id, source_events.c.event_id == event_id))).mappings().first()
+    return dict(row) if row else None
+
+
+def _d8d_outbox(conn, *, aggregate_id: str, event_type: str, payload: Dict[str, Any]) -> int:
+    """Write only structural metadata to outbox; callers must never supply content."""
+    forbidden = {"content", "conflict_summary", "evidence", "original_user_text"}
+    if forbidden.intersection(payload):
+        raise ValueError("D8D outbox payload must not contain content")
+    res = conn.execute(insert(outbox).values(aggregate_type="memory", aggregate_id=aggregate_id, event_type=event_type, payload=json.dumps(payload, sort_keys=True), attempts=0, created_at=_now_iso(), priority=0))
+    return int(res.lastrowid)
+
+
+def insert_knowledge_entry(
+    conn, *, user_id: str, knowledge_id: str, knowledge_type: str, source_event_id: str,
+    content: Dict[str, Any], confidence: float, conditions: Optional[str] = None,
+    trace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Persist a new trusted knowledge item and its primary evidence edge atomically.
+
+    The evidence tier is derived solely from the same-user admitted source event;
+    callers cannot promote a weak/failed source by passing their own tier.
+    """
+    _d8d_nonempty(user_id=user_id, knowledge_id=knowledge_id, knowledge_type=knowledge_type, source_event_id=source_event_id)
+    if knowledge_type not in _KNOWLEDGE_TYPES:
+        raise ValueError("invalid knowledge_type")
+    event = _source_event_row(conn, user_id=user_id, event_id=source_event_id)
+    if event is None or event["admission_decision"] != "allow_extraction":
+        raise ValueError("knowledge source event is not admitted")
+    status, source_type = event["source_business_status"], event["source_type"]
+    if status == "failed" and knowledge_type != "failure_experience":
+        raise ValueError("failed source may only persist failure_experience")
+    if status in {"partial", "cancelled", "timeout", "ignored"}:
+        raise ValueError("source business status cannot persist knowledge")
+    eligible = source_type in {"manual_config", "tool_result"} and status in {"success", "completed"}
+    tier = "user_explicit_config_latest" if source_type == "manual_config" and eligible else ("tool_execution_result" if eligible else None)
+    lifecycle_eligibility = "eligible" if tier else "evidence_unmapped"
+    now = _now_iso()
+    try:
+        # Canonical idempotent replay (ADR-017 §3.1.1): a retried logical ingress
+        # with the same user/knowledge/source and identical immutable inputs must
+        # return the existing canonical identity without re-inserting the entry,
+        # re-creating the primary evidence relation, or emitting a second Outbox
+        # event.  Any drift in immutable inputs is fail-closed.
+        existing = conn.execute(
+            select(memory_entries).where(and_(
+                memory_entries.c.user_id == user_id,
+                memory_entries.c.entry_type == "knowledge",
+                memory_entries.c.knowledge_id == knowledge_id,
+            ))
+        ).mappings().first()
+        if existing is not None:
+            edge = conn.execute(
+                select(memory_relation).where(and_(
+                    memory_relation.c.user_id == user_id,
+                    memory_relation.c.relation_type == "evidence",
+                    memory_relation.c.is_primary == 1,
+                    memory_relation.c.left_endpoint_type == "knowledge",
+                    memory_relation.c.left_endpoint_id == knowledge_id,
+                    memory_relation.c.right_endpoint_type == "source_event",
+                ))
+            ).mappings().first()
+            if edge is None:
+                raise ValueError("canonical primary evidence relation is missing")
+            if edge["right_endpoint_id"] != source_event_id:
+                raise ValueError("knowledge replay source event conflict")
+            stored_content = json.loads(existing["content"])
+            if (
+                existing["knowledge_type"] != knowledge_type
+                or existing["conditions"] != conditions
+                or existing["confidence"] != confidence
+                or stored_content != content
+            ):
+                raise ValueError("knowledge replay immutable input conflict")
+            return {
+                "memory_entry_id": int(existing["id"]),
+                "memory_id": str(existing["id"]),
+                "version_id": f"v{int(existing['version'])}",
+                "knowledge_id": knowledge_id,
+                "evidence_tier": existing["evidence_tier"],
+                "lifecycle_eligibility": existing["lifecycle_eligibility"],
+                "replayed": True,
+            }
+        res = conn.execute(insert(memory_entries).values(user_id=user_id, entry_type="knowledge", content=json.dumps(content, ensure_ascii=False), confidence=confidence, version=1, row_revision=1, is_deleted=0, created_at=now, updated_at=now, trace_id=trace_id, knowledge_id=knowledge_id, knowledge_type=knowledge_type, conditions=conditions, lifecycle_eligibility=lifecycle_eligibility, memory_status="candidate", memory_type="short_term", evidence_tier=tier, last_accessed_at=None, access_count=None))
+        entry_id = int(res.lastrowid)
+        relation_id = f"evidence:{knowledge_id}:{source_event_id}"
+        insert_relation(conn, user_id=user_id, relation_id=relation_id, relation_type="evidence", left_endpoint_type="knowledge", left_endpoint_id=knowledge_id, right_endpoint_type="source_event", right_endpoint_id=source_event_id, is_primary=True, emit_outbox=False)
+        # The canonical evidence edge is created as part of this same business
+        # write.  Emit its structural change event in the same transaction,
+        # while keeping user content and evidence payloads out of Outbox.
+        _d8d_outbox(
+            conn,
+            aggregate_id=knowledge_id,
+            event_type=EVENT_MEMORY_RELATION_CHANGED,
+            payload={
+                "user_id": user_id,
+                "knowledge_id": knowledge_id,
+                "relation_id": relation_id,
+                "occurred_at": now,
+            },
+        )
+    except OperationalError as exc:
+        raise _wrap_locked(exc) from exc
+    return {"memory_entry_id": entry_id, "memory_id": str(entry_id), "version_id": "v1", "knowledge_id": knowledge_id, "evidence_tier": tier, "lifecycle_eligibility": lifecycle_eligibility}
+
+
+def insert_relation(
+    conn, *, user_id: str, relation_id: str, relation_type: str,
+    left_endpoint_type: str, left_endpoint_id: str, right_endpoint_type: str,
+    right_endpoint_id: str, is_primary: bool = False, emit_outbox: bool = True,
+) -> Dict[str, Any]:
+    _d8d_nonempty(user_id=user_id, relation_id=relation_id, relation_type=relation_type, left_endpoint_type=left_endpoint_type, left_endpoint_id=left_endpoint_id, right_endpoint_type=right_endpoint_type, right_endpoint_id=right_endpoint_id)
+    if relation_type not in _RELATION_TYPES or left_endpoint_type not in {"knowledge", "source_event"} or right_endpoint_type not in {"knowledge", "source_event"}:
+        raise ValueError("invalid relation enum")
+    allowed = {"version": ("knowledge", "knowledge"), "derived": ("knowledge", "knowledge"), "evidence": ("knowledge", "source_event")}
+    if (left_endpoint_type, right_endpoint_type) != allowed[relation_type]:
+        raise ValueError("invalid relation endpoint direction")
+    if left_endpoint_type == right_endpoint_type and left_endpoint_id == right_endpoint_id:
+        raise ValueError("self relation is forbidden")
+    if _knowledge_row(conn, user_id=user_id, knowledge_id=left_endpoint_id) is None:
+        raise ValueError("left knowledge endpoint is not owned by user")
+    right_exists = _knowledge_row(conn, user_id=user_id, knowledge_id=right_endpoint_id) if right_endpoint_type == "knowledge" else _source_event_row(conn, user_id=user_id, event_id=right_endpoint_id)
+    if right_exists is None:
+        raise ValueError("right endpoint is not owned by user")
+    now = _now_iso()
+    res = conn.execute(insert(memory_relation).values(user_id=user_id, relation_id=relation_id, relation_type=relation_type, left_endpoint_type=left_endpoint_type, left_endpoint_id=left_endpoint_id, right_endpoint_type=right_endpoint_type, right_endpoint_id=right_endpoint_id, is_primary=1 if is_primary else 0, created_at=now))
+    if emit_outbox:
+        _d8d_outbox(conn, aggregate_id=left_endpoint_id, event_type=EVENT_MEMORY_RELATION_CHANGED, payload={"user_id": user_id, "knowledge_id": left_endpoint_id, "relation_id": relation_id, "occurred_at": now})
+    return {"id": int(res.lastrowid), "relation_id": relation_id}
+
+
+def get_relation_by_id(conn, *, user_id: str, relation_id: str) -> Optional[Dict[str, Any]]:
+    row = conn.execute(select(memory_relation).where(and_(memory_relation.c.user_id == user_id, memory_relation.c.relation_id == relation_id))).mappings().first()
+    return dict(row) if row else None
+
+
+def list_relations(conn, *, user_id: str, knowledge_id: Optional[str] = None, relation_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    stmt = select(memory_relation).where(memory_relation.c.user_id == user_id)
+    if knowledge_id is not None:
+        stmt = stmt.where(((memory_relation.c.left_endpoint_type == "knowledge") & (memory_relation.c.left_endpoint_id == knowledge_id)) | ((memory_relation.c.right_endpoint_type == "knowledge") & (memory_relation.c.right_endpoint_id == knowledge_id)))
+    if relation_type is not None:
+        if relation_type not in _RELATION_TYPES:
+            raise ValueError("invalid relation_type")
+        stmt = stmt.where(memory_relation.c.relation_type == relation_type)
+    return [dict(row) for row in conn.execute(stmt.order_by(memory_relation.c.created_at, memory_relation.c.relation_id)).mappings().all()]
+
+
+def insert_conflict(
+    conn, *, user_id: str, conflict_id: str, conflict_type: str, left_knowledge_id: str,
+    right_knowledge_id: str, resolution_status: str, is_auto_resolvable: bool,
+    detected_at: str, involved_knowledge_ids: Optional[List[str]] = None,
+    resolution_strategy: Optional[str] = None, resolution_confidence: Optional[float] = None,
+    resolved_at: Optional[str] = None, resolved_by: Optional[str] = None,
+    decision_action: Optional[str] = None, winner_id: Optional[str] = None,
+    reason_code: Optional[str] = None,
+) -> Dict[str, Any]:
+    _d8d_nonempty(user_id=user_id, conflict_id=conflict_id, conflict_type=conflict_type, left_knowledge_id=left_knowledge_id, right_knowledge_id=right_knowledge_id, resolution_status=resolution_status, detected_at=detected_at)
+    if conflict_type not in _CONFLICT_TYPES or resolution_status not in _RESOLUTION_STATUSES or left_knowledge_id == right_knowledge_id:
+        raise ValueError("invalid conflict")
+    if resolution_confidence is not None and not 0 <= resolution_confidence <= 1:
+        raise ValueError("invalid resolution_confidence")
+    if resolution_status in {"resolved_auto", "resolved_manual"} and (not resolved_at or not resolved_by):
+        raise ValueError("resolved conflict requires resolved_at and resolved_by")
+    _validate_conflict_decision(
+        decision_action=decision_action,
+        winner_id=winner_id,
+        left_knowledge_id=left_knowledge_id,
+        right_knowledge_id=right_knowledge_id,
+    )
+    members = involved_knowledge_ids
+    if members is not None and len(members) > 32:
+        raise ValueError("at most 32 involved knowledge ids")
+    all_ids = [left_knowledge_id, right_knowledge_id] + (members or [])
+    if any(_knowledge_row(conn, user_id=user_id, knowledge_id=knowledge_id) is None for knowledge_id in all_ids):
+        raise ValueError("conflict endpoint is not owned by user")
+    now = _now_iso()
+    # The Domain summary is intentionally discarded: persisted/returned form is an allowlisted system code.
+    res = conn.execute(insert(memory_conflict).values(user_id=user_id, conflict_id=conflict_id, conflict_type=conflict_type, left_knowledge_id=left_knowledge_id, right_knowledge_id=right_knowledge_id, conflict_summary=f"conflict:{conflict_type}", involved_present=0 if members is None else 1, resolution_status=resolution_status, is_auto_resolvable=1 if is_auto_resolvable else 0, detected_at=detected_at, resolution_strategy=resolution_strategy, resolution_confidence=resolution_confidence, resolved_at=resolved_at, resolved_by=resolved_by, winner_id=winner_id, decision_action=decision_action, reason_code=reason_code, created_at=now, updated_at=now))
+    for ordinal, (knowledge_id, role) in enumerate([(left_knowledge_id, "left"), (right_knowledge_id, "right")] + [(item, "involved") for item in members or []]):
+        conn.execute(insert(memory_conflict_member).values(user_id=user_id, conflict_id=conflict_id, knowledge_id=knowledge_id, ordinal=ordinal, role=role, created_at=now))
+    _d8d_outbox(conn, aggregate_id=conflict_id, event_type=EVENT_MEMORY_CONFLICT_CHANGED, payload={"user_id": user_id, "conflict_id": conflict_id, "occurred_at": now})
+    return {"id": int(res.lastrowid), "conflict_id": conflict_id}
+
+
+def get_conflict_by_id(conn, *, user_id: str, conflict_id: str) -> Optional[Dict[str, Any]]:
+    row = conn.execute(select(memory_conflict).where(and_(memory_conflict.c.user_id == user_id, memory_conflict.c.conflict_id == conflict_id))).mappings().first()
+    return dict(row) if row else None
+
+
+def _validate_conflict_decision(
+    *, decision_action: Optional[str], winner_id: Optional[str],
+    left_knowledge_id: str, right_knowledge_id: str,
+) -> None:
+    """Single Decision validator shared by insert/update (ADR-017 audit truth).
+
+    ``winner_id`` may only appear for a keep decision and must name the side
+    actually kept; coexist/defer/reject must not carry a winner.
+    """
+    if decision_action is None:
+        if winner_id is not None:
+            raise ValueError("only keep decisions may have a winner")
+        return
+    if decision_action not in _DECISION_ACTIONS:
+        raise ValueError("invalid decision_action")
+    if decision_action == "keep_left":
+        if winner_id != left_knowledge_id:
+            raise ValueError("winner_id must match keep side")
+    elif decision_action == "keep_right":
+        if winner_id != right_knowledge_id:
+            raise ValueError("winner_id must match keep side")
+    elif winner_id is not None:
+        raise ValueError("only keep decisions may have a winner")
+
+
+def list_conflicts_by_knowledge(conn, *, user_id: str, knowledge_id: str) -> List[Dict[str, Any]]:
+    # Conflict truth membership is the member table: an involved-only participant
+    # (neither left nor right) must surface in the same scoped conflict set.
+    rows = conn.execute(
+        select(memory_conflict).where(and_(
+            memory_conflict.c.user_id == user_id,
+            exists(
+                select(1).where(and_(
+                    memory_conflict_member.c.user_id == memory_conflict.c.user_id,
+                    memory_conflict_member.c.conflict_id == memory_conflict.c.conflict_id,
+                    memory_conflict_member.c.knowledge_id == knowledge_id,
+                ))
+            ),
+        )).order_by(memory_conflict.c.detected_at, memory_conflict.c.conflict_id)
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def resolve_conflict_state(conn, *, user_id: str, knowledge_id: str) -> str:
+    if _knowledge_row(conn, user_id=user_id, knowledge_id=knowledge_id, eligible_only=True) is None:
+        return "none"
+    unresolved = conn.execute(
+        select(func.count()).select_from(memory_conflict).where(and_(
+            memory_conflict.c.user_id == user_id,
+            memory_conflict.c.resolution_status.not_in(["resolved_auto", "resolved_manual"]),
+            exists(
+                select(1).where(and_(
+                    memory_conflict_member.c.user_id == memory_conflict.c.user_id,
+                    memory_conflict_member.c.conflict_id == memory_conflict.c.conflict_id,
+                    memory_conflict_member.c.knowledge_id == knowledge_id,
+                ))
+            ),
+        ))
+    ).scalar_one()
+    return "unresolved" if unresolved else "resolved"
+
+
+def update_conflict_resolution(conn, *, user_id: str, conflict_id: str, resolution_status: str, decision_action: Optional[str], winner_id: Optional[str], reason_code: Optional[str], resolved_at: Optional[str], resolved_by: Optional[str]) -> int:
+    row = get_conflict_by_id(conn, user_id=user_id, conflict_id=conflict_id)
+    if row is None:
+        return 0
+    if resolution_status not in _RESOLUTION_STATUSES:
+        raise ValueError("invalid resolution_status")
+    if resolution_status in {"resolved_auto", "resolved_manual"} and (not resolved_at or not resolved_by):
+        raise ValueError("resolved conflict requires resolved_at and resolved_by")
+    _validate_conflict_decision(
+        decision_action=decision_action,
+        winner_id=winner_id,
+        left_knowledge_id=row["left_knowledge_id"],
+        right_knowledge_id=row["right_knowledge_id"],
+    )
+    now = _now_iso()
+    result = conn.execute(update(memory_conflict).where(and_(memory_conflict.c.user_id == user_id, memory_conflict.c.conflict_id == conflict_id)).values(resolution_status=resolution_status, decision_action=decision_action, winner_id=winner_id, reason_code=reason_code, resolved_at=resolved_at, resolved_by=resolved_by, updated_at=now))
+    if result.rowcount:
+        _d8d_outbox(conn, aggregate_id=conflict_id, event_type=EVENT_MEMORY_CONFLICT_CHANGED, payload={"user_id": user_id, "conflict_id": conflict_id, "occurred_at": now})
+    return int(result.rowcount)
+
+
+def get_lifecycle_memory(conn, *, user_id: str, knowledge_id: str) -> Optional[Dict[str, Any]]:
+    return _knowledge_row(conn, user_id=user_id, knowledge_id=knowledge_id, eligible_only=True)
+
+
+def update_lifecycle_memory(conn, *, user_id: str, knowledge_id: str, expected_row_revision: int, memory_status: Optional[str] = None, memory_type: Optional[str] = None) -> int:
+    if memory_status is None and memory_type is None:
+        raise ValueError("lifecycle mutation is empty")
+    if memory_status is not None and memory_status not in _MEMORY_STATUSES:
+        raise ValueError("invalid memory_status")
+    if memory_type is not None and memory_type not in _MEMORY_TYPES:
+        raise ValueError("invalid memory_type")
+    row = get_lifecycle_memory(conn, user_id=user_id, knowledge_id=knowledge_id)
+    if row is None or int(row["row_revision"]) != expected_row_revision:
+        return 0
+    if memory_status == "active" and row["memory_status"] in {"removed", "expired"}:
+        raise ValueError("terminal lifecycle state cannot auto-recover")
+    values: Dict[str, Any] = {"row_revision": expected_row_revision + 1, "updated_at": _now_iso()}
+    if memory_status is not None:
+        values["memory_status"] = memory_status
+        if memory_status == "removed":
+            values["is_deleted"] = 1
+    if memory_type is not None:
+        values["memory_type"] = memory_type
+    result = conn.execute(update(memory_entries).where(and_(memory_entries.c.user_id == user_id, memory_entries.c.knowledge_id == knowledge_id, memory_entries.c.row_revision == expected_row_revision, memory_entries.c.version == row["version"])).values(**values))
+    return int(result.rowcount)

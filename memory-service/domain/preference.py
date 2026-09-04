@@ -61,7 +61,7 @@ class Preference(BaseModel):
 
     # ── D3 §5.2 可选字段 ──
     decay_after_at: Optional[AwareDatetime] = None  # DEFERRED：衰减函数待 A/E
-    previous_version_id: Optional[str] = None
+    previous_version_id: Optional[NonEmptyStr] = None  # 存在时须非空非纯空白（v1 仍须 None）
     extracted_entities: Optional[List[str]] = None
 
     @model_validator(mode="after")

@@ -1,0 +1,27 @@
+RC=0
+=== restart ===
+
+active
+
+srw------- /run/user/1000/kylin-memory/memory.sock
+
+=== journal after restart ===
+
+9月 03 14:43:55 yanmouren778-pc kylin-memory-server[17491]: 2026-09-03T14:43:55+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+
+9月 03 14:43:56 yanmouren778-pc kylin-memory-server[17491]: 2026-09-03T14:43:56+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+
+9月 03 14:43:56 yanmouren778-pc kylin-memory-server[17491]: 2026-09-03T14:43:56+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+
+9月 03 14:43:56 yanmouren778-pc kylin-memory-server[17491]: 2026-09-03T14:43:56+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+
+=== IPC roundtrip (unknown method fail-closed) ===
+
+{"protocol_version": "1.0", "request_id": "d12d_restart", "trace_id": "trc_restart", "status": "ok", "data": {"context": [], "degraded": false, "reason": "retrieval main chain pending"}, "server_ts": "2026-09-03T06:44:12.699553+00:00"}
+
+=== no-PII scan of journal (zh content) ===
+
+3
+
+
+ERR:
