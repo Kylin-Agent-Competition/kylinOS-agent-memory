@@ -241,6 +241,6 @@ fi
 
 echo 'RESULT=PASS all required assertions passed.'
 echo 'TD-KYSEC-001 remains In Progress until KySec exec forced blocking and deployment-policy safety are verified.'
-echo 'TD-DEPLOY-001 remains Open until controlled install and rollback are run on this tested_commit.'
-echo 'TD-049 remains Open until a controlled different-UID fail-closed test is recorded.'
+echo 'TD-DEPLOY-001 remains In Progress until controlled rollback and 5.0.3 AGT-006 layout verification are recorded.'
+echo 'TD-049 remains In Progress until a controlled different-UID fail-closed test is recorded.'
 echo 'TD-055 remains Open until OS reboot and a real C-to-D-to-B request are recorded on this tested_commit.'
