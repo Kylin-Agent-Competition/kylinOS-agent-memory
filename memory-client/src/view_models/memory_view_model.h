@@ -429,7 +429,8 @@ public:
         const QString& stopReason);
 
     // 构造 TurnFinalizedEvent JSON（可预览可发送复用；Preview→Send 走缓存）。
-    // retryOfTurnId：finalization_reason=retry 时必须提供，显式注入 metadata.retry_of_turn_id。
+    // retryOfTurnId：finalization_reason=retry 时必须提供，显式注入 event.top-level retry_of_turn_id。
+    //   （DRIFT-B 修复：retry_of_turn_id 是 TurnFinalizedEvent 字段，不是 EventMetadata 字段。）
     Q_INVOKABLE QJsonObject buildTurnFinalizedEventJson(
         const QString& userId,
         const QString& sessionId,

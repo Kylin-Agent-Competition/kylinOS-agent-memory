@@ -438,7 +438,29 @@ ParseResult<MemoryQuery> memoryQueryFromJson(const QJsonObject& object)
     query.sessionId = object.value(QStringLiteral("session_id")).toString();
     query.queryText = object.value(QStringLiteral("query_text")).toString();
     query.scene = object.value(QStringLiteral("scene")).toString();
-    query.maxContextTokens = object.value(QStringLiteral("max_context_tokens")).toInt();
+    const auto maxTokensValue = object.value(QStringLiteral("max_context_tokens"));
+    if (!maxTokensValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("max_context_tokens"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    const double maxTokensDouble = maxTokensValue.toDouble();
+    if (maxTokensDouble != static_cast<double>(static_cast<qlonglong>(maxTokensDouble))) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_value"),
+                QStringLiteral("max_context_tokens"),
+                QStringLiteral("Field must be an integer."),
+            }},
+        };
+    }
+    query.maxContextTokens = static_cast<int>(maxTokensDouble);
 
     const ValidationResult validation = validate(query);
     if (!validation.ok()) {
@@ -651,10 +673,31 @@ ParseResult<MemoryContext> memoryContextFromJson(const QJsonObject& object)
         return {std::nullopt, status.errors};
     }
 
+    const auto selectedIdsValue = object.value(QStringLiteral("selected_memory_ids"));
+    if (!selectedIdsValue.isArray()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("selected_memory_ids"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    const QJsonArray selectedIds = selectedIdsValue.toArray();
     QStringList selectedMemoryIds;
-    const QJsonArray selectedIds = object.value(QStringLiteral("selected_memory_ids")).toArray();
     selectedMemoryIds.reserve(selectedIds.size());
     for (const QJsonValue& selectedId : selectedIds) {
+        if (!selectedId.isString()) {
+            return {
+                std::nullopt,
+                {{
+                    QStringLiteral("invalid_type"),
+                    QStringLiteral("selected_memory_ids"),
+                    QStringLiteral("Array elements must be strings."),
+                }},
+            };
+        }
         selectedMemoryIds.append(selectedId.toString());
     }
 
@@ -663,11 +706,71 @@ ParseResult<MemoryContext> memoryContextFromJson(const QJsonObject& object)
     context.queryId = object.value(QStringLiteral("query_id")).toString();
     context.selectedMemoryIds = selectedMemoryIds;
     context.contextVersion = object.value(QStringLiteral("context_version")).toString();
-    context.tokenBudget = object.value(QStringLiteral("token_budget")).toInt();
-    context.actualTokenCount = object.value(QStringLiteral("actual_token_count")).toInt();
-    context.sensitiveExcludedCount = object.value(QStringLiteral("sensitive_excluded_count")).toInt();
-    context.forgottenExcludedCount = object.value(QStringLiteral("forgotten_excluded_count")).toInt();
-    context.conflictExcludedCount = object.value(QStringLiteral("conflict_excluded_count")).toInt();
+
+    const auto tokenBudgetValue = object.value(QStringLiteral("token_budget"));
+    if (!tokenBudgetValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("token_budget"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    context.tokenBudget = tokenBudgetValue.toInt();
+
+    const auto actualCountValue = object.value(QStringLiteral("actual_token_count"));
+    if (!actualCountValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("actual_token_count"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    context.actualTokenCount = actualCountValue.toInt();
+
+    const auto sensValue = object.value(QStringLiteral("sensitive_excluded_count"));
+    if (!sensValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("sensitive_excluded_count"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    context.sensitiveExcludedCount = sensValue.toInt();
+
+    const auto forgotValue = object.value(QStringLiteral("forgotten_excluded_count"));
+    if (!forgotValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("forgotten_excluded_count"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    context.forgottenExcludedCount = forgotValue.toInt();
+
+    const auto conflictValue = object.value(QStringLiteral("conflict_excluded_count"));
+    if (!conflictValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("conflict_excluded_count"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    context.conflictExcludedCount = conflictValue.toInt();
     context.injectionStatus = *status.value;
 
     const ValidationResult validation = validate(context);
@@ -744,7 +847,69 @@ QString toString(ToolExecutionStatus status)
     case ToolExecutionStatus::Timeout:
         return QStringLiteral("timeout");
     }
+    Q_UNREACHABLE();
     return {};
+}
+
+ParseResult<BusinessStatus> businessStatusFromString(const QString& value)
+{
+    // KMA R-6 canonical 8-value white-list. Canonical names ONLY.
+    if (value == QStringLiteral("success"))   return {BusinessStatus::Success, {}};
+    if (value == QStringLiteral("partial"))   return {BusinessStatus::Partial, {}};
+    if (value == QStringLiteral("failed"))    return {BusinessStatus::Failed, {}};     // canonical; legacy "failure" NOT accepted
+    if (value == QStringLiteral("cancelled")) return {BusinessStatus::Cancelled, {}};
+    if (value == QStringLiteral("timeout"))   return {BusinessStatus::Timeout, {}};
+    if (value == QStringLiteral("queued"))    return {BusinessStatus::Queued, {}};
+    if (value == QStringLiteral("running"))   return {BusinessStatus::Running, {}};
+    if (value == QStringLiteral("skipped"))   return {BusinessStatus::Skipped, {}};
+
+    return {
+        std::nullopt,
+        {{
+            QStringLiteral("invalid_enum"),
+            QStringLiteral("source_business_status"),
+            QStringLiteral("Unknown canonical business status (must be one of 8 KMA R-6 values)."),
+        }},
+    };
+}
+
+QString toString(BusinessStatus status)
+{
+    switch (status) {
+    case BusinessStatus::Success:   return QStringLiteral("success");
+    case BusinessStatus::Partial:   return QStringLiteral("partial");
+    case BusinessStatus::Failed:    return QStringLiteral("failed");
+    case BusinessStatus::Cancelled: return QStringLiteral("cancelled");
+    case BusinessStatus::Timeout:   return QStringLiteral("timeout");
+    case BusinessStatus::Queued:    return QStringLiteral("queued");
+    case BusinessStatus::Running:   return QStringLiteral("running");
+    case BusinessStatus::Skipped:   return QStringLiteral("skipped");
+    }
+    Q_UNREACHABLE();
+    return {};
+}
+
+// KMA R-6 / DRIFT-002: consistency check between Host DTO status and canonical business status.
+// Host DTO uses "failure" as alias but canonical business status MUST report "failed".
+// Returns true when (executionStatus, businessStatus) is an allowed tuple.
+static bool businessStatusConsistentWithExecution(
+    ToolExecutionStatus executionStatus, BusinessStatus businessStatus)
+{
+    switch (businessStatus) {
+    case BusinessStatus::Success:   return executionStatus == ToolExecutionStatus::Success;
+    case BusinessStatus::Partial:   return executionStatus == ToolExecutionStatus::Partial;
+    case BusinessStatus::Failed:    return executionStatus == ToolExecutionStatus::Failure; // "failure"/"failed" → Failure
+    case BusinessStatus::Cancelled: return executionStatus == ToolExecutionStatus::Cancelled;
+    case BusinessStatus::Timeout:   return executionStatus == ToolExecutionStatus::Timeout;
+    case BusinessStatus::Queued:    // no direct Host DTO mapping — allowed (non-terminal states)
+        [[fallthrough]];
+    case BusinessStatus::Running:
+        [[fallthrough]];
+    case BusinessStatus::Skipped:
+        return true;
+    }
+    Q_UNREACHABLE();
+    return false;
 }
 
 ValidationResult validate(const ToolExecutionEvent& event)
@@ -785,6 +950,14 @@ ValidationResult validate(const ToolExecutionEvent& event)
             QStringLiteral("Required field is missing."),
         });
     }
+    // KMA R-6 / DRIFT-002: canonical business status is REQUIRED
+    if (!event.sourceBusinessStatus.has_value()) {
+        result.errors.append({
+            QStringLiteral("required"),
+            QStringLiteral("source_business_status"),
+            QStringLiteral("Required KMA R-6 canonical business status is missing."),
+        });
+    }
     if (!event.sideEffect.has_value()) {
         result.errors.append({
             QStringLiteral("required"),
@@ -807,6 +980,17 @@ ValidationResult validate(const ToolExecutionEvent& event)
             QStringLiteral("Successful tool execution requires a result reference."),
         });
     }
+    // KMA R-6 / DRIFT-002: Host DTO execution_status ↔ canonical business status consistency.
+    // Catches contradictions like execution_status="failure" but source_business_status="success".
+    if (event.executionStatus.has_value() && event.sourceBusinessStatus.has_value()) {
+        if (!businessStatusConsistentWithExecution(*event.executionStatus, *event.sourceBusinessStatus)) {
+            result.errors.append({
+                QStringLiteral("inconsistent_value"),
+                QStringLiteral("source_business_status"),
+                QStringLiteral("source_business_status contradicts execution_status (e.g. Host failure → canonical failed)."),
+            });
+        }
+    }
     return result;
 }
 
@@ -825,6 +1009,7 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
             QStringLiteral("started_at"),
             QStringLiteral("finished_at"),
             QStringLiteral("execution_status"),
+            QStringLiteral("source_business_status"),
             QStringLiteral("side_effect"),
         });
     if (missingField.has_value()) {
@@ -851,6 +1036,7 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
             {QStringLiteral("side_effect"), QJsonValue::Bool},
             {QStringLiteral("rollback_required"), QJsonValue::Bool},
             {QStringLiteral("rollback_status"), QJsonValue::String},
+            {QStringLiteral("source_business_status"), QJsonValue::String},
         });
     if (invalidType.has_value()) {
         return {std::nullopt, {*invalidType}};
@@ -867,6 +1053,14 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
         return {std::nullopt, status.errors};
     }
 
+    // KMA R-6: source_business_status MUST be a canonical 8-value enum.
+    // Unknown values (e.g. legacy "succeeded"/"failure") are REJECTED outright.
+    const auto biz = businessStatusFromString(
+        object.value(QStringLiteral("source_business_status")).toString());
+    if (!biz.ok()) {
+        return {std::nullopt, biz.errors};
+    }
+
     ToolExecutionEvent event;
     event.metadata = eventMetadataFromJson(object);
     event.toolCallId = object.value(QStringLiteral("tool_call_id")).toString();
@@ -877,11 +1071,38 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
     event.finishedAt = QDateTime::fromString(
         object.value(QStringLiteral("finished_at")).toString(), Qt::ISODateWithMs);
     event.executionStatus = *status.value;
+    event.sourceBusinessStatus = *biz.value;
     event.resultRef = object.value(QStringLiteral("result_ref")).toString();
     event.errorType = object.value(QStringLiteral("error_type")).toString();
     event.errorMessageSafe = object.value(QStringLiteral("error_message_safe")).toString();
-    event.sideEffect = object.value(QStringLiteral("side_effect")).toBool();
-    event.rollbackRequired = object.value(QStringLiteral("rollback_required")).toBool();
+
+    const auto sideEffectValue = object.value(QStringLiteral("side_effect"));
+    if (!sideEffectValue.isBool()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("side_effect"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    event.sideEffect = sideEffectValue.toBool();
+
+    const auto rollbackRequiredValue = object.value(QStringLiteral("rollback_required"));
+    // rollback_required is optional; when present it must be a boolean.
+    if (!rollbackRequiredValue.isUndefined() && !rollbackRequiredValue.isNull()
+        && !rollbackRequiredValue.isBool()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("rollback_required"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    event.rollbackRequired = rollbackRequiredValue.toBool();
     event.rollbackStatus = object.value(QStringLiteral("rollback_status")).toString();
 
     const ValidationResult validation = validate(event);
@@ -922,6 +1143,14 @@ QJsonObject toJson(const ToolExecutionEvent& event)
     }
     if (!event.errorMessageSafe.isEmpty()) {
         object.insert(QStringLiteral("error_message_safe"), event.errorMessageSafe);
+    }
+
+    // KMA R-6 / DRIFT-002: canonical business result field (enum → canonical name).
+    // Only emitted when has_value — serialize ALWAYS outputs canonical names via toString().
+    if (event.sourceBusinessStatus.has_value()) {
+        object.insert(
+            QStringLiteral("source_business_status"),
+            toString(*event.sourceBusinessStatus));
     }
 
     return object;
@@ -1036,17 +1265,49 @@ ParseResult<TurnFinalizedEvent> turnFinalizedEventFromJson(const QJsonObject& ob
         return {std::nullopt, versionValidation.errors};
     }
 
+    const auto toolIdsValue = object.value(QStringLiteral("tool_call_ids"));
+    if (!toolIdsValue.isArray()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("tool_call_ids"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    const QJsonArray toolIds = toolIdsValue.toArray();
     QStringList toolCallIds;
-    const QJsonArray toolIds = object.value(QStringLiteral("tool_call_ids")).toArray();
     toolCallIds.reserve(toolIds.size());
     for (const QJsonValue& toolId : toolIds) {
+        if (!toolId.isString()) {
+            return {
+                std::nullopt,
+                {{
+                    QStringLiteral("invalid_type"),
+                    QStringLiteral("tool_call_ids"),
+                    QStringLiteral("Array elements must be strings."),
+                }},
+            };
+        }
         toolCallIds.append(toolId.toString());
     }
 
     TurnFinalizedEvent event;
     event.metadata = eventMetadataFromJson(object);
     event.finalMessageId = object.value(QStringLiteral("final_message_id")).toString();
-    event.isFinal = object.value(QStringLiteral("is_final")).toBool();
+    const auto isFinalValue = object.value(QStringLiteral("is_final"));
+    if (!isFinalValue.isBool()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("is_final"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    event.isFinal = isFinalValue.toBool();
     event.finalizationReason = object.value(QStringLiteral("finalization_reason")).toString();
     event.stopReason = object.value(QStringLiteral("stop_reason")).toString();
     event.retryOfTurnId = object.value(QStringLiteral("retry_of_turn_id")).toString();

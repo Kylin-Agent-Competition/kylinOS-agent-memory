@@ -15,6 +15,7 @@
   "started_at": "2026-08-14T05:00:00.000Z",
   "finished_at": "2026-08-14T05:00:00.150Z",
   "execution_status": "success",
+  "source_business_status": "success",
   "result_ref": "ref:tool-result:001",
   "side_effect": false,
   "rollback_required": false,
