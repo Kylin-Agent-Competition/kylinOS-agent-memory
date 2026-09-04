@@ -193,6 +193,123 @@ def test_stop_joins_conn_threads(server):
     s.close()
 
 
+def test_stop_cannot_join_registered_but_unstarted_worker(server, monkeypatch):
+    """Registration and start are atomic: stop never joins an unstarted worker.
+
+    Delay the accepted connection worker precisely at ``Thread.start()``.  The
+    stopper is already running before the monkeypatch so only the connection
+    worker is delayed.  Before the fix, stop() could snapshot that registered,
+    unstarted worker and raise ``RuntimeError`` from ``join()``.
+    """
+    srv, sock_path = server
+    worker_start_entered = threading.Event()
+    allow_worker_start = threading.Event()
+    request_stop = threading.Event()
+    stop_done = threading.Event()
+    stop_errors = []
+    original_start = threading.Thread.start
+
+    def stopper():
+        request_stop.wait(timeout=3)
+        try:
+            srv.stop()
+        except Exception as exc:  # pragma: no cover - assertion below reports it
+            stop_errors.append(exc)
+        finally:
+            stop_done.set()
+
+    stop_thread = threading.Thread(target=stopper, daemon=True)
+    original_start(stop_thread)
+
+    def delayed_start(thread):
+        worker_start_entered.set()
+        assert allow_worker_start.wait(timeout=3), "test did not release worker start"
+        return original_start(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", delayed_start)
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        client.connect(sock_path)
+        assert worker_start_entered.wait(timeout=3)
+        request_stop.set()
+        # stop() must wait for the registration/start critical section rather
+        # than snapshotting an unstarted worker.
+        assert not stop_done.wait(timeout=0.1)
+        allow_worker_start.set()
+        assert stop_done.wait(timeout=3)
+        assert stop_errors == []
+        with srv._conn_lock:
+            assert srv._conn_threads == []
+    finally:
+        allow_worker_start.set()
+        client.close()
+        stop_thread.join(timeout=3)
+
+
+def test_stop_prevents_registration_after_accept(server):
+    """A connection accepted before stop() cannot create a post-stop worker."""
+    srv, sock_path = server
+    original_lock = srv._conn_lock
+    registration_waiting = threading.Event()
+    allow_registration = threading.Event()
+
+    class PauseFirstLock:
+        """Pause the next lifecycle-lock acquisition before it obtains the lock."""
+
+        def __init__(self):
+            self._lock = original_lock
+            self._pause_once = True
+
+        def __enter__(self):
+            if self._pause_once:
+                self._pause_once = False
+                registration_waiting.set()
+                assert allow_registration.wait(timeout=3), "test did not release registration"
+            self._lock.acquire()
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self._lock.release()
+
+    srv._conn_lock = PauseFirstLock()
+    stop_done = threading.Event()
+    stop_errors = []
+
+    def stopper():
+        try:
+            srv.stop()
+        except Exception as exc:  # pragma: no cover - assertion below reports it
+            stop_errors.append(exc)
+        finally:
+            stop_done.set()
+
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        client.connect(sock_path)
+        assert registration_waiting.wait(timeout=3)
+        stop_thread = threading.Thread(target=stopper, daemon=True)
+        stop_thread.start()
+        assert stop_done.wait(timeout=3)
+        allow_registration.set()
+        stop_thread.join(timeout=3)
+        assert stop_errors == []
+        # The server rechecks state after accept while holding the lifecycle
+        # lock, closes this connection, and never adds a worker post-stop.
+        client.settimeout(3)
+        assert client.recv(1) == b""
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            with srv._conn_lock:
+                if srv._conn_threads == []:
+                    break
+            time.sleep(0.01)
+        with srv._conn_lock:
+            assert srv._conn_threads == []
+    finally:
+        allow_registration.set()
+        client.close()
+
+
 # ── ALIGN-005 返工：socket ownership / stale / active（PR#57 R1） ──
 
 def test_default_socket_path_is_not_memory_sock():
