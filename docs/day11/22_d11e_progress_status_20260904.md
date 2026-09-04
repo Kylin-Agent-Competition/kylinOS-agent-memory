@@ -8,9 +8,9 @@
 | 2 | 业务验收矩阵 | ✅ | `06_d11e_acceptance_matrix_20260903.md` |
 | 3 | 真实案例/评委路径 | ✅（文档） | `07_d11e_real_case_judge_path_20260903.md`；可执行 VM 脚本待 L2 |
 | 4 | UI 文案/证据/安全确认 | ✅（静态） | `08_*`；运行态待同 VM |
-| 5 | 同 VM 端到端验收 | ✅ 可测部分收口（用户认可） | 服务部署+偏好/遗忘软删闭环+广回归（见 11-25）；完整 E2E 转跨轨交付并标 UNVERIFIED（见 26） |
+| 5 | 同 VM 端到端验收 | ⛔ 阻塞（仅阶段性证据归档） | 服务部署+偏好/遗忘软删闭环+广回归已归档（见 11-25 与 `evidence/index.yaml`）；完整 RC-01..07、Critical 检索/硬删除/C GUI/A SDK 链路尚未完成，不得作为 D11E 完成结论（见 26） |
 | 6 | L0/L1 回归 | ✅ | 主机 571（17/21 log）；VM 535/571（10/19 log）、广回归 1744/1780（14/20 log） |
-| 7 | 收口与 D Review | ⏳ | PR #132（Draft）待 D 非作者 Reviewer；Draft→Ready 由用户手动 |
+| 7 | 阶段性归档与 D Review | ⏳ | PR #132 为 Ready；D 非作者 Reviewer 已给出 `CHANGES_REQUESTED`，本轮修订证据索引与完成口径后申请复审。D11E 完成仍依赖工作项 5 解阻 |
 
 ## 跨轨交付记录
 
@@ -23,7 +23,7 @@
 1. D2：`memory.retrieve`/MemoryContext 主链接线（D 轨）→ 遗忘后排除 SEC-FORGET-05 可验证。
 2. A1/A3：A 轨可写 VM 构建 `cpp-bridge` 复跑真实 SDK Embedding（10 用例）并归档 `cc4acf6` 证据。
 3. C2/C4：memory-client 在可写环境构建 + 运行态截图（或 B/D 在可写 VM 按 C 配方构建）。
-4. D Review（PR #132）→ 合并。
+4. 完成 D Review 的 High 修订并复审；仅在 RC-01..07 和 Critical 链路同 Commit/同 VM 证据齐备后，才可宣布 D11E 完成。
 
 ## 说明
 

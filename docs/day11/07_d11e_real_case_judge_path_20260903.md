@@ -34,7 +34,7 @@
 - 预期：显式长期偏好以 `memory_status=candidate→（确认后）active`、`version=1` 沉淀并在后续会话的差异化 Context 中可解释召回；临时指令不产生稳定长期条目；跨会话 Context 差异为正对照。
 - 判定证据：trace 关联、DB 中 preference 行（key/scope/version/status）、Step2 Context 差异、偏好编辑器状态。
 - 通过标准：长期偏好可召回且可解释；临时指令无稳定长期写入；无跨用户/敏感泄露。
-- 当前状态：L0/L1 锚点已覆盖（535 passed）；本卡 L2 待执行（UNVERIFIED）。
+- 当前状态：L0/L1 锚点已覆盖（历史 `f4d9a00` VM 记录为 535 passed；当前 `cc4acf6` 基线 VM 复跑为 571 passed，见 `24_d11e_vm_e_l0l1_cc4acf6_20260904.log`）；本卡 L2 待执行（`UNVERIFIED`）。
 
 ### D11E-RC-02 Tool 事实型知识与失败不沉淀
 - 目标：验证真实 Tool 结果沉淀为知识且高于模型自述；Tool 失败/取消/超时不沉淀为稳定记忆。
