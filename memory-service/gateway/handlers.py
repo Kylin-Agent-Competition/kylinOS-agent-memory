@@ -26,6 +26,8 @@ from pipeline.schemas import (
     ConsentScope,
     EventValidationError,
     SensitivityLevel,
+    SourceBusinessStatus,
+    SourceType,
 )
 from security.source_admission import SourceAdmissionPolicy
 from service.contracts import ServiceRequestContext
@@ -410,6 +412,62 @@ _SECURITY_CLASS_REJECT_REASONS = frozenset(
     }
 )
 
+_LEGACY_COLLECTED_AT = "collected_at"
+_CANONICAL_CAPTURED_AT = "captured_at"
+_HOST_IDENTITY_PLACEHOLDER = "PENDING_HOST_IDENTITY"
+_SOURCE_TYPE_PLACEHOLDERS = frozenset({"PENDING_C_CONFIRMATION"})
+
+
+def _normalized_aware_utc_timestamp(value: Any, field: str) -> str:
+    """Return a canonical timestamp or reject malformed compatibility input."""
+    if not isinstance(value, str):
+        raise RequestValidationError(f"invalid_type: {field}")
+    try:
+        timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise RequestValidationError(f"invalid_timestamp: {field}") from None
+    if timestamp.tzinfo is None:
+        raise RequestValidationError(f"invalid_timestamp: {field} (timezone required)")
+    return timestamp.astimezone(timezone.utc).isoformat(timespec="milliseconds")
+
+
+def _validate_event_ingest_schema_guard(payload: Dict[str, Any]) -> None:
+    """Fail closed before Pipeline/UoW when known transport drift reaches event.ingest.
+
+    `event.ingest` only accepts Canonical business input. During the TD-060
+    transport compatibility window, a legacy `collected_at` may accompany
+    `captured_at` only when it denotes the same aware UTC timestamp.
+    """
+    if _LEGACY_COLLECTED_AT in payload:
+        if _CANONICAL_CAPTURED_AT not in payload:
+            raise RequestValidationError(
+                "legacy field collected_at requires canonical captured_at"
+            )
+        if _normalized_aware_utc_timestamp(
+            payload[_LEGACY_COLLECTED_AT], _LEGACY_COLLECTED_AT
+        ) != _normalized_aware_utc_timestamp(
+            payload[_CANONICAL_CAPTURED_AT], _CANONICAL_CAPTURED_AT
+        ):
+            raise RequestValidationError(
+                "inconsistent_value: captured_at and collected_at"
+            )
+
+    if payload.get("actor_id") == _HOST_IDENTITY_PLACEHOLDER:
+        raise RequestValidationError("untrusted placeholder actor_id")
+
+    source_type = payload.get("source_type")
+    if source_type in _SOURCE_TYPE_PLACEHOLDERS:
+        raise RequestValidationError("unmapped source_type")
+    if source_type is not None and source_type not in {item.value for item in SourceType}:
+        raise RequestValidationError("invalid source_type")
+
+    source_business_status = payload.get("source_business_status")
+    if (
+        source_business_status is not None
+        and source_business_status not in {item.value for item in SourceBusinessStatus}
+    ):
+        raise RequestValidationError("invalid source_business_status")
+
 
 def _event_ingest_content_suppressed(
     event,
@@ -503,6 +561,14 @@ def register_event_ingest_handler(
             raise RequestValidationError("missing required field: schema_version")
         if payload["schema_version"] != _SCHEMA_VERSION_EVENT_INGEST:
             raise RequestValidationError("unsupported_schema_version")
+
+        _validate_event_ingest_schema_guard(payload)
+        # The Pipeline consumes only the canonical business schema. Preserve
+        # compatibility for a verified duplicate transport alias without
+        # weakening MemorySourceEvent's extra="forbid" boundary.
+        if _LEGACY_COLLECTED_AT in payload:
+            payload = dict(payload)
+            payload.pop(_LEGACY_COLLECTED_AT)
 
         declared_user_id = payload.get("user_id")
 

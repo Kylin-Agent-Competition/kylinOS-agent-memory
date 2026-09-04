@@ -21,6 +21,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -29,8 +30,8 @@ from pathlib import Path
 
 import pytest
 
-from db.engine import create_db_engine, init_schema
 from db import repositories as repo
+from db.engine import create_db_engine, init_schema
 from db.uow import UnitOfWork
 from gateway.handlers import (
     _event_ingest_request_fingerprint,
@@ -388,6 +389,73 @@ def test_schema_version_invalid(env, mutate):
     mutate(p)
     with pytest.raises(RequestValidationError):
         env["invoke"](p)
+
+
+# ── D12D Schema Drift Guard（TD-060） ──
+
+
+@pytest.mark.parametrize(
+    ("name", "mutate", "error"),
+    [
+        (
+            "legacy_only_collected_at",
+            lambda p: (p.pop("captured_at"), p.__setitem__("collected_at", "2026-09-04T08:00:00Z")),
+            "legacy field collected_at requires canonical captured_at",
+        ),
+        (
+            "conflicting_time_aliases",
+            lambda p: p.__setitem__("collected_at", "2026-09-04T08:00:00Z"),
+            "inconsistent_value: captured_at and collected_at",
+        ),
+        (
+            "legacy_failure_status",
+            lambda p: p.__setitem__("source_business_status", "failure"),
+            "invalid source_business_status",
+        ),
+        (
+            "placeholder_actor",
+            lambda p: p.__setitem__("actor_id", "PENDING_HOST_IDENTITY"),
+            "untrusted placeholder actor_id",
+        ),
+        (
+            "unmapped_source_type",
+            lambda p: p.__setitem__("source_type", "PENDING_C_CONFIRMATION"),
+            "unmapped source_type",
+        ),
+    ],
+)
+def test_schema_drift_guard_rejects_without_persistence(env, name, mutate, error):
+    """Known C-to-D drift must fail before source_events or cache side effects."""
+    payload = _payload(event_id=f"evt-drift-{name}", idempotency_key=f"idem-drift-{name}")
+    mutate(payload)
+
+    with pytest.raises(RequestValidationError, match=re.escape(error)):
+        env["invoke"](payload)
+
+    assert _rows(env["engine"]) == []
+    with env["engine"].connect() as conn:
+        assert repo.get_idempotency_cache(
+            conn,
+            user_id="u1",
+            session_id="s1",
+            idempotency_key=f"idem-drift-{name}",
+        ) is None
+
+
+def test_schema_drift_guard_accepts_matching_timestamp_aliases(env):
+    """A legacy alias remains compatible only when it names the same instant."""
+    payload = _payload(
+        event_id="evt-matching-time-aliases",
+        idempotency_key="idem-matching-time-aliases",
+        occurred_at="2026-09-03T23:00:00Z",
+        captured_at="2026-09-04T08:00:00+08:00",
+        collected_at="2026-09-04T00:00:00Z",
+    )
+
+    response = env["invoke"](payload)
+
+    assert response["admission_decision"] == "allow_extraction"
+    assert len(_rows(env["engine"])) == 1
 
 
 def test_trace_id_mismatch(env):
