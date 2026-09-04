@@ -13,11 +13,56 @@ namespace kylin::memory::contract::v1 {
 
 namespace {
 
+// Reads a KMA R-1 time alias: accepts both the canonical `captured_at` name and the
+// legacy transport alias `collected_at` (TD-060). If both are present the canonical
+// name wins (fail-closed: we don't silently merge two different timestamps). Returns
+// the parsed timestamp, or an invalid QDateTime if neither key is present / parseable.
+std::pair<QDateTime, QString /*effective_key*/> readCanonicalCapturedAt(
+    const QJsonObject& object)
+{
+    const QString canonicalKey = QStringLiteral("captured_at");
+    const QString legacyKey = QStringLiteral("collected_at");
+    if (object.contains(canonicalKey)) {
+        const QString raw = object.value(canonicalKey).toString();
+        return {QDateTime::fromString(raw, Qt::ISODateWithMs), canonicalKey};
+    }
+    if (object.contains(legacyKey)) {
+        const QString raw = object.value(legacyKey).toString();
+        return {QDateTime::fromString(raw, Qt::ISODateWithMs), legacyKey};
+    }
+    return {{}, canonicalKey};
+}
+
+// Returns true if any of the provided keys is a JSON string member of `object`.
+bool containsAnyOf(
+    const QJsonObject& object, std::initializer_list<QString> keys)
+{
+    for (const QString& k : keys) {
+        if (object.contains(k)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::optional<ContractError> firstMissingRequiredField(
     const QJsonObject& object,
     std::initializer_list<QString> requiredFields)
 {
     for (const QString& field : requiredFields) {
+        // KMA R-1 alias: `captured_at` / `collected_at` either satisfies the
+        // required field; the error reports the canonical name.
+        if (field == QStringLiteral("captured_at")) {
+            if (!containsAnyOf(object,
+                    {QStringLiteral("captured_at"), QStringLiteral("collected_at")})) {
+                return ContractError{
+                    QStringLiteral("required"),
+                    field,
+                    QStringLiteral("Required field is missing."),
+                };
+            }
+            continue;
+        }
         if (!object.contains(field)) {
             return ContractError{
                 QStringLiteral("required"),
@@ -97,13 +142,52 @@ std::optional<ContractError> firstMissingRequiredEventMetadataField(
             QStringLiteral("user_id"),
             QStringLiteral("session_id"),
             QStringLiteral("occurred_at"),
-            QStringLiteral("collected_at"),
+            // KMA R-1 (TD-060): `captured_at` is the canonical name; legacy
+            // transport alias `collected_at` is still accepted.
+            QStringLiteral("captured_at"),
             QStringLiteral("idempotency_key"),
         });
 }
 
 std::optional<ContractError> firstInvalidEventMetadataJsonType(const QJsonObject& object)
 {
+    // KMA R-1 (TD-060, review MEDIUM-01): the event-metadata time key has a
+    // transport alias pair — Canonical `captured_at` and legacy
+    // `collected_at`. The semantic rule is "Canonical wins on INPUT", meaning:
+    //   - If the payload carries BOTH keys, we only validate the Canonical
+    //     one. A malformed legacy alias must NOT cause a rejection when the
+    //     Canonical key is already well-formed. This matches the behaviour of
+    //     `readCanonicalCapturedAt()` which ignores the legacy key in the
+    //     "both present" path.
+    //   - If ONLY the legacy key is present, we validate its type and surface
+    //     the error under the **Canonical** field name so callers do not start
+    //     depending on the legacy transport name in error surfaces.
+    //   - If NEITHER is present, we skip the type check — the
+    //     "firstMissingRequiredEventMetadataField" check handles the
+    //     required-field gate separately.
+    const bool hasCanonical = object.contains(QStringLiteral("captured_at"));
+    const bool hasLegacy = object.contains(QStringLiteral("collected_at"));
+    if (hasCanonical) {
+        if (object.value(QStringLiteral("captured_at")).type() != QJsonValue::String) {
+            return ContractError{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("captured_at"),
+                QStringLiteral("Field has an invalid JSON type."),
+            };
+        }
+    } else if (hasLegacy) {
+        // Legacy-only ingress — type-check it but report the Canonical name
+        // (keeps the adapter-window "inputs are normalised to canonical names"
+        // contract that downstream error handlers already depend on).
+        if (object.value(QStringLiteral("collected_at")).type() != QJsonValue::String) {
+            return ContractError{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("captured_at"),
+                QStringLiteral("Field has an invalid JSON type."),
+            };
+        }
+    }
+    // All other metadata fields — single canonical key, no aliases.
     return firstInvalidJsonType(
         object,
         {
@@ -114,7 +198,7 @@ std::optional<ContractError> firstInvalidEventMetadataJsonType(const QJsonObject
             {QStringLiteral("session_id"), QJsonValue::String},
             {QStringLiteral("turn_id"), QJsonValue::String},
             {QStringLiteral("occurred_at"), QJsonValue::String},
-            {QStringLiteral("collected_at"), QJsonValue::String},
+            // `captured_at` / `collected_at` — handled above (aliased pair).
             {QStringLiteral("source_reference"), QJsonValue::String},
             {QStringLiteral("idempotency_key"), QJsonValue::String},
         });
@@ -131,8 +215,13 @@ EventMetadata eventMetadataFromJson(const QJsonObject& object)
     metadata.turnId = object.value(QStringLiteral("turn_id")).toString();
     metadata.occurredAt = QDateTime::fromString(
         object.value(QStringLiteral("occurred_at")).toString(), Qt::ISODateWithMs);
-    metadata.collectedAt = QDateTime::fromString(
-        object.value(QStringLiteral("collected_at")).toString(), Qt::ISODateWithMs);
+    // KMA R-1: prefer canonical `captured_at`, fall back to legacy alias
+    // `collected_at` (TD-060).
+    const auto [captured, effectiveKey] = readCanonicalCapturedAt(object);
+    metadata.collectedAt = captured;
+    // (void) to mark "used" for the uncommon case that compilers warn on C++17
+    // structured bindings with the same variable scope.
+    Q_UNUSED(effectiveKey);
     metadata.sourceReference = object.value(QStringLiteral("source_reference")).toString();
     metadata.idempotencyKey = object.value(QStringLiteral("idempotency_key")).toString();
     return metadata;
@@ -146,7 +235,10 @@ QJsonObject eventMetadataToJson(const EventMetadata& metadata)
         {QStringLiteral("user_id"), metadata.userId},
         {QStringLiteral("session_id"), metadata.sessionId},
         {QStringLiteral("occurred_at"), metadata.occurredAt.toUTC().toString(Qt::ISODateWithMs)},
-        {QStringLiteral("collected_at"), metadata.collectedAt.toUTC().toString(Qt::ISODateWithMs)},
+        // KMA R-1: always output canonical `captured_at`. Hosts still writing the
+        // legacy `collected_at` transport alias can still parse via alias support
+        // in `eventMetadataFromJson` (TD-060 adapter window).
+        {QStringLiteral("captured_at"), metadata.collectedAt.toUTC().toString(Qt::ISODateWithMs)},
         {QStringLiteral("idempotency_key"), metadata.idempotencyKey},
     };
 
@@ -238,9 +330,11 @@ ValidationResult validateEventMetadata(const EventMetadata& metadata)
         });
     }
     if (!metadata.collectedAt.isValid()) {
+        // KMA R-1: report the canonical field name; legacy alias is accepted only
+        // as a transport input.
         result.errors.append({
             QStringLiteral("invalid_timestamp"),
-            QStringLiteral("collected_at"),
+            QStringLiteral("captured_at"),
             QStringLiteral("Timestamp must be valid ISO 8601."),
         });
     }
@@ -614,7 +708,9 @@ ParseResult<ToolExecutionStatus> toolExecutionStatusFromString(const QString& va
     if (value == QStringLiteral("partial")) {
         return {ToolExecutionStatus::Partial, {}};
     }
-    if (value == QStringLiteral("failure")) {
+    // KMA R-1 / DRIFT-003: Canonical event business result uses `failed`;
+    // Host DTO `execution_status` alias `failure` is still accepted.
+    if (value == QStringLiteral("failure") || value == QStringLiteral("failed")) {
         return {ToolExecutionStatus::Failure, {}};
     }
     if (value == QStringLiteral("cancelled")) {

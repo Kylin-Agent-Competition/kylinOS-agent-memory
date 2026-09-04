@@ -1,15 +1,17 @@
-name: Memory Client L0 ctest
+name: Memory Client L0 ctest + Contract L0 ctest
 
 on:
   pull_request:
     branches: [main, integration]
     paths:
       - 'memory-client/**'
+      - 'os-agent-integration/**'
       - '.github/workflows/memory-client-ctest.yml'
   push:
     branches: [main, integration, 'feat/**']
     paths:
       - 'memory-client/**'
+      - 'os-agent-integration/**'
       - '.github/workflows/memory-client-ctest.yml'
   workflow_dispatch:
 
@@ -108,3 +110,48 @@ jobs:
 
       - name: Confirm binary exists
         run: test -x memory-client/build-qml/kylin-memory-client
+
+  contract-ctest:
+    name: os-agent-integration contract ctest (standalone)
+    runs-on: ubuntu-22.04
+    # 独立 standalone：直接针对 os-agent-integration/CMakeLists.txt（不依赖
+    # memory-client 顶层 CMake 项目）。这是 Reviewer D HIGH-02 / HIGH-03
+    # 的核心修复：之前 contract 目录的修改不会触发任何 build/test，
+    # "测试代码不编译但 PR 全绿"。现在把 configure/build/ctest 作为独立
+    # job 合入同一份 workflow，并在 paths 里包含 os-agent-integration/**
+    # 保证 contract / examples / tests / standalone CMake 任一处改动都
+    # 会触发。
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt5 (Core + Test) & cmake
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            qtbase5-dev \
+            qt5-qmake
+
+      - name: Configure os-agent-integration standalone (tests ON)
+        run: |
+          cmake -S os-agent-integration \
+                -B os-agent-integration/build \
+                -DBUILD_TESTING=ON \
+                -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build test_memory_event_contract_v1
+        run: |
+          cmake --build os-agent-integration/build \
+                --target test_memory_event_contract_v1 \
+                -j"$(nproc)"
+
+      - name: ctest os-agent-integration standalone
+        run: |
+          ctest --test-dir os-agent-integration/build \
+                --output-on-failure \
+                --verbose
+        env:
+          QT_QPA_PLATFORM: offscreen
+

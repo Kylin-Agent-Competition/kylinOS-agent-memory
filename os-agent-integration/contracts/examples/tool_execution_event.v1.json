@@ -6,7 +6,7 @@
   "session_id": "session-001",
   "turn_id": "turn-002",
   "occurred_at": "2026-08-14T05:00:00.150Z",
-  "collected_at": "2026-08-14T05:00:00.200Z",
+  "captured_at": "2026-08-14T05:00:00.200Z",
   "source_reference": "ref:tool-event:001",
   "idempotency_key": "tool-execution:tool-call-001",
   "tool_call_id": "tool-call-001",

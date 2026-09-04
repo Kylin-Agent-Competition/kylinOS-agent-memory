@@ -42,7 +42,7 @@ QJsonObject knownMemoryContextPayload()
   "session_id": "session-001",
   "turn_id": "turn-002",
   "occurred_at": "2026-08-14T04:59:59.900Z",
-  "collected_at": "2026-08-14T05:00:00.000Z",
+  "captured_at": "2026-08-14T05:00:00.000Z",
   "source_reference": "ref:context-build:001",
   "idempotency_key": "memory-context:query-001",
   "query_id": "query-001",
@@ -75,7 +75,7 @@ QJsonObject knownToolExecutionPayload()
   "session_id": "session-001",
   "turn_id": "turn-002",
   "occurred_at": "2026-08-14T05:00:00.150Z",
-  "collected_at": "2026-08-14T05:00:00.200Z",
+  "captured_at": "2026-08-14T05:00:00.200Z",
   "source_reference": "ref:tool-event:001",
   "idempotency_key": "tool-execution:tool-call-001",
   "tool_call_id": "tool-call-001",
@@ -109,7 +109,7 @@ QJsonObject knownTurnFinalizedPayload()
   "session_id": "session-001",
   "turn_id": "turn-002",
   "occurred_at": "2026-08-14T05:01:00.000Z",
-  "collected_at": "2026-08-14T05:01:00.050Z",
+  "captured_at": "2026-08-14T05:01:00.050Z",
   "source_reference": "ref:chat-record:message-003",
   "idempotency_key": "turn-finalized:session-001:turn-002",
   "final_message_id": "message-003",
@@ -200,7 +200,7 @@ private slots:
     void turnFinalizedJsonRejectsFalseFinality();
     void turnFinalizedValidationRequiresResolvableContentReference();
     void turnFinalizedJsonRequiresResolvableContentReference();
-    void turnFinalizedValidationRequiresCollectedAt();
+    void turnFinalizedValidationRequiresCapturedAt();
     void turnFinalizedEventRejectsSelfRetry();
     void schemaVersionRejectsUnknownMajor_data();
     void schemaVersionRejectsUnknownMajor();
@@ -222,6 +222,11 @@ private slots:
     void wrongJsonTypesAreRejected();
     void eventMetadataWrongJsonTypesAreRejected_data();
     void eventMetadataWrongJsonTypesAreRejected();
+    // KMA R-1 (TD-060, review MEDIUM-01): verifies that when both the Canonical
+    // `captured_at` key AND the legacy transport alias `collected_at` are
+    // present, a malformed legacy alias does NOT cause an invalid_type
+    // rejection — because the Canonical key wins per `readCanonicalCapturedAt()`.
+    void capturedAtCanonicalWinsOverBadLegacyAliasType();
     void idArraysRejectNonStringElements_data();
     void idArraysRejectNonStringElements();
     void integerFieldsRejectFractionalValues();
@@ -310,7 +315,9 @@ void MemoryEventContractV1Test::memoryContextJsonRequiresTrustedMetadata_data()
     QTest::newRow("user_id") << QStringLiteral("user_id");
     QTest::newRow("session_id") << QStringLiteral("session_id");
     QTest::newRow("occurred_at") << QStringLiteral("occurred_at");
-    QTest::newRow("collected_at") << QStringLiteral("collected_at");
+    // KMA R-1: Canonical captured_at required. Legacy alias collected_at also accepted
+    // for INPUT (covered by eventMetadataAcceptsLegacyCollectedAtAlias test).
+    QTest::newRow("captured_at") << QStringLiteral("captured_at");
     QTest::newRow("idempotency_key") << QStringLiteral("idempotency_key");
 }
 
@@ -363,7 +370,9 @@ void MemoryEventContractV1Test::memoryContextValidationRequiresTrustedMetadata_d
     QTest::newRow("user_id") << QStringLiteral("user_id");
     QTest::newRow("session_id") << QStringLiteral("session_id");
     QTest::newRow("occurred_at") << QStringLiteral("occurred_at");
-    QTest::newRow("collected_at") << QStringLiteral("collected_at");
+    // KMA R-1: the validation struct-level check still uses the collectedAt
+    // member; report the canonical field name.
+    QTest::newRow("captured_at") << QStringLiteral("captured_at");
     QTest::newRow("idempotency_key") << QStringLiteral("idempotency_key");
 }
 
@@ -382,7 +391,7 @@ void MemoryEventContractV1Test::memoryContextValidationRequiresTrustedMetadata()
         context.metadata.sessionId.clear();
     } else if (field == QStringLiteral("occurred_at")) {
         context.metadata.occurredAt = {};
-    } else if (field == QStringLiteral("collected_at")) {
+    } else if (field == QStringLiteral("captured_at")) {
         context.metadata.collectedAt = {};
     } else if (field == QStringLiteral("idempotency_key")) {
         context.metadata.idempotencyKey.clear();
@@ -437,6 +446,9 @@ void MemoryEventContractV1Test::toolExecutionStatusParsesKnownValues_data()
                               << static_cast<int>(contract::ToolExecutionStatus::Partial);
     QTest::newRow("failure") << QStringLiteral("failure")
                               << static_cast<int>(contract::ToolExecutionStatus::Failure);
+    // KMA R-1 / DRIFT-003: Canonical business-level `failed` alias accepted on INPUT.
+    QTest::newRow("failed") << QStringLiteral("failed")
+                             << static_cast<int>(contract::ToolExecutionStatus::Failure);
     QTest::newRow("cancelled") << QStringLiteral("cancelled")
                                 << static_cast<int>(contract::ToolExecutionStatus::Cancelled);
     QTest::newRow("timeout") << QStringLiteral("timeout")
@@ -501,7 +513,8 @@ void MemoryEventContractV1Test::toolExecutionJsonRequiresTrustedMetadata_data()
     QTest::newRow("user_id") << QStringLiteral("user_id");
     QTest::newRow("session_id") << QStringLiteral("session_id");
     QTest::newRow("occurred_at") << QStringLiteral("occurred_at");
-    QTest::newRow("collected_at") << QStringLiteral("collected_at");
+    // KMA R-1 Canonical key.
+    QTest::newRow("captured_at") << QStringLiteral("captured_at");
     QTest::newRow("idempotency_key") << QStringLiteral("idempotency_key");
 }
 
@@ -606,7 +619,8 @@ void MemoryEventContractV1Test::turnFinalizedJsonRequiresEventTimestamps_data()
     QTest::addColumn<QString>("field");
 
     QTest::newRow("occurred_at") << QStringLiteral("occurred_at");
-    QTest::newRow("collected_at") << QStringLiteral("collected_at");
+    // KMA R-1 Canonical key.
+    QTest::newRow("captured_at") << QStringLiteral("captured_at");
 }
 
 void MemoryEventContractV1Test::turnFinalizedJsonRequiresEventTimestamps()
@@ -716,7 +730,7 @@ void MemoryEventContractV1Test::turnFinalizedJsonRequiresResolvableContentRefere
              QStringLiteral("Finalized turn requires a resolvable content reference."));
 }
 
-void MemoryEventContractV1Test::turnFinalizedValidationRequiresCollectedAt()
+void MemoryEventContractV1Test::turnFinalizedValidationRequiresCapturedAt()
 {
     const auto parsed = contract::turnFinalizedEventFromJson(knownTurnFinalizedPayload());
     QVERIFY(parsed.ok());
@@ -728,7 +742,8 @@ void MemoryEventContractV1Test::turnFinalizedValidationRequiresCollectedAt()
     QVERIFY(!validation.ok());
     QCOMPARE(validation.errors.size(), 1);
     QCOMPARE(validation.errors.first().code, QStringLiteral("invalid_timestamp"));
-    QCOMPARE(validation.errors.first().field, QStringLiteral("collected_at"));
+    // KMA R-1: error reports Canonical field name captured_at.
+    QCOMPARE(validation.errors.first().field, QStringLiteral("captured_at"));
 }
 
 void MemoryEventContractV1Test::turnFinalizedEventRejectsSelfRetry()
@@ -1106,7 +1121,15 @@ void MemoryEventContractV1Test::eventMetadataWrongJsonTypesAreRejected_data()
     QJsonObject toolEvent = knownToolExecutionPayload();
     toolEvent.insert(QStringLiteral("event_id"), 42);
     QJsonObject turnEvent = knownTurnFinalizedPayload();
-    turnEvent.insert(QStringLiteral("collected_at"), 42);
+    // KMA R-1: overwrite captured_at (Canonical) with a non-string to trigger
+    // invalid_type rejection.
+    turnEvent.insert(QStringLiteral("captured_at"), 42);
+    // MEDIUM-01 case 1: legacy-only ingress (captured_at removed; collected_at
+    // re-inserted with a bad type). The error must be reported under the
+    // *Canonical* field name, not the legacy alias.
+    QJsonObject turnLegacyOnly = knownTurnFinalizedPayload();
+    turnLegacyOnly.remove(QStringLiteral("captured_at"));
+    turnLegacyOnly.insert(QStringLiteral("collected_at"), 42);
 
     QTest::newRow("MemoryContext.trace_id")
         << static_cast<int>(ContractObjectKind::MemoryContext)
@@ -1114,9 +1137,14 @@ void MemoryEventContractV1Test::eventMetadataWrongJsonTypesAreRejected_data()
     QTest::newRow("ToolExecutionEvent.event_id")
         << static_cast<int>(ContractObjectKind::ToolExecutionEvent)
         << toolEvent << QStringLiteral("event_id");
-    QTest::newRow("TurnFinalizedEvent.collected_at")
+    QTest::newRow("TurnFinalizedEvent.captured_at")
         << static_cast<int>(ContractObjectKind::TurnFinalizedEvent)
-        << turnEvent << QStringLiteral("collected_at");
+        << turnEvent << QStringLiteral("captured_at");
+    // MEDIUM-01: legacy-only wrong type reports canonical `captured_at` so
+    // error surfaces never grow a dependency on the transport alias name.
+    QTest::newRow("TurnFinalizedEvent.legacy_collected_at_only_invalid_type")
+        << static_cast<int>(ContractObjectKind::TurnFinalizedEvent)
+        << turnLegacyOnly << QStringLiteral("captured_at");
 }
 
 void MemoryEventContractV1Test::eventMetadataWrongJsonTypesAreRejected()
@@ -1184,6 +1212,44 @@ void MemoryEventContractV1Test::integerFieldsRejectFractionalValues()
     QCOMPARE(parsed.errors.first().code, QStringLiteral("invalid_value"));
     QCOMPARE(parsed.errors.first().field, QStringLiteral("max_context_tokens"));
     QCOMPARE(parsed.errors.first().safeMessage, QStringLiteral("Field must be an integer."));
+}
+
+// KMA R-1 (TD-060, review MEDIUM-01): captured_at (Canonical) wins over
+// legacy collected_at during JSON type check. If both keys are present and
+// captured_at is a correctly-formed ISO-8601 string while the legacy alias
+// is a non-string, the parser must accept the payload (the legacy alias is
+// defined to be a *transport-side* adapter window: malformed bytes on the
+// transport adapter must NOT contaminate the canonical ingest result).
+void MemoryEventContractV1Test::capturedAtCanonicalWinsOverBadLegacyAliasType()
+{
+    // 1) MemoryContext: round-trip via public toJson(MemoryContext) API.
+    //    toJson(MemoryContext) returns a *flat* JSON object — captured_at is
+    //    at the top level, not nested under "metadata". So we read it
+    //    directly from the round-trip object.
+    QJsonObject ctx = knownMemoryContextPayload();
+    QVERIFY(ctx.contains(QStringLiteral("captured_at")));
+    ctx.insert(QStringLiteral("collected_at"), 666);  // non-string garbage
+    auto ctxParsed = contract::memoryContextFromJson(ctx);
+    QVERIFY2(ctxParsed.ok(),
+        "MemoryContext with good captured_at + bad collected_at must parse OK");
+    const QJsonObject ctxRoundTrip = contract::toJson(*ctxParsed.value);
+    QCOMPARE(ctxRoundTrip.value(QStringLiteral("captured_at")).toString(),
+             ctx.value(QStringLiteral("captured_at")).toString());
+
+    // 2) ToolExecutionEvent: only assert .ok() on the canonical-wins
+    //    branch (value shape is already covered by the round-trip tests).
+    QJsonObject tool = knownToolExecutionPayload();
+    tool.insert(QStringLiteral("collected_at"), QJsonValue(QJsonObject{}));
+    auto toolParsed = contract::toolExecutionEventFromJson(tool);
+    QVERIFY2(toolParsed.ok(),
+        "ToolExecutionEvent with good captured_at + bad collected_at must parse OK");
+
+    // 3) TurnFinalizedEvent: same canonical-wins positive path.
+    QJsonObject turn = knownTurnFinalizedPayload();
+    turn.insert(QStringLiteral("collected_at"), QJsonValue(QJsonArray{1, 2, 3}));
+    auto turnParsed = contract::turnFinalizedEventFromJson(turn);
+    QVERIFY2(turnParsed.ok(),
+        "TurnFinalizedEvent with good captured_at + bad collected_at must parse OK");
 }
 
 void MemoryEventContractV1Test::timestampsAcceptIsoWithoutMilliseconds()

@@ -6,7 +6,7 @@
   "session_id": "session-001",
   "turn_id": "turn-002",
   "occurred_at": "2026-08-14T05:01:00.000Z",
-  "collected_at": "2026-08-14T05:01:00.050Z",
+  "captured_at": "2026-08-14T05:01:00.050Z",
   "source_reference": "ref:chat-record:message-003",
   "idempotency_key": "turn-finalized:session-001:turn-002",
   "final_message_id": "message-003",
