@@ -1,7 +1,7 @@
 # fix(C): align C-track fields with KMA canonical v1 CANDIDATE (Adapter Window)
 
 **轨道 (Track)**：C 轨（memory-client ViewModel + os-agent-integration 契约层 + 双端 L0/L1 测试）
-**Head**：`60aa788`（on branch `fix/c-d12-schema-drift-canonical-adapter`，rebased on latest main `d5e3b0f`）
+**Head**：`b9de2f9`（on branch `fix/c-d12-schema-drift-canonical-adapter`，rebased on latest main `d5e3b0f`）
 **Base**：`main@d5e3b0f`
 
 > **治理口径**：本 PR 是对 `docs/architecture/KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md`（当前状态 **CANDIDATE\_FOR\_FREEZE**，§0 / §R-1 handoff / §结尾明确）的 Candidate **Adapter Window** 对齐。本文任何地方不宣称 Canonical v1 已进入 `FROZEN` 团队级权威基线；transport 层不单方面停止 ADR-010/TD-039 的 `collected_at` 名称（按 R-1 handoff 登记 **TD-060 由 C/D 书面冻结后才允许删除 legacy alias**）。
