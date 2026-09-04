@@ -6,7 +6,7 @@
 - 授权：已取得 E 轨负责人授权，由 B 轨（高翌哲）代行 D11E 限定范围；本批＝准备阶段（工作清单与基线口径），不代行 E 轨业务实现或正式验收结论。
 - 工作类型：`test`（业务验收场景、真实案例脚本与评委操作路径、UI 文案/证据/安全确认审查）。
 - 工作分支：`test/D11E-vm-business-acceptance`（按提交分支要求命名：`<类型>/<用途>`，不含 `codex`）。
-- 基线：`origin/main@f263d5b`（2026-09-03 更新：初版基线 0820036，已含 D11D PR #115、C-D11 PR #116、D11B PR #111、D10D PR #120，并新增 C-D12 PR #127、D8D 持久化 PR #128、D12D PR #131、E 轨 schema-drift 修复 #137；本 PR 分支创建于 0820036，Ready/合并前以最新 main 为准）。
+- 基线：`origin/main@cc4acf6`（2026-09-03 更新：初版基线 0820036，已含 D11D PR #115、C-D11 PR #116、D11B PR #111、D10D PR #120，并新增 C-D12 PR #127、D8D 持久化 PR #128、D12D PR #131、E 轨 schema-drift 修复 #137；本 PR 分支创建于 0820036，Ready/合并前以最新 main 为准）。
 - 本次范围：建立 D11E 工作清单、固定验收口径与跨轨依赖/不在范围；不包含麒麟 VM 实测、业务代码修改或「主演示业务正确」的达标结论。
 - 开始时间：2026-09-03（准备阶段）。最晚停止时间：进入实测/实现前须由 E 轨负责人指定并确认。
 - 当前进度：0/7（0%，准备阶段）。
@@ -26,7 +26,7 @@
 
 | # | 工作项 | 依赖 | 验证方式 | 状态 |
 |---|---|---|---|---|
-| 1 | 基线与环境盘点（准备阶段）：记录 `origin/main@f263d5b`、D11D 统一 VM/快照与交付（PR #115：`packaging/systemd/install_kylin_memory.sh`、`kylin-memory.service`、JSON 日志/trace_id/脱敏诊断与 `evidence/l2-kylin-vm/d11d_*`）、C-D11 5 步主演示编排（PR #116）、D11B 检索联调输入（PR #111）、E 轨既有业务实现与测试（`memory-service/domain|service|security` + `tests/test_*_d4e..d10e.py`）、E 冻结契约与验收样例（`docs/architecture/D3_MEMORY_BUSINESS_CONTRACT_V1.md`、`D3_MEMORY_SECURITY_ACCEPTANCE_V1.md`、`datasets/GATE0_BUSINESS_ACCEPTANCE_CASES_V0.1.json`）；确认 D11E 验收用 VM/快照与同一 Commit 口径 | `origin/main`；D11D/C-D11 合并基线 | `git status`、仓库审阅、快照/版本/哈希核对 | 待开始（基线口径已记录于本清单；VM 实测待 D11E 专用环境复核） |
+| 1 | 基线与环境盘点（准备阶段）：记录 `origin/main@cc4acf6`、D11D 统一 VM/快照与交付（PR #115：`packaging/systemd/install_kylin_memory.sh`、`kylin-memory.service`、JSON 日志/trace_id/脱敏诊断与 `evidence/l2-kylin-vm/d11d_*`）、C-D11 5 步主演示编排（PR #116）、D11B 检索联调输入（PR #111）、E 轨既有业务实现与测试（`memory-service/domain|service|security` + `tests/test_*_d4e..d10e.py`）、E 冻结契约与验收样例（`docs/architecture/D3_MEMORY_BUSINESS_CONTRACT_V1.md`、`D3_MEMORY_SECURITY_ACCEPTANCE_V1.md`、`datasets/GATE0_BUSINESS_ACCEPTANCE_CASES_V0.1.json`）；确认 D11E 验收用 VM/快照与同一 Commit 口径 | `origin/main`；D11D/C-D11 合并基线 | `git status`、仓库审阅、快照/版本/哈希核对 | 待开始（基线口径已记录于本清单；VM 实测待 D11E 专用环境复核） |
 | 2 | 业务验收场景方案：按冻结契约将偏好、知识、冲突、生命周期、遗忘五类业务映射到真实服务链路的验收场景与判定口径（复用/对照 D7E/D8E/D9E/D10E 的 L0/L1 用例与 G0-E-01..14、SEC-* 规则），输出验收矩阵（场景×输入×预期×证据级别×当前状态） | 工作项 1；E 冻结契约与既有测试 | 验收矩阵可核对、每条场景可映射契约条款与 SEC 规则 | 待开始 |
 | 3 | 真实案例脚本与评委操作路径：整理/完善真实案例（Gate0 验收案例、D9 检索语料/Query、C-D11 5 步编排）的输入、预期输出、证据采集与评委判定步骤；同 Commit 同 VM 可复跑 | 工作项 2；C-D11 主演示路径 | 脚本/步骤复跑、输入输出与证据一致、判定可复现 | 待开始 |
 | 4 | UI 文案、证据与安全确认审查：核对 QML/演示文案、提示与汇总灯初始态/终态与业务事实一致；确认先预览再确认、确认凭据 TTL 过期失败关闭、跨用户隔离、敏感过滤、遗忘后排除等安全确认真实生效（对应 SEC-CTX-01、SEC-FORGET-01..05、SEC-UI-*、SEC-SENS-* 等） | 工作项 2；C-D11 客户端 Harness 与 B/D 检索/服务证据 | 文案/状态断言、脱敏断言、真实日志核对 | 待开始 |
@@ -57,7 +57,7 @@
 
 ## 当前状态与阻塞（准备阶段）
 
-- D11D（PR #115）已合并并含麒麟 VM L2 证据与 `packaging/systemd` 产物；C-D11（PR #116）5 步主演示编排已合并；D11B（PR #111）、D10D（PR #120）已合并；`main` 现为 `f263d5b`（更新后新增 C-D12 PR #127、D8D 持久化 PR #128、D12D PR #131）。E 轨 L0/L1 在 `f263d5b` 复跑 571 passed（见 17 log；历史 b70827c 基线 535 见 05 log）。
+- D11D（PR #115）已合并并含麒麟 VM L2 证据与 `packaging/systemd` 产物；C-D11（PR #116）5 步主演示编排已合并；D11B（PR #111）、D10D（PR #120）已合并；`main` 现为 `cc4acf6`（更新后新增 C-D12 PR #127、D8D 持久化 PR #128、D12D PR #131）。E 轨 L0/L1 在 `cc4acf6` 复跑 571 passed（见 21 log；历史 b70827c 基线 535 见 05 log）。
 - 已确认 D11E 端到端验收**复用 D11D 统一 VM 环境**（D11D PR #115 部署产物：`packaging/systemd/install_kylin_memory.sh`、`kylin-memory.service`、DB 迁移与 `evidence/l2-kylin-vm/d11d_*`）；D11E 专用克隆 `Kylin-V11-2603-D11E-0820036-Test` 已建并完成 VM 侧 L0/L1（535 passed，见 09/10 证据）。C 轨主演示真实运行结果与 B 轨真实检索输出需在同一 Commit 就绪后才能执行工作项 5；具体执行 VM/快照与最晚停止时间以 D 轨在 D11E 验收时指定为准。
 - 本批为纯文档准备：UTF-8 无 BOM、LF 行尾、无尾随空白，`git diff --check` 通过；未改动既有生产链路、SQLite 真源、部署脚本、冻结文档或其他轨道交付物。
 - 已完成 VM 侧 E 轨 L0/L1 回归（535 passed，见 09/10）；**同 VM 端到端业务验收、真实案例证据与安全确认结论保持 `UNVERIFIED`**，直到 D 轨部署产物与 A/B/C 输入就绪并在同 Commit 同 VM 复测通过。
@@ -72,7 +72,7 @@
 - 台账 D11-E（E 轨＝谢嘉然；B 轨高翌哲在 E 轨授权下代行 D11E 限定范围，准备阶段）：同一虚拟机全功能联调。
 - 完成定义：主演示业务正确；真实案例具备完整输入与结果证据。
 - 施工任务：① 验收偏好、知识、冲突、生命周期和遗忘业务；② 完善真实案例脚本和评委操作路径；③ 审查 UI 文案、证据和安全确认。
-- 基线：`origin/main@f263d5b`（含 D11D PR #115、C-D11 PR #116、D11B PR #111、D10D PR #120 等）。
+- 基线：`origin/main@cc4acf6`（含 D11D PR #115、C-D11 PR #116、D11B PR #111、D10D PR #120 等）。
 - 分支：`test/D11E-vm-business-acceptance`（不含 `codex`）。
 
 ### 提交内容
@@ -83,7 +83,7 @@
 
 ### 工作清单概览（7 项，全部待开始）
 
-1. 基线与环境盘点（`origin/main@f263d5b`、D11D 统一 VM/交付、C-D11 主演示编排、E 轨业务实现与测试、冻结契约与验收样例）。
+1. 基线与环境盘点（`origin/main@cc4acf6`、D11D 统一 VM/交付、C-D11 主演示编排、E 轨业务实现与测试、冻结契约与验收样例）。
 2. 业务验收场景方案：五类业务按冻结契约映射真实服务链路，输出验收矩阵。
 3. 真实案例脚本与评委操作路径：输入/预期/证据采集/判定，同 Commit 同 VM 可复跑。
 4. UI 文案、证据与安全确认审查：先预览再确认、credential TTL、用户隔离、敏感过滤、遗忘后排除。
