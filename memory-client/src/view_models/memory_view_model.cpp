@@ -734,6 +734,9 @@ void MemoryViewModel::runBehaviorPipeline(
     //   actor_role = user/agent/system（辅助标签）；
     //   actor_id  = 可信宿主实体 ID（当前 Demo 缺真实注入，显式标注缺失，
     //              下游 Adapter 在 production 模式下 fail-closed）。
+    // Adapter Window 策略：legacy `actor` 字段保留（零破坏既有 consumer），
+    // 等 TD-060 C/D 书面冻结后才在 follow-on PR 删除。
+    behavior.insert(QStringLiteral("actor"), actor);
     behavior.insert(QStringLiteral("actor_role"), actor);
     behavior.insert(QStringLiteral("actor_id"), QStringLiteral("PENDING_HOST_IDENTITY"));
     // DRIFT-004: 能确定的 source_type 显式投影，其余保持

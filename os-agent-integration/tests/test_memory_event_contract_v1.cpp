@@ -1222,8 +1222,10 @@ void MemoryEventContractV1Test::integerFieldsRejectFractionalValues()
 // transport adapter must NOT contaminate the canonical ingest result).
 void MemoryEventContractV1Test::capturedAtCanonicalWinsOverBadLegacyAliasType()
 {
-    // 1) MemoryContext: round-trip via public toJson(MemoryContext) API,
-    //    then pull the captured_at out of the nested metadata object.
+    // 1) MemoryContext: round-trip via public toJson(MemoryContext) API.
+    //    toJson(MemoryContext) returns a *flat* JSON object — captured_at is
+    //    at the top level, not nested under "metadata". So we read it
+    //    directly from the round-trip object.
     QJsonObject ctx = knownMemoryContextPayload();
     QVERIFY(ctx.contains(QStringLiteral("captured_at")));
     ctx.insert(QStringLiteral("collected_at"), 666);  // non-string garbage
@@ -1231,8 +1233,7 @@ void MemoryEventContractV1Test::capturedAtCanonicalWinsOverBadLegacyAliasType()
     QVERIFY2(ctxParsed.ok(),
         "MemoryContext with good captured_at + bad collected_at must parse OK");
     const QJsonObject ctxRoundTrip = contract::toJson(*ctxParsed.value);
-    const QJsonObject ctxMeta = ctxRoundTrip.value(QStringLiteral("metadata")).toObject();
-    QCOMPARE(ctxMeta.value(QStringLiteral("captured_at")).toString(),
+    QCOMPARE(ctxRoundTrip.value(QStringLiteral("captured_at")).toString(),
              ctx.value(QStringLiteral("captured_at")).toString());
 
     // 2) ToolExecutionEvent: only assert .ok() on the canonical-wins
