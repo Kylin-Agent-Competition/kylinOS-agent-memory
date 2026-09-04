@@ -312,13 +312,27 @@ void D6cMultiSourceAdaptersTest::manualConfigLongTermPersisted()  // B1
             const QJsonValue cfgVal = parts.payload.value(QStringLiteral("config"));
             const bool hasCfg = cfgVal.isObject();
             const QJsonObject cfg = hasCfg ? cfgVal.toObject() : QJsonObject{};
+            // KMA R-3 / DRIFT-007 / DRIFT-008 / DRIFT-009 / KMA R-5:
+            // Accept either legacy (scope/key/value/sensitivity_level) or
+            // Canonical (config_kind+preference_scope / preference_key /
+            // preference_value / sensitivity). Dual-write keeps both present
+            // so this mock validates the "at least one side present" contract.
+            const bool hasScopeEither =
+                cfg.contains(QStringLiteral("scope"))
+                || (cfg.contains(QStringLiteral("config_kind"))
+                    && cfg.contains(QStringLiteral("preference_scope")));
+            const bool hasKeyEither = cfg.contains(QStringLiteral("key"))
+                                     || cfg.contains(QStringLiteral("preference_key"));
+            const bool hasValueEither = cfg.contains(QStringLiteral("value"))
+                                       || cfg.contains(QStringLiteral("preference_value"));
+            const bool hasSensitivityEither =
+                cfg.contains(QStringLiteral("sensitivity_level"))
+                || cfg.contains(QStringLiteral("sensitivity"));
             const bool missingRequired =
-                !cfg.contains(QStringLiteral("scope"))
-                || !cfg.contains(QStringLiteral("key"))
-                || !cfg.contains(QStringLiteral("value"))
+                !hasScopeEither || !hasKeyEither || !hasValueEither
                 || !cfg.contains(QStringLiteral("is_temporary"))
                 || !cfg.contains(QStringLiteral("should_persist"))
-                || !cfg.contains(QStringLiteral("sensitivity_level"));
+                || !hasSensitivityEither;
             if (!hasCfg || missingRequired) {
                 return client::buildErrorResponse(
                     parts.requestId, parts.traceId,
