@@ -32,9 +32,9 @@
 | D14B | 工作清单已存在但 0/8 VM 项待开始 | 仅消费 D14D 的 `L3_READY` 输出，不由 D14D 替代检索/索引业务回归 |
 
 2026-09-06 已创建本地发布代码候选提交
-`719a6cb45e7e2ec51cc97cbf7d4be746a7d4e468`（分支 `chore/d14d-integration-candidate`）：它包含
+`414250c36dd9889cf012c7c64eaa8344da601b0b`（分支 `chore/d14d-integration-candidate`）：它包含
 `4a32e5c`、D14A release 分支、P1 修复的 cherry-pick `df5f4af`/`13c43f8`，以及安装失败清理和
-替换 unit 所有权保护。该提交仅为
+替换 unit 所有权与替换服务保护。该提交仅为
 `SELECTED_CANDIDATE`，尚未完成评审、D13D `FROZEN` 或任何 D14D L3 Gate，不能写入正式
 `tested_commit` 字段。
 
