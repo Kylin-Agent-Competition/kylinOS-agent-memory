@@ -515,7 +515,7 @@ void TestD13CStability::s3_retry_semantics()
     vm.connectToService();
     QVERIFY(waitForStage([&]{ return vm.connectionState() == "connected"; }));
 
-    // ① 第一次失败（非 retry）：retry_of_turn_id 必须为空
+    // ① 第一次失败（非 retry）：retry_of_turn_id 必须为空（真实走 IPC）
     vm.runPostTurnPipeline(
         QLatin1String(kUserId), QLatin1String(kSessionA),
         "turn-s3-001", "tr-s3-001", "msg-s3-001",
@@ -524,39 +524,54 @@ void TestD13CStability::s3_retry_semantics()
     vm.resetPostTurnPipeline();
     QVERIFY(waitForStage([&]{ return vm.postTurnStage() == "idle"; }));
 
-    // ② retry：finalization_reason=retry + retryOfTurnId="turn-s3-001"
-    //    构造事件 JSON 验证字段透传
-    const QJsonObject evt = vm.buildTurnFinalizedEventJson(
+    // ② retry：构造 retry 事件并经生产 MemoryClient::sendRequest 真实发送到 Mock
+    const QJsonObject retryEvent = vm.buildTurnFinalizedEventJson(
         QLatin1String(kUserId), QLatin1String(kSessionA),
         "turn-s3-002", "tr-s3-002", "msg-s3-002",
         "assistant-retry", "retry", "stop",
         "turn-s3-001" /* retryOfTurnId */);
-    // DRIFT-B fix（rebase main 后契约）：retry_of_turn_id 在事件顶层，
-    // 不在 metadata 嵌套内（与 finalization_reason 同层，ADR-010 契约）。
-    QCOMPARE(evt.value(QStringLiteral("retry_of_turn_id")).toString(),
+    // builder 字段透传（DRIFT-B：retry_of_turn_id/finalization_reason 在事件顶层）
+    QCOMPARE(retryEvent.value(QStringLiteral("retry_of_turn_id")).toString(),
              QStringLiteral("turn-s3-001"));
-    // ADR-010: finalization_reason 在事件顶层，不在 metadata 内
-    QCOMPARE(evt.value(QStringLiteral("finalization_reason")).toString(),
+    QCOMPARE(retryEvent.value(QStringLiteral("finalization_reason")).toString(),
              QStringLiteral("retry"));
 
-    // 通过 runPostTurnPipeline 发送（不带 retryOfTurnId 参数 = 默认空）
-    // 注：runPostTurnPipeline 签名无 retryOfTurnId 形参；retry 必须通过
-    // buildTurnFinalizedEventJson + sendMemoryQuery 链路。这里只做事件 JSON
-    // 字段透传断言，足以验证 retry 语义契约。
+    client::MemoryClient rawClient;
+    rawClient.setSocketPath(socket);
+    rawClient.connectToService();
+    QVERIFY(waitForStage(
+        [&]{ return rawClient.connectionState()
+                 == client::MemoryClient::ConnectionState::Connected; }));
+    const QString rawRequestId = rawClient.sendRequest(
+        client::methods::kTurnFinalized, retryEvent);
+    QVERIFY2(!rawRequestId.isEmpty(),
+             "D13C-S3 MemoryClient::sendRequest 必须成功发出 retry 请求");
+    QVERIFY2(waitForStage([&]{ return capturedFinalizationReasons.size() >= 2; }, 3000),
+             qPrintable(QStringLiteral("D13C-S3 retry 未到达 Mock，已收到 %1 条")
+                            .arg(capturedFinalizationReasons.size())));
+
+    // ③ 后续非 retry 真实发送：retry_of_turn_id 必须为空
     vm.runPostTurnPipeline(
         QLatin1String(kUserId), QLatin1String(kSessionA),
         "turn-s3-003", "tr-s3-003", "msg-s3-003",
         "assistant-final", "ended", "stop");
     QVERIFY(waitForStage([&]{ return vm.postTurnStage() == "sent"; }));
+    QVERIFY2(waitForStage([&]{ return capturedFinalizationReasons.size() >= 3; }, 3000),
+             qPrintable(QStringLiteral("D13C-S3 第 3 条请求未到达 Mock，已收到 %1 条")
+                            .arg(capturedFinalizationReasons.size())));
 
-    // 断言：3 次请求中第 1 / 3 次为非 retry（retry_of_turn_id 为空）
-    QCOMPARE(capturedRetryOfIds.size(), 2);
+    // 最终断言（真实 IPC 捕获顺序：① ended/空 → ② retry/父id → ③ ended/空）
+    QCOMPARE(capturedRetryOfIds.size(), 3);
+    QCOMPARE(capturedFinalizationReasons.at(0), QStringLiteral("ended"));
     QVERIFY2(capturedRetryOfIds.at(0).isEmpty(),
              "D13C-S3 非 retry 路径 retry_of_turn_id 必须为空");
-    QVERIFY2(capturedRetryOfIds.at(1).isEmpty(),
-             "D13C-S3 非 retry 路径 retry_of_turn_id 必须为空");
-    QCOMPARE(capturedFinalizationReasons.at(0), QStringLiteral("ended"));
-    QCOMPARE(capturedFinalizationReasons.at(1), QStringLiteral("ended"));
+    QCOMPARE(capturedFinalizationReasons.at(1), QStringLiteral("retry"));
+    QCOMPARE(capturedRetryOfIds.at(1), QStringLiteral("turn-s3-001"));
+    QVERIFY2(capturedRetryOfIds.at(1) != QStringLiteral("turn-s3-002"),
+             "D13C-S3 retry_of_turn_id 不得等于当前 turn id");
+    QCOMPARE(capturedFinalizationReasons.at(2), QStringLiteral("ended"));
+    QVERIFY2(capturedRetryOfIds.at(2).isEmpty(),
+             "D13C-S3 后续非 retry 路径 retry_of_turn_id 必须为空");
 }
 
 // ── S4 · 客户端 5000ms deadline timeout fail-closed ─────────────────────
