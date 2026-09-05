@@ -5,6 +5,11 @@
 # 方案（contract §1/§4 冻结）：整包复制到 <install_prefix>，launcher 留在包内，
 #   ~/.local/bin/kylin-memory-server 仅做 symlink → <prefix>/bin/kylin-memory-server。
 #   unit ExecStart 指向 <prefix>/bin/kylin-memory-server（固定前缀，不依赖 $0 重定位）。
+# 升级回退（PR#152 D14A R2）：在覆盖任何既有状态前，先把旧 install_prefix / 旧 unit /
+#   旧 launcher（普通文件或 symlink）捕获进确定性私有事务目录
+#   ${XDG_STATE_HOME:-$HOME/.local/state}/kylin-memory/d14a-install-txn（0700），
+#   并以 txn.meta 显式记录“被捕获的是哪个旧状态”；uninstall rollback 依据该元数据
+#   精确恢复，不再使用 *.bak.<timestamp> 猜测。事务目录位于 install_prefix 之外。
 # =============================================================================
 set -euo pipefail
 
@@ -174,43 +179,147 @@ fi
   || die "包内迁移缺失: runtime/app/migrations"
 
 # ── 1. 前置系统依赖校验（contract §3，fail-closed：版本 + SHA-256） ──
-[ -f "$EXPECT_SDK_SO_PATH" ] || die "前置依赖缺失: $EXPECT_SDK_SO_PATH"
-ACTUAL_SHA="$(sha256sum "$EXPECT_SDK_SO_PATH" | awk '{print $1}')"
-[ "$ACTUAL_SHA" = "$EXPECT_SDK_SHA" ] \
-  || die "SDK SHA-256 不匹配: expected=$EXPECT_SDK_SHA actual=$ACTUAL_SHA"
+# 测试缝（仅隔离测试用）：D14A_SYSTEM_SDK_* 可覆盖“系统前置校验”所检查的 SDK
+# 路径/版本/SHA；生产打包后未设置这些变量，一律回落下方冻结值。完整性 Gate 始终
+# 以冻结常量校验 manifest 中的 SDK identity，本测试缝不放松冻结身份。
+SDK_SO_PATH="${D14A_SYSTEM_SDK_SO_PATH:-$EXPECT_SDK_SO_PATH}"
+SDK_VERSION="${D14A_SYSTEM_SDK_VERSION:-$EXPECT_SDK_VERSION}"
+SDK_SHA256="${D14A_SYSTEM_SDK_SHA256:-$EXPECT_SDK_SHA}"
+[ -f "$SDK_SO_PATH" ] || die "前置依赖缺失: $SDK_SO_PATH"
+ACTUAL_SHA="$(sha256sum "$SDK_SO_PATH" | awk '{print $1}')"
+[ "$ACTUAL_SHA" = "$SDK_SHA256" ] \
+  || die "SDK SHA-256 不匹配: expected=$SDK_SHA256 actual=$ACTUAL_SHA"
 ACTUAL_VER="$(dpkg-query -W -f='${Version}' libkylin-coreai-embedding 2>/dev/null || echo 'unknown')"
-[ "$ACTUAL_VER" = "$EXPECT_SDK_VERSION" ] \
-  || die "SDK 版本不匹配: expected=$EXPECT_SDK_VERSION actual=$ACTUAL_VER"
+[ "$ACTUAL_VER" = "$SDK_VERSION" ] \
+  || die "SDK 版本不匹配: expected=$SDK_VERSION actual=$ACTUAL_VER"
 
-# ── 2. 整包安装到 install_prefix（tar 保留符号链接，规避 vboxsf 限制） ──
-if [ -d "$INSTALL_PREFIX" ]; then
-  mv -f "$INSTALL_PREFIX" "$INSTALL_PREFIX.bak.$(date +%Y%m%d_%H%M%S)"
-fi
+# ── 2. 事务捕获：覆盖任何既有状态前，先备份旧状态（升级回退，PR#152 D14A R2） ──
+# TXN_DIR 是确定性、私有的事务目录（0700），位于 install_prefix 之外（默认 state home）。
+# 其中 txn.meta 以键=值显式记录“恰好一个旧状态”：
+#   旧 prefix（目录级 mv 搬迁）、旧 unit（字节备份）、旧 launcher（none/file/symlink）。
+# 安装中途失败时本事务保留，可被 uninstall.sh rollback 精确恢复。
+TXN_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/kylin-memory/d14a-install-txn"
+
+capture_old_state() {
+  local stage
+  stage="${TXN_DIR}.stage.$$"
+
+  case "$TXN_DIR/" in
+    "$INSTALL_PREFIX"/*)
+      die "事务目录不得位于 install_prefix 内部: $TXN_DIR（请调整 XDG_STATE_HOME）" ;;
+  esac
+
+  OLD_PREFIX_BACKUP=absent
+  OLD_UNIT_BACKUP=absent
+  OLD_LAUNCHER_KIND=none
+  OLD_LAUNCHER_TARGET=""
+
+  # 捕获任一步失败：回迁已搬移的旧 prefix 并终止，不留错向事务。
+  # （M-1/M-2：捕获后任一步失败均走此回迁路径，禁止任何 rm -rf 销毁已捕获旧 prefix。
+  #  HIGH-1：回迁 mv 再次失败时保留 stage/old-prefix 作为唯一可恢复备份，仅当
+  #   未捕获旧 prefix / 回迁成功 / stage 内已无唯一需恢复 old-prefix backup 时才清理。）
+  tx_fail() {
+    local msg="$1"
+    if [ "$OLD_PREFIX_BACKUP" = present ] \
+       && [ -d "$stage/old-prefix" ] && [ ! -e "$INSTALL_PREFIX" ]; then
+      if mv -f "$stage/old-prefix" "$INSTALL_PREFIX"; then
+        # 旧 prefix 已安全回迁：唯一备份已归位，可安全清理 stage
+        rm -rf "$stage"
+      else
+        # 回迁失败：唯一可恢复备份仍保留于 stage/old-prefix，禁止 rm -rf 销毁；
+        # 保留 stage 与完整现场，诊断指向真实保留路径（mv 根因已透传至 stderr）
+        echo "[d14a-install] CRITICAL: 旧 prefix 回迁失败，唯一备份保留于 $stage/old-prefix（stage 未清理）" >&2
+      fi
+    else
+      # 未捕获旧 prefix / 已无唯一需恢复 old-prefix backup：安全清理 stage
+      rm -rf "$stage"
+    fi
+    die "事务捕获失败: $msg"
+  }
+
+  mkdir -p "$(dirname "$TXN_DIR")" || die "无法创建事务父目录: $(dirname "$TXN_DIR")"
+  rm -rf "$stage"
+  mkdir -p "$stage" || die "无法创建事务暂存目录: $stage"
+  chmod 0700 "$stage" || tx_fail "无法设置事务暂存目录权限: $stage"
+
+  # 旧 prefix：目录级搬迁（mv 保持字节/inode 保真，恢复时 mv 回迁）
+  if [ -d "$INSTALL_PREFIX" ]; then
+    mv -f "$INSTALL_PREFIX" "$stage/old-prefix" \
+      || tx_fail "无法搬迁旧 prefix ($INSTALL_PREFIX)"
+    OLD_PREFIX_BACKUP=present
+    log "事务捕获: 旧 prefix 已搬迁到事务目录"
+  fi
+
+  # 旧 unit：普通文件则字节备份（旧代码从不备份 unit）
+  if [ -f "$UNIT_DST" ]; then
+    cp -f "$UNIT_DST" "$stage/old-unit" \
+      || tx_fail "无法备份旧 unit ($UNIT_DST)"
+    OLD_UNIT_BACKUP=present
+  fi
+
+  # 旧 launcher 三态：symlink 记 target；普通文件字节备份；不存在记 none
+  if [ -L "$BIN_SYMLINK" ]; then
+    OLD_LAUNCHER_KIND=symlink
+    OLD_LAUNCHER_TARGET="$(readlink "$BIN_SYMLINK")" \
+      || tx_fail "无法读取旧 launcher symlink target ($BIN_SYMLINK)"
+    log "事务捕获: 旧 launcher 为 symlink → $OLD_LAUNCHER_TARGET"
+  elif [ -f "$BIN_SYMLINK" ]; then
+    cp -f "$BIN_SYMLINK" "$stage/old-launcher" \
+      || tx_fail "无法备份旧 launcher ($BIN_SYMLINK)"
+    OLD_LAUNCHER_KIND=file
+    log "事务捕获: 旧 launcher 为普通文件，已字节备份"
+  fi
+
+  # txn.meta：临时文件 + mv 原子落盘
+  {
+    echo "TXN_FORMAT=1"
+    echo "INSTALL_PREFIX=$INSTALL_PREFIX"
+    echo "UNIT_PATH=$UNIT_DST"
+    echo "BIN_SYMLINK_PATH=$BIN_SYMLINK"
+    echo "OLD_PREFIX_BACKUP=$OLD_PREFIX_BACKUP"
+    echo "OLD_PREFIX_DIR=$TXN_DIR/old-prefix"
+    echo "OLD_UNIT_BACKUP=$OLD_UNIT_BACKUP"
+    echo "OLD_UNIT_FILE=$TXN_DIR/old-unit"
+    echo "OLD_LAUNCHER_KIND=$OLD_LAUNCHER_KIND"
+    echo "OLD_LAUNCHER_FILE=$TXN_DIR/old-launcher"
+    echo "OLD_LAUNCHER_TARGET=$OLD_LAUNCHER_TARGET"
+  } > "$stage/txn.meta.tmp" || tx_fail "txn.meta 写入失败"
+  mv -f "$stage/txn.meta.tmp" "$stage/txn.meta" || tx_fail "txn.meta 落盘失败"
+
+  # 整体切换：本轮捕获成功后才替换既有事务（rm + mv，原子切换；
+  # 连续升级时只保留“最近一次旧状态”）。任一步失败均走 tx_fail：
+  # 旧 prefix 已捕获成功时自动回迁旧状态（M-1：mv 失败分支禁止 rm -rf "$stage"
+  # 销毁已捕获旧 prefix；M-2：finalization/权限步骤失败同样回迁或保留可恢复备份）。
+  rm -rf "$TXN_DIR" || tx_fail "无法清理旧事务目录 $TXN_DIR"
+  mv -f "$stage" "$TXN_DIR" || tx_fail "无法切换到事务目录 $TXN_DIR"
+  chmod 0700 "$TXN_DIR" || tx_fail "无法设置事务目录权限 $TXN_DIR"
+  log "事务就绪: $TXN_DIR（old_prefix=$OLD_PREFIX_BACKUP old_unit=$OLD_UNIT_BACKUP old_launcher=$OLD_LAUNCHER_KIND）"
+}
+
+capture_old_state
+
+# ── 3. 整包安装到 install_prefix（tar 保留符号链接，规避 vboxsf 限制） ──
 mkdir -p "$INSTALL_PREFIX"
 tar -C "$PKG_DIR" -cf - . | tar -C "$INSTALL_PREFIX" -xf -
 [ -x "$INSTALL_PREFIX/bin/kylin-memory-server" ] || die "安装失败: $INSTALL_PREFIX/bin/kylin-memory-server"
 
-# ── 3. ~/.local/bin 做 symlink → <prefix>/bin/kylin-memory-server ──
+# ── 4. ~/.local/bin 做 symlink → <prefix>/bin/kylin-memory-server ──
 mkdir -p "$HOME/.local/bin"
-if [ -e "$BIN_SYMLINK" ] && [ ! -L "$BIN_SYMLINK" ]; then
-  cp -f "$BIN_SYMLINK" "$BIN_SYMLINK.bak.$(date +%Y%m%d_%H%M%S)"
-fi
 ln -sfn "$INSTALL_PREFIX/bin/kylin-memory-server" "$BIN_SYMLINK"
 
-# ── 4. 数据目录（确定 0700） ──
+# ── 5. 数据目录（确定 0700） ──
 mkdir -p "$HOME/.config/systemd/user" \
   "$HOME/.config/kylin-memory" "$HOME/.local/share/kylin-memory" "$HOME/.local/state/kylin-memory"
 chmod 0700 "$HOME/.config/kylin-memory" "$HOME/.local/share/kylin-memory" "$HOME/.local/state/kylin-memory"
 
-# ── 5. unit：ExecStart 指向固定 prefix launcher（BLOCKER 1 方案 B） ──
+# ── 6. unit：ExecStart 指向固定 prefix launcher（BLOCKER 1 方案 B） ──
 UNIT_SRC="$SELF_DIR/kylin-memory.service"
-# 渲染 ExecStart 为 <prefix>/bin/kylin-memory-server
+# 渲染 ExecStart 为 <prefix>/bin/kylin-memory-server（旧 unit 已在事务捕获中备份）
 sed "s|%h/.local/bin/kylin-memory-server|$INSTALL_PREFIX/bin/kylin-memory-server|g" \
   "$UNIT_SRC" > "$UNIT_DST"
-if [ -f "$UNIT_DST.bak.$(date +%Y%m%d_%H%M%S 2>/dev/null)" ]; then :; fi
 systemctl --user daemon-reload
 
-# ── 6. 首次启动前 Alembic 迁移（BLOCKER 2：clean VM 必须 upgrade head） ──
+# ── 7. 首次启动前 Alembic 迁移（BLOCKER 2：clean VM 必须 upgrade head） ──
 export KYLIN_MEMORY_DB="${KYLIN_MEMORY_DB:-$HOME/.local/share/kylin-memory/kylin_memory.db}"
 mkdir -p "$(dirname "$KYLIN_MEMORY_DB")"
 log "执行 Alembic 迁移（upgrade head）…"
@@ -229,7 +338,7 @@ assert rows, "alembic_version 为空"
 print("alembic_version:", rows[0][0])
 PYEOF
 
-# ── 7. enable --now + wait socket + journal ready + restart 二次 status ──
+# ── 8. enable --now + wait socket + journal ready + restart 二次 status ──
 systemctl --user enable --now "$UNIT_NAME" || die "enable --now 失败"
 sleep 3
 # wait socket
@@ -245,7 +354,7 @@ for i in $(seq 1 30); do
 done
 systemctl --user is-active --quiet "$UNIT_NAME" || die "服务未 active"
 
-# ── 8. restart 二次 status（contract §7 Step 6） ──
+# ── 9. restart 二次 status（contract §7 Step 6） ──
 log "restart 验证…"
 systemctl --user restart "$UNIT_NAME"
 sleep 3
