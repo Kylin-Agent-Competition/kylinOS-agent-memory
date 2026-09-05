@@ -6,10 +6,12 @@
 “按既有流程”替代字段。所有哈希使用完整 64 位小写 SHA-256，所有 Git commit 使用完整
 40 位小写 SHA。
 
-当前唯一被测基线：
+当前基线状态（尚未形成唯一正式被测基线）：
 
 ```text
-kylin-mem/main@4a32e5c948a968f3bd4409d91deac320002baea1
+previous_baseline: 4a32e5c948a968f3bd4409d91deac320002baea1 (INVALIDATED_BY_PR_157)
+current_prerequisite_candidate: 17dce3696066213b54e9dcbe6b87c4944cb41c8c
+formal_tested_commit: PENDING_P0_I3_RESELECTION
 ```
 
 本回执不授权修改 Gold、阈值、IPC、Schema、数据库或生产逻辑。不得提交、粘贴或传递私钥、
@@ -26,7 +28,7 @@ confirmed_by:
 track_and_role:
 confirmed_at_utc:
 
-implementation_commit: 4a32e5c948a968f3bd4409d91deac320002baea1
+implementation_commit: PENDING_P0_I3_RESELECTION
 adapter_delivery_type: [versioned_script | approved_command_sequence]
 adapter_path_or_artifact_id:
 adapter_commit_or_artifact_sha256:
@@ -91,13 +93,14 @@ offline_verification_result: [PASS | FAIL]
 
 ```text
 confirmation_id:
-signed_by: Reviewer D
+signed_by: <non-author independent execution reviewer>
 signed_at_utc:
-key_id: d13d-execution-rd-20260906-v1
-public_key_file: d13d-execution-public.pem
-public_key_sha256: 464aca34fa53a9b8a59e8cd120162f854e54217d4a1769e3e45abac8104debc0
+reviewer_track_or_role:
+key_id: PENDING_NAMED_ASSIGNMENT
+public_key_file: PENDING_NAMED_ASSIGNMENT
+public_key_sha256: PENDING_NAMED_ASSIGNMENT
 
-implementation_commit: 4a32e5c948a968f3bd4409d91deac320002baea1
+implementation_commit: PENDING_P0_I3_RESELECTION
 environment_id:
 evidence_root_identifier:
 execution_attestation_file: D13D_EXECUTION_ATTESTATION_V1.json
@@ -110,8 +113,7 @@ offline_verification_result: [PASS | FAIL]
 approval_reference:
 ```
 
-验收要求：attestation 同时绑定 implementation commit、environment、依赖/数据版本、四类
-raw hash、execution log、SHA256SUMS 与 evidence index；Seal 和 attestation 的字段逐项一致。
+验收要求：Execution Reviewer 必须不是 adapter/证据作者，并使用与 D13E Review Seal 不同的执行审查密钥。attestation 同时绑定 implementation commit、environment、依赖/数据版本、四类 raw hash、execution log、SHA256SUMS 与 evidence index；Seal 和 attestation 的字段逐项一致。
 
 ## 回执 D：非作者 Reviewer 对 PR #150 的审查
 

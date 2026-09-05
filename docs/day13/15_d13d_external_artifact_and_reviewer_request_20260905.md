@@ -2,9 +2,10 @@
 
 ## 目的
 
-本申请单用于关闭 D13D 当前无法由普通 VM 执行用户自行取得的门禁。D13D 已完成
-`4a32e5c948a968f3bd4409d91deac320002baea1` 的隔离部署、迁移、UDS 预检和测试；
-不得因后续缺失材料而伪造签名、公钥、Trust Root 或逐样本执行结果。
+本申请单用于关闭 D13D 当前无法由普通 VM 执行用户自行取得的门禁。下节记录的
+`4a32e5c948a968f3bd4409d91deac320002baea1` 隔离部署、迁移、UDS 预检和测试仅是历史准备证据；
+PR #157 合并后它不再是正式冻结基线。当前状态为 `BLOCKED`：待版本化 adapter 经独立审查并合并后，
+按 P0-I3 选择新的完整 `tested_commit`。不得因后续缺失材料而伪造签名、公钥、Trust Root 或逐样本执行结果。
 
 ## 已核验的冻结候选
 
@@ -31,17 +32,16 @@ aeea9beab5d25461083bb693424014a813cd91bae6b0d7b60443f817f33c6be0  D13E_GOLD_V1.j
 Review Seal；D13D 写入 provenance 后，D Reviewer 必须对 evidence root 内最终
 `FROZEN_BY_D13D` Manifest 重新复算并签发其 hash。
 
-## Reviewer D 密钥责任（2026-09-06 决定）
+## 双 Seal 独立责任（2026-09-06 修订）
 
-Reviewer D 是唯一签名保管人，密钥物料分离：
+两份 Seal 必须由不同职责边界签发，不能以 Reviewer D 的 Review Seal 密钥替代 Execution Seal：
 
-| 用途 | key ID | 私钥保管位置 | 可交付物 |
+| 用途 | 签发责任 | 当前身份/密钥状态 | 可交付物 |
 | --- | --- | --- | --- |
-| D13E Review Seal | `d13e-review-rd-20260906-v1` | Windows 受限目录，仅 Reviewer D | public PEM、Review Seal、detached signature |
-| D13D Execution Seal | `d13d-execution-rd-20260906-v1` | Windows 受限目录，仅 Reviewer D | public PEM、Execution Seal、detached signature |
+| D13E Review Seal | Reviewer D | 已有 Review 职责；具体公开验证物以实际交付为准 | public PEM、Review Seal、detached signature |
+| D13D Execution Seal | 非作者的独立执行审查人 | `PENDING_NAMED_ASSIGNMENT`；推荐由 Reviewer E 类独立角色承担，但尚无具名任命或密钥资料 | execution public PEM、key ID、Execution Seal、detached signature |
 
-私钥不得复制到 VM、证据目录、Git、CI 或任何工作树。D13D 负责准备可验证的最终
-Manifest、raw、attestation 和 Seal payload；Reviewer D 在 Windows 受控边界中独立签名。
+D13D 负责准备可验证的最终 Manifest、raw、attestation 和 Seal payload；执行审查人仅在独立复核后于受控边界签名。任何私钥不得复制到 VM、证据目录、Git、CI 或工作树。
 
 ## 申请 A：D Reviewer / 签名保管人
 
@@ -85,9 +85,9 @@ Frozen Trust Root 已由授权流程安装并完成 `root:root`、权限、non-s
 请只回传以下非敏感核验结果：`ls -ld`、`stat`、三个文件 SHA-256、Trust Root JSON 内容。
 不得回传任何私钥或 sudo 密码。
 
-## 申请 C：D13D 签名保管人
+## 申请 C：独立 D13D Execution Reviewer
 
-Reviewer D 已按上述职责建立 D13D 受控 Ed25519 signing key，并仅交付：
+请由项目负责人具名指定一位非作者的独立执行审查人；在指派和实际创建密钥前，以下字段均不得填写为 Reviewer D 或虚构值。该审查人仅交付：
 
 ```text
 d13d-execution-public.pem
@@ -96,7 +96,7 @@ public_key_sha256
 受控签名接口或在 VM 外签名的流程说明
 ```
 
-私钥必须留在 D13D 受控边界外，不能进入 VM 工作树、evidence root、Git、CI 或 E 轨。
+私钥必须留在执行审查人的受控边界内，不能进入 VM 工作树、evidence root、Git、CI 或 E 轨。
 在 D13D 生成真实 execution attestation 后，请返回：
 
 ```text
@@ -133,7 +133,7 @@ reference、evidence root/reference、`frozen_by_track=D`、approval reference �
 
 申请 D 的交付物需增加以下最小约束：版本化执行适配器或明确的逐样本真实调用步骤；每条
 raw 必须记录 `sample_id`、`metric`、由实际调用返回/查询得到的 `actual`，以及足以追溯的
-执行日志引用。适配器不得读取 Gold 结果来构造 `actual`；执行步骤须在 `4a32e5c...` 冻结
+执行日志引用。适配器不得读取 Gold 结果来构造 `actual`；执行步骤须在 P0-I3 最终选定的冻结
 工作树和隔离数据命名空间中运行。该适配器/步骤须在运行前得到 D13E/B 的书面确认，避免
 D13D 单轨擅自定义评测语义。
 

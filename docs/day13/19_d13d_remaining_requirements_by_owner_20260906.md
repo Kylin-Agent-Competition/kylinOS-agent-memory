@@ -6,17 +6,19 @@
 `26bb97a5927922083986d398ddaf46544a510354a8baa1c9ef3d493ba5aa2ece`。
 
 结论：B 轨确认 D13E 候选输入的静态完整性，但没有、也不承担 Preference、Conflict、Safety、
-Forget 四类业务 raw 的 adapter 或真实执行。因此 D13D-B07 仍为 `BLOCKED`。唯一被测基线保持：
-`4a32e5c948a968f3bd4409d91deac320002baea1`。
+Forget 四类业务 raw 的 adapter 或真实执行。因此 D13D-B07 仍为 `BLOCKED`。此前基线
+`4a32e5c948a968f3bd4409d91deac320002baea1` 已被 PR #157 的 P0-I1/I2 实现变更失效；当前仅有
+`main@17dce3696066213b54e9dcbe6b87c4944cb41c8c` 前置候选，正式 `tested_commit` 待 P0-I3 重新选择。
 
 ## P0-0：已冻结的四类 raw 责任映射
 
-责任人：D 轨（D13D）；签名保管与独立复核人：Reviewer D。B owner 的书面确认已被
-项目负责人接受，B 轨不承担四类业务 `actual` 的生成或批准。
+责任人：D 轨（D13D）。D13E Review Seal 由 Reviewer D 独立复核；D13D Execution Seal 必须由
+非作者的独立执行审查人签发（`PENDING_NAMED_ASSIGNMENT`）。B owner 的书面确认已被项目负责人接受，
+B 轨不承担四类业务 `actual` 的生成或批准。
 
 本项由项目负责人于 2026-09-06 明确指定，替代此前“D13E 负责人或项目负责人待指定”的
-占位要求。D 轨负责集成、隔离环境、证据收件和失败闭合；Reviewer D 只负责独立复核与
-签章，不参与 author 自批。D13A 的责任仅限已批准的性能/运行时辅助工作，不承担四类
+占位要求。D 轨负责集成、隔离环境、证据收件和失败闭合；Reviewer D 只签发 D13E Review Seal，
+独立 Execution Reviewer 只签发 D13D Execution Seal，二者均不参与 author 自批。D13A 的责任仅限已批准的性能/运行时辅助工作，不承担四类
 业务语义、Gold 判定、raw 批准或 Seal 签发。
 
 必须书面指定以下每个 metric 的执行责任轨、具名 Owner、实现/复核边界和审批引用：
@@ -70,10 +72,10 @@ dispatch。最小要求：
 
 ## P0-4：Attestation、D13D Execution Seal 与正式 Runner
 
-责任人：D13D 准备证据；Reviewer D 独立签发。
+责任人：D13D 准备证据；非作者的独立 Execution Reviewer 独立签发。
 
 - 生成 execution log、`SHA256SUMS`、`evidence/index.yaml`、execution attestation；attestation 绑定四类 raw hash、日志、索引、commit、环境、依赖/数据和 evidence root。
-- Reviewer D 对 attestation hash 签发 `D13D_EXECUTION_SEAL_V1.json` 和 `.sig`。
+- 独立 Execution Reviewer 对 attestation hash 签发 `D13D_EXECUTION_SEAL_V1.json` 和 `.sig`，并使用不同于 D13E Review Seal 的 key ID 和公钥。
 - 在目标 VM 固定 `/etc/kylin-memory/trust` 下离线验签双 Seal，并运行 `scripts/run_d13e_formal_eval.py`。
 - Runner Gate 0--10 必须全部通过，summary 落盘；否则 D13D 仍为 `BLOCKED`。
 

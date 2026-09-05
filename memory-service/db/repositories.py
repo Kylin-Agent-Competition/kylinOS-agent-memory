@@ -444,6 +444,23 @@ def list_memory_entries(
     return [dict(r) for r in rows]
 
 
+def get_memory_entry_by_id(
+    conn, *, user_id: str, entry_id: int
+) -> Optional[Dict[str, Any]]:
+    """Read one active memory entry through the mandatory user boundary."""
+    _require_nonempty(user_id=user_id)
+    row = conn.execute(
+        select(memory_entries).where(
+            and_(
+                memory_entries.c.id == entry_id,
+                memory_entries.c.user_id == user_id,
+                memory_entries.c.is_deleted == 0,
+            )
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
 # ── D7D preference version persistence ──
 
 
@@ -622,6 +639,7 @@ def _record_operation_receipt(
     evidence_fingerprint: str,
     idempotency_key: Optional[str],
     request_fingerprint: str,
+    trace_id: Optional[str],
     created_at: str,
 ) -> None:
     conn.execute(
@@ -634,6 +652,7 @@ def _record_operation_receipt(
             evidence_fingerprint=evidence_fingerprint,
             idempotency_key=idempotency_key,
             request_fingerprint=request_fingerprint,
+            trace_id=trace_id,
             created_at=created_at,
         )
     )
@@ -648,6 +667,7 @@ def _append_preference_version(
     evidence_fingerprint: str,
     idempotency_key: Optional[str],
     request_fingerprint: str,
+    trace_id: Optional[str] = None,
     rollback_of_version_id: Optional[int] = None,
     no_op_on_same_value: bool = True,
     deduplicate_evidence: bool = True,
@@ -689,6 +709,7 @@ def _append_preference_version(
             evidence_fingerprint=evidence_fingerprint,
             idempotency_key=idempotency_key,
             request_fingerprint=request_fingerprint,
+            trace_id=trace_id,
             created_at=_now_iso(),
         )
         return {**current, "created": False}
@@ -742,6 +763,7 @@ def _append_preference_version(
         evidence_fingerprint=evidence_fingerprint,
         idempotency_key=idempotency_key,
         request_fingerprint=request_fingerprint,
+        trace_id=trace_id,
         created_at=now,
     )
     return {**version, "created": True}
@@ -758,6 +780,7 @@ def save_preference_version(
     evidence_fingerprint: str,
     idempotency_key: Optional[str],
     request_fingerprint: str,
+    trace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """创建或更新偏好版本，不原地覆盖历史。"""
     _require_nonempty(
@@ -782,6 +805,7 @@ def save_preference_version(
         evidence_fingerprint=evidence_fingerprint,
         idempotency_key=idempotency_key,
         request_fingerprint=request_fingerprint,
+        trace_id=trace_id,
     )
 
 
@@ -856,6 +880,7 @@ def rollback_preference_version(
     preference_version_id: int,
     idempotency_key: Optional[str],
     request_fingerprint: str,
+    trace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """将历史版本的值追加为新 current 版本，不覆盖旧版本。"""
     _require_nonempty(user_id=user_id, request_fingerprint=request_fingerprint)
@@ -880,6 +905,7 @@ def rollback_preference_version(
         evidence_fingerprint=f"rollback:{target['id']}:{uuid.uuid4().hex}",
         idempotency_key=idempotency_key,
         request_fingerprint=request_fingerprint,
+        trace_id=trace_id,
         rollback_of_version_id=int(target["id"]),
         no_op_on_same_value=False,
         deduplicate_evidence=False,
@@ -1853,6 +1879,35 @@ def soft_delete_resolved_targets(
                 executed += 1
                 version_ids.append(str(version_id))
         return executed, version_ids
+    if target_type == "all":
+        executed = 0
+        version_ids: List[str] = []
+        for raw in resolved_target_ids:
+            try:
+                kind, raw_id = raw.split(":", 1)
+            except (AttributeError, ValueError) as exc:
+                raise UnsupportedForgetScopeError("full_reset target must be tagged") from exc
+            if kind == "knowledge":
+                count, _ = soft_delete_resolved_targets(
+                    conn,
+                    user_id=user_id,
+                    target_type="knowledge",
+                    resolved_target_ids=[raw_id],
+                    forget_plan_id=forget_plan_id,
+                )
+            elif kind == "preference":
+                count, versions = soft_delete_resolved_targets(
+                    conn,
+                    user_id=user_id,
+                    target_type="preference",
+                    resolved_target_ids=[raw_id],
+                    forget_plan_id=forget_plan_id,
+                )
+                version_ids.extend(versions)
+            else:
+                raise UnsupportedForgetScopeError("full_reset target has unknown type")
+            executed += count
+        return executed, version_ids
     raise UnsupportedForgetScopeError(
         f"soft delete not supported for target_type={target_type!r}"
     )
@@ -1892,7 +1947,7 @@ def _d8d_outbox(conn, *, aggregate_id: str, event_type: str, payload: Dict[str, 
 def insert_knowledge_entry(
     conn, *, user_id: str, knowledge_id: str, knowledge_type: str, source_event_id: str,
     content: Dict[str, Any], confidence: float, conditions: Optional[str] = None,
-    trace_id: Optional[str] = None,
+    trace_id: Optional[str] = None, topic_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Persist a new trusted knowledge item and its primary evidence edge atomically.
 
@@ -1900,6 +1955,8 @@ def insert_knowledge_entry(
     callers cannot promote a weak/failed source by passing their own tier.
     """
     _d8d_nonempty(user_id=user_id, knowledge_id=knowledge_id, knowledge_type=knowledge_type, source_event_id=source_event_id)
+    if topic_key is not None:
+        _d8d_nonempty(topic_key=topic_key)
     if knowledge_type not in _KNOWLEDGE_TYPES:
         raise ValueError("invalid knowledge_type")
     event = _source_event_row(conn, user_id=user_id, event_id=source_event_id)
@@ -1947,6 +2004,7 @@ def insert_knowledge_entry(
                 existing["knowledge_type"] != knowledge_type
                 or existing["conditions"] != conditions
                 or existing["confidence"] != confidence
+                or existing["topic_key"] != topic_key
                 or stored_content != content
             ):
                 raise ValueError("knowledge replay immutable input conflict")
@@ -1959,7 +2017,7 @@ def insert_knowledge_entry(
                 "lifecycle_eligibility": existing["lifecycle_eligibility"],
                 "replayed": True,
             }
-        res = conn.execute(insert(memory_entries).values(user_id=user_id, entry_type="knowledge", content=json.dumps(content, ensure_ascii=False), confidence=confidence, version=1, row_revision=1, is_deleted=0, created_at=now, updated_at=now, trace_id=trace_id, knowledge_id=knowledge_id, knowledge_type=knowledge_type, conditions=conditions, lifecycle_eligibility=lifecycle_eligibility, memory_status="candidate", memory_type="short_term", evidence_tier=tier, last_accessed_at=None, access_count=None))
+        res = conn.execute(insert(memory_entries).values(user_id=user_id, entry_type="knowledge", content=json.dumps(content, ensure_ascii=False), confidence=confidence, version=1, row_revision=1, is_deleted=0, created_at=now, updated_at=now, trace_id=trace_id, knowledge_id=knowledge_id, knowledge_type=knowledge_type, conditions=conditions, topic_key=topic_key, lifecycle_eligibility=lifecycle_eligibility, memory_status="candidate", memory_type="short_term", evidence_tier=tier, last_accessed_at=None, access_count=None))
         entry_id = int(res.lastrowid)
         relation_id = f"evidence:{knowledge_id}:{source_event_id}"
         insert_relation(conn, user_id=user_id, relation_id=relation_id, relation_type="evidence", left_endpoint_type="knowledge", left_endpoint_id=knowledge_id, right_endpoint_type="source_event", right_endpoint_id=source_event_id, is_primary=True, emit_outbox=False)

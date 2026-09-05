@@ -2,7 +2,7 @@
 
 ## 前提
 
-- 唯一被测基线：`kylin-mem/main@4a32e5c948a968f3bd4409d91deac320002baea1`。
+- 基线状态：`kylin-mem/main@4a32e5c948a968f3bd4409d91deac320002baea1` 已被 PR #157 的前置实现变更失效；`17dce3696066213b54e9dcbe6b87c4944cb41c8c` 仅为当前前置候选。adapter 经独立审查并合并后，必须由 P0-I3 重新选择唯一正式 `tested_commit`。
 - 固定 Dataset：`D13E_FORMAL_TESTSET_V1.jsonl`，SHA-256 为 `9740c00f4a9d91471bec8e6fa8aeeeb52f890f8680d83f740a84db2b1701a44b`。
 - 本标准只验收 D13D-B07 的执行适配器和真实 raw；不替代双 Seal、attestation、正式 Runner 或 PR #150 独立审查。
 - 任一 P0 项失败、缺失或不可独立复核，结论为 `REJECTED / BLOCKED`。不得用 Gold、默认零值、手工 raw、单测断言或局部成功样本替代。

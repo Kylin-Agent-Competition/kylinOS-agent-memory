@@ -6,7 +6,7 @@
 - 任务类型：`docs/test-infrastructure`；本任务冻结评测输入和运行环境，不实现或调整检索、Embedding、Vector、IPC、Schema、数据库或 UI 功能。
 - 创建日期：2026-09-05。
 - 责任边界：D 轨负责环境、部署和证据可复现性；D13B 消费冻结环境执行检索评测；D13E 提供封存集、Gold 判定键、指标阈值及其 SHA-256。
-- 状态：`PREPARED`。PR #148 已合并，候选 D13E 工件和离线 Runner 已在被测基线中；Frozen Trust Root 已在目标 VM 按固定路径安装并完成权限/非软链/加载核验。外部双 Seal、最终 evidence root 与实际 VM raw 结果尚未登记，禁止标记为 `FROZEN` 或“正式评测已开始”。
+- 状态：`BLOCKED`。PR #157 已于 `main@17dce3696066213b54e9dcbe6b87c4944cb41c8c` 合并，解决了 Safety/Forget 的 P0 实现前置；但版本化执行适配器尚未作为经审查的基线一部分合并，故尚未重新选择正式 `tested_commit`。Frozen Trust Root 的实际安装状态、外部双 Seal、最终 evidence root 与 VM 真实 raw 均未登记，禁止标记为 `FROZEN` 或“正式评测已开始”。
 - 关联：`docs/day13/01_d13b_formal_eval_worklist_20260902.md`、`evidence/index.yaml`、`Kylin-runtime-knowledge/VERSION_MAP.md`（2026-09-01）。
 
 ## 目标
@@ -23,11 +23,11 @@
 
 | 项目 | 当前值 | 状态 | 冻结要求 |
 | --- | --- | --- | --- |
-| 被测提交 | `4a32e5c948a968f3bd4409d91deac320002baea1` | SELECTED | PR #148 merge commit；`kylin-mem/main` 于 2026-09-05 复核的完整 SHA，部署前和 VM 内 `HEAD` 必须精确一致。 |
-| 基线来源 | `kylin-mem/main` | CONFIRMED | 该提交包含 D13B 正式评测组件及 PR #148 的 D13E 候选工件、离线正式 Runner。 |
+| 先前被测提交 | `4a32e5c948a968f3bd4409d91deac320002baea1` | INVALIDATED_BY_PR_157 | 历史 PR #148 merge commit；因 PR #157 的必需实现已合并，不得再作为本轮正式 `tested_commit`。 |
+| 当前前置候选 | `kylin-mem/main@17dce3696066213b54e9dcbe6b87c4944cb41c8c` | CANDIDATE_ONLY | PR #157 merge commit；仅代表 P0-I1/I2 已合入的当前主线，P0-I3 完成并审查 adapter 后必须重新选择完整正式基线。 |
 | 当前工作树 | `feat/d10d-build@1e89d5a`，含 D13C 采集器与用户未跟踪文件 | EXCLUDED | 不作为 D13D 候选，除非经审核后显式选定。 |
 | D13E 候选输入 | 已合入，未 Seal | BLOCKED | 独立复核 Dataset、Gold、Threshold、Manifest hash；必须由 D Reviewer Review Seal 证明批准，候选文件本身不能自证封存。 |
-| Frozen Trust Root | 已安装于 `/etc/kylin-memory/trust` | PREPARED | 已核验 root:root、目录 755/文件 644、non-symlink，并由正式加载函数读取两个 Reviewer D key ID；不得由 evidence 目录或调用参数提供。 |
+| Frozen Trust Root | 需按实际 VM 重新核验 | BLOCKED | 仅可固定加载 D13E Review 公钥和独立 D13D Execution Reviewer 公钥；执行签章密钥不得与作者或 Review Seal 混用，且不得由 evidence 目录或调用参数提供。 |
 | 外部签名与 raw 结果 | 未提供 | BLOCKED | 取得 D13E Review Seal/.sig、D13D Execution Seal/.sig 和四类真实逐样本 raw JSONL。 |
 | VM 运行环境 | `Kylin-desktop-neo` 为 VERSION_MAP 目标环境 | READY_FOR_CAPTURE | 每次冻结须实际采集，历史基线不可替代当前 commit 的 L2 证据。 |
 | 正式统一证据目录 | 未创建 | BLOCKED | 历史 `d13d_20260905T090507Z` 仅为旧基线准备记录；必须为本次正式运行创建新的唯一目录、最终 Manifest 和校验清单后才登记索引。 |
@@ -36,23 +36,23 @@
 
 ## 被测基线决定
 
-本轮 D13D 的唯一被测代码基线为：
+`4a32e5c948a968f3bd4409d91deac320002baea1` 是历史基线，已因 PR #157 的实现变更失效。本轮尚未选定唯一被测代码基线；目前仅记录 P0-I3 的前置候选：
 
 ```text
 remote: kylin-mem
 ref:    main
-commit: 4a32e5c948a968f3bd4409d91deac320002baea1
-subject: test(D13E)：建立封存候选集与正式评测门禁 (#148)
+commit: 17dce3696066213b54e9dcbe6b87c4944cb41c8c
+subject: feat(D13D): Safety execution observability prerequisite (#157)
 ```
 
 选择依据：
 
-- 它是本地已解析的 `kylin-mem/main`/远端默认分支指向，且是可部署、可追溯的完整提交；
-- D13B 正式评测组件及 PR #148 的 D13E 候选集、Gold、阈值、manifest、bundle 和离线 Runner 均存在于该树；
+- 该提交是已合并的 P0-I1/I2 前置实现，但不是正式 `tested_commit`：adapter 合并、独立审查和 P0-I3 基线重选尚未完成；
+- D13B 正式评测组件及 PR #148 的 D13E 候选集、Gold、阈值、manifest、bundle 和离线 Runner 均需在最终选择的干净工作树中逐项复核；
 - 当前工作树 `feat/d10d-build@1e89d5a` 不是该主线的后代，且包含未合并的 D13C 证据采集器和用户未跟踪文件，不能作为正式被测代码；
-- 旧 `7242935bee5f230cee0535d5e28dbe1e60a302f6` 不含合并后的 D13E 正式门禁，故此前针对该提交的隔离预检不再是本轮正式冻结证据；该证据包仅保留为历史准备记录。
+- 旧 `7242935bee5f230cee0535d5e28dbe1e60a302f6` 与 `4a32e5c...` 均仅为历史准备记录，不能作为本轮正式冻结证据。
 
-此决定不表示 `4a32e5c...` 在麒麟 VM 已通过正式评测；任何提交、依赖、数据、Trust Root 或 Seal 变化均按本任务卡的失效规则处理。
+P0-I3 在 adapter 经独立审查并合并后，必须记录新的完整 `tested_commit`、新 VM 快照与干净隔离工作树；此前不得进行正式 VM raw、Seal 或 Runner Gate 0--10。
 
 ## 批准范围
 
@@ -101,8 +101,11 @@ evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>/
   runtime_versions.txt
   service_unit.txt
   commands.log
-  d13b_raw_results.json
-  d13b_report.json
+  raw/preference_raw.jsonl
+  raw/conflict_raw.jsonl
+  raw/safety_raw.jsonl
+  raw/forget_raw.jsonl
+  derived/d13b_report.json
   SHA256SUMS
   README.md
 ```
@@ -147,7 +150,7 @@ VM 运行时路径、SDK/Vector ABI 和安装包版本以实际 VM 采集为准�
 
 1. `tested_commit`、VM 内 `HEAD`、评测报告 metadata 与 `evidence/index.yaml` 的 `tested_commit` 完全一致。
 2. VM、部署、依赖、数据集、Gold 和配置的版本/哈希/来源完整可追溯，且 `SHA256SUMS` 全部验证通过。
-3. 原始结果、聚合报告、实际命令和退出码可由独立人员在指定 VM 快照复跑。
+3. 四份唯一规范 raw（Preference 4、Conflict 4、Safety 4、Forget 5）及实际命令和退出码可由独立人员在指定 VM 快照复跑；D13B 聚合/报告只能置于 `derived/`，不得成为第二份 canonical raw。
 4. 证据索引按现有 1.1 契约登记 `id`、`task_id`、`description`、`status`、`evidence_level`、`source`、`date`、`reviewer`、`limitations`、`checksum_sha256`；同时记录 `tested_commit`、`evidence_commit`、`manifest_sha256`。
 5. 对未满足的前提明确写 `BLOCKED` / `UNVERIFIED`，不得以环境冻结替代 D13B 指标通过、D13E 数据集批准或 C/D 端到端链路验收。
 
@@ -160,8 +163,8 @@ VM 运行时路径、SDK/Vector ABI 和安装包版本以实际 VM 采集为准�
 
 ## 未决事项
 
-1. D Reviewer / 受控 signing 流程需交付已验签的 Review Seal；D13D signing 流程需交付 Execution Seal。
-2. 需在新的 `4a32e5c...` VM 快照上建立正式 evidence root、完成最终 provenance，并取得可验签的双 Seal。
+1. D13E Review Seal 仍由 Reviewer D 负责；D13D Execution Seal 必须由非作者的独立执行审查人签发。该审查人的姓名、key ID、公钥文件和哈希均为 `PENDING_NAMED_ASSIGNMENT`，不得伪造或复用 Review Seal 密钥。
+2. 待 P0-I3 重新选择正式基线后，需在新的 VM 快照上建立正式 evidence root、完成最终 provenance，并取得可验签的双 Seal。
 3. 需在该冻结环境完成真实四类 raw JSONL、attestation 与 Gate 0--10 正式 runner。
 
 在上述事项关闭前，本任务卡仅授权准备与只读采集，不授权发布任何正式量化结论。

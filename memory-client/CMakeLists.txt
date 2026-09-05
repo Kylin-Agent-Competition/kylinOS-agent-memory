@@ -17,12 +17,14 @@ endif()
 option(KYLIN_MEMORY_CLIENT_BUILD_QML_APP "Build the QML GUI application (requires Qt Quick)" ON)
 option(KYLIN_MEMORY_CLIENT_BUILD_TESTS "Build L0 mock contract tests" ON)
 
-find_package(Qt5 5.12 REQUIRED COMPONENTS Core Network)
+find_package(Qt5 5.12 REQUIRED COMPONENTS Core Network Sql)
 
 # ── memory-client 静态库（self-contained on QJsonObject，不依赖 contract v1） ──
 add_library(kylin_memory_client STATIC
     src/protocol_adapter.cpp
     src/memory_client.cpp
+    src/adapters/turn_extraction_adapter.cpp
+    src/adapters/production_source_resolver.cpp
     src/view_models/memory_view_model.cpp
 )
 
@@ -31,11 +33,13 @@ target_include_directories(kylin_memory_client
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-# QLocalSocket/QLocalServer 属于 Qt Network 模块
+# QLocalSocket/QLocalServer 属于 Qt Network 模块；
+# QSqlDatabase（QSQLITE 只读）属 Qt Sql 模块（Host mapping S2 生产 resolver）。
 target_link_libraries(kylin_memory_client
     PUBLIC
         Qt5::Core
         Qt5::Network
+        Qt5::Sql
 )
 
 # ── QML GUI 应用（可选，需要 Qt Quick） ──
