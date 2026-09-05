@@ -36,6 +36,16 @@
 - 受控正式 CLI 负向测试退出码为 2，且未写出 summary：仓库候选 Bundle 在
   `formal_result_status=NOT_RUN` 处被拒绝。这是预期的前置 fail-closed 行为，不是正式结果；
   VM 的 `/etc/kylin-memory/trust` 仍不存在，故后续 Gate 0 也尚无法由真实材料通过。
+- VM 全套 `PYTHONPATH=memory-service python -m pytest -q memory-service/tests` 完成：
+  `1723 passed, 49 skipped, 4 failed`，耗时 200.80 秒；未发现 requirements 声明的依赖缺失，
+  未安装额外包。候选 worktree 在测试后仍为 clean。
+- 4 个失败均位于 `test_day13a_benchmarks.py::test_full_run_rejects_incomplete_real_index_evidence`。
+  原因是测试未传入已被当前 `validate_run_completeness()` 要求的
+  `expected_commit` / `expected_branch`，并对旧的短错误文本作列表精确匹配；实际验证已正确
+  返回更严格、带完整路径的 fail-closed 错误。此 D13A 测试维护问题不在 D13D 批准范围内，
+  不通过修改或跳过测试掩盖。
+- VM 上 `bash scripts/verify_repository_baseline.sh` 通过；该结论不覆盖上述 D13A pytest
+  失败，也不构成 D13E 正式指标。
 
 ## 当前阻塞项
 
@@ -46,12 +56,15 @@
 | D13D-PM03 | D13E Review Seal | 真实 D Reviewer 对已合并工件签发的 JSON + detached Ed25519 signature，可由 PM02 Trust Root 验证 | BLOCKED |
 | D13D-PM04 | D13D Execution Seal | D13D 受控私钥签发的 execution attestation JSON + signature；私钥不进入仓库、证据、CI 或 E 轨 | BLOCKED |
 | D13D-PM05 | 四类真实 raw JSONL | 冻结 VM 中产生 Preference、Conflict、Safety、Forget 逐样本结果，并通过 runner Gate 0--10 | BLOCKED |
+| D13D-PM06 | D13A 全套 pytest 维护失败 | 4 个 Day13A 断言与当前 `bench_utils` 合同一致，并在 VM 全套 pytest 中复跑通过 | BLOCKED / 超出 D13D 范围 |
 
 ## VM 测试结论
 
 - 新基线的迁移、独立 UDS 启动和 D13E 离线评测合同已在指定麒麟 VM 上完成相应 L2 验证。
 - 这不是 D13E 正式四项指标：候选 Bundle、Trust Root、双 Seal、D13D execution attestation 和四类 raw JSONL 均未就绪。
 - 任何后续正式执行须在同一冻结证据根中使用真实的受控签名材料，并让 CLI 依次通过 Gate 0--10。
+- 本轮未安装依赖或仓库：现有隔离 VM 的 `d4d-venv` 已满足 `memory-service/requirements.txt`，
+  因此没有为“测试通过”而引入额外包、系统软件或外部仓库。
 
 ## 受控下一步
 
