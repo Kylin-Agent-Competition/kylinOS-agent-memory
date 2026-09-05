@@ -5,6 +5,7 @@
   "manifest_file": "D13E_FORMAL_MANIFEST_V1.json",
   "dataset_file": "D13E_FORMAL_TESTSET_V1.jsonl",
   "gold_file": "D13E_GOLD_V1.jsonl",
+  "threshold_config_file": "D13E_FORMAL_THRESHOLDS_V1.json",
   "raw_result_files": {
     "preference": null,
     "conflict": null,
@@ -14,5 +15,5 @@
   "execution_status": "NOT_RUN",
   "formal_result_status": "UNVERIFIED",
   "evidence_reference": null,
-  "rule": "The formal runner must reject this candidate bundle until D13D provenance is complete, hashes match, all raw files exist, and the non-author D Reviewer has approved sealing."
+  "rule": "The formal runner must reject this candidate bundle until D13D provenance, threshold approval, raw execution attestation, hashes, and the externally verified non-author D Reviewer sealing are complete."
 }

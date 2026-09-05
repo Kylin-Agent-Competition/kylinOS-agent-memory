@@ -1,0 +1,21 @@
+{
+  "threshold_version": "d13e-formal-thresholds/v1",
+  "approval_status": "CANDIDATE_FOR_D_APPROVAL",
+  "approval_reference": null,
+  "source": "D13E candidate formal threshold proposal; requires independent D Reviewer approval before formal evaluation.",
+  "approved_by": null,
+  "metrics": {
+    "preference": {
+      "minimum_accuracy": 0.85
+    },
+    "conflict": {
+      "minimum_accuracy": 0.88
+    },
+    "safety": {
+      "maximum_violation_count": 0
+    },
+    "forget": {
+      "maximum_violation_count": 0
+    }
+  }
+}

@@ -11,12 +11,36 @@ import hashlib
 import json
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Iterable
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_SAFETY_HARD_ZERO_COUNTERS = frozenset(
+    {
+        "critical_gate_bypass_count",
+        "normal_memory_write_count",
+        "audit_plaintext_leak_count",
+        "cross_user_violation_count",
+    }
+)
+_FORGET_HARD_ZERO_COUNTERS = frozenset(
+    {
+        "missed_target_items",
+        "wrongly_deleted_items",
+        "cross_user_violation_count",
+        "residual_after_realtime_query",
+        "residual_after_full_rebuild",
+    }
+)
+_GITHUB_REVIEW_REFERENCE = re.compile(
+    r"^https://github\.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/148#pullrequestreview-([0-9]+)$"
+)
+_TRUSTED_D_REVIEWER_IDENTITIES = frozenset({"Ducknesses"})
 
 
 def _required_text(mapping: dict[str, Any], key: str, label: str) -> str:
@@ -38,6 +62,153 @@ def _read_json(path: Path, label: str) -> dict[str, Any]:
     return raw
 
 
+def _fetch_github_review(approval_reference: str) -> dict[str, Any]:
+    """从 GitHub 的 Review API 获取不可由 Manifest 自报替代的批准记录。"""
+    match = _GITHUB_REVIEW_REFERENCE.fullmatch(approval_reference)
+    if not match:
+        raise ValueError("approval_reference 必须是 PR #148 的 GitHub Review URL")
+    review_id = match.group(1)
+    api_url = "https://api.github.com/repos/Kylin-Agent-Competition/kylinOS-agent-memory/pulls/148/reviews/" + review_id
+    request = Request(api_url, headers={"Accept": "application/vnd.github+json", "User-Agent": "d13e-formal-eval"})
+    try:
+        with urlopen(request, timeout=15) as response:  # noqa: S310 -- fixed GitHub API origin above
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, URLError, json.JSONDecodeError) as exc:
+        raise ValueError("无法从 GitHub 核验 D Reviewer 批准记录") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("GitHub Review 响应必须是对象")
+    return payload
+
+
+def _fetch_github_reviews() -> list[dict[str, Any]]:
+    """读取 PR #148 全部 Review，以拒绝仍未收敛的变更请求。"""
+    reviews: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        api_url = f"https://api.github.com/repos/Kylin-Agent-Competition/kylinOS-agent-memory/pulls/148/reviews?per_page=100&page={page}"
+        request = Request(api_url, headers={"Accept": "application/vnd.github+json", "User-Agent": "d13e-formal-eval"})
+        try:
+            with urlopen(request, timeout=15) as response:  # noqa: S310 -- fixed GitHub API origin above
+                payload = json.loads(response.read().decode("utf-8"))
+        except (OSError, URLError, json.JSONDecodeError) as exc:
+            raise ValueError("无法从 GitHub 核验 PR #148 reviewDecision") from exc
+        if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+            raise ValueError("GitHub Reviews 响应必须是对象列表")
+        reviews.extend(payload)
+        if len(payload) < 100:
+            return reviews
+        page += 1
+
+
+def _fetch_github_pull_request() -> dict[str, Any]:
+    """获取 PR #148 的真实作者和当前 head，防止旧批准继续覆盖新提交。"""
+    api_url = "https://api.github.com/repos/Kylin-Agent-Competition/kylinOS-agent-memory/pulls/148"
+    request = Request(api_url, headers={"Accept": "application/vnd.github+json", "User-Agent": "d13e-formal-eval"})
+    try:
+        with urlopen(request, timeout=15) as response:  # noqa: S310 -- fixed GitHub API origin above
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, URLError, json.JSONDecodeError) as exc:
+        raise ValueError("无法从 GitHub 核验 PR #148 作者和当前 head") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("GitHub Pull Request 响应必须是对象")
+    return payload
+
+
+def _verify_review_decision(reviews: list[dict[str, Any]]) -> None:
+    """按每位 Reviewer 的最新有效 Review 近似 GitHub 的 reviewDecision。"""
+    latest: dict[str, dict[str, Any]] = {}
+    for review in reviews:
+        user = review.get("user")
+        login = user.get("login") if isinstance(user, dict) else None
+        if not isinstance(login, str) or not login:
+            continue
+        previous = latest.get(login)
+        if previous is None or (str(review.get("submitted_at", "")), int(review.get("id", 0))) >= (
+            str(previous.get("submitted_at", "")),
+            int(previous.get("id", 0)),
+        ):
+            latest[login] = review
+    if any(review.get("state") == "CHANGES_REQUESTED" for review in latest.values()):
+        raise ValueError("PR #148 reviewDecision 仍为 CHANGES_REQUESTED")
+
+
+def _approved_artifact_hashes(payload: dict[str, Any]) -> dict[str, str]:
+    body = payload.get("body")
+    if not isinstance(body, str):
+        raise ValueError("GitHub Review 必须包含 D13E 封存工件批准摘要")
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    if not lines or lines[0] != "D13E_FORMAL_SEAL_APPROVAL":
+        raise ValueError("GitHub Review 缺少 D13E_FORMAL_SEAL_APPROVAL 摘要")
+    approved: dict[str, str] = {}
+    for line in lines[1:]:
+        key, separator, value = line.partition(":")
+        if separator and key in {"dataset_sha256", "gold_sha256", "threshold_config_sha256"}:
+            approved[key] = value.strip()
+    if set(approved) != {"dataset_sha256", "gold_sha256", "threshold_config_sha256"}:
+        raise ValueError("GitHub Review 必须批准 Dataset、Gold 与阈值配置的 SHA-256")
+    if not all(_SHA256.fullmatch(value) for value in approved.values()):
+        raise ValueError("GitHub Review 中的封存工件 SHA-256 格式不正确")
+    return approved
+
+
+def _validated_d_reviewer_claim(manifest: dict[str, Any]) -> tuple[str, str]:
+    review = manifest["review"]
+    if review.get("required_reviewer_track") != "D" or review.get("reviewer_track") != "D":
+        raise ValueError("D13E 封存必须由 D 轨 Reviewer 批准")
+    author_identity = _required_text(manifest, "created_by_identity", "manifest")
+    reviewer_identity = _required_text(review, "reviewer_identity", "manifest.review")
+    if reviewer_identity == author_identity:
+        raise ValueError("D13E 封存 Reviewer 必须是非作者")
+    if reviewer_identity not in _TRUSTED_D_REVIEWER_IDENTITIES:
+        raise ValueError("D13E 封存 Reviewer 不在可信 D 轨身份注册表中")
+    reviewed_commit = review.get("reviewed_commit")
+    if not isinstance(reviewed_commit, str) or not _GIT_SHA.fullmatch(reviewed_commit):
+        raise ValueError("manifest.review.reviewed_commit 必须是 40 位小写 Git SHA")
+    approval_reference = _required_text(review, "approval_reference", "manifest.review")
+    if not _GITHUB_REVIEW_REFERENCE.fullmatch(approval_reference):
+        raise ValueError("approval_reference 必须是 PR #148 的 GitHub Review URL")
+    return approval_reference, reviewed_commit
+
+
+def _verify_d_reviewer_approval(
+    manifest: dict[str, Any],
+    review_fetcher: Callable[[str], dict[str, Any]],
+    review_list_fetcher: Callable[[], list[dict[str, Any]]],
+    pull_request_fetcher: Callable[[], dict[str, Any]],
+) -> None:
+    approval_reference, reviewed_commit = _validated_d_reviewer_claim(manifest)
+    review = manifest["review"]
+    reviewer_identity = review["reviewer_identity"]
+    payload = review_fetcher(approval_reference)
+    match = _GITHUB_REVIEW_REFERENCE.fullmatch(approval_reference)
+    assert match is not None
+    if payload.get("id") != int(match.group(1)):
+        raise ValueError("GitHub Review ID 与 approval_reference 不一致")
+    if payload.get("state") != "APPROVED":
+        raise ValueError("GitHub Review 尚未处于 APPROVED 状态")
+    user = payload.get("user")
+    if not isinstance(user, dict) or user.get("login") != reviewer_identity:
+        raise ValueError("GitHub Review 的 Reviewer 身份与 Manifest 不一致")
+    if payload.get("commit_id") != reviewed_commit:
+        raise ValueError("GitHub Review 的 commit 与 Manifest reviewed_commit 不一致")
+    pull_request = pull_request_fetcher()
+    author = pull_request.get("user")
+    head = pull_request.get("head")
+    if not isinstance(author, dict) or author.get("login") == reviewer_identity:
+        raise ValueError("GitHub PR 作者不得作为 D13E 封存 Reviewer")
+    if not isinstance(head, dict) or head.get("sha") != reviewed_commit:
+        raise ValueError("GitHub PR 当前 head 必须与 D Reviewer 批准的 commit 一致")
+    approved_hashes = _approved_artifact_hashes(payload)
+    expected_hashes = {
+        "dataset_sha256": manifest.get("dataset_sha256"),
+        "gold_sha256": manifest.get("gold_sha256"),
+        "threshold_config_sha256": manifest.get("threshold_config_sha256"),
+    }
+    if approved_hashes != expected_hashes:
+        raise ValueError("GitHub Review 批准的封存工件 SHA-256 与 Manifest 不一致")
+    _verify_review_decision(review_list_fetcher())
+
+
 def _relative_file(base: Path, value: object, label: str) -> Path:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label} 必须是非空相对路径")
@@ -50,12 +221,19 @@ def _relative_file(base: Path, value: object, label: str) -> Path:
     return resolved
 
 
+def _validated_evidence_directory(bundle_base: Path, provenance: dict[str, Any]) -> Path:
+    """正式 Bundle 必须已由 D13D 部署到唯一证据目录的根部。"""
+    if provenance.get("evidence_directory") != ".":
+        raise ValueError("provenance.evidence_directory 必须为 '.'，即 Bundle 根必须是 D13D 唯一证据目录")
+    return bundle_base
+
+
 def _verify_sha256(path: Path, expected: object, label: str) -> None:
     if not isinstance(expected, str) or not _SHA256.fullmatch(expected):
-        raise ValueError(f"{label}_sha256 必须是 64 位小写十六进制 SHA-256")
+        raise ValueError(f"{label} 必须是 64 位小写十六进制 SHA-256")
     actual = hashlib.sha256(path.read_bytes()).hexdigest()
     if actual != expected:
-        raise ValueError(f"{label}_sha256 与 {path.name} 实际内容不一致")
+        raise ValueError(f"{label} 与 {path.name} 实际内容不一致")
 
 
 def _read_jsonl(path: Path, label: str) -> list[dict[str, Any]]:
@@ -95,6 +273,27 @@ def _expected_matches(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
     return all(key in actual and actual[key] == value for key, value in expected.items())
 
 
+def _matches_metric_contract(metric: str, expected: dict[str, Any], actual: dict[str, Any]) -> bool:
+    """拒绝未知输出字段，并为 Safety/Forget 明确校验所有硬零计数。"""
+    hard_zero_counters = frozenset()
+    if metric == "safety":
+        hard_zero_counters = _SAFETY_HARD_ZERO_COUNTERS
+    elif metric == "forget":
+        hard_zero_counters = _FORGET_HARD_ZERO_COUNTERS
+    allowed = set(expected) | hard_zero_counters
+    unknown = set(actual) - allowed
+    if unknown:
+        raise ValueError(f"{metric} actual 包含未声明字段：{', '.join(sorted(unknown))}")
+    missing_counters = hard_zero_counters - set(actual)
+    if missing_counters:
+        raise ValueError(f"{metric} actual 缺少硬零计数：{', '.join(sorted(missing_counters))}")
+    if any(type(actual[counter]) is not int or actual[counter] < 0 for counter in hard_zero_counters):
+        raise ValueError(f"{metric} actual 的硬零计数必须是非负整数")
+    if any(actual[counter] != 0 for counter in hard_zero_counters):
+        return False
+    return _expected_matches(expected, actual)
+
+
 def _error_type(metric: str, expected: dict[str, Any], actual: dict[str, Any]) -> str:
     if metric == "preference":
         expected_count = expected.get("record_count")
@@ -125,11 +324,113 @@ def _error_type(metric: str, expected: dict[str, Any], actual: dict[str, Any]) -
     return "FORGET_RESIDUAL_AFTER_REBUILD"
 
 
+def _validated_raw_files(
+    bundle: dict[str, Any],
+    provenance: dict[str, Any],
+    base: Path,
+) -> dict[str, Path]:
+    """验证 D13D 冻结执行证明及其四类逐样本 raw 文件。"""
+    metrics = ("preference", "conflict", "safety", "forget")
+    if bundle.get("execution_status") != "EXECUTED_ON_FROZEN_D13D":
+        raise ValueError("bundle.execution_status 必须为 'EXECUTED_ON_FROZEN_D13D'")
+    attestation_path = _relative_file(base, bundle.get("execution_attestation_file"), "execution_attestation_file")
+    _verify_sha256(attestation_path, bundle.get("execution_attestation_sha256"), "execution_attestation_sha256")
+    attestation = _read_json(attestation_path, "D13D execution attestation")
+    if attestation.get("attestation_version") != "d13d-execution-attestation/v1":
+        raise ValueError("D13D execution attestation 的 attestation_version 不正确")
+    if attestation.get("execution_status") != "EXECUTED_ON_FROZEN_D13D":
+        raise ValueError("D13D execution attestation 必须声明 EXECUTED_ON_FROZEN_D13D")
+    for key in (
+        "implementation_commit",
+        "environment_id",
+        "dependency_version_reference",
+        "data_version_reference",
+        "evidence_root",
+        "evidence_directory",
+        "evidence_reference",
+    ):
+        if attestation.get(key) != provenance.get(key):
+            raise ValueError(f"D13D execution attestation.{key} 必须与 provenance 一致")
+
+    raw_files = bundle.get("raw_result_files")
+    if not isinstance(raw_files, dict) or set(raw_files) != set(metrics):
+        raise ValueError("raw_result_files 必须完整包含四类指标")
+    if attestation.get("raw_result_files") != raw_files:
+        raise ValueError("D13D execution attestation.raw_result_files 必须与 bundle 一致")
+    execution_log = _relative_file(base, attestation.get("execution_log_file"), "execution_log_file")
+    _verify_sha256(execution_log, attestation.get("execution_log_sha256"), "execution_log_sha256")
+    sha256sums = _relative_file(base, attestation.get("sha256sums_file"), "sha256sums_file")
+    _verify_sha256(sha256sums, attestation.get("sha256sums_sha256"), "sha256sums_sha256")
+    evidence_index = _relative_file(base, attestation.get("evidence_index_file"), "evidence_index_file")
+    _verify_sha256(evidence_index, attestation.get("evidence_index_sha256"), "evidence_index_sha256")
+
+    paths: dict[str, Path] = {}
+    expected_sums = {Path(attestation["execution_log_file"]).as_posix(): attestation["execution_log_sha256"]}
+    for metric in metrics:
+        descriptor = raw_files[metric]
+        if not isinstance(descriptor, dict) or set(descriptor) != {"file", "sha256"}:
+            raise ValueError(f"raw_result_files.{metric} 必须只包含 file 与 sha256")
+        path = _relative_file(base, descriptor.get("file"), f"raw_result_files.{metric}.file")
+        _verify_sha256(path, descriptor.get("sha256"), f"raw_result_files.{metric}.sha256")
+        paths[metric] = path
+        expected_sums[Path(descriptor["file"]).as_posix()] = descriptor["sha256"]
+    sums: dict[str, str] = {}
+    for line in sha256sums.read_text(encoding="utf-8").splitlines():
+        digest, separator, filename = line.partition("  ")
+        if separator and _SHA256.fullmatch(digest) and filename:
+            sums[filename.removeprefix("*")] = digest
+    for filename, digest in expected_sums.items():
+        if sums.get(filename) != digest:
+            raise ValueError(f"SHA256SUMS 缺少或错配受证明文件：{filename}")
+    return paths
+
+
+def _validated_thresholds(bundle: dict[str, Any], manifest: dict[str, Any], base: Path) -> dict[str, dict[str, Any]]:
+    """读取经 D Reviewer 批准且与 Manifest 绑定的四项正式阈值。"""
+    if bundle.get("threshold_config_file") != manifest.get("threshold_config_file"):
+        raise ValueError("bundle.threshold_config_file 必须与 manifest 一致")
+    path = _relative_file(base, bundle.get("threshold_config_file"), "threshold_config_file")
+    _verify_sha256(path, manifest.get("threshold_config_sha256"), "threshold_config_sha256")
+    thresholds = _read_json(path, "threshold config")
+    if thresholds.get("threshold_version") != "d13e-formal-thresholds/v1":
+        raise ValueError("threshold config 的 threshold_version 不正确")
+    if thresholds.get("approval_status") != "APPROVED_BY_D_NON_AUTHOR_REVIEWER":
+        raise ValueError("threshold config 必须经 D 非作者 Reviewer 批准")
+    review = manifest["review"]
+    if thresholds.get("approval_reference") != review.get("approval_reference"):
+        raise ValueError("threshold config.approval_reference 必须与 Manifest Review 一致")
+    if thresholds.get("approved_by") != review.get("reviewer_identity"):
+        raise ValueError("threshold config.approved_by 必须与 D Reviewer 身份一致")
+    _required_text(thresholds, "source", "threshold config")
+    metrics = thresholds.get("metrics")
+    expected_fields = {
+        "preference": "minimum_accuracy",
+        "conflict": "minimum_accuracy",
+        "safety": "maximum_violation_count",
+        "forget": "maximum_violation_count",
+    }
+    if not isinstance(metrics, dict) or set(metrics) != set(expected_fields):
+        raise ValueError("threshold config.metrics 必须完整包含四类指标")
+    for metric, field in expected_fields.items():
+        definition = metrics[metric]
+        if not isinstance(definition, dict) or set(definition) != {field}:
+            raise ValueError(f"threshold config.metrics.{metric} 必须只包含 {field}")
+        value = definition[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"threshold config.metrics.{metric}.{field} 必须是数值")
+        if field == "minimum_accuracy" and not 0 <= value <= 1:
+            raise ValueError(f"threshold config.metrics.{metric}.{field} 必须在 0 到 1 之间")
+        if field == "maximum_violation_count" and (not isinstance(value, int) or value != 0):
+            raise ValueError(f"threshold config.metrics.{metric}.{field} 当前正式 Gate 必须为 0")
+    return metrics
+
+
 def _metric_report(
     metric: str,
     dataset_records: list[dict[str, Any]],
     gold_records: dict[str, dict[str, Any]],
     raw_records: dict[str, dict[str, Any]],
+    threshold: dict[str, Any],
 ) -> dict[str, Any]:
     valid = [record for record in dataset_records if record.get("inclusion_status") == "valid"]
     if not valid:
@@ -148,7 +449,7 @@ def _metric_report(
         actual = raw_records[sample_id].get("actual")
         if not isinstance(expected, dict) or not isinstance(actual, dict):
             raise ValueError(f"{metric} sample {sample_id} 的 expected/actual 必须是对象")
-        if _expected_matches(expected, actual):
+        if _matches_metric_contract(metric, expected, actual):
             correct_count += 1
             if metric == "preference":
                 if expected.get("record_count") == 0:
@@ -191,23 +492,23 @@ def _metric_report(
                 "true_negative": true_negative,
                 "false_positive": false_positive,
                 "false_negative": false_negative,
-                "target_threshold": 0.85,
-                "gate_status": "PASS" if report["accuracy"] >= 0.85 else "FAIL",
+                "target_threshold": threshold["minimum_accuracy"],
+                "gate_status": "PASS" if report["accuracy"] >= threshold["minimum_accuracy"] else "FAIL",
             }
         )
     elif metric == "conflict":
         report.update(
             {
-                "target_threshold": 0.88,
-                "gate_status": "PASS" if report["accuracy"] >= 0.88 else "FAIL",
+                "target_threshold": threshold["minimum_accuracy"],
+                "gate_status": "PASS" if report["accuracy"] >= threshold["minimum_accuracy"] else "FAIL",
             }
         )
     else:
         report.update(
             {
-                "target_violation_count": 0,
+                "target_violation_count": threshold["maximum_violation_count"],
                 "violation_count": sample_count - correct_count,
-                "gate_status": "PASS" if correct_count == sample_count else "FAIL",
+                "gate_status": "PASS" if sample_count - correct_count <= threshold["maximum_violation_count"] else "FAIL",
             }
         )
     return report
@@ -233,6 +534,7 @@ def validate_formal_bundle(bundle_path: Path) -> tuple[dict[str, Any], dict[str,
         if review.get(key) != "APPROVED_BY_D_NON_AUTHOR_REVIEWER":
             raise ValueError(f"manifest.review.{key} 必须由 D 非作者 Reviewer 批准")
     _required_text(review, "approval_reference", "manifest.review")
+    _validated_d_reviewer_claim(manifest)
     if bundle.get("formal_result_status") != "READY_FOR_FORMAL_EVALUATION":
         raise ValueError("bundle.formal_result_status 必须为 'READY_FOR_FORMAL_EVALUATION'")
     for key in ("dataset_version", "gold_label_version"):
@@ -266,11 +568,16 @@ def validate_formal_bundle(bundle_path: Path) -> tuple[dict[str, Any], dict[str,
         input_path = _relative_file(bundle_path.parent, bundle_value, key)
         if not input_path.is_file():
             raise ValueError(f"{key} 指向的文件不存在：{input_path}")
-        _verify_sha256(input_path, manifest.get(hash_key), key.removesuffix("_file"))
+        _verify_sha256(input_path, manifest.get(hash_key), hash_key)
     return bundle, manifest, bundle_path.parent
 
 
-def compute_formal_report(bundle_path: Path) -> dict[str, Any]:
+def compute_formal_report(
+    bundle_path: Path,
+    review_fetcher: Callable[[str], dict[str, Any]] = _fetch_github_review,
+    review_list_fetcher: Callable[[], list[dict[str, Any]]] = _fetch_github_reviews,
+    pull_request_fetcher: Callable[[], dict[str, Any]] = _fetch_github_pull_request,
+) -> dict[str, Any]:
     """计算 D13E 四类指标；仅接受已冻结 provenance 与全量逐样本原始结果。"""
     bundle, manifest, base = validate_formal_bundle(bundle_path)
     dataset_path = _relative_file(base, bundle["dataset_file"], "dataset_file")
@@ -280,14 +587,18 @@ def compute_formal_report(bundle_path: Path) -> dict[str, Any]:
     dataset_by_id = _record_map(dataset, "dataset")
     if set(dataset_by_id) != set(gold):
         raise ValueError("Dataset 与 Gold 的 sample_id 必须一一对应")
+    metrics = ("preference", "conflict", "safety", "forget")
+    if any(record.get("metric") not in metrics for record in dataset) or any(record.get("metric") not in metrics for record in gold.values()):
+        raise ValueError("Dataset 与 Gold 只能包含四类正式指标")
+    if any(record.get("inclusion_status") not in {"valid", "boundary"} for record in dataset):
+        raise ValueError("Dataset inclusion_status 必须为 valid 或 boundary")
+    _validated_evidence_directory(base, manifest["provenance"])
+    thresholds = _validated_thresholds(bundle, manifest, base)
 
     expected_counts = manifest.get("sample_count")
     if not isinstance(expected_counts, dict):
         raise ValueError("manifest.sample_count 必须是对象")
-    metrics = ("preference", "conflict", "safety", "forget")
-    raw_files = bundle.get("raw_result_files")
-    if not isinstance(raw_files, dict) or set(raw_files) != set(metrics):
-        raise ValueError("raw_result_files 必须完整包含四类指标")
+    raw_paths = _validated_raw_files(bundle, manifest["provenance"], base)
 
     reports: dict[str, dict[str, Any]] = {}
     for metric in metrics:
@@ -302,15 +613,17 @@ def compute_formal_report(bundle_path: Path) -> dict[str, Any]:
                 raise ValueError(f"{metric} Gold 必须声明 valid 或 boundary 状态")
             if gold_record["evaluation_status"] != record.get("inclusion_status"):
                 raise ValueError(f"{metric} Gold 与 Dataset 的有效/边界状态不一致")
-        raw_path = _relative_file(base, raw_files[metric], f"raw_result_files.{metric}")
-        raw = _record_map(_read_jsonl(raw_path, f"{metric} raw result"), f"{metric} raw result")
+            if gold_record.get("gold_status") != "SEALED_BY_D_REVIEWER":
+                raise ValueError(f"{metric} Gold 必须由 D Reviewer 封存（gold_status=SEALED_BY_D_REVIEWER）")
+        raw = _record_map(_read_jsonl(raw_paths[metric], f"{metric} raw result"), f"{metric} raw result")
         for record in raw.values():
             if record.get("metric") != metric:
                 raise ValueError(f"{metric} raw result 的 metric 不一致")
-        reports[metric] = _metric_report(metric, metric_dataset, gold, raw)
+        reports[metric] = _metric_report(metric, metric_dataset, gold, raw, thresholds[metric])
 
     if expected_counts.get("total") != len(dataset):
         raise ValueError("manifest.sample_count.total 与 Dataset 实际数量不一致")
+    _verify_d_reviewer_approval(manifest, review_fetcher, review_list_fetcher, pull_request_fetcher)
     provenance = manifest["provenance"]
     return {
         "status": "COMPUTED",
@@ -341,7 +654,12 @@ def main() -> int:
 
     text = json.dumps(report, ensure_ascii=False, indent=2)
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        output_path = Path(args.output).resolve()
+        evidence_directory = Path(args.input).resolve().parent
+        if output_path != evidence_directory and evidence_directory not in output_path.parents:
+            print("D13E 正式评测拒绝写出报告：--output 必须位于 D13D 唯一证据目录", file=sys.stderr)
+            return 2
+        output_path.write_text(text, encoding="utf-8")
     else:
         print(text)
     return 0

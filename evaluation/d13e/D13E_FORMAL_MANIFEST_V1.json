@@ -7,6 +7,8 @@
   "dataset_sha256": "9740c00f4a9d91471bec8e6fa8aeeeb52f890f8680d83f740a84db2b1701a44b",
   "gold_file": "D13E_GOLD_V1.jsonl",
   "gold_sha256": "2d19904ede82f6ce7171e416bbb84b65c4534c803476765d13b7a2280619623d",
+  "threshold_config_file": "D13E_FORMAL_THRESHOLDS_V1.json",
+  "threshold_config_sha256": "75aa65d4119c3b08cc436eee9ac35641a32d88f74df3501fc5824bacd6bb3eb6",
   "sample_count": {
     "preference": 4,
     "conflict": 4,
@@ -21,6 +23,7 @@
     "dependency_version_reference": null,
     "data_version_reference": null,
     "evidence_root": null,
+    "evidence_directory": null,
     "evidence_reference": null,
     "rule": "D13D fields are mandatory before a D13E result can be formal. UNKNOWN, latest main, and historical D11D values are forbidden substitutes."
   },
@@ -28,9 +31,13 @@
     "required_reviewer_track": "D",
     "status": "PENDING_NON_AUTHOR_REVIEW",
     "gold_review_status": "CANDIDATE_FOR_D_REVIEW",
+    "reviewer_identity": null,
+    "reviewer_track": null,
+    "reviewed_commit": null,
     "approval_reference": null
   },
   "created_by_track": "E",
+  "created_by_identity": "gaoyizhe934",
   "created_at": "2026-09-05",
   "execution_status": "UNVERIFIED"
 }
