@@ -52,11 +52,11 @@
 | ID | 事项 | 解除证据 | 状态 |
 | --- | --- | --- | --- |
 | D13D-PM01 | 新基线 VM 回滚点与隔离部署 | 已有新快照、VM 内 detached `HEAD=4a32e5c...`、clean worktree、独立运行路径与 UDS 预检 | PREPARED |
-| D13D-PM02 | Frozen Trust Root | `/etc/kylin-memory/trust` 中的 Trust Root JSON、两个 public PEM 均为 root owner、非 symlink、group/other 不可写；公钥来源经授权 | BLOCKED |
+| D13D-PM02 | Frozen Trust Root | 已安装 `/etc/kylin-memory/trust`；root:root、755/644、non-symlink，Runner 正式加载函数已验证两个 Reviewer D key ID | PREPARED |
 | D13D-PM03 | D13E Review Seal | 真实 D Reviewer 对已合并工件签发的 JSON + detached Ed25519 signature，可由 PM02 Trust Root 验证 | BLOCKED |
 | D13D-PM04 | D13D Execution Seal | D13D 受控私钥签发的 execution attestation JSON + signature；私钥不进入仓库、证据、CI 或 E 轨 | BLOCKED |
 | D13D-PM05 | 四类真实 raw JSONL | 冻结 VM 中产生 Preference、Conflict、Safety、Forget 逐样本结果，并通过 runner Gate 0--10 | BLOCKED |
-| D13D-PM06 | D13A 全套 pytest 维护失败 | 4 个 Day13A 断言与当前 `bench_utils` 合同一致，并在 VM 全套 pytest 中复跑通过 | BLOCKED / 超出 D13D 范围 |
+| D13D-PM06 | D13A 全套 pytest 维护失败 | 4 个 Day13A 断言与当前 `bench_utils` 合同一致，并在 VM 全套 pytest 中复跑通过 | 技术债 / 不阻塞 D13D 冻结 |
 
 ## VM 测试结论
 
@@ -65,6 +65,10 @@
 - 任何后续正式执行须在同一冻结证据根中使用真实的受控签名材料，并让 CLI 依次通过 Gate 0--10。
 - 本轮未安装依赖或仓库：现有隔离 VM 的 `d4d-venv` 已满足 `memory-service/requirements.txt`，
   因此没有为“测试通过”而引入额外包、系统软件或外部仓库。
+- 2026-09-06：Reviewer D 已建立两套独立 Ed25519 密钥，私钥只在 Windows 受限目录中保管；
+  VM 固定 Trust Root 只接收两份 public PEM 与 Trust Root JSON。正式 Runner 已在 VM 成功加载
+  `d13e-review-rd-20260906-v1` 和 `d13d-execution-rd-20260906-v1`。D13A 的 4 个断言维护失败
+  调整为并行技术债，不阻塞 D13D 正式冻结。
 
 ## 受控下一步
 

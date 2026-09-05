@@ -31,9 +31,21 @@ aeea9beab5d25461083bb693424014a813cd91bae6b0d7b60443f817f33c6be0  D13E_GOLD_V1.j
 Review Seal；D13D 写入 provenance 后，D Reviewer 必须对 evidence root 内最终
 `FROZEN_BY_D13D` Manifest 重新复算并签发其 hash。
 
+## Reviewer D 密钥责任（2026-09-06 决定）
+
+Reviewer D 是唯一签名保管人，密钥物料分离：
+
+| 用途 | key ID | 私钥保管位置 | 可交付物 |
+| --- | --- | --- | --- |
+| D13E Review Seal | `d13e-review-rd-20260906-v1` | Windows 受限目录，仅 Reviewer D | public PEM、Review Seal、detached signature |
+| D13D Execution Seal | `d13d-execution-rd-20260906-v1` | Windows 受限目录，仅 Reviewer D | public PEM、Execution Seal、detached signature |
+
+私钥不得复制到 VM、证据目录、Git、CI 或任何工作树。D13D 负责准备可验证的最终
+Manifest、raw、attestation 和 Seal payload；Reviewer D 在 Windows 受控边界中独立签名。
+
 ## 申请 A：D Reviewer / 签名保管人
 
-请提供 D13E Review Seal 的公开交付物，不提供 Review 私钥：
+Reviewer D 按上述责任提供 D13E Review Seal 的公开交付物，不提供 Review 私钥：
 
 ```text
 D13E_REVIEW_SEAL_V1.json
@@ -74,7 +86,7 @@ Review Seal 必须使用 Ed25519 detached signature，含以下事实：
 
 ## 申请 C：D13D 签名保管人
 
-请建立或指定 D13D 受控 Ed25519 signing key，并只交付：
+Reviewer D 已按上述职责建立 D13D 受控 Ed25519 signing key，并仅交付：
 
 ```text
 d13d-execution-public.pem
@@ -107,7 +119,7 @@ reference、evidence root/reference、`frozen_by_track=D`、approval reference �
 当前仓库仅提供候选 Dataset/Gold、验证 Runner 和正式合同；它不包含可自行伪造的真实 raw
 生成器。因此 D13D 需要 D13E/B 方确认真实链路与运行职责，之后才能生成 attestation 和 Seal。
 
-## 申请 E：D13A 代码责任方
+## 申请 E：D13A 代码责任方（非 D13D 冻结门禁）
 
 请单独处理 VM pytest 的 4 个 D13A 测试维护失败：
 
@@ -117,7 +129,8 @@ memory-service/tests/test_day13a_benchmarks.py::test_full_run_rejects_incomplete
 
 当前 `validate_run_completeness()` 已要求 `expected_commit`/`expected_branch` 并输出完整路径错误，
 但该测试未传入前述参数并将旧短文本作列表精确匹配。请由 D13A 责任方修正测试/合同一致性并在
-`4a32e5c...` 后代上复跑；D13D 不修改 D13A 代码或跳过测试。
+`4a32e5c...` 后代上复跑；D13D 不修改 D13A 代码或跳过测试。该项登记为并行技术债，
+不阻塞 D13D Trust Root、Seal、raw、attestation 与正式 runner 冻结闭环。
 
 ## D13D 收件后的执行顺序
 
