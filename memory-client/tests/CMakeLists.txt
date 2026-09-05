@@ -410,4 +410,127 @@ if(D11C_QML_LOAD_AVAILABLE)
     set_tests_properties(d11c_qml_load PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
     )
+
+    # ========================================================================
+    # 全 QML 文件编译加载 L0 回归（PR151 麒麟 VM 回归配套）
+    #
+    # 背景：VerticalLinkPage.qml 的 ColumnLayout padding（QtQuick.Layouts
+    # padding 自 Qt 5.15 起才有）在麒麟 VM（Qt 5.12）加载即失败（退出码
+    # 255），而 CI（Qt 5.15）全绿——d11c_qml_load 仅覆盖 D11 页面，
+    # 其余 QML 文件无加载覆盖。本目标对 qrc 内全部 14 个 QML 文件做
+    # QQmlComponent status==Ready 验证，堵住编译期回归盲区。
+    # 已知局限：Qt 版本特性差异（5.12 vs 5.15）仍需麒麟 VM L2 回归确认。
+    # ========================================================================
+    add_executable(test_qml_pages_load
+        ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+        ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+        ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
+        test_qml_pages_load.cpp
+        ${D11C_QML_LOAD_RCC_SOURCES}
+    )
+    target_link_libraries(test_qml_pages_load
+        PRIVATE
+            Qt5::Core
+            Qt5::Gui
+            Qt5::Network
+            Qt5::Qml
+            Qt5::Quick
+            Qt5::QuickControls2
+            Qt5::Test
+    )
+    target_include_directories(test_qml_pages_load
+        PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+    )
+    add_test(
+        NAME qml_pages_load
+        COMMAND test_qml_pages_load
+    )
+    set_tests_properties(qml_pages_load PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+    )
 endif()
+
+# ============================================================================
+# Host mapping 任务卡 S1 — TurnExtractionAdapter 骨架 L0 契约测试
+# （纯内存 resolver；生产 resolver 属 S2，BLOCKED_BY_HOST_MAPPING 不变）
+# 范围（事件契约 v1 §7 五边界，A~F 共 13 用例）：
+#   A. 元数据与关联：ipcEvent 字段完整（无正文）+ source_event_id 关联 +
+#      occurred_at 透传/回退
+#   B. 原文隔离红线：正文只在 providerCandidate，ipcEvent 序列化全文不含正文 +
+#      source_reference 生成规则
+#   C. fail-closed：resolver 未命中 / 命中但空串 / 未注入 resolver
+#      → 候选无正文、safeError 固定安全消息（不含引用/正文）
+#   D. tool_results 组装：受控 Tool resolver 命中组装 / 未命中不编造（上抛）/
+#      无调用空数组
+#   E. 纯内存测试 resolver 注册-解析往返
+#   F. 事件标识一致性：同 (session,turn) idempotency_key 一致 + event_id 每次新
+# 注意：本测试仅为 memory-client 侧 S1 骨架的 L0 契约验证（纯内存 resolver），
+#       不声称真实 AI Assistant Hook / Chat DB / 正文通道已接入。
+# ============================================================================
+add_executable(test_turn_extraction_adapter
+    ${CMAKE_SOURCE_DIR}/src/adapters/turn_extraction_adapter.cpp
+    test_turn_extraction_adapter.cpp
+)
+target_link_libraries(test_turn_extraction_adapter
+    PRIVATE
+        Qt5::Core
+        Qt5::Test
+)
+target_include_directories(test_turn_extraction_adapter
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_turn_extraction_adapter
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME turn_extraction_adapter
+    COMMAND test_turn_extraction_adapter
+)
+
+# ============================================================================
+# Host mapping 任务卡 S2 — ProductionSourceResolver L0 契约测试
+# （fixture SQLite 模拟宿主 Chat DB；生产注册仍 BLOCKED_BY_HOST_MAPPING）
+# 范围（A~D 共 14 用例）：
+#   A. 只读打开与命中：open 成功 / resolve 命中（originalUserText+
+#      modelResponse，modelRequest 不编造）/ 与 TurnExtractionAdapter
+#      集成（Extracted + 正文仅入 providerCandidate，原文隔离红线）
+#   B. 只读红线：chmod 0444 仍可打开命中（证明 QSQLITE_OPEN_READONLY
+#      生效）/ resolve 前后 DB 文件 SHA-256 不变（绝不写宿主 DB）
+#   C. fail-closed：未 open / 文件不存在 / chmod 000 / 表缺失 / 行缺失 /
+#      同 turn 无用户消息 / 用户正文空串 / 终稿非 assistant 角色 /
+#      非受控引用格式（7 种）/ config 标识符非法（SQL 注入防御）
+#   D. schema 适配：自定义表/列/角色值命中（VM 确认真实 schema 后
+#      经 config 覆盖，不改代码）
+# 运行依赖：Qt5 Sql QSQLITE 运行时驱动插件（Debian/Ubuntu:
+#   libqt5sql5-sqlite，CI workflow 已安装；qtbase5-dev 的 Depends
+#   libqt5sql5 仅提供链接库，不含 sqlite 驱动插件）。缺失时本测试
+#   失败而非跳过——L0 全绿必须意味着只读/fail-closed 行为真实验证。
+# 注意：本测试仅为 S2 生产 resolver 的 L0 契约验证（fixture SQLite），
+#       不声称真实宿主 Chat DB 已接入。
+# ============================================================================
+add_executable(test_production_source_resolver
+    ${CMAKE_SOURCE_DIR}/src/adapters/production_source_resolver.cpp
+    ${CMAKE_SOURCE_DIR}/src/adapters/turn_extraction_adapter.cpp
+    test_production_source_resolver.cpp
+)
+target_link_libraries(test_production_source_resolver
+    PRIVATE
+        Qt5::Core
+        Qt5::Sql
+        Qt5::Test
+)
+target_include_directories(test_production_source_resolver
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_production_source_resolver
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME production_source_resolver
+    COMMAND test_production_source_resolver
+)
