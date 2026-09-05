@@ -30,6 +30,12 @@
 - 已完成新候选的只读运行时采集：OS/KERNEL、Python、SQLite、Alembic、Pydantic、
   SQLAlchemy、三项 Runtime 动态库和 active user-service wrapper 均在 L2 原始日志中记录。
   该采集仅证明当前 VM 观察值，不证明 SDK ABI、Outbox 或正式评测通过。
+- VM 上执行 `PYTHONPATH=memory-service python -m unittest
+  memory-service.tests.test_d13e_formal_eval -v`：48/48 通过，耗时约 47 秒。该测试使用
+  TEST-ONLY trust hook 覆盖签名、固定 Trust Root、路径和 fail-closed 合同；不产生、导入或认可正式私钥/Seal。
+- 受控正式 CLI 负向测试退出码为 2，且未写出 summary：仓库候选 Bundle 在
+  `formal_result_status=NOT_RUN` 处被拒绝。这是预期的前置 fail-closed 行为，不是正式结果；
+  VM 的 `/etc/kylin-memory/trust` 仍不存在，故后续 Gate 0 也尚无法由真实材料通过。
 
 ## 当前阻塞项
 
@@ -40,6 +46,12 @@
 | D13D-PM03 | D13E Review Seal | 真实 D Reviewer 对已合并工件签发的 JSON + detached Ed25519 signature，可由 PM02 Trust Root 验证 | BLOCKED |
 | D13D-PM04 | D13D Execution Seal | D13D 受控私钥签发的 execution attestation JSON + signature；私钥不进入仓库、证据、CI 或 E 轨 | BLOCKED |
 | D13D-PM05 | 四类真实 raw JSONL | 冻结 VM 中产生 Preference、Conflict、Safety、Forget 逐样本结果，并通过 runner Gate 0--10 | BLOCKED |
+
+## VM 测试结论
+
+- 新基线的迁移、独立 UDS 启动和 D13E 离线评测合同已在指定麒麟 VM 上完成相应 L2 验证。
+- 这不是 D13E 正式四项指标：候选 Bundle、Trust Root、双 Seal、D13D execution attestation 和四类 raw JSONL 均未就绪。
+- 任何后续正式执行须在同一冻结证据根中使用真实的受控签名材料，并让 CLI 依次通过 Gate 0--10。
 
 ## 受控下一步
 
