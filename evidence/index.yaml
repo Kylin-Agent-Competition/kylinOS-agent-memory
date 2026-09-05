@@ -1823,3 +1823,37 @@ entries:
     details: |
       Kylin V11, kernel 6.6.0-76-generic, Python 3.12.3。
       定向 pytest：35 passed。真实长度前缀 JSON UDS：5 类拒绝请求均 INVALID_REQUEST 且 source_events=0/idempotency_cache=0；canonical captured_at + malformed legacy collected_at 正向请求仅写入 source_events=1/idempotency_cache=1。
+
+  - id: "D13C-L1-REGRESSION"
+    task_id: "D13C"
+    description: "D13C 端到端会话评测与主演示稳定性复测——Python 评测账本 L1（32 passed）+ C++ L0 稳定性测试 S1-S6（待 CI 验证）+ CLI 冒烟"
+    status: "PASS"
+    evidence_level: "E2"
+    source: "memory-service/tests/test_d13c_session_eval.py + memory-client/tests/test_d13c_stability.cpp"
+    tested_commit: "待 PR 合入后回填"
+    evidence_commit: "待 PR 合入后回填"
+    date: "2026-09-03"
+    reviewer: "待审（D 主审）"
+    runtime_result: "L1 PASS（32 passed）；L0 待 CI 验证（CMake 不在本地 Windows 环境可用）"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "L2 麒麟 VM 证据未执行（Runtime 结论 UNVERIFIED）；C++ L0 稳定性测试 S1-S6 待 CI 验证（ubuntu-22.04 + qtbase5-dev/qt5-qmake/build-essential）；smoke bundle 为自构造，非 D13E 封存测试集；本 PR 不关闭 C-D13，仅落地评测账本与 L0 稳定性测试"
+    checksum_sha256: "待回填"
+    details: |
+      D13C Python L1 评测账本测试（test_d13c_session_eval.py）: 32 passed in 0.10s
+      A1-A8 成功 bundle: step_completion_rate / isolation_pass_rate / ipc_method_coverage / stop_retry / cross_session / latency / critical_zero
+      E1-E4 fail-closed: provenance / config_version / latency / statistics_method
+      S1-S3 guardrail: cross_user critical / sensitive critical / unresolved_conflict 非 critical
+      R1-R4 边界: NO_VALID_SESSIONS / 重复 step_id / 重复 session_id / invalid stability_repeat
+      N1-N5 稳定性语义: stability_repeat 默认 / retry_of_turn_id=turn_id 违反 / stop 缺 stop_reason / deadline timeout 正确 failed / deadline timeout 错误 stage 违反
+      类型校验: latency NaN/bool 拒绝 / isolation 字段 bool/string 拒绝 / response_status 枚举校验 / guardrail category 枚举校验
+      CLI 冒烟（run_d13c_session_eval.py + d13c_smoke_bundle.json）: report_version=d13c-session-eval-report/v1, session_count=2, total_step_count=14, step_completion_rate=1.0, isolation_pass_rate=1.0, guardrail_critical_count=0, critical_zero_ok=true, coverage_complete=true, fail_closed_reasons=[]
+      py_compile: exit 0（d13c_session_eval.py + run_d13c_session_eval.py + test_d13c_session_eval.py）
+      C++ L0 稳定性测试（test_d13c_stability.cpp）: 6 个 test slot（S1-S6），待 CI 验证
+        S1 stability_replay_5rounds: 主演示编排复跑 5 轮稳定性
+        S2 stop_reason_semantics: PostTurn stop_reason 透传语义
+        S3 retry_semantics: retry_of_turn_id 透传 + 非 retry 必须为空
+        S4 deadline_timeout_client_block: 客户端 5000ms deadline timeout fail-closed
+        S5 cross_session_isolation_replay: 跨会话隔离复跑
+        S6 reset_clears_pending_no_writeback: Reset 清 pending 防 stale response 回写
+      回归日志: docs/day13/06_d13c_l0l1_regression_20260903.log

@@ -1,0 +1,314 @@
+{
+  "config": {
+    "config_version": "d13c-session-eval-config/v1",
+    "dataset_version": "d13c-dataset-v1-smoke",
+    "gold_label_version": "d13c-gold-v1-smoke",
+    "implementation_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "environment": "smoke-test",
+    "evidence_reference": "smoke/d13c-session-eval",
+    "dataset_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "gold_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "statistics_method": "p50_and_p95",
+    "warmup_count": 0,
+    "repeat_count": 5,
+    "concurrency": 1,
+    "stability_repeat": 5,
+    "deadline_ms": 5000
+  },
+  "sessions": [
+    {
+      "session_id": "session-smoke-0001",
+      "scenario": "cross_session_A",
+      "injected_context_text": "[CTX] session-A context for smoke",
+      "steps": [
+        {
+          "step_id": "step1_prechat",
+          "method": "memory.retrieve",
+          "response_status": "ok",
+          "stage_final": "ready",
+          "stage_transitions": ["idle", "querying", "ready"],
+          "latency_ms": 12.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0001"
+        },
+        {
+          "step_id": "step2_postturn",
+          "method": "turn.finalized",
+          "response_status": "ok",
+          "stage_final": "ready",
+          "stage_transitions": ["idle", "sending", "ready"],
+          "latency_ms": 8.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "normal",
+          "stop_reason": "stop",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0001"
+        },
+        {
+          "step_id": "step3_tool",
+          "method": "tool.execution",
+          "response_status": "ok",
+          "stage_final": "ready",
+          "stage_transitions": ["idle", "sending", "ready"],
+          "latency_ms": 15.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0001"
+        },
+        {
+          "step_id": "step4a_conflict",
+          "method": "conflict.compare",
+          "response_status": "ok",
+          "stage_final": "ready",
+          "stage_transitions": ["idle", "querying", "ready"],
+          "latency_ms": 6.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0001"
+        },
+        {
+          "step_id": "step4b_lifecycle",
+          "method": "lifecycle.status",
+          "response_status": "ok",
+          "stage_final": "ready",
+          "stage_transitions": ["idle", "querying", "ready"],
+          "latency_ms": 5.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0001"
+        },
+        {
+          "step_id": "step5a_forget_preview",
+          "method": "forget.preview",
+          "response_status": "ok",
+          "stage_final": "awaiting_confirmation",
+          "stage_transitions": ["idle", "previewing", "awaiting_confirmation"],
+          "latency_ms": 9.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0001"
+        },
+        {
+          "step_id": "step5b_forget_execute",
+          "method": "forget.execute",
+          "response_status": "ok",
+          "stage_final": "completed",
+          "stage_transitions": ["idle", "executing", "completed"],
+          "latency_ms": 11.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0001"
+        }
+      ]
+    },
+    {
+      "session_id": "session-smoke-0002",
+      "scenario": "cross_session_A",
+      "injected_context_text": "[CTX] session-B context for smoke",
+      "steps": [
+        {
+          "step_id": "step1_prechat",
+          "method": "memory.retrieve",
+          "response_status": "ok",
+          "stage_final": "ready",
+          "stage_transitions": ["idle", "querying", "ready"],
+          "latency_ms": 10.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0002"
+        },
+        {
+          "step_id": "step2_postturn",
+          "method": "turn.finalized",
+          "response_status": "ok",
+          "stage_final": "ready",
+          "stage_transitions": ["idle", "sending", "ready"],
+          "latency_ms": 7.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "normal",
+          "stop_reason": "stop",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0002"
+        },
+        {
+          "step_id": "step3_tool",
+          "method": "tool.execution",
+          "response_status": "ok",
+          "stage_final": "ready",
+          "stage_transitions": ["idle", "sending", "ready"],
+          "latency_ms": 13.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0002"
+        },
+        {
+          "step_id": "step4a_conflict",
+          "method": "conflict.compare",
+          "response_status": "ok",
+          "stage_final": "ready",
+          "stage_transitions": ["idle", "querying", "ready"],
+          "latency_ms": 5.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0002"
+        },
+        {
+          "step_id": "step4b_lifecycle",
+          "method": "lifecycle.status",
+          "response_status": "ok",
+          "stage_final": "ready",
+          "stage_transitions": ["idle", "querying", "ready"],
+          "latency_ms": 4.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0002"
+        },
+        {
+          "step_id": "step5a_forget_preview",
+          "method": "forget.preview",
+          "response_status": "ok",
+          "stage_final": "awaiting_confirmation",
+          "stage_transitions": ["idle", "previewing", "awaiting_confirmation"],
+          "latency_ms": 8.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0002"
+        },
+        {
+          "step_id": "step5b_forget_execute",
+          "method": "forget.execute",
+          "response_status": "ok",
+          "stage_final": "completed",
+          "stage_transitions": ["idle", "executing", "completed"],
+          "latency_ms": 10.0,
+          "isolation": {
+            "original_user_text_isolated": true,
+            "injected_context_present": true,
+            "model_request_clean": true
+          },
+          "guardrail_violations": [],
+          "deadline_ms": 5000,
+          "timed_out": false,
+          "finalization_reason": "",
+          "stop_reason": "",
+          "retry_of_turn_id": "",
+          "turn_id": "turn-0002"
+        }
+      ]
+    }
+  ]
+}

@@ -411,3 +411,40 @@ if(D11C_QML_LOAD_AVAILABLE)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
     )
 endif()
+
+# ============================================================================
+# D13-C 端到端会话评测 · 主演示稳定性复测 L0 Mock 契约测试
+# 范围（S1~S6 共 6 个稳定性 test slot）：
+#   S1. 主演示编排复跑 5 轮稳定性（无 hang、无 stage 错乱、安全护栏通过）
+#   S2. PostTurn stop_reason 透传语义（stop/length/content_filter/tool_use）
+#   S3. retry_of_turn_id 透传 + 非 retry 必须为空
+#   S4. 客户端 5000ms deadline timeout fail-closed（无死锁、可恢复）
+#   S5. 跨会话隔离复跑（A/B session 反复切换，injectedContextText 严格区分）
+#   S6. Reset 清 pending 防 stale response 回写（toolStage 保持 idle）
+# 注意：L0 Mock 契约验证，不代表麒麟宿主真实交互（L2 由 B/D 轨另行归档）。
+# ============================================================================
+add_executable(test_d13c_stability
+    ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+    ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
+    mock_gateway_server.cpp
+    test_d13c_stability.cpp
+)
+target_link_libraries(test_d13c_stability
+    PRIVATE
+        Qt5::Core
+        Qt5::Network
+        Qt5::Test
+)
+target_include_directories(test_d13c_stability
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_d13c_stability
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME d13c_stability
+    COMMAND test_d13c_stability
+)
