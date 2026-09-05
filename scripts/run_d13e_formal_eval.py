@@ -1,28 +1,35 @@
 """D13E 正式评测 CLI（候选实现）。
 
 正式执行路径完全离线：Runner 只读取本地证据目录中的 Bundle、Manifest、
-阈值、四类 raw、D13D execution attestation，以及两个由 D 轨外部流程冻结的
-Seal 工件：
+阈值、四类 raw、D13D execution attestation，以及两个由 D 轨外部流程冻结并
+签名的 Seal 工件：
 
-- D13E_REVIEW_SEAL_V1.json（Review 完成后由可信 sealing 流程生成）；
-- D13D_EXECUTION_SEAL_V1.json（D13D 轨冻结 attestation digest 后生成）。
+- D13E_REVIEW_SEAL_V1.json / D13E_REVIEW_SEAL_V1.sig
+- D13D_EXECUTION_SEAL_V1.json / D13D_EXECUTION_SEAL_V1.sig
 
-Runner 不访问 GitHub API；被审批工件（Dataset / Gold / Threshold / Runner）
-也不保存“谁批准 / 哪个 Review 批准 / 当前是否批准”等自报字段，审批结果只由
-外部 Seal 证明。在读取或写入任何报告前，先校验 D13D 冻结 provenance；该入口
-不接受 UNKNOWN、缺失 Commit 或候选环境来生成可误读的正式输出。
+Runner 不访问 GitHub API；被审批工件（Dataset / Gold / Threshold / Runner /
+Manifest）也不保存“谁批准 / 哪个 Review 批准 / 当前是否批准”等自报字段。
+“谁有权生成 APPROVED / FROZEN 这两个事实”由以下结构证明：
+
+- D / D13D 私钥对 canonical payload 做 Ed25519 detached signature；
+- 公钥只来自 D13D 冻结的、位于 evidence root 之外的 frozen trust store；
+- Runner 在无网络 VM 中离线验签。
+
+被审批工件与两个 Seal/.sig 必须位于同一 D13D 唯一证据目录；Trust Root 必须
+位于该证据目录之外。任何签名、路径、provenance、哈希或指标失败都会 fail-closed，
+非零退出且不写正式报告。
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import re
 import sys
 from pathlib import Path
 from typing import Any, Iterable
-
 
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -49,6 +56,147 @@ _GITHUB_REVIEW_REFERENCE = re.compile(
 _TRUSTED_D_REVIEWER_IDENTITIES = frozenset({"Ducknesses"})
 _REVIEW_SEAL_VERSION = "d13e-review-seal/v1"
 _D13D_EXECUTION_SEAL_VERSION = "d13d-execution-seal/v1"
+_TRUST_STORE_VERSION = "d13e-trust-roots/v1"
+_SIGNATURE_SCHEME = "ed25519"
+_DEFAULT_TRUST_ROOT = Path("/etc/kylin-memory/trust")
+_TRUST_STORE_FILE = "D13E_TRUST_ROOTS_V1.json"
+_REVIEW_TRUST_KEY = "review"
+_D13D_TRUST_KEY = "d13d_execution"
+
+# --- Ed25519 常量（RFC 8032） ---
+_ED25519_P = 2**255 - 19
+_ED25519_L = 2**252 + 27742317777372353535851937790883648493
+_ED25519_D = (-121665 * pow(121666, _ED25519_P - 2, _ED25519_P)) % _ED25519_P
+_ED25519_SQRT_M1 = pow(2, (_ED25519_P - 1) // 4, _ED25519_P)
+_ED25519_BY = (4 * pow(5, _ED25519_P - 2, _ED25519_P)) % _ED25519_P
+
+
+def _ed25519_recover_x(y: int, sign: int) -> int:
+    p = _ED25519_P
+    d = _ED25519_D
+    x2 = ((y * y - 1) * pow(d * y * y + 1, p - 2, p)) % p
+    if x2 == 0:
+        x = 0
+    else:
+        x = pow(x2, (p + 3) // 8, p)
+        if (x * x - x2) % p != 0:
+            x = (x * _ED25519_SQRT_M1) % p
+        if (x * x - x2) % p != 0:
+            raise ValueError("无法恢复 Ed25519 点的 x 坐标")
+    if (x & 1) != sign:
+        x = p - x
+    return x
+
+
+def _ed25519_point_add(p1: tuple[int, int], p2: tuple[int, int]) -> tuple[int, int]:
+    p = _ED25519_P
+    d = _ED25519_D
+    x1, y1 = p1
+    x2, y2 = p2
+    x1y2 = (x1 * y2) % p
+    y1x2 = (y1 * x2) % p
+    y1y2 = (y1 * y2) % p
+    x1x2 = (x1 * x2) % p
+    d_x1x2y1y2 = (d * x1x2 * y1y2) % p
+    x3 = ((x1y2 + y1x2) * pow(1 + d_x1x2y1y2, p - 2, p)) % p
+    y3 = ((y1y2 + x1x2) * pow(1 - d_x1x2y1y2, p - 2, p)) % p
+    return x3, y3
+
+
+def _ed25519_scalar_mult(scalar: int, point: tuple[int, int]) -> tuple[int, int]:
+    result: tuple[int, int] = (0, 1)  # identity
+    addend = point
+    while scalar > 0:
+        if scalar & 1:
+            result = _ed25519_point_add(result, addend)
+        addend = _ed25519_point_add(addend, addend)
+        scalar >>= 1
+    return result
+
+
+def _ed25519_point_decode(encoded: bytes) -> tuple[int, int]:
+    if len(encoded) != 32:
+        raise ValueError("Ed25519 点编码长度必须为 32 字节")
+    y = int.from_bytes(encoded, "little") & ((1 << 255) - 1)
+    if y >= _ED25519_P:
+        raise ValueError("Ed25519 点 y 坐标越界")
+    sign = (encoded[31] >> 7) & 1
+    return _ed25519_recover_x(y, sign), y
+
+
+def _ed25519_verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
+    """RFC 8032 Ed25519 验签（纯 Python，供离线 Runner 使用）。"""
+    if len(public_key) != 32 or len(signature) != 64:
+        return False
+    r_encoded = signature[:32]
+    s_bytes = signature[32:]
+    s = int.from_bytes(s_bytes, "little")
+    if s >= _ED25519_L:
+        return False
+    try:
+        a_point = _ed25519_point_decode(public_key)
+        r_point = _ed25519_point_decode(r_encoded)
+    except ValueError:
+        return False
+    digest = hashlib.sha512(r_encoded + public_key + message).digest()
+    h = int.from_bytes(digest, "little") % _ED25519_L
+    sb = _ed25519_scalar_mult(s, (_ED25519_BX, _ED25519_BY))
+    ha = _ed25519_scalar_mult(h, a_point)
+    r_plus_ha = _ed25519_point_add(r_point, ha)
+    return sb == r_plus_ha
+
+
+_ED25519_BX = _ed25519_recover_x(_ED25519_BY, 0)
+
+
+def _canonical_json_bytes(payload: dict[str, Any]) -> bytes:
+    """签名合同：稳定 key 顺序、紧凑分隔符、UTF-8，不含 signature 自身。"""
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _load_ed25519_public_key_pem(pem_bytes: bytes) -> bytes:
+    """解析 PKIX 'BEGIN PUBLIC KEY' 中的 Ed25519 32 字节原始公钥。"""
+    text = pem_bytes.decode("utf-8", errors="strict")
+    if "-----BEGIN PUBLIC KEY-----" not in text or "-----END PUBLIC KEY-----" not in text:
+        raise ValueError("trust root 公钥必须是 PEM 格式（BEGIN PUBLIC KEY）")
+    b64 = "".join(
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and "-----" not in line
+    )
+    try:
+        der = base64.b64decode(b64, validate=True)
+    except Exception as exc:  # noqa: BLE001 -- 统一按 trust root 无效处理
+        raise ValueError("trust root 公钥 PEM base64 解码失败") from exc
+    # 顶层 SEQUENCE 内的第二个元素应为 BIT STRING(0x03)。
+    if len(der) < 8 or der[0] != 0x30:
+        raise ValueError("trust root 公钥 DER 不是 SEQUENCE")
+    pos = 2
+    if der[1] & 0x80:
+        length_bytes = der[1] & 0x7F
+        pos += length_bytes
+    # 遍历顶层子元素，找到 BIT STRING。
+    while pos < len(der):
+        if der[pos] != 0x03:
+            tag_len = der[pos + 1] if pos + 1 < len(der) else 0
+            pos += 2 + (tag_len if not (tag_len & 0x80) else (tag_len & 0x7F) + 1)
+            continue
+        bit_string_header = pos + 1
+        if bit_string_header >= len(der):
+            raise ValueError("trust root 公钥 DER BIT STRING 缺失")
+        length = der[bit_string_header]
+        value_start = bit_string_header + 1
+        if length & 0x80:
+            count = length & 0x7F
+            length = int.from_bytes(der[bit_string_header + 1 : bit_string_header + 1 + count], "big")
+            value_start = bit_string_header + 1 + count
+        value = der[value_start : value_start + length]
+        if len(value) == 33 and value[0] == 0:
+            raw = value[1:]
+            if len(raw) == 32:
+                return raw
+        break
+    raise ValueError("trust root 公钥 DER 中未找到 Ed25519 BIT STRING")
 
 
 def _required_text(mapping: dict[str, Any], key: str, label: str) -> str:
@@ -68,83 +216,6 @@ def _read_json(path: Path, label: str) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError(f"{label} 顶层必须是 JSON 对象")
     return raw
-
-
-def _load_review_seal(path: Path, author_identity: str | None = None) -> dict[str, Any]:
-    """加载 Review 完成后由可信 sealing 流程生成的 D13E Review Seal。
-
-    Seal 是 Review 后置工件，本身不写入被审批的 Commit C；Runner 只消费它的
-    reviewer 身份、reviewed_commit、批准状态与批准的工件 SHA-256。
-    """
-    path = path.resolve()
-    if not path.is_file():
-        raise ValueError(f"D13E Review Seal 文件不存在：{path}")
-    seal = _read_json(path, "D13E review seal")
-    if seal.get("seal_version") != _REVIEW_SEAL_VERSION:
-        raise ValueError("review seal 的 seal_version 必须为 'd13e-review-seal/v1'")
-    if seal.get("source_pr") != 148:
-        raise ValueError("review seal 的 source_pr 必须为 148")
-    reviewed_commit = seal.get("reviewed_commit")
-    if not isinstance(reviewed_commit, str) or not _GIT_SHA.fullmatch(reviewed_commit):
-        raise ValueError("review seal 的 reviewed_commit 必须是 40 位小写 Git SHA")
-    reviewer_identity = _required_text(seal, "reviewer_identity", "review seal")
-    if seal.get("reviewer_track") != "D":
-        raise ValueError("review seal 的 reviewer_track 必须为 D")
-    if author_identity is not None and reviewer_identity == author_identity:
-        raise ValueError("D13E 封存 Reviewer 必须是非作者")
-    if reviewer_identity not in _TRUSTED_D_REVIEWER_IDENTITIES:
-        raise ValueError("review seal 的 Reviewer 不在可信 D 轨身份注册表中")
-    if seal.get("review_state") != "APPROVED":
-        raise ValueError("review seal 的 review_state 必须为 APPROVED")
-    review_reference = _required_text(seal, "review_reference", "review seal")
-    if not _GITHUB_REVIEW_REFERENCE.fullmatch(review_reference):
-        raise ValueError("review seal 的 review_reference 必须是 PR #148 的 GitHub Review URL")
-    artifacts = seal.get("approved_artifacts")
-    required_artifacts = ("dataset_sha256", "gold_sha256", "threshold_sha256", "runner_sha256")
-    if not isinstance(artifacts, dict) or set(artifacts) != set(required_artifacts):
-        raise ValueError("review seal 的 approved_artifacts 必须完整包含 Dataset/Gold/阈值/Runner 的 SHA-256")
-    for key in required_artifacts:
-        value = artifacts[key]
-        if not isinstance(value, str) or not _SHA256.fullmatch(value):
-            raise ValueError(f"review seal 的 approved_artifacts.{key} 必须是 64 位小写 SHA-256")
-    return seal
-
-
-def _load_d13d_execution_seal(path: Path) -> dict[str, Any]:
-    """加载 D13D 轨冻结的 execution seal（外部可信根）。"""
-    path = path.resolve()
-    if not path.is_file():
-        raise ValueError(f"D13D execution seal 文件不存在：{path}")
-    seal = _read_json(path, "D13D execution seal")
-    if seal.get("seal_version") != _D13D_EXECUTION_SEAL_VERSION:
-        raise ValueError("D13D execution seal 的 seal_version 必须为 'd13d-execution-seal/v1'")
-    attestation_sha256 = seal.get("attestation_sha256")
-    if not isinstance(attestation_sha256, str) or not _SHA256.fullmatch(attestation_sha256):
-        raise ValueError("D13D execution seal 的 attestation_sha256 必须是 64 位小写 SHA-256")
-    implementation_commit = seal.get("implementation_commit")
-    if not isinstance(implementation_commit, str) or not _GIT_SHA.fullmatch(implementation_commit):
-        raise ValueError("D13D execution seal 的 implementation_commit 必须是 40 位小写 Git SHA")
-    for key in ("environment_id", "evidence_root"):
-        _required_text(seal, key, "D13D execution seal")
-    if seal.get("frozen_by_track") != "D":
-        raise ValueError("D13D execution seal 必须由 D 轨冻结（frozen_by_track=D）")
-    _required_text(seal, "approval_reference", "D13D execution seal")
-    return seal
-
-
-def _validated_evidence_directory(bundle_base: Path, provenance: dict[str, Any]) -> Path:
-    """正式 Bundle 必须已由 D13D 部署到唯一证据目录的根部。"""
-    if provenance.get("evidence_directory") != ".":
-        raise ValueError("provenance.evidence_directory 必须为 '.'，即 Bundle 根必须是 D13D 唯一证据目录")
-    return bundle_base
-
-
-def _verify_sha256(path: Path, expected: object, label: str) -> None:
-    if not isinstance(expected, str) or not _SHA256.fullmatch(expected):
-        raise ValueError(f"{label} 必须是 64 位小写十六进制 SHA-256")
-    actual = hashlib.sha256(path.read_bytes()).hexdigest()
-    if actual != expected:
-        raise ValueError(f"{label} 与 {path.name} 实际内容不一致")
 
 
 def _read_jsonl(path: Path, label: str) -> list[dict[str, Any]]:
@@ -189,6 +260,189 @@ def _relative_file(base: Path, value: object, label: str) -> Path:
     resolved = (base / candidate).resolve()
     if base not in resolved.parents:
         raise ValueError(f"{label} 越出 bundle 目录")
+    return resolved
+
+
+def _require_path_inside_evidence_root(base: Path, path: Path, label: str) -> Path:
+    """R4：Seal / .sig 必须位于 bundle/evidence root 内，拒绝绝对外部路径、../ 与 symlink 逃逸。"""
+    resolved = path.resolve()
+    base_resolved = base.resolve()
+    if resolved != base_resolved and base_resolved not in resolved.parents:
+        raise ValueError(f"{label} 必须位于 D13D 唯一证据目录内：{resolved}")
+    return resolved
+
+
+def _validated_evidence_directory(bundle_base: Path, provenance: dict[str, Any]) -> Path:
+    """正式 Bundle 必须已由 D13D 部署到唯一证据目录的根部。"""
+    if provenance.get("evidence_directory") != ".":
+        raise ValueError("provenance.evidence_directory 必须为 '.'，即 Bundle 根必须是 D13D 唯一证据目录")
+    return bundle_base
+
+
+def _verify_sha256(path: Path, expected: object, label: str) -> None:
+    if not isinstance(expected, str) or not _SHA256.fullmatch(expected):
+        raise ValueError(f"{label} 必须是 64 位小写十六进制 SHA-256")
+    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual != expected:
+        raise ValueError(f"{label} 与 {path.name} 实际内容不一致")
+
+
+def _load_trust_root_entry(trust_root_dir: Path, role: str) -> tuple[str, bytes, str]:
+    """Gate 0：读取 frozen trust store 中指定角色的 (key_id, 原始公钥, key_sha256)。
+
+    Trust Root 必须位于 evidence root 之外；攻击者替换 evidence 目录内的文件
+    无法影响这里的可信公钥。
+    """
+    if not trust_root_dir.is_dir():
+        raise ValueError(f"frozen trust root 目录不存在：{trust_root_dir}")
+    store_path = trust_root_dir / _TRUST_STORE_FILE
+    store = _read_json(store_path, "trust store")
+    if store.get("trust_store_version") != _TRUST_STORE_VERSION:
+        raise ValueError("trust store 的 trust_store_version 不正确")
+    if store.get("signature_scheme") != _SIGNATURE_SCHEME:
+        raise ValueError(f"trust store 的 signature_scheme 必须为 {_SIGNATURE_SCHEME}")
+    entry = store.get(role)
+    if not isinstance(entry, dict):
+        raise ValueError(f"trust store 缺少 {role} 信任根条目")
+    key_id = _required_text(entry, "key_id", f"trust store.{role}")
+    pem_file_name = _required_text(entry, "public_key_file", f"trust store.{role}")
+    key_sha256 = _required_text(entry, "public_key_sha256", f"trust store.{role}")
+    if not _SHA256.fullmatch(key_sha256):
+        raise ValueError(f"trust store.{role}.public_key_sha256 必须是 64 位 SHA-256")
+    pem_path = (trust_root_dir / Path(pem_file_name)).resolve()
+    trust_root_resolved = trust_root_dir.resolve()
+    if trust_root_resolved not in pem_path.parents:
+        raise ValueError(f"trust store.{role}.public_key_file 越出 trust root 目录")
+    if not pem_path.is_file():
+        raise ValueError(f"trust root 公钥文件不存在：{pem_path}")
+    _verify_sha256(pem_path, key_sha256, f"trust store.{role}.public_key_sha256")
+    raw_key = _load_ed25519_public_key_pem(pem_path.read_bytes())
+    if len(raw_key) != 32:
+        raise ValueError(f"trust store.{role} 公钥必须是 32 字节 Ed25519 公钥")
+    return key_id, raw_key, key_sha256
+
+
+def _verify_detached_signature(public_key: bytes, message: bytes, signature_path: Path, label: str) -> None:
+    """Gate 2/5：读取 detached signature 并离线验签；异常一律 fail-closed。"""
+    if not signature_path.is_file():
+        raise ValueError(f"{label} 的 detached signature 文件不存在：{signature_path}")
+    try:
+        signature = signature_path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"{label} 的 detached signature 无法读取") from exc
+    if len(signature) != 64:
+        raise ValueError(f"{label} 的 detached signature 长度必须为 64 字节（Ed25519）")
+    if not _ed25519_verify(public_key, message, signature):
+        raise ValueError(f"{label} 的 detached signature 校验失败")
+
+
+def _seal_signature_path(seal_path: Path) -> Path:
+    """D13E_REVIEW_SEAL_V1.json -> D13E_REVIEW_SEAL_V1.sig"""
+    return seal_path.with_suffix(".sig")
+
+
+def _load_and_verify_review_seal(
+    seal_path: Path,
+    base: Path,
+    trust_root_dir: Path,
+) -> tuple[dict[str, Any], str, str, str]:
+    """R1：Review Seal schema → 路径 → canonical payload → 可信公钥 → 验签 → policy。"""
+    seal_path = _require_path_inside_evidence_root(base, seal_path, "Review Seal")
+    signature_path = _require_path_inside_evidence_root(base, _seal_signature_path(seal_path), "Review Seal signature")
+    seal = _read_json(seal_path, "D13E review seal")
+    if seal.get("seal_version") != _REVIEW_SEAL_VERSION:
+        raise ValueError("review seal 的 seal_version 必须为 'd13e-review-seal/v1'")
+    if seal.get("signature_scheme") != _SIGNATURE_SCHEME:
+        raise ValueError(f"review seal 的 signature_scheme 必须为 {_SIGNATURE_SCHEME}")
+    source_repo = _required_text(seal, "source_repo", "review seal")
+    if source_repo != "Kylin-Agent-Competition/kylinOS-agent-memory":
+        raise ValueError("review seal 的 source_repo 不正确")
+    if seal.get("source_pr") != 148:
+        raise ValueError("review seal 的 source_pr 必须为 148")
+    actual_pr_author = _required_text(seal, "actual_pr_author", "review seal")
+    reviewer_identity = _required_text(seal, "reviewer_identity", "review seal")
+    if seal.get("reviewer_track") != "D":
+        raise ValueError("review seal 的 reviewer_track 必须为 D")
+    if reviewer_identity == actual_pr_author:
+        raise ValueError("D13E 封存 Reviewer 必须与 signed actual_pr_author 不同（非作者）")
+    if reviewer_identity not in _TRUSTED_D_REVIEWER_IDENTITIES:
+        raise ValueError("review seal 的 Reviewer 不在可信 D 轨身份注册表中")
+    if seal.get("review_state") != "APPROVED":
+        raise ValueError("review seal 的 review_state 必须为 APPROVED")
+    review_reference = _required_text(seal, "review_reference", "review seal")
+    if not _GITHUB_REVIEW_REFERENCE.fullmatch(review_reference):
+        raise ValueError("review seal 的 review_reference 必须是 PR #148 的 GitHub Review URL")
+    reviewed_commit = seal.get("reviewed_commit")
+    if not isinstance(reviewed_commit, str) or not _GIT_SHA.fullmatch(reviewed_commit):
+        raise ValueError("review seal 的 reviewed_commit 必须是 40 位小写 Git SHA")
+    artifacts = seal.get("approved_artifacts")
+    required_artifacts = (
+        "dataset_sha256",
+        "gold_sha256",
+        "threshold_sha256",
+        "runner_sha256",
+        "manifest_sha256",
+    )
+    if not isinstance(artifacts, dict) or set(artifacts) != set(required_artifacts):
+        raise ValueError("review seal 的 approved_artifacts 必须完整包含 Dataset/Gold/阈值/Runner/Manifest 的 SHA-256")
+    for key in required_artifacts:
+        value = artifacts[key]
+        if not isinstance(value, str) or not _SHA256.fullmatch(value):
+            raise ValueError(f"review seal 的 approved_artifacts.{key} 必须是 64 位小写 SHA-256")
+    key_id = _required_text(seal, "key_id", "review seal")
+    trust_key_id, public_key, trust_key_sha256 = _load_trust_root_entry(trust_root_dir, _REVIEW_TRUST_KEY)
+    if key_id != trust_key_id:
+        raise ValueError("review seal 的 key_id 与 frozen trust root 不一致")
+    canonical = _canonical_json_bytes(seal)
+    _verify_detached_signature(public_key, canonical, signature_path, "Review Seal")
+    return seal, hashlib.sha256(canonical).hexdigest(), key_id, public_key
+
+
+def _load_and_verify_d13d_execution_seal(
+    seal_path: Path,
+    base: Path,
+    trust_root_dir: Path,
+) -> tuple[dict[str, Any], str, str, str]:
+    """R2：D13D Seal schema → 路径 → canonical payload → 可信公钥 → 验签。"""
+    seal_path = _require_path_inside_evidence_root(base, seal_path, "D13D execution seal")
+    signature_path = _require_path_inside_evidence_root(base, _seal_signature_path(seal_path), "D13D execution seal signature")
+    seal = _read_json(seal_path, "D13D execution seal")
+    if seal.get("seal_version") != _D13D_EXECUTION_SEAL_VERSION:
+        raise ValueError("D13D execution seal 的 seal_version 必须为 'd13d-execution-seal/v1'")
+    if seal.get("signature_scheme") != _SIGNATURE_SCHEME:
+        raise ValueError(f"D13D execution seal 的 signature_scheme 必须为 {_SIGNATURE_SCHEME}")
+    attestation_sha256 = seal.get("attestation_sha256")
+    if not isinstance(attestation_sha256, str) or not _SHA256.fullmatch(attestation_sha256):
+        raise ValueError("D13D execution seal 的 attestation_sha256 必须是 64 位小写 SHA-256")
+    implementation_commit = seal.get("implementation_commit")
+    if not isinstance(implementation_commit, str) or not _GIT_SHA.fullmatch(implementation_commit):
+        raise ValueError("D13D execution seal 的 implementation_commit 必须是 40 位小写 Git SHA")
+    for key in (
+        "environment_id",
+        "dependency_version_reference",
+        "data_version_reference",
+        "evidence_root",
+        "evidence_reference",
+    ):
+        _required_text(seal, key, "D13D execution seal")
+    if seal.get("frozen_by_track") != "D":
+        raise ValueError("D13D execution seal 必须由 D 轨冻结（frozen_by_track=D）")
+    _required_text(seal, "approval_reference", "D13D execution seal")
+    key_id = _required_text(seal, "key_id", "D13D execution seal")
+    trust_key_id, public_key, trust_key_sha256 = _load_trust_root_entry(trust_root_dir, _D13D_TRUST_KEY)
+    if key_id != trust_key_id:
+        raise ValueError("D13D execution seal 的 key_id 与 frozen trust root 不一致")
+    canonical = _canonical_json_bytes(seal)
+    _verify_detached_signature(public_key, canonical, signature_path, "D13D execution seal")
+    return seal, hashlib.sha256(canonical).hexdigest(), key_id, public_key
+
+
+def _validated_trust_root_dir(trust_root_dir: Path, base: Path) -> Path:
+    """Trust Root 必须存在且位于 evidence root 之外，否则 E 可替换公钥伪造 PASS。"""
+    resolved = trust_root_dir.resolve()
+    base_resolved = base.resolve()
+    if resolved == base_resolved or base_resolved in resolved.parents:
+        raise ValueError("frozen trust root 不得位于 evidence root 内")
     return resolved
 
 
@@ -287,8 +541,8 @@ def _validated_raw_files(
 ) -> dict[str, Path]:
     """验证 D13D 冻结执行证明及其四类逐样本 raw 文件。
 
-    attestation digest 同时受 Bundle 与 D13D execution seal（外部可信根）双重
-    冻结；E 轨只重写 raw + SHA256SUMS + attestation + bundle 无法制造
+    attestation digest 同时受 Bundle 与已签名 D13D execution seal（外部可信根）
+    双重冻结；E 轨只重写 raw + SHA256SUMS + attestation + bundle 无法制造
     EXECUTED_ON_FROZEN_D13D。
     """
     metrics = ("preference", "conflict", "safety", "forget")
@@ -313,7 +567,14 @@ def _validated_raw_files(
     ):
         if attestation.get(key) != provenance.get(key):
             raise ValueError(f"D13D execution attestation.{key} 必须与 provenance 一致")
-    for key in ("implementation_commit", "environment_id", "evidence_root"):
+    for key in (
+        "implementation_commit",
+        "environment_id",
+        "dependency_version_reference",
+        "data_version_reference",
+        "evidence_root",
+        "evidence_reference",
+    ):
         if attestation.get(key) != d13d_seal.get(key):
             raise ValueError(f"D13D execution attestation.{key} 必须与 D13D execution seal 一致")
 
@@ -445,7 +706,7 @@ def _validate_approved_artifact_hashes(
     manifest: dict[str, Any],
     review_seal: dict[str, Any],
 ) -> None:
-    """Review Seal 批准的本地工件 SHA-256 必须与实际文件一致（T3 Artifact drift）。"""
+    """Gate 4：Review Seal 批准的本地工件 SHA-256 必须与实际文件一致。"""
     artifacts = review_seal["approved_artifacts"]
     for key, hash_key in (("dataset_file", "dataset_sha256"), ("gold_file", "gold_sha256")):
         approved = artifacts[hash_key]
@@ -458,6 +719,9 @@ def _validate_approved_artifact_hashes(
         raise ValueError("review seal 批准的 threshold_sha256 与 Manifest 不一致")
     threshold_path = _relative_file(base, bundle["threshold_config_file"], "threshold_config_file")
     _verify_sha256(threshold_path, threshold_approved, "review seal.approved_artifacts.threshold_sha256")
+    manifest_approved = artifacts["manifest_sha256"]
+    manifest_path = _relative_file(base, bundle["manifest_file"], "manifest_file")
+    _verify_sha256(manifest_path, manifest_approved, "review seal.approved_artifacts.manifest_sha256")
     runner_path = Path(__file__).resolve()
     if not runner_path.is_file():
         raise ValueError("无法定位正在执行的 Runner 文件")
@@ -465,7 +729,7 @@ def _validate_approved_artifact_hashes(
 
 
 def validate_formal_bundle(bundle_path: Path) -> tuple[dict[str, Any], dict[str, Any], Path]:
-    """先验证 D13D provenance 与稳定工件绑定；任何失败都不得让调用方写报告。"""
+    """Gate 7：验证 D13D provenance 与稳定工件绑定；任何失败都不得让调用方写报告。"""
     bundle_path = bundle_path.resolve()
     bundle = _read_json(bundle_path, "bundle")
     if bundle.get("bundle_version") != "d13e-formal-bundle/v1":
@@ -519,13 +783,21 @@ def compute_formal_report(
     bundle_path: Path,
     review_seal_path: Path | None = None,
     d13d_seal_path: Path | None = None,
+    trust_root_dir: Path | None = None,
 ) -> dict[str, Any]:
-    """离线计算 D13E 四类指标；只消费本地证据与 D 轨冻结的两个 Seal。"""
+    """离线计算 D13E 四类指标；只消费本地证据与两个已签名 Seal 及 frozen trust root。"""
     bundle, manifest, base = validate_formal_bundle(bundle_path)
     if review_seal_path is None or d13d_seal_path is None:
         raise ValueError("正式评测必须同时提供 --review-seal 与 --d13d-seal")
-    review_seal = _load_review_seal(Path(review_seal_path), author_identity=manifest.get("created_by_identity"))
-    d13d_seal = _load_d13d_execution_seal(Path(d13d_seal_path))
+    if trust_root_dir is None:
+        trust_root_dir = _DEFAULT_TRUST_ROOT
+    trust_root = _validated_trust_root_dir(Path(trust_root_dir), base)
+    review_seal, review_seal_sha256, review_key_id, review_public_key = _load_and_verify_review_seal(
+        Path(review_seal_path), base, trust_root
+    )
+    d13d_seal, d13d_seal_sha256, d13d_key_id, d13d_public_key = _load_and_verify_d13d_execution_seal(
+        Path(d13d_seal_path), base, trust_root
+    )
     _validate_approved_artifact_hashes(base, bundle, manifest, review_seal)
 
     dataset_path = _relative_file(base, bundle["dataset_file"], "dataset_file")
@@ -570,6 +842,8 @@ def compute_formal_report(
     if expected_counts.get("total") != len(dataset):
         raise ValueError("manifest.sample_count.total 与 Dataset 实际数量不一致")
     provenance = manifest["provenance"]
+    review_signature_path = _seal_signature_path(Path(review_seal_path).resolve())
+    d13d_signature_path = _seal_signature_path(Path(d13d_seal_path).resolve())
     return {
         "status": "COMPUTED",
         "provenance": {
@@ -581,20 +855,30 @@ def compute_formal_report(
             "dataset_sha256": manifest["dataset_sha256"],
             "gold_sha256": manifest["gold_sha256"],
             "reviewed_commit": review_seal["reviewed_commit"],
+            "actual_pr_author": review_seal["actual_pr_author"],
             "reviewer_identity": review_seal["reviewer_identity"],
             "review_reference": review_seal["review_reference"],
             "attestation_sha256": d13d_seal["attestation_sha256"],
+            "review_seal_sha256": review_seal_sha256,
+            "review_signature_sha256": hashlib.sha256(review_signature_path.read_bytes()).hexdigest(),
+            "review_key_id": review_key_id,
+            "review_key_fingerprint": hashlib.sha256(review_public_key).hexdigest(),
+            "d13d_execution_seal_sha256": d13d_seal_sha256,
+            "d13d_signature_sha256": hashlib.sha256(d13d_signature_path.read_bytes()).hexdigest(),
+            "d13d_key_id": d13d_key_id,
+            "d13d_key_fingerprint": hashlib.sha256(d13d_public_key).hexdigest(),
         },
         **reports,
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="D13E formal evaluation（离线）")
+    parser = argparse.ArgumentParser(description="D13E formal evaluation（离线，Ed25519 签名 Seal）")
     parser.add_argument("input", nargs="?", help="D13E formal bundle JSON（或使用 --bundle）")
     parser.add_argument("--bundle", dest="bundle_flag", help="D13E formal bundle JSON 路径")
     parser.add_argument("--review-seal", help="D13E_REVIEW_SEAL_V1.json 路径")
     parser.add_argument("--d13d-seal", help="D13D_EXECUTION_SEAL_V1.json 路径")
+    parser.add_argument("--trust-roots", help="frozen trust root 目录（默认 /etc/kylin-memory/trust）")
     parser.add_argument("--output", "-o", help="formal report JSON output")
     args = parser.parse_args()
 
@@ -607,6 +891,7 @@ def main() -> int:
             Path(bundle_value),
             review_seal_path=Path(args.review_seal) if args.review_seal else None,
             d13d_seal_path=Path(args.d13d_seal) if args.d13d_seal else None,
+            trust_root_dir=Path(args.trust_roots) if args.trust_roots else None,
         )
     except ValueError as exc:
         print(f"D13E 正式评测拒绝执行：{exc}", file=sys.stderr)
