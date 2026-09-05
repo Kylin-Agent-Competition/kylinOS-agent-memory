@@ -119,6 +119,23 @@ reference、evidence root/reference、`frozen_by_track=D`、approval reference �
 当前仓库仅提供候选 Dataset/Gold、验证 Runner 和正式合同；它不包含可自行伪造的真实 raw
 生成器。因此 D13D 需要 D13E/B 方确认真实链路与运行职责，之后才能生成 attestation 和 Seal。
 
+### 已完成的执行器缺口核验（2026-09-06）
+
+- `scripts/run_d13e_formal_eval.py` 只读取并校验 `raw_result_files`，不会调用偏好、冲突、
+  Safety 或 Forget 生产逻辑；当前 Bundle 的四个 `raw_result_files` 均为 `null`，状态为
+  `NOT_RUN` / `UNVERIFIED`。
+- 17 条封存样本的 `source_basis` 分散在 `providers.preference_rules`、D8E 冲突策略、
+  `pipeline.sensitive` 和 D10D Forget 持久化/IPC 路径。仓库中未找到把四类样本映射为统一
+  实际执行、逐条观测并输出 JSONL 的 D13E 执行适配器。
+- 因此不得从 Gold 复制 `expected` 为 raw 的 `actual`，也不得把单元测试断言、Mock 或手工
+  JSON 当作冻结 VM 的正式结果。
+
+申请 D 的交付物需增加以下最小约束：版本化执行适配器或明确的逐样本真实调用步骤；每条
+raw 必须记录 `sample_id`、`metric`、由实际调用返回/查询得到的 `actual`，以及足以追溯的
+执行日志引用。适配器不得读取 Gold 结果来构造 `actual`；执行步骤须在 `4a32e5c...` 冻结
+工作树和隔离数据命名空间中运行。该适配器/步骤须在运行前得到 D13E/B 的书面确认，避免
+D13D 单轨擅自定义评测语义。
+
 ## 申请 E：D13A 代码责任方（非 D13D 冻结门禁）
 
 请单独处理 VM pytest 的 4 个 D13A 测试维护失败：
