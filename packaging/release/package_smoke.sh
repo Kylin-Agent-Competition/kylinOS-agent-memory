@@ -10,9 +10,16 @@
 set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
-PKG_DIR="${1:-$SELF_DIR/..}"
+PKG_DIR=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --package) PKG_DIR="$2"; shift 2 ;;
+    --prefix) INSTALL_PREFIX="$2"; shift 2 ;;
+    *) echo "未知参数: $1" >&2; exit 2 ;;
+  esac
+done
+PKG_DIR="${PKG_DIR:-$SELF_DIR/..}"
 PKG_DIR="$(cd "$PKG_DIR" && pwd)"
-INSTALL_PREFIX="${INSTALL_PREFIX:-${XDG_DATA_HOME:-$HOME/.local/share}/kylin-memory-d14a-smoke}"
 
 log() { echo "[d14a-smoke] $*"; }
 die() { echo "[d14a-smoke] FAIL: $*" >&2; exit 1; }
@@ -38,10 +45,12 @@ fi
 rm -f "$SOCK"
 
 # ── 2. 启动 embedding.server（真实 SDK，用于 verify 的 memory.embed） ──
-export PYTHONPATH="$INSTALL_PREFIX/runtime/app:$INSTALL_PREFIX/runtime/bridge"
-# embedding server 需在 install 前启动（verify 用）；先启动（从 package venv，install 后同路径）
+# embedding server 需在 install 前启动（verify 用）；从 package venv 启动，
+# PYTHONPATH 用包内路径（安装前后包内容一致）
+export PYTHONPATH="$PKG_DIR/runtime/app:$PKG_DIR/runtime/bridge"
 "$PKG_DIR/runtime/python/bin/python" -m embedding.server \
-  --socket "$EMBED_SOCK" > /tmp/d14a-smoke-embed.log 2>&1 &
+  --socket "$EMBED_SOCK" \
+  > /tmp/d14a-smoke-embed.log 2>&1 &
 EMBED_PID=$!
 # wait socket
 for i in $(seq 1 30); do [ -S "$EMBED_SOCK" ] && break; sleep 1; done
