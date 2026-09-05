@@ -30,11 +30,14 @@ def _watermark() -> Watermark:
     )
 
 
-def _retrieval(target_id: str, *, ranked_ids: tuple[str, ...] = ()) -> ForgetRetrievalObservation:
+def _retrieval(
+    target_ids: tuple[str, ...] | str, *, ranked_ids: tuple[str, ...] = ()
+) -> ForgetRetrievalObservation:
+    confirmed = (target_ids,) if isinstance(target_ids, str) else target_ids
     return ForgetRetrievalObservation(
         sample=ForgetResidualSample(
             query_id="controlled-query",
-            confirmed_target_ids=(target_id,),
+            confirmed_target_ids=confirmed,
             ranked_ids=ranked_ids,
         ),
         dataset_version="d13d-controlled-l1",
@@ -134,6 +137,72 @@ def test_observation_detects_wrong_deletion_and_cross_user_mutation(state):
         )
     assert observed["wrongly_deleted_items"] == 1
     assert observed["cross_user_violation_count"] == 1
+
+
+def test_observation_covers_full_reset_tagged_knowledge_and_preference(state):
+    engine, target, _control, _foreign = state
+    with engine.begin() as conn:
+        owner_preference = repo.save_preference_version(
+            conn,
+            user_id=USER,
+            preference_key="theme",
+            preference_scope="global",
+            preference_value="dark",
+            memory_status="active",
+            evidence_fingerprint="owner-pref-evidence",
+            idempotency_key=None,
+            request_fingerprint="owner-pref-request",
+        )
+        foreign_preference = repo.save_preference_version(
+            conn,
+            user_id=FOREIGN,
+            preference_key="theme",
+            preference_scope="global",
+            preference_value="light",
+            memory_status="active",
+            evidence_fingerprint="foreign-pref-evidence",
+            idempotency_key=None,
+            request_fingerprint="foreign-pref-request",
+        )
+    owner_item_id = int(owner_preference["memory_item_id"])
+    foreign_item_id = int(foreign_preference["memory_item_id"])
+    target_ids = (f"knowledge:{target}", f"preference:{owner_item_id}")
+    with engine.connect() as conn:
+        snapshot = capture_forget_execution_snapshot(
+            conn,
+            user_id=USER,
+            foreign_user_id=FOREIGN,
+            confirmed_target_ids=target_ids,
+        )
+    with engine.begin() as conn:
+        count, _ = repo.soft_delete_resolved_targets(
+            conn,
+            user_id=USER,
+            target_type="all",
+            resolved_target_ids=list(target_ids),
+            forget_plan_id="full-reset-controlled-plan",
+        )
+    assert count == 2
+    with engine.connect() as conn:
+        observed = observe_forget_execution(
+            conn,
+            snapshot=snapshot,
+            realtime_observation=_retrieval(target_ids),
+            rebuild_observation=_retrieval(target_ids),
+        )
+        foreign_current = repo.get_current_preference_version(
+            conn, user_id=FOREIGN, preference_key="theme", preference_scope="global"
+        )
+    assert observed == {
+        "missed_target_items": 0,
+        "wrongly_deleted_items": 0,
+        "cross_user_violation_count": 0,
+        "residual_after_realtime_query": 0,
+        "residual_after_full_rebuild": 0,
+    }
+    assert foreign_current is not None
+    assert foreign_current["memory_status"] == "active"
+    assert foreign_item_id > 0
 
 
 def test_observation_fails_closed_for_missing_or_unbound_retrieval_observation(state):
