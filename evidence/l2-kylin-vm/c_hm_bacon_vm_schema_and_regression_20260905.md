@@ -1,9 +1,13 @@
 # C-HM bacon VM 回归与宿主 Chat DB schema 确认报告
 
 - 仓库：`Kylin-Agent-Competition/kylinOS-agent-memory`
+
 - 分支：`feat/C-host-mapping` @ `ab43e7d`
-- 环境：银河麒麟桌面操作系统 V11 x86_64（bacon-pc，Qt 5.15.19，SSH `172.19.224.1:2222`）
+
+- 环境：银河麒麟桌面操作系统 V11 x86\_64（bacon-pc，Qt 5.15.19，SSH `172.19.224.1:2222`）
+
 - 日期：2026-09-05
+
 - 执行方式：SSH（paramiko），脚本上传执行；源码经 `git archive` 本地打包上传（VM 直连 GitHub 不稳定，clone 阻塞后改用离线包）
 
 ## 一、memory-client L0 回归（ctest）
@@ -36,7 +40,9 @@ SUMMARY: total=14 fail=0（loader exit=0，QT_QPA_PLATFORM=offscreen）
 ```
 
 **验证结论（V1/V2 修复）**：
+
 - V2（`ManualConfigPage` SpinBox `suffix`）：Controls 2 在 Qt 5.x 全系无该属性，本 VM（5.15.19）修复后加载 PASS——修复在「麒麟真实运行时」确认有效；
+
 - V1（ColumnLayout padding）：Qt 5.15 上合法，加载 PASS 确认修复无回归；**Qt 5.12 兼容性结论仍以 pr151 报告 VM（Qt 5.12）复测为准**，本 VM 不越权标注。
 
 ## 三、宿主 Chat DB schema 确认（V3 关闭：调查部分）
@@ -53,13 +59,13 @@ CREATE TABLE RECORD(ID INT AUTO_INCREMENT, sessionID VARCHAR(36),
 
 `message` 列为 JSON blob，关键字段（实测样本）：
 
-| 字段 | 含义 | 样本 |
-|------|------|------|
-| `author` | 角色 | `"User"` / `"Bot"`（role 信息在 JSON 内，非独立列） |
-| `isEnd` | 终稿标记 | User 恒 `false`；Bot 终稿 `true` |
-| `message` | 正文 | `"如何去除白色衣服上的咖啡渍？"` |
-| `modelMsg` | 模型名 | `"通义千问（Qwen-Plus） 试用版"` |
-| `noModelError` / `reasonMessage` | 错误信息 | 正常为空串 |
+| 字段                               | 含义   | 样本                                       |
+| -------------------------------- | ---- | ---------------------------------------- |
+| `author`                         | 角色   | `"User"` / `"Bot"`（role 信息在 JSON 内，非独立列） |
+| `isEnd`                          | 终稿标记 | User 恒 `false`；Bot 终稿 `true`             |
+| `message`                        | 正文   | `"如何去除白色衣服上的咖啡渍？"`                       |
+| `modelMsg`                       | 模型名  | `"通义千问（Qwen-Plus） 试用版"`                  |
+| `noModelError` / `reasonMessage` | 错误信息 | 正常为空串                                    |
 
 数据现状：8 条 RECORD、5 个 session；session 0/1/2 为完整 turn（User+Bot 成对，msgIndex 0/1）；session 3/4 仅 User 无 Bot 终稿（2026-09-05 当日产生，模型未回复）→ **天然 fail-closed 场景样本**。
 
@@ -78,15 +84,20 @@ SELECT json_extract(message,'$.modelMsg') FROM RECORD
  WHERE sessionID=? AND json_extract(message,'$.author')='Bot';
 ```
 
-B1~B5 验证全部通过：用户原文提取、终稿正文提取、模型名提取、无终稿 turn 识别（仅 session 0/1/2 有终稿）、全表分布（User×5 isEnd=0，Bot×3 isEnd=1）。
+B1\~B5 验证全部通过：用户原文提取、终稿正文提取、模型名提取、无终稿 turn 识别（仅 session 0/1/2 有终稿）、全表分布（User×5 isEnd=0，Bot×3 isEnd=1）。
 
 ### 3.3 对 ProductionSourceResolver 的改造结论
 
 S2 的假设 schema（`role`/`turn_id`/`content` 独立列）与实际不符，改造方向明确：
+
 - 表/列名经 `ProductionSourceResolverConfig` 覆盖为 `RECORD`/`sessionID`/`msgIndex`/`message`/`operateTime`；
+
 - role 判定从「列值比较」改为「`json_extract(message,'$.author')`」；
+
 - 终稿判定：`json_extract(message,'$.isEnd')=1 AND author='Bot'`；
+
 - turn 划分：`sessionID` + msgIndex 配对（User N / Bot N+1）；无 Bot 终稿 → fail-closed（nullopt），与 ADR-010 §INSERT 语义一致；
+
 - SQLite 需启用 JSON1（`json_extract`）——麒麟 VM 系统 sqlite3 支持（已实测）。
 
 ## 四、环境发现
@@ -99,5 +110,8 @@ S2 的假设 schema（`role`/`turn_id`/`content` 独立列）与实际不符，�
 ## 五、结论
 
 - L0 ctest 在麒麟 VM（本机）11/11 全绿；QML 14/14 加载 PASS（含 V1/V2 修复确认，V1 的 Qt 5.12 兼容性以 pr151 VM 复测为准）；
+
 - **V3（schema 不匹配）调查关闭**：真实 schema、JSON 字段语义、查询模型 SQL 均已在真实 DB 验证，resolver 改造输入齐备；
+
 - S3/S4/TD-007/008/009 未在本 VM 执行（无宿主源码），状态不变；S5 全链路复测待 resolver 改造（V3-R）落地后进行。
+
