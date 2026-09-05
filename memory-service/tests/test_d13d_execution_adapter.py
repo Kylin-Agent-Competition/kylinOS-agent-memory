@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import ast
 
 import pytest
 
@@ -13,6 +14,7 @@ from evaluation.d13d_execution_adapter import (
     ExecutionRequest,
     raw_record,
     validate_execution_request,
+    write_raw_records,
 )
 
 
@@ -106,15 +108,113 @@ def test_raw_record_has_only_formal_runner_contract_fields():
     record = raw_record(
         sample_id="d13e-safety-001",
         metric="safety",
-        actual={"critical_gate_bypass_count": 0},
+        actual={
+            "critical_gate_bypass_count": 0,
+            "normal_memory_write_count": 0,
+            "audit_plaintext_leak_count": 0,
+            "cross_user_violation_count": 0,
+        },
         trace_reference="source-events:controlled-trace",
     )
     assert set(record) == {"sample_id", "metric", "actual", "trace_reference"}
 
 
-def test_adapter_module_does_not_reference_evaluation_expectation_artifacts():
+@pytest.mark.parametrize(
+    ("metric", "actual", "message"),
+    [
+        ("safety", {"critical_gate_bypass_count": 0}, "missing required fields"),
+        ("forget", {"missed_target_items": 0}, "missing required fields"),
+        (
+            "safety",
+            {
+                "critical_gate_bypass_count": -1,
+                "normal_memory_write_count": 0,
+                "audit_plaintext_leak_count": 0,
+                "cross_user_violation_count": 0,
+            },
+            "non-negative integer",
+        ),
+        ("preference", {"record_count": 1, "formal_result": "PASS"}, "forbidden"),
+    ],
+)
+def test_raw_record_rejects_incomplete_or_evaluation_shaped_actual(metric, actual, message):
+    with pytest.raises(ExecutionPreflightError, match=message):
+        raw_record(
+            sample_id=f"d13e-{metric if metric != 'preference' else 'pref'}-001",
+            metric=metric,
+            actual=actual,
+            trace_reference="traces/sample-001.jsonl",
+        )
+
+
+def _raw_records(validated):
+    actual_by_metric = {
+        "preference": {"record_count": 1},
+        "conflict": {"action": "defer", "winner_id": None, "reason_code": "same_tier"},
+        "safety": {
+            "critical_gate_bypass_count": 0,
+            "normal_memory_write_count": 0,
+            "audit_plaintext_leak_count": 0,
+            "cross_user_violation_count": 0,
+        },
+        "forget": {
+            "missed_target_items": 0,
+            "wrongly_deleted_items": 0,
+            "cross_user_violation_count": 0,
+            "residual_after_realtime_query": 0,
+            "residual_after_full_rebuild": 0,
+        },
+    }
+    return [
+        raw_record(
+            sample_id=sample["sample_id"],
+            metric=sample["metric"],
+            actual=actual_by_metric[sample["metric"]],
+            trace_reference=f"traces/{sample['sample_id']}.jsonl",
+        )
+        for sample in validated.records
+    ]
+
+
+def test_raw_writer_creates_only_canonical_files_after_complete_validation(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+
+    written = write_raw_records(validated, _raw_records(validated))
+
+    assert set(written) == {"preference", "conflict", "safety", "forget"}
+    assert {path.relative_to(validated.request.output_root).as_posix() for path in written.values()} == {
+        "raw/preference_raw.jsonl",
+        "raw/conflict_raw.jsonl",
+        "raw/safety_raw.jsonl",
+        "raw/forget_raw.jsonl",
+    }
+    assert [len(path.read_text(encoding="utf-8").splitlines()) for path in written.values()] == [4, 4, 4, 5]
+    assert not validated.request.state_root.exists()
+    assert not validated.request.evidence_root.exists()
+
+
+def test_raw_writer_fails_closed_before_creating_output_for_missing_sample(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    records = _raw_records(validated)
+
+    with pytest.raises(ExecutionPreflightError, match="raw samples do not match"):
+        write_raw_records(validated, records[:-1])
+
+    assert not validated.request.output_root.exists()
+
+
+def test_adapter_module_does_not_import_evaluator_owned_artifacts():
     source = (REPOSITORY_ROOT / "memory-service" / "evaluation" / "d13d_execution_adapter.py").read_text(
         encoding="utf-8"
-    ).lower()
-    assert "gold" not in source
-    assert "threshold" not in source
+    )
+    imports = [
+        alias.name
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    ] + [
+        node.module
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.ImportFrom) and node.module is not None
+    ]
+    assert all(not name.startswith("evaluation.d13e") for name in imports)

@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -27,6 +27,49 @@ _EXPECTED_DISTRIBUTION = {
     "safety": 4,
     "forget": 5,
 }
+_RAW_FILENAMES = {
+    "preference": "preference_raw.jsonl",
+    "conflict": "conflict_raw.jsonl",
+    "safety": "safety_raw.jsonl",
+    "forget": "forget_raw.jsonl",
+}
+_REQUIRED_ACTUAL_FIELDS = {
+    "preference": frozenset({"record_count"}),
+    "conflict": frozenset({"action", "winner_id", "reason_code"}),
+    "safety": frozenset(
+        {
+            "critical_gate_bypass_count",
+            "normal_memory_write_count",
+            "audit_plaintext_leak_count",
+            "cross_user_violation_count",
+        }
+    ),
+    "forget": frozenset(
+        {
+            "missed_target_items",
+            "wrongly_deleted_items",
+            "cross_user_violation_count",
+            "residual_after_realtime_query",
+            "residual_after_full_rebuild",
+        }
+    ),
+}
+_COUNTER_FIELDS = frozenset(
+    {
+        "record_count",
+        "critical_gate_bypass_count",
+        "normal_memory_write_count",
+        "audit_plaintext_leak_count",
+        "cross_user_violation_count",
+        "missed_target_items",
+        "wrongly_deleted_items",
+        "residual_after_realtime_query",
+        "residual_after_full_rebuild",
+    }
+)
+_FORBIDDEN_EVALUATION_TOKENS = frozenset(
+    {"gold", "expected", "threshold", "pass", "fail", "formal_result", "formal_pass"}
+)
 
 
 class ExecutionPreflightError(ValueError):
@@ -222,17 +265,99 @@ def validate_execution_request(
     return ValidatedExecution(request=normalized, records=_validate_records(_read_jsonl(normalized.testset_path)))
 
 
+def _validate_actual(metric: str, actual: Mapping[str, Any]) -> None:
+    missing = _REQUIRED_ACTUAL_FIELDS[metric].difference(actual)
+    if missing:
+        raise ExecutionPreflightError("raw actual is missing required fields")
+    for key, value in actual.items():
+        if key.lower() in _FORBIDDEN_EVALUATION_TOKENS:
+            raise ExecutionPreflightError("raw actual contains a forbidden evaluation field")
+        if key in _COUNTER_FIELDS and (
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+        ):
+            raise ExecutionPreflightError("raw counter fields must be non-negative integers")
+        if isinstance(value, str) and value.upper() in {"PASS", "FAIL"}:
+            raise ExecutionPreflightError("raw actual contains a forbidden evaluation value")
+    try:
+        json.dumps(actual, ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError) as exc:
+        raise ExecutionPreflightError("raw actual must be JSON serializable") from exc
+
+
 def raw_record(*, sample_id: str, metric: str, actual: dict[str, Any], trace_reference: str) -> dict[str, Any]:
     """Create the only permitted raw record shape after a real execution."""
     if not _SAMPLE_ID.fullmatch(sample_id) or metric not in _METRICS:
         raise ExecutionPreflightError("raw record identity is invalid")
     if not isinstance(actual, dict) or not actual:
         raise ExecutionPreflightError("raw record actual must be a non-empty object")
+    _validate_actual(metric, actual)
     if not isinstance(trace_reference, str) or not trace_reference.strip():
         raise ExecutionPreflightError("raw record requires a trace_reference")
+    if trace_reference.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:[\\/]", trace_reference):
+        raise ExecutionPreflightError("raw record trace_reference must be relative or an opaque trace ID")
     return {
         "sample_id": sample_id,
         "metric": metric,
         "actual": actual,
         "trace_reference": trace_reference,
     }
+
+
+def _validated_raw_record(record: Mapping[str, Any]) -> dict[str, Any]:
+    if set(record) != {"sample_id", "metric", "actual", "trace_reference"}:
+        raise ExecutionPreflightError("raw record uses an unexpected top-level shape")
+    return raw_record(
+        sample_id=record["sample_id"],
+        metric=record["metric"],
+        actual=record["actual"],
+        trace_reference=record["trace_reference"],
+    )
+
+
+def write_raw_records(
+    validated: ValidatedExecution,
+    raw_records: Iterable[Mapping[str, Any]],
+) -> dict[str, Path]:
+    """Write the four canonical raw files after complete, fail-closed validation.
+
+    Callers supply observations returned by real production dispatch. This seam
+    neither dispatches production code nor manufactures `actual` values. It
+    validates every record before creating the new output root so an invalid
+    batch cannot leave a partial canonical raw package behind.
+    """
+    if not isinstance(validated, ValidatedExecution):
+        raise TypeError("validated must be a ValidatedExecution")
+    expected_metric_by_id = {
+        sample["sample_id"]: sample["metric"] for sample in validated.records
+    }
+    grouped: dict[str, list[dict[str, Any]]] = {metric: [] for metric in _METRICS}
+    seen_sample_ids: set[str] = set()
+    for source_record in raw_records:
+        if not isinstance(source_record, Mapping):
+            raise ExecutionPreflightError("raw record must be an object")
+        record = _validated_raw_record(source_record)
+        sample_id = record["sample_id"]
+        if sample_id in seen_sample_ids:
+            raise ExecutionPreflightError("raw sample_id must be unique")
+        if expected_metric_by_id.get(sample_id) != record["metric"]:
+            raise ExecutionPreflightError("raw sample_id and metric must match the Dataset")
+        seen_sample_ids.add(sample_id)
+        grouped[record["metric"]].append(record)
+    if seen_sample_ids != set(expected_metric_by_id):
+        raise ExecutionPreflightError("raw samples do not match the complete Dataset")
+    if validated.request.output_root.exists():
+        raise ExecutionPreflightError("output_root must not already exist")
+
+    raw_root = validated.request.output_root / "raw"
+    raw_root.mkdir(parents=True)
+    written: dict[str, Path] = {}
+    for metric, filename in _RAW_FILENAMES.items():
+        path = raw_root / filename
+        serialized = "".join(
+            json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            + "\n"
+            for record in grouped[metric]
+        )
+        path.write_text(serialized, encoding="utf-8", newline="\n")
+        written[metric] = path
+    return written
