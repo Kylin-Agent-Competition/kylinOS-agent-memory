@@ -161,4 +161,37 @@ turn.finalized / event.ingest / forget.* production 默认不注册 → UNSUPPOR
 | S6 | C→D handoff 备忘 → D 轨 ACTIVE 化评估 | S5 |
 
 ---
+
+## 九、执行进度与发现（滚动更新）
+
+### 9.1 进度
+
+| 步 | 状态 | 提交 | 说明 |
+|----|------|------|------|
+| S1 | 完成 | `f0778e1` | TurnExtractionAdapter 骨架 + L0（13 用例，纯内存 resolver） |
+| S2 | 完成 | `a8b78df` | ProductionSourceResolver（fixture SQLite L0，16 用例）；发现并规避 Qt 5.15 `QSQLITE_OPEN_READONLY=TRUE` 带值形式回退读写模式的缺陷 |
+| S3/S5 首轮 VM 回归 | 部分 | `6581d2f` | 见 `evidence/l2-kylin-vm/pr151_vm_test_report_20260905.md`；ctest 12/12、Hook 集成 20 PASS、QML 构建 OK；S3 patch 部署/TD-008 确认/S5 全链路未完成，发现 4 项（见 9.2） |
+| V1/V2 修复 | 完成 | `0764118` | QML Qt 5.12 兼容修复 + `qml_pages_load` 全量加载 L0 回归（见 9.2） |
+| S4 | 未开始 | — | 依赖 S4-BLOCK-001 缓解 |
+| S6 | 未开始 | — | 依赖 S5 完成 |
+
+### 9.2 首轮 VM 回归发现与处置
+
+VM 环境：银河麒麟 V11 x86_64（Qt 5.12）；报告：`evidence/l2-kylin-vm/pr151_vm_test_report_20260905.md`。
+
+| # | 发现 | 处置 |
+|---|------|------|
+| V1 | `VerticalLinkPage.qml:96` ColumnLayout `bottomPadding`：QtQuick.Layouts 的 padding 属性自 Qt 5.15 起才有，VM（Qt 5.12）加载即退出 255；CI（Qt 5.15.3）全绿——`d11c_qml_load` 仅覆盖 D11 页面，其余 QML 文件无任何加载覆盖 | **已修复（`0764118`）**：BehaviorObserve / ManualConfig / ToolAdapter / VerticalLink 四页面 padding 改 `x/y/width` + 末尾 spacer；新增 `test_qml_pages_load`（qrc 内全部 14 个 QML 文件逐个 `QQmlComponent` 编译加载断言 `status==Ready`），堵住「CI 绿但低版本 Qt 加载失败」盲区。已知局限：Qt 版本特性差异仍以 VM L2 为准 |
+| V2 | `ManualConfigPage.qml:118` SpinBox `suffix`：QtQuick.Controls 2（Qt 5.x）无该属性（Controls 1 / Qt 6 才有），编译即 Error；`main.qml` 因引用该页类型连带失败——**该页面此前在任何环境（含 CI）都未成功加载过**，由新测试首次暴露 | **已修复（`0764118`）**：移除 `suffix`，单位改独立 `Label` |
+| V3 | 真实宿主 Chat DB 与 S2 假设 schema 不匹配：实际 `RECORD(ID, sessionID, msgIndex, message, operateTime)`，**无 role / turn_id 列**；且当前 0 条 RECORD、0 session | **登记待办（不盲改）**：表名 / ID 列 / 正文列可经 `ProductionSourceResolverConfig` 覆盖；但 ① 无 role 列无法区分用户消息与 assistant 终稿、② sessionID 为会话级而非 turn 级——查询模型扩展须以真实数据确认 msgIndex 角色编码与 turn 划分规则为前提。fail-closed 原则下无真实数据不推断，S5 复测前置 = VM 产生真实对话数据，或从 kylin-aiassistant 源码确认 RECORD 写入逻辑 |
+| V4 | `memory-service` 的 `PRODUCTION_RESOLVER_STATUS` 保持 `BLOCKED_BY_HOST_MAPPING` | **符合预期**（红线 §三.3，非缺陷）：C 轨不改 memory-service |
+
+### 9.3 S5 复测前置条件（汇总）
+
+1. V3 schema 确认（真实数据样本或源码级 RECORD 写入逻辑）；
+2. S4-BLOCK-003 缓解：VM dev 包与构建环境（S3 patch 编译部署前置）；
+3. S4-BLOCK-001 缓解：GUI 手动 Tool 触发方案（TD-007 三类事件采集前置）；
+4. 本轮 QML 修复在 VM 复跑 QML smoke 实测确认（修复依据 Qt 5.12 兼容性分析，以 VM 实测为准，不提前标注 HOST_VERIFIED）。
+
+---
 *任务卡编制：2026-09-05｜依据：D12E 合并后审计 `docs/day12/15` §B-7、事件契约 v1 §7、ADR-010、TD Register R-ARCH-05/TD-007~009、台账 D14-C 依赖分析*
