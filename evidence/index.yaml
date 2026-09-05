@@ -1826,34 +1826,24 @@ entries:
 
   - id: "D13C-L1-REGRESSION"
     task_id: "D13C"
-    description: "D13C 端到端会话评测与主演示稳定性复测——Python 评测账本 L1（32 passed）+ C++ L0 稳定性测试 S1-S6（待 CI 验证）+ CLI 冒烟"
+    description: "D13C 端到端会话评测与主演示稳定性复测——Python 评测账本/CLI L1（config v2，82 passed）+ C++ L0 稳定性测试 S1-S6（CI SUCCESS）+ 文档/evidence 收口"
     status: "PASS"
     evidence_level: "E2"
-    source: "memory-service/tests/test_d13c_session_eval.py + memory-client/tests/test_d13c_stability.cpp"
-    tested_commit: "待 PR 合入后回填"
-    evidence_commit: "待 PR 合入后回填"
-    date: "2026-09-03"
-    reviewer: "待审（D 主审）"
-    runtime_result: "L1 PASS（32 passed）；L0 待 CI 验证（CMake 不在本地 Windows 环境可用）"
+    source: "memory-service/tests/test_d13c_session_eval.py + memory-service/tests/test_d13c_session_eval_cli.py + memory-client/tests/test_d13c_stability.cpp"
+    tested_commit: "f3f9f0cf87c10945148b6fdce88e9d021ec72ee4"
+    date: "2026-09-06"
+    reviewer: "Ducknesses（PR #134 复审中）"
+    runtime_result: "Python L1: 82 passed（module + CLI）；CLI valid exit 0 / no-pair exit 2；C++ L0 ctest + Contract L0 ctest SUCCESS（GitHub Actions run 637 / 178）"
     review_status: "PENDING"
     merge_qualified: false
-    limitations: "L2 麒麟 VM 证据未执行（Runtime 结论 UNVERIFIED）；C++ L0 稳定性测试 S1-S6 待 CI 验证（ubuntu-22.04 + qtbase5-dev/qt5-qmake/build-essential）；smoke bundle 为自构造，非 D13E 封存测试集；本 PR 不关闭 C-D13，仅落地评测账本与 L0 稳定性测试"
-    checksum_sha256: "待回填"
+    limitations: "仅 L0/L1 评测账本与稳定性测试（config d13c-session-eval-config/v2）；Runtime 仍 UNVERIFIED，麒麟 VM 会话闭环/五轮/跨会话/deadline 真实证据未执行；历史 worklist/log（09-03/09-05）保留为快照不回写"
+    checksum_sha256: "N/A（L1 源码级测试，无独立外部 evidence bundle）"
     details: |
-      D13C Python L1 评测账本测试（test_d13c_session_eval.py）: 32 passed in 0.10s
-      A1-A8 成功 bundle: step_completion_rate / isolation_pass_rate / ipc_method_coverage / stop_retry / cross_session / latency / critical_zero
-      E1-E4 fail-closed: provenance / config_version / latency / statistics_method
-      S1-S3 guardrail: cross_user critical / sensitive critical / unresolved_conflict 非 critical
-      R1-R4 边界: NO_VALID_SESSIONS / 重复 step_id / 重复 session_id / invalid stability_repeat
-      N1-N5 稳定性语义: stability_repeat 默认 / retry_of_turn_id=turn_id 违反 / stop 缺 stop_reason / deadline timeout 正确 failed / deadline timeout 错误 stage 违反
-      类型校验: latency NaN/bool 拒绝 / isolation 字段 bool/string 拒绝 / response_status 枚举校验 / guardrail category 枚举校验
-      CLI 冒烟（run_d13c_session_eval.py + d13c_smoke_bundle.json）: report_version=d13c-session-eval-report/v1, session_count=2, total_step_count=14, step_completion_rate=1.0, isolation_pass_rate=1.0, guardrail_critical_count=0, critical_zero_ok=true, coverage_complete=true, fail_closed_reasons=[]
-      py_compile: exit 0（d13c_session_eval.py + run_d13c_session_eval.py + test_d13c_session_eval.py）
-      C++ L0 稳定性测试（test_d13c_stability.cpp）: 6 个 test slot（S1-S6），待 CI 验证
-        S1 stability_replay_5rounds: 主演示编排复跑 5 轮稳定性
-        S2 stop_reason_semantics: PostTurn stop_reason 透传语义
-        S3 retry_semantics: retry_of_turn_id 透传 + 非 retry 必须为空
-        S4 deadline_timeout_client_block: 客户端 5000ms deadline timeout fail-closed
-        S5 cross_session_isolation_replay: 跨会话隔离复跑
-        S6 reset_clears_pending_no_writeback: Reset 清 pending 防 stale response 回写
-      回归日志: docs/day13/06_d13c_l0l1_regression_20260903.log
+      D13C Python L1（test_d13c_session_eval.py + test_d13c_session_eval_cli.py）: 82 passed（VM: Python 3.12.3 / pytest 9.1.1）
+      数据模型: Session 三件套 execution_group_id/stability_cohort_id/stability_round（同给同不给）+ execution_record_id（bundle 唯一键，session_id 允许跨 round 复用）
+      稳定性: A/B 固定真实 session × 5 轮 PASS；重复 execution_record FAIL；同一执行位置 (group,cohort,round,session) 重复 FAIL；缺轮/越界 FAIL
+      deadline: 逐 step deadline_ms == config.deadline_ms（5000/5000 PASS；3000/6000 漂移 FAIL → DEADLINE_CONFIG_EVIDENCE_MISMATCH）
+      已关闭回归: response/stage/timed_out 矩阵、no comparable pair 顶层 fail-closed、CLI malformed/root/config/sessions fail-closed、finalization_reason 非冻结、retry 真实 IPC（MemoryClient::sendRequest→Mock）、stop/retry violation、cross-session round-scoped
+      C++ L0（test_d13c_stability.cpp S1-S6）: GitHub Actions "Memory Client L0 ctest + Contract L0 ctest" SUCCESS（run 178）；"Repository Baseline Check" SUCCESS（run 637）
+      py_compile: PASS；git diff --check: PASS
+      详见: docs/day13/13_d13c_latest_review_rework_20260906.md、docs/day13/14_d13c_p1_closure_20260906.md
