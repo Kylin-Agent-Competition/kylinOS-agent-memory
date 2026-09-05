@@ -97,19 +97,28 @@ cp "$BRIDGE_BUILD"/kylin_embedding*.so "$DIST/runtime/bridge/"
 
 # 2.3 runtime/app/migrations（发布包内 Alembic 迁移）
 python3 - "$REPO_DIR/migrations" "$DIST/runtime/app/migrations" << 'PYEOF'
-import shutil, sys, os
+import shutil, sys, os, re
 src, dst = sys.argv[1], sys.argv[2]
 shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-# 使 env.py 可重定位：migrations 与 memory-service 同在 runtime/app 下
+# 使 env.py 可重定位（确定性重写，非字符串替换）：
+# 打包后 migrations 位于 <prefix>/runtime/app/migrations；memory-service 位于
+# <prefix>/runtime/app。env.py 运行 cwd = <prefix>/runtime/app（install 时 cd 到该目录），
+# 且 alembic -c migrations/alembic.ini 已把 script_location 指向 migrations/。
+# 因此只需把 db.schema 所在目录（= cwd = <prefix>/runtime/app）加入 sys.path。
 env_py = os.path.join(dst, "env.py")
 c = open(env_py).read()
-c = c.replace(
-    'sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "memory-service"))',
-    'sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # <prefix>/runtime/app')
-c = c.replace(
-    'sys.path.insert(0, str(Path(__file__).resolve().parents[1]))',
-    'sys.path.insert(0, str(Path(__file__).resolve().parents[0]))')
+# 删除原两处 sys.path.insert（其 parents[N] 相对位置已不适用）
+c = re.sub(r'^\s*sys\.path\.insert\(0, str\(Path\(__file__\)\.resolve\(\)\.parents\[[01]\].*?\)\)\s*$',
+           '', c, flags=re.M)
+# 在 from db.schema import 之前插入确定性 sys.path（cwd 即 runtime/app）
+anchor = "from db.schema import metadata"
+assert anchor in c, "env.py 缺少 from db.schema import metadata"
+c = c.replace(anchor,
+              "import os\n"
+              "sys.path.insert(0, os.path.abspath(os.getcwd()))  # <prefix>/runtime/app\n\n"
+              + anchor)
 open(env_py, "w").write(c)
+print("env.py rewritten deterministically")
 PYEOF
 
 # 2.4 内嵌 venv（重定位；tar 保留符号链接，规避 vboxsf 无法创建 symlink）
@@ -153,13 +162,29 @@ CFG
 
 # 2.7 systemd 脚本
 mkdir -p "$DIST/systemd"
-cp "$REPO_DIR/packaging/systemd/kylin-memory.service" "$DIST/systemd/"
+cp "$REPO_DIR/packaging/systemd/kylin-memory.service" "$DIST/systemd/kylin-memory.service"
 cp "$REPO_DIR/packaging/release/systemd_install.sh" "$DIST/systemd/install.sh"
 cp "$REPO_DIR/packaging/release/systemd_uninstall.sh" "$DIST/systemd/uninstall.sh"
 cp "$REPO_DIR/packaging/release/systemd_verify.sh" "$DIST/systemd/verify.sh"
+# install 脚本在运行时把 ExecStart 的 %h/.local/bin 渲染为 <install_prefix>/bin
 
 # 2.8 VERSION
 echo "$PACKAGE_VERSION" > "$DIST/VERSION"
+
+# ── Phase 2.9: 包内 Alembic migration smoke（BLOCKER 2 复审要求） ──
+# 在临时 DB 上执行 upgrade head，证明发布包内迁移链可用（无源码依赖）
+log "包内 Alembic migration smoke…"
+MIGRATE_DB="/tmp/kylin-d14a-migrate-smoke.db"
+rm -f "$MIGRATE_DB"
+( cd "$DIST/runtime/app" \
+  && KYLIN_MEMORY_DB="$MIGRATE_DB" PYTHONPATH="$DIST/runtime/app" \
+     "$DIST/runtime/python/bin/alembic" -c migrations/alembic.ini upgrade head ) \
+  || die "包内 Alembic migration smoke 失败"
+"$DIST/runtime/python/bin/python" -c \
+  "import sqlite3,os; c=sqlite3.connect('$MIGRATE_DB'); print('migrate head:', c.execute('SELECT version_num FROM alembic_version').fetchone()[0])" \
+  || die "migration smoke 校验失败"
+rm -f "$MIGRATE_DB"
+log "包内 Alembic migration smoke: PASS"
 
 # ── Phase 3: manifest + SHA256SUMS ──
 python3 - "$DIST" "$PACKAGE_NAME" "$PACKAGE_VERSION" "$SOURCE_COMMIT" << 'PYEOF'
