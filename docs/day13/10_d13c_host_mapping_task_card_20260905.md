@@ -136,6 +136,18 @@ turn.finalized / event.ingest / forget.* production 默认不注册 → UNSUPPOR
 | TD-016 / TD-060 | 不动（D Reviewer / D-E 协同范围） |
 | 新增候选 | 若 S4-BLOCK-001/003 仍阻塞 L2 → 登记新 TD（含缓解路径与负责人），不静默降级 |
 
+### PR151 PASS_WITH_DEBT（复审 `793e5e8`）
+
+| 债务 / 后续项 | 状态与关闭条件 | 责任边界 |
+|---|---|---|
+| R-ARCH-05 | In Progress；仅在 S3、S4、S5/L3 证据与 C→D handoff 均具备后申请关闭 | C 轨施工，D 轨评审 ACTIVE 化输入 |
+| S3 / production identity | 未完成；部署 Hook 并确认其可稳定取得的行标识，再决定 production 使用 `ID`、`rowid` 或 Hook 标识；在此之前默认配置保持 fail-closed | C 轨；不得以现有 L0/L2 fixture 推断 production 身份 |
+| TD-007 / TD-008 / TD-009 | High / Open；分别采集三类 Tool 事件、确认 Hook 点 A 注入、验证实际 Tool 路径或备用路径，并归档 L2 证据 | C 轨执行，D 主审确认关闭 |
+| S4 GUI Tool 真实触发 | BLOCKED；需缓解 S4-BLOCK-001 后手动完成成功、失败、取消三类触发 | C 轨 / 宿主 GUI 环境 |
+| 服务端 L3 | 未验证；须完成 `turn.finalized → memory-service → persistence` 的真实运行时全链路与落库证据 | D 轨 service 运行时配合；本 PR 不改 `memory-service` |
+| trusted host identity / resolver ACTIVE | BLOCKED；在 C→D handoff 后由 D 轨评估信任边界及 `BLOCKED_BY_HOST_MAPPING` 到 ACTIVE 的条件 | D 轨；本 PR 保持 production BLOCKED |
+| 合并前主线同步 | 待合并前处理；分支相对最新 `main` 落后，需同步主线并复跑 CI；当前未发现 Host Mapping 核心语义冲突 | PR 作者 / 合并人；不可据此跳过 CI |
+
 ---
 
 ## 七、验收标准
@@ -174,7 +186,7 @@ turn.finalized / event.ingest / forget.* production 默认不注册 → UNSUPPOR
 | V1/V2 修复 | 完成 | `0764118` | QML Qt 5.12 兼容修复 + `qml_pages_load` 全量加载 L0 回归（见 9.2） |
 | V3-R（resolver 改造） | 完成 | `55ca828` | ProductionSourceResolver 适配真实 schema（RECORD + JSON blob，见 9.4）；L0 重构 16 → 25 用例，全套 ctest 13/13 绿（WSL Qt 5.15.3 本地验证）；生产注册保持 BLOCKED_BY_HOST_MAPPING，待 S5 复测 |
 | S5r2 真实 DB 验证 | client 侧完成 | `d9a834b` | bacon VM 真实 Chat DB harness 18/18 PASS（resolver 默认/rowid 两 config + Adapter 集成 + 只读/隔离红线，双路径独立基线比对，见 9.5）；V5 新发现（RECORD.ID 全 NULL）登记；服务端落库全链路与 S3 Hook 待宿主源码/service 环境 |
-| PR151 Review 返工 | **完成（待提交/复审）** | 本工作树 | HIGH-01：`retry_of_turn_id` 移至 IPC event 顶层并补 Contract round-trip；HIGH-03：`captured_at` 与 legacy `collected_at` 双写同值；HIGH-02：previous `Bot + isEnd=true` 成为回扫硬边界；MEDIUM-01：`ID=NULL` / `rowid` 自动回归与只读 SHA 校验。Memory Client ctest 13/13、Contract 1/1 通过；production 注册继续 BLOCKED |
+| PR151 Review 返工 | **完成（PASS_WITH_DEBT / APPROVED）** | `793e5e8` | HIGH-01：`retry_of_turn_id` 移至 IPC event 顶层并补 Contract round-trip；HIGH-03：`captured_at` 与 legacy `collected_at` 双写同值；HIGH-02：previous `Bot + isEnd=true` 成为回扫硬边界；MEDIUM-01：`ID=NULL` / `rowid` 自动回归与只读 SHA 校验。Memory Client ctest 13/13、Contract 1/1 通过；production 注册继续 BLOCKED；遗留项见第六节 PASS_WITH_DEBT 表。 |
 | S4 | 未开始 | — | 依赖 S4-BLOCK-001 缓解 |
 | S6 | 未开始 | — | 依赖 S5 完成 |
 
