@@ -25,3 +25,21 @@ def test_percentile_uses_nearest_rank_and_validates_input():
         assert "must not be empty" in str(exc)
     else:
         raise AssertionError("empty sample set must fail")
+
+
+def test_prepare_output_dir_rejects_existing_evidence(tmp_path):
+    output = tmp_path / "evidence"
+    collector.prepare_output_dir(output)
+    (output / "old-report.json").write_text("old", encoding="utf-8")
+
+    try:
+        collector.prepare_output_dir(output)
+    except FileExistsError as exc:
+        assert "not empty" in str(exc)
+    else:
+        raise AssertionError("existing evidence must not be overwritten")
+
+
+def test_only_ok_responses_count_toward_latency():
+    assert collector.is_success_response({"status": "ok"})
+    assert not collector.is_success_response({"status": "error", "error_code": "TIMEOUT"})

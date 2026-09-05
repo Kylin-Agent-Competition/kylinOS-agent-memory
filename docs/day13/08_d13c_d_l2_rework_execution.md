@@ -60,6 +60,8 @@ systemctl --user is-active kylin-memory.service
 
 3. Copy `scripts/d13c_l2_collect.py` from that same commit to the VM checkout
    and run it against the deployed service. The database is opened read-only.
+   The output directory must be fresh or empty; the collector refuses to
+   overwrite an existing evidence run.
 
 ```bash
 python3 scripts/d13c_l2_collect.py \
@@ -81,7 +83,7 @@ python3 scripts/d13c_l2_collect.py \
 | Requirement group | Collector coverage | Current expected state |
 | --- | --- | --- |
 | D-L2-01 to D-L2-03 | socket permission, UDS connection, framed echo | directly testable |
-| D-L2-04 to D-L2-05 | complete empty MemoryContext response mapping | BLOCKED pending C/D/E ADR; current `[]` is a known failure |
+| D-L2-04 to D-L2-05 | complete empty MemoryContext response mapping for a controlled no-match probe | BLOCKED pending C/D/E ADR; current `[]` is a known failure |
 | D-L2-06 | retrieve latency percentiles | directly testable |
 | D-L2-07 to D-L2-10 | Chat DB write and event field persistence | BLOCKED by `turn.finalized` host mapping |
 | D-L2-11 to D-L2-12 | client and Gateway deadline behavior | requires C client / approved slow-handler case |

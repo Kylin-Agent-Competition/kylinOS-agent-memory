@@ -116,6 +116,17 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def prepare_output_dir(path: Path) -> None:
+    """Create a fresh evidence directory without overwriting an earlier run."""
+    if path.exists() and any(path.iterdir()):
+        raise FileExistsError(f"output directory is not empty: {path}")
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def is_success_response(response: dict[str, Any]) -> bool:
+    return response.get("status") == "ok"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--socket", required=True, help="deployed memory-service UDS path")
@@ -128,7 +139,10 @@ def main() -> int:
         parser.error("--iterations must be positive")
 
     output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        prepare_output_dir(output_dir)
+    except (FileExistsError, OSError) as exc:
+        parser.error(str(exc))
     socket_path = Path(args.socket)
     now = datetime.now(timezone.utc).isoformat()
     records: list[dict[str, Any]] = []
@@ -151,7 +165,7 @@ def main() -> int:
     try:
         echo, elapsed = request(str(socket_path), "echo", {"method": "echo"}, "d13c-echo")
         records.append({"method": "echo", "request": {"method": "echo"}, "response": echo, "elapsed_ms": elapsed})
-        connected = echo.get("status") == "ok"
+        connected = is_success_response(echo)
         results.append(result("D-L2-02", "VERIFIED" if connected else "FAILED", "echo connection result", response_status=echo.get("status")))
         valid_echo = connected and echo.get("data", {}).get("echo", {}).get("method") == "echo"
         results.append(result("D-L2-03", "VERIFIED" if valid_echo else "FAILED", "length-prefixed echo envelope", response=echo))
@@ -167,8 +181,12 @@ def main() -> int:
         try:
             response, elapsed = request(str(socket_path), "memory.retrieve", {"query": "D13C controlled empty-query probe"}, f"d13c-retrieve-{index}")
             records.append({"method": "memory.retrieve", "iteration": index, "response": response, "elapsed_ms": elapsed})
-            latencies.append(elapsed)
-            retrieve_response = response
+            if is_success_response(response):
+                latencies.append(elapsed)
+                retrieve_response = response
+            else:
+                records.append({"method": "memory.retrieve", "iteration": index, "error": "non-ok response excluded from latency"})
+                break
         except (OSError, ConnectionError, ValueError, json.JSONDecodeError) as exc:
             records.append({"method": "memory.retrieve", "iteration": index, "error": str(exc)})
             break
@@ -177,7 +195,7 @@ def main() -> int:
     valid_context = isinstance(context, dict) and {"selected_memory_ids", "context_version", "injection_status"}.issubset(context)
     results.append(result("D-L2-04", "VERIFIED" if valid_context else "FAILED", "MemoryContext schema check", observed_context=context))
     empty_skipped = isinstance(context, dict) and context.get("injection_status") == "skipped" and not context.get("selected_memory_ids")
-    results.append(result("D-L2-05", "VERIFIED" if empty_skipped else "FAILED", "empty-query must be skipped empty context", observed_context=context))
+    results.append(result("D-L2-05", "VERIFIED" if empty_skipped else "FAILED", "no-match probe must return skipped empty context", observed_context=context))
     if len(latencies) == args.iterations:
         p50, p95 = percentile(latencies, 50), percentile(latencies, 95)
         results.append(result("D-L2-06", "VERIFIED" if p50 < 300 and p95 < 1000 else "FAILED", "retrieve latency", samples=len(latencies), p50_ms=round(p50, 3), p95_ms=round(p95, 3)))
