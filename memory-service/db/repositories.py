@@ -353,14 +353,11 @@ def insert_memory_entry(
     source_turn_id: Optional[int] = None,
     confidence: float = 0.0,
     trace_id: Optional[str] = None,
-    topic_key: Optional[str] = None,
 ) -> int:
     """插入 memory_entry（content 序列化为 JSON 文本），返回 id。
 
     ADR-011：trace_id nullable 列透传（IPC envelope 唯一真源）。
     """
-    if topic_key is not None:
-        _require_nonempty(topic_key=topic_key)
     now = _now_iso()
     try:
         res = conn.execute(
@@ -376,7 +373,6 @@ def insert_memory_entry(
                 created_at=now,
                 updated_at=now,
                 trace_id=trace_id,
-                topic_key=topic_key,
             )
         )
     except OperationalError as exc:
@@ -2008,6 +2004,7 @@ def insert_knowledge_entry(
                 existing["knowledge_type"] != knowledge_type
                 or existing["conditions"] != conditions
                 or existing["confidence"] != confidence
+                or existing["topic_key"] != topic_key
                 or stored_content != content
             ):
                 raise ValueError("knowledge replay immutable input conflict")

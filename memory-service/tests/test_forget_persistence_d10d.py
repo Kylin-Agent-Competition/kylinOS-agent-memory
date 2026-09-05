@@ -124,7 +124,7 @@ def env_trusted(tmp_path):
 
 
 def _seed_knowledge(
-    engine, *, user_id=USER, content="深色主题偏好", entry_type="knowledge", topic_key=None
+    engine, *, user_id=USER, content="深色主题偏好", entry_type="knowledge"
 ) -> int:
     with engine.begin() as conn:
         return repo.insert_memory_entry(
@@ -132,7 +132,6 @@ def _seed_knowledge(
             user_id=user_id,
             entry_type=entry_type,
             content={"value": content},
-            topic_key=topic_key,
         )
 
 
@@ -156,7 +155,9 @@ def _seed_preference(engine, *, user_id=USER, key="theme", scope="global", value
     return int(row[0])
 
 
-def _seed_admitted_knowledge(engine, *, event_id: str, occurred_at: datetime) -> int:
+def _seed_admitted_knowledge(
+    engine, *, event_id: str, occurred_at: datetime, topic_key: str | None = None
+) -> int:
     """Seed the real source-event/evidence relation required by time_window."""
     now = _now_iso()
     with engine.begin() as conn:
@@ -205,6 +206,7 @@ def _seed_admitted_knowledge(engine, *, event_id: str, occurred_at: datetime) ->
             source_event_id=event_id,
             content={"kind": "test"},
             confidence=0.9,
+            topic_key=topic_key,
         )
     return int(result["memory_entry_id"])
 
@@ -621,9 +623,13 @@ def test_invalid_time_window_preview_fails_closed(env):
 
 
 def test_topic_preview_and_execute_uses_exact_structured_key(env):
-    selected = _seed_knowledge(env["engine"], topic_key="d13d-topic")
-    untouched = _seed_knowledge(env["engine"], topic_key="other-topic")
-    legacy_null = _seed_knowledge(env["engine"], content="d13d-topic", topic_key=None)
+    selected = _seed_admitted_knowledge(
+        env["engine"], event_id="topic-selected", occurred_at=datetime(2026, 9, 1, tzinfo=timezone.utc), topic_key="d13d-topic"
+    )
+    untouched = _seed_admitted_knowledge(
+        env["engine"], event_id="topic-untouched", occurred_at=datetime(2026, 9, 1, tzinfo=timezone.utc), topic_key="other-topic"
+    )
+    legacy_null = _seed_knowledge(env["engine"], content="d13d-topic")
     payload = _payload(
         forget_mode="topic",
         target_type="knowledge",
