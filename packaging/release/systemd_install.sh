@@ -10,19 +10,162 @@ set -euo pipefail
 
 UNIT_NAME="kylin-memory"
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
-PKG_DIR="$(cd "$SELF_DIR/.." && pwd)"          # 发布包根（安装来源）
+# 发布包根（安装来源）。PKG_DIR 允许环境覆盖（与 INSTALL_PREFIX 同级的测试缝，
+# 供隔离测试把完整性 Gate 指向临时构造的发布包；生产打包后运行不覆盖）。
+PKG_DIR="${PKG_DIR:-$(cd "$SELF_DIR/.." && pwd)}"
 # contract §1: install_prefix（默认 $XDG_DATA_HOME/kylin-memory-d14a）
 INSTALL_PREFIX="${INSTALL_PREFIX:-${XDG_DATA_HOME:-$HOME/.local/share}/kylin-memory-d14a}"
 UNIT_DST="$HOME/.config/systemd/user/${UNIT_NAME}.service"
 BIN_SYMLINK="$HOME/.local/bin/kylin-memory-server"
 
+# 契约 §6 冻结的 SDK identity（与 build_release_package.sh manifest 一致）
+EXPECT_PACKAGE_NAME="kylin-memory-a-d14a"
+EXPECT_SDK_SO_PATH="/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0"
+EXPECT_SDK_VERSION="1.2.0.0-0k0.4"
+EXPECT_SDK_SHA="028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48"
+
 log() { echo "[d14a-install] $*"; }
 die() { echo "[d14a-install] ERROR: $*" >&2; exit 1; }
 
-# ── 0. 包内完整性预检（fail-closed，contract §3/§7） ──
-[ -f "$PKG_DIR/manifest.json" ] || die "发布包缺失 manifest.json"
-[ -f "$PKG_DIR/SHA256SUMS" ] || die "发布包缺失 SHA256SUMS"
-[ -f "$PKG_DIR/VERSION" ] || die "发布包缺失 VERSION"
+# =============================================================================
+# 全量、双向、fail-closed 的包完整性 Gate（contract §10）
+#   - 解析 SHA256SUMS（<sha256>  <relpath>），拒绝空清单/重复/绝对路径/路径穿越/空路径
+#   - 对 SHA256SUMS 中全部文件在 <PKG_DIR> 下逐一按磁盘实际 sha256 校验（不信任 manifest hash）
+#   - 双向一致：manifest.files 键集 == SHA256SUMS 文件集，且 size 与磁盘一致
+#   - manifest identity：package_name/package_version/source_commit/SDK identity 与契约冻结值一致
+#   - VERSION 文件内容 == manifest.package_version
+#   任何一项不满足即非零退出，且不产生任何复制/迁移/systemd 副作用。
+#   用法：verify_package_integrity <pkg_dir>，成功返回 0，失败调用 die 退出。
+# =============================================================================
+verify_package_integrity() {
+  local pkg="$1"
+  local sums="$pkg/SHA256SUMS"
+  local manifest="$pkg/manifest.json"
+  local version_file="$pkg/VERSION"
+
+  [ -f "$sums" ] || die "发布包缺失 SHA256SUMS"
+  [ -f "$manifest" ] || die "发布包缺失 manifest.json"
+  [ -f "$version_file" ] || die "发布包缺失 VERSION"
+
+  "$PYTHON3" - "$manifest" "$version_file" "$pkg" \
+    "$EXPECT_PACKAGE_NAME" "$EXPECT_SDK_SO_PATH" "$EXPECT_SDK_VERSION" "$EXPECT_SDK_SHA" \
+    <<'PYEOF' || die "包完整性 Gate 失败（详见上方错误）"
+import json, sys, os, hashlib, re
+
+manifest_path, version_path, pkg = sys.argv[1], sys.argv[2], sys.argv[3]
+exp_name, exp_so, exp_ver, exp_sha = sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7]
+sha_path = os.path.join(pkg, "SHA256SUMS")
+
+def die(msg): sys.exit("完整性Gate: " + msg)
+
+# ── 1. 解析 SHA256SUMS（fail-closed） ──
+entries = []          # (relpath, sha256)
+seen_paths = {}
+try:
+    sha_lines = open(sha_path, encoding="utf-8").read().splitlines()
+except OSError as e:
+    die("读取 SHA256SUMS 失败: %s" % e)
+for lineno, line in enumerate(sha_lines, 1):
+    if not line.strip():
+        continue
+    parts = line.split()
+    if len(parts) != 2:
+        die("SHA256SUMS 行 %d 格式非法（须 `sha256  relpath`）：%r" % (lineno, line))
+    sha, rel = parts[0], parts[1]
+    if not re.fullmatch(r"[0-9a-f]{64}", sha):
+        die("SHA256SUMS 行 %d 哈希非法：%r" % (lineno, sha))
+    if rel in seen_paths:
+        die("SHA256SUMS 出现重复路径：%r" % rel)
+    seen_paths[rel] = sha
+    entries.append((rel, sha))
+if not entries:
+    die("SHA256SUMS 为空清单（fail-closed）")
+
+# ── 2. SHA256SUMS 语法防穿越/防绝对路径 ──
+for rel, _sha in entries:
+    if rel.startswith("/"):
+        die("绝对路径禁止: %r" % rel)
+    norm = os.path.normpath(rel)
+    if norm != rel or rel in (".", "..") or norm.startswith("../") or norm == "..":
+        die("路径穿越/非法相对路径: %r" % rel)
+
+# ── 3. 载入 manifest ──
+try:
+    manifest = json.load(open(manifest_path, encoding="utf-8"))
+except Exception as e:
+    die("manifest.json 解析失败: %s" % e)
+
+# ── 4. 双向一致：manifest.files 键集 == SHA256SUMS 文件集 ──
+man_files = manifest.get("files", {})
+sum_set = set(rel for rel, _ in entries)
+man_set = set(man_files.keys())
+missing_in_sum = man_set - sum_set
+unmanaged_in_sum = sum_set - man_set
+if missing_in_sum:
+    die("manifest 声明但 SHA256SUMS 未覆盖: %s" % sorted(missing_in_sum))
+if unmanaged_in_sum:
+    die("SHA256SUMS 含 manifest 未登记文件: %s" % sorted(unmanaged_in_sum))
+
+# ── 5. 全量 sha256 + size 校验（SHA256SUMS 全集，且与 manifest.files 双向一致） ──
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+for rel, expect_sha in entries:
+    p = os.path.join(pkg, rel)
+    if not os.path.isfile(p):
+        die("受管理文件缺失: %r" % rel)
+    if sha256(p) != expect_sha:
+        die("哈希不符: %r" % rel)
+    mf = man_files[rel]
+    if int(mf.get("size", -1)) != os.path.getsize(p):
+        die("size 不符: %r" % rel)
+    if mf.get("sha256") != expect_sha:
+        die("manifest.sha256 与 SHA256SUMS 不一致: %r" % rel)
+
+# ── 6. manifest identity ──
+if manifest.get("package_name") != exp_name:
+    die("package_name 不符: expected=%r actual=%r" % (exp_name, manifest.get("package_name")))
+if not manifest.get("package_version"):
+    die("package_version 缺失")
+if not re.fullmatch(r"[0-9a-f]{40}", str(manifest.get("source_commit", ""))):
+    die("source_commit 非法（须 40 位 SHA）: %r" % manifest.get("source_commit"))
+sdk = manifest.get("sdk") or {}
+if sdk.get("so_path") != exp_so:
+    die("sdk.so_path 不符: expected=%r actual=%r" % (exp_so, sdk.get("so_path")))
+if sdk.get("version") != exp_ver:
+    die("sdk.version 不符: expected=%r actual=%r" % (exp_ver, sdk.get("version")))
+if sdk.get("sha256") != exp_sha:
+    die("sdk.sha256 不符（冻结值）: expected=%r actual=%r" % (exp_sha, sdk.get("sha256")))
+
+# ── 7. VERSION 文件内容 == manifest.package_version ──
+actual_version = open(version_path, encoding="utf-8").read().strip()
+if actual_version != manifest.get("package_version"):
+    die("VERSION(%r) != manifest.package_version(%r)" %
+        (actual_version, manifest.get("package_version")))
+
+print("包完整性 Gate: PASS（%d 文件，双向一致，identity 绑定）" % len(entries))
+PYEOF
+}
+
+# 完整性 Gate 最先执行（早于任何复制/迁移/systemd 副作用）
+PYTHON3="${PYTHON3:-/usr/bin/python3}"
+verify_package_integrity "$PKG_DIR"
+
+# ── 入参解析：install（默认完整安装） / _integrity-gate（仅执行完整性 Gate） ──
+MODE="${1:-install}"
+if [ "$MODE" = "_integrity-gate" ]; then
+  log "仅执行完整性 Gate（_integrity-gate）"
+  exit 0
+fi
+if [ "$MODE" != "install" ]; then
+  die "未知模式: $MODE（支持 install / _integrity-gate）"
+fi
+
+# ── 0. 包内存在性预检（fail-closed，contract §3/§7；哈希由上方 Gate 负责） ──
 [ -x "$PKG_DIR/runtime/python/bin/python" ] || die "包内 venv 缺失: runtime/python"
 [ -f "$PKG_DIR/runtime/app/app.py" ] || die "包内 app 缺失: runtime/app"
 [ -n "$(ls "$PKG_DIR"/runtime/bridge/kylin_embedding*.so 2>/dev/null)" ] \
@@ -31,35 +174,15 @@ die() { echo "[d14a-install] ERROR: $*" >&2; exit 1; }
   || die "包内迁移缺失: runtime/app/migrations"
 
 # ── 1. 前置系统依赖校验（contract §3，fail-closed：版本 + SHA-256） ──
-SDK_SO="/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0"
-SDK_EXPECT_SHA="028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48"
-SDK_EXPECT_VER="1.2.0.0-0k0.4"
-[ -f "$SDK_SO" ] || die "前置依赖缺失: $SDK_SO"
-ACTUAL_SHA="$(sha256sum "$SDK_SO" | awk '{print $1}')"
-[ "$ACTUAL_SHA" = "$SDK_EXPECT_SHA" ] \
-  || die "SDK SHA-256 不匹配: expected=$SDK_EXPECT_SHA actual=$ACTUAL_SHA"
+[ -f "$EXPECT_SDK_SO_PATH" ] || die "前置依赖缺失: $EXPECT_SDK_SO_PATH"
+ACTUAL_SHA="$(sha256sum "$EXPECT_SDK_SO_PATH" | awk '{print $1}')"
+[ "$ACTUAL_SHA" = "$EXPECT_SDK_SHA" ] \
+  || die "SDK SHA-256 不匹配: expected=$EXPECT_SDK_SHA actual=$ACTUAL_SHA"
 ACTUAL_VER="$(dpkg-query -W -f='${Version}' libkylin-coreai-embedding 2>/dev/null || echo 'unknown')"
-[ "$ACTUAL_VER" = "$SDK_EXPECT_VER" ] \
-  || die "SDK 版本不匹配: expected=$SDK_EXPECT_VER actual=$ACTUAL_VER"
+[ "$ACTUAL_VER" = "$EXPECT_SDK_VERSION" ] \
+  || die "SDK 版本不匹配: expected=$EXPECT_SDK_VERSION actual=$ACTUAL_VER"
 
-# ── 2. 包自身校验（contract §10：manifest 中声明的 SHA 与包内实际文件一致） ──
-# 校验核心文件（bridge/app.py/VERSION）哈希与 manifest 一致
-PYTHON3="${PYTHON3:-/usr/bin/python3}"
-"$PYTHON3" - "$PKG_DIR/manifest.json" "$PKG_DIR" <<'PYEOF' || die "manifest 校验失败（无 python3 或哈希不一致）"
-import json, hashlib, sys
-manifest = json.load(open(sys.argv[1]))
-for rel in ("VERSION",
-            "runtime/bridge/kylin_embedding.cpython-312-x86_64-linux-gnu.so",
-            "runtime/app/app.py"):
-    path = sys.argv[2] + "/" + rel
-    h = hashlib.sha256(open(path, "rb").read()).hexdigest()
-    got = manifest["files"][rel]["sha256"]
-    if h != got:
-        sys.exit("hash mismatch: %s" % rel)
-print("manifest core files verified")
-PYEOF
-
-# ── 3. 整包安装到 install_prefix（tar 保留符号链接，规避 vboxsf 限制） ──
+# ── 2. 整包安装到 install_prefix（tar 保留符号链接，规避 vboxsf 限制） ──
 if [ -d "$INSTALL_PREFIX" ]; then
   mv -f "$INSTALL_PREFIX" "$INSTALL_PREFIX.bak.$(date +%Y%m%d_%H%M%S)"
 fi
@@ -67,19 +190,19 @@ mkdir -p "$INSTALL_PREFIX"
 tar -C "$PKG_DIR" -cf - . | tar -C "$INSTALL_PREFIX" -xf -
 [ -x "$INSTALL_PREFIX/bin/kylin-memory-server" ] || die "安装失败: $INSTALL_PREFIX/bin/kylin-memory-server"
 
-# ── 4. ~/.local/bin 做 symlink → <prefix>/bin/kylin-memory-server ──
+# ── 3. ~/.local/bin 做 symlink → <prefix>/bin/kylin-memory-server ──
 mkdir -p "$HOME/.local/bin"
 if [ -e "$BIN_SYMLINK" ] && [ ! -L "$BIN_SYMLINK" ]; then
   cp -f "$BIN_SYMLINK" "$BIN_SYMLINK.bak.$(date +%Y%m%d_%H%M%S)"
 fi
 ln -sfn "$INSTALL_PREFIX/bin/kylin-memory-server" "$BIN_SYMLINK"
 
-# ── 5. 数据目录（确定 0700） ──
+# ── 4. 数据目录（确定 0700） ──
 mkdir -p "$HOME/.config/systemd/user" \
   "$HOME/.config/kylin-memory" "$HOME/.local/share/kylin-memory" "$HOME/.local/state/kylin-memory"
 chmod 0700 "$HOME/.config/kylin-memory" "$HOME/.local/share/kylin-memory" "$HOME/.local/state/kylin-memory"
 
-# ── 6. unit：ExecStart 指向固定 prefix launcher（BLOCKER 1 方案 B） ──
+# ── 5. unit：ExecStart 指向固定 prefix launcher（BLOCKER 1 方案 B） ──
 UNIT_SRC="$SELF_DIR/kylin-memory.service"
 # 渲染 ExecStart 为 <prefix>/bin/kylin-memory-server
 sed "s|%h/.local/bin/kylin-memory-server|$INSTALL_PREFIX/bin/kylin-memory-server|g" \
@@ -87,7 +210,7 @@ sed "s|%h/.local/bin/kylin-memory-server|$INSTALL_PREFIX/bin/kylin-memory-server
 if [ -f "$UNIT_DST.bak.$(date +%Y%m%d_%H%M%S 2>/dev/null)" ]; then :; fi
 systemctl --user daemon-reload
 
-# ── 7. 首次启动前 Alembic 迁移（BLOCKER 2：clean VM 必须 upgrade head） ──
+# ── 6. 首次启动前 Alembic 迁移（BLOCKER 2：clean VM 必须 upgrade head） ──
 export KYLIN_MEMORY_DB="${KYLIN_MEMORY_DB:-$HOME/.local/share/kylin-memory/kylin_memory.db}"
 mkdir -p "$(dirname "$KYLIN_MEMORY_DB")"
 log "执行 Alembic 迁移（upgrade head）…"
@@ -106,7 +229,7 @@ assert rows, "alembic_version 为空"
 print("alembic_version:", rows[0][0])
 PYEOF
 
-# ── 8. enable --now + wait socket + journal ready + restart 二次 status ──
+# ── 7. enable --now + wait socket + journal ready + restart 二次 status ──
 systemctl --user enable --now "$UNIT_NAME" || die "enable --now 失败"
 sleep 3
 # wait socket
@@ -122,7 +245,7 @@ for i in $(seq 1 30); do
 done
 systemctl --user is-active --quiet "$UNIT_NAME" || die "服务未 active"
 
-# ── 9. restart 二次 status（contract §7 Step 6） ──
+# ── 8. restart 二次 status（contract §7 Step 6） ──
 log "restart 验证…"
 systemctl --user restart "$UNIT_NAME"
 sleep 3

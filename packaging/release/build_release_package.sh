@@ -207,6 +207,16 @@ for root, dirs, fnames in os.walk(dist):
         rel = os.path.relpath(p, dist)
         files[rel] = {"size": os.path.getsize(p), "sha256": sha256(p)}
 
+# 断言：files 全集与磁盘真实常规文件一致（manifest.json / SHA256SUMS 在建时尚未存在，
+# 天然不进入 files/SHA256SUMS；Gate 侧以 manifest.files == SHA256SUMS 双向一致为准，故此处
+# 无需也无法把它们包含进来。此断言防 files 与磁盘 walk 集漂移。）
+on_disk = set()
+for root, dirs, fnames in os.walk(dist):
+    for f in fnames:
+        on_disk.add(os.path.relpath(os.path.join(root, f), dist))
+on_disk -= {"manifest.json", "SHA256SUMS"}
+assert set(files) == on_disk, "files 集与磁盘 walk 集不一致"
+
 manifest = {
     "package_name": name,
     "package_version": ver,
