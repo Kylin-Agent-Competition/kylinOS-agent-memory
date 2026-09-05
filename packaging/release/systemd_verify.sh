@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
 # D14A verify/smoke — 发布包安装后健康 + 真实 SDK 验证（contract §9，fail-closed）
-# 用法: bash verify.sh [--embed-socket <path>]
+# 用法: bash verify.sh [--embed-socket <path>] [--embed-pid <pid>]
 # 校验项:
 #   1. systemd --user is-active
-#   2. socket 存在且 holder PID == systemd MainPID
-#   3. cmdline / cwd 不含源码 checkout 与个人 venv
-#   4. 实际加载 SDK .so 的 SHA-256 == contract 冻结值
-#   5. 真实 memory.embed → dim=768（非 fake；embedding.sock 必须就绪，否则 FAIL）
+#   2. gateway socket 存在且 holder PID == systemd MainPID
+#   3. cmdline 不含源码 checkout 与个人 venv
+#   4. 真实 memory.embed → dim=768（非 fake；embedding.sock 必须就绪，否则 FAIL）
+#   5. 若提供 --embed-pid：校验 embedding server 进程实际加载 SDK .so 的
+#      SHA-256 == contract 冻结值（SDK 由 embedding server 加载，非 gateway）
 # =============================================================================
 set -euo pipefail
 
@@ -16,10 +17,12 @@ SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 PKG_DIR="$(cd "$SELF_DIR/.." && pwd)"
 INSTALL_PREFIX="${INSTALL_PREFIX:-${XDG_DATA_HOME:-$HOME/.local/share}/kylin-memory-d14a}"
 EMBED_SOCK=""
+EMBED_PID=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --embed-socket) EMBED_SOCK="$2"; shift 2 ;;
+    --embed-pid) EMBED_PID="$2"; shift 2 ;;
     *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
 done
@@ -60,16 +63,7 @@ echo "$CMDLINE" | grep -qiE "(\.venv|d4d-venv|/home/[^/]+/kylinOS-agent-memory)"
   && die "cmdline 含开发 venv/源码路径" || true
 pass "cmdline 指向发布包 venv（无开发目录依赖）"
 
-# 4. 实际加载 SDK .so 的 SHA-256 == 冻结值（contract §6）
-SDK_SO="/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0"
-SDK_EXPECT_SHA="028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48"
-grep -Fq "$SDK_SO" /proc/$PID/maps || die "进程未加载 SDK .so: $SDK_SO"
-ACTUAL_SHA="$(sha256sum "$SDK_SO" | awk '{print $1}')"
-[ "$ACTUAL_SHA" = "$SDK_EXPECT_SHA" ] \
-  || die "SDK 实际 SHA 不匹配: expected=$SDK_EXPECT_SHA actual=$ACTUAL_SHA"
-pass "SDK 实际加载 SHA 校验通过"
-
-# 5. 真实 memory.embed → dim=768（fail-closed：embedding.sock 必须就绪）
+# 4. 真实 memory.embed → dim=768（fail-closed：embedding.sock 必须就绪）
 [ -S "$EMBED_SOCK" ] || die "embedding.sock 未就绪: $EMBED_SOCK（无法完成真实 SDK smoke）"
 PY="$INSTALL_PREFIX/runtime/python/bin/python"
 EMBED_RESULT="$("$PY" - <<PYEOF 2>&1 || true
@@ -98,5 +92,17 @@ echo "$EMBED_RESULT" | grep -q '"degraded": false' \
   || die "memory.embed 处于降级（fake fallback）: $EMBED_RESULT"
 log "memory.embed: $EMBED_RESULT"
 pass "真实 SDK memory.embed dim=768"
+
+# 5. 若提供 --embed-pid：校验 embedding server 实际加载 SDK .so 的 SHA（contract §6）
+if [ -n "$EMBED_PID" ]; then
+  SDK_SO="/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0"
+  SDK_EXPECT_SHA="028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48"
+  [ -d /proc/$EMBED_PID ] || die "embedding server PID 无效: $EMBED_PID"
+  grep -Fq "$SDK_SO" /proc/$EMBED_PID/maps || die "embedding server 未加载 SDK .so: $SDK_SO"
+  ACTUAL_SHA="$(sha256sum "$SDK_SO" | awk '{print $1}')"
+  [ "$ACTUAL_SHA" = "$SDK_EXPECT_SHA" ] \
+    || die "SDK 实际 SHA 不匹配: expected=$SDK_EXPECT_SHA actual=$ACTUAL_SHA"
+  pass "embedding server SDK 实际加载 SHA 校验通过"
+fi
 
 echo "[d14a-verify] ALL PASS"

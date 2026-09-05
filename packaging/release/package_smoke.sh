@@ -63,13 +63,13 @@ bash "$PKG_DIR/systemd/install.sh" install || die "install 失败"
 # ── 4. verify（fail-closed：PID==MainPID / SDK SHA / memory.embed）
 #    从已安装的 INSTALL_PREFIX 运行 verify（验证发布链的最终安装形态） ──
 log "执行 verify…"
-bash "$INSTALL_PREFIX/systemd/verify.sh" --embed-socket "$EMBED_SOCK" || die "verify 失败"
+bash "$INSTALL_PREFIX/systemd/verify.sh" --embed-socket "$EMBED_SOCK" --embed-pid "$EMBED_PID" || die "verify 失败"
 
 # ── 5. restart 再 verify ──
 log "restart 后再次 verify…"
 systemctl --user restart "$UNIT_NAME"
 sleep 3
-bash "$INSTALL_PREFIX/systemd/verify.sh" --embed-socket "$EMBED_SOCK" || die "restart 后 verify 失败"
+bash "$INSTALL_PREFIX/systemd/verify.sh" --embed-socket "$EMBED_SOCK" --embed-pid "$EMBED_PID" || die "restart 后 verify 失败"
 
 # ── 6. rollback ──
 log "执行 rollback…"
