@@ -15,7 +15,7 @@
 | D13D-B04 | 新基线隔离部署与 VM 核验 | D13D | VM 内 `HEAD=4a32e5c948a968f3bd4409d91deac320002baea1`、工作树干净，独立 DB/socket 已启动并完成 UDS 预检；现有 user service 未切换。 | PREPARED |
 | D13D-B05 | 本轮正式证据目录与校验清单尚未生成 | D13D | 创建唯一 `evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>/`，写入最终环境清单、命令输出、Manifest、attestation 和 `SHA256SUMS`；不得复用旧基线准备目录。 | BLOCKED |
 | D13D-B06 | D13B -> D13D 正式 Evaluation Contract | B 轨 | B 轨已提供正式 CLI、输入/输出合同和 fail-closed 语义；真实输入绑定随 D13E/B01、B02 与 D13D 环境冻结执行。 | B 轨已解除 |
-| D13D-B07 | 四类真实 raw JSONL 与受批准执行适配器缺失 | D13D + D13E / B 轨 | 仓库当前仅有 Dataset/Gold 与验证 Runner；17 条样本分别指向偏好规则、冲突策略、敏感检测、遗忘事务等真实调用链，未提供可将它们统一执行为 raw 的生产/评测适配器。D13E/B 必须提供或书面批准适配器及执行步骤；适配器不得读取 Gold 生成 actual、不得使用 Mock 或手工构造结果。随后在冻结 VM 产生 Preference、Conflict、Safety、Forget 的逐样本 raw，并由正式 Runner Gate 0--10 校验。 | BLOCKED |
+| D13D-B07 | 四类真实 raw JSONL 与受批准执行适配器缺失 | D13D + D13E / B 轨 | 已收到回执 A（内容 hash 见 D13D 收件核验记录）：不读 Gold、真实调用链、逐样本 trace、失败非零退出等口径与模板一致；但 `confirmed_by` 未具名，adapter path/commit-or-hash/invocation/approval reference 均为未交付，17 条 raw 尚未产生。B/D13E 必须补具名确认并交付或书面批准适配器及执行步骤；适配器不得读取 Gold 生成 actual、不得使用 Mock 或手工构造结果。随后在冻结 VM 产生 Preference、Conflict、Safety、Forget 的逐样本 raw，并由正式 Runner Gate 0--10 校验。 | CONTRACT_PENDING_IDENTITY / DELIVERY_BLOCKED |
 
 ## 开工条件
 
