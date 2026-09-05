@@ -8,7 +8,7 @@
 - 初始结论：`NOT_READY_FOR_D14D_INTEGRATION`。该分支的 package-only SDK 冒烟是有价值的
   准备证据，但初始脚本无法满足 D14D 的完整性、可回退和升级 Gate，且不包含 D13E 主线。
 - 整改状态：`fix/d14a-release-lifecycle@9536746` 已修复 P1-01 至 P1-04，并补充安装失败清理与
-  替换 unit/服务/路径的所有权守卫；本地发布代码候选 `336125d` 已包含这些修复和 L0 守卫测试。
+  替换 unit/服务/路径的所有权守卫与 tar/manifest 身份绑定；本地发布代码候选 `35b4804` 已包含这些修复和 L0 守卫测试。
   该候选尚未独立审查或选定为最终被测提交，故 D14D 总体结论仍为 `NOT_READY_FOR_D14D_INTEGRATION`。
 
 ## 已确认项
@@ -30,7 +30,7 @@
 | D14D-P1-05 | High | package contract 规定升级，但脚本只提供 install/rollback，无第二包、版本顺序、数据保留或 migration rollback 契约 | D14D G7 无法执行，不能宣称完成完整发布生命周期 | 提供经批准的 upgrade package、from/to identity、数据保留/清除策略、前后 schema/version 检查和失败回退流程；否则 G7 必须 `NOT_RUN` |
 | D14D-P1-06 | Critical | D14A head 不包含 `kylin-mem/main@4a32e5c`（D13E 门禁），其 package contract 固定 source commit `5424d28` | D13D、D14A、D14B 不会绑定同一被测实现 | 在一个经过审查的最终集成 SHA 上重建 D14A；D13D `FROZEN`、包 manifest、VM HEAD 和 D14B 输入必须均使用该 SHA |
 
-## 整改候选（`bf7b4fe`；本地集成候选代码为 `336125d`）
+## 整改候选（`f32429e`；本地集成候选代码为 `35b4804`）
 
 | 原问题 | 状态 | 实现与 L0 证据 |
 | --- | --- | --- |
@@ -43,7 +43,7 @@
 `bash packaging/release/test_release_script_guards.sh` 通过。以上是 WSL L0 证据，尚未替代
 最终集成提交上的麒麟 L3 安装、真实 SDK、重启和回退验证。
 
-候选发布代码提交 `336125d7749b889f0275f0df05f9a3115f0249db` 已包含 D13E 主线 `4a32e5c`、
+候选发布代码提交 `35b48040c78ee39ad6dd693a87d0c4ea5eed78fd` 已包含 D13E 主线 `4a32e5c`、
 D14A release head、修复后的 cherry-pick `df5f4af`/`13c43f8`，以及清理所有权守卫；`git diff --check`
 和 release L0 守卫测试均通过。在该候选工作树用 CPython 3.13 执行
 `python -m unittest memory-service.tests.test_d13e_formal_eval -v` 得到 48 passed、1 skipped

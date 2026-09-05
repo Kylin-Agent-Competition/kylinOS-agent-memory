@@ -119,6 +119,17 @@ PY
   if [ "$manifest_commit" != "$TESTED_COMMIT" ]; then
     add_blocker "package manifest source_commit does not match tested_commit (manifest=$manifest_commit)"
   fi
+
+  package_root_name="$(basename "$PACKAGE_DIR")"
+  tar_manifest_path="$package_root_name/manifest.json"
+  if ! tar -tzf "$PACKAGE_TAR" | grep -Fqx "$tar_manifest_path"; then
+    add_blocker "package tar does not contain $tar_manifest_path exactly"
+  else
+    tar_manifest_sha256="$(tar -xOzf "$PACKAGE_TAR" "$tar_manifest_path" | sha256sum | awk '{print $1}')"
+    if [ "$tar_manifest_sha256" != "$package_manifest_sha256" ]; then
+      add_blocker "package tar manifest does not match package directory manifest"
+    fi
+  fi
 fi
 
 freeze_result="$(python3 - "$D13D_FREEZE" "$TESTED_COMMIT" <<'PY'
