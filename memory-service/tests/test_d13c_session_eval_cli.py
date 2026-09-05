@@ -138,3 +138,29 @@ def test_cli_invalid_state_combo_fail_closed(tmp_path):
     assert any("INVALID_INPUT" in r for r in report["fail_closed_reasons"])
     assert "Traceback" not in proc.stderr
 
+
+
+
+def test_cli_no_comparable_pair_exit_2(tmp_path):
+    data = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    # 两个不同 scenario 各 1 session → 无 comparable pair → 顶层 fail-closed
+    data["sessions"] = [
+        {
+            "session_id": "only-A",
+            "scenario": "scenario_A",
+            "injected_context_text": "[CTX] A 内容",
+            "steps": json.loads(FIXTURE.read_text(encoding="utf-8"))["sessions"][0]["steps"],
+        },
+        {
+            "session_id": "only-B",
+            "scenario": "scenario_B",
+            "injected_context_text": "[CTX] B 内容",
+            "steps": json.loads(FIXTURE.read_text(encoding="utf-8"))["sessions"][1]["steps"],
+        },
+    ]
+    bundle = _write(tmp_path, "no_pair.json", data)
+    proc, report = _run(tmp_path, bundle)
+    assert proc.returncode == 2
+    assert report["aggregate_metrics"] is None
+    assert any("NO_COMPARABLE_CROSS_SESSION_PAIR" in r for r in report["fail_closed_reasons"])
+    assert "Traceback" not in proc.stderr

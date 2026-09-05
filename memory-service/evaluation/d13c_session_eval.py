@@ -28,16 +28,16 @@ memory-client + Mock Gateway 或已部署的 D 轨 Gateway 完成，未取得 VM
 设计要点（fail-closed）
 -----------------------
 - provenance 字段缺失 / commit 非 40 hex / sha256 非 64 hex /
-  config_version != "d13c-session-eval-config/v1" → INVALID_PROVENANCE，指标 null。
+  config_version != "d13c-session-eval-config/v2" → INVALID_PROVENANCE，指标 null。
 - 任一完成 step 缺 latency_ms 或非有限非负数 → MISSING_LATENCY，该会话指标 null。
 - guardrail critical（cross_user / sensitive / unresolved_conflict）> 0 →
   critical_zero_ok=False，仍输出指标但 Critical 标记。
 - 0 个有效 session → NO_VALID_SESSIONS，聚合指标 null。
 - 重复 step_id（会话内）/ session_id（bundle 内）→ DUPLICATE_* fail-closed。
-- stability_repeat < 1 / deadline_ms <= 0 / repeat_count < 1 → INVALID_CONFIG。
-- stop_retry 语义违反（retry 缺 retry_of_turn_id / retry_of_turn_id=turn_id /
-  stop turn 缺 stop_reason）计入 stop_retry_violation_count，不 null 整体指标
-  （便于定位），但 critical_zero_ok 不受其影响。
+- stability_repeat < 1 / deadline_ms <= 0 → INVALID_CONFIG。
+- retry 语义违反（retry 缺 retry_of_turn_id / retry_of_turn_id=turn_id）计入
+  stop_retry_violation_count，不 null 整体指标（便于定位），但 critical_zero_ok
+  不受其影响。
 - 延迟只接受有限非负数（拒绝 bool / NaN / ±Infinity）。
 """
 
@@ -48,7 +48,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Optional
 
-FROZEN_CONFIG_VERSION = "d13c-session-eval-config/v1"
+FROZEN_CONFIG_VERSION = "d13c-session-eval-config/v2"
 REPORT_VERSION = "d13c-session-eval-report/v1"
 DEFAULT_DEADLINE_MS = 5000
 DEFAULT_STABILITY_REPEAT = 5
@@ -122,10 +122,6 @@ def _state_combo_is_legal(
 _VALID_RESPONSE_STATUSES: frozenset[str] = frozenset(
     {"ok", "error", "unsupported_method", "timeout", "disconnected"}
 )
-_VALID_FINALIZATION_REASONS: frozenset[str] = frozenset(
-    {"", "normal", "stop", "retry", "cancelled", "length"}
-)
-
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -146,7 +142,6 @@ class EvalSessionConfig:
     gold_sha256: str
     statistics_method: str
     warmup_count: int
-    repeat_count: int
     concurrency: int
     stability_repeat: int
     deadline_ms: int
@@ -195,7 +190,6 @@ class EvalSessionConfig:
         normalized["statistics_method"] = statistics_method
 
         normalized["warmup_count"] = cls._int_field(raw, "warmup_count", minimum=0)
-        normalized["repeat_count"] = cls._int_field(raw, "repeat_count", minimum=1)
         normalized["concurrency"] = cls._int_field(raw, "concurrency", minimum=1)
         # stability_repeat：稳定性复跑轮数（D13-C「复测主演示稳定性」），至少 1
         if "stability_repeat" in raw:
@@ -330,11 +324,11 @@ class StepRecord:
             raise ValueError(f"steps[{position}].deadline_ms 必须 > 0")
 
         timed_out = cls._parse_bool(raw.get("timed_out"), f"steps[{position}].timed_out")
-        finalization_reason = str(raw.get("finalization_reason", "")).strip()
-        if finalization_reason not in _VALID_FINALIZATION_REASONS:
-            raise ValueError(
-                f"steps[{position}] 非法 finalization_reason {finalization_reason!r}"
-            )
+        # NR-3：finalization_reason 暂不冻结业务枚举（待 E 终审），只严格要求类型为字符串
+        raw_reason = raw.get("finalization_reason", "")
+        if not isinstance(raw_reason, str):
+            raise ValueError(f"steps[{position}].finalization_reason 必须是字符串")
+        finalization_reason = raw_reason.strip()
         stop_reason = str(raw.get("stop_reason", "")).strip()
         retry_of_turn_id = str(raw.get("retry_of_turn_id", "")).strip()
         turn_id = str(raw.get("turn_id", "")).strip()
@@ -393,8 +387,10 @@ class SessionRecord:
     scenario: str
     steps: tuple[StepRecord, ...]
     injected_context_text: str
-    # R2：稳定性复跑执行轮次证据（execution_group_id + stability_round 必须成对）
+    # R2/NR-1：稳定性复跑执行轮次证据（execution_group_id + stability_cohort_id +
+    # stability_round 三项必须同时提供或同时不提供）
     execution_group_id: str
+    stability_cohort_id: str
     stability_round: Optional[int]
 
     @classmethod
@@ -420,8 +416,10 @@ class SessionRecord:
                 )
             seen_step_ids.add(step.step_id)
             steps.append(step)
-        # R2：稳定性复跑轮次证据（可选，但 execution_group_id / stability_round 必须成对）
+        # NR-1：稳定性复跑轮次证据（execution_group_id / stability_cohort_id /
+        # stability_round 三项必须同时提供或同时不提供）
         execution_group_id = str(raw.get("execution_group_id", "")).strip()
+        stability_cohort_id = str(raw.get("stability_cohort_id", "")).strip()
         raw_round = raw.get("stability_round")
         if raw_round is None:
             stability_round: Optional[int] = None
@@ -436,9 +434,17 @@ class SessionRecord:
                     f"sessions[{position}].stability_round 必须 >= 1（禁止 round=0/负值）"
                 )
             stability_round = raw_round
-        if bool(execution_group_id) != (stability_round is not None):
+        evidence_count = sum(
+            (
+                bool(execution_group_id),
+                bool(stability_cohort_id),
+                stability_round is not None,
+            )
+        )
+        if evidence_count not in (0, 3):
             raise ValueError(
-                f"sessions[{position}] execution_group_id 与 stability_round 必须成对提供"
+                f"sessions[{position}] execution_group_id / stability_cohort_id / "
+                "stability_round 三项必须同时提供或同时不提供"
             )
         injected = str(raw.get("injected_context_text", "")).strip()
         # injected_context_text 允许空字符串（failed/skipped 注入场景），
@@ -449,6 +455,7 @@ class SessionRecord:
             steps=tuple(steps),
             injected_context_text=injected,
             execution_group_id=execution_group_id,
+            stability_cohort_id=stability_cohort_id,
             stability_round=stability_round,
         )
 
@@ -511,24 +518,19 @@ def _session_metrics(session: SessionRecord) -> dict[str, Any]:
     present_methods = {s.method for s in steps}
     missing_methods = [m for m in REQUIRED_IPC_METHODS if m not in present_methods]
 
-    # stop_retry 语义违反计数
+    # retry 语义违反计数（NR-3：finalization_reason 不冻结业务枚举，
+    # 只保留已明确的 retry 跨字段约束；不再假设 stop 需要 stop_reason）
     stop_retry_violations: list[str] = []
     for step in steps:
-        if step.method == "turn.finalized":
-            if step.finalization_reason == "retry":
-                if not step.retry_of_turn_id:
-                    stop_retry_violations.append(
-                        f"{step.step_id}: retry 缺 retry_of_turn_id"
-                    )
-                elif step.retry_of_turn_id == step.turn_id:
-                    stop_retry_violations.append(
-                        f"{step.step_id}: retry_of_turn_id == turn_id"
-                    )
-            elif step.finalization_reason == "stop":
-                if not step.stop_reason:
-                    stop_retry_violations.append(
-                        f"{step.step_id}: stop 缺 stop_reason"
-                    )
+        if step.method == "turn.finalized" and step.finalization_reason == "retry":
+            if not step.retry_of_turn_id:
+                stop_retry_violations.append(
+                    f"{step.step_id}: retry 缺 retry_of_turn_id"
+                )
+            elif step.retry_of_turn_id == step.turn_id:
+                stop_retry_violations.append(
+                    f"{step.step_id}: retry_of_turn_id == turn_id"
+                )
 
     # deadline 行为违反：timed_out=True 必须 stage_final ∈ failed 且迁移末态为 failed
     deadline_violations: list[str] = []
@@ -579,75 +581,116 @@ def _session_metrics(session: SessionRecord) -> dict[str, Any]:
 def _validate_stability_rounds(
     sessions: list[SessionRecord], stability_repeat: int
 ) -> None:
-    """R2：把 config.stability_repeat 与实际执行轮次证据绑定（fail-closed）。
+    """NR-1：把 config.stability_repeat 与实际执行轮次证据绑定（fail-closed）。
 
-    当 stability_repeat > 1 时，bundle 必须：
-    - 每个 session 都携带 execution_group_id + stability_round（成对）；
-    - 全部属于同一 execution_group_id；
-    - stability_round 恰好覆盖 {1..stability_repeat}（禁止缺轮/重复轮/round=0/越界）。
-    证据不足直接抛 ValueError（CLI 统一 exit 2 + fail_closed_reasons）。
+    正确模型：
+        execution_group_id
+          └── stability_cohort_id（A/B）
+                └── stability_round 1..stability_repeat
+
+    每个 (execution_group_id, stability_cohort_id) 独立校验 rounds == {1..N}：
+    缺轮 / 同 cohort 内重复轮 / 越界 / 无证据 / 混用带与不带证据 均 fail-closed。
     """
     tagged = [
         s for s in sessions
-        if s.execution_group_id or s.stability_round is not None
+        if s.execution_group_id or s.stability_cohort_id or s.stability_round is not None
     ]
     if not tagged:
         if stability_repeat > 1:
             raise ValueError(
                 f"stability_repeat={stability_repeat} 但 bundle 未携带任何执行轮次证据"
-                "（sessions 缺少 execution_group_id/stability_round）"
+                "（sessions 缺少 execution_group_id/stability_cohort_id/stability_round）"
             )
         return
     if len(tagged) != len(sessions):
         raise ValueError("sessions 混用带轮次证据与不带轮次证据的条目")
-    groups: dict[str, list[int]] = {}
+    groups: dict[tuple[str, str], list[int]] = {}
     for s in sessions:
-        groups.setdefault(s.execution_group_id, []).append(
+        key = (s.execution_group_id, s.stability_cohort_id)
+        groups.setdefault(key, []).append(
             s.stability_round if s.stability_round is not None else 0
         )
-    if len(groups) != 1:
-        raise ValueError("稳定性复跑证据必须属于同一 execution_group_id")
-    rounds = groups[next(iter(groups))]
-    duplicates = sorted({r for r in rounds if rounds.count(r) > 1})
-    out_of_range = sorted({r for r in rounds if r < 1 or r > stability_repeat})
-    missing = [r for r in range(1, stability_repeat + 1) if r not in rounds]
-    if duplicates or out_of_range or missing:
+    problems: list[str] = []
+    for (group_id, cohort_id), rounds in groups.items():
+        duplicates = sorted({r for r in rounds if rounds.count(r) > 1})
+        out_of_range = sorted({r for r in rounds if r < 1 or r > stability_repeat})
+        missing = [r for r in range(1, stability_repeat + 1) if r not in rounds]
+        if duplicates or out_of_range or missing:
+            problems.append(
+                f"group={group_id!r} cohort={cohort_id!r}: "
+                f"missing={missing} duplicate={duplicates} out_of_range={out_of_range}"
+            )
+    if problems:
         raise ValueError(
-            f"stability_repeat={stability_repeat} 与实际轮次证据不一致："
-            f"missing={missing} duplicate={duplicates} out_of_range={out_of_range}"
+            f"stability_repeat={stability_repeat} 与实际轮次证据不一致：" + "; ".join(problems)
         )
 
 
 def _cross_session_isolation(sessions: list[SessionRecord]) -> dict[str, Any]:
-    """跨会话隔离：同 scenario 组的 injected_context_text 必须可区分。
+    """NR-1：跨会话隔离只比较“同执行组、同 round、同 scenario、不同 cohort”的 A/B。
 
-    对每个 scenario 组内 >=2 个 session，两两比对 injected_context_text：
-    - 任一为空 → isolation_ok=False（空串不能证明可区分）
-    - 两者相等 → isolation_ok=False
+    - 带轮次证据（execution_group_id/stability_cohort_id/stability_round）：
+      比较键 = (execution_group_id, stability_round, scenario)，组内取不同
+      stability_cohort_id 的 pair（A1 vs B1；不跨 round 比 A1 vs A2/B1 vs B5）。
+    - 不带轮次证据（单轮/非稳定性 bundle）：退回按 scenario 分组的通用比较。
+    - 任一 context 为空或两者相等 → isolation_ok=False。
     """
-    groups: dict[str, list[SessionRecord]] = {}
-    for s in sessions:
-        groups.setdefault(s.scenario, []).append(s)
+    tagged_any = any(
+        s.execution_group_id or s.stability_cohort_id or s.stability_round is not None
+        for s in sessions
+    )
     pair_results: list[dict[str, Any]] = []
     overall_ok = True
-    for scenario, group in groups.items():
-        if len(group) < 2:
-            continue
-        for i in range(len(group)):
-            for j in range(i + 1, len(group)):
-                a = group[i]
-                b = group[j]
-                ok = bool(a.injected_context_text) and bool(b.injected_context_text) and a.injected_context_text != b.injected_context_text
-                pair_results.append({
-                    "scenario": scenario,
-                    "session_a": a.session_id,
-                    "session_b": b.session_id,
-                    "isolation_ok": ok,
-                })
-                if not ok:
-                    overall_ok = False
+
+    def _compare(a: SessionRecord, b: SessionRecord, extra: dict[str, Any]) -> None:
+        nonlocal overall_ok
+        ok = (
+            bool(a.injected_context_text)
+            and bool(b.injected_context_text)
+            and a.injected_context_text != b.injected_context_text
+        )
+        pair_results.append({
+            "session_a": a.session_id,
+            "session_b": b.session_id,
+            "isolation_ok": ok,
+            **extra,
+        })
+        if not ok:
+            overall_ok = False
+
+    if tagged_any:
+        buckets: dict[tuple[Any, Any, str], list[SessionRecord]] = {}
+        for s in sessions:
+            key = (s.execution_group_id, s.stability_round, s.scenario)
+            buckets.setdefault(key, []).append(s)
+        for (group_id, round_no, scenario), group in buckets.items():
+            for i in range(len(group)):
+                for j in range(i + 1, len(group)):
+                    a = group[i]
+                    b = group[j]
+                    if a.stability_cohort_id == b.stability_cohort_id:
+                        # 同 cohort 不构成 A/B 对照（避免同 cohort 跨轮误比）
+                        continue
+                    _compare(a, b, {
+                        "execution_group_id": group_id,
+                        "stability_round": round_no,
+                        "scenario": scenario,
+                        "cohort_a": a.stability_cohort_id,
+                        "cohort_b": b.stability_cohort_id,
+                    })
+    else:
+        scenario_groups: dict[str, list[SessionRecord]] = {}
+        for s in sessions:
+            scenario_groups.setdefault(s.scenario, []).append(s)
+        for scenario, group in scenario_groups.items():
+            if len(group) < 2:
+                continue
+            for i in range(len(group)):
+                for j in range(i + 1, len(group)):
+                    _compare(group[i], group[j], {"scenario": scenario})
+
     if not pair_results:
-        # R1：没有任何可比较的同 scenario 会话对 → 不可判定（禁止空证据 PASS）
+        # NR-5：没有任何可比较 pair → 顶层 fail-closed（禁止空证据 PASS）
         return {
             "cross_session_isolation_ok": None,
             "pair_count": 0,
@@ -709,6 +752,10 @@ def compute_session_report(
                 all_latencies.append(step.latency_ms)
 
     cross_iso = _cross_session_isolation(parsed)
+    reason = cross_iso.get("fail_closed_reason")
+    if reason:
+        # NR-5：无 comparable pair → 顶层 fail-closed（aggregate_metrics=null，CLI exit 2）
+        return _empty_report(config, reason)
 
     critical_zero_ok = total_critical == 0
 
@@ -771,7 +818,6 @@ def _config_dict(config: EvalSessionConfig) -> dict[str, Any]:
         "gold_sha256": config.gold_sha256,
         "statistics_method": config.statistics_method,
         "warmup_count": config.warmup_count,
-        "repeat_count": config.repeat_count,
         "concurrency": config.concurrency,
         "stability_repeat": config.stability_repeat,
         "deadline_ms": config.deadline_ms,

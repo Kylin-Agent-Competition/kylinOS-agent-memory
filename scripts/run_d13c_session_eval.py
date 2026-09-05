@@ -1,11 +1,12 @@
 """D13C 端到端会话评测 CLI（C 轨）。
 
 读取会话评测输入 bundle JSON（config + sessions[]），按冻结口径
-（d13c-session-eval-config/v1）计算会话级指标与护栏统计，输出 JSON 报告。
+（d13c-session-eval-config/v2）计算会话级指标与护栏统计，输出 JSON 报告。
 fail-closed：provenance/采样参数不完整或非法、config_version 不符、
 0 个有效 session 时，不输出可被误读为正式的指标。
-R2：config.stability_repeat>1 时，sessions 必须携带 execution_group_id +
-stability_round 并覆盖 1..stability_repeat（缺轮/重复轮/越界均 fail-closed）。
+R2/NR-1：config.stability_repeat>1 时，sessions 必须携带 execution_group_id +
+stability_cohort_id + stability_round（A/B 每 cohort 覆盖 1..stability_repeat；
+缺轮/重复轮/越界均 fail-closed）。
 
 用法：
     PYTHONPATH=memory-service python scripts/run_d13c_session_eval.py <bundle.json> [--output report.json]
@@ -13,7 +14,7 @@ stability_round 并覆盖 1..stability_repeat（缺轮/重复轮/越界均 fail-
 bundle JSON 结构：
     {
       "config": {
-        "config_version": "d13c-session-eval-config/v1",
+        "config_version": "d13c-session-eval-config/v2",
         "dataset_version": "...",
         "gold_label_version": "...",
         "implementation_commit": "<40 hex>",
@@ -23,7 +24,6 @@ bundle JSON 结构：
         "gold_sha256": "<64 hex>",
         "statistics_method": "p50_and_p95",
         "warmup_count": 0,
-        "repeat_count": 5,
         "concurrency": 1,
         "stability_repeat": 5,
         "deadline_ms": 5000

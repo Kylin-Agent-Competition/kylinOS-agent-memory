@@ -1,6 +1,6 @@
 {
   "config": {
-    "config_version": "d13c-session-eval-config/v1",
+    "config_version": "d13c-session-eval-config/v2",
     "dataset_version": "d13c-dataset-v1-smoke",
     "gold_label_version": "d13c-gold-v1-smoke",
     "implementation_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -10,7 +10,6 @@
     "gold_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
     "statistics_method": "p50_and_p95",
     "warmup_count": 0,
-    "repeat_count": 5,
     "concurrency": 1,
     "stability_repeat": 1,
     "deadline_ms": 5000
@@ -18,7 +17,7 @@
   "sessions": [
     {
       "session_id": "session-smoke-0001",
-      "scenario": "cross_session_A",
+      "scenario": "cross_session",
       "injected_context_text": "[CTX] session-A context for smoke",
       "steps": [
         {
@@ -26,8 +25,12 @@
           "method": "memory.retrieve",
           "response_status": "ok",
           "stage_final": "ready",
-          "stage_transitions": ["idle", "querying", "ready"],
-          "latency_ms": 12.0,
+          "stage_transitions": [
+            "idle",
+            "querying",
+            "ready"
+          ],
+          "latency_ms": 12,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -46,8 +49,12 @@
           "method": "turn.finalized",
           "response_status": "ok",
           "stage_final": "ready",
-          "stage_transitions": ["idle", "sending", "ready"],
-          "latency_ms": 8.0,
+          "stage_transitions": [
+            "idle",
+            "sending",
+            "ready"
+          ],
+          "latency_ms": 8,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -66,8 +73,12 @@
           "method": "tool.execution",
           "response_status": "ok",
           "stage_final": "ready",
-          "stage_transitions": ["idle", "sending", "ready"],
-          "latency_ms": 15.0,
+          "stage_transitions": [
+            "idle",
+            "sending",
+            "ready"
+          ],
+          "latency_ms": 15,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -86,8 +97,12 @@
           "method": "conflict.compare",
           "response_status": "ok",
           "stage_final": "ready",
-          "stage_transitions": ["idle", "querying", "ready"],
-          "latency_ms": 6.0,
+          "stage_transitions": [
+            "idle",
+            "querying",
+            "ready"
+          ],
+          "latency_ms": 6,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -106,8 +121,12 @@
           "method": "lifecycle.status",
           "response_status": "ok",
           "stage_final": "ready",
-          "stage_transitions": ["idle", "querying", "ready"],
-          "latency_ms": 5.0,
+          "stage_transitions": [
+            "idle",
+            "querying",
+            "ready"
+          ],
+          "latency_ms": 5,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -126,8 +145,12 @@
           "method": "forget.preview",
           "response_status": "ok",
           "stage_final": "awaiting_confirmation",
-          "stage_transitions": ["idle", "previewing", "awaiting_confirmation"],
-          "latency_ms": 9.0,
+          "stage_transitions": [
+            "idle",
+            "previewing",
+            "awaiting_confirmation"
+          ],
+          "latency_ms": 9,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -146,8 +169,12 @@
           "method": "forget.execute",
           "response_status": "ok",
           "stage_final": "completed",
-          "stage_transitions": ["idle", "executing", "completed"],
-          "latency_ms": 11.0,
+          "stage_transitions": [
+            "idle",
+            "executing",
+            "completed"
+          ],
+          "latency_ms": 11,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -161,11 +188,14 @@
           "retry_of_turn_id": "",
           "turn_id": "turn-0001"
         }
-      ]
+      ],
+      "execution_group_id": "d13c-main-demo-smoke-001",
+      "stability_cohort_id": "session-A",
+      "stability_round": 1
     },
     {
       "session_id": "session-smoke-0002",
-      "scenario": "cross_session_A",
+      "scenario": "cross_session",
       "injected_context_text": "[CTX] session-B context for smoke",
       "steps": [
         {
@@ -173,8 +203,12 @@
           "method": "memory.retrieve",
           "response_status": "ok",
           "stage_final": "ready",
-          "stage_transitions": ["idle", "querying", "ready"],
-          "latency_ms": 10.0,
+          "stage_transitions": [
+            "idle",
+            "querying",
+            "ready"
+          ],
+          "latency_ms": 10,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -193,8 +227,12 @@
           "method": "turn.finalized",
           "response_status": "ok",
           "stage_final": "ready",
-          "stage_transitions": ["idle", "sending", "ready"],
-          "latency_ms": 7.0,
+          "stage_transitions": [
+            "idle",
+            "sending",
+            "ready"
+          ],
+          "latency_ms": 7,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -213,8 +251,12 @@
           "method": "tool.execution",
           "response_status": "ok",
           "stage_final": "ready",
-          "stage_transitions": ["idle", "sending", "ready"],
-          "latency_ms": 13.0,
+          "stage_transitions": [
+            "idle",
+            "sending",
+            "ready"
+          ],
+          "latency_ms": 13,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -233,8 +275,12 @@
           "method": "conflict.compare",
           "response_status": "ok",
           "stage_final": "ready",
-          "stage_transitions": ["idle", "querying", "ready"],
-          "latency_ms": 5.0,
+          "stage_transitions": [
+            "idle",
+            "querying",
+            "ready"
+          ],
+          "latency_ms": 5,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -253,8 +299,12 @@
           "method": "lifecycle.status",
           "response_status": "ok",
           "stage_final": "ready",
-          "stage_transitions": ["idle", "querying", "ready"],
-          "latency_ms": 4.0,
+          "stage_transitions": [
+            "idle",
+            "querying",
+            "ready"
+          ],
+          "latency_ms": 4,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -273,8 +323,12 @@
           "method": "forget.preview",
           "response_status": "ok",
           "stage_final": "awaiting_confirmation",
-          "stage_transitions": ["idle", "previewing", "awaiting_confirmation"],
-          "latency_ms": 8.0,
+          "stage_transitions": [
+            "idle",
+            "previewing",
+            "awaiting_confirmation"
+          ],
+          "latency_ms": 8,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -293,8 +347,12 @@
           "method": "forget.execute",
           "response_status": "ok",
           "stage_final": "completed",
-          "stage_transitions": ["idle", "executing", "completed"],
-          "latency_ms": 10.0,
+          "stage_transitions": [
+            "idle",
+            "executing",
+            "completed"
+          ],
+          "latency_ms": 10,
           "isolation": {
             "original_user_text_isolated": true,
             "injected_context_present": true,
@@ -308,7 +366,10 @@
           "retry_of_turn_id": "",
           "turn_id": "turn-0002"
         }
-      ]
+      ],
+      "execution_group_id": "d13c-main-demo-smoke-001",
+      "stability_cohort_id": "session-B",
+      "stability_round": 1
     }
   ]
 }
