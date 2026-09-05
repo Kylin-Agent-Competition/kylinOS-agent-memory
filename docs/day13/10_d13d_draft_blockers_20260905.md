@@ -14,7 +14,7 @@
 | D13D-B03 | 正式 VM 快照与资源尚未为本轮登记 | D13D | 记录 VM 名称/UUID、银河麒麟版本、kernel、CPU/RAM/磁盘、快照名与时间；从该快照创建隔离工作树。 | BLOCKED |
 | D13D-B04 | 基线尚未部署并在 VM 核验 | D13D | VM 内 `HEAD` 等于 `7242935bee5f230cee0535d5e28dbe1e60a302f6`，工作树干净，服务单元/依赖/路径已采集。 | BLOCKED |
 | D13D-B05 | 本轮证据目录与校验清单尚未生成 | D13D | 创建唯一 `evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>/`，写入环境清单、命令输出和 `SHA256SUMS`。 | BLOCKED |
-| D13D-B06 | D13B 正式命令与输入 bundle 未按冻结输入绑定 | D13B + D13D | 命令、评测配置、数据集和 Gold 的版本/哈希写入同一环境清单，报告 metadata 与之匹配。 | BLOCKED |
+| D13D-B06 | D13B -> D13D 正式 Evaluation Contract | B 轨 | B 轨已提供正式 CLI、输入/输出合同和 fail-closed 语义；真实输入绑定随 D13E/B01、B02 与 D13D 环境冻结执行。 | B 轨已解除 |
 
 ## 开工条件
 

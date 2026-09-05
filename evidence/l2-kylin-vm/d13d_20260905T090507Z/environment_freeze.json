@@ -1,0 +1,57 @@
+{
+  "schema_version": "d13d-environment-freeze/v1",
+  "freeze_status": "BLOCKED",
+  "collected_at_utc": "2026-09-05T09:05:44Z",
+  "tested_commit": "7242935bee5f230cee0535d5e28dbe1e60a302f6",
+  "tested_ref": "kylin-mem/main",
+  "source_commit": "a840dc563a2742197da07d16a8c87d54b67904cf",
+  "environment_id": "Kylin-desktop-neo-D12-TDR/d13d_20260905T090507Z",
+  "vm": {
+    "name": "Kylin-desktop-neo D12-TDR",
+    "uuid": "32070b0e-c7f5-45bd-b086-2262ba960f08",
+    "current_snapshot": "d13d-pre-7242935-20260905-0858",
+    "current_snapshot_uuid": "ea4f8a16-3b43-47c0-9cd5-5df823089aaa",
+    "os": "Kylin V11 2603",
+    "kernel": "Linux 6.6.0-76-generic x86_64",
+    "cpu_count": 8,
+    "memory_mb": 8192,
+    "guest_user": "kylin-agent",
+    "guest_uid": 1000
+  },
+  "candidate_deployment": {
+    "worktree": "/home/kylin-agent/kylinOS-agent-memory-d13d-7242935",
+    "worktree_head": "7242935bee5f230cee0535d5e28dbe1e60a302f6",
+    "worktree_dirty_entries": 0,
+    "bundle_sha256": "fc68fb7a651bbb81edc4bc7d895e6afce810d5a8247c5b540c9599f63b352d4d",
+    "python": "/home/kylin-agent/d4d-venv/bin/python",
+    "python_version": "3.12.3",
+    "alembic_version": "1.19.1",
+    "pydantic_version": "2.13.4",
+    "sqlalchemy_version": "2.0.52",
+    "isolated_socket": "/run/user/1000/kylin-memory/d13d-7242935.sock",
+    "isolated_database": "/home/kylin-agent/.local/share/kylin-memory/d13d-7242935/kylin_memory.db",
+    "isolated_service_mode": "manual preflight only; --no-outbox; not the formal systemd deployment"
+  },
+  "d13e_candidate_input": {
+    "dataset_version": "d13e-formal-v1",
+    "dataset_sha256": "9740c00f4a9d91471bec8e6fa8aeeeb52f890f8680d83f740a84db2b1701a44b",
+    "gold_version": "d13e-gold-v1",
+    "gold_sha256": "7e31f82ab85aa0247c5ac286e532992487f5a117784f7c6c7a6a3a524f83a0fc",
+    "status": "CANDIDATE_FOR_SEALING; not copied or consumed in this run"
+  },
+  "d13b_contract_equivalence": {
+    "receipt_baseline": "053754d611801548fdac59b2894c6862bf85cf56",
+    "candidate_baseline": "7242935bee5f230cee0535d5e28dbe1e60a302f6",
+    "scripts/run_d13b_formal_eval.py": "9c31928bbab76e5c160fe0dcab94b00efe881428",
+    "memory-service/retrieval/formal_eval.py": "89da20bddb9517ece6cf3c3464aece6cdeb7b11e",
+    "memory-service/tests/retrieval/test_formal_eval.py": "2e132f3bb7f6b722528379ae2add149899b59007",
+    "conclusion": "All three blobs are identical across the two commits."
+  },
+  "blockers": [
+    "D13E Dataset and Gold are not yet D-reviewed and sealed.",
+    "The official PASS/FAIL threshold configuration, approval record, and hash are not available.",
+    "D13B formal bundle cannot be populated with approved real provenance.",
+    "The isolated preflight is not the formal user-service deployment and did not run the formal evaluation."
+  ],
+  "conclusion": "Candidate code deployment preparation and isolated UDS preflight completed on the named Kylin VM. This is L2 preparation evidence only. D13D is not FROZEN and no formal metric or PASS/FAIL claim is made."
+}
