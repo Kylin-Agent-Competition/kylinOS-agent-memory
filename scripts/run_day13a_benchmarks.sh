@@ -44,6 +44,8 @@ export PYTHONDONTWRITEBYTECODE=1
 export KYLIN_EMBEDDING_SDK_SO_PATH="${DAY13A_SDK_SO}"
 export KYLIN_EMBEDDING_MODEL_VERSION="${DAY13A_MODEL_VERSION:-${KYLIN_EMBEDDING_MODEL_VERSION:-}}"
 export KYLIN_EMBEDDING_MODEL_SHA256="${DAY13A_MODEL_SHA256:-${KYLIN_EMBEDDING_MODEL_SHA256:-}}"
+export DAY13A_IPC_SOCKET="${IPC_SOCKET}"
+export DAY13A_IPC_PID="${DAY13A_IPC_PID}"
 
 EXPECTED_COMMIT="${DAY13A_EXPECTED_COMMIT:-$(git -C "${ROOT_DIR}" rev-parse HEAD)}"
 EXPECTED_BRANCH="${DAY13A_EXPECTED_BRANCH:-$(git -C "${ROOT_DIR}" branch --show-current)}"
@@ -89,8 +91,13 @@ run_one() {
     --validate-formal-environment "${run_dir}/environment.json" \
     --expected-commit "${EXPECTED_COMMIT}" --expected-branch "${EXPECTED_BRANCH}"
 
+  "${PYTHON_BIN}" "${ROOT_DIR}/scripts/benchmark_ipc.py" \
+    --socket "${IPC_SOCKET}" --pid "${DAY13A_IPC_PID}" \
+    --validate-service-identity
+
   "${PYTHON_BIN}" "${ROOT_DIR}/scripts/benchmark_embedding.py" \
     --texts "${TEXTS}" --concurrency 1 4 8 --warmup 50 \
+    --so-path "${DAY13A_SDK_SO}" \
     --output-dir "${run_dir}"
 
   "${PYTHON_BIN}" "${ROOT_DIR}/scripts/benchmark_bridge.py" \

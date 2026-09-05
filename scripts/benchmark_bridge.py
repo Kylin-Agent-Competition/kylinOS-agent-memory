@@ -20,7 +20,7 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 from bench_utils import (ResourceSampler, append_jsonl, benchmark_summary,
-                          resource_metrics, write_json, write_jsonl)
+                          file_sha256, resource_metrics, write_json, write_jsonl)
 
 
 def _run_requests(bridge: Any, texts: list[str], concurrency: int) -> list[dict[str, Any]]:
@@ -121,6 +121,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         "warmup": args.warmup,
         "concurrency": args.concurrency,
         "rounds": summaries,
+        "sdk_so_path": str(params.so_path),
+        "sdk_so_sha256": file_sha256(str(params.so_path)),
+        "sdk_loaded": bool(getattr(bridge, "loaded", False)),
     }
     if args.output_dir:
         write_jsonl(args.output_dir / "raw" / "bridge.jsonl", all_rows)

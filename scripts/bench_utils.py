@@ -29,6 +29,13 @@ _REQUIRED_IPC_CONCURRENCY = (1, 4, 8, 16)
 _SDK_SHA256_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 
 
+def _parse_positive_int(value: Optional[str]) -> Optional[int]:
+    if not isinstance(value, str) or not value.isdigit():
+        return None
+    parsed = int(value)
+    return parsed if parsed > 0 else None
+
+
 def percentile(values: Iterable[float], fraction: float) -> float:
     """返回 nearest-rank 分位数；空输入返回 ``0.0``。"""
     ordered = sorted(float(value) for value in values)
@@ -227,6 +234,11 @@ def _file_sha256(path: Optional[str]) -> Optional[str]:
     return digest.hexdigest()
 
 
+def file_sha256(path: Optional[str]) -> Optional[str]:
+    """返回文件 SHA-256，供 benchmark 摘要记录实际加载身份。"""
+    return _file_sha256(path)
+
+
 def _shared_object_soname(path: Optional[str]) -> Optional[str]:
     if not path or not Path(path).is_file():
         return None
@@ -384,6 +396,8 @@ def environment_snapshot(repo_root: Path | str) -> dict[str, Any]:
         "embedding_sdk_so_soname": sdk_so_soname,
         "embedding_model_version": os.environ.get("KYLIN_EMBEDDING_MODEL_VERSION") or None,
         "embedding_model_sha256": os.environ.get("KYLIN_EMBEDDING_MODEL_SHA256") or None,
+        "ipc_socket": os.environ.get("DAY13A_IPC_SOCKET") or None,
+        "ipc_pid": _parse_positive_int(os.environ.get("DAY13A_IPC_PID")),
         "bridge_build_type": os.environ.get("KYLIN_EMBEDDING_BUILD_TYPE", "Release"),
         "commands": {
             "git_rev_parse_HEAD": git_head,
@@ -467,6 +481,76 @@ def _round_completeness_errors(
     return errors
 
 
+_RESOURCE_METRICS = (
+    "rss_start_mb", "rss_peak_mb", "rss_end_mb",
+    "cpu_avg_percent", "cpu_peak_percent",
+)
+
+
+def _resource_completeness_errors(
+    summary: Any,
+    *,
+    label: str,
+    environment: Mapping[str, Any],
+    required_concurrency: Sequence[int],
+) -> list[str]:
+    if not isinstance(summary, Mapping):
+        return []
+    if summary.get("resource_sample_target") != "gateway_service":
+        return [f"{label} resource_sample_target 必须为 gateway_service"]
+    pid = summary.get("resource_sample_pid")
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        errors = [f"{label} resource_sample_pid 必须为正整数"]
+    else:
+        errors = []
+    if summary.get("resource_sample_identity_valid") is not True:
+        errors.append(f"{label} 未验证 resource_sample_pid 持有目标 UDS")
+    expected_pid = environment.get("ipc_pid")
+    if isinstance(expected_pid, int) and not isinstance(expected_pid, bool) and pid != expected_pid:
+        errors.append(f"{label} resource_sample_pid 与 environment.ipc_pid 不一致")
+    expected_socket = environment.get("ipc_socket")
+    if isinstance(expected_socket, str) and expected_socket and summary.get("socket") != expected_socket:
+        errors.append(f"{label} socket 与 environment.ipc_socket 不一致")
+    rounds = summary.get("rounds")
+    if not isinstance(rounds, Mapping):
+        return errors
+    for concurrency in required_concurrency:
+        round_summary = rounds.get(str(concurrency))
+        if not isinstance(round_summary, Mapping):
+            continue
+        for metric in _RESOURCE_METRICS:
+            value = round_summary.get(metric)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                errors.append(f"{label} 并发档位 {concurrency} 缺少资源指标 {metric}")
+            elif not math.isfinite(float(value)) or float(value) < 0:
+                errors.append(f"{label} 并发档位 {concurrency} 资源指标 {metric} 非法")
+    return errors
+
+
+def _sdk_identity_errors(
+    summary: Any,
+    *,
+    label: str,
+    environment: Mapping[str, Any],
+) -> list[str]:
+    if not isinstance(summary, Mapping) or summary.get("formal_run") is not True:
+        return []
+    errors: list[str] = []
+    path = summary.get("sdk_so_path")
+    digest = summary.get("sdk_so_sha256")
+    if not isinstance(path, str) or not path:
+        errors.append(f"{label} 未记录实际 SDK so_path")
+    if not isinstance(digest, str) or not _SDK_SHA256_RE.fullmatch(digest):
+        errors.append(f"{label} 未记录合法 SDK SHA-256")
+    if summary.get("sdk_loaded") is not True:
+        errors.append(f"{label} 未确认 SDK 已由运行时加载")
+    if isinstance(path, str) and path and path != environment.get("embedding_sdk_so_path"):
+        errors.append(f"{label} SDK so_path 与 environment 不一致")
+    if isinstance(digest, str) and digest and digest != environment.get("embedding_sdk_so_sha256"):
+        errors.append(f"{label} SDK SHA-256 与 environment 不一致")
+    return errors
+
+
 def validate_run_completeness(
     summary: Mapping[str, Any],
     *,
@@ -504,6 +588,12 @@ def validate_run_completeness(
         label="bridge",
         required_concurrency=_REQUIRED_EMBEDDING_CONCURRENCY,
     ))
+    errors.extend(_sdk_identity_errors(
+        summary.get("embedding"), label="embedding", environment=environment,
+    ))
+    errors.extend(_sdk_identity_errors(
+        summary.get("bridge"), label="bridge", environment=environment,
+    ))
 
     ipc = summary.get("ipc")
     ipc = ipc if isinstance(ipc, Mapping) else {}
@@ -514,11 +604,19 @@ def validate_run_completeness(
     errors.extend(_round_completeness_errors(
         echo, label="ipc.echo", required_concurrency=_REQUIRED_IPC_CONCURRENCY,
     ))
+    errors.extend(_resource_completeness_errors(
+        echo, label="ipc.echo", environment=environment,
+        required_concurrency=_REQUIRED_IPC_CONCURRENCY,
+    ))
     if isinstance(echo, Mapping) and echo.get("measurement_scope") != "gateway_ipc_round_trip_baseline":
         errors.append("ipc.echo measurement_scope 不正确")
     errors.extend(_round_completeness_errors(
         memory_retrieve,
         label="ipc.memory_retrieve",
+        required_concurrency=_REQUIRED_IPC_CONCURRENCY,
+    ))
+    errors.extend(_resource_completeness_errors(
+        memory_retrieve, label="ipc.memory_retrieve", environment=environment,
         required_concurrency=_REQUIRED_IPC_CONCURRENCY,
     ))
     if isinstance(memory_retrieve, Mapping):

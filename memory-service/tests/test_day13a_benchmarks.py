@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -32,6 +33,7 @@ from benchmark_embedding import main as embedding_main  # noqa: E402
 from benchmark_ipc import (  # noqa: E402
     main as ipc_main,
     resource_sample_identity,
+    validate_ipc_service_identity,
 )
 from benchmark_outbox import main as outbox_main  # noqa: E402
 from db.engine import create_db_engine, init_schema  # noqa: E402
@@ -66,29 +68,47 @@ def _rounds(concurrency: tuple[int, ...]) -> dict:
             "success_throughput_req_s": 1.0,
             "success_rate": 1.0,
             "error_rate": 0.0,
+            "rss_start_mb": 10.0,
+            "rss_peak_mb": 11.0,
+            "rss_end_mb": 10.5,
+            "cpu_avg_percent": 20.0,
+            "cpu_peak_percent": 30.0,
         }
         for level in concurrency
     }
 
 
 def _complete_run(*, index_status: str = "measured") -> dict:
+    sdk_identity = {
+        "sdk_so_path": "/usr/lib/libkysdk-coreai-embedding.so.1.0.0",
+        "sdk_so_sha256": "a" * 64,
+        "sdk_loaded": True,
+    }
     return {
         "git_commit": "abc123",
         "environment": _formal_environment(),
-        "embedding": {"formal_run": True, "rounds": _rounds((1, 4, 8))},
-        "bridge": {"formal_run": True, "rounds": _rounds((1, 4, 8))},
+        "embedding": {"formal_run": True, **sdk_identity, "rounds": _rounds((1, 4, 8))},
+        "bridge": {"formal_run": True, **sdk_identity, "rounds": _rounds((1, 4, 8))},
         "ipc": {
             "formal_run": True,
             "methods": {
                 "echo": {
                     "formal_run": True,
                     "measurement_scope": "gateway_ipc_round_trip_baseline",
+                    "socket": "/run/memory.sock",
+                    "resource_sample_target": "gateway_service",
+                    "resource_sample_pid": 4321,
+                    "resource_sample_identity_valid": True,
                     "rounds": _rounds((1, 4, 8, 16)),
                 },
                 "memory_retrieve": {
                     "formal_run": True,
                     "measurement_scope": "gateway_empty_context_ipc_baseline",
                     "knowledge_retrieval_latency_eligible": False,
+                    "socket": "/run/memory.sock",
+                    "resource_sample_target": "gateway_service",
+                    "resource_sample_pid": 4321,
+                    "resource_sample_identity_valid": True,
                     "rounds": _rounds((1, 4, 8, 16)),
                 },
             },
@@ -208,6 +228,80 @@ def test_partial_run_can_be_complete_without_real_index_measurement() -> None:
         expected_commit="abc123",
         expected_branch="perf/D13A-baseline-load",
     ) == []
+
+
+def test_formal_run_rejects_sdk_identity_drift() -> None:
+    summary = _complete_run(index_status="not_measured")
+    summary["embedding"]["sdk_so_sha256"] = "b" * 64
+    errors = validate_run_completeness(
+        summary,
+        mode="partial",
+        expected_commit="abc123",
+        expected_branch="perf/D13A-baseline-load",
+    )
+    assert "embedding SDK SHA-256 与 environment 不一致" in errors
+
+
+def test_ipc_service_identity_requires_socket_owned_by_pid(tmp_path: Path) -> None:
+    if not hasattr(socket, "AF_UNIX") or not Path("/proc/net/unix").exists():
+        pytest.skip("需要 Linux /proc UDS 身份信息")
+    socket_path = str(tmp_path / "identity.sock")
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener.bind(socket_path)
+    listener.listen(1)
+    try:
+        assert validate_ipc_service_identity(os.getpid(), socket_path) == []
+        unrelated = subprocess.Popen(["sleep", "10"])
+        try:
+            errors = validate_ipc_service_identity(unrelated.pid, socket_path)
+            assert "PID 未持有目标 UDS listening socket" in errors
+        finally:
+            unrelated.terminate()
+            unrelated.wait(timeout=3)
+    finally:
+        listener.close()
+
+
+def test_formal_ipc_run_rejects_missing_resource_metrics() -> None:
+    summary = _complete_run(index_status="not_measured")
+    summary["ipc"]["methods"]["echo"]["rounds"]["16"].pop("rss_peak_mb")
+    errors = validate_run_completeness(
+        summary,
+        mode="partial",
+        expected_commit="abc123",
+        expected_branch="perf/D13A-baseline-load",
+    )
+    assert "ipc.echo 并发档位 16 缺少资源指标 rss_peak_mb" in errors
+
+
+def test_embedding_cli_propagates_explicit_sdk_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import providers
+    captured: dict[str, str | None] = {}
+
+    class CapturingProvider:
+        sdk_so_path = "/tmp/captured-sdk.so"
+
+        def __init__(self, so_path=None):
+            captured["so_path"] = so_path
+
+        def start(self):
+            pass
+
+        def close(self):
+            pass
+
+        def embed(self, text, *, timeout_ms=5000):
+            return providers.EmbeddingResult(vector=[0.1], dimension=1, l2_norm=0.1)
+
+        def model_info(self):
+            return type("ModelInfo", (), {"loaded": True, "name": "test"})()
+
+    monkeypatch.setattr(providers, "EmbeddingProvider", CapturingProvider)
+    assert embedding_main([
+        "--texts", "1", "--concurrency", "1", "--warmup", "0",
+        "--so-path", "/tmp/explicit-sdk.so", "--output-dir", str(tmp_path), "--json",
+    ]) == 0
+    assert captured["so_path"] == "/tmp/explicit-sdk.so"
 
 
 def test_ipc_resource_sample_identity_distinguishes_gateway_from_client() -> None:

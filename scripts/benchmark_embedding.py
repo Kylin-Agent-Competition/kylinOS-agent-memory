@@ -37,7 +37,7 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 from bench_utils import (ResourceSampler, append_jsonl, benchmark_summary,
-                          resource_metrics, write_json, write_jsonl)
+                          file_sha256, resource_metrics, write_json, write_jsonl)
 
 # 保证从仓库任意目录运行时都能 import memory-service 包
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -47,10 +47,10 @@ if _MSVC not in sys.path:
 
 # ── provider 选择：真实 SDK（默认）或 fake（冒烟） ──
 
-def _make_provider(fake: bool):
+def _make_provider(fake: bool, so_path: Optional[str] = None):
     if not fake:
         from providers import EmbeddingProvider
-        return EmbeddingProvider()
+        return EmbeddingProvider(so_path=so_path)
     from providers import EmbeddingResult
 
     class FakeProvider:
@@ -115,6 +115,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="每档 warm-up 请求数（默认 50）")
     parser.add_argument("--fake", action="store_true",
                         help="用 fake provider 冒烟（无 SDK 环境）")
+    parser.add_argument("--so-path",
+                        help="正式运行时显式绑定并记录实际加载的 SDK 动态库路径")
     parser.add_argument("--output-dir", type=Path,
                         help="运行目录；保存 raw/embedding.jsonl 与摘要")
     parser.add_argument("--json", action="store_true",
@@ -126,7 +128,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     from embedding.embedding_service import EmbeddingService
 
-    provider = _make_provider(args.fake)
+    provider = _make_provider(args.fake, args.so_path)
     service = EmbeddingService(provider=provider)
     service.start()
 
@@ -138,6 +140,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         "concurrency": args.concurrency,
         "rounds": {},
     }
+    if not args.fake:
+        sdk_so_path = str(getattr(provider, "sdk_so_path", args.so_path or ""))
+        model_info = provider.model_info()
+        summary.update({
+            "sdk_so_path": sdk_so_path,
+            "sdk_so_sha256": file_sha256(sdk_so_path),
+            "sdk_loaded": bool(getattr(model_info, "loaded", False)),
+            "model_identity": {
+                "name": getattr(model_info, "name", None),
+                "source": "runtime_model_info",
+            },
+        })
     all_rows = []
     resource_rows = []
     for conc in args.concurrency:

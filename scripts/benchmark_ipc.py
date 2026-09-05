@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import socket
+import stat
 import sys
 import threading
 import time
@@ -38,6 +39,55 @@ def resource_sample_identity(pid: Optional[int]) -> dict[str, Any]:
         "resource_sample_target": "gateway_service" if pid is not None else "benchmark_client",
         "resource_sample_pid": pid if pid is not None else os.getpid(),
     }
+
+
+def validate_ipc_service_identity(pid: Optional[int], socket_path: str) -> list[str]:
+    """确认 PID 确实持有目标 UDS 的 listening socket。
+
+    ``kill -0`` 只能证明某个 PID 存活，不能证明它是被测 Gateway。Linux
+    的 ``/proc/net/unix`` 将路径映射到 socket inode，再与目标进程的 fd
+    链接交叉核验；无法完成任一步骤都 fail-closed。
+    """
+    errors: list[str] = []
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return ["PID 必须为正整数"]
+    if not socket_path:
+        return ["UDS socket 路径不能为空"]
+    socket_file = Path(socket_path)
+    try:
+        if not stat.S_ISSOCK(socket_file.stat().st_mode):
+            errors.append("目标路径不是 UDS socket")
+    except OSError as exc:
+        errors.append(f"无法读取 UDS socket: {exc}")
+    proc_unix = Path("/proc/net/unix")
+    proc_fds = Path(f"/proc/{pid}/fd")
+    try:
+        lines = proc_unix.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return [*errors, f"无法读取 /proc/net/unix: {exc}"]
+    inode: Optional[str] = None
+    for line in lines[1:]:
+        fields = line.split()
+        # Num RefCount Protocol Flags Type St Inode Path
+        if len(fields) >= 8 and fields[5] == "01" and fields[7] == socket_path:
+            inode = fields[6]
+            break
+    if inode is None:
+        errors.append("目标 UDS 未在 /proc/net/unix 中登记为 listening socket")
+        return errors
+    try:
+        fd_paths = list(proc_fds.iterdir())
+    except OSError as exc:
+        return [*errors, f"无法读取目标 PID 的 fd: {exc}"]
+    expected = f"socket:[{inode}]"
+    for fd_path in fd_paths:
+        try:
+            if os.readlink(fd_path) == expected:
+                return errors
+        except OSError:
+            continue
+    errors.append("PID 未持有目标 UDS listening socket")
+    return errors
 
 
 def _request(socket_path: str, *, method: str, payload: dict[str, Any], request_no: int,
@@ -123,6 +173,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--deadline-ms", type=int, default=10000)
     parser.add_argument("--pid", type=int,
                         help="可选：要采样的 Gateway 服务 PID；默认采样 benchmark 客户端")
+    parser.add_argument("--validate-service-identity", action="store_true",
+                        help="只验证 PID 是否持有目标 UDS listening socket")
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args(argv)
     if (args.requests <= 0 or args.warmup < 0 or args.deadline_ms <= 0
@@ -141,6 +193,29 @@ def main(argv: Optional[list[str]] = None) -> int:
     if not Path(args.socket).exists():
         print(f"UDS socket 不存在：{args.socket}", file=sys.stderr)
         return 2
+    if args.validate_service_identity:
+        if args.pid is None:
+            print("--validate-service-identity 必须同时提供 --pid", file=sys.stderr)
+            return 2
+        identity_errors = validate_ipc_service_identity(args.pid, args.socket)
+        if identity_errors:
+            for error in identity_errors:
+                print(f"IPC 服务身份校验失败：{error}", file=sys.stderr)
+            return 2
+        print(json.dumps({
+            "socket": args.socket,
+            "resource_sample_pid": args.pid,
+            "resource_sample_target": "gateway_service",
+            "resource_sample_identity_valid": True,
+        }, ensure_ascii=False))
+        return 0
+    identity_errors: list[str] = []
+    if args.pid is not None:
+        identity_errors = validate_ipc_service_identity(args.pid, args.socket)
+        if identity_errors:
+            for error in identity_errors:
+                print(f"IPC 服务身份校验失败：{error}", file=sys.stderr)
+            return 2
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
             probe.settimeout(1.0)
@@ -204,12 +279,20 @@ def main(argv: Optional[list[str]] = None) -> int:
         "concurrency": args.concurrency,
         "rounds": summaries,
         **resource_sample_identity(args.pid),
+        "resource_sample_identity_valid": args.pid is not None and not identity_errors,
     }
+    if args.pid is not None:
+        identity_errors = validate_ipc_service_identity(args.pid, args.socket)
+        if identity_errors:
+            output["resource_sample_identity_valid"] = False
+            output["resource_sample_identity_errors"] = identity_errors
     if args.output_dir:
         write_jsonl(args.output_dir / "raw" / "ipc.jsonl", all_rows)
         append_jsonl(args.output_dir / "raw" / "resources.jsonl", resource_rows)
         write_json(args.output_dir / "ipc.summary.json", output)
     print(json.dumps(output, ensure_ascii=False, indent=2))
+    if identity_errors:
+        return 2
     return 2 if all_rows and all(not row["ok"] for row in all_rows) else 0
 
 
