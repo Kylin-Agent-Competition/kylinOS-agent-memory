@@ -483,8 +483,8 @@ void TestD13CStability::s2_stop_reason_semantics()
 // ── S3 · retry_of_turn_id 透传 + 非 retry 必须为空 ──────────────────────
 //
 // 验证点：
-//   - 非 retry 路径：metadata.retry_of_turn_id 必须为空字符串（不携带）
-//   - retry 路径：metadata.retry_of_turn_id 必须等于上一次失败的 turn_id
+//   - 非 retry 路径：retry_of_turn_id 必须为空字符串（不携带）
+//   - retry 路径：retry_of_turn_id 必须等于上一次失败的 turn_id
 //   - finalization_reason="retry" 时 retryOfTurnId 必须显式提供
 void TestD13CStability::s3_retry_semantics()
 {
@@ -493,10 +493,10 @@ void TestD13CStability::s3_retry_semantics()
     QStringList capturedFinalizationReasons;
     mock.setHandler([&](const client::EnvelopeParts& parts) -> QJsonObject {
         if (parts.method == client::methods::kTurnFinalized) {
-            const QJsonObject md = parts.payload.value(
-                QStringLiteral("metadata")).toObject();
+            // DRIFT-B fix（rebase main 后契约）：retry_of_turn_id 是
+            // TurnFinalizedEvent 事件顶层字段，不在 metadata 嵌套内。
             capturedRetryOfIds.append(
-                md.value(QStringLiteral("retry_of_turn_id")).toString());
+                parts.payload.value(QStringLiteral("retry_of_turn_id")).toString());
             // ADR-010: finalization_reason 在事件顶层
             capturedFinalizationReasons.append(
                 parts.payload.value(QStringLiteral("finalization_reason")).toString());
@@ -531,8 +531,9 @@ void TestD13CStability::s3_retry_semantics()
         "turn-s3-002", "tr-s3-002", "msg-s3-002",
         "assistant-retry", "retry", "stop",
         "turn-s3-001" /* retryOfTurnId */);
-    const QJsonObject evtMd = evt.value(QStringLiteral("metadata")).toObject();
-    QCOMPARE(evtMd.value(QStringLiteral("retry_of_turn_id")).toString(),
+    // DRIFT-B fix（rebase main 后契约）：retry_of_turn_id 在事件顶层，
+    // 不在 metadata 嵌套内（与 finalization_reason 同层，ADR-010 契约）。
+    QCOMPARE(evt.value(QStringLiteral("retry_of_turn_id")).toString(),
              QStringLiteral("turn-s3-001"));
     // ADR-010: finalization_reason 在事件顶层，不在 metadata 内
     QCOMPARE(evt.value(QStringLiteral("finalization_reason")).toString(),
