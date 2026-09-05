@@ -1,0 +1,897 @@
+"""D13C 端到端会话评测账本：冻结口径下的会话指标计算与护栏统计（C 轨）。
+
+定位
+----
+本模块为 C 轨（memory-client）端到端会话评测账本。它消费会话证据 bundle JSON
+（跨会话 / Tool / Stop-Retry / UX 各场景的逐步请求、响应、stage 迁移、原文隔离
+与护栏违规记录），按冻结口径计算会话级指标；provenance（dataset/gold 哈希、
+commit、environment、evidence、采样参数、stability_repeat、deadline_ms）未完整
+绑定或 config_version 不符时 fail-closed，不输出任何可被当作正式指标的数值。
+
+本模块只消费数据、不执行会话、不生产 Gold；真实会话执行需在麒麟 VM 上由
+memory-client + Mock Gateway 或已部署的 D 轨 Gateway 完成，未取得 VM 实测前
+一切 Runtime / 正式达标结论必须标 UNVERIFIED。
+
+冻结口径来源
+------------
+- 台账 D13-C：运行端到端跨会话 / Tool / Stop-Retry / UX 会话；收集 UI、请求、
+  日志与数据库证据；复测主演示稳定性。
+- ADR-010 turn.finalized：Post-Turn 写链路；finalization_reason=retry 必须携带
+  metadata.retry_of_turn_id 且 ≠ turn_id（TB-D6C-04）。
+- memory_context.v1.json：Pre-Chat 注入契约；injection_status ∈
+  {prepared/degraded/failed/skipped}，failed/skipped 不产生伪 Context。
+- FRZ-IPC-006：envelope 长度前缀 JSON；客户端死线 5000ms。
+- D11-C test_d11c_e2e_orchestrator.cpp：5 步主演示编排（Pre-Chat / Post-Turn /
+  Tool / 知识+冲突+生命周期 / 精准遗忘）的 L0 Mock 契约。
+- D13-B formal_eval.py：fail-closed 与 provenance 强校验模板。
+
+设计要点（fail-closed）
+-----------------------
+- provenance 字段缺失 / commit 非 40 hex / sha256 非 64 hex /
+  config_version != "d13c-session-eval-config/v2" → INVALID_PROVENANCE，指标 null。
+- 任一完成 step 缺 latency_ms 或非有限非负数 → MISSING_LATENCY，该会话指标 null。
+- guardrail critical（cross_user / sensitive / unresolved_conflict）> 0 →
+  critical_zero_ok=False，仍输出指标但 Critical 标记。
+- 0 个有效 session → NO_VALID_SESSIONS，聚合指标 null。
+- 重复 step_id（会话内）/ execution_record_id（bundle 内）→ DUPLICATE_* fail-closed；
+  session_id 允许跨 stability_round 重复（真实 replay 复用同一逻辑 session）。
+- P1-02：每条 step.deadline_ms 必须 == config.deadline_ms，否则
+  DEADLINE_CONFIG_EVIDENCE_MISMATCH fail-closed。
+- stability_repeat < 1 / deadline_ms <= 0 → INVALID_CONFIG。
+- retry 语义违反（retry 缺 retry_of_turn_id / retry_of_turn_id=turn_id）计入
+  stop_retry_violation_count，不 null 整体指标（便于定位），但 critical_zero_ok
+  不受其影响。
+- 延迟只接受有限非负数（拒绝 bool / NaN / ±Infinity）。
+"""
+
+from __future__ import annotations
+
+import math
+import re
+from dataclasses import dataclass
+from typing import Any, Iterable, Mapping, Optional
+
+FROZEN_CONFIG_VERSION = "d13c-session-eval-config/v2"
+REPORT_VERSION = "d13c-session-eval-report/v1"
+DEFAULT_DEADLINE_MS = 5000
+DEFAULT_STABILITY_REPEAT = 5
+
+# D11-C 5 步主演示编排必须出现的 IPC 方法集合（缺一即 method_coverage 不完整）
+REQUIRED_IPC_METHODS: tuple[str, ...] = (
+    "memory.retrieve",
+    "turn.finalized",
+    "tool.execution",
+    "conflict.compare",
+    "lifecycle.status",
+    "forget.preview",
+    "forget.execute",
+)
+
+# 负向护栏类别（C 轨会话视角）；critical_zero 要求前两类 item=0
+GUARDRAIL_CATEGORIES: tuple[str, ...] = (
+    "cross_user",
+    "sensitive",
+    "unresolved_conflict",
+)
+CRITICAL_ZERO_CATEGORIES: tuple[str, ...] = (
+    "cross_user",
+    "sensitive",
+)
+
+# step 完成态：stage_final 落在此集合视为该步成功完成。
+# awaiting_confirmation 是 forget.preview 的成功终态（等待用户确认后进入 execute），
+# 不是失败；failed/timeout 才是失败终态。
+COMPLETED_STAGE_FINALS: frozenset[str] = frozenset(
+    {"ready", "completed", "awaiting_confirmation"}
+)
+# step 失败态：用于 deadline timeout 路径校验（timed_out=True 必须 stage_final=failed）
+FAILED_STAGE_FINALS: frozenset[str] = frozenset({"failed", "timeout"})
+
+
+def _state_combo_is_legal(
+    method: str, response_status: str, timed_out: bool, stage_final: str
+) -> bool:
+    """R3：response_status × timed_out × stage_final 冻结合法状态组合矩阵。
+
+    | response_status    | timed_out | stage_final           | completed |
+    | ok                 | false     | ready/completed       | 是        |
+    | ok(forget.preview) | false     | awaiting_confirmation | 是        |
+    | error              | false     | failed                | 否        |
+    | timeout            | true      | timeout/failed        | 否        |
+    | disconnected       | false     | failed                | 否        |
+    | unsupported_method | false     | failed                | 否        |
+
+    非法组合（error+ready / timeout+ready / timeout+timed_out=false /
+    ok+timed_out=true / disconnected+completed / unsupported_method+completed /
+    非 forget.preview 的 awaiting_confirmation）在解析期直接 fail-closed。
+    """
+    if response_status == "ok":
+        if timed_out:
+            return False  # ok + timed_out=true 禁止
+        if stage_final == "awaiting_confirmation":
+            return method == "forget.preview"
+        return stage_final in ("ready", "completed")
+    if response_status == "error":
+        return (not timed_out) and stage_final == "failed"
+    if response_status == "timeout":
+        return timed_out and stage_final in ("timeout", "failed")
+    if response_status == "disconnected":
+        return (not timed_out) and stage_final == "failed"
+    if response_status == "unsupported_method":
+        return (not timed_out) and stage_final == "failed"
+    return False
+
+
+_VALID_RESPONSE_STATUSES: frozenset[str] = frozenset(
+    {"ok", "error", "unsupported_method", "timeout", "disconnected"}
+)
+_GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+SUPPORTED_STATISTICS_METHODS = frozenset({"p50_and_p95", "p50", "p95"})
+
+
+@dataclass(frozen=True)
+class EvalSessionConfig:
+    """C 轨会话评测运行绑定配置（fail-closed：provenance 与采样参数必须显式完整）。"""
+
+    config_version: str
+    dataset_version: str
+    gold_label_version: str
+    implementation_commit: str
+    environment: str
+    evidence_reference: str
+    dataset_sha256: str
+    gold_sha256: str
+    statistics_method: str
+    warmup_count: int
+    concurrency: int
+    stability_repeat: int
+    deadline_ms: int
+
+    @classmethod
+    def from_mapping(cls, raw: Mapping[str, Any]) -> "EvalSessionConfig":
+        config_version = str(raw.get("config_version", "")).strip()
+        if config_version != FROZEN_CONFIG_VERSION:
+            raise ValueError(
+                f"config_version 必须为冻结值 {FROZEN_CONFIG_VERSION!r}，"
+                f"实际 {config_version!r}"
+            )
+        normalized: dict[str, Any] = {"config_version": config_version}
+        for field_name, raw_key in (
+            ("dataset_version", "dataset_version"),
+            ("gold_label_version", "gold_label_version"),
+            ("environment", "environment"),
+            ("evidence_reference", "evidence_reference"),
+        ):
+            value = str(raw.get(raw_key, "")).strip()
+            if not value or value.upper() == "UNKNOWN":
+                raise ValueError(
+                    f"正式会话评测必须绑定 {raw_key!r}，不得为空或 UNKNOWN"
+                )
+            normalized[field_name] = value
+        commit = str(raw.get("implementation_commit", "")).strip()
+        if not _GIT_SHA_RE.match(commit):
+            raise ValueError("implementation_commit 必须是 40 位小写十六进制 Git SHA")
+        normalized["implementation_commit"] = commit
+        for raw_key in ("dataset_sha256", "gold_sha256"):
+            digest = str(raw.get(raw_key, "")).strip()
+            if not _SHA256_RE.match(digest):
+                raise ValueError(
+                    f"{raw_key} 必须是非空 64 位小写十六进制 SHA-256"
+                )
+            normalized[raw_key] = digest
+
+        statistics_method = str(raw.get("statistics_method", "")).strip().lower()
+        if not statistics_method or statistics_method.upper() in ("UNKNOWN", "PENDING"):
+            raise ValueError("statistics_method 必须显式登记，不得为 UNKNOWN/PENDING")
+        if statistics_method not in SUPPORTED_STATISTICS_METHODS:
+            raise ValueError(
+                f"不支持的 statistics_method {statistics_method!r}；"
+                f"支持 {sorted(SUPPORTED_STATISTICS_METHODS)}"
+            )
+        normalized["statistics_method"] = statistics_method
+
+        normalized["warmup_count"] = cls._int_field(raw, "warmup_count", minimum=0)
+        normalized["concurrency"] = cls._int_field(raw, "concurrency", minimum=1)
+        # stability_repeat：稳定性复跑轮数（D13-C「复测主演示稳定性」），至少 1
+        if "stability_repeat" in raw:
+            normalized["stability_repeat"] = cls._int_field(
+                raw, "stability_repeat", minimum=1
+            )
+        else:
+            normalized["stability_repeat"] = DEFAULT_STABILITY_REPEAT
+        # deadline_ms：客户端死线（FRZ-IPC-006 默认 5000ms），必须正数
+        if "deadline_ms" in raw:
+            normalized["deadline_ms"] = cls._int_field(raw, "deadline_ms", minimum=1)
+        else:
+            normalized["deadline_ms"] = DEFAULT_DEADLINE_MS
+        return cls(**normalized)
+
+    @staticmethod
+    def _int_field(raw: Mapping[str, Any], key: str, minimum: int) -> int:
+        if key not in raw:
+            raise ValueError(f"正式会话评测必须显式提供 {key!r}")
+        value = raw[key]
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"{key} 必须是整数（不接受 bool/浮点/字符串）")
+        if value < minimum:
+            raise ValueError(f"{key} 必须 >= {minimum}")
+        return value
+
+
+@dataclass(frozen=True)
+class StepRecord:
+    """会话中一步 IPC 交互的证据记录（formal 模式字段全部显式提供）。"""
+
+    step_id: str
+    method: str
+    response_status: str
+    stage_final: str
+    stage_transitions: tuple[str, ...]
+    latency_ms: float
+    isolation_original_user_text: bool
+    isolation_injected_context_present: bool
+    isolation_model_request_clean: bool
+    guardrail_violations: tuple[str, ...]
+    deadline_ms: int
+    timed_out: bool
+    finalization_reason: str
+    stop_reason: str
+    retry_of_turn_id: str
+    turn_id: str
+
+    @property
+    def isolation_ok(self) -> bool:
+        return (
+            self.isolation_original_user_text
+            and self.isolation_injected_context_present
+            and self.isolation_model_request_clean
+        )
+
+    @property
+    def completed(self) -> bool:
+        return (
+            _state_combo_is_legal(
+                self.method, self.response_status, self.timed_out, self.stage_final
+            )
+            and self.stage_final in COMPLETED_STAGE_FINALS
+        )
+
+    @classmethod
+    def from_mapping(cls, position: int, raw: Mapping[str, Any]) -> "StepRecord":
+        if not isinstance(raw, dict):
+            raise ValueError(f"steps[{position}] 必须是对象")
+        for key in ("step_id", "method", "response_status", "stage_final"):
+            value = str(raw.get(key, "")).strip()
+            if not value:
+                raise ValueError(f"steps[{position}] 缺少非空字段 {key!r}")
+            if key == "response_status" and value not in _VALID_RESPONSE_STATUSES:
+                raise ValueError(
+                    f"steps[{position}] 非法 response_status {value!r}"
+                )
+            # stage_final 不限枚举（ViewModel 可能引入新状态），但必须非空
+        step_id = str(raw["step_id"]).strip()
+        method = str(raw["method"]).strip()
+        response_status = str(raw["response_status"]).strip()
+        stage_final = str(raw["stage_final"]).strip()
+
+        raw_transitions = raw.get("stage_transitions", [])
+        if not isinstance(raw_transitions, list):
+            raise ValueError(f"steps[{position}].stage_transitions 必须是数组")
+        transitions = tuple(str(t).strip() for t in raw_transitions)
+
+        # latency_ms：完成态 step 必须有 latency；失败态可为 0 但仍必须有限非负
+        latency = cls._parse_latency(raw.get("latency_ms"), position)
+        # 完成态 step 必须有正向 latency 记录（>0 表示真实经过时间；=0 仅允许失败态）
+        if stage_final in COMPLETED_STAGE_FINALS and latency <= 0:
+            raise ValueError(
+                f"steps[{position}] 完成态 stage_final={stage_final!r} "
+                f"必须提供正向 latency_ms（>0），实际 {latency!r}"
+            )
+
+        isolation = raw.get("isolation", {})
+        if not isinstance(isolation, dict):
+            raise ValueError(f"steps[{position}].isolation 必须是对象")
+        iso_ou = cls._parse_bool(
+            isolation.get("original_user_text_isolated"),
+            f"steps[{position}].isolation.original_user_text_isolated",
+        )
+        iso_ic = cls._parse_bool(
+            isolation.get("injected_context_present"),
+            f"steps[{position}].isolation.injected_context_present",
+        )
+        iso_mr = cls._parse_bool(
+            isolation.get("model_request_clean"),
+            f"steps[{position}].isolation.model_request_clean",
+        )
+
+        raw_violations = raw.get("guardrail_violations", [])
+        if not isinstance(raw_violations, list):
+            raise ValueError(f"steps[{position}].guardrail_violations 必须是数组")
+        violations: list[str] = []
+        for v in raw_violations:
+            v_str = str(v).strip()
+            if v_str not in GUARDRAIL_CATEGORIES:
+                raise ValueError(
+                    f"steps[{position}].guardrail_violations 含非法类别 {v_str!r}"
+                )
+            violations.append(v_str)
+
+        deadline_ms = raw.get("deadline_ms")
+        if deadline_ms is None:
+            deadline_ms = DEFAULT_DEADLINE_MS
+        if isinstance(deadline_ms, bool) or not isinstance(deadline_ms, int):
+            raise ValueError(f"steps[{position}].deadline_ms 必须是整数")
+        if deadline_ms <= 0:
+            raise ValueError(f"steps[{position}].deadline_ms 必须 > 0")
+
+        timed_out = cls._parse_bool(raw.get("timed_out"), f"steps[{position}].timed_out")
+        # NR-3：finalization_reason 暂不冻结业务枚举（待 E 终审），只严格要求类型为字符串
+        raw_reason = raw.get("finalization_reason", "")
+        if not isinstance(raw_reason, str):
+            raise ValueError(f"steps[{position}].finalization_reason 必须是字符串")
+        finalization_reason = raw_reason.strip()
+        stop_reason = str(raw.get("stop_reason", "")).strip()
+        retry_of_turn_id = str(raw.get("retry_of_turn_id", "")).strip()
+        turn_id = str(raw.get("turn_id", "")).strip()
+
+        # R3：非法状态组合在解析期 fail-closed（不允许进入指标计算）
+        if not _state_combo_is_legal(method, response_status, timed_out, stage_final):
+            raise ValueError(
+                f"steps[{position}] 非法状态组合：response_status={response_status!r} "
+                f"timed_out={timed_out!r} stage_final={stage_final!r} "
+                f"method={method!r}（对照 R3 冻结合法矩阵）"
+            )
+
+        return cls(
+            step_id=step_id,
+            method=method,
+            response_status=response_status,
+            stage_final=stage_final,
+            stage_transitions=transitions,
+            latency_ms=latency,
+            isolation_original_user_text=iso_ou,
+            isolation_injected_context_present=iso_ic,
+            isolation_model_request_clean=iso_mr,
+            guardrail_violations=tuple(violations),
+            deadline_ms=deadline_ms,
+            timed_out=timed_out,
+            finalization_reason=finalization_reason,
+            stop_reason=stop_reason,
+            retry_of_turn_id=retry_of_turn_id,
+            turn_id=turn_id,
+        )
+
+    @staticmethod
+    def _parse_latency(value: Any, position: int) -> float:
+        """latency 只接受有限非负数（拒绝 bool / NaN / ±Infinity）。"""
+        if value is None:
+            raise ValueError(f"steps[{position}].latency_ms 必须显式提供")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"steps[{position}].latency_ms 必须是有限数值")
+        latency = float(value)
+        if not math.isfinite(latency) or latency < 0:
+            raise ValueError(f"steps[{position}].latency_ms 必须是有限非负数")
+        return latency
+
+    @staticmethod
+    def _parse_bool(value: Any, label: str) -> bool:
+        if not isinstance(value, bool):
+            raise ValueError(f"{label} 必须是布尔值（不接受字符串/0/1）")
+        return value
+
+
+@dataclass(frozen=True)
+class SessionRecord:
+    """一条已执行会话：session_id + scenario + steps + injected_context_text。"""
+
+    session_id: str
+    # P1-01：bundle 内执行记录唯一键（真实 session_id 可跨 round 重复）
+    execution_record_id: str
+    scenario: str
+    steps: tuple[StepRecord, ...]
+    injected_context_text: str
+    # R2/NR-1：稳定性复跑执行轮次证据（execution_group_id + stability_cohort_id +
+    # stability_round 三项必须同时提供或同时不提供）
+    execution_group_id: str
+    stability_cohort_id: str
+    stability_round: Optional[int]
+
+    @classmethod
+    def from_mapping(cls, position: int, raw: Mapping[str, Any]) -> "SessionRecord":
+        if not isinstance(raw, dict):
+            raise ValueError(f"sessions[{position}] 必须是对象")
+        session_id = str(raw.get("session_id", "")).strip()
+        execution_record_id = str(raw.get("execution_record_id", "")).strip()
+        scenario = str(raw.get("scenario", "")).strip()
+        if not session_id or not scenario:
+            raise ValueError(
+                f"sessions[{position}] 缺少非空 session_id / scenario"
+            )
+        if not execution_record_id:
+            raise ValueError(
+                f"sessions[{position}] 缺少非空 execution_record_id"
+                "（bundle 内执行记录唯一键）"
+            )
+        raw_steps = raw.get("steps", [])
+        if not isinstance(raw_steps, list) or not raw_steps:
+            raise ValueError(f"sessions[{position}].steps 必须是非空数组")
+        steps: list[StepRecord] = []
+        seen_step_ids: set[str] = set()
+        for idx, step_raw in enumerate(raw_steps):
+            step = StepRecord.from_mapping(idx, step_raw)
+            if step.step_id in seen_step_ids:
+                raise ValueError(
+                    f"sessions[{position}] 存在重复 step_id {step.step_id!r}"
+                )
+            seen_step_ids.add(step.step_id)
+            steps.append(step)
+        # NR-1：稳定性复跑轮次证据（execution_group_id / stability_cohort_id /
+        # stability_round 三项必须同时提供或同时不提供）
+        execution_group_id = str(raw.get("execution_group_id", "")).strip()
+        stability_cohort_id = str(raw.get("stability_cohort_id", "")).strip()
+        raw_round = raw.get("stability_round")
+        if raw_round is None:
+            stability_round: Optional[int] = None
+        else:
+            if isinstance(raw_round, bool) or not isinstance(raw_round, int):
+                raise ValueError(
+                    f"sessions[{position}].stability_round 必须是整数"
+                    "（不接受 bool/浮点/字符串）"
+                )
+            if raw_round < 1:
+                raise ValueError(
+                    f"sessions[{position}].stability_round 必须 >= 1（禁止 round=0/负值）"
+                )
+            stability_round = raw_round
+        evidence_count = sum(
+            (
+                bool(execution_group_id),
+                bool(stability_cohort_id),
+                stability_round is not None,
+            )
+        )
+        if evidence_count not in (0, 3):
+            raise ValueError(
+                f"sessions[{position}] execution_group_id / stability_cohort_id / "
+                "stability_round 三项必须同时提供或同时不提供"
+            )
+        injected = str(raw.get("injected_context_text", "")).strip()
+        # injected_context_text 允许空字符串（failed/skipped 注入场景），
+        # 但跨会话隔离比对需要非空；空串在 cross_session_isolation 计算时单独处理。
+        return cls(
+            session_id=session_id,
+            execution_record_id=execution_record_id,
+            scenario=scenario,
+            steps=tuple(steps),
+            injected_context_text=injected,
+            execution_group_id=execution_group_id,
+            stability_cohort_id=stability_cohort_id,
+            stability_round=stability_round,
+        )
+
+
+# ── 指标计算 ──────────────────────────────────────────────────────────────
+
+
+def _quantile(sorted_values: list[float], q: float) -> Optional[float]:
+    """简单最近邻分位（与 retrieval.evaluation 口径一致）：空列表返回 None。"""
+    if not sorted_values:
+        return None
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    idx = max(0, min(len(sorted_values) - 1, int(round(q * (len(sorted_values) - 1)))))
+    return sorted_values[idx]
+
+
+def _latency_stats(latencies: list[float]) -> dict[str, Optional[float]]:
+    sorted_vals = sorted(latencies)
+    if not sorted_vals:
+        return {
+            "p50_ms": None,
+            "p95_ms": None,
+            "mean_ms": None,
+            "max_ms": None,
+            "sample_count": 0,
+        }
+    return {
+        "p50_ms": _quantile(sorted_vals, 0.50),
+        "p95_ms": _quantile(sorted_vals, 0.95),
+        "mean_ms": sum(sorted_vals) / len(sorted_vals),
+        "max_ms": sorted_vals[-1],
+        "sample_count": len(sorted_vals),
+    }
+
+
+def _session_metrics(session: SessionRecord) -> dict[str, Any]:
+    """计算单会话指标（假定 session 已通过 fail-closed 校验）。"""
+    steps = session.steps
+    total = len(steps)
+    completed = sum(1 for s in steps if s.completed)
+    isolation_ok = sum(1 for s in steps if s.isolation_ok)
+
+    # 护栏：会话级违规 step 唯一计数 + per-category item 计数
+    per_category: dict[str, dict[str, Any]] = {
+        cat: {"violating_step_ids": set(), "violation_item_count": 0}
+        for cat in GUARDRAIL_CATEGORIES
+    }
+    violating_step_ids: set[str] = set()
+    for step in steps:
+        for cat in step.guardrail_violations:
+            per_category[cat]["violating_step_ids"].add(step.step_id)
+            per_category[cat]["violation_item_count"] += 1
+            violating_step_ids.add(step.step_id)
+    critical_item_count = sum(
+        per_category[cat]["violation_item_count"] for cat in CRITICAL_ZERO_CATEGORIES
+    )
+
+    # IPC 方法覆盖
+    present_methods = {s.method for s in steps}
+    missing_methods = [m for m in REQUIRED_IPC_METHODS if m not in present_methods]
+
+    # retry 语义违反计数（NR-3：finalization_reason 不冻结业务枚举，
+    # 只保留已明确的 retry 跨字段约束；不再假设 stop 需要 stop_reason）
+    stop_retry_violations: list[str] = []
+    for step in steps:
+        if step.method == "turn.finalized" and step.finalization_reason == "retry":
+            if not step.retry_of_turn_id:
+                stop_retry_violations.append(
+                    f"{step.step_id}: retry 缺 retry_of_turn_id"
+                )
+            elif step.retry_of_turn_id == step.turn_id:
+                stop_retry_violations.append(
+                    f"{step.step_id}: retry_of_turn_id == turn_id"
+                )
+
+    # deadline 行为违反：timed_out=True 必须 stage_final ∈ failed 且迁移末态为 failed
+    deadline_violations: list[str] = []
+    for step in steps:
+        if step.timed_out:
+            if step.stage_final not in FAILED_STAGE_FINALS:
+                deadline_violations.append(
+                    f"{step.step_id}: timed_out 但 stage_final={step.stage_final!r}"
+                )
+            elif step.stage_transitions and step.stage_transitions[-1] not in FAILED_STAGE_FINALS:
+                deadline_violations.append(
+                    f"{step.step_id}: timed_out 但 stage_transitions 末态非 failed"
+                )
+
+    latencies = [s.latency_ms for s in steps if s.latency_ms > 0]
+
+    return {
+        "session_id": session.session_id,
+        "scenario": session.scenario,
+        "step_count": total,
+        "step_completion_rate": completed / total if total else None,
+        "completed_step_count": completed,
+        "isolation_pass_rate": isolation_ok / total if total else None,
+        "isolation_ok_step_count": isolation_ok,
+        "guardrail_critical_count": critical_item_count,
+        "guardrail_violation_step_count": len(violating_step_ids),
+        "guardrail_per_category": {
+            cat: {
+                "violation_step_count": len(per_category[cat]["violating_step_ids"]),
+                "violation_item_count": per_category[cat]["violation_item_count"],
+            }
+            for cat in GUARDRAIL_CATEGORIES
+        },
+        "ipc_method_coverage": {
+            "required": list(REQUIRED_IPC_METHODS),
+            "present": sorted(present_methods),
+            "missing": missing_methods,
+            "coverage_complete": len(missing_methods) == 0,
+        },
+        "stop_retry_violation_count": len(stop_retry_violations),
+        "stop_retry_violations": stop_retry_violations,
+        "deadline_violation_count": len(deadline_violations),
+        "deadline_violations": deadline_violations,
+        "latency": _latency_stats(latencies),
+    }
+
+
+def _validate_deadline_binding(
+    sessions: list[SessionRecord], config_deadline_ms: int
+) -> None:
+    """P1-02：每条 step.deadline_ms 必须等于 config.deadline_ms。
+
+    任一 step 漂移立即 fail-closed（DEADLINE_CONFIG_EVIDENCE_MISMATCH），
+    不允许“config 声称 5000、实际 step 3000”的 provenance 漂移进入正式报告。
+    """
+    for s in sessions:
+        for step in s.steps:
+            if step.deadline_ms != config_deadline_ms:
+                raise ValueError(
+                    "DEADLINE_CONFIG_EVIDENCE_MISMATCH: "
+                    f"execution_record={s.execution_record_id!r} "
+                    f"session={s.session_id!r} step={step.step_id!r} "
+                    f"expected_deadline_ms={config_deadline_ms} "
+                    f"actual_deadline_ms={step.deadline_ms}"
+                )
+
+
+def _validate_stability_rounds(
+    sessions: list[SessionRecord], stability_repeat: int
+) -> None:
+    """NR-1：把 config.stability_repeat 与实际执行轮次证据绑定（fail-closed）。
+
+    正确模型：
+        execution_group_id
+          └── stability_cohort_id（A/B）
+                └── stability_round 1..stability_repeat
+
+    每个 (execution_group_id, stability_cohort_id) 独立校验 rounds == {1..N}：
+    缺轮 / 同 cohort 内重复轮 / 越界 / 无证据 / 混用带与不带证据 均 fail-closed。
+    """
+    tagged = [
+        s for s in sessions
+        if s.execution_group_id or s.stability_cohort_id or s.stability_round is not None
+    ]
+    if not tagged:
+        if stability_repeat > 1:
+            raise ValueError(
+                f"stability_repeat={stability_repeat} 但 bundle 未携带任何执行轮次证据"
+                "（sessions 缺少 execution_group_id/stability_cohort_id/stability_round）"
+            )
+        return
+    if len(tagged) != len(sessions):
+        raise ValueError("sessions 混用带轮次证据与不带轮次证据的条目")
+    # P1-01：同一执行位置 (group, cohort, round, session) 不得重复提交两条 evidence
+    positions: set[tuple[str, str, int, str]] = set()
+    for s in sessions:
+        pos = (
+            s.execution_group_id,
+            s.stability_cohort_id,
+            s.stability_round if s.stability_round is not None else -1,
+            s.session_id,
+        )
+        if pos in positions:
+            raise ValueError(
+                "同一执行位置重复证据：group=" + repr(s.execution_group_id)
+                + " cohort=" + repr(s.stability_cohort_id)
+                + f" round={s.stability_round} session={s.session_id!r}"
+            )
+        positions.add(pos)
+    groups: dict[tuple[str, str], list[int]] = {}
+    for s in sessions:
+        key = (s.execution_group_id, s.stability_cohort_id)
+        groups.setdefault(key, []).append(
+            s.stability_round if s.stability_round is not None else 0
+        )
+    problems: list[str] = []
+    for (group_id, cohort_id), rounds in groups.items():
+        duplicates = sorted({r for r in rounds if rounds.count(r) > 1})
+        out_of_range = sorted({r for r in rounds if r < 1 or r > stability_repeat})
+        missing = [r for r in range(1, stability_repeat + 1) if r not in rounds]
+        if duplicates or out_of_range or missing:
+            problems.append(
+                f"group={group_id!r} cohort={cohort_id!r}: "
+                f"missing={missing} duplicate={duplicates} out_of_range={out_of_range}"
+            )
+    if problems:
+        raise ValueError(
+            f"stability_repeat={stability_repeat} 与实际轮次证据不一致：" + "; ".join(problems)
+        )
+
+
+def _cross_session_isolation(sessions: list[SessionRecord]) -> dict[str, Any]:
+    """NR-1：跨会话隔离只比较“同执行组、同 round、同 scenario、不同 cohort”的 A/B。
+
+    - 带轮次证据（execution_group_id/stability_cohort_id/stability_round）：
+      比较键 = (execution_group_id, stability_round, scenario)，组内取不同
+      stability_cohort_id 的 pair（A1 vs B1；不跨 round 比 A1 vs A2/B1 vs B5）。
+    - 不带轮次证据（单轮/非稳定性 bundle）：退回按 scenario 分组的通用比较。
+    - 任一 context 为空或两者相等 → isolation_ok=False。
+    """
+    tagged_any = any(
+        s.execution_group_id or s.stability_cohort_id or s.stability_round is not None
+        for s in sessions
+    )
+    pair_results: list[dict[str, Any]] = []
+    overall_ok = True
+
+    def _compare(a: SessionRecord, b: SessionRecord, extra: dict[str, Any]) -> None:
+        nonlocal overall_ok
+        ok = (
+            bool(a.injected_context_text)
+            and bool(b.injected_context_text)
+            and a.injected_context_text != b.injected_context_text
+        )
+        pair_results.append({
+            "session_a": a.session_id,
+            "session_b": b.session_id,
+            "isolation_ok": ok,
+            **extra,
+        })
+        if not ok:
+            overall_ok = False
+
+    if tagged_any:
+        buckets: dict[tuple[Any, Any, str], list[SessionRecord]] = {}
+        for s in sessions:
+            key = (s.execution_group_id, s.stability_round, s.scenario)
+            buckets.setdefault(key, []).append(s)
+        for (group_id, round_no, scenario), group in buckets.items():
+            for i in range(len(group)):
+                for j in range(i + 1, len(group)):
+                    a = group[i]
+                    b = group[j]
+                    if a.stability_cohort_id == b.stability_cohort_id:
+                        # 同 cohort 不构成 A/B 对照（避免同 cohort 跨轮误比）
+                        continue
+                    _compare(a, b, {
+                        "execution_group_id": group_id,
+                        "stability_round": round_no,
+                        "scenario": scenario,
+                        "cohort_a": a.stability_cohort_id,
+                        "cohort_b": b.stability_cohort_id,
+                    })
+    else:
+        scenario_groups: dict[str, list[SessionRecord]] = {}
+        for s in sessions:
+            scenario_groups.setdefault(s.scenario, []).append(s)
+        for scenario, group in scenario_groups.items():
+            if len(group) < 2:
+                continue
+            for i in range(len(group)):
+                for j in range(i + 1, len(group)):
+                    _compare(group[i], group[j], {"scenario": scenario})
+
+    if not pair_results:
+        # NR-5：没有任何可比较 pair → 顶层 fail-closed（禁止空证据 PASS）
+        return {
+            "cross_session_isolation_ok": None,
+            "pair_count": 0,
+            "pairs": [],
+            "fail_closed_reason": "NO_COMPARABLE_CROSS_SESSION_PAIR",
+        }
+    return {
+        "cross_session_isolation_ok": overall_ok,
+        "pair_count": len(pair_results),
+        "pairs": pair_results,
+        "fail_closed_reason": None,
+    }
+
+
+def compute_session_report(
+    session_records: Iterable[Mapping[str, Any]],
+    config: EvalSessionConfig,
+) -> dict[str, Any]:
+    """计算 D13C 端到端会话评测报告（冻结口径、fail-closed）。"""
+    # 解析 sessions（解析失败直接抛 ValueError，由调用方决定如何标记 fail-closed）
+    parsed: list[SessionRecord] = []
+    seen_execution_record_ids: set[str] = set()
+    for idx, raw in enumerate(session_records):
+        session = SessionRecord.from_mapping(idx, raw)
+        if session.execution_record_id in seen_execution_record_ids:
+            raise ValueError(
+                f"bundle 存在重复 execution_record_id {session.execution_record_id!r}"
+            )
+        seen_execution_record_ids.add(session.execution_record_id)
+        parsed.append(session)
+
+    if not parsed:
+        return _empty_report(config, "NO_VALID_SESSIONS")
+
+    # P1-02：逐 step deadline 与 config 绑定（漂移立即 fail-closed）
+    _validate_deadline_binding(parsed, config.deadline_ms)
+
+    # R2/NR-1：stability_repeat 与实际执行轮次证据绑定（缺轮/重复轮/越界/无证据均 fail-closed）
+    _validate_stability_rounds(parsed, config.stability_repeat)
+
+    per_session = [_session_metrics(s) for s in parsed]
+
+    # 聚合
+    total_steps = sum(m["step_count"] for m in per_session)
+    total_completed = sum(m["completed_step_count"] for m in per_session)
+    total_isolation_ok = sum(m["isolation_ok_step_count"] for m in per_session)
+    total_critical = sum(m["guardrail_critical_count"] for m in per_session)
+    total_stop_retry_violations = sum(m["stop_retry_violation_count"] for m in per_session)
+    total_deadline_violations = sum(m["deadline_violation_count"] for m in per_session)
+
+    # 聚合 IPC 方法覆盖：所有会话 present 的并集 ⊇ REQUIRED
+    all_present: set[str] = set()
+    for m in per_session:
+        all_present.update(m["ipc_method_coverage"]["present"])
+    missing_methods = [m for m in REQUIRED_IPC_METHODS if m not in all_present]
+
+    # 聚合延迟：所有 step 的 latency（>0）
+    all_latencies: list[float] = []
+    for session in parsed:
+        for step in session.steps:
+            if step.latency_ms > 0:
+                all_latencies.append(step.latency_ms)
+
+    cross_iso = _cross_session_isolation(parsed)
+    reason = cross_iso.get("fail_closed_reason")
+    if reason:
+        # NR-5：无 comparable pair → 顶层 fail-closed（aggregate_metrics=null，CLI exit 2）
+        return _empty_report(config, reason)
+
+    critical_zero_ok = total_critical == 0
+
+    return {
+        "report_version": REPORT_VERSION,
+        "config": _config_dict(config),
+        "aggregate_metrics": {
+            "session_count": len(parsed),
+            "total_step_count": total_steps,
+            "step_completion_rate": (
+                total_completed / total_steps if total_steps else None
+            ),
+            "isolation_pass_rate": (
+                total_isolation_ok / total_steps if total_steps else None
+            ),
+            "guardrail_critical_count": total_critical,
+            "critical_zero_ok": critical_zero_ok,
+            "critical_zero_categories": list(CRITICAL_ZERO_CATEGORIES),
+            "ipc_method_coverage": {
+                "required": list(REQUIRED_IPC_METHODS),
+                "present": sorted(all_present),
+                "missing": missing_methods,
+                "coverage_complete": len(missing_methods) == 0,
+            },
+            "stop_retry_violation_count": total_stop_retry_violations,
+            "deadline_violation_count": total_deadline_violations,
+            "latency": _latency_stats(all_latencies),
+            "cross_session_isolation_ok": cross_iso["cross_session_isolation_ok"],
+            "cross_session_pair_count": cross_iso["pair_count"],
+        },
+        "per_session_metrics": per_session,
+        "cross_session_isolation": cross_iso,
+        "critical_zero_ok": critical_zero_ok,
+        "fail_closed_reasons": [],
+        "provenance": {
+            "implementation_commit": config.implementation_commit,
+            "environment": config.environment,
+            "evidence_reference": config.evidence_reference,
+            "dataset_version": config.dataset_version,
+            "gold_label_version": config.gold_label_version,
+            "dataset_sha256": config.dataset_sha256,
+            "gold_sha256": config.gold_sha256,
+            "note": (
+                "本报告为 L0/L1 评测账本计算结果；未取得麒麟 VM 实测前，"
+                "Runtime / 正式达标结论必须标 UNVERIFIED。"
+            ),
+        },
+    }
+
+
+def _config_dict(config: EvalSessionConfig) -> dict[str, Any]:
+    return {
+        "config_version": config.config_version,
+        "dataset_version": config.dataset_version,
+        "gold_label_version": config.gold_label_version,
+        "implementation_commit": config.implementation_commit,
+        "environment": config.environment,
+        "evidence_reference": config.evidence_reference,
+        "dataset_sha256": config.dataset_sha256,
+        "gold_sha256": config.gold_sha256,
+        "statistics_method": config.statistics_method,
+        "warmup_count": config.warmup_count,
+        "concurrency": config.concurrency,
+        "stability_repeat": config.stability_repeat,
+        "deadline_ms": config.deadline_ms,
+    }
+
+
+def _empty_report(config: EvalSessionConfig, reason: str) -> dict[str, Any]:
+    """fail-closed 空报告：指标 null，仅保留 config 与原因。"""
+    return {
+        "report_version": REPORT_VERSION,
+        "config": _config_dict(config),
+        "aggregate_metrics": None,
+        "per_session_metrics": [],
+        "cross_session_isolation": None,
+        "critical_zero_ok": None,
+        "fail_closed_reasons": [reason],
+        "provenance": {
+            "implementation_commit": config.implementation_commit,
+            "environment": config.environment,
+            "evidence_reference": config.evidence_reference,
+            "note": (
+                "fail-closed：不输出可被误读为正式的指标；"
+                "未取得麒麟 VM 实测前 Runtime 结论 UNVERIFIED。"
+            ),
+        },
+    }

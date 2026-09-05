@@ -541,7 +541,8 @@ memory-client/
     ├── test_d9c_context_assemble.cpp # L0 D9-C Demo（17 用例 A/E/S/R）
     ├── test_d10c_forgetting.cpp      # L0 D10-C Demo（18 用例 A~J 遗忘契约）
     ├── test_d11c_e2e_orchestrator.cpp # L0 D11-C E2E（15 用例 A1~F3，含 E4 TTL过期 + F3 in-flight→reset→stale）
-    └── test_d11c_qml_load.cpp        # L0 D11-C QML（5 业务 slot，含 Card objectName 精确高度 + F 汇总灯初始态禁绿灯）
+    ├── test_d11c_qml_load.cpp        # L0 D11-C QML（5 业务 slot，含 Card objectName 精确高度 + F 汇总灯初始态禁绿灯）
+    └── test_d13c_stability.cpp       # L0 D13-C 稳定性复测（6 用例 S1~S6，复跑/stop-retry/deadline/隔离/reset-stale）
 ```
 
 ## 构建
@@ -571,11 +572,12 @@ cmake --build memory-client/build
 
 * **Job 1 / L0 ctest**：cmake configure（QML OFF / tests ON）→ cmake --build → `ctest --output-on-failure --verbose`
 
-  * 覆盖 ctest 目标（**共 10 个**，按注册顺序）：
+  * 覆盖 ctest 目标（**共 11 个**，按注册顺序）：
     `protocol_adapter` / `memory_client_mock` / `d5_vertical_link_demo` /
     `d6c_multi_source_adapters` / `d7c_preference_editor` /
     `d8c_knowledge_conflict_lifecycle` / `d9c_context_assemble` /
-    `d10c_forgetting` / `d11c_e2e_orchestrator` / `d11c_qml_load`
+    `d10c_forgetting` / `d11c_e2e_orchestrator` / `d11c_qml_load` /
+    `d13c_stability`
 
 * **Job 2 / QML build smoke**：cmake configure（QML ON / tests OFF）→ cmake --build → 产物存在校验
 
@@ -593,8 +595,29 @@ cmake --build memory-client/build
 
 | 层级                 | 要求                                                                                | 状态                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | ------------------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **L0**             | 编译通过、Mock 协议测试 + QML build smoke                                                  | **L0\_PENDING CI** — ctest 预期 **10/10**（protocol\_adapter / memory\_client\_mock / d5\_vertical\_link\_demo / d6c\_multi\_source\_adapters / d7c\_preference\_editor / d8c\_knowledge\_conflict\_lifecycle / d9c\_context\_assemble / d10c\_forgetting / d11c\_e2e\_orchestrator / d11c\_qml\_load；d11c\_qml\_load 在缺 Qt5 Quick 运行时的环境会跳过）；QML\_APP=ON 构建 smoke job 验证 QRC / main.qml / 五 Page 可编译（含 D11DemoOrchestratorPage） |
+| **L0**             | 编译通过、Mock 协议测试 + QML build smoke                                                  | **L0\_PENDING CI** — ctest 预期 **11/11**（protocol\_adapter / memory\_client\_mock / d5\_vertical\_link\_demo / d6c\_multi\_source\_adapters / d7c\_preference\_editor / d8c\_knowledge\_conflict\_lifecycle / d9c\_context\_assemble / d10c\_forgetting / d11c\_e2e\_orchestrator / d11c\_qml\_load / d13c\_stability；d11c\_qml\_load 在缺 Qt5 Quick 运行时的环境会跳过）；QML\_APP=ON 构建 smoke job 验证 QRC / main.qml / 五 Page 可编译（含 D11DemoOrchestratorPage） |
 | **L1**             | QLocalSocket 连接真实 Gateway / Echo；turn.finalized 测试态 handler；真实 MemoryContext 返回非空 | 待联调                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | **L2**             | 银河麒麟 VM 中真实 AI Assistant Hook / ChatRecord / Chat DB / SourceResolver 打通          | **未实现**（属后续真实 C-D5 关闭工作）                                                                                                                                                                                                                                                                                                                                                                                                      |
 | **HOST\_VERIFIED** | SEC-CTX-01 原文隔离宿主级证据                                                              | **RUNTIME\_UNVERIFIED**                                                                                                                                                                                                                                                                                                                                                                                                       |
+
+## D13-C 端到端会话稳定性复测
+
+D13-C 在 D11-C E2E Orchestrator 基础上增加主演示稳定性复测 L0 测试
+（`test_d13c_stability.cpp`，6 个 test slot S1~S6）：
+
+| 用例 | 验证点 |
+|---|---|
+| S1 `stability_replay_5rounds` | 主演示编排复跑 5 轮稳定性（无 hang、无 stage 错乱、安全护栏通过、resetAllPipelines 后 stage 回 idle） |
+| S2 `stop_reason_semantics` | PostTurn stop_reason 透传语义（stop/length/content_filter/tool_use 原样到 metadata.stop_reason） |
+| S3 `retry_semantics` | retry_of_turn_id 透传 + 非 retry 路径必须为空（buildTurnFinalizedEventJson 字段断言） |
+| S4 `deadline_timeout_client_block` | 客户端 5000ms deadline timeout fail-closed（Mock `__hold__` 不回包 → timeout → stage=failed/timeout → busy=false → 可恢复） |
+| S5 `cross_session_isolation_replay` | 跨会话隔离复跑（5 轮 A/B 切换，injectedContextText 严格区分，session_id 顺序严格 A→B→A→B...） |
+| S6 `reset_clears_pending_no_writeback` | Reset 清 pending 防 stale response 回写（Mock `__hold__` + sendRawEnvelope 注入 stale response → stage 保持 idle） |
+
+配合 Python 评测账本模块（`memory-service/evaluation/d13c_session_eval.py` + CLI `scripts/run_d13c_session_eval.py`），
+L1 测试 32 项已全部通过（`memory-service/tests/test_d13c_session_eval.py`）。
+
+⚠️ **Demo / Prototype 声明**：本测试仅为 memory-client 侧 L0 稳定性 Mock 契约验证，
+不代表真实 AI Assistant Hook / Chat DB / ChatRecord / model_request 已接入，
+不关闭 C-D13，也不宣称 Runtime 已在麒麟 VM 验证（L2 由 B/D 轨另行归档）。
 
