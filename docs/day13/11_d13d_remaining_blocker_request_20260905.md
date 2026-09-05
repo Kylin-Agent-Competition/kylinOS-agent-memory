@@ -1,4 +1,10 @@
-# D13D 正式环境冻结：剩余阻塞项请求单
+# D13D 正式环境冻结：剩余阻塞项请求单（历史版本，已替代）
+
+> 2026-09-05 更新：本单基于 PR #148 合并前的 `7242935...`，现已被
+> `docs/day13/09_d13d_environment_freeze_task_card_20260905.md` 与
+> `docs/day13/14_d13d_pr148_postmerge_continuation_20260905.md` 替代。不得以本文
+> 的 Dataset/Gold “交付请求”或 `7242935...` 部署步骤绕过 PR #148 合并后的 Trust Root
+> 与双 Seal 合同。
 
 - 日期：2026-09-05
 - 关联：PR #150、`docs/day13/09_d13d_environment_freeze_task_card_20260905.md`、B 轨回执 `PR150_B轨_B06解除回执_20260905.md`

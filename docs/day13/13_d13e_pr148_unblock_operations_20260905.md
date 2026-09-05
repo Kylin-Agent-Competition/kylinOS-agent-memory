@@ -1,4 +1,14 @@
-# PR #148 解锁与 D13D 续办操作清单
+# PR #148 解锁与 D13D 续办操作清单（历史版本，已替代）
+
+> 2026-09-05 更新：PR #148 已以 merge commit
+> `4a32e5c948a968f3bd4409d91deac320002baea1` 合并到 `main`，且 GitHub
+> `reviewDecision=APPROVED`。以下正文保留为合并前操作轨迹，不得再据此判断
+> PR 状态、选择 `7242935...` 为被测基线或要求修改 manifest 自报审批字段。
+>
+> 合并后的实际门禁为：固定 `/etc/kylin-memory/trust`、D13E Review Seal/.sig、
+> D13D Execution Seal/.sig、两份 Seal 的离线验签、以及冻结 VM 的 Preference / Conflict /
+> Safety / Forget 四类 raw JSONL。正式 runner 仅接受外部 Seal 证明审批事实；候选
+> Dataset、Gold、Threshold、Manifest 和 Bundle 本身不自证 `APPROVED` / `FROZEN`。
 
 ## 当前判定
 

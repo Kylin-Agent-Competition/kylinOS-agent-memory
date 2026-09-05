@@ -2,7 +2,7 @@
 
 ## 状态
 
-`PREPARED` / `BLOCKED`。本批完成候选基线的 VM 隔离部署准备和 L2 UDS 预检；未执行正式 D13B 评测，未发布正式指标，也未将 D13D 标记为 `FROZEN`。
+`INVALIDATED`（作为正式冻结证据）/ 历史准备记录。本批完成旧候选基线的 VM 隔离部署准备和 L2 UDS 预检；PR #148 合并后，被测提交切换为 `4a32e5c...`，本记录不得再用于正式评测或正式冻结。
 
 ## 已完成
 
@@ -21,7 +21,13 @@
 
 其中包含 VM probe、部署前状态、bundle hash、候选 clone、独立迁移/启动、UDS probe、结构化环境清单和 `SHA256SUMS`。本批证据的限制及未关闭门禁以 `environment_freeze.json` 的 `freeze_status=BLOCKED` 为准。
 
-## 仍然阻塞
+## 失效原因与保留范围
+
+- 本批 `tested_commit=7242935...` 不含 PR #148 合并后的 D13E Runner、候选输入与固定 Trust Root 合同，无法代表新的 D13D 被测基线 `4a32e5c948a968f3bd4409d91deac320002baea1`。
+- 原始文件及其 `SHA256SUMS` 不修改、不覆盖，仅作为旧提交的隔离启动准备证据保存。
+- 旧隔离候选进程在确认 PID/命令行归属后应停止，工作树、数据库和 socket 记录保留，避免把旧实例误认作新基线。
+
+## 原记录中的阻塞
 
 1. D13E Dataset/Gold 仍为候选状态，未经过 D Reviewer 封存。
 2. 正式 PASS/FAIL 阈值、批准记录与 hash 未交付。

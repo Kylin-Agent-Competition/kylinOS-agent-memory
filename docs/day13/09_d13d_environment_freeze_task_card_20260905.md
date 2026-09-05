@@ -6,7 +6,7 @@
 - 任务类型：`docs/test-infrastructure`；本任务冻结评测输入和运行环境，不实现或调整检索、Embedding、Vector、IPC、Schema、数据库或 UI 功能。
 - 创建日期：2026-09-05。
 - 责任边界：D 轨负责环境、部署和证据可复现性；D13B 消费冻结环境执行检索评测；D13E 提供封存集、Gold 判定键、指标阈值及其 SHA-256。
-- 状态：`PREPARED`。被测代码基线已确定；D13E 封存输入与实际 VM 采集结果尚未登记，禁止标记为 `FROZEN` 或“正式评测已开始”。
+- 状态：`PREPARED`。PR #148 已合并，候选 D13E 工件和离线 Runner 已在被测基线中；但外部签名 Seal、冻结 Trust Root 与实际 VM raw 结果尚未登记，禁止标记为 `FROZEN` 或“正式评测已开始”。
 - 关联：`docs/day13/01_d13b_formal_eval_worklist_20260902.md`、`evidence/index.yaml`、`Kylin-runtime-knowledge/VERSION_MAP.md`（2026-09-01）。
 
 ## 目标
@@ -23,10 +23,12 @@
 
 | 项目 | 当前值 | 状态 | 冻结要求 |
 | --- | --- | --- | --- |
-| 被测提交 | `7242935bee5f230cee0535d5e28dbe1e60a302f6` | SELECTED | `kylin-mem/main` 于 2026-09-05 12:15:45 +08:00 的完整 SHA；部署前和 VM 内 `HEAD` 必须精确一致。 |
-| 基线来源 | `kylin-mem/main` | CONFIRMED | 该提交已包含 D13B 合并提交 `8cc4a89e34ca7ec73563c798a46339721f291139` 及 `memory-service/retrieval/formal_eval.py`、`scripts/run_d13b_formal_eval.py`。 |
+| 被测提交 | `4a32e5c948a968f3bd4409d91deac320002baea1` | SELECTED | PR #148 merge commit；`kylin-mem/main` 于 2026-09-05 复核的完整 SHA，部署前和 VM 内 `HEAD` 必须精确一致。 |
+| 基线来源 | `kylin-mem/main` | CONFIRMED | 该提交包含 D13B 正式评测组件及 PR #148 的 D13E 候选工件、离线正式 Runner。 |
 | 当前工作树 | `feat/d10d-build@1e89d5a`，含 D13C 采集器与用户未跟踪文件 | EXCLUDED | 不作为 D13D 候选，除非经审核后显式选定。 |
-| D13E 封存集与 Gold | 未提供 | BLOCKED | 登记数据集版本、来源、完整 SHA-256、Gold 判定键版本与访问控制信息。 |
+| D13E 候选输入 | 已合入，未 Seal | BLOCKED | 独立复核 Dataset、Gold、Threshold、Manifest hash；必须由 D Reviewer Review Seal 证明批准，候选文件本身不能自证封存。 |
+| Frozen Trust Root | VM 中不存在 | BLOCKED | 由授权流程在 `/etc/kylin-memory/trust` 安装 root-owned 非 symlink Trust Root JSON 与两份 Ed25519 公钥；不得由 evidence 目录或调用参数提供。 |
+| 外部签名与 raw 结果 | 未提供 | BLOCKED | 取得 D13E Review Seal/.sig、D13D Execution Seal/.sig 和四类真实逐样本 raw JSONL。 |
 | VM 运行环境 | `Kylin-desktop-neo` 为 VERSION_MAP 目标环境 | READY_FOR_CAPTURE | 每次冻结须实际采集，历史基线不可替代当前 commit 的 L2 证据。 |
 | 统一证据目录 | 未创建 | READY | 以本任务定义的目录和 manifest 创建，所有文件校验后才登记索引。 |
 
@@ -39,18 +41,18 @@
 ```text
 remote: kylin-mem
 ref:    main
-commit: 7242935bee5f230cee0535d5e28dbe1e60a302f6
-subject: fix(D12D): 防护 event.ingest 字段漂移 (#143)
+commit: 4a32e5c948a968f3bd4409d91deac320002baea1
+subject: test(D13E)：建立封存候选集与正式评测门禁 (#148)
 ```
 
 选择依据：
 
 - 它是本地已解析的 `kylin-mem/main`/远端默认分支指向，且是可部署、可追溯的完整提交；
-- D13B 合并提交 `8cc4a89e34ca7ec73563c798a46339721f291139` 已是其祖先，正式评测账本和 CLI 均存在于该树；
+- D13B 正式评测组件及 PR #148 的 D13E 候选集、Gold、阈值、manifest、bundle 和离线 Runner 均存在于该树；
 - 当前工作树 `feat/d10d-build@1e89d5a` 不是该主线的后代，且包含未合并的 D13C 证据采集器和用户未跟踪文件，不能作为正式被测代码；
-- `kylin-mem/test/d13e-formal-eval@6f55dfefeb248a11a0c9b54ce392762d49c4e065` 未合并，并包含 D13E 数据外的客户端、Gateway 和契约修改。D13D 仅消费其经 D13E 批准并逐项校验的封存集/Gold/配置文件，不合并或部署该分支。
+- 旧 `7242935bee5f230cee0535d5e28dbe1e60a302f6` 不含合并后的 D13E 正式门禁，故此前针对该提交的隔离预检不再是本轮正式冻结证据；该证据包仅保留为历史准备记录。
 
-此决定不冻结 D13E 输入版本，也不表示 `7242935...` 在麒麟 VM 已通过正式评测；任何提交、依赖、数据或配置变化均按本任务卡的失效规则处理。
+此决定不表示 `4a32e5c...` 在麒麟 VM 已通过正式评测；任何提交、依赖、数据、Trust Root 或 Seal 变化均按本任务卡的失效规则处理。
 
 ## 批准范围
 
@@ -66,6 +68,7 @@ subject: fix(D12D): 防护 event.ingest 字段漂移 (#143)
 - 为取得指标而修改数据集、删除失败查询、重写检索/Embedding/Vector 生产逻辑，或把开发集替代封存集；
 - 覆盖系统 SDK、`/usr` 下库文件、官方模型目录或既有 VM 快照；
 - 将 WSL/L0/L1、旧 commit 或历史 VM 日志表述为本冻结 commit 的正式结果。
+- 伪造、提交、记录或通过 CI 分发 D Reviewer/D13D 私钥；从 evidence root、Bundle、Seal 或环境变量加载 Trust Root。
 
 ## 冻结输入与输出契约
 
@@ -83,6 +86,9 @@ subject: fix(D12D): 防护 event.ingest 字段漂移 (#143)
 | `eval_config` | 固定 `d9-retrieval-eval-config/v1` 的完整 JSON 与 SHA-256，包含 k/top_k/rrf_k、warmup/repeat/concurrency/statistics_method。 |
 | `dataset` | D13E 封存集版本、完整 SHA-256、条目数、访问限制；不记录用户原文或敏感样本正文。 |
 | `gold` | Gold 判定键版本、完整 SHA-256、空 Gold/负例/边界样本策略及 OFFICIAL 阈值来源。 |
+| `trust_root` | 固定 `/etc/kylin-memory/trust` 的目录/文件权限、owner、两个 public PEM hash 和 Trust Root JSON hash；不得记录私钥。 |
+| `review_seal` | D13E Review Seal 与 detached signature 的路径、SHA-256、key ID、审查引用和验签结果。 |
+| `execution_seal` | D13D Execution Seal 与 detached signature 的路径、SHA-256、key ID、attestation hash 和验签结果。 |
 
 ### 输出目录
 
@@ -110,6 +116,8 @@ evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>/
 - [ ] 部署精确 `tested_commit`，核对 VM 内 `git rev-parse HEAD` 和 `git status --porcelain`。
 - [ ] 采集 service unit、active 状态、Memory Service socket 权限、数据库路径及 Python/SQLite/依赖版本。
 - [ ] 取得 D13E 封存集、Gold、阈值和评测配置；逐一执行 SHA-256 校验并记录条目数。
+- [ ] 核验 `/etc/kylin-memory/trust` 的固定路径、root owner、非 symlink 与 group/other 非写权限；未授权不得自行安装或生成公钥。
+- [ ] 接收并离线验签 D13E Review Seal、D13D Execution Seal；两份 Seal/.sig 必须位于本轮 evidence root 内。
 - [ ] 创建唯一证据目录，记录所有实际执行命令、退出码与原始输出。
 - [ ] 由 D13B 在同一冻结目录运行正式评测；结果和报告与环境清单中的 `tested_commit`、数据集和配置哈希一致。
 - [ ] 对目录内所有交付物生成 `SHA256SUMS` 并独立复核。
@@ -145,15 +153,15 @@ VM 运行时路径、SDK/Vector ABI 和安装包版本以实际 VM 采集为准�
 
 ## 风险、失效与回滚
 
-- 候选提交、VM 快照、服务 unit、依赖、配置或 D13E 输入任一变化，当前冻结立即标记 `INVALIDATED`，创建新的 `<UTC_RUN_ID>`，禁止增量覆盖旧目录。
+- 候选提交、VM 快照、服务 unit、依赖、配置、D13E 输入、Trust Root 或任一 Seal 任一变化，当前冻结立即标记 `INVALIDATED`，创建新的 `<UTC_RUN_ID>`，禁止增量覆盖旧目录。
 - 部署失败、服务不活跃、哈希不匹配或工作树不干净时停止正式评测，保留诊断日志并标记 `BLOCKED`。
 - VM 仅在项目级工作树与用户级服务范围内操作；不覆盖系统包/库、不更新系统依赖。部署前保存工作树和 service 状态，失败时回退至采集到的部署前 commit/状态并复验。
 - 日志必须避免封存样本正文、认证信息和用户原文。需要调查失败样本时，使用 dataset 行号或脱敏 query ID。
 
 ## 未决事项
 
-1. D13E 需交付封存集、Gold、阈值与 SHA-256。
-3. 需确认用于正式评测的 VM 名称、快照和资源配额，以及是否已有可用的干净快照。
-4. D13B 需确认其运行器所需的最终 bundle 文件格式和输出文件名，以写入冻结目录的实际命令。
+1. D Reviewer / 受控 signing 流程需交付已验签的 Review Seal；D13D signing 流程需交付 Execution Seal。
+2. 需获得安装 frozen Trust Root 所需的已批准公钥材料及系统级变更授权。
+3. 需在新的 `4a32e5c...` VM 快照上完成隔离部署与真实四类 raw JSONL。
 
 在上述事项关闭前，本任务卡仅授权准备与只读采集，不授权发布任何正式量化结论。
