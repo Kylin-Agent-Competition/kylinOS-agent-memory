@@ -82,6 +82,7 @@ memory_entries = Table(
     Column("row_revision", Integer, nullable=True),
     Column("knowledge_type", String, nullable=True),
     Column("conditions", Text, nullable=True),
+    Column("topic_key", String, nullable=True),
     Column("lifecycle_eligibility", String, nullable=True),
     Column("memory_status", String, nullable=True),
     Column("memory_type", String, nullable=True),
@@ -485,6 +486,14 @@ uq_memory_entries_user_knowledge = Index(
 )
 idx_memory_entries_user_status = Index("idx_memory_entries_user_status", memory_entries.c.user_id, memory_entries.c.memory_status)
 idx_memory_entries_user_lifecycle_type = Index("idx_memory_entries_user_lifecycle_type", memory_entries.c.user_id, memory_entries.c.memory_type)
+idx_memory_entries_user_topic_active = Index(
+    "idx_memory_entries_user_topic_active",
+    memory_entries.c.user_id,
+    memory_entries.c.topic_key,
+    sqlite_where=(memory_entries.c.entry_type == "knowledge")
+    & (memory_entries.c.is_deleted == 0)
+    & memory_entries.c.topic_key.isnot(None),
+)
 uq_memory_relation_user_relation = Index("uq_memory_relation_user_relation", memory_relation.c.user_id, memory_relation.c.relation_id, unique=True)
 idx_memory_relation_left = Index("idx_memory_relation_left", memory_relation.c.user_id, memory_relation.c.left_endpoint_type, memory_relation.c.left_endpoint_id)
 idx_memory_relation_right = Index("idx_memory_relation_right", memory_relation.c.user_id, memory_relation.c.right_endpoint_type, memory_relation.c.right_endpoint_id)

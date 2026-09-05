@@ -20,7 +20,7 @@ import os
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -122,10 +122,16 @@ def env_trusted(tmp_path):
     eng.dispose()
 
 
-def _seed_knowledge(engine, *, user_id=USER, content="深色主题偏好", entry_type="knowledge") -> int:
+def _seed_knowledge(
+    engine, *, user_id=USER, content="深色主题偏好", entry_type="knowledge", topic_key=None
+) -> int:
     with engine.begin() as conn:
         return repo.insert_memory_entry(
-            conn, user_id=user_id, entry_type=entry_type, content={"value": content}
+            conn,
+            user_id=user_id,
+            entry_type=entry_type,
+            content={"value": content},
+            topic_key=topic_key,
         )
 
 
@@ -147,6 +153,59 @@ def _seed_preference(engine, *, user_id=USER, key="theme", scope="global", value
             (user_id, key, scope),
         ).first()
     return int(row[0])
+
+
+def _seed_admitted_knowledge(engine, *, event_id: str, occurred_at: datetime) -> int:
+    """Seed the real source-event/evidence relation required by time_window."""
+    now = _now_iso()
+    with engine.begin() as conn:
+        repo.insert_source_event(
+            conn,
+            user_id=USER,
+            event_id=event_id,
+            actor_id=USER,
+            session_id="time-window-session",
+            turn_id=None,
+            tool_call_id=None,
+            source_type="manual_config",
+            event_type="user_message",
+            schema_version="0.1",
+            trace_id="time-window-trace",
+            source_reference="test-source",
+            raw_payload_ref=None,
+            content_summary="structured test source",
+            idempotency_key=f"idem-{event_id}",
+            consent_scope="memory_only",
+            source_business_status="success",
+            sensitivity="none",
+            is_sensitive_matched=0,
+            should_ignore=0,
+            payload_security_checked=0,
+            memory_type=None,
+            requires_embedding=0,
+            has_structured_payload=1,
+            language_tag=None,
+            occurred_at=occurred_at.astimezone(timezone.utc).isoformat(),
+            captured_at=occurred_at.astimezone(timezone.utc).isoformat(),
+            content_fingerprint=f"fp-{event_id}",
+            dedup_group=None,
+            duplicate_of=None,
+            admission_decision="allow_extraction",
+            admission_reason_code="ok",
+            processing_status="pending",
+            created_at=now,
+            updated_at=now,
+        )
+        result = repo.insert_knowledge_entry(
+            conn,
+            user_id=USER,
+            knowledge_id=f"knowledge-{event_id}",
+            knowledge_type="fact",
+            source_event_id=event_id,
+            content={"kind": "test"},
+            confidence=0.9,
+        )
+    return int(result["memory_entry_id"])
 
 
 def _preview(env, payload=None, *, idem_key="preview-1"):
@@ -550,18 +609,91 @@ def _business_then_fail(uow, token: str):
 # ── F. fail-closed ──
 
 
-@pytest.mark.parametrize("mode", ["topic", "time_window", "full_reset"])
-def test_unsupported_forget_mode_preview_fails_closed(env, mode):
-    p = _payload(forget_mode=mode)
-    # full_reset 不允许携带 target_id（Domain 校验）；topic/time_window 需 target_topic/target_time_range
-    if mode == "topic":
-        p["target_topic"] = "某个主题"
-    elif mode == "time_window":
-        p["target_time_range"] = "[start,end)"
-    else:
-        p.pop("target_id")
+def test_invalid_time_window_preview_fails_closed(env):
+    p = _payload(
+        forget_mode="time_window",
+        target_type="knowledge",
+        target_time_range="[start,end)",
+    )
     with pytest.raises(RequestValidationError):
         _preview(env, p)
+
+
+def test_topic_preview_and_execute_uses_exact_structured_key(env):
+    selected = _seed_knowledge(env["engine"], topic_key="d13d-topic")
+    untouched = _seed_knowledge(env["engine"], topic_key="other-topic")
+    payload = _payload(
+        forget_mode="topic",
+        target_type="knowledge",
+        target_topic="d13d-topic",
+        target_id=None,
+    )
+    preview = _preview(env, payload)
+    assert preview["resolved_target_ids"] == [str(selected)]
+    response = env["invoke"](
+        "forget.execute",
+        {"forget_plan_id": "plan-1", "user_id": USER, "confirmation_token": preview["confirmation_token"]},
+        idem_key="execute-topic",
+    )
+    assert response["status"] == "completed"
+    with env["engine"].connect() as conn:
+        assert conn.exec_driver_sql("SELECT is_deleted FROM memory_entries WHERE id=?", (selected,)).scalar_one() == 1
+        assert conn.exec_driver_sql("SELECT is_deleted FROM memory_entries WHERE id=?", (untouched,)).scalar_one() == 0
+
+
+def test_full_reset_only_removes_owned_memory_entities(env):
+    knowledge_id = _seed_knowledge(env["engine"])
+    preference_id = _seed_preference(env["engine"])
+    other_id = _seed_knowledge(env["engine"], user_id=OTHER)
+    payload = _payload(
+        forget_mode="full_reset",
+        target_type="all",
+        target_id=None,
+    )
+    preview = _preview(env, payload)
+    assert preview["resolved_target_ids"] == [
+        f"knowledge:{knowledge_id}",
+        f"preference:{preference_id}",
+    ]
+    response = env["invoke"](
+        "forget.execute",
+        {"forget_plan_id": "plan-1", "user_id": USER, "confirmation_token": preview["confirmation_token"]},
+        idem_key="execute-reset",
+    )
+    assert response["status"] == "completed"
+    assert response["executed_count"] == 2
+    with env["engine"].connect() as conn:
+        assert conn.exec_driver_sql("SELECT is_deleted FROM memory_entries WHERE id=?", (knowledge_id,)).scalar_one() == 1
+        assert conn.exec_driver_sql("SELECT is_deleted FROM memory_entries WHERE id=?", (other_id,)).scalar_one() == 0
+
+
+def test_time_window_uses_primary_evidence_occurred_at_half_open_bounds(env):
+    start = datetime(2026, 9, 1, 0, 0, tzinfo=timezone.utc)
+    selected = _seed_admitted_knowledge(
+        env["engine"], event_id="time-selected", occurred_at=start + timedelta(hours=1)
+    )
+    endpoint = _seed_admitted_knowledge(
+        env["engine"], event_id="time-endpoint", occurred_at=start + timedelta(days=1)
+    )
+    payload = _payload(
+        forget_mode="time_window",
+        target_type="knowledge",
+        target_time_range=json.dumps(
+            {"from": start.isoformat(), "to": (start + timedelta(days=1)).isoformat()}
+        ),
+        target_id=None,
+    )
+    preview = _preview(env, payload)
+    assert preview["resolved_target_ids"] == [str(selected)]
+    response = env["invoke"](
+        "forget.execute",
+        {"forget_plan_id": "plan-1", "user_id": USER, "confirmation_token": preview["confirmation_token"]},
+        idem_key="execute-time-window",
+    )
+    assert response["status"] == "completed"
+    with env["engine"].connect() as conn:
+        assert conn.exec_driver_sql("SELECT is_deleted FROM memory_entries WHERE id=?", (selected,)).scalar_one() == 1
+        assert conn.exec_driver_sql("SELECT is_deleted FROM memory_entries WHERE id=?", (endpoint,)).scalar_one() == 0
 
 
 def test_hard_delete_execute_fails_closed(env):
@@ -768,6 +900,7 @@ def test_migration_upgrade_creates_forget_tables_and_priority(tmp_path):
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     indexes = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
     outbox_info = {row[1]: row for row in conn.execute("PRAGMA table_info(outbox)")}
+    memory_entry_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_entries)")}
     outbox_sql = conn.execute("SELECT sql FROM sqlite_master WHERE name='outbox'").fetchone()[0]
     revision = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     conn.close()
@@ -778,15 +911,16 @@ def test_migration_upgrade_creates_forget_tables_and_priority(tmp_path):
     assert "idx_forget_audit_user_created" in indexes
     assert "idx_outbox_priority" in indexes
     assert "priority" in outbox_info
+    assert "topic_key" in memory_entry_columns
     assert str(outbox_info["attempts"][4]) in {"0", "'0'", '"0"'}
     assert "'forget'" in outbox_sql  # aggregate_type CHECK 扩展
-    assert revision == "20260902_add_memory_relation_conflict"
+    assert revision == "20260906_add_forget_topic_key"
 
 
 def test_migration_single_head(tmp_path):
     r = _run_alembic(tmp_path / "heads.db", "heads")
     assert r.returncode == 0, r.stderr
-    assert r.stdout.strip() == "20260902_add_memory_relation_conflict (head)"
+    assert r.stdout.strip() == "20260906_add_forget_topic_key (head)"
 
 
 def test_migration_downgrade_roundtrip(tmp_path):

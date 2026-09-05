@@ -353,11 +353,14 @@ def insert_memory_entry(
     source_turn_id: Optional[int] = None,
     confidence: float = 0.0,
     trace_id: Optional[str] = None,
+    topic_key: Optional[str] = None,
 ) -> int:
     """插入 memory_entry（content 序列化为 JSON 文本），返回 id。
 
     ADR-011：trace_id nullable 列透传（IPC envelope 唯一真源）。
     """
+    if topic_key is not None:
+        _require_nonempty(topic_key=topic_key)
     now = _now_iso()
     try:
         res = conn.execute(
@@ -373,6 +376,7 @@ def insert_memory_entry(
                 created_at=now,
                 updated_at=now,
                 trace_id=trace_id,
+                topic_key=topic_key,
             )
         )
     except OperationalError as exc:
@@ -1853,6 +1857,35 @@ def soft_delete_resolved_targets(
                 executed += 1
                 version_ids.append(str(version_id))
         return executed, version_ids
+    if target_type == "all":
+        executed = 0
+        version_ids: List[str] = []
+        for raw in resolved_target_ids:
+            try:
+                kind, raw_id = raw.split(":", 1)
+            except (AttributeError, ValueError) as exc:
+                raise UnsupportedForgetScopeError("full_reset target must be tagged") from exc
+            if kind == "knowledge":
+                count, _ = soft_delete_resolved_targets(
+                    conn,
+                    user_id=user_id,
+                    target_type="knowledge",
+                    resolved_target_ids=[raw_id],
+                    forget_plan_id=forget_plan_id,
+                )
+            elif kind == "preference":
+                count, versions = soft_delete_resolved_targets(
+                    conn,
+                    user_id=user_id,
+                    target_type="preference",
+                    resolved_target_ids=[raw_id],
+                    forget_plan_id=forget_plan_id,
+                )
+                version_ids.extend(versions)
+            else:
+                raise UnsupportedForgetScopeError("full_reset target has unknown type")
+            executed += count
+        return executed, version_ids
     raise UnsupportedForgetScopeError(
         f"soft delete not supported for target_type={target_type!r}"
     )
@@ -1892,7 +1925,7 @@ def _d8d_outbox(conn, *, aggregate_id: str, event_type: str, payload: Dict[str, 
 def insert_knowledge_entry(
     conn, *, user_id: str, knowledge_id: str, knowledge_type: str, source_event_id: str,
     content: Dict[str, Any], confidence: float, conditions: Optional[str] = None,
-    trace_id: Optional[str] = None,
+    trace_id: Optional[str] = None, topic_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Persist a new trusted knowledge item and its primary evidence edge atomically.
 
@@ -1900,6 +1933,8 @@ def insert_knowledge_entry(
     callers cannot promote a weak/failed source by passing their own tier.
     """
     _d8d_nonempty(user_id=user_id, knowledge_id=knowledge_id, knowledge_type=knowledge_type, source_event_id=source_event_id)
+    if topic_key is not None:
+        _d8d_nonempty(topic_key=topic_key)
     if knowledge_type not in _KNOWLEDGE_TYPES:
         raise ValueError("invalid knowledge_type")
     event = _source_event_row(conn, user_id=user_id, event_id=source_event_id)
@@ -1959,7 +1994,7 @@ def insert_knowledge_entry(
                 "lifecycle_eligibility": existing["lifecycle_eligibility"],
                 "replayed": True,
             }
-        res = conn.execute(insert(memory_entries).values(user_id=user_id, entry_type="knowledge", content=json.dumps(content, ensure_ascii=False), confidence=confidence, version=1, row_revision=1, is_deleted=0, created_at=now, updated_at=now, trace_id=trace_id, knowledge_id=knowledge_id, knowledge_type=knowledge_type, conditions=conditions, lifecycle_eligibility=lifecycle_eligibility, memory_status="candidate", memory_type="short_term", evidence_tier=tier, last_accessed_at=None, access_count=None))
+        res = conn.execute(insert(memory_entries).values(user_id=user_id, entry_type="knowledge", content=json.dumps(content, ensure_ascii=False), confidence=confidence, version=1, row_revision=1, is_deleted=0, created_at=now, updated_at=now, trace_id=trace_id, knowledge_id=knowledge_id, knowledge_type=knowledge_type, conditions=conditions, topic_key=topic_key, lifecycle_eligibility=lifecycle_eligibility, memory_status="candidate", memory_type="short_term", evidence_tier=tier, last_accessed_at=None, access_count=None))
         entry_id = int(res.lastrowid)
         relation_id = f"evidence:{knowledge_id}:{source_event_id}"
         insert_relation(conn, user_id=user_id, relation_id=relation_id, relation_type="evidence", left_endpoint_type="knowledge", left_endpoint_id=knowledge_id, right_endpoint_type="source_event", right_endpoint_id=source_event_id, is_primary=True, emit_outbox=False)
