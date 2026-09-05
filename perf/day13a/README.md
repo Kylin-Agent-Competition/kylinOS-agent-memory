@@ -15,7 +15,7 @@
 
 `memory.retrieve` 当前返回 empty context，因此它的 `measurement_scope` 是 `gateway_empty_context_ipc_baseline`：仅代表 UDS → Gateway → Registry → handler → response 的 IPC 基线，不能用作知识检索主链延迟或比赛“知识检索响应 ≤500ms”的达标证据。
 
-当前 `benchmark_outbox.py` 测的是 `outbox_queue_backlog_drain`，不是索引积压：它写入 `turn.finalized` 并使用可控 consumer。结果会写入 `index_backlog_measurement.status=not_measured`，并使 collection 的 `formal_baseline_complete=false`。只有补齐 `memory.upserted → OutboxWorker → index consumer → Vector/Embedding backend` 的真实链路后，才可将索引积压列为已测量。
+当前 `benchmark_outbox.py` 测的是 `outbox_queue_backlog_drain`，不是索引积压：它写入 `turn.finalized` 并使用可控 consumer。`full` 模式会在此基础上调用 `benchmark_index_backlog.py`，写入 `memory.upserted`，经真实 `OutboxWorker`、索引 consumer、`SqliteVectorProvider` 和 `VectorCliClient` 进入 Vector Engine，并将结果合并到 `outbox.summary.json.index_backlog_measurement`。只有该真实链路的结果为 `status=measured` 且通过完整性校验时，才可将索引积压列为已测量。
 
 项目内部 Embedding 查询预算是 **≤180ms**；比赛官方知识检索响应指标是 **≤500ms**。二者属于不同层级，不能互相替代。D13A 只记录基线，不设置回归 Gate，也不承担 D13B/D13C 的热点定位或优化。
 
@@ -36,9 +36,17 @@ export DAY13A_BASELINE_MODE=partial
 PYTHONPATH=memory-service:scripts ./scripts/run_day13a_benchmarks.sh
 ```
 
-`DAY13A_SDK_SO`、`DAY13A_MODEL_VERSION`（或 `DAY13A_MODEL_SHA256`）与 `DAY13A_IPC_PID` 是正式运行的必填身份资料；环境快照会记录实际 `.so` 路径、文件存在性、SHA-256、SONAME、SDK/runtime 版本线索和模型身份。Embedding benchmark 会将 `DAY13A_SDK_SO` 显式传给 `EmbeddingProvider(so_path=...)`，并在运行时摘要中记录 Provider/Bridge 已加载的 `.so` 路径与 SHA-256；汇总时若与环境快照漂移则 fail-closed。`DAY13A_MODEL_VERSION` 是操作者声明的模型身份，只有同时提供模型 SHA-256 或额外运行时校验时才表示可复核的二进制身份。`DAY13A_OUTPUT_DIR` 是所有轮次共用的**外部**根目录，必须不存在或为空；若位于 Git worktree 内或已含旧产物，runner 会拒绝运行。可选参数：`DAY13A_PYTHON`、`DAY13A_RUN_ID`、`DAY13A_RUN_COUNT`、`DAY13A_BASELINE_MODE`、`DAY13A_EXPECTED_COMMIT`、`DAY13A_EXPECTED_BRANCH`、`DAY13A_TEXTS`、`DAY13A_IPC_REQUESTS`、`DAY13A_IPC_PAYLOAD`、`DAY13A_OUTBOX_EVENTS`。默认连续跑 3 轮；本地只验证一轮可设置 `DAY13A_RUN_COUNT=1`。每轮 IPC 都会先用 `/proc/net/unix` 与目标 PID 的 fd 交叉验证实际 Gateway 持有目标 listening UDS，结束时再次验证；IPC summary 必须记录 `resource_sample_target=gateway_service`、有效 PID、每个并发档位完整 CPU/RSS，避免将 benchmark 客户端资源或任意存活 PID 误作服务端资源。每轮 IPC 都会分别运行 `echo` 和 `memory.retrieve`；业务请求默认 payload 为 `schema_version=1.0,user_id=day13a-benchmark`，Gateway validation profile 的可信身份应匹配该用户，或通过 `DAY13A_IPC_PAYLOAD` 覆盖。脚本不会自动启动/停止服务，不会安装软件，也不会删除已有 DB。
+`DAY13A_SDK_SO`、`DAY13A_MODEL_VERSION`（或 `DAY13A_MODEL_SHA256`）与 `DAY13A_IPC_PID` 是正式运行的必填身份资料；环境快照会记录实际 `.so` 路径、文件存在性、SHA-256、SONAME、SDK/runtime 版本线索和模型身份。Embedding benchmark 会将 `DAY13A_SDK_SO` 显式传给 `EmbeddingProvider(so_path=...)`，并在运行时摘要中记录 Provider/Bridge 已加载的 `.so` 路径与 SHA-256；汇总时若与环境快照漂移则 fail-closed。`DAY13A_MODEL_VERSION` 是操作者声明的模型身份，只有同时提供模型 SHA-256 或额外运行时校验时才表示可复核的二进制身份。`DAY13A_OUTPUT_DIR` 是所有轮次共用的**外部**根目录，必须不存在或为空；若位于 Git worktree 内或已含旧产物，runner 会拒绝运行。可选参数：`DAY13A_PYTHON`、`DAY13A_RUN_ID`、`DAY13A_RUN_COUNT`、`DAY13A_BASELINE_MODE`、`DAY13A_EXPECTED_COMMIT`、`DAY13A_EXPECTED_BRANCH`、`DAY13A_VECTOR_CLI`、`DAY13A_VECTOR_DIMENSION`、`DAY13A_TEXTS`、`DAY13A_IPC_REQUESTS`、`DAY13A_IPC_PAYLOAD`、`DAY13A_OUTBOX_EVENTS`。默认连续跑 3 轮；本地只验证一轮可设置 `DAY13A_RUN_COUNT=1`。每轮 IPC 都会先用 `/proc/net/unix` 与目标 PID 的 fd 交叉验证实际 Gateway 持有目标 listening UDS，结束时再次验证；IPC summary 必须记录 `resource_sample_target=gateway_service`、有效 PID、每个并发档位完整 CPU/RSS，避免将 benchmark 客户端资源或任意存活 PID 误作服务端资源。每轮 IPC 都会分别运行 `echo` 和 `memory.retrieve`；业务请求默认 payload 为 `schema_version=1.0,user_id=day13a-benchmark`，Gateway validation profile 的可信身份应匹配该用户，或通过 `DAY13A_IPC_PAYLOAD` 覆盖。脚本不会自动启动/停止服务，不会安装软件，也不会删除已有 DB。
 
-目前仓库尚未包含真实 index backlog benchmark，因此应显式设置 `DAY13A_BASELINE_MODE=partial` 执行 VM 采集。`full` 模式必须显式提供 `DAY13A_EXPECTED_COMMIT` 与 `DAY13A_EXPECTED_BRANCH`，且会在性能负载前检查真实 index benchmark 是否存在；不具备该能力时立即退出，不会先浪费三轮 VM 测试时间。
+`full` 模式现在包含真实 index backlog benchmark，但必须显式提供 `DAY13A_VECTOR_CLI`（真实 `vector_cli` 可执行文件路径）和 `DAY13A_VECTOR_DIMENSION`，并同时提供 `DAY13A_EXPECTED_COMMIT` 与 `DAY13A_EXPECTED_BRANCH`。例如：
+
+```bash
+export DAY13A_BASELINE_MODE=full
+export DAY13A_VECTOR_CLI=/absolute/path/to/vector_cli
+export DAY13A_VECTOR_DIMENSION=4
+```
+
+若宿主没有真实 Vector CLI，仍应使用 `DAY13A_BASELINE_MODE=partial`；脚本会在负载前 fail-closed，不会把 queue-only 结果冒充索引积压证据。
 
 运行目录结构如下（所有目录均在 `DAY13A_OUTPUT_DIR` 或默认的 `/tmp` 路径下）：
 
@@ -55,10 +63,13 @@ PYTHONPATH=memory-service:scripts ./scripts/run_day13a_benchmarks.sh
 │   ├── ipc.summary.json
 │   └── raw/ipc.jsonl
 ├── outbox.summary.json
+├── index_backlog.summary.json
+├── index-backlog.sqlite3
 └── raw/
     ├── embedding.jsonl
     ├── bridge.jsonl
     ├── outbox.jsonl
+    ├── index_backlog.jsonl
     └── resources.jsonl
 ```
 
