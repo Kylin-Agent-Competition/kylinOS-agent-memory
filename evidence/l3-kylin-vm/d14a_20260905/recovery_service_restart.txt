@@ -1,0 +1,2 @@
+[restart] embedding server killed (pid 46346) -> nohup restart -> socket rebuilt (18:00) -> memory.embed ok dim=768 -> memory.health ok bridge_loaded=true
+no stale process (procs=1), no stale socket (recreated), real SDK re-initialized
