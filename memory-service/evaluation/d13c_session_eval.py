@@ -33,7 +33,10 @@ memory-client + Mock Gateway 或已部署的 D 轨 Gateway 完成，未取得 VM
 - guardrail critical（cross_user / sensitive / unresolved_conflict）> 0 →
   critical_zero_ok=False，仍输出指标但 Critical 标记。
 - 0 个有效 session → NO_VALID_SESSIONS，聚合指标 null。
-- 重复 step_id（会话内）/ session_id（bundle 内）→ DUPLICATE_* fail-closed。
+- 重复 step_id（会话内）/ execution_record_id（bundle 内）→ DUPLICATE_* fail-closed；
+  session_id 允许跨 stability_round 重复（真实 replay 复用同一逻辑 session）。
+- P1-02：每条 step.deadline_ms 必须 == config.deadline_ms，否则
+  DEADLINE_CONFIG_EVIDENCE_MISMATCH fail-closed。
 - stability_repeat < 1 / deadline_ms <= 0 → INVALID_CONFIG。
 - retry 语义违反（retry 缺 retry_of_turn_id / retry_of_turn_id=turn_id）计入
   stop_retry_violation_count，不 null 整体指标（便于定位），但 critical_zero_ok
@@ -384,6 +387,8 @@ class SessionRecord:
     """一条已执行会话：session_id + scenario + steps + injected_context_text。"""
 
     session_id: str
+    # P1-01：bundle 内执行记录唯一键（真实 session_id 可跨 round 重复）
+    execution_record_id: str
     scenario: str
     steps: tuple[StepRecord, ...]
     injected_context_text: str
@@ -398,10 +403,16 @@ class SessionRecord:
         if not isinstance(raw, dict):
             raise ValueError(f"sessions[{position}] 必须是对象")
         session_id = str(raw.get("session_id", "")).strip()
+        execution_record_id = str(raw.get("execution_record_id", "")).strip()
         scenario = str(raw.get("scenario", "")).strip()
         if not session_id or not scenario:
             raise ValueError(
                 f"sessions[{position}] 缺少非空 session_id / scenario"
+            )
+        if not execution_record_id:
+            raise ValueError(
+                f"sessions[{position}] 缺少非空 execution_record_id"
+                "（bundle 内执行记录唯一键）"
             )
         raw_steps = raw.get("steps", [])
         if not isinstance(raw_steps, list) or not raw_steps:
@@ -451,6 +462,7 @@ class SessionRecord:
         # 但跨会话隔离比对需要非空；空串在 cross_session_isolation 计算时单独处理。
         return cls(
             session_id=session_id,
+            execution_record_id=execution_record_id,
             scenario=scenario,
             steps=tuple(steps),
             injected_context_text=injected,
@@ -578,6 +590,26 @@ def _session_metrics(session: SessionRecord) -> dict[str, Any]:
     }
 
 
+def _validate_deadline_binding(
+    sessions: list[SessionRecord], config_deadline_ms: int
+) -> None:
+    """P1-02：每条 step.deadline_ms 必须等于 config.deadline_ms。
+
+    任一 step 漂移立即 fail-closed（DEADLINE_CONFIG_EVIDENCE_MISMATCH），
+    不允许“config 声称 5000、实际 step 3000”的 provenance 漂移进入正式报告。
+    """
+    for s in sessions:
+        for step in s.steps:
+            if step.deadline_ms != config_deadline_ms:
+                raise ValueError(
+                    "DEADLINE_CONFIG_EVIDENCE_MISMATCH: "
+                    f"execution_record={s.execution_record_id!r} "
+                    f"session={s.session_id!r} step={step.step_id!r} "
+                    f"expected_deadline_ms={config_deadline_ms} "
+                    f"actual_deadline_ms={step.deadline_ms}"
+                )
+
+
 def _validate_stability_rounds(
     sessions: list[SessionRecord], stability_repeat: int
 ) -> None:
@@ -604,6 +636,22 @@ def _validate_stability_rounds(
         return
     if len(tagged) != len(sessions):
         raise ValueError("sessions 混用带轮次证据与不带轮次证据的条目")
+    # P1-01：同一执行位置 (group, cohort, round, session) 不得重复提交两条 evidence
+    positions: set[tuple[str, str, int, str]] = set()
+    for s in sessions:
+        pos = (
+            s.execution_group_id,
+            s.stability_cohort_id,
+            s.stability_round if s.stability_round is not None else -1,
+            s.session_id,
+        )
+        if pos in positions:
+            raise ValueError(
+                "同一执行位置重复证据：group=" + repr(s.execution_group_id)
+                + " cohort=" + repr(s.stability_cohort_id)
+                + f" round={s.stability_round} session={s.session_id!r}"
+            )
+        positions.add(pos)
     groups: dict[tuple[str, str], list[int]] = {}
     for s in sessions:
         key = (s.execution_group_id, s.stability_cohort_id)
@@ -712,20 +760,23 @@ def compute_session_report(
     """计算 D13C 端到端会话评测报告（冻结口径、fail-closed）。"""
     # 解析 sessions（解析失败直接抛 ValueError，由调用方决定如何标记 fail-closed）
     parsed: list[SessionRecord] = []
-    seen_session_ids: set[str] = set()
+    seen_execution_record_ids: set[str] = set()
     for idx, raw in enumerate(session_records):
         session = SessionRecord.from_mapping(idx, raw)
-        if session.session_id in seen_session_ids:
+        if session.execution_record_id in seen_execution_record_ids:
             raise ValueError(
-                f"bundle 存在重复 session_id {session.session_id!r}"
+                f"bundle 存在重复 execution_record_id {session.execution_record_id!r}"
             )
-        seen_session_ids.add(session.session_id)
+        seen_execution_record_ids.add(session.execution_record_id)
         parsed.append(session)
 
     if not parsed:
         return _empty_report(config, "NO_VALID_SESSIONS")
 
-    # R2：stability_repeat 与实际执行轮次证据绑定（缺轮/重复轮/越界/无证据均 fail-closed）
+    # P1-02：逐 step deadline 与 config 绑定（漂移立即 fail-closed）
+    _validate_deadline_binding(parsed, config.deadline_ms)
+
+    # R2/NR-1：stability_repeat 与实际执行轮次证据绑定（缺轮/重复轮/越界/无证据均 fail-closed）
     _validate_stability_rounds(parsed, config.stability_repeat)
 
     per_session = [_session_metrics(s) for s in parsed]

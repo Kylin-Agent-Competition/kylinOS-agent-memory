@@ -191,7 +191,8 @@
       ],
       "execution_group_id": "d13c-main-demo-smoke-001",
       "stability_cohort_id": "session-A",
-      "stability_round": 1
+      "stability_round": 1,
+      "execution_record_id": "smoke-A-r1"
     },
     {
       "session_id": "session-smoke-0002",
@@ -369,7 +370,8 @@
       ],
       "execution_group_id": "d13c-main-demo-smoke-001",
       "stability_cohort_id": "session-B",
-      "stability_round": 1
+      "stability_round": 1,
+      "execution_record_id": "smoke-B-r1"
     }
   ]
 }

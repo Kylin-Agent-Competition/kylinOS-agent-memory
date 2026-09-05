@@ -124,9 +124,11 @@ def _session(
     scenario="cross_session",
     steps=None,
     injected_context_text="[CTX] A 内容",
+    execution_record_id=None,
 ):
     return {
         "session_id": session_id,
+        "execution_record_id": execution_record_id or f"rec-{session_id}",
         "scenario": scenario,
         "injected_context_text": injected_context_text,
         "steps": steps if steps is not None else _happy_steps(),
@@ -143,12 +145,15 @@ def _tag(session, group="demo-stability-run-001", cohort="session-A", round_no=1
 
 
 def _cohort_session(cohort, round_no, *, group="demo-stability-run-001",
-                    scenario="cross_session", ctx=None):
+                    scenario="cross_session", ctx=None, session_id=None,
+                    execution_record_id=None):
+    sid = session_id or f"{cohort}-round-{round_no}"
     return _tag(
         _session(
-            session_id=f"{cohort}-round-{round_no}",
+            session_id=sid,
             scenario=scenario,
             injected_context_text=ctx or f"[CTX] {cohort} round {round_no}",
+            execution_record_id=execution_record_id,
         ),
         group=group, cohort=cohort, round_no=round_no,
     )
@@ -185,13 +190,17 @@ def _stability_config(repeat):
 
 def _stable_ab(repeat=5, scenario="cross_session", group="demo-stability-run-001",
                ctx_a="[CTX] A", ctx_b="[CTX] B"):
-    """A/B 双 cohort × N 轮的真实主演示形态。"""
+    """真实形态：A/B 各固定逻辑 session_id 复用 × N 轮（每轮不同 execution_record_id）。"""
     sessions = []
     for r in range(1, repeat + 1):
-        sessions.append(_cohort_session("A", r, group=group, scenario=scenario,
-                                        ctx=f"{ctx_a} r{r}"))
-        sessions.append(_cohort_session("B", r, group=group, scenario=scenario,
-                                        ctx=f"{ctx_b} r{r}"))
+        sessions.append(_cohort_session(
+            "A", r, group=group, scenario=scenario,
+            session_id="session-stab-0001", execution_record_id=f"stab-A-r{r}",
+            ctx=f"{ctx_a} r{r}"))
+        sessions.append(_cohort_session(
+            "B", r, group=group, scenario=scenario,
+            session_id="session-stab-0002", execution_record_id=f"stab-B-r{r}",
+            ctx=f"{ctx_b} r{r}"))
     return sessions
 
 
@@ -351,9 +360,12 @@ def test_r2_duplicate_step_id_in_session_raises():
         _report([_session(steps=steps)])
 
 
-def test_r3_duplicate_session_id_in_bundle_raises():
-    sessions = [_session(), _session()]
-    with pytest.raises(ValueError, match="重复 session_id"):
+def test_r3_duplicate_execution_record_id_in_bundle_raises():
+    sessions = [
+        _session("session-A", execution_record_id="rec-dup"),
+        _session("session-B", execution_record_id="rec-dup"),
+    ]
+    with pytest.raises(ValueError, match="execution_record_id"):
         _report(sessions)
 
 
@@ -580,9 +592,11 @@ def test_cross_session_pairs_are_round_scoped():
     iso = report["cross_session_isolation"]
     assert iso["pair_count"] == 3
     for pair in iso["pairs"]:
-        assert pair["session_a"].startswith("A-round-")
-        assert pair["session_b"].startswith("B-round-")
-        assert pair["stability_round"] == int(pair["session_a"].rsplit("-", 1)[1])
+        assert pair["cohort_a"] == "A"
+        assert pair["cohort_b"] == "B"
+        assert pair["session_a"] == "session-stab-0001"
+        assert pair["session_b"] == "session-stab-0002"
+        assert pair["stability_round"] in (1, 2, 3)
     assert report["aggregate_metrics"]["cross_session_isolation_ok"] is True
 
 
@@ -688,4 +702,107 @@ def test_invalid_guardrail_category_rejected():
     steps[0] = _step("step1_prechat", "memory.retrieve",
                      violations=["unknown_category"])
     with pytest.raises(ValueError, match="guardrail_violations"):
+        _report([_session(steps=steps)])
+
+# ── P1-01：execution_record_id 唯一键 / 真实 session_id 跨轮复用 ────
+
+
+def test_p1_01_real_fixed_session_id_across_5_rounds_pass():
+    # 真实形态：A/B 各固定 session_id × 5 轮，每轮不同 execution_record_id
+    sessions = _stable_ab(5)
+    ids = [s["session_id"] for s in sessions]
+    assert ids.count("session-stab-0001") == 5
+    assert ids.count("session-stab-0002") == 5
+    recs = [s["execution_record_id"] for s in sessions]
+    assert len(set(recs)) == 10
+    report = _report(sessions, _stability_config(5))
+    assert report["aggregate_metrics"] is not None
+    assert report["aggregate_metrics"]["cross_session_pair_count"] == 5
+    assert report["fail_closed_reasons"] == []
+
+
+def test_p1_01_missing_execution_record_id_rejected():
+    s = _session()
+    del s["execution_record_id"]
+    with pytest.raises(ValueError, match="execution_record_id"):
+        _report([s])
+
+
+def test_p1_01_duplicate_execution_record_id_fails():
+    sessions = [
+        _session("session-A", execution_record_id="rec-x"),
+        _session("session-B", execution_record_id="rec-x"),
+    ]
+    with pytest.raises(ValueError, match="execution_record_id"):
+        _report(sessions)
+
+
+def test_p1_01_duplicate_position_group_cohort_round_session_fails():
+    # 同一执行位置 (group, cohort, round, session) 重复提交两条 evidence
+    a1 = _cohort_session("A", 1, session_id="session-stab-0001",
+                         execution_record_id="a1")
+    a1_dup = _cohort_session("A", 1, session_id="session-stab-0001",
+                             execution_record_id="a1-dup")
+    b1 = _cohort_session("B", 1, session_id="session-stab-0002",
+                         execution_record_id="b1")
+    with pytest.raises(ValueError, match="同一执行位置"):
+        _report([a1, a1_dup, b1], _stability_config(1))
+
+
+# ── P1-02：step.deadline_ms 与 config.deadline_ms 绑定 ───────────────
+
+
+def test_p1_02_deadline_all_match_pass():
+    sessions = _peer(_session())
+    report = _report(sessions)
+    assert report["aggregate_metrics"] is not None
+
+
+def test_p1_02_single_step_mismatch_fail_closed():
+    steps = _happy_steps()
+    steps[0] = _step("step1_prechat", "memory.retrieve", deadline_ms=3000)
+    with pytest.raises(ValueError, match="DEADLINE_CONFIG_EVIDENCE_MISMATCH"):
+        _report(_peer(_session(steps=steps)))
+
+
+def test_p1_02_last_round_mismatch_fail_closed():
+    sessions = _stable_ab(5)
+    for s in sessions:
+        if s["execution_record_id"] == "stab-A-r5":
+            steps = s["steps"]
+            steps[0] = dict(steps[0])
+            steps[0]["deadline_ms"] = 3000
+            s["steps"] = steps
+    with pytest.raises(ValueError, match="DEADLINE_CONFIG_EVIDENCE_MISMATCH"):
+        _report(sessions, _stability_config(5))
+
+
+def test_p1_02_cohort_b_round3_mismatch_fail_closed():
+    sessions = _stable_ab(5)
+    for s in sessions:
+        if s["execution_record_id"] == "stab-B-r3":
+            steps = s["steps"]
+            steps[0] = dict(steps[0])
+            steps[0]["deadline_ms"] = 6000
+            s["steps"] = steps
+    with pytest.raises(ValueError, match="DEADLINE_CONFIG_EVIDENCE_MISMATCH"):
+        _report(sessions, _stability_config(5))
+
+
+def test_p1_02_config_3000_all_steps_3000_pass():
+    cfg = dict(CONFIG)
+    cfg["deadline_ms"] = 3000
+    steps = _happy_steps()
+    for st in steps:
+        st["deadline_ms"] = 3000
+    a = _session(session_id="A-3000", steps=steps, injected_context_text="[CTX] A")
+    b = _session(session_id="B-3000", steps=steps, injected_context_text="[CTX] B")
+    report = _report([a, b], cfg)
+    assert report["aggregate_metrics"] is not None
+
+
+def test_p1_02_deadline_bool_rejected():
+    steps = _happy_steps()
+    steps[0] = _step("step1_prechat", "memory.retrieve", deadline_ms=True)
+    with pytest.raises(ValueError, match="deadline_ms 必须是整数"):
         _report([_session(steps=steps)])

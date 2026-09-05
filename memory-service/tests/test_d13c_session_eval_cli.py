@@ -147,12 +147,14 @@ def test_cli_no_comparable_pair_exit_2(tmp_path):
     data["sessions"] = [
         {
             "session_id": "only-A",
+            "execution_record_id": "only-A-rec",
             "scenario": "scenario_A",
             "injected_context_text": "[CTX] A 内容",
             "steps": json.loads(FIXTURE.read_text(encoding="utf-8"))["sessions"][0]["steps"],
         },
         {
             "session_id": "only-B",
+            "execution_record_id": "only-B-rec",
             "scenario": "scenario_B",
             "injected_context_text": "[CTX] B 内容",
             "steps": json.loads(FIXTURE.read_text(encoding="utf-8"))["sessions"][1]["steps"],
