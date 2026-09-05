@@ -193,41 +193,6 @@ class D13EFormalEvalCliTests(unittest.TestCase):
             check=False,
         )
 
-    def _run_sealed(
-        self,
-        bundle: Path,
-        output: Path,
-        *,
-        review_seal: Path | None = None,
-        d13d_seal: Path | None = None,
-        trust_root: Path | None = None,
-    ) -> subprocess.CompletedProcess[str]:
-        review_seal = review_seal if review_seal is not None else self._review_seal_path
-        d13d_seal = d13d_seal if d13d_seal is not None else self._d13d_seal_path
-        trust_root = trust_root if trust_root is not None else self._trust_root
-        assert review_seal is not None and d13d_seal is not None and trust_root is not None
-        environment = dict(os.environ, PYTHONPATH=str(REPOSITORY_ROOT / "memory-service"))
-        return subprocess.run(
-            [
-                sys.executable,
-                str(RUNNER),
-                str(bundle),
-                "--review-seal",
-                str(review_seal),
-                "--d13d-seal",
-                str(d13d_seal),
-                "--trust-roots",
-                str(trust_root),
-                "--output",
-                str(output),
-            ],
-            cwd=REPOSITORY_ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
     def _write_signed_review_seal(self, root: Path, manifest: dict[str, object], *, seed: bytes = REVIEW_SEED, key_id: str = REVIEW_KEY_ID) -> Path:
         payload: dict[str, object] = {
             "seal_version": "d13e-review-seal/v1",
@@ -318,7 +283,7 @@ class D13EFormalEvalCliTests(unittest.TestCase):
 
     def _compute(self, bundle: Path, *, trust_root: Path | None = None) -> dict[str, object]:
         assert self._review_seal_path is not None and self._d13d_seal_path is not None
-        return RUNNER_MODULE.compute_formal_report(
+        return RUNNER_MODULE._compute_formal_report_with_verified_trust_root(
             bundle,
             self._review_seal_path,
             self._d13d_seal_path,
@@ -528,12 +493,6 @@ class D13EFormalEvalCliTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("--review-seal", result.stderr)
 
-    def test_runner_rejects_trust_root_inside_evidence_root(self) -> None:
-        with self._evidence() as (root, trust):
-            bundle = self._write_complete_bundle(root, trust)
-            with self.assertRaisesRegex(ValueError, "evidence root"):
-                self._compute(bundle, trust_root=root)
-
     def test_runner_rejects_missing_trust_root_directory(self) -> None:
         with self._evidence() as (root, trust):
             bundle = self._write_complete_bundle(root, trust)
@@ -672,9 +631,8 @@ class D13EFormalEvalCliTests(unittest.TestCase):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["dataset_sha256"] = self._sha(dataset_path)
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-            result = self._run_sealed(bundle, root / "report.json")
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("dataset_sha256", result.stderr)
+            with self.assertRaisesRegex(ValueError, "dataset_sha256"):
+                self._compute(bundle)
 
     def test_runner_rejects_approved_gold_drift_after_sealing(self) -> None:
         with self._evidence() as (root, trust):
@@ -685,9 +643,8 @@ class D13EFormalEvalCliTests(unittest.TestCase):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["gold_sha256"] = self._sha(gold_path)
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-            result = self._run_sealed(bundle, root / "report.json")
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("gold_sha256", result.stderr)
+            with self.assertRaisesRegex(ValueError, "gold_sha256"):
+                self._compute(bundle)
 
     def test_runner_rejects_dataset_sha256_that_does_not_match_input_file(self) -> None:
         with self._evidence() as (root, trust):
@@ -705,9 +662,8 @@ class D13EFormalEvalCliTests(unittest.TestCase):
             bundle = self._write_complete_bundle(root, trust)
             raw_path = root / "preference.jsonl"
             raw_path.write_text("  " + raw_path.read_text(encoding="utf-8"), encoding="utf-8")
-            result = self._run_sealed(bundle, root / "report.json")
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("raw_result_files.preference.sha256", result.stderr)
+            with self.assertRaisesRegex(ValueError, "raw_result_files.preference.sha256"):
+                self._compute(bundle)
 
 
     # ---- R2：D13D Execution Seal 签名认证 ----
@@ -722,9 +678,8 @@ class D13EFormalEvalCliTests(unittest.TestCase):
             raw["actual"]["critical_gate_bypass_count"] = 1
             raw_path.write_text(json.dumps(raw) + "\n", encoding="utf-8")
             self._refresh_execution_attestation(root, bundle, refresh_d13d_seal=False)
-            result = self._run_sealed(bundle, root / "report.json")
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("attestation_sha256", result.stderr)
+            with self.assertRaisesRegex(ValueError, "attestation_sha256"):
+                self._compute(bundle)
 
     def test_d13d_seal_rewrite_with_attacker_signature_rejected(self) -> None:
         """T30b：攻击者用自建 key 重签 D13D seal → 验签失败。"""
@@ -786,9 +741,10 @@ class D13EFormalEvalCliTests(unittest.TestCase):
             outside.mkdir()
             (outside / "review-seal.json").write_bytes((root / "review-seal.json").read_bytes())
             (outside / "review-seal.sig").write_bytes((root / "review-seal.sig").read_bytes())
-            result = self._run_sealed(bundle, root / "report.json", review_seal=outside / "review-seal.json")
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("证据目录", result.stderr)
+            with self.assertRaisesRegex(ValueError, "证据目录"):
+                RUNNER_MODULE._compute_formal_report_with_verified_trust_root(
+                    bundle, outside / "review-seal.json", self._d13d_seal_path, trust
+                )
 
     def test_d13d_seal_outside_evidence_root_rejected(self) -> None:
         with self._evidence() as (root, trust):
@@ -797,9 +753,10 @@ class D13EFormalEvalCliTests(unittest.TestCase):
             outside.mkdir()
             (outside / "d13d-seal.json").write_bytes((root / "d13d-seal.json").read_bytes())
             (outside / "d13d-seal.sig").write_bytes((root / "d13d-seal.sig").read_bytes())
-            result = self._run_sealed(bundle, root / "report.json", d13d_seal=outside / "d13d-seal.json")
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("证据目录", result.stderr)
+            with self.assertRaisesRegex(ValueError, "证据目录"):
+                RUNNER_MODULE._compute_formal_report_with_verified_trust_root(
+                    bundle, self._review_seal_path, outside / "d13d-seal.json", trust
+                )
 
     # ---- T34：signature 文件异常 fail-closed ----
 
@@ -846,9 +803,8 @@ class D13EFormalEvalCliTests(unittest.TestCase):
             self._d13d_seal_path.with_suffix(".sig").unlink()  # type: ignore[union-attr]
             provenance = json.loads((root / "manifest.json").read_text(encoding="utf-8"))["provenance"]
             self._d13d_seal_path = self._write_signed_d13d_seal(root, attestation_path, provenance, provenance["evidence_reference"])
-            result = self._run_sealed(bundle, root / "report.json")
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("environment_id", result.stderr)
+            with self.assertRaisesRegex(ValueError, "environment_id"):
+                self._compute(bundle)
 
     def test_runner_rejects_execution_attestation_with_different_dependency_reference(self) -> None:
         with self._evidence() as (root, trust):
@@ -979,6 +935,111 @@ class D13EFormalEvalCliTests(unittest.TestCase):
                 self.assertEqual(report[metric]["status"], "COMPUTED")  # type: ignore[index]
                 self.assertEqual(report[metric]["correct_count"], 1)  # type: ignore[index]
                 self.assertEqual(report[metric]["gate_status"], "PASS")  # type: ignore[index]
+
+
+    # ---- 第四轮：Formal Trust Root 固定系统路径（T35–T41） ----
+
+    def test_cli_rejects_trust_roots_override(self) -> None:
+        environment = dict(os.environ, PYTHONPATH=str(REPOSITORY_ROOT / "memory-service"))
+        result = subprocess.run(
+            [sys.executable, str(RUNNER), "bundle.json", "--trust-roots", "/tmp/attacker-trust", "--output", "report.json"],
+            cwd=REPOSITORY_ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--trust-roots", result.stderr)
+
+    def test_cli_help_has_no_trust_roots_option(self) -> None:
+        environment = dict(os.environ, PYTHONPATH=str(REPOSITORY_ROOT / "memory-service"))
+        result = subprocess.run(
+            [sys.executable, str(RUNNER), "--help"],
+            cwd=REPOSITORY_ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("--trust-roots", result.stdout)
+        self.assertNotIn("trust_root", result.stdout)
+
+    def test_formal_api_has_no_trust_root_override(self) -> None:
+        import inspect
+        parameters = inspect.signature(RUNNER_MODULE.compute_formal_report).parameters
+        self.assertNotIn("trust_root", parameters)
+        self.assertNotIn("trust_root_dir", parameters)
+        self.assertTrue(hasattr(RUNNER_MODULE, "_compute_formal_report_with_verified_trust_root"))
+
+    def test_attacker_signed_seals_rejected_by_legit_trust_root(self) -> None:
+        """T36 lower-level：attacker 用自建私钥签名双 Seal，用固定合法 trust root 验签必须 FAIL。"""
+        with self._evidence() as (root, trust):
+            bundle = self._write_complete_bundle(root, trust)
+            review_payload = json.loads((root / "review-seal.json").read_text(encoding="utf-8"))
+            (root / "review-seal.sig").write_bytes(_ed25519_sign(ATTACKER_SEED, _canonical(review_payload)))
+            d13d_payload = json.loads((root / "d13d-seal.json").read_text(encoding="utf-8"))
+            (root / "d13d-seal.sig").write_bytes(_ed25519_sign(ATTACKER_SEED, _canonical(d13d_payload)))
+            with self.assertRaisesRegex(ValueError, "signature"):
+                self._compute(bundle)
+
+    def test_trust_metadata_rejects_symlink(self) -> None:
+        for want_dir in (True, False):
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                RUNNER_MODULE._check_trust_metadata(
+                    is_symlink=True,
+                    is_dir=want_dir,
+                    is_file=not want_dir,
+                    uid=0,
+                    mode=0o700,
+                    label="trust path",
+                    want_dir=want_dir,
+                )
+
+    def test_trust_metadata_rejects_writable_by_group_or_other(self) -> None:
+        for mode in (0o777, 0o775, 0o666):
+            with self.assertRaisesRegex(ValueError, "group/other"):
+                RUNNER_MODULE._check_trust_metadata(
+                    is_symlink=False,
+                    is_dir=True,
+                    is_file=False,
+                    uid=0,
+                    mode=mode,
+                    label="trust path",
+                    want_dir=True,
+                )
+
+    def test_trust_metadata_rejects_unknown_owner(self) -> None:
+        with self.assertRaisesRegex(ValueError, "root"):
+            RUNNER_MODULE._check_trust_metadata(
+                is_symlink=False,
+                is_dir=True,
+                is_file=False,
+                uid=1000,
+                mode=0o700,
+                label="trust path",
+                want_dir=True,
+            )
+
+    def test_trust_metadata_accepts_frozen_directory(self) -> None:
+        RUNNER_MODULE._check_trust_metadata(
+            is_symlink=False,
+            is_dir=True,
+            is_file=False,
+            uid=0,
+            mode=0o700,
+            label="trust path",
+            want_dir=True,
+        )
+
+    @unittest.skipUnless(os.name == "posix", "real-fs metadata gate requires POSIX")
+    def test_trust_root_metadata_gate_on_real_fs_posix(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "trust"
+            target.mkdir(mode=0o777)
+            with self.assertRaises(ValueError):
+                RUNNER_MODULE._require_trust_metadata(target, want_dir=True, label="trust path")
 
 
 if __name__ == "__main__":

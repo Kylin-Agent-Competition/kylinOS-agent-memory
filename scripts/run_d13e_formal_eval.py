@@ -26,7 +26,9 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import re
+import stat
 import sys
 from pathlib import Path
 from typing import Any, Iterable
@@ -58,7 +60,9 @@ _REVIEW_SEAL_VERSION = "d13e-review-seal/v1"
 _D13D_EXECUTION_SEAL_VERSION = "d13d-execution-seal/v1"
 _TRUST_STORE_VERSION = "d13e-trust-roots/v1"
 _SIGNATURE_SCHEME = "ed25519"
-_DEFAULT_TRUST_ROOT = Path("/etc/kylin-memory/trust")
+_FORMAL_TRUST_ROOT = Path("/etc/kylin-memory/trust")
+_FORMAL_TRUST_ROOT_EXACT = "/etc/kylin-memory/trust"
+_TRUST_ROOT_EXPECTED_UID = 0
 _TRUST_STORE_FILE = "D13E_TRUST_ROOTS_V1.json"
 _REVIEW_TRUST_KEY = "review"
 _D13D_TRUST_KEY = "d13d_execution"
@@ -309,10 +313,13 @@ def _load_trust_root_entry(trust_root_dir: Path, role: str) -> tuple[str, bytes,
     key_sha256 = _required_text(entry, "public_key_sha256", f"trust store.{role}")
     if not _SHA256.fullmatch(key_sha256):
         raise ValueError(f"trust store.{role}.public_key_sha256 必须是 64 位 SHA-256")
-    pem_path = (trust_root_dir / Path(pem_file_name)).resolve()
-    trust_root_resolved = trust_root_dir.resolve()
-    if trust_root_resolved not in pem_path.parents:
-        raise ValueError(f"trust store.{role}.public_key_file 越出 trust root 目录")
+    if (
+        not pem_file_name
+        or pem_file_name in (".", "..")
+        or any(character in pem_file_name for character in ("/", "\\"))
+    ):
+        raise ValueError(f"trust store.{role}.public_key_file 必须是 basename（禁止路径）")
+    pem_path = (trust_root_dir / pem_file_name).resolve()
     if not pem_path.is_file():
         raise ValueError(f"trust root 公钥文件不存在：{pem_path}")
     _verify_sha256(pem_path, key_sha256, f"trust store.{role}.public_key_sha256")
@@ -437,13 +444,73 @@ def _load_and_verify_d13d_execution_seal(
     return seal, hashlib.sha256(canonical).hexdigest(), key_id, public_key
 
 
-def _validated_trust_root_dir(trust_root_dir: Path, base: Path) -> Path:
-    """Trust Root 必须存在且位于 evidence root 之外，否则 E 可替换公钥伪造 PASS。"""
-    resolved = trust_root_dir.resolve()
-    base_resolved = base.resolve()
-    if resolved == base_resolved or base_resolved in resolved.parents:
-        raise ValueError("frozen trust root 不得位于 evidence root 内")
-    return resolved
+def _check_trust_metadata(
+    *,
+    is_symlink: bool,
+    is_dir: bool,
+    is_file: bool,
+    uid: int,
+    mode: int,
+    label: str,
+    want_dir: bool,
+    expected_uid: int = _TRUST_ROOT_EXPECTED_UID,
+) -> None:
+    """Trust Root / store / PEM 的系统权限 Gate（纯逻辑，便于跨平台单元测试）。"""
+    if is_symlink:
+        raise ValueError(f"{label} 不得是 symlink")
+    if want_dir and not is_dir:
+        raise ValueError(f"{label} 必须是目录")
+    if not want_dir and not is_file:
+        raise ValueError(f"{label} 必须是普通文件")
+    if uid != expected_uid:
+        raise ValueError(f"{label} 必须由 root（uid={expected_uid}）持有")
+    if mode & 0o022:
+        raise ValueError(f"{label} 不允许 group/other 写权限")
+
+
+def _require_trust_metadata(path: Path, *, want_dir: bool, label: str) -> None:
+    """用 lstat 读取元数据并应用 Gate：symlink / 类型 / owner / group-other 写。"""
+    try:
+        entry = path.lstat()
+    except OSError as exc:
+        raise ValueError(f"{label} 无法访问：{path}") from exc
+    _check_trust_metadata(
+        is_symlink=stat.S_ISLNK(entry.st_mode),
+        is_dir=stat.S_ISDIR(entry.st_mode),
+        is_file=stat.S_ISREG(entry.st_mode),
+        uid=entry.st_uid,
+        mode=entry.st_mode,
+        label=label,
+        want_dir=want_dir,
+    )
+
+
+def _load_formal_system_trust_root() -> Path:
+    """正式入口的 Trust Root 只来自 D13D 冻结的系统路径，不接受调用者覆盖。
+
+    检查：固定路径、lstat、目录非 symlink、root owner、group/other 不可写；
+    并对 trust store 与两个 public PEM 应用相同 Gate。
+    """
+    path = _FORMAL_TRUST_ROOT
+    if str(path) != _FORMAL_TRUST_ROOT_EXACT:
+        raise ValueError("formal trust root 必须固定为 /etc/kylin-memory/trust")
+    _require_trust_metadata(path, want_dir=True, label="formal trust root 目录")
+    store_path = path / _TRUST_STORE_FILE
+    _require_trust_metadata(store_path, want_dir=False, label="formal trust store")
+    store = _read_json(store_path, "trust store")
+    for role in (_REVIEW_TRUST_KEY, _D13D_TRUST_KEY):
+        entry = store.get(role)
+        if not isinstance(entry, dict):
+            raise ValueError(f"trust store 缺少 {role} 信任根条目")
+        pem_file_name = _required_text(entry, "public_key_file", f"trust store.{role}")
+        if (
+            not pem_file_name
+            or pem_file_name in (".", "..")
+            or any(character in pem_file_name for character in ("/", "\\"))
+        ):
+            raise ValueError(f"trust store.{role}.public_key_file 必须是 basename（禁止路径）")
+        _require_trust_metadata(path / pem_file_name, want_dir=False, label=f"formal trust {role} 公钥")
+    return path
 
 
 def _expected_matches(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
@@ -779,19 +846,19 @@ def validate_formal_bundle(bundle_path: Path) -> tuple[dict[str, Any], dict[str,
     return bundle, manifest, bundle_path.parent
 
 
-def compute_formal_report(
+def _compute_formal_report_with_verified_trust_root(
     bundle_path: Path,
-    review_seal_path: Path | None = None,
-    d13d_seal_path: Path | None = None,
-    trust_root_dir: Path | None = None,
+    review_seal_path: Path,
+    d13d_seal_path: Path,
+    trust_root_dir: Path,
 ) -> dict[str, Any]:
-    """离线计算 D13E 四类指标；只消费本地证据与两个已签名 Seal 及 frozen trust root。"""
+    """共享底层：使用已确认可信的 trust root 执行完整离线校验。
+
+    TEST-ONLY：单元测试通过该 helper 注入临时 trust root；正式入口
+    compute_formal_report() 不接受任何 trust-root 覆盖。
+    """
     bundle, manifest, base = validate_formal_bundle(bundle_path)
-    if review_seal_path is None or d13d_seal_path is None:
-        raise ValueError("正式评测必须同时提供 --review-seal 与 --d13d-seal")
-    if trust_root_dir is None:
-        trust_root_dir = _DEFAULT_TRUST_ROOT
-    trust_root = _validated_trust_root_dir(Path(trust_root_dir), base)
+    trust_root = Path(trust_root_dir).resolve()
     review_seal, review_seal_sha256, review_key_id, review_public_key = _load_and_verify_review_seal(
         Path(review_seal_path), base, trust_root
     )
@@ -872,13 +939,33 @@ def compute_formal_report(
     }
 
 
+def compute_formal_report(
+    bundle_path: Path,
+    review_seal_path: Path | None = None,
+    d13d_seal_path: Path | None = None,
+) -> dict[str, Any]:
+    """正式入口：Trust Root 只来自 D13D 冻结的系统路径，不接受调用者覆盖。
+
+    先做候选 fail-closed 校验；只有已冻结 Bundle 才要求两个签名 Seal。
+    """
+    validate_formal_bundle(Path(bundle_path))
+    if review_seal_path is None or d13d_seal_path is None:
+        raise ValueError("正式评测必须同时提供 --review-seal 与 --d13d-seal")
+    trust_root = _load_formal_system_trust_root()
+    return _compute_formal_report_with_verified_trust_root(
+        Path(bundle_path),
+        Path(review_seal_path),
+        Path(d13d_seal_path),
+        trust_root,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="D13E formal evaluation（离线，Ed25519 签名 Seal）")
     parser.add_argument("input", nargs="?", help="D13E formal bundle JSON（或使用 --bundle）")
     parser.add_argument("--bundle", dest="bundle_flag", help="D13E formal bundle JSON 路径")
     parser.add_argument("--review-seal", help="D13E_REVIEW_SEAL_V1.json 路径")
     parser.add_argument("--d13d-seal", help="D13D_EXECUTION_SEAL_V1.json 路径")
-    parser.add_argument("--trust-roots", help="frozen trust root 目录（默认 /etc/kylin-memory/trust）")
     parser.add_argument("--output", "-o", help="formal report JSON output")
     args = parser.parse_args()
 
@@ -891,7 +978,6 @@ def main() -> int:
             Path(bundle_value),
             review_seal_path=Path(args.review_seal) if args.review_seal else None,
             d13d_seal_path=Path(args.d13d_seal) if args.d13d_seal else None,
-            trust_root_dir=Path(args.trust_roots) if args.trust_roots else None,
         )
     except ValueError as exc:
         print(f"D13E 正式评测拒绝执行：{exc}", file=sys.stderr)
