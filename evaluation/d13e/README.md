@@ -45,7 +45,8 @@ D13E_REVIEW_SEAL_V1.json       +  D13E_REVIEW_SEAL_V1.sig
 D13D_EXECUTION_SEAL_V1.json    +  D13D_EXECUTION_SEAL_V1.sig
 ```
 
-- Frozen Trust Root 位于 **evidence root 之外**，由 D13D 环境冻结时预置：
+- Frozen Trust Root = 唯一固定系统路径 `/etc/kylin-memory/trust`（第四轮冻结），
+  由 D13D 环境冻结 / 镜像部署阶段预置：
 
 ```text
 /etc/kylin-memory/trust/D13E_TRUST_ROOTS_V1.json   # trust_store_version=d13e-trust-roots/v1, signature_scheme=ed25519
@@ -54,6 +55,14 @@ D13D_EXECUTION_SEAL_V1.json    +  D13D_EXECUTION_SEAL_V1.sig
 ```
 
   Trust Root JSON 至少记录 `key_id` / `public_key_file` / `public_key_sha256`。
+
+- 谁决定哪个公钥可信 = **D13D Frozen System Environment**。正式 CLI 无 `--trust-roots`，
+  正式 API `compute_formal_report()` 不接收 trust-root 参数；正式 Runner 不读取任何
+  trust-root 环境变量、Bundle 字段或 Seal 字段，只读取上述系统固定路径。
+- 权限契约（fail-closed）：目录、`D13E_TRUST_ROOTS_V1.json` 与两个 public PEM 均必须：
+  非 symlink（`lstat`）；目录/普通文件类型正确；owner = root（`uid=0`）；
+  group/other 不可写（`mode & 0o022 == 0`）；`public_key_file` 只允许 basename。
+
 - Private key 归属：Review Seal 由 D Reviewer / D 轨受控私钥签名；D13D Seal 由
   D13D-owned process 签名。正式私钥**禁止 commit、禁止进入 evidence、禁止进入
   CI、禁止交给 E actor**。CI 与测试只使用 TEST-ONLY 私钥。
@@ -94,16 +103,17 @@ D13D provenance、四类 raw result、两个签名 Seal 与 frozen trust root �
 & <python> scripts/run_d13e_formal_eval.py <D13D 统一证据目录>/bundle.json `
   --review-seal <证据目录>/D13E_REVIEW_SEAL_V1.json `
   --d13d-seal <证据目录>/D13D_EXECUTION_SEAL_V1.json `
-  --trust-roots /etc/kylin-memory/trust `
   --output <证据目录>/summary.json
 ```
 
-`--trust-roots` 默认 `/etc/kylin-memory/trust`；开发/CI 可指向 TEST-ONLY trust store。
+正式 CLI 不存在 `--trust-roots`；单元测试通过 Python 内 TEST-ONLY hook
+（`_compute_formal_report_with_verified_trust_root`）注入临时 trust root，
+该 hook 不进入 argparse / 环境变量合同。
 
 Runner 固定 Gate 顺序（任何失败均非零退出且不写正式报告）：
 
 ```text
-Gate 0  Trust Root 存在（且不在 evidence root 内）
+Gate 0  Trust Root = 固定系统路径 /etc/kylin-memory/trust，通过 symlink/owner/mode Gate
 Gate 1  Seal/.sig 位于 evidence root
 Gate 2  Review Seal 签名有效
 Gate 3  Review policy：actual_pr_author / reviewer / state / commit

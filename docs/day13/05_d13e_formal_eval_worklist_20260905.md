@@ -135,3 +135,42 @@ Formal metrics                 BLOCKED / external
   并签名 `D13E_REVIEW_SEAL_V1.json`。
 - D13D：预置 frozen trust store，冻结并签名 `D13D_EXECUTION_SEAL_V1.json`，
   交付真实四类 raw + execution attestation。
+
+## 7. 第四轮 Review 返工（2026-09-05）：固定系统 Trust Root
+
+第四轮 Review 对 head \`58fc398\` 确认 Ed25519 双 Seal / actual_pr_author / Seal
+路径均已关闭，剩余核心 P1：正式 Runner 允许调用者通过 \`--trust-roots\` 自选信任根。
+
+### 状态
+
+\`\`\`text
+Review-ID self-reference             CLOSED
+Offline Runner                       CLOSED
+Ed25519 Review Seal                  CLOSED
+Ed25519 D13D Seal                    CLOSED
+actual_pr_author signed              CLOSED
+Seal evidence-root path              CLOSED
+D13E CI                              CLOSED
+
+Frozen Trust Root caller override    IN_PROGRESS（代码+测试已实现，待第 5 轮 Reviewer）
+System trust permissions             IN_PROGRESS（代码+测试已实现，待第 5 轮 Reviewer）
+Attacker external trust test         IN_PROGRESS（代码+测试已实现，待第 5 轮 Reviewer）
+
+Real D Reviewer APPROVED Seal        EXTERNAL BLOCKED
+Real D13D raw/evidence               EXTERNAL BLOCKED
+Formal four metrics                  EXTERNAL BLOCKED
+\`\`\`
+
+### 实现内容（Commit 1 + Commit 2）
+
+- 正式 CLI 删除 \`--trust-roots\`；正式 API \`compute_formal_report()\` 不再接收
+  trust-root 参数；测试通过 TEST-ONLY hook
+  \`_compute_formal_report_with_verified_trust_root\` 注入临时 trust root。
+- 正式 Runner 只读取固定系统路径 \`/etc/kylin-memory/trust\`；不读取 CLI / 环境变量 /
+  Bundle / Seal 提供的 trust 路径。
+- Trust Root 目录、\`D13E_TRUST_ROOTS_V1.json\` 与两个 public PEM 增加系统权限 Gate：
+  \`lstat\` 非 symlink、目录/普通文件类型、owner=root（uid=0）、group/other 不可写
+  （\`mode & 0o022 == 0\`）；\`public_key_file\` 只允许 basename；保留 PEM SHA 与 key_id 校验。
+- 新增 T35～T41：CLI 拒绝 \`--trust-roots\`、help 无该选项、正式 API 无 override、
+  attacker 签名双 Seal 用合法 trust root 验签 FAIL、symlink/owner/group-other 写拒绝。
+- 契约测试扩至 48 项（CI POSIX 额外含 real-fs metadata gate 1 项，Windows 跳过）。
