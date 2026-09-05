@@ -21,6 +21,10 @@
 //
 //   CREATE TABLE RECORD(ID, sessionID, msgIndex, message TEXT, operateTime)
 //
+//   VM 实测：SQLite 中 RECORD.ID 可为 NULL，rowid 才是有效行标识；默认 ID
+//   映射保持保守 fail-closed，显式 idColumn="rowid" 覆盖已由 L0 回归验证。
+//   最终 production 行标识仍待 S3 Hook 观察点确认。
+//
 //   message 列为 JSON blob（非规范化列），关键字段：
 //     $.author  "User" | "Bot"        —— 角色在 JSON 内，非独立列
 //     $.isEnd   bool                  —— Bot 终稿标记（流式/中间消息为 false）
@@ -32,16 +36,16 @@
 //   - 只读红线：QSQLITE_OPEN_READONLY 裸选项打开（SQLITE_OPEN_READONLY），
 //     绝不写宿主 Chat DB（journal/wal 也不会创建）；
 //   - source_reference 仅接受受控格式 ref:chat-record:{messageId}
-//     （messageId = RECORD.ID 行主键，与 TurnExtractionAdapter::
-//     buildSourceReference 口径一致），其余一律 nullopt；
+//     （messageId 由 config.idColumn 映射；默认 ID，rowid 仅显式覆盖），
+//     其余一律 nullopt；
 //     source_reference 为非可信输入，不记录到日志/异常；
 //   - fail-closed（一律 nullopt，禁止编造正文、禁止空串替代，
 //     turns.original_user_text NOT NULL 冻结语义）：
 //       未打开 / 引用格式不符 / 表缺失 / 行缺失 /
 //       终稿行 JSON 解析失败或非对象 / author 非 Bot / isEnd 非 true /
 //       正文/会话/序号字段缺失或类型不符 /
-//       窗口内无 User 行 / 窗口内任何行 JSON 损坏（防止配错 turn）/
-//       最近 User 行正文空串 / SQL 错误；
+//       窗口内无 User 行 / previous Bot + isEnd=true（防止跨 turn 配错）/
+//       窗口内任何行 JSON 损坏 / 最近 User 行正文空串 / SQL 错误；
 //   - JSON 解析在 C++（QJsonDocument）完成，不依赖 SQLite JSON1 扩展
 //     （任意 SQLite 构建可用；服务端 json_extract SQL 已在 VM 实测，
 //     客户端侧选择更可移植的等价实现）；
@@ -55,13 +59,15 @@
 
 namespace kylin::memory::client::v1 {
 
-// schema 映射配置 — 默认值即 bacon VM 实测真实 schema/字段/角色值。
+// schema 映射配置 — 默认表、会话/序号/JSON 字段与角色值对齐 VM 实测；
+// 行标识默认 ID 保守 fail-closed，rowid 必须显式覆盖。
 struct ProductionSourceResolverConfig {
     QString databasePath;  // 宿主 Chat DB 文件路径（SQLite）
 
     // 表/列名（标识符字段，仅允许 [A-Za-z0-9_]）：
     QString tableName = QStringLiteral("RECORD");
-    QString idColumn = QStringLiteral("ID");              // 行主键 = source_reference 的 messageId
+    // 保守默认：真实 RECORD.ID 可为 NULL；rowid 只能由调用方显式覆盖。
+    QString idColumn = QStringLiteral("ID");
     QString sessionColumn = QStringLiteral("sessionID");  // 会话关联键
     QString msgIndexColumn = QStringLiteral("msgIndex");  // 会话内消息序号（turn 配对）
     QString messageColumn = QStringLiteral("message");    // JSON blob 列

@@ -43,6 +43,8 @@ private slots:
     void ipcEventMetadataAndEventFieldsComplete();   // A1
     void providerCandidateAssociatesSourceEventId(); // A2
     void occurredAtPassthroughWithFallback();        // A3
+    void retryOfTurnIdStaysAtEventTopLevel();        // A4
+    void capturedAtMatchesCollectedAt();             // A5
 
     // §B 原文隔离
     void textOnlyInProviderCandidateNeverInIpcEvent();  // B1
@@ -121,6 +123,9 @@ void TurnExtractionAdapterTest::ipcEventMetadataAndEventFieldsComplete()  // A1
     QCOMPARE(meta.value(QStringLiteral("occurred_at")).toString(),
              QStringLiteral("2026-09-05T10:00:00.123Z"));
     QVERIFY(!meta.value(QStringLiteral("collected_at")).toString().isEmpty());
+    QVERIFY(!meta.value(QStringLiteral("captured_at")).toString().isEmpty());
+    QCOMPARE(meta.value(QStringLiteral("captured_at")).toString(),
+             meta.value(QStringLiteral("collected_at")).toString());
     QCOMPARE(meta.value(QStringLiteral("source_reference")).toString(),
              QStringLiteral("ref:chat-record:msg-hm-1"));
 
@@ -162,6 +167,9 @@ void TurnExtractionAdapterTest::providerCandidateAssociatesSourceEventId()  // A
     QCOMPARE(out.providerCandidate.value(QStringLiteral("occurred_at")).toString(),
              QStringLiteral("2026-09-05T10:00:00.123Z"));
     QVERIFY(!out.providerCandidate.value(QStringLiteral("collected_at")).toString().isEmpty());
+    QVERIFY(!out.providerCandidate.value(QStringLiteral("captured_at")).toString().isEmpty());
+    QCOMPARE(out.providerCandidate.value(QStringLiteral("captured_at")).toString(),
+             out.providerCandidate.value(QStringLiteral("collected_at")).toString());
     QCOMPARE(out.providerCandidate.value(QStringLiteral("source")).toString(),
              QStringLiteral("chat"));
 }
@@ -181,8 +189,54 @@ void TurnExtractionAdapterTest::occurredAtPassthroughWithFallback()  // A3
     const QString occurredAt = out.providerCandidate.value(QStringLiteral("occurred_at")).toString();
     const QString collectedAt =
         out.providerCandidate.value(QStringLiteral("collected_at")).toString();
+    const QString capturedAt =
+        out.providerCandidate.value(QStringLiteral("captured_at")).toString();
     QVERIFY(!occurredAt.isEmpty());
     QCOMPARE(occurredAt, collectedAt);
+    QCOMPARE(occurredAt, capturedAt);
+}
+
+void TurnExtractionAdapterTest::retryOfTurnIdStaysAtEventTopLevel()  // A4
+{
+    client::InMemorySourceResolver src = makeRegisteredSourceResolver();
+    client::InMemoryToolResultResolver tools;
+    const client::TurnExtractionAdapter adapter(&src, &tools);
+
+    client::TurnObservation obs = sampleObservation();
+    obs.retryOfTurnId = QStringLiteral("turn-old");
+    const client::TurnExtractionOutcome out = adapter.extract(obs);
+    QCOMPARE(out.status, client::TurnExtractionOutcome::Status::Extracted);
+
+    QCOMPARE(out.ipcEvent.value(QStringLiteral("retry_of_turn_id")).toString(),
+             QStringLiteral("turn-old"));
+    const QJsonObject metadata = out.ipcEvent.value(QStringLiteral("metadata")).toObject();
+    QVERIFY(!metadata.contains(QStringLiteral("retry_of_turn_id")));
+}
+
+void TurnExtractionAdapterTest::capturedAtMatchesCollectedAt()  // A5
+{
+    client::InMemorySourceResolver src = makeRegisteredSourceResolver();
+    client::InMemoryToolResultResolver tools;
+    const client::TurnExtractionAdapter adapter(&src, &tools);
+
+    const client::TurnExtractionOutcome out = adapter.extract(sampleObservation());
+    QCOMPARE(out.status, client::TurnExtractionOutcome::Status::Extracted);
+
+    const QJsonObject metadata = out.ipcEvent.value(QStringLiteral("metadata")).toObject();
+    const QString metadataCapturedAt =
+        metadata.value(QStringLiteral("captured_at")).toString();
+    const QString metadataCollectedAt =
+        metadata.value(QStringLiteral("collected_at")).toString();
+    QVERIFY(!metadataCapturedAt.isEmpty());
+    QCOMPARE(metadataCapturedAt, metadataCollectedAt);
+
+    const QString candidateCapturedAt =
+        out.providerCandidate.value(QStringLiteral("captured_at")).toString();
+    const QString candidateCollectedAt =
+        out.providerCandidate.value(QStringLiteral("collected_at")).toString();
+    QVERIFY(!candidateCapturedAt.isEmpty());
+    QCOMPARE(candidateCapturedAt, candidateCollectedAt);
+    QCOMPARE(candidateCapturedAt, metadataCapturedAt);
 }
 
 // ── §B 原文隔离 ─────────────────────────────────────────────────────────────

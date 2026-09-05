@@ -148,6 +148,41 @@ bool createRecordDb(const QString& path, const QList<RecordRow>& rows)
     return true;
 }
 
+bool createIdNullRecordDb(const QString& path, const QList<RecordRow>& rows)
+{
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"));
+        db.setDatabaseName(path);
+        if (!db.open()) {
+            return false;
+        }
+        QSqlQuery q(db);
+        if (!q.exec(QStringLiteral(
+                "CREATE TABLE RECORD("
+                "ID INT AUTO_INCREMENT, sessionID VARCHAR(36), msgIndex INT, "
+                "message TEXT, operateTime INTEGER, PRIMARY KEY (ID))"))) {
+            return false;
+        }
+        QSqlQuery insert(db);
+        if (!insert.prepare(QStringLiteral(
+                "INSERT INTO RECORD (sessionID, msgIndex, message, operateTime) "
+                "VALUES (:session, :idx, :msg, :time)"))) {
+            return false;
+        }
+        for (const RecordRow& row : rows) {
+            insert.bindValue(QStringLiteral(":session"), row.session);
+            insert.bindValue(QStringLiteral(":idx"), row.msgIndex);
+            insert.bindValue(QStringLiteral(":msg"), row.messageJson);
+            insert.bindValue(QStringLiteral(":time"), 0);
+            if (!insert.exec()) {
+                return false;
+            }
+        }
+    }
+    QSqlDatabase::removeDatabase(QSqlDatabase::defaultConnection);
+    return true;
+}
+
 // 通用 fixture（任意 SQL；C4 无关表 / D1 自定义 schema / C11 损坏 JSON 行用）。
 bool createFixtureDb(const QString& path, const QString& createSql,
                      const QList<QString>& insertSqls)
@@ -225,6 +260,8 @@ private slots:
     void resolveHitsReturnsTurnContent();           // A2
     void resolveThroughTurnExtractionAdapter();     // A3
     void resolveSkipsIntermediateBotRows();         // A4
+    void failClosedAtPreviousFinalizedBotBoundary(); // A5
+    void resolveMultiTurnReturnsCurrentUser();      // A6
 
     // §B 只读红线
     void readonlyOpenWorksOnWriteProtectedFile();   // B1
@@ -252,6 +289,8 @@ private slots:
 
     // §E 窗口边界
     void resolveHitsAtWindowBoundaryEdge();         // E1
+    void defaultIdColumnFailsClosedOnIdNullRows();  // E2
+    void rowidOverrideResolvesIdNullRowsReadOnly(); // E3
 
 private:
     QTemporaryDir tempDir_;
@@ -344,6 +383,41 @@ void ProductionSourceResolverTest::resolveSkipsIntermediateBotRows()  // A4
     QVERIFY2(hit.has_value(), "中间流式行不应阻断配对");
     QCOMPARE(hit->originalUserText, QStringLiteral("流式场景的用户正文"));
     QCOMPARE(hit->modelResponse, QStringLiteral("流式场景的终稿正文"));
+}
+
+void ProductionSourceResolverTest::failClosedAtPreviousFinalizedBotBoundary()  // A5
+{
+    const QString dbPath = tempDir_.filePath(QStringLiteral("chat-a5.db"));
+    QVERIFY(createRecordDb(dbPath, {
+        {21, QStringLiteral("sess-a5"), 1, userMsg(QStringLiteral("previous-user"))},
+        {22, QStringLiteral("sess-a5"), 2, botFinalMsg(QStringLiteral("previous-final"))},
+        {23, QStringLiteral("sess-a5"), 3, botFinalMsg(QStringLiteral("current-final"))},
+    }));
+
+    client::ProductionSourceResolver resolver(defaultConfig(dbPath));
+    QVERIFY(resolver.open());
+    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:23")).has_value(),
+             "previous BotFinal must stop the backward scan");
+}
+
+void ProductionSourceResolverTest::resolveMultiTurnReturnsCurrentUser()  // A6
+{
+    const QString dbPath = tempDir_.filePath(QStringLiteral("chat-a6.db"));
+    QVERIFY(createRecordDb(dbPath, {
+        {31, QStringLiteral("sess-a6"), 1, userMsg(QStringLiteral("turn-A user"))},
+        {32, QStringLiteral("sess-a6"), 2, botFinalMsg(QStringLiteral("turn-A final"))},
+        {33, QStringLiteral("sess-a6"), 3, userMsg(QStringLiteral("turn-B user"))},
+        {34, QStringLiteral("sess-a6"), 4, botStreamMsg(QStringLiteral("turn-B stream"))},
+        {35, QStringLiteral("sess-a6"), 5, botFinalMsg(QStringLiteral("turn-B final"))},
+    }));
+
+    client::ProductionSourceResolver resolver(defaultConfig(dbPath));
+    QVERIFY(resolver.open());
+    const std::optional<client::ResolvedTurnContent> hit =
+        resolver.resolve(QStringLiteral("ref:chat-record:35"));
+    QVERIFY2(hit.has_value(), "current turn user must resolve");
+    QCOMPARE(hit->originalUserText, QStringLiteral("turn-B user"));
+    QCOMPARE(hit->modelResponse, QStringLiteral("turn-B final"));
 }
 
 // ── §B 只读红线 ─────────────────────────────────────────────────────────────
@@ -744,6 +818,42 @@ void ProductionSourceResolverTest::resolveHitsAtWindowBoundaryEdge()  // E1
     QVERIFY2(hit.has_value(), "User 行恰在窗口边界（第 64 行）应命中");
     QCOMPARE(hit->originalUserText, QStringLiteral("窗口边界的用户正文"));
     QCOMPARE(hit->modelResponse, QStringLiteral("窗口边界的终稿"));
+}
+
+void ProductionSourceResolverTest::defaultIdColumnFailsClosedOnIdNullRows()  // E2
+{
+    const QString dbPath = tempDir_.filePath(QStringLiteral("chat-e2.db"));
+    QVERIFY(createIdNullRecordDb(dbPath, {
+        {0, QStringLiteral("sess-e2"), 1, userMsg(QStringLiteral("id-null user"))},
+        {0, QStringLiteral("sess-e2"), 2, botFinalMsg(QStringLiteral("id-null final"))},
+    }));
+
+    client::ProductionSourceResolver resolver(defaultConfig(dbPath));
+    QVERIFY(resolver.open());
+    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:2")).has_value(),
+             "default ID must not treat SQLite rowid as RECORD.ID");
+}
+
+void ProductionSourceResolverTest::rowidOverrideResolvesIdNullRowsReadOnly()  // E3
+{
+    const QString dbPath = tempDir_.filePath(QStringLiteral("chat-e3.db"));
+    QVERIFY(createIdNullRecordDb(dbPath, {
+        {0, QStringLiteral("sess-e3"), 1, userMsg(QStringLiteral("rowid user"))},
+        {0, QStringLiteral("sess-e3"), 2, botFinalMsg(QStringLiteral("rowid final"))},
+    }));
+    const QByteArray hashBefore = fileSha256(dbPath);
+    QVERIFY(!hashBefore.isEmpty());
+
+    client::ProductionSourceResolverConfig config = defaultConfig(dbPath);
+    config.idColumn = QStringLiteral("rowid");
+    client::ProductionSourceResolver resolver(config);
+    QVERIFY(resolver.open());
+    const std::optional<client::ResolvedTurnContent> hit =
+        resolver.resolve(QStringLiteral("ref:chat-record:2"));
+    QVERIFY2(hit.has_value(), "explicit rowid override must resolve ID=NULL rows");
+    QCOMPARE(hit->originalUserText, QStringLiteral("rowid user"));
+    QCOMPARE(hit->modelResponse, QStringLiteral("rowid final"));
+    QCOMPARE(fileSha256(dbPath), hashBefore);
 }
 
 QTEST_MAIN(ProductionSourceResolverTest)

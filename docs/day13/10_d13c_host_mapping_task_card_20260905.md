@@ -174,6 +174,7 @@ turn.finalized / event.ingest / forget.* production 默认不注册 → UNSUPPOR
 | V1/V2 修复 | 完成 | `0764118` | QML Qt 5.12 兼容修复 + `qml_pages_load` 全量加载 L0 回归（见 9.2） |
 | V3-R（resolver 改造） | 完成 | `55ca828` | ProductionSourceResolver 适配真实 schema（RECORD + JSON blob，见 9.4）；L0 重构 16 → 25 用例，全套 ctest 13/13 绿（WSL Qt 5.15.3 本地验证）；生产注册保持 BLOCKED_BY_HOST_MAPPING，待 S5 复测 |
 | S5r2 真实 DB 验证 | client 侧完成 | `d9a834b` | bacon VM 真实 Chat DB harness 18/18 PASS（resolver 默认/rowid 两 config + Adapter 集成 + 只读/隔离红线，双路径独立基线比对，见 9.5）；V5 新发现（RECORD.ID 全 NULL）登记；服务端落库全链路与 S3 Hook 待宿主源码/service 环境 |
+| PR151 Review 返工 | **完成（待提交/复审）** | 本工作树 | HIGH-01：`retry_of_turn_id` 移至 IPC event 顶层并补 Contract round-trip；HIGH-03：`captured_at` 与 legacy `collected_at` 双写同值；HIGH-02：previous `Bot + isEnd=true` 成为回扫硬边界；MEDIUM-01：`ID=NULL` / `rowid` 自动回归与只读 SHA 校验。Memory Client ctest 13/13、Contract 1/1 通过；production 注册继续 BLOCKED |
 | S4 | 未开始 | — | 依赖 S4-BLOCK-001 缓解 |
 | S6 | 未开始 | — | 依赖 S5 完成 |
 

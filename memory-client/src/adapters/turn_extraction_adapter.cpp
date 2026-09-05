@@ -57,9 +57,9 @@ TurnExtractionOutcome TurnExtractionAdapter::extract(const TurnObservation& obs)
     const QString idempotencyKey = QStringLiteral("turn-finalized:%1:%2")
                                        .arg(obs.sessionId, obs.turnId);
     const QString srcRef = buildSourceReference(obs.finalMessageId, obs.turnId);
-    const QString collectedAt = nowIso8601UtcMs();
+    const QString capturedAt = nowIso8601UtcMs();
     // 边界 2：occurred_at 透传宿主时间；宿主缺失时回退采集时间（不编造宿主时间）。
-    const QString occurredAt = obs.occurredAtIso.isEmpty() ? collectedAt : obs.occurredAtIso;
+    const QString occurredAt = obs.occurredAtIso.isEmpty() ? capturedAt : obs.occurredAtIso;
 
     // ── ① IPC 事件（ADR-010 映射；无正文，不依赖 resolver） ────────────────
     QJsonObject metadata{
@@ -70,17 +70,17 @@ TurnExtractionOutcome TurnExtractionAdapter::extract(const TurnObservation& obs)
         {QStringLiteral("turn_id"), obs.turnId},
         {QStringLiteral("idempotency_key"), idempotencyKey},
         {QStringLiteral("occurred_at"), occurredAt},
-        {QStringLiteral("collected_at"), collectedAt},
+        {QStringLiteral("captured_at"), capturedAt},
+        {QStringLiteral("collected_at"), capturedAt},
         {QStringLiteral("source_reference"), srcRef},
     };
     if (!obs.traceId.isEmpty()) metadata.insert(QStringLiteral("trace_id"), obs.traceId);
-    if (!obs.retryOfTurnId.isEmpty())
-        metadata.insert(QStringLiteral("retry_of_turn_id"), obs.retryOfTurnId);
-
     QJsonObject event;
     event.insert(QStringLiteral("metadata"), metadata);
+    if (!obs.retryOfTurnId.isEmpty())
+        event.insert(QStringLiteral("retry_of_turn_id"), obs.retryOfTurnId);
     event.insert(QStringLiteral("is_final"), true);
-    event.insert(QStringLiteral("finalized_at"), collectedAt);
+    event.insert(QStringLiteral("finalized_at"), capturedAt);
     if (!obs.finalMessageId.isEmpty())
         event.insert(QStringLiteral("final_message_id"), obs.finalMessageId);
     if (!obs.finalizationReason.isEmpty())
@@ -95,7 +95,8 @@ TurnExtractionOutcome TurnExtractionAdapter::extract(const TurnObservation& obs)
     candidate.insert(QStringLiteral("source_event_id"), eventId);
     candidate.insert(QStringLiteral("session_id"), obs.sessionId);
     candidate.insert(QStringLiteral("occurred_at"), occurredAt);
-    candidate.insert(QStringLiteral("collected_at"), collectedAt);
+    candidate.insert(QStringLiteral("captured_at"), capturedAt);
+    candidate.insert(QStringLiteral("collected_at"), capturedAt);
     // 边界 2：真实来源类型（默认 "chat"，对齐 Provider source 字段）。
     candidate.insert(QStringLiteral("source"),
                      obs.sourceType.isEmpty() ? QStringLiteral("chat") : obs.sourceType);

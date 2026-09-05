@@ -230,6 +230,13 @@ std::optional<ResolvedTurnContent> ProductionSourceResolver::resolve(
             content.modelResponse = modelResponse;
             return content;
         }
+
+        if (author.isString() && author.toString() == config_.assistantAuthorValue) {
+            const QJsonValue isEnd = rowJson->value(config_.isEndField);
+            if (!isEnd.isBool() || isEnd.toBool()) {
+                return std::nullopt;
+            }
+        }
     }
     return std::nullopt;  // 窗口内无 User 行（如模型未回复的 turn）→ fail-closed
 }
