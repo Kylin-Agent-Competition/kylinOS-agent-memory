@@ -10,10 +10,10 @@
 | ID | 阻塞项 | 责任方 | 解除条件 | 当前状态 |
 | --- | --- | --- | --- | --- |
 | D13D-B01 | D13E Review Seal 未交付 | D Reviewer / 受控签名流程 | 提供已签名的 `D13E_REVIEW_SEAL_V1.json` / `.sig`，其批准的 Dataset、Gold、Threshold、Runner、Manifest hash 与 `4a32e5c...` 一致。 | BLOCKED |
-| D13D-B02 | Frozen Trust Root 与 D13D Execution Seal 未就绪 | D13D / 系统授权人 | 授权安装 root-owned `/etc/kylin-memory/trust`（Trust Root JSON + 两个 public PEM），并由受控 D13D 私钥生成 execution seal/.sig；不得提交私钥。 | BLOCKED |
+| D13D-B02 | D13D Execution Seal 未签发 | Reviewer D / D13D | Frozen Trust Root 已安装并核验；待真实 execution attestation 生成后，由 Reviewer D 受控私钥签发 execution seal/.sig。不得提交私钥。 | BLOCKED |
 | D13D-B03 | 本轮 VM 快照与资源登记 | D13D | 已创建 `d13d-pre-4a32e5c-20260905-2320`（UUID `458b6763-5015-404f-a961-cd4a1899232d`）；VM 身份和资源见续办记录。 | PREPARED |
 | D13D-B04 | 新基线隔离部署与 VM 核验 | D13D | VM 内 `HEAD=4a32e5c948a968f3bd4409d91deac320002baea1`、工作树干净，独立 DB/socket 已启动并完成 UDS 预检；现有 user service 未切换。 | PREPARED |
-| D13D-B05 | 本轮证据目录与校验清单尚未生成 | D13D | 创建唯一 `evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>/`，写入环境清单、命令输出和 `SHA256SUMS`。 | BLOCKED |
+| D13D-B05 | 本轮正式证据目录与校验清单尚未生成 | D13D | 创建唯一 `evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>/`，写入最终环境清单、命令输出、Manifest、attestation 和 `SHA256SUMS`；不得复用旧基线准备目录。 | BLOCKED |
 | D13D-B06 | D13B -> D13D 正式 Evaluation Contract | B 轨 | B 轨已提供正式 CLI、输入/输出合同和 fail-closed 语义；真实输入绑定随 D13E/B01、B02 与 D13D 环境冻结执行。 | B 轨已解除 |
 | D13D-B07 | 四类真实 raw JSONL 尚未生成 | D13D + D13E / B 轨 | 在冻结 VM 产生 Preference、Conflict、Safety、Forget 的逐样本 raw，并由正式 Runner Gate 0--10 校验。 | BLOCKED |
 

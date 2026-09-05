@@ -6,7 +6,7 @@
 - 任务类型：`docs/test-infrastructure`；本任务冻结评测输入和运行环境，不实现或调整检索、Embedding、Vector、IPC、Schema、数据库或 UI 功能。
 - 创建日期：2026-09-05。
 - 责任边界：D 轨负责环境、部署和证据可复现性；D13B 消费冻结环境执行检索评测；D13E 提供封存集、Gold 判定键、指标阈值及其 SHA-256。
-- 状态：`PREPARED`。PR #148 已合并，候选 D13E 工件和离线 Runner 已在被测基线中；但外部签名 Seal、冻结 Trust Root 与实际 VM raw 结果尚未登记，禁止标记为 `FROZEN` 或“正式评测已开始”。
+- 状态：`PREPARED`。PR #148 已合并，候选 D13E 工件和离线 Runner 已在被测基线中；Frozen Trust Root 已在目标 VM 按固定路径安装并完成权限/非软链/加载核验。外部双 Seal、最终 evidence root 与实际 VM raw 结果尚未登记，禁止标记为 `FROZEN` 或“正式评测已开始”。
 - 关联：`docs/day13/01_d13b_formal_eval_worklist_20260902.md`、`evidence/index.yaml`、`Kylin-runtime-knowledge/VERSION_MAP.md`（2026-09-01）。
 
 ## 目标
@@ -27,10 +27,10 @@
 | 基线来源 | `kylin-mem/main` | CONFIRMED | 该提交包含 D13B 正式评测组件及 PR #148 的 D13E 候选工件、离线正式 Runner。 |
 | 当前工作树 | `feat/d10d-build@1e89d5a`，含 D13C 采集器与用户未跟踪文件 | EXCLUDED | 不作为 D13D 候选，除非经审核后显式选定。 |
 | D13E 候选输入 | 已合入，未 Seal | BLOCKED | 独立复核 Dataset、Gold、Threshold、Manifest hash；必须由 D Reviewer Review Seal 证明批准，候选文件本身不能自证封存。 |
-| Frozen Trust Root | VM 中不存在 | BLOCKED | 由授权流程在 `/etc/kylin-memory/trust` 安装 root-owned 非 symlink Trust Root JSON 与两份 Ed25519 公钥；不得由 evidence 目录或调用参数提供。 |
+| Frozen Trust Root | 已安装于 `/etc/kylin-memory/trust` | PREPARED | 已核验 root:root、目录 755/文件 644、non-symlink，并由正式加载函数读取两个 Reviewer D key ID；不得由 evidence 目录或调用参数提供。 |
 | 外部签名与 raw 结果 | 未提供 | BLOCKED | 取得 D13E Review Seal/.sig、D13D Execution Seal/.sig 和四类真实逐样本 raw JSONL。 |
 | VM 运行环境 | `Kylin-desktop-neo` 为 VERSION_MAP 目标环境 | READY_FOR_CAPTURE | 每次冻结须实际采集，历史基线不可替代当前 commit 的 L2 证据。 |
-| 统一证据目录 | 未创建 | READY | 以本任务定义的目录和 manifest 创建，所有文件校验后才登记索引。 |
+| 正式统一证据目录 | 未创建 | BLOCKED | 历史 `d13d_20260905T090507Z` 仅为旧基线准备记录；必须为本次正式运行创建新的唯一目录、最终 Manifest 和校验清单后才登记索引。 |
 
 只有所有 `BLOCKED` 项解除，且 L2 采集完成、校验和复核无误，D13D 才可由 `PREPARED` 转为 `FROZEN`。
 
@@ -161,7 +161,7 @@ VM 运行时路径、SDK/Vector ABI 和安装包版本以实际 VM 采集为准�
 ## 未决事项
 
 1. D Reviewer / 受控 signing 流程需交付已验签的 Review Seal；D13D signing 流程需交付 Execution Seal。
-2. 需获得安装 frozen Trust Root 所需的已批准公钥材料及系统级变更授权。
-3. 需在新的 `4a32e5c...` VM 快照上完成隔离部署与真实四类 raw JSONL。
+2. 需在新的 `4a32e5c...` VM 快照上建立正式 evidence root、完成最终 provenance，并取得可验签的双 Seal。
+3. 需在该冻结环境完成真实四类 raw JSONL、attestation 与 Gate 0--10 正式 runner。
 
 在上述事项关闭前，本任务卡仅授权准备与只读采集，不授权发布任何正式量化结论。
