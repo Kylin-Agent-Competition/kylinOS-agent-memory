@@ -640,9 +640,9 @@ void D6cMultiSourceAdaptersTest::behaviorCarriesPendingMappingStatus()  // C4
 
 void D6cMultiSourceAdaptersTest::retryOfTurnIdInjectedAndNotEqualToSelfTurnId()  // D1
 {
-    // Retry 场景：retry_of_turn_id 必须注入 metadata，且不等于自身 turn_id
-    // （TB-D6C-04：buildTurnFinalizedEventJson 增加 retryOfTurnId 参数，
-    // 非空时自动写入 metadata.retry_of_turn_id）。
+    // Retry 场景：retry_of_turn_id 必须注入 event top-level，且不等于自身 turn_id
+    // （DRIFT-B fix: retry_of_turn_id 是 TurnFinalizedEvent 字段，不是 EventMetadata 字段。
+    // 对齐 contract parser 的 flat JSON 读取位置。）
     client::MemoryViewModel vm;
     const QString selfTurnId = QStringLiteral("turn-retry-002");
     const QString retryOfTurnId = QStringLiteral("turn-retry-001");
@@ -662,14 +662,14 @@ void D6cMultiSourceAdaptersTest::retryOfTurnIdInjectedAndNotEqualToSelfTurnId() 
 
     // ① turn_id == selfTurnId
     QCOMPARE(meta.value(QStringLiteral("turn_id")).toString(), selfTurnId);
-    // ② retry_of_turn_id 字段存在且非空
-    QVERIFY2(meta.contains(QStringLiteral("retry_of_turn_id")),
-             "retry 场景 metadata 必须含 retry_of_turn_id");
-    QVERIFY(!meta.value(QStringLiteral("retry_of_turn_id")).toString().isEmpty());
+    // ② retry_of_turn_id 字段在 event top-level 存在且非空（DRIFT-B: 从 metadata 移到 event）
+    QVERIFY2(event.contains(QStringLiteral("retry_of_turn_id")),
+             "retry 场景 event top-level 必须含 retry_of_turn_id");
+    QVERIFY(!event.value(QStringLiteral("retry_of_turn_id")).toString().isEmpty());
     // ③ retry_of_turn_id != turn_id
-    QVERIFY2(meta.value(QStringLiteral("retry_of_turn_id")).toString() != selfTurnId,
+    QVERIFY2(event.value(QStringLiteral("retry_of_turn_id")).toString() != selfTurnId,
              "retry_of_turn_id 必须不等于 turn_id 本身");
-    QCOMPARE(meta.value(QStringLiteral("retry_of_turn_id")).toString(), retryOfTurnId);
+    QCOMPARE(event.value(QStringLiteral("retry_of_turn_id")).toString(), retryOfTurnId);
 }
 
 void D6cMultiSourceAdaptersTest::stopReasonExplicitlySet()  // D2

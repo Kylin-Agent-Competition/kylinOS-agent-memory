@@ -450,10 +450,6 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
         {QStringLiteral("source_reference"), srcRef},
     };
     if (!traceId.isEmpty()) metadata.insert(QStringLiteral("trace_id"), traceId);
-    // TB-D6C-04：finalization_reason=retry 时必须携带 retry_of_turn_id，
-    // 且 retry_of_turn_id != turn_id（调用方保证）。
-    if (!retryOfTurnId.isEmpty())
-        metadata.insert(QStringLiteral("retry_of_turn_id"), retryOfTurnId);
 
     QJsonObject event;
     event.insert(QStringLiteral("metadata"), metadata);
@@ -462,6 +458,10 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
     if (!finalMessageId.isEmpty()) event.insert(QStringLiteral("final_message_id"), finalMessageId);
     if (!finalizationReason.isEmpty()) event.insert(QStringLiteral("finalization_reason"), finalizationReason);
     if (!stopReason.isEmpty())     event.insert(QStringLiteral("stop_reason"), stopReason);
+    // DRIFT-B fix: retry_of_turn_id is a TurnFinalizedEvent field (top-level),
+    // NOT an EventMetadata field. Moved from metadata to event per contract parser.
+    if (!retryOfTurnId.isEmpty())
+        event.insert(QStringLiteral("retry_of_turn_id"), retryOfTurnId);
     event.insert(QStringLiteral("tool_call_ids"), QJsonArray{});
 
     cachedTurnEventKey_ = key;

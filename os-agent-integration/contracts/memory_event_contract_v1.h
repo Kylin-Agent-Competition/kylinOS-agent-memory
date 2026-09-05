@@ -92,6 +92,20 @@ enum class ToolExecutionStatus {
     Timeout,
 };
 
+// KMA R-6 / DRIFT-002: Canonical business status (8-value white-list).
+// Aligned with memory-service/pipeline/schemas.py SourceBusinessStatus (D3 §2.3 frozen).
+// Strongly-typed: contract parser rejects unknown values; serializer outputs canonical names only.
+enum class BusinessStatus {
+    Raw,        // "raw"
+    Completed,  // "completed"
+    Success,    // "success"
+    Partial,    // "partial"
+    Failed,     // "failed" (canonical; legacy "failure" maps here but is NOT canonical)
+    Cancelled,  // "cancelled"
+    Timeout,    // "timeout"
+    Ignored,    // "ignored"
+};
+
 struct ToolExecutionEvent {
     EventMetadata metadata;
     QString toolCallId;
@@ -99,7 +113,8 @@ struct ToolExecutionEvent {
     QString argumentsRef;
     QDateTime startedAt;
     QDateTime finishedAt;
-    std::optional<ToolExecutionStatus> executionStatus;
+    std::optional<ToolExecutionStatus> executionStatus;   // Host DTO field ("success"/"partial"/"failure"/"failed"/...)
+    std::optional<BusinessStatus>  sourceBusinessStatus;  // KMA R-6 canonical business result (required 8-value enum)
     QString resultRef;
     QString errorType;
     QString errorMessageSafe;
@@ -133,6 +148,11 @@ struct TurnFinalizedEvent {
 
 [[nodiscard]] ParseResult<ToolExecutionStatus> toolExecutionStatusFromString(const QString& value);
 [[nodiscard]] QString toString(ToolExecutionStatus status);
+
+// KMA R-6 / DRIFT-002: Canonical business status (8-value white-list).
+// Canonical names ONLY — legacy "failure" is NOT accepted (it's Host DTO's execution_status alias).
+[[nodiscard]] ParseResult<BusinessStatus> businessStatusFromString(const QString& value);
+[[nodiscard]] QString toString(BusinessStatus status);
 [[nodiscard]] ValidationResult validate(const ToolExecutionEvent& event);
 [[nodiscard]] ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& object);
 [[nodiscard]] QJsonObject toJson(const ToolExecutionEvent& event);
