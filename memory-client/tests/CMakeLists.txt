@@ -411,3 +411,42 @@ if(D11C_QML_LOAD_AVAILABLE)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
     )
 endif()
+
+# ============================================================================
+# Host mapping 任务卡 S1 — TurnExtractionAdapter 骨架 L0 契约测试
+# （纯内存 resolver；生产 resolver 属 S2，BLOCKED_BY_HOST_MAPPING 不变）
+# 范围（事件契约 v1 §7 五边界，A~F 共 13 用例）：
+#   A. 元数据与关联：ipcEvent 字段完整（无正文）+ source_event_id 关联 +
+#      occurred_at 透传/回退
+#   B. 原文隔离红线：正文只在 providerCandidate，ipcEvent 序列化全文不含正文 +
+#      source_reference 生成规则
+#   C. fail-closed：resolver 未命中 / 命中但空串 / 未注入 resolver
+#      → 候选无正文、safeError 固定安全消息（不含引用/正文）
+#   D. tool_results 组装：受控 Tool resolver 命中组装 / 未命中不编造（上抛）/
+#      无调用空数组
+#   E. 纯内存测试 resolver 注册-解析往返
+#   F. 事件标识一致性：同 (session,turn) idempotency_key 一致 + event_id 每次新
+# 注意：本测试仅为 memory-client 侧 S1 骨架的 L0 契约验证（纯内存 resolver），
+#       不声称真实 AI Assistant Hook / Chat DB / 正文通道已接入。
+# ============================================================================
+add_executable(test_turn_extraction_adapter
+    ${CMAKE_SOURCE_DIR}/src/adapters/turn_extraction_adapter.cpp
+    test_turn_extraction_adapter.cpp
+)
+target_link_libraries(test_turn_extraction_adapter
+    PRIVATE
+        Qt5::Core
+        Qt5::Test
+)
+target_include_directories(test_turn_extraction_adapter
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_turn_extraction_adapter
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME turn_extraction_adapter
+    COMMAND test_turn_extraction_adapter
+)

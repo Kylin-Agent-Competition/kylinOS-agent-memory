@@ -23,6 +23,7 @@ find_package(Qt5 5.12 REQUIRED COMPONENTS Core Network)
 add_library(kylin_memory_client STATIC
     src/protocol_adapter.cpp
     src/memory_client.cpp
+    src/adapters/turn_extraction_adapter.cpp
     src/view_models/memory_view_model.cpp
 )
 
