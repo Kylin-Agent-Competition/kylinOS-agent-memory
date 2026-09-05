@@ -1,0 +1,418 @@
+{
+  "artifacts": {
+    "raw": [
+      "ipc_echo\\raw\\ipc.jsonl",
+      "ipc_echo\\raw\\resources.jsonl",
+      "ipc_memory_retrieve\\raw\\ipc.jsonl",
+      "ipc_memory_retrieve\\raw\\resources.jsonl",
+      "raw\\bridge.jsonl",
+      "raw\\embedding.jsonl",
+      "raw\\outbox.jsonl",
+      "raw\\resources.jsonl"
+    ]
+  },
+  "bridge": {
+    "benchmark": "bridge",
+    "concurrency": [
+      1,
+      4,
+      8
+    ],
+    "formal_run": true,
+    "rounds": {
+      "1": {
+        "benchmark": "bridge",
+        "concurrency": 1,
+        "cpu_avg_percent": 2.53,
+        "cpu_peak_percent": 17.205,
+        "errors": 0,
+        "p50_ms": 98.371,
+        "p95_ms": 154.711,
+        "p99_ms": 203.121,
+        "requests": 1000,
+        "rss_end_mb": 24.824,
+        "rss_peak_mb": 24.832,
+        "rss_start_mb": 23.352,
+        "throughput_req_s": 9.462,
+        "wall_seconds": 105.68469
+      },
+      "4": {
+        "benchmark": "bridge",
+        "concurrency": 4,
+        "cpu_avg_percent": 2.915,
+        "cpu_peak_percent": 24.288,
+        "errors": 0,
+        "p50_ms": 290.999,
+        "p95_ms": 1312.283,
+        "p99_ms": 2061.846,
+        "requests": 1000,
+        "rss_end_mb": 25.742,
+        "rss_peak_mb": 25.773,
+        "rss_start_mb": 25.172,
+        "throughput_req_s": 9.089,
+        "wall_seconds": 110.019308
+      },
+      "8": {
+        "benchmark": "bridge",
+        "concurrency": 8,
+        "cpu_avg_percent": 4.53,
+        "cpu_peak_percent": 28.138,
+        "errors": 0,
+        "p50_ms": 358.648,
+        "p95_ms": 3164.09,
+        "p99_ms": 5642.033,
+        "requests": 1000,
+        "rss_end_mb": 26.531,
+        "rss_peak_mb": 26.625,
+        "rss_start_mb": 26.023,
+        "throughput_req_s": 9.598,
+        "wall_seconds": 104.188948
+      }
+    },
+    "texts": 1000,
+    "warmup": 50
+  },
+  "embedding": {
+    "benchmark": "embedding",
+    "concurrency": [
+      1,
+      4,
+      8
+    ],
+    "formal_run": true,
+    "rounds": {
+      "1": {
+        "benchmark": "embedding",
+        "concurrency": 1,
+        "cpu_avg_percent": 2.814,
+        "cpu_peak_percent": 27.266,
+        "errors": 0,
+        "p50_ms": 110.82,
+        "p95_ms": 169.028,
+        "p99_ms": 208.183,
+        "requests": 1000,
+        "rss_end_mb": 55.047,
+        "rss_peak_mb": 55.055,
+        "rss_start_mb": 39.41,
+        "throughput_req_s": 8.598,
+        "wall_seconds": 116.305852
+      },
+      "4": {
+        "benchmark": "embedding",
+        "concurrency": 4,
+        "cpu_avg_percent": 3.373,
+        "cpu_peak_percent": 30.579,
+        "errors": 0,
+        "p50_ms": 424.059,
+        "p95_ms": 863.105,
+        "p99_ms": 1170.811,
+        "requests": 1000,
+        "rss_end_mb": 57.578,
+        "rss_peak_mb": 58.465,
+        "rss_start_mb": 55.633,
+        "throughput_req_s": 8.823,
+        "wall_seconds": 113.341246
+      },
+      "8": {
+        "benchmark": "embedding",
+        "concurrency": 8,
+        "cpu_avg_percent": 3.448,
+        "cpu_peak_percent": 17.292,
+        "errors": 0,
+        "p50_ms": 904.541,
+        "p95_ms": 1718.554,
+        "p99_ms": 2146.031,
+        "requests": 1000,
+        "rss_end_mb": 59.785,
+        "rss_peak_mb": 59.852,
+        "rss_start_mb": 57.668,
+        "throughput_req_s": 8.354,
+        "wall_seconds": 119.710259
+      }
+    },
+    "texts": 1000,
+    "warmup": 50
+  },
+  "environment": {
+    "architecture": "x86_64",
+    "bridge_build_type": "Release",
+    "captured_at": "2026-09-04T15:15:19.711434+00:00",
+    "commands": {
+      "free_m": {
+        "command": [
+          "free",
+          "-m"
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "               total        used        free      shared  buff/cache   available\n内存：          7941        3851         272          45        4159        4090\n交换：          9527          19        9508\n"
+      },
+      "git_rev_parse_HEAD": {
+        "command": [
+          "git",
+          "rev-parse",
+          "HEAD"
+        ],
+        "returncode": 128,
+        "stderr": "致命错误：不是 git 仓库（或者直至挂载点 / 的任何父目录）\n停止在文件系统边界（未设置 GIT_DISCOVERY_ACROSS_FILESYSTEM）。\n",
+        "stdout": ""
+      },
+      "git_status_porcelain": {
+        "command": [
+          "git",
+          "status",
+          "--porcelain"
+        ],
+        "returncode": 128,
+        "stderr": "致命错误：不是 git 仓库（或者直至挂载点 / 的任何父目录）\n停止在文件系统边界（未设置 GIT_DISCOVERY_ACROSS_FILESYSTEM）。\n",
+        "stdout": ""
+      },
+      "lscpu": {
+        "command": [
+          "lscpu"
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "架构：                                   x86_64\nCPU 运行模式：                           32-bit, 64-bit\nAddress sizes:                           39 bits physical, 48 bits virtual\n字节序：                                 Little Endian\nCPU:                                     4\n在线 CPU 列表：                          0-3\n厂商 ID：                                GenuineIntel\n型号名称：                               13th Gen Intel(R) Core(TM) i7-13650HX\nCPU 系列：                               6\n型号：                                   183\n每个核的线程数：                         1\n每个座的核数：                           4\n座：                                     1\n步进：                                   1\nBogoMIPS：                               5606.39\n标记：                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ibrs_enhanced fsgsbase bmi1 avx2 bmi2 invpcid rdseed adx clflushopt sha_ni arat md_clear flush_l1d arch_capabilities\n超管理器厂商：                           KVM\n虚拟化类型：                             完全\nL1d 缓存：                               192 KiB (4 instances)\nL1i 缓存：                               128 KiB (4 instances)\nL2 缓存：                                5 MiB (4 instances)\nL3 缓存：                                96 MiB (4 instances)\nNUMA 节点：                              1\nNUMA 节点0 CPU：                         0-3\nVulnerability Gather data sampling:      Not affected\nVulnerability Indirect target selection: Vulnerable\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Reg file data sampling:    Mitigation; Clear Register File\nVulnerability Retbleed:                  Mitigation; Enhanced IBRS\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Vulnerable\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Vulnerable: eIBRS with unprivileged eBPF\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\n"
+      },
+      "python_version": {
+        "command": [
+          "/home/yanmouren778/d11e-venv/bin/python",
+          "--version"
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "Python 3.12.3\n"
+      },
+      "uname_a": {
+        "command": [
+          "uname",
+          "-a"
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "Linux yanmouren778-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux\n"
+      }
+    },
+    "cpu_model": "x86_64",
+    "embedding_runtime_version": null,
+    "embedding_sdk_version": null,
+    "git_branch": null,
+    "git_commit": null,
+    "git_dirty": null,
+    "hostname": "yanmouren778-pc",
+    "kernel": "6.6.0-63-generic",
+    "logical_cores": 4,
+    "memory_total_mb": 7941.992,
+    "os_name": "Linux",
+    "os_version": "#63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026",
+    "physical_cores": null,
+    "python_version": "3.12.3"
+  },
+  "formal_run_blockers": [
+    "git_commit 缺失或不可验证",
+    "git_branch 缺失或不可验证",
+    "git_dirty 不是已验证的 clean 状态",
+    "git rev-parse HEAD 失败",
+    "git status --porcelain 失败",
+    "未测量真实索引积压"
+  ],
+  "formal_run_eligible": false,
+  "generated_at": "2026-09-04T16:36:11.657891+00:00",
+  "git_commit": null,
+  "ipc": {
+    "benchmark": "ipc",
+    "formal_run": true,
+    "methods": {
+      "echo": {
+        "benchmark": "ipc",
+        "concurrency": [
+          1,
+          4,
+          8,
+          16
+        ],
+        "formal_run": true,
+        "method": "echo",
+        "requests": 2000,
+        "rounds": {
+          "1": {
+            "benchmark": "ipc",
+            "concurrency": 1,
+            "cpu_avg_percent": 44.416,
+            "cpu_peak_percent": 69.839,
+            "errors": 0,
+            "method": "echo",
+            "p50_ms": 1.587,
+            "p95_ms": 3.323,
+            "p99_ms": 4.411,
+            "requests": 2000,
+            "rss_end_mb": 54.59,
+            "rss_peak_mb": 54.594,
+            "rss_start_mb": 54.59,
+            "throughput_req_s": 494.922,
+            "wall_seconds": 4.041039
+          },
+          "16": {
+            "benchmark": "ipc",
+            "concurrency": 16,
+            "cpu_avg_percent": 67.06,
+            "cpu_peak_percent": 93.677,
+            "errors": 506,
+            "method": "echo",
+            "p50_ms": 37.476,
+            "p95_ms": 95.891,
+            "p99_ms": 149.546,
+            "requests": 2000,
+            "rss_end_mb": 54.852,
+            "rss_peak_mb": 54.98,
+            "rss_start_mb": 54.715,
+            "throughput_req_s": 426.229,
+            "wall_seconds": 4.692312
+          },
+          "4": {
+            "benchmark": "ipc",
+            "concurrency": 4,
+            "cpu_avg_percent": 71.75,
+            "cpu_peak_percent": 88.482,
+            "errors": 0,
+            "method": "echo",
+            "p50_ms": 8.167,
+            "p95_ms": 14.835,
+            "p99_ms": 26.855,
+            "requests": 2000,
+            "rss_end_mb": 54.645,
+            "rss_peak_mb": 54.68,
+            "rss_start_mb": 54.629,
+            "throughput_req_s": 426.695,
+            "wall_seconds": 4.687193
+          },
+          "8": {
+            "benchmark": "ipc",
+            "concurrency": 8,
+            "cpu_avg_percent": 71.799,
+            "cpu_peak_percent": 92.014,
+            "errors": 0,
+            "method": "echo",
+            "p50_ms": 17.025,
+            "p95_ms": 29.249,
+            "p99_ms": 56.151,
+            "requests": 2000,
+            "rss_end_mb": 54.699,
+            "rss_peak_mb": 54.754,
+            "rss_start_mb": 54.656,
+            "throughput_req_s": 412.675,
+            "wall_seconds": 4.846433
+          }
+        },
+        "socket": "/home/yanmouren778/test-rounds/d13a-20260904/gateway/memory.sock",
+        "warmup": 50
+      },
+      "memory_retrieve": {
+        "benchmark": "ipc",
+        "concurrency": [
+          1,
+          4,
+          8,
+          16
+        ],
+        "formal_run": true,
+        "method": "memory.retrieve",
+        "requests": 2000,
+        "rounds": {
+          "1": {
+            "benchmark": "ipc",
+            "concurrency": 1,
+            "cpu_avg_percent": 67.073,
+            "cpu_peak_percent": 83.613,
+            "errors": 0,
+            "method": "memory.retrieve",
+            "p50_ms": 3.415,
+            "p95_ms": 7.849,
+            "p99_ms": 12.145,
+            "requests": 2000,
+            "rss_end_mb": 55.832,
+            "rss_peak_mb": 55.848,
+            "rss_start_mb": 55.395,
+            "throughput_req_s": 232.163,
+            "wall_seconds": 8.614653
+          },
+          "16": {
+            "benchmark": "ipc",
+            "concurrency": 16,
+            "cpu_avg_percent": 72.358,
+            "cpu_peak_percent": 100.553,
+            "errors": 1835,
+            "method": "memory.retrieve",
+            "p50_ms": 156.58,
+            "p95_ms": 197.178,
+            "p99_ms": 234.615,
+            "requests": 2000,
+            "rss_end_mb": 60.566,
+            "rss_peak_mb": 61.375,
+            "rss_start_mb": 61.215,
+            "throughput_req_s": 1022.673,
+            "wall_seconds": 1.955659
+          },
+          "4": {
+            "benchmark": "ipc",
+            "concurrency": 4,
+            "cpu_avg_percent": 78.169,
+            "cpu_peak_percent": 98.617,
+            "errors": 0,
+            "method": "memory.retrieve",
+            "p50_ms": 34.887,
+            "p95_ms": 64.941,
+            "p99_ms": 97.844,
+            "requests": 2000,
+            "rss_end_mb": 56.617,
+            "rss_peak_mb": 56.68,
+            "rss_start_mb": 56.215,
+            "throughput_req_s": 104.534,
+            "wall_seconds": 19.132459
+          },
+          "8": {
+            "benchmark": "ipc",
+            "concurrency": 8,
+            "cpu_avg_percent": 81.215,
+            "cpu_peak_percent": 121.708,
+            "errors": 0,
+            "method": "memory.retrieve",
+            "p50_ms": 83.659,
+            "p95_ms": 146.887,
+            "p99_ms": 188.902,
+            "requests": 2000,
+            "rss_end_mb": 61.215,
+            "rss_peak_mb": 61.344,
+            "rss_start_mb": 57.406,
+            "throughput_req_s": 89.37,
+            "wall_seconds": 22.378789
+          }
+        },
+        "socket": "/home/yanmouren778/test-rounds/d13a-20260904/gateway/memory.sock",
+        "warmup": 50
+      }
+    }
+  },
+  "outbox": {
+    "benchmark": "outbox",
+    "consumer_throughput": 258.202,
+    "cpu_avg_percent": 42.691,
+    "cpu_peak_percent": 174.458,
+    "db": "/home/yanmouren778/kylinOS-agent-memory-d11e-20260904/perf/day13a/run_01/outbox.sqlite3",
+    "dead_letters": 0,
+    "drain_time_seconds": 19.365,
+    "errors": 0,
+    "events_processed": 5000,
+    "events_submitted": 5000,
+    "formal_run": true,
+    "max_backlog": 5000,
+    "producer_throughput": 966.567,
+    "rss_end_mb": 48.781,
+    "rss_peak_mb": 48.977,
+    "rss_start_mb": 44.945,
+    "time_to_max_backlog": 5.161,
+    "time_to_max_backlog_seconds": 5.161
+  },
+  "schema_version": "day13a.v1"
+}
