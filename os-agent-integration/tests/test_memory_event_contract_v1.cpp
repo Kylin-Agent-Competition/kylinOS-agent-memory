@@ -193,6 +193,7 @@ private slots:
     void toolExecutionValidationRequiresExplicitStatusAndSideEffect();
     void toolExecutionValidationRequiresTrustedMetadata();
     void turnFinalizedEventRoundTripsKnownPayload();
+    void turnFinalizedRetryRoundTripKeepsTopLevelField();
     void optionalEventMetadataIsOmittedFromCanonicalJson();
     void turnFinalizedJsonRequiresEventTimestamps_data();
     void turnFinalizedJsonRequiresEventTimestamps();
@@ -605,6 +606,21 @@ void MemoryEventContractV1Test::turnFinalizedEventRoundTripsKnownPayload()
     QVERIFY(parsed.value.has_value());
     QCOMPARE(parsed.value->toolCallIds, QStringList{QStringLiteral("tool-call-001")});
     QCOMPARE(contract::toJson(*parsed.value), expected);
+}
+
+void MemoryEventContractV1Test::turnFinalizedRetryRoundTripKeepsTopLevelField()
+{
+    QJsonObject payload = knownTurnFinalizedPayload();
+    payload.insert(QStringLiteral("retry_of_turn_id"), QStringLiteral("turn-old"));
+
+    const auto parsed = contract::turnFinalizedEventFromJson(payload);
+
+    QVERIFY(parsed.ok());
+    QVERIFY(parsed.value.has_value());
+    QCOMPARE(parsed.value->retryOfTurnId, QStringLiteral("turn-old"));
+    const QJsonObject serialized = contract::toJson(*parsed.value);
+    QCOMPARE(serialized.value(QStringLiteral("retry_of_turn_id")).toString(),
+             QStringLiteral("turn-old"));
 }
 
 void MemoryEventContractV1Test::optionalEventMetadataIsOmittedFromCanonicalJson()
