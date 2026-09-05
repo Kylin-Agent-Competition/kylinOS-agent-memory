@@ -9,6 +9,8 @@
 Forget 四类业务 raw 的 adapter 或真实执行。因此 D13D-B07 仍为 `BLOCKED`。此前基线
 `4a32e5c948a968f3bd4409d91deac320002baea1` 已被 PR #157 的 P0-I1/I2 实现变更失效；当前仅有
 `main@17dce3696066213b54e9dcbe6b87c4944cb41c8c` 前置候选，正式 `tested_commit` 待 P0-I3 重新选择。
+PR #157 最终审查已批准其 P0 实现、迁移、L1/CI；其 VM/formal 测试豁免仅限该 PR 的 merge blocker，
+不能解除本任务的真实 raw、双 Seal、attestation、Runner 或 `FROZEN` 门禁。
 
 ## P0-0：已冻结的四类 raw 责任映射
 

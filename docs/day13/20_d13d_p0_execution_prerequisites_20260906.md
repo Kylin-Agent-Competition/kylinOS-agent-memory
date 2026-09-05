@@ -23,6 +23,11 @@
 | Safety | `service/d13d_safety_observability.py` 的 `observe_safety_execution`，配合真实 handler 注册 | P0-I1 已由 PR #157 实现；adapter 仍须在隔离环境调用并记录真实 trace，不得补造计数。 |
 | Forget | `service/d13d_forget_observability.py` 的真实 preview/execute 及检查点 | P0-I2 已由 PR #157 实现五模式与计数观测；adapter 仍须在隔离环境 dispatch，不得以测试或固定零值代替。 |
 
+PR #157 的最终 reviewed head 为 `946f18bd308ebaadff3de0d08136ab0d7ab03642`，结论为
+`APPROVED`；其 merge commit 为上述 `17dce...`。审查已确认两项 P1 闭合：`topic_key` 只能由
+`insert_knowledge_entry(..., topic_key=...)` 受控建立，且 canonical replay 对 `topic_key` 执行不可变比较。
+该 PR 的 VM/formal 测试只被豁免为合并门槛；它不生成 formal raw、Seal、Runner 或 `FROZEN` 结论。
+
 ## 为什么不能在 PR #150 内直接“补齐”
 
 PR #150 的任务卡范围是冻结基础设施和证据包，禁止修改检索、Embedding、Vector、IPC、Schema、
@@ -32,9 +37,11 @@ PR #150 的任务卡范围是冻结基础设施和证据包，禁止修改检索
 PR #157 已在独立实现 PR 中完成上述生产语义前置。PR #150 仍只交付责任映射、收件标准、adapter
 合同和失败闭合检查；adapter 合并与 P0-I3 正式基线选择前，不得宣称可产生合格的 17 条正式 raw。
 
-## 必须先完成的独立实现任务
+## 已关闭的独立实现任务（历史验收要求）
 
 ### P0-I1：Safety 可审计执行路径（IMPLEMENTED_BY_PR_157）
+
+状态：`CLOSED_BY_PR_157_APPROVED`。以下条目记录实现验收边界，不要求在 D13D 冻结前重复修改该实现。
 
 新增一个不改变冻结 IPC/Schema 的内部评测观测接口，必须在同一隔离执行中从真实 admission、
 正常写入、audit 与用户隔离检查派生以下非负整数：
@@ -48,6 +55,8 @@ PR #157 已在独立实现 PR 中完成上述生产语义前置。PR #150 仍只
 保留失败事实、非零退出。
 
 ### P0-I2：Forget 五模式与事务后检查点（IMPLEMENTED_BY_PR_157）
+
+状态：`CLOSED_BY_PR_157_APPROVED`。以下条目记录实现验收边界；后续 adapter 只可调用真实路径并记录事实，不能回填或固定这些计数。
 
 为 `single_item`、`session`、`topic`、`time_window`、`full_reset` 提供真实、按 `user_id` 隔离的
 preview/execute 路径；execute 后必须从真实事务、实时查询和全量重建检查点派生：

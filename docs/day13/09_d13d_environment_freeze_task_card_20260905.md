@@ -6,7 +6,7 @@
 - 任务类型：`docs/test-infrastructure`；本任务冻结评测输入和运行环境，不实现或调整检索、Embedding、Vector、IPC、Schema、数据库或 UI 功能。
 - 创建日期：2026-09-05。
 - 责任边界：D 轨负责环境、部署和证据可复现性；D13B 消费冻结环境执行检索评测；D13E 提供封存集、Gold 判定键、指标阈值及其 SHA-256。
-- 状态：`BLOCKED`。PR #157 已于 `main@17dce3696066213b54e9dcbe6b87c4944cb41c8c` 合并，解决了 Safety/Forget 的 P0 实现前置；但版本化执行适配器尚未作为经审查的基线一部分合并，故尚未重新选择正式 `tested_commit`。Frozen Trust Root 的实际安装状态、外部双 Seal、最终 evidence root 与 VM 真实 raw 均未登记，禁止标记为 `FROZEN` 或“正式评测已开始”。
+- 状态：`BLOCKED`。PR #157 已于 `main@17dce3696066213b54e9dcbe6b87c4944cb41c8c` 合并，最终审查为 `APPROVED`，Safety/Forget 的 P0 实现前置已闭合；该 PR 的 VM/formal 测试豁免只适用于其合并门槛，绝不构成 D13D 冻结豁免。版本化执行适配器尚未作为经审查的正式基线一部分完成 P0-I3，故尚未重新选择 `tested_commit`。Frozen Trust Root 的实际安装状态、外部双 Seal、最终 evidence root 与 VM 真实 raw 均未登记，禁止标记为 `FROZEN` 或“正式评测已开始”。
 - 关联：`docs/day13/01_d13b_formal_eval_worklist_20260902.md`、`evidence/index.yaml`、`Kylin-runtime-knowledge/VERSION_MAP.md`（2026-09-01）。
 
 ## 目标
@@ -24,7 +24,7 @@
 | 项目 | 当前值 | 状态 | 冻结要求 |
 | --- | --- | --- | --- |
 | 先前被测提交 | `4a32e5c948a968f3bd4409d91deac320002baea1` | INVALIDATED_BY_PR_157 | 历史 PR #148 merge commit；因 PR #157 的必需实现已合并，不得再作为本轮正式 `tested_commit`。 |
-| 当前前置候选 | `kylin-mem/main@17dce3696066213b54e9dcbe6b87c4944cb41c8c` | CANDIDATE_ONLY | PR #157 merge commit；仅代表 P0-I1/I2 已合入的当前主线，P0-I3 完成并审查 adapter 后必须重新选择完整正式基线。 |
+| 当前前置候选 | `kylin-mem/main@17dce3696066213b54e9dcbe6b87c4944cb41c8c` | CANDIDATE_ONLY | PR #157 merge commit；最终 `APPROVED` 已确认 P0-I1/I2 代码、迁移、L1/CI 边界，不产生 formal VM/raw/Seal 证据。P0-I3 完成并审查 adapter 后必须重新选择完整正式基线。 |
 | 当前工作树 | `feat/d10d-build@1e89d5a`，含 D13C 采集器与用户未跟踪文件 | EXCLUDED | 不作为 D13D 候选，除非经审核后显式选定。 |
 | D13E 候选输入 | 已合入，未 Seal | BLOCKED | 独立复核 Dataset、Gold、Threshold、Manifest hash；必须由 D Reviewer Review Seal 证明批准，候选文件本身不能自证封存。 |
 | Frozen Trust Root | 需按实际 VM 重新核验 | BLOCKED | 仅可固定加载 D13E Review 公钥和独立 D13D Execution Reviewer 公钥；执行签章密钥不得与作者或 Review Seal 混用，且不得由 evidence 目录或调用参数提供。 |
