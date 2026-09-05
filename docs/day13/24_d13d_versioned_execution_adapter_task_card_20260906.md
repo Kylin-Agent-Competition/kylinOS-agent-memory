@@ -75,6 +75,10 @@ or retrieval binding is an execution error rather than a zero count.
 3. A unique VM evidence directory and its write authority must be assigned.
 4. Raw execution, execution attestation, and both signatures must be produced by the
    authorized formal process. Until then this work remains `CANDIDATE_NOT_FROZEN`.
+5. Forget formal dispatch additionally requires the reviewed external state-binding and
+   retrieval-observation input described in
+   `docs/day13/25_d13d_formal_forget_state_binding_request_20260906.md`; the adapter
+   must fail closed rather than synthesize targets or observations.
 
 ## Rollback
 
