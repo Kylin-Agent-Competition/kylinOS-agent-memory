@@ -985,12 +985,17 @@ def mark_outbox_dead_letter(conn, *, outbox_id: int, attempts: int, last_error: 
 def cleanup_expired_idempotency(conn, *, now_iso: str, limit: int = 100) -> int:
     """幂等缓存过期清理（Worker 每轮顺带，借 idx_idempotency_expires）。
 
-    SQLite 支持 DELETE ... LIMIT，但 SQLAlchemy 2.0 通用 Delete 无 .limit()
-    （MySQL 方言专有），故用原生 SQL 表达（冻结文档附录 B 附注）。
+    使用子查询限制删除行数，避免依赖 SQLite 可选的
+    ``SQLITE_ENABLE_UPDATE_DELETE_LIMIT`` 编译选项；SQLAlchemy 2.0 通用
+    Delete 也没有跨方言的 ``.limit()``。
     """
     try:
         res = conn.exec_driver_sql(
-            "DELETE FROM idempotency_cache WHERE expires_at < ? LIMIT ?",
+            "DELETE FROM idempotency_cache "
+            "WHERE (user_id, session_id, idempotency_key) IN ("
+            "SELECT user_id, session_id, idempotency_key "
+            "FROM idempotency_cache WHERE expires_at < ? "
+            "ORDER BY expires_at LIMIT ?)",
             (now_iso, limit),
         )
     except OperationalError as exc:

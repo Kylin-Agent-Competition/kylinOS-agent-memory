@@ -1,24 +1,23 @@
 #!/usr/bin/env python
-"""benchmark_embedding.py — 轨道 A Day9 Embedding 串行/低并发吞吐测量脚本
+"""D13A Embedding Service/Provider 性能基线脚本。
 
-台账 R47（A 轨 D9）：测量 Embedding 串行/低并发吞吐 → Embedding 吞吐基线
-+ 积压治理策略。可复现（固定样本/固定并发/输出原始数据 + 汇总）。
+默认使用真实 SDK，测试矩阵为 1000 请求、并发 1/4/8；可复现（固定样本、
+warm-up、原始数据 + 汇总）。
 
 用法：
   # 本地（无 SDK，用 fake provider 冒烟）：
-  PYTHONPATH=memory-service python scripts/benchmark_embedding.py --fake --texts 50
+  PYTHONPATH=memory-service:scripts python scripts/benchmark_embedding.py --fake --texts 50
 
   # 麒麟 VM（真实 SDK）：
   cd /mnt/shared && PYTHONPATH=/mnt/shared/memory-service \
     LD_LIBRARY_PATH=/usr/lib/kylin-ai/depends:$LD_LIBRARY_PATH \
-    /tmp/day8-venv/bin/python scripts/benchmark_embedding.py --texts 100 --concurrency 1 4 8
+    /tmp/day13a-venv/bin/python scripts/benchmark_embedding.py --texts 1000 --concurrency 1 4 8 --warmup 50
 
-输出：stdout 原始数据（每轮 per-request 耗时）+ JSON 汇总（P50/P95/P99/吞吐）
-      可 tee 到 evidence/l1/day9_embedding_throughput.log 落盘。
+输出：stdout JSON 汇总；提供 --output-dir 时保存每条请求和资源样本 JSONL。
 
 指标语义（架构 TABLE 29 延迟预算：Embedding 查询 ≤180ms）：
   - 串行吞吐（req/s）：单连接顺序调用的吞吐
-  - 低并发吞吐（req/s）：2/4/8 并发下吞吐（线程池 max_workers=2 上限约束）
+  - 并发吞吐（req/s）：各并发档位的墙钟吞吐
   - P50/P95/P99：单请求耗时分布（判断是否逼近 180ms 预算）
 """
 
@@ -27,12 +26,18 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import statistics
 import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import List
+from pathlib import Path
+from typing import List, Optional
+
+_SCRIPTS = Path(__file__).resolve().parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+from bench_utils import (ResourceSampler, append_jsonl, benchmark_summary,
+                          file_sha256, resource_metrics, write_json, write_jsonl)
 
 # 保证从仓库任意目录运行时都能 import memory-service 包
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -42,10 +47,10 @@ if _MSVC not in sys.path:
 
 # ── provider 选择：真实 SDK（默认）或 fake（冒烟） ──
 
-def _make_provider(fake: bool):
+def _make_provider(fake: bool, so_path: Optional[str] = None):
     if not fake:
         from providers import EmbeddingProvider
-        return EmbeddingProvider()
+        return EmbeddingProvider(so_path=so_path)
     from providers import EmbeddingResult
 
     class FakeProvider:
@@ -69,89 +74,127 @@ def _make_provider(fake: bool):
     return FakeProvider()
 
 
-def _run_serial(service, texts: List[str], concurrency: int) -> List[float]:
-    """指定并发下跑一批 embed，返回 per-request 耗时（秒）。"""
-    latencies: List[float] = []
+def _run_serial(service, texts: List[str], concurrency: int) -> List[dict]:
+    """指定并发下跑一批 embed，保留每条请求的成功与耗时。"""
+    rows: List[dict] = []
     lock = threading.Lock()
 
-    def worker(t: str) -> None:
+    def worker(item) -> None:
+        request, t = item
         start = time.monotonic()
-        r = service.embed(t, timeout_ms=10000)
-        dur = time.monotonic() - start
-        if not r.get("ok"):
-            raise RuntimeError(f"embed failed: {r}")
+        try:
+            r = service.embed(t, timeout_ms=10000)
+            ok = bool(r.get("ok")) and not bool(r.get("degraded"))
+            error = None if ok else r.get("error") or r.get("degraded_reason")
+        except Exception as exc:  # noqa: BLE001 - 保存失败样本而非中断整个轮次
+            ok = False
+            error = {"type": type(exc).__name__, "message": str(exc)[:200]}
+        row = {
+            "request": request,
+            "concurrency": concurrency,
+            "latency_ms": round((time.monotonic() - start) * 1000.0, 3),
+            "ok": ok,
+        }
+        if error:
+            row["error"] = error
         with lock:
-            latencies.append(dur)
+            rows.append(row)
 
     with ThreadPoolExecutor(max_workers=concurrency) as ex:
-        list(ex.map(worker, texts))
-    return latencies
+        list(ex.map(worker, enumerate(texts)))
+    return sorted(rows, key=lambda row: int(row["request"]))
 
 
-def _percentile(sorted_vals: List[float], pct: float) -> float:
-    if not sorted_vals:
-        return 0.0
-    idx = max(0, min(len(sorted_vals) - 1, int(len(sorted_vals) * pct)))
-    return sorted_vals[idx]
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Day9 Embedding 吞吐测量")
-    parser.add_argument("--texts", type=int, default=100,
-                        help="每轮文本数（默认 100）")
-    parser.add_argument("--concurrency", type=int, nargs="+", default=[1],
-                        help="并发档位，如 1 4 8（默认 1=串行）")
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description="D13A Embedding P50/P95/P99 benchmark")
+    parser.add_argument("--texts", type=int, default=1000,
+                        help="正式请求数（默认 1000）")
+    parser.add_argument("--concurrency", type=int, nargs="+", default=[1, 4, 8],
+                        help="并发档位（默认 1 4 8）")
+    parser.add_argument("--warmup", type=int, default=50,
+                        help="每档 warm-up 请求数（默认 50）")
     parser.add_argument("--fake", action="store_true",
                         help="用 fake provider 冒烟（无 SDK 环境）")
+    parser.add_argument("--so-path",
+                        help="正式运行时显式绑定并记录实际加载的 SDK 动态库路径")
+    parser.add_argument("--output-dir", type=Path,
+                        help="运行目录；保存 raw/embedding.jsonl 与摘要")
     parser.add_argument("--json", action="store_true",
                         help="仅输出 JSON 汇总（供脚本解析）")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+
+    if args.texts <= 0 or args.warmup < 0 or any(c <= 0 for c in args.concurrency):
+        parser.error("texts/concurrency 必须为正数，warmup 不得为负")
 
     from embedding.embedding_service import EmbeddingService
 
-    provider = _make_provider(args.fake)
+    provider = _make_provider(args.fake, args.so_path)
     service = EmbeddingService(provider=provider)
     service.start()
 
-    summary = {"texts": args.texts, "rounds": {}}
+    summary = {
+        "benchmark": "embedding",
+        "formal_run": not args.fake,
+        "texts": args.texts,
+        "warmup": args.warmup,
+        "concurrency": args.concurrency,
+        "rounds": {},
+    }
+    if not args.fake:
+        sdk_so_path = str(getattr(provider, "sdk_so_path", args.so_path or ""))
+        model_info = provider.model_info()
+        summary.update({
+            "sdk_so_path": sdk_so_path,
+            "sdk_so_sha256": file_sha256(sdk_so_path),
+            "sdk_loaded": bool(getattr(model_info, "loaded", False)),
+            "model_identity": {
+                "name": getattr(model_info, "name", None),
+                "source": "runtime_model_info",
+            },
+        })
+    all_rows = []
+    resource_rows = []
     for conc in args.concurrency:
+        warmup = [f"day13a-warmup-c{conc:02d}-{i:04d}" for i in range(args.warmup)]
+        if warmup:
+            _run_serial(service, warmup, conc)
         # Review 修复：每轮生成唯一文本（含轮次序号）——若各轮复用同一批 texts，
         # 第 2 轮起全部缓存命中（P50≈0ms、吞吐虚高），测的不是 Provider 吞吐。
-        texts = [f"day9-benchmark-文本-{conc:02d}-{i:04d}"
+        texts = [f"day13a-benchmark-文本-{conc:02d}-{i:04d}"
                  for i in range(args.texts)]
         wall_start = time.monotonic()
-        latencies = _run_serial(service, texts, conc)
+        sampler = ResourceSampler()
+        sampler.start()
+        lat_rows = _run_serial(service, texts, conc)
         wall_seconds = time.monotonic() - wall_start
-        latencies.sort()
-        n = len(latencies)
-        # Review 修复：并发>1 时吞吐 = n / 轮次墙钟时长（不是 per-request 之和，
-        # 后者在并发下虚高）。P50/P95/P99 仍基于 per-request 耗时（延迟分布）。
-        throughput = n / wall_seconds if wall_seconds > 0 else 0.0
-        p50 = _percentile(latencies, 0.50)
-        p95 = _percentile(latencies, 0.95)
-        p99 = _percentile(latencies, 0.99)
-        summary["rounds"][str(conc)] = {
-            "concurrency": conc,
-            "requests": n,
-            "total_seconds": round(wall_seconds, 4),
-            "throughput_req_s": round(throughput, 2),
-            "p50_ms": round(p50 * 1000, 2),
-            "p95_ms": round(p95 * 1000, 2),
-            "p99_ms": round(p99 * 1000, 2),
-        }
+        sampled_resources = sampler.stop()
+        resources = resource_metrics(sampled_resources)
+        resource_rows.extend({**row, "benchmark": "embedding", "concurrency": conc}
+                             for row in sampled_resources)
+        latencies = [float(row["latency_ms"]) / 1000.0
+                     for row in lat_rows if row["ok"]]
+        round_summary = benchmark_summary(
+            name="embedding", requests=len(lat_rows),
+            errors=sum(1 for row in lat_rows if not row["ok"]),
+            wall_seconds=wall_seconds, latencies_s=latencies,
+            resources=resources, concurrency=conc,
+        )
+        summary["rounds"][str(conc)] = round_summary
+        all_rows.extend(lat_rows)
         if not args.json:
-            print(f"\n[concurrency={conc}] {n} requests, "
-                  f"wall={wall_seconds:.4f}s, throughput={throughput:.2f} req/s, "
-                  f"P50={p50*1000:.2f}ms P95={p95*1000:.2f}ms P99={p99*1000:.2f}ms",
+            print(f"\n[concurrency={conc}] {round_summary['requests']} requests, "
+                  f"wall={wall_seconds:.4f}s, throughput={round_summary['throughput_req_s']:.3f} req/s, "
+                  f"P50={round_summary['p50_ms']:.3f}ms P95={round_summary['p95_ms']:.3f}ms "
+                  f"P99={round_summary['p99_ms']:.3f}ms",
                   flush=True)
 
     service.close()
 
-    if args.json:
-        print(json.dumps(summary, ensure_ascii=False, indent=2))
-    else:
-        print("\n== JSON 汇总 ==")
-        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    if args.output_dir:
+        write_jsonl(args.output_dir / "raw" / "embedding.jsonl", all_rows)
+        append_jsonl(args.output_dir / "raw" / "resources.jsonl", resource_rows)
+        write_json(args.output_dir / "embedding.summary.json", summary)
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 
 
