@@ -1,5 +1,19 @@
 # D13D P0-I2：Forget 五模式执行语义裁决请求
 
+> STATUS: RESOLVED
+>
+> - resolved_at: 2026-09-06
+> - resolved_by: 项目负责人
+> - approval_reference: 项目负责人在当前 D13D 工作会话中的书面跨轨授权（2026-09-06）
+> - implementation_task: `docs/day13/22_d13d_p0_forget_execution_task_card_20260906.md`
+>
+> 已选语义：F-01 使用受控入口写入的 `memory_entries.topic_key` 精确匹配；F-02
+> 使用同用户 primary evidence 所关联的 `source_events.occurred_at`，输入时区归一化到
+> UTC 并采用 `[from, to)`；F-03 仅删除本用户的 Memory Service knowledge 与 preference，
+> 保留 source events 和审计事实，`target_type=all` 使用 `knowledge:<id>` /
+> `preference:<id>` 的内部 tagged selection。hard delete、cascade 和 event target 继续
+> fail-closed。本记录不等价于正式评测、Seal、冻结或 Reviewer D 审查批准。
+
 ## 请求目的
 
 D 轨已承担 D13D 的四类 raw 集成责任。为完成封存集中的 `topic`、`time_window`、

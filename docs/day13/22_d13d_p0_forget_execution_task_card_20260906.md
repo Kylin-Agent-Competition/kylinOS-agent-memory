@@ -19,9 +19,26 @@
    `preference:<id>`，消除跨表数字 ID 歧义。
 4. 其余 target type/mode 组合保持 fail-closed；hard delete 与 cascade 仍不实现。
 
+## topic_key 权威写入真源
+
+- `topic_key` 仅可由受控 structured knowledge ingress 在调用
+  `db.repositories.insert_knowledge_entry(..., topic_key=...)` 时显式传入；Repository 拒绝空白值。
+- 对受控评测状态准备，可使用同一受控入口预置明确的 `topic_key`。这是 state preparation，
+  不读取 Gold、不由 adapter 按 sample 修改既有数据库、也不从 target selector 回填字段。
+- 旧 knowledge 的 `topic_key=NULL` 保持 NULL；topic resolver 不做 content、conditions 或自然语言 fallback。
+
+## Safety observation 边界
+
+- `normal_memory_write_count` 冻结为同一 trace 下的实际 normal Memory Service entity 写入：
+  active `memory_entries` 写入，加上有 `memory_version_receipts.trace_id` 的 preference
+  `write`/`rollback` 写入；不以 created_at 时间推测归属，no-op 不计为写入。
+- Safety observer 只返回事实计数和 trace reference，不读取 Gold、不接收 expected counter、
+  不判断 PASS/FAIL。后续 versioned adapter 才负责把事实层投影为 formal `actual`。
+
 ## 允许修改
 
-- `memory_entries` 新增 nullable `topic_key` 与 user-scoped index，以及单一 Alembic migration；
+- `memory_entries` 新增 nullable `topic_key` 与 user-scoped index；`memory_version_receipts`
+  新增 nullable `trace_id` 审计归属列；两者均通过 Alembic migration 管理；
 - Forget resolver、UoW dispatcher、受影响 L1/迁移测试；
 - 只读的事务后残留观测接口及后续 adapter 调用。
 

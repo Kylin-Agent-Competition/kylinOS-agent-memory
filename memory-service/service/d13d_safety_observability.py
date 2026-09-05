@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 from sqlalchemy import and_, func, select
 
 from db import repositories as repo
-from db.schema import memory_entries, source_events
+from db.schema import memory_entries, memory_items, memory_version_receipts, source_events
 
 
 def _require_nonblank(name: str, value: str) -> None:
@@ -30,9 +30,10 @@ def observe_safety_execution(
     """Derive D13D Safety counters from one persisted execution trace.
 
     The caller must have run the normal event-ingest path before this function.
-    Missing trace facts fail closed instead of returning a fabricated all-zero
-    result. ``foreign_user_id`` is required so cross-user isolation is checked
-    through the same user-scoped Repository entry point used by the service.
+    Missing trace facts or a foreign-memory control fail closed instead of
+    returning a fabricated all-zero result. ``foreign_user_id`` is required so
+    cross-user isolation is checked through the real user-scoped memory read
+    boundary, not a source-event lookup.
     """
     _require_nonblank("user_id", user_id)
     _require_nonblank("trace_id", trace_id)
@@ -69,7 +70,7 @@ def observe_safety_execution(
             for field in ("content_summary", "raw_payload_ref", "content_fingerprint")
         )
     )
-    normal_memory_write_count = int(
+    knowledge_write_count = int(
         conn.execute(
             select(func.count())
             .select_from(memory_entries)
@@ -83,13 +84,46 @@ def observe_safety_execution(
         ).scalar_one()
     )
 
-    # Probe every persisted event through the Repository's mandatory user
-    # filter. A non-null result would prove that this trace leaked across users.
-    cross_user_violation_count = sum(
-        1
-        for event_id in event_ids
-        if repo.get_source_event_by_event_id(
-            conn, user_id=foreign_user_id, event_id=event_id
+    preference_write_count = int(
+        conn.execute(
+            select(func.count())
+            .select_from(
+                memory_version_receipts.join(
+                    memory_items,
+                    memory_items.c.id == memory_version_receipts.c.memory_item_id,
+                )
+            )
+            .where(
+                and_(
+                    memory_items.c.user_id == user_id,
+                    memory_version_receipts.c.trace_id == trace_id,
+                    memory_version_receipts.c.operation_kind.in_(("write", "rollback")),
+                )
+            )
+        ).scalar_one()
+    )
+    normal_memory_write_count = knowledge_write_count + preference_write_count
+
+    foreign_entry_id = conn.execute(
+        select(memory_entries.c.id)
+        .where(
+            and_(
+                memory_entries.c.user_id == foreign_user_id,
+                memory_entries.c.is_deleted == 0,
+            )
+        )
+        .order_by(memory_entries.c.id.asc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if foreign_entry_id is None:
+        raise ValueError("no active foreign memory control for cross-user probe")
+    if repo.get_memory_entry_by_id(
+        conn, user_id=foreign_user_id, entry_id=int(foreign_entry_id)
+    ) is None:
+        raise ValueError("foreign memory control is not readable by its owner")
+    cross_user_violation_count = int(
+        repo.get_memory_entry_by_id(
+            conn, user_id=user_id, entry_id=int(foreign_entry_id)
         )
         is not None
     )

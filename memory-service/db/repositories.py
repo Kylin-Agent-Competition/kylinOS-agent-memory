@@ -448,6 +448,23 @@ def list_memory_entries(
     return [dict(r) for r in rows]
 
 
+def get_memory_entry_by_id(
+    conn, *, user_id: str, entry_id: int
+) -> Optional[Dict[str, Any]]:
+    """Read one active memory entry through the mandatory user boundary."""
+    _require_nonempty(user_id=user_id)
+    row = conn.execute(
+        select(memory_entries).where(
+            and_(
+                memory_entries.c.id == entry_id,
+                memory_entries.c.user_id == user_id,
+                memory_entries.c.is_deleted == 0,
+            )
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
 # ── D7D preference version persistence ──
 
 
@@ -626,6 +643,7 @@ def _record_operation_receipt(
     evidence_fingerprint: str,
     idempotency_key: Optional[str],
     request_fingerprint: str,
+    trace_id: Optional[str],
     created_at: str,
 ) -> None:
     conn.execute(
@@ -638,6 +656,7 @@ def _record_operation_receipt(
             evidence_fingerprint=evidence_fingerprint,
             idempotency_key=idempotency_key,
             request_fingerprint=request_fingerprint,
+            trace_id=trace_id,
             created_at=created_at,
         )
     )
@@ -652,6 +671,7 @@ def _append_preference_version(
     evidence_fingerprint: str,
     idempotency_key: Optional[str],
     request_fingerprint: str,
+    trace_id: Optional[str] = None,
     rollback_of_version_id: Optional[int] = None,
     no_op_on_same_value: bool = True,
     deduplicate_evidence: bool = True,
@@ -693,6 +713,7 @@ def _append_preference_version(
             evidence_fingerprint=evidence_fingerprint,
             idempotency_key=idempotency_key,
             request_fingerprint=request_fingerprint,
+            trace_id=trace_id,
             created_at=_now_iso(),
         )
         return {**current, "created": False}
@@ -746,6 +767,7 @@ def _append_preference_version(
         evidence_fingerprint=evidence_fingerprint,
         idempotency_key=idempotency_key,
         request_fingerprint=request_fingerprint,
+        trace_id=trace_id,
         created_at=now,
     )
     return {**version, "created": True}
@@ -762,6 +784,7 @@ def save_preference_version(
     evidence_fingerprint: str,
     idempotency_key: Optional[str],
     request_fingerprint: str,
+    trace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """创建或更新偏好版本，不原地覆盖历史。"""
     _require_nonempty(
@@ -786,6 +809,7 @@ def save_preference_version(
         evidence_fingerprint=evidence_fingerprint,
         idempotency_key=idempotency_key,
         request_fingerprint=request_fingerprint,
+        trace_id=trace_id,
     )
 
 
@@ -860,6 +884,7 @@ def rollback_preference_version(
     preference_version_id: int,
     idempotency_key: Optional[str],
     request_fingerprint: str,
+    trace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """将历史版本的值追加为新 current 版本，不覆盖旧版本。"""
     _require_nonempty(user_id=user_id, request_fingerprint=request_fingerprint)
@@ -884,6 +909,7 @@ def rollback_preference_version(
         evidence_fingerprint=f"rollback:{target['id']}:{uuid.uuid4().hex}",
         idempotency_key=idempotency_key,
         request_fingerprint=request_fingerprint,
+        trace_id=trace_id,
         rollback_of_version_id=int(target["id"]),
         no_op_on_same_value=False,
         deduplicate_evidence=False,

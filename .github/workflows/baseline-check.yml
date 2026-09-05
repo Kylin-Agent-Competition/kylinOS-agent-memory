@@ -29,3 +29,18 @@ jobs:
       - name: D13E 正式评测契约测试
         run: |
           python3 -m unittest memory-service.tests.test_d13e_formal_eval -v
+
+      - name: Install Memory Service L1 dependencies
+        run: python3 -m pip install -r memory-service/requirements.txt
+
+      - name: D13D prerequisite L1 regression
+        env:
+          PYTHONPATH: memory-service
+        run: |
+          python3 -m pytest \
+            memory-service/tests/test_d13d_safety_observability.py \
+            memory-service/tests/test_d13d_forget_observability.py \
+            memory-service/tests/test_event_ingest_d6d.py \
+            memory-service/tests/test_forget_persistence_d10d.py \
+            memory-service/tests/retrieval/test_evaluation.py \
+            -q
