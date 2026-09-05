@@ -123,7 +123,7 @@ PR #150 仅审查 D13D 的任务卡、阻塞状态、责任边界和证据纪律
 reviewer_identity:
 reviewer_track_or_role:
 reviewed_pr: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/150
-reviewed_head_commit: 1ad1997ea098038de3523ce55a42790f11188000
+reviewed_head_commit:
 reviewed_at_utc:
 review_conclusion: [APPROVE | REQUEST_CHANGES | COMMENT]
 
@@ -135,7 +135,8 @@ required_changes_or_limitations:
 review_reference:
 ```
 
-验收要求：Reviewer 必须是 PR #150 作者之外的独立人员；若结论为 `APPROVE`，仅代表文档/
+验收要求：Reviewer 必须在审查时填入 PR #150 的**精确当前 head SHA**；任一后续实质变更都会使此前
+`APPROVE` 失效并要求重新审查。Reviewer 必须是 PR #150 作者之外的独立人员；若结论为 `APPROVE`，仅代表文档/
 流程材料可合并，不替代 D13E Review Seal、D13D Execution Seal 或正式 Runner Gate 0--10。
 
 ## D13D 收件检查

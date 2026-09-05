@@ -1,5 +1,8 @@
 # D13D：PR #148 合并后续办记录
 
+> **HISTORICAL / INVALIDATED_BY_PR_157 — 以下记录不是当前操作指令或证据。**
+> 它仅保存 `4a32e5c...` 时代的准备事实；PR #157 合并后该基线、VM 部署、Trust Root 和“Reviewer D 两套密钥/Execution Seal”安排均不得迁移到当前 D13D。当前状态为 `formal_tested_commit=PENDING_P0_I3_RESELECTION`、Trust Root `PENDING_REVALIDATION`、D13D `BLOCKED`；任何 D13D Execution Seal 均须由非作者且不同于 D13E Review Seal 的独立执行审查人签发。请使用 [09 环境冻结任务卡](09_d13d_environment_freeze_task_card_20260905.md) 与 [20 P0 前置清单](20_d13d_p0_execution_prerequisites_20260906.md)。
+
 ## 结论
 
 - PR #148 已合并且审核结论为 `APPROVED`；被测基线重新选定为

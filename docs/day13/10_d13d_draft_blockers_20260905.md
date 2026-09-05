@@ -1,5 +1,8 @@
 # D13D Draft：阻塞项与开工条件
 
+> **HISTORICAL / INVALIDATED_BY_PR_157 — 不可作为当前冻结、VM 部署、Seal、Runner 或 `tested_commit` 的输入。**
+> 本文件以下内容只保留 2026-09-05 的收件和准备历史；其中 `4a32e5c...`、其 VM/Trust Root 描述，以及由 Reviewer D 执行签章的安排均已失效。当前权威状态见 [环境冻结任务卡](09_d13d_environment_freeze_task_card_20260905.md)：`formal_tested_commit=PENDING_P0_I3_RESELECTION`、Trust Root `PENDING_REVALIDATION`，D13D 仍为 `BLOCKED`。D13D Execution Seal 必须由非作者、独立于 D13E Review Seal 的执行审查人签发。
+
 - Draft 分支：`docs/d13d-environment-freeze`
 - 被测代码基线：`kylin-mem/main@4a32e5c948a968f3bd4409d91deac320002baea1`（PR #148 merge commit）
 - 状态：`PREPARED`。本记录不是环境冻结成功证据，也不发布正式量化结论。

@@ -72,9 +72,16 @@ preview/execute 路径；execute 后必须从真实事务、实时查询和全�
 
 ### P0-I3：基线重新选择和 adapter 集成
 
-I1/I2 已由 PR #157 合并；待版本化 adapter 经独立审查并合并后，D 轨重新选择包含该 adapter 的完整
-commit、重新建 VM 快照和隔离工作树。只有在新基线上，才可启用 adapter 并验证：Dataset SHA 与 17 条
-4/4/4/5 分布、Gold 隔离、四类真实 dispatch、缺 trace/重复 ID/未知 metric/已存在输出目录/调用失败的 fail-closed 行为。
+I1/I2 已由 PR #157 合并。I3 必须按以下不可跳步阶段推进：
+
+| 阶段 | 交付与当前状态 |
+| --- | --- |
+| P0-I3a | 版本化 preflight、官方 Dataset SHA 锚定、隔离/输入形状 fail-closed 与 L1 覆盖；`IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`。 |
+| P0-I3b | 四类真实 dispatch 和唯一 canonical raw（4/4/4/5）；`BLOCKED_PARTIAL`。Preference、Conflict、Safety 仅为待审代码候选；Forget 仍缺外部提供的状态绑定、真实实时/重建观察，不能以零值或 mock 补造。 |
+| P0-I3c | 对完整 I3a/I3b 的非作者独立审查和合并；`PENDING`。 |
+| P0-I3d | 在 I3c 后重新选择包含 adapter 的完整正式 `tested_commit`，新建 VM 快照/隔离工作树并重验；`PENDING`。 |
+
+在 I3d 前不得产生或宣称正式 raw、Seal、Runner Gate 或 `FROZEN`。I3b 最终验收仍要求 Dataset SHA、17 条 4/4/4/5 分布、Gold 隔离、四类真实 dispatch、缺 trace/重复 ID/未知 metric/已存在输出目录/调用失败的 fail-closed 行为。
 
 ## D13D 推进门禁
 

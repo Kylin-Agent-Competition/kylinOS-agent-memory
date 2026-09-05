@@ -21,6 +21,12 @@
 
 ## 当前已知状态与开工门禁
 
+### 双状态机（环境可执行性与正式闭环分离）
+
+环境状态只回答“是否已在对应 VM 对当前候选完成重验”：`PENDING_REVALIDATION` → `ENVIRONMENT_FROZEN`。它要求最终基线、VM 身份、干净部署和固定 Trust Root 的实际采集，但**不**允许 Runner 推断或正式结论。
+
+证据闭环状态独立推进：`BLOCKED` → `RAW_READY_PENDING_SEALS` → `SEALED_READY_FOR_RUNNER` → `D13D_FROZEN`。只有四类真实 raw、双 Seal、最终清单/校验和和 Gate 0--10 均按同一重新选择的 `tested_commit` 通过，才能进入 `D13D_FROZEN`。当前状态是 `PENDING_REVALIDATION` / `BLOCKED`，且 `formal_tested_commit=PENDING_P0_I3_RESELECTION`。
+
 | 项目 | 当前值 | 状态 | 冻结要求 |
 | --- | --- | --- | --- |
 | 先前被测提交 | `4a32e5c948a968f3bd4409d91deac320002baea1` | INVALIDATED_BY_PR_157 | 历史 PR #148 merge commit；因 PR #157 的必需实现已合并，不得再作为本轮正式 `tested_commit`。 |

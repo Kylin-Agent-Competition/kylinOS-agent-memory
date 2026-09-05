@@ -10,6 +10,17 @@
 - This task starts only after PR #157's production prerequisites were merged. It does not
   convert the merged commit into a formal tested or frozen commit.
 
+## P0-I3 staged delivery
+
+| Stage | Scope | Current state |
+| --- | --- | --- |
+| P0-I3a | Versioned preflight, approved Dataset SHA anchor, isolation/shape checks and L1 regressions | `IMPLEMENTED_PENDING_INDEPENDENT_REVIEW` |
+| P0-I3b | All four real dispatchers and only canonical 4/4/4/5 raw output | `BLOCKED_PARTIAL`: Preference/Conflict/Safety are review-pending code candidates; Forget needs an externally supplied state binding plus real retrieval observations. |
+| P0-I3c | Non-author independent review and merge of the complete adapter | `PENDING` |
+| P0-I3d | Reselect the post-adapter formal tested commit and revalidate an isolated VM | `PENDING` |
+
+No stage here produces formal raw, a Seal, a Runner decision, or `D13D_FROZEN`. The tested commit remains `PENDING_P0_I3_RESELECTION`.
+
 ## Goal
 
 Provide a versioned, fail-closed execution adapter for the D13E formal Dataset. The adapter
@@ -71,7 +82,7 @@ or retrieval binding is an execution error rather than a zero count.
 ## Blocking conditions for formal execution
 
 1. A post-adapter tested commit must be frozen after all L0/L1 and review are complete.
-2. Reviewer D must freeze the VM snapshot, environment identity, and external trust root.
+2. The assigned non-author execution authority must independently revalidate the VM snapshot, environment identity, and external trust root; it must not reuse the D13E Review Seal identity/key.
 3. A unique VM evidence directory and its write authority must be assigned.
 4. Raw execution, execution attestation, and both signatures must be produced by the
    authorized formal process. Until then this work remains `CANDIDATE_NOT_FROZEN`.

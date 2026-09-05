@@ -6,6 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 import ast
+import subprocess
+import sys
 
 import pytest
 
@@ -16,6 +18,7 @@ from gateway.handlers import register_default_handlers, register_event_ingest_ha
 from gateway.preference_handlers import register_preference_handlers
 from gateway.registry import HandlerRegistry
 from evaluation.d13d_execution_adapter import (
+    OFFICIAL_D13E_TESTSET_SHA256,
     ExecutionPreflightError,
     ExecutionRequest,
     dispatch_safety_sample,
@@ -28,7 +31,7 @@ from evaluation.d13d_execution_adapter import (
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 TESTSET = REPOSITORY_ROOT / "evaluation" / "d13e" / "D13E_FORMAL_TESTSET_V1.jsonl"
-TESTSET_SHA256 = "9740c00f4a9d91471bec8e6fa8aeeeb52f890f8680d83f740a84db2b1701a44b"
+TESTSET_SHA256 = OFFICIAL_D13E_TESTSET_SHA256
 HEAD = "17dce3696066213b54e9dcbe6b87c4944cb41c8c"
 
 
@@ -71,7 +74,7 @@ def test_valid_dataset_preflight_is_read_only_and_has_all_17_samples(tmp_path):
     [
         ({"tested_commit": "bad"}, "full lowercase Git SHA"),
         ({"tested_commit": "0" * 40}, "equal HEAD"),
-        ({"testset_sha256": "0" * 64}, "SHA-256 does not match"),
+        ({"testset_sha256": "0" * 64}, "must equal the approved"),
         ({"output_root": REPOSITORY_ROOT / "generated"}, "overlap repository_root"),
     ],
 )
@@ -96,12 +99,12 @@ def test_preflight_rejects_nested_isolation_roots(tmp_path):
         )
 
 
-def test_preflight_rejects_duplicate_sample_id(tmp_path):
+def test_preflight_rejects_altered_dataset_even_when_caller_recomputes_sha(tmp_path):
     records = [json.loads(line) for line in TESTSET.read_text(encoding="utf-8").splitlines()]
     records[-1]["sample_id"] = records[0]["sample_id"]
     altered = tmp_path / "altered.jsonl"
     altered.write_text("\n".join(json.dumps(record) for record in records), encoding="utf-8")
-    with pytest.raises(ExecutionPreflightError, match="sample_id must be unique"):
+    with pytest.raises(ExecutionPreflightError, match="must equal the approved D13E Dataset SHA-256"):
         validate_execution_request(
             _request(
                 tmp_path,
@@ -110,6 +113,45 @@ def test_preflight_rejects_duplicate_sample_id(tmp_path):
             ),
             git_runner=_git_runner,
         )
+
+
+def test_preflight_rejects_missing_dataset_as_a_structured_error(tmp_path):
+    with pytest.raises(ExecutionPreflightError, match="testset cannot be read"):
+        validate_execution_request(
+            _request(tmp_path, testset_path=tmp_path / "missing.jsonl"),
+            git_runner=_git_runner,
+        )
+
+
+def test_cli_reports_missing_dataset_as_structured_rejection(tmp_path):
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(REPOSITORY_ROOT / "scripts" / "run_d13d_execution_adapter.py"),
+            "--tested-commit",
+            HEAD,
+            "--testset",
+            str(tmp_path / "missing.jsonl"),
+            "--testset-sha256",
+            TESTSET_SHA256,
+            "--output-root",
+            str(tmp_path / "output"),
+            "--state-root",
+            str(tmp_path / "state"),
+            "--evidence-root",
+            str(tmp_path / "evidence"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert json.loads(completed.stdout) == {
+        "status": "REJECTED",
+        "reason": "testset cannot be read",
+    }
+    assert "Traceback" not in completed.stderr
 
 
 def test_raw_record_has_only_formal_runner_contract_fields():

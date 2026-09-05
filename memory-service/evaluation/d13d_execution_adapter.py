@@ -25,6 +25,9 @@ from gateway.registry import HandlerRegistry, RequestContext
 
 
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+OFFICIAL_D13E_TESTSET_SHA256 = (
+    "9740c00f4a9d91471bec8e6fa8aeeeb52f890f8680d83f740a84db2b1701a44b"
+)
 _SAMPLE_ID = re.compile(r"^d13e-(pref|conflict|safety|forget)-\d{3}$")
 _METRICS = frozenset({"preference", "conflict", "safety", "forget"})
 _EXPECTED_DISTRIBUTION = {
@@ -262,13 +265,22 @@ def validate_execution_request(
 ) -> ValidatedExecution:
     """Validate all pre-dispatch invariants without creating any artifacts."""
     normalized = _validate_isolation(request)
-    _validate_git_identity(normalized, git_runner)
     if not re.fullmatch(r"[0-9a-f]{64}", normalized.testset_sha256):
         raise ExecutionPreflightError("testset_sha256 must be a lowercase SHA-256")
-    actual_digest = hashlib.sha256(normalized.testset_path.read_bytes()).hexdigest()
-    if actual_digest != normalized.testset_sha256:
-        raise ExecutionPreflightError("testset SHA-256 does not match")
-    return ValidatedExecution(request=normalized, records=_validate_records(_read_jsonl(normalized.testset_path)))
+    if normalized.testset_sha256 != OFFICIAL_D13E_TESTSET_SHA256:
+        raise ExecutionPreflightError(
+            "testset_sha256 must equal the approved D13E Dataset SHA-256"
+        )
+    try:
+        testset_bytes = normalized.testset_path.read_bytes()
+    except OSError as exc:
+        raise ExecutionPreflightError("testset cannot be read") from exc
+    actual_digest = hashlib.sha256(testset_bytes).hexdigest()
+    if actual_digest != OFFICIAL_D13E_TESTSET_SHA256:
+        raise ExecutionPreflightError("testset content SHA-256 does not match approved Dataset")
+    records = _validate_records(_read_jsonl(normalized.testset_path))
+    _validate_git_identity(normalized, git_runner)
+    return ValidatedExecution(request=normalized, records=records)
 
 
 def _validate_evaluation_free(value: Any) -> None:

@@ -1,12 +1,14 @@
 # D13D 收件核验：回执 A（B 轨执行适配器与逐样本口径）
 
+> **HISTORICAL_RECEIPT_ONLY / INVALIDATED_BY_PR_157。** 此回执只证明当时收到了材料；其中的 `4a32e5c...` 仅是历史收件字段，绝不构成当前 `tested_commit`、冻结输入或执行许可。当前正式基线必须在 P0-I3c 独立审查/合并后由 P0-I3d 重新选择；在此之前为 `PENDING_P0_I3_RESELECTION`。
+
 ## 收件对象
 
 - 附件名称：`D13D_回执A_B轨执行适配器与逐样本口径确认.md`。
 - 收件日期：2026-09-06。
 - 文件 SHA-256：`119a8e46c431025531def3f2e52085615b0e63a967bb340c4724ea55bba68591`。
 - 关联：D13D-B07、[回执模板](16_d13d_written_confirmation_and_delivery_template_20260906.md)、PR #150。
-- 被测基线：`4a32e5c948a968f3bd4409d91deac320002baea1`。
+- 历史收件基线：`4a32e5c948a968f3bd4409d91deac320002baea1`（`INVALIDATED_BY_PR_157`，不可使用）。
 
 ## 核验结论
 
