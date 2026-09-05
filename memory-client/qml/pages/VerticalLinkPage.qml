@@ -88,12 +88,13 @@ Page {
         clip: true
 
         ColumnLayout {
-            width: root.width
+            // 兼容性：QtQuick.Layouts 的 padding 属性自 Qt 5.15 起才有，
+            // 麒麟 VM（Qt 5.12）QML 加载即退出 255（pr151_vm_test_report_20260905）。
+            // 改用 x/y/width 实现等效 12px 留白，底部留白由末尾 spacer 补足。
+            x: 12
+            y: 12
+            width: root.width - 24
             spacing: 8
-            leftPadding: 12
-            rightPadding: 12
-            topPadding: 12
-            bottomPadding: 12
 
             // =================================================================
             // 标题 + Demo 声明 + 连接状态
@@ -581,6 +582,9 @@ Page {
                     }
                 }
             }
+
+            // 底部留白（替代 bottomPadding，兼容 Qt 5.12 Layouts）
+            Item { Layout.preferredHeight: 12 }
         }  // ColumnLayout
     }  // ScrollView
 }

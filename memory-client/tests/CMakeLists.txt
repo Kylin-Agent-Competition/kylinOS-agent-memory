@@ -410,6 +410,45 @@ if(D11C_QML_LOAD_AVAILABLE)
     set_tests_properties(d11c_qml_load PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
     )
+
+    # ========================================================================
+    # 全 QML 文件编译加载 L0 回归（PR151 麒麟 VM 回归配套）
+    #
+    # 背景：VerticalLinkPage.qml 的 ColumnLayout padding（QtQuick.Layouts
+    # padding 自 Qt 5.15 起才有）在麒麟 VM（Qt 5.12）加载即失败（退出码
+    # 255），而 CI（Qt 5.15）全绿——d11c_qml_load 仅覆盖 D11 页面，
+    # 其余 QML 文件无加载覆盖。本目标对 qrc 内全部 14 个 QML 文件做
+    # QQmlComponent status==Ready 验证，堵住编译期回归盲区。
+    # 已知局限：Qt 版本特性差异（5.12 vs 5.15）仍需麒麟 VM L2 回归确认。
+    # ========================================================================
+    add_executable(test_qml_pages_load
+        ${CMAKE_SOURCE_DIR}/src/protocol_adapter.cpp
+        ${CMAKE_SOURCE_DIR}/src/memory_client.cpp
+        ${CMAKE_SOURCE_DIR}/src/view_models/memory_view_model.cpp
+        test_qml_pages_load.cpp
+        ${D11C_QML_LOAD_RCC_SOURCES}
+    )
+    target_link_libraries(test_qml_pages_load
+        PRIVATE
+            Qt5::Core
+            Qt5::Gui
+            Qt5::Network
+            Qt5::Qml
+            Qt5::Quick
+            Qt5::QuickControls2
+            Qt5::Test
+    )
+    target_include_directories(test_qml_pages_load
+        PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+    )
+    add_test(
+        NAME qml_pages_load
+        COMMAND test_qml_pages_load
+    )
+    set_tests_properties(qml_pages_load PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+    )
 endif()
 
 # ============================================================================
