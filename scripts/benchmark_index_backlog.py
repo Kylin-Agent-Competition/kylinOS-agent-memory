@@ -64,6 +64,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--cli", required=True, help="真实 vector_cli 可执行文件")
     parser.add_argument("--dimension", type=int, required=True)
     parser.add_argument("--events", type=int, default=5000)
+    parser.add_argument("--max-retries", type=int, default=3)
     parser.add_argument("--poll-interval-ms", type=float, default=20.0)
     parser.add_argument("--sample-interval-ms", type=float, default=100.0)
     parser.add_argument("--drain-timeout-s", type=float, default=300.0)
@@ -71,12 +72,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
     if (
         args.events <= 0
+        or args.max_retries < 0
         or args.dimension <= 0
         or args.poll_interval_ms <= 0
         or args.sample_interval_ms <= 0
         or args.drain_timeout_s <= 0
     ):
-        parser.error("events/dimension/interval/timeout 参数不合法")
+        parser.error("events/max-retries/dimension/interval/timeout 参数不合法")
     if not _cli_available(args.cli):
         print(f"真实 vector_cli 不可执行，拒绝伪造 index backlog 结果: {args.cli}", file=sys.stderr)
         return 2
@@ -95,7 +97,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     worker = OutboxWorker(
         engine,
         poll_interval_s=args.poll_interval_ms / 1000.0,
-        max_retries=0,
+        max_retries=args.max_retries,
         consumer=build_outbox_router(vector_provider=provider).route,
     )
     initial = worker.metrics()
@@ -200,6 +202,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "events_submitted": submitted,
         "events_processed": processed,
         "producer_errors": producer_errors,
+        "max_retries": args.max_retries,
         "dead_letters": dead_letters,
         "initial_backlog": int(initial.get("backlog") or 0),
         "max_backlog": max_backlog,
