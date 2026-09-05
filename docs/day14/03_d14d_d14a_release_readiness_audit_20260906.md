@@ -45,8 +45,9 @@
 
 候选发布代码提交 `414250c36dd9889cf012c7c64eaa8344da601b0b` 已包含 D13E 主线 `4a32e5c`、
 D14A release head、修复后的 cherry-pick `df5f4af`/`13c43f8`，以及清理所有权守卫；`git diff --check`
-和 release L0 守卫测试均通过。D13E 全套 unittest 在当前 WSL bridge 的 30 秒前台观察上限内未取得可复核
-终态，因此仍须在最终集成环境中重跑，不得据截断日志宣称通过。
+和 release L0 守卫测试均通过。在该候选工作树用 CPython 3.13 执行
+`python -m unittest memory-service.tests.test_d13e_formal_eval -v` 得到 48 passed、1 skipped
+（非 POSIX 元数据项）、28.132s 的可复核本地契约结果；这不替代最终集成环境或麒麟 L3 验证。
 
 ## 逐项证据
 
