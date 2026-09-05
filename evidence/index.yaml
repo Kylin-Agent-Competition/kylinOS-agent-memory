@@ -1804,3 +1804,22 @@ entries:
       Kaiming app: cn.kylin.kylin-aiassistant, binary/5.0.3, runtime stable:top.openkylin.ukui/1.1.43-aipc.7/x86_64.
       层根目录 /opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-aiassistant/binary/5.0.3 完整文件树 SHA-256 前后均为 3d3926c91e94430e187a99efae5edd3a5ea0a5db38aadcd2289169f1a7a78c75。
       rollback 后 service inactive；reinstall 后 active 且 /run/user/1000/kylin-memory/memory.sock 存在；kaiming ps 仍显示 AI Assistant 容器。
+  - id: "PR143-SCHEMA-GUARD-L2"
+    task_id: "D12D-SchemaGuard"
+    description: "PR #143 event.ingest 字段漂移入口防护：Kylin V11 validation profile 的定向回归与真实 UDS 请求验证"
+    status: "HOST_VERIFIED"
+    evidence_level: "E4"
+    source: "evidence/l2-kylin-vm/pr143_schema_guard_0baba38_20260905.log"
+    report: "evidence/l2-kylin-vm/pr143_schema_guard_0baba38_20260905.md"
+    tested_commit: "0baba38712c78211e76b1de4d641a1405d9c3293"
+    evidence_commit: "766cbf5e9fb87e1ec6423804f155ded7e0054cce"
+    runtime_result: "PASS"
+    review_status: "PENDING"
+    merge_qualified: false
+    date: "2026-09-05"
+    reviewer: "pending"
+    limitations: "仅覆盖显式注册的 validation profile（trusted_identity=None）；production 默认不注册 event.ingest。未证明真实 C→D 宿主接入、部署成品化或 TD-060 的 C/D status mapping 冻结。"
+    checksum_sha256: "cdc175228f8b89afe2a83a9cc4b49e8edfbfc37ba354d44ff53001bd1fed522c"
+    details: |
+      Kylin V11, kernel 6.6.0-76-generic, Python 3.12.3。
+      定向 pytest：35 passed。真实长度前缀 JSON UDS：5 类拒绝请求均 INVALID_REQUEST 且 source_events=0/idempotency_cache=0；canonical captured_at + malformed legacy collected_at 正向请求仅写入 source_events=1/idempotency_cache=1。
