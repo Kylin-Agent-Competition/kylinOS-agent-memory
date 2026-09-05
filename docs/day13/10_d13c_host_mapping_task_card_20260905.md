@@ -173,6 +173,7 @@ turn.finalized / event.ingest / forget.* production 默认不注册 → UNSUPPOR
 | S3/S5 首轮 VM 回归 | 部分 | `6581d2f` | 见 `evidence/l2-kylin-vm/pr151_vm_test_report_20260905.md`；ctest 12/12、Hook 集成 20 PASS、QML 构建 OK；S3 patch 部署/TD-008 确认/S5 全链路未完成，发现 4 项（见 9.2） |
 | V1/V2 修复 | 完成 | `0764118` | QML Qt 5.12 兼容修复 + `qml_pages_load` 全量加载 L0 回归（见 9.2） |
 | V3-R（resolver 改造） | 完成 | `55ca828` | ProductionSourceResolver 适配真实 schema（RECORD + JSON blob，见 9.4）；L0 重构 16 → 25 用例，全套 ctest 13/13 绿（WSL Qt 5.15.3 本地验证）；生产注册保持 BLOCKED_BY_HOST_MAPPING，待 S5 复测 |
+| S5r2 真实 DB 验证 | client 侧完成 | `d9a834b` | bacon VM 真实 Chat DB harness 18/18 PASS（resolver 默认/rowid 两 config + Adapter 集成 + 只读/隔离红线，双路径独立基线比对，见 9.5）；V5 新发现（RECORD.ID 全 NULL）登记；服务端落库全链路与 S3 Hook 待宿主源码/service 环境 |
 | S4 | 未开始 | — | 依赖 S4-BLOCK-001 缓解 |
 | S6 | 未开始 | — | 依赖 S5 完成 |
 
@@ -200,12 +201,28 @@ VM 环境：银河麒麟 V11 x86_64（Qt 5.12）；报告：`evidence/l2-kylin-v
 | S4-BLOCK-003 | 本 VM 不成立（dev 包齐备）；但系统 ostree guard 禁止装包——不触碰 /usr 正好符合红线 |
 | S3 / TD-007/008 | 本 VM 无宿主源码，不可行，状态不变 |
 
+### 9.5 bacon VM S5r2 真实 Chat DB 验证（2026-09-05 第三轮，报告：`evidence/l2-kylin-vm/c_hm_s5r2_realdb_verification_20260905.md`）
+
+环境：同 9.4 VM；代码 @ `55ca828`（V3-R 改造后）。双路径独立基线（sqlite3 CLI json_extract → sha256sum vs resolver Qt 提取），SHA-256 + 字节长度双重比对。
+
+| 项 | 结果 |
+|----|------|
+| L0 ctest | 11/11 全绿（含 V3-R 重构后 production_source_resolver 25 用例，麒麟真实运行时） |
+| **V5 新发现** | **RECORD.ID 全部 NULL**：宿主建表用 MySQL 方言 `INT AUTO_INCREMENT`（SQLite 解释为类型名，非自增主键），插入不写 ID；同库 MEETINGRECORD 用正确方言对照确认。行唯一标识 = 隐式 rowid。处置：不改代码——config `idColumn="rowid"` 覆盖即命中；生产默认值决策待 S3 确认 Hook 观察点可取得的行标识；默认 config 对真实 DB fail-closed（不编造）符合红线 |
+| §A 默认 config | 3 个真实终稿引用全部 fail-closed PASS（ID 全 NULL 下不误命中、不编造） |
+| §B rowid 覆盖 | 3 个真实 Bot 终稿（rowid 2/4/6）全命中；userText/modelResponse 与独立基线 SHA-256 + 字节数一致；User 行/缺失行/非受控引用 fail-closed；modelRequest 留空 |
+| §C Adapter 集成 | 真实 finalMessageId 全链路 Extracted；providerCandidate 含真实正文（对基线）；ipcEvent 不含正文（原文隔离红线）；source_event_id 关联 |
+| §D 只读红线 | resolve 前后 DB SHA-256 不变（harness + shell 双重复核） |
+| 汇总 | **harness 18/18 PASS，failures=0**；S5 client 侧（resolver + adapter 真实数据源）验证通过 |
+| S5 剩余 | 服务端全链路（turn.finalized → memory-service 落库，本 VM 无 service 运行时栈）+ S3 Hook 部署/TD-008/TD-007（需宿主源码环境），状态不变 |
+
 ### 9.3 S5 复测前置条件（汇总）
 
 1. ~~V3 schema 确认（真实数据样本或源码级 RECORD 写入逻辑）~~ **已关闭**（9.4：JSON blob 字段语义 + 查询模型实测 B1~B5 全过）；
 2. S4-BLOCK-003 缓解：VM dev 包与构建环境（S3 patch 编译部署前置）；
 3. S4-BLOCK-001 缓解：GUI 手动 Tool 触发方案（TD-007 三类事件采集前置）；
-4. 本轮 QML 修复在 VM 复跑 QML smoke 实测确认（修复依据 Qt 5.12 兼容性分析，以 VM 实测为准，不提前标注 HOST_VERIFIED）。
+4. 本轮 QML 修复在 VM 复跑 QML smoke 实测确认（修复依据 Qt 5.12 兼容性分析，以 VM 实测为准，不提前标注 HOST_VERIFIED）；
+5. **新增（V5）**：生产 `idColumn` 默认值决策（ID vs rowid）待 S3 确认 Hook 观察点可取得的行标识——rowid 覆盖路径已实测可用（9.5）。
 
 ---
 *任务卡编制：2026-09-05｜依据：D12E 合并后审计 `docs/day12/15` §B-7、事件契约 v1 §7、ADR-010、TD Register R-ARCH-05/TD-007~009、台账 D14-C 依赖分析*
