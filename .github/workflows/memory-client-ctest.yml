@@ -42,7 +42,8 @@ jobs:
             libqt5quick5 \
             libqt5gui5 \
             libqt5qml5 \
-            libgl1-mesa-dev
+            libgl1-mesa-dev \
+            libqt5sql5-sqlite
         # d11c_qml_load (Reviewer E HIGH-01) 需要 QQuickView
         # 真实加载 D11DemoOrchestratorPage.qml，因此 L0 ctest Job 需安装
         # Qt Quick 头文件 + 运行时 QML 模块；原仅 qtbase5-dev 会在
@@ -53,6 +54,10 @@ jobs:
         # 能被找到（原裸 QQmlComponent::create() 在 headless CI 触发
         # SIGSEGV signal 11；已改用 QQuickView + QT_QUICK_BACKEND=software
         # 稳定完成 QQuickItem 实例化 + Step Card implicitHeight>0 验证）。
+        # libqt5sql5-sqlite：Host mapping S2 test_production_source_resolver
+        # 需要 Qt5 Sql QSQLITE 运行时驱动插件（qtbase5-dev Depends 的
+        # libqt5sql5 仅提供链接库；--no-install-recommends 不会带上
+        # Recommends 的 sqlite 驱动插件）。
 
       - name: Configure CMake (QML app OFF, tests ON)
         run: |

@@ -450,3 +450,48 @@ add_test(
     NAME turn_extraction_adapter
     COMMAND test_turn_extraction_adapter
 )
+
+# ============================================================================
+# Host mapping 任务卡 S2 — ProductionSourceResolver L0 契约测试
+# （fixture SQLite 模拟宿主 Chat DB；生产注册仍 BLOCKED_BY_HOST_MAPPING）
+# 范围（A~D 共 14 用例）：
+#   A. 只读打开与命中：open 成功 / resolve 命中（originalUserText+
+#      modelResponse，modelRequest 不编造）/ 与 TurnExtractionAdapter
+#      集成（Extracted + 正文仅入 providerCandidate，原文隔离红线）
+#   B. 只读红线：chmod 0444 仍可打开命中（证明 QSQLITE_OPEN_READONLY
+#      生效）/ resolve 前后 DB 文件 SHA-256 不变（绝不写宿主 DB）
+#   C. fail-closed：未 open / 文件不存在 / chmod 000 / 表缺失 / 行缺失 /
+#      同 turn 无用户消息 / 用户正文空串 / 终稿非 assistant 角色 /
+#      非受控引用格式（7 种）/ config 标识符非法（SQL 注入防御）
+#   D. schema 适配：自定义表/列/角色值命中（VM 确认真实 schema 后
+#      经 config 覆盖，不改代码）
+# 运行依赖：Qt5 Sql QSQLITE 运行时驱动插件（Debian/Ubuntu:
+#   libqt5sql5-sqlite，CI workflow 已安装；qtbase5-dev 的 Depends
+#   libqt5sql5 仅提供链接库，不含 sqlite 驱动插件）。缺失时本测试
+#   失败而非跳过——L0 全绿必须意味着只读/fail-closed 行为真实验证。
+# 注意：本测试仅为 S2 生产 resolver 的 L0 契约验证（fixture SQLite），
+#       不声称真实宿主 Chat DB 已接入。
+# ============================================================================
+add_executable(test_production_source_resolver
+    ${CMAKE_SOURCE_DIR}/src/adapters/production_source_resolver.cpp
+    ${CMAKE_SOURCE_DIR}/src/adapters/turn_extraction_adapter.cpp
+    test_production_source_resolver.cpp
+)
+target_link_libraries(test_production_source_resolver
+    PRIVATE
+        Qt5::Core
+        Qt5::Sql
+        Qt5::Test
+)
+target_include_directories(test_production_source_resolver
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_definitions(test_production_source_resolver
+    PRIVATE
+        QT_TESTCLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+add_test(
+    NAME production_source_resolver
+    COMMAND test_production_source_resolver
+)
