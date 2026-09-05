@@ -1,0 +1,238 @@
+"""Fail-closed preflight for the versioned D13D execution adapter.
+
+This module deliberately validates only the public formal Dataset inputs.  It
+does not import any evaluator-owned decision artifacts, and it does not decide
+whether an observed result passes. Dispatch and raw production are held behind
+the separately frozen VM execution gate described in the D13D task card.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass
+import hashlib
+import json
+from pathlib import Path
+import re
+import subprocess
+from typing import Any, Callable, Iterable
+
+
+_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+_SAMPLE_ID = re.compile(r"^d13e-(pref|conflict|safety|forget)-\d{3}$")
+_METRICS = frozenset({"preference", "conflict", "safety", "forget"})
+_EXPECTED_DISTRIBUTION = {
+    "preference": 4,
+    "conflict": 4,
+    "safety": 4,
+    "forget": 5,
+}
+
+
+class ExecutionPreflightError(ValueError):
+    """An invocation is not safe to dispatch against an isolated environment."""
+
+
+@dataclass(frozen=True)
+class ExecutionRequest:
+    """All identity and isolation inputs required before any D13D dispatch."""
+
+    repository_root: Path
+    tested_commit: str
+    testset_path: Path
+    testset_sha256: str
+    output_root: Path
+    state_root: Path
+    evidence_root: Path
+
+
+@dataclass(frozen=True)
+class ValidatedExecution:
+    """A validated Dataset and the immutable identity used to validate it."""
+
+    request: ExecutionRequest
+    records: tuple[dict[str, Any], ...]
+
+
+def _run_git(repository_root: Path, *args: str) -> str:
+    completed = subprocess.run(
+        ["git", "-C", str(repository_root), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if completed.returncode != 0:
+        raise ExecutionPreflightError("Git identity check failed")
+    return completed.stdout.strip()
+
+
+def _canonical_path(path: Path, *, label: str) -> Path:
+    if not path.is_absolute():
+        raise ExecutionPreflightError(f"{label} must be an absolute path")
+    return path.resolve(strict=False)
+
+
+def _paths_overlap(left: Path, right: Path) -> bool:
+    return left == right or left in right.parents or right in left.parents
+
+
+def _validate_isolation(request: ExecutionRequest) -> ExecutionRequest:
+    repository_root = _canonical_path(request.repository_root, label="repository_root")
+    if not (repository_root / ".git").exists():
+        raise ExecutionPreflightError("repository_root is not a Git worktree")
+    output_root = _canonical_path(request.output_root, label="output_root")
+    state_root = _canonical_path(request.state_root, label="state_root")
+    evidence_root = _canonical_path(request.evidence_root, label="evidence_root")
+    roots = {
+        "output_root": output_root,
+        "state_root": state_root,
+        "evidence_root": evidence_root,
+    }
+    for label, path in roots.items():
+        if path.exists():
+            raise ExecutionPreflightError(f"{label} must not already exist")
+        if _paths_overlap(repository_root, path):
+            raise ExecutionPreflightError(f"{label} must not overlap repository_root")
+    root_items = tuple(roots.items())
+    for index, (left_label, left_path) in enumerate(root_items):
+        for right_label, right_path in root_items[index + 1 :]:
+            if _paths_overlap(left_path, right_path):
+                raise ExecutionPreflightError(
+                    f"{left_label} and {right_label} must not overlap"
+                )
+    return ExecutionRequest(
+        repository_root=repository_root,
+        tested_commit=request.tested_commit,
+        testset_path=_canonical_path(request.testset_path, label="testset_path"),
+        testset_sha256=request.testset_sha256,
+        output_root=output_root,
+        state_root=state_root,
+        evidence_root=evidence_root,
+    )
+
+
+def _validate_git_identity(request: ExecutionRequest, git_runner: Callable[..., str]) -> None:
+    if not _GIT_SHA.fullmatch(request.tested_commit):
+        raise ExecutionPreflightError("tested_commit must be a full lowercase Git SHA")
+    if git_runner(request.repository_root, "status", "--porcelain"):
+        raise ExecutionPreflightError("worktree must be clean")
+    head = git_runner(request.repository_root, "rev-parse", "HEAD")
+    if head != request.tested_commit:
+        raise ExecutionPreflightError("tested_commit must equal HEAD")
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError as exc:
+        raise ExecutionPreflightError("testset does not exist") from exc
+    if not lines:
+        raise ExecutionPreflightError("testset must not be empty")
+    records: list[dict[str, Any]] = []
+    for line_number, line in enumerate(lines, start=1):
+        if not line.strip():
+            raise ExecutionPreflightError(f"testset line {line_number} must not be blank")
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ExecutionPreflightError(f"testset line {line_number} is not JSON") from exc
+        if not isinstance(record, dict):
+            raise ExecutionPreflightError(f"testset line {line_number} must be an object")
+        records.append(record)
+    return records
+
+
+def _require_input_shape(metric: str, value: object) -> None:
+    if not isinstance(value, dict):
+        raise ExecutionPreflightError(f"{metric} sample input must be an object")
+    if metric == "preference":
+        required = {"turn_id", "user_id", "user_text"}
+    elif metric == "conflict":
+        required = {"left", "right"}
+        for side in required:
+            side_value = value.get(side)
+            if not isinstance(side_value, dict) or set(side_value) != {
+                "knowledge_id", "user_id", "evidence_tier", "scope"
+            }:
+                raise ExecutionPreflightError("conflict sample sides must use the frozen input shape")
+    elif metric == "safety":
+        has_text_case = set(value) == {"user_id", "text"}
+        has_read_case = set(value) == {"actor_user_id", "target_user_id", "operation"}
+        if not (has_text_case or has_read_case):
+            raise ExecutionPreflightError("safety sample must be a text or cross-user read input")
+        return
+    else:
+        required = {"user_id", "forget_mode", "target_selector"}
+        selector = value.get("target_selector")
+        if not isinstance(selector, dict):
+            raise ExecutionPreflightError("forget target_selector must be an object")
+    if set(value) != required:
+        raise ExecutionPreflightError(f"{metric} sample uses an unexpected input shape")
+
+
+def _validate_records(records: Iterable[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
+    materialized = tuple(records)
+    if len(materialized) != 17:
+        raise ExecutionPreflightError("testset must contain exactly 17 samples")
+    sample_ids: set[str] = set()
+    metrics: list[str] = []
+    for record in materialized:
+        if set(record) != {
+            "sample_id",
+            "metric",
+            "scenario",
+            "input",
+            "source_basis",
+            "synthetic_data",
+            "inclusion_status",
+        }:
+            raise ExecutionPreflightError("testset record uses an unexpected top-level shape")
+        sample_id = record.get("sample_id")
+        metric = record.get("metric")
+        if not isinstance(sample_id, str) or not _SAMPLE_ID.fullmatch(sample_id):
+            raise ExecutionPreflightError("testset sample_id is invalid")
+        if sample_id in sample_ids:
+            raise ExecutionPreflightError("testset sample_id must be unique")
+        if metric not in _METRICS:
+            raise ExecutionPreflightError("testset metric is invalid")
+        if record.get("inclusion_status") != "valid":
+            raise ExecutionPreflightError("testset sample must be valid for formal execution")
+        _require_input_shape(metric, record.get("input"))
+        sample_ids.add(sample_id)
+        metrics.append(metric)
+    if Counter(metrics) != _EXPECTED_DISTRIBUTION:
+        raise ExecutionPreflightError("testset metric distribution is invalid")
+    return materialized
+
+
+def validate_execution_request(
+    request: ExecutionRequest,
+    *,
+    git_runner: Callable[..., str] = _run_git,
+) -> ValidatedExecution:
+    """Validate all pre-dispatch invariants without creating any artifacts."""
+    normalized = _validate_isolation(request)
+    _validate_git_identity(normalized, git_runner)
+    if not re.fullmatch(r"[0-9a-f]{64}", normalized.testset_sha256):
+        raise ExecutionPreflightError("testset_sha256 must be a lowercase SHA-256")
+    actual_digest = hashlib.sha256(normalized.testset_path.read_bytes()).hexdigest()
+    if actual_digest != normalized.testset_sha256:
+        raise ExecutionPreflightError("testset SHA-256 does not match")
+    return ValidatedExecution(request=normalized, records=_validate_records(_read_jsonl(normalized.testset_path)))
+
+
+def raw_record(*, sample_id: str, metric: str, actual: dict[str, Any], trace_reference: str) -> dict[str, Any]:
+    """Create the only permitted raw record shape after a real execution."""
+    if not _SAMPLE_ID.fullmatch(sample_id) or metric not in _METRICS:
+        raise ExecutionPreflightError("raw record identity is invalid")
+    if not isinstance(actual, dict) or not actual:
+        raise ExecutionPreflightError("raw record actual must be a non-empty object")
+    if not isinstance(trace_reference, str) or not trace_reference.strip():
+        raise ExecutionPreflightError("raw record requires a trace_reference")
+    return {
+        "sample_id": sample_id,
+        "metric": metric,
+        "actual": actual,
+        "trace_reference": trace_reference,
+    }
