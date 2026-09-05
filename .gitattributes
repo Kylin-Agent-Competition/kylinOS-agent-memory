@@ -21,3 +21,7 @@
 *.jpg binary
 *.jpeg binary
 *.gif binary
+
+# D13D L2 evidence is verified byte-for-byte by SHA256SUMS. Treat the
+# immutable package as binary: no line-ending conversion or text diff checks.
+evidence/l2-kylin-vm/d13d_20260905T090507Z/** binary

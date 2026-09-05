@@ -1,0 +1,50 @@
+# Kylin VM test evidence
+run_id=vm_probe_20260905_165513
+collected_at_utc=2026-09-05T08:55:13.311582+00:00
+endpoint=127.0.0.1:2222
+user=kylin-agent
+mode=probe
+--- guest script ---
+set -eu
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'hostname='; hostname
+printf 'user='; id -un
+printf 'uid='; id -u
+printf 'kernel='; uname -srmo
+printf 'os_release='; cat /etc/kylin-release 2>/dev/null || cat /etc/os-release
+printf 'disk_root='; df -h / | tail -1
+printf 'python='; python3 --version 2>&1 || true
+printf 'repo_exists='; test -d "/home/kylin-agent/kylinOS-agent-memory" && printf 'yes\n' || printf 'no\n'
+if test -e "/home/kylin-agent/kylinOS-agent-memory/.git"; then
+  if git -C "/home/kylin-agent/kylinOS-agent-memory" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    printf 'git_head='; git -C "/home/kylin-agent/kylinOS-agent-memory" rev-parse HEAD
+    printf 'git_branch='; git -C "/home/kylin-agent/kylinOS-agent-memory" branch --show-current
+    printf 'git_dirty='; git -C "/home/kylin-agent/kylinOS-agent-memory" status --porcelain | wc -l
+  else
+    printf 'git_state=UNAVAILABLE (guest .git metadata cannot be resolved)\n'
+  fi
+fi
+--- guest output ---
+guest_utc=2026-09-05T08:55:13Z
+hostname=kylin-agent-pc
+user=kylin-agent
+uid=1000
+kernel=Linux 6.6.0-76-generic x86_64 GNU/Linux
+os_release=NAME="Kylin"
+FULL_NAME="kylin"
+VERSION="银河麒麟桌面操作系统V11"
+VERSION_US="Kylin Linux Desktop V11"
+ID=kylin
+PRETTY_NAME="Kylin V11"
+VERSION_ID="v11"
+HOME_URL="http://www.kylinos.cn/"
+VERSION_CODENAME=kylin
+KYLIN_RELEASE_ID="2603"
+ID_LIKE=openKylin
+disk_root=/dev/sda3        93G   37G   52G   42% /
+python=Python 3.12.3
+repo_exists=yes
+git_head=053754d611801548fdac59b2894c6862bf85cf56
+git_branch=git_dirty=0
+--- runner summary ---
+{"completed_at_utc": "2026-09-05T08:55:13.883524+00:00", "duration_seconds": 0.572, "endpoint": "127.0.0.1:2222", "exit_code": 0, "mode": "probe", "requested_command": null, "run_id": "vm_probe_20260905_165513", "started_at_utc": "2026-09-05T08:55:13.311267+00:00", "status": "PASS", "timed_out": false, "user": "kylin-agent"}

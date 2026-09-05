@@ -1,0 +1,15 @@
+{
+  "completed_at_utc": "2026-09-05T08:56:00.477508+00:00",
+  "duration_seconds": 0.716,
+  "endpoint": "127.0.0.1:2222",
+  "exit_code": 0,
+  "log_file": "d13d_preflight_20260905_0900.log",
+  "log_sha256": "3bea6272a9a2fa3ace34957a23127faca9e01c66e0cd509aab60553326c35dd3",
+  "mode": "command",
+  "requested_command": "printf 'remote='; git remote -v; printf 'has_tested_commit='; git cat-file -e 7242935bee5f230cee0535d5e28dbe1e60a302f6^{commit} 2>/dev/null && echo yes || echo no; printf 'worktrees='; git worktree list --porcelain; printf 'service_state='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user is-active kylin-memory.service 2>&1 || true; printf 'unit_path='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show kylin-memory.service -p FragmentPath --value 2>&1 || true; printf 'socket='; stat -c '%a %U:%G %n' /run/user/1000/kylin-memory/memory.sock 2>&1 || true; printf 'db='; ls -l /home/kylin-agent/.local/share/kylin-memory/kylin_memory.db 2>&1 || true; printf 'home_repos='; find /home/kylin-agent -maxdepth 1 -mindepth 1 -type d -name 'kylinOS-agent-memory*' -printf '%p\\n'",
+  "run_id": "d13d_preflight_20260905_0900",
+  "started_at_utc": "2026-09-05T08:55:59.761343+00:00",
+  "status": "PASS",
+  "timed_out": false,
+  "user": "kylin-agent"
+}

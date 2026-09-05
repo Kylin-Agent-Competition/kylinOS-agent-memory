@@ -1,0 +1,15 @@
+{
+  "completed_at_utc": "2026-09-05T08:56:43.015834+00:00",
+  "duration_seconds": 0.852,
+  "endpoint": "127.0.0.1:2222",
+  "exit_code": 0,
+  "log_file": "d13d_deployment_state_20260905_0902.log",
+  "log_sha256": "f27bbd0876461f00153e3060d8174ed1357a5c2e3978a9020e54d855d3c9d3c4",
+  "mode": "command",
+  "requested_command": "printf 'unit='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user cat kylin-memory.service; printf 'execstart='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show kylin-memory.service -p ExecStart --value; printf 'alembic='; PYTHONPATH=memory-service python3 -m alembic -c migrations/alembic.ini current 2>&1 || true; printf 'venvs='; find /home/kylin-agent -maxdepth 2 -type f -path '*/bin/python*' -printf '%p\\n' 2>/dev/null; printf 'service_wrapper='; sed -n '1,10p' /home/kylin-agent/.local/bin/kylin-memory-server 2>&1 || true; printf 'backup='; ls -ld /home/kylin-agent/kylinOS-agent-memory.b70827c-backup 2>&1 || true",
+  "run_id": "d13d_deployment_state_20260905_0902",
+  "started_at_utc": "2026-09-05T08:56:42.163559+00:00",
+  "status": "PASS",
+  "timed_out": false,
+  "user": "kylin-agent"
+}
