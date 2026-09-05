@@ -35,7 +35,7 @@ Gold Label，建立 fail-closed 正式 Runner，计算 Preference、Conflict、S
 | 2 | E2 | 建立独立 D13E held-out Dataset，不复用 D6 Devset 为正式集 | D3/D6 规范 | JSONL 格式、稳定 ID、固定样本规模 | CANDIDATE_READY（待 D Reviewer 封存） |
 | 3 | E3 | 建立一对一 Gold，含判定依据与有效/边界状态 | E2；D Reviewer 复核 | Dataset/Gold ID 全等 | CANDIDATE_READY（17/17 ID 对应；待 D Reviewer） |
 | 4 | E4 | 计算 Dataset/Gold SHA-256，写入 Manifest 和 bundle | E2、E3 | 哈希可独立复算 | CANDIDATE_HASH_VERIFIED（候选哈希已复算） |
-| 5 | E10 | 建立正式 Runner；provenance 与唯一 evidence 根、外部核验的 D 非作者封存、PR 当前 head 且无未解决变更请求、阈值版本/哈希、D13D execution attestation（含依赖/数据、SHA256SUMS、evidence index）、版本、哈希、四类 metric 样本集不完整即 fail-closed | E2--E4 | CLI 行为测试与手工复现 | CANDIDATE_READY（20 项契约测试通过；真实 raw、D 批准与 VM provenance 待 D13D/D Reviewer） |
+| 5 | E10 | 建立正式 Runner；provenance 与唯一 evidence 根、D13D execution attestation（含依赖/数据、SHA256SUMS、evidence index）、阈值版本/哈希、外部 Review Seal 与 D13D execution seal、版本、哈希、四类 metric 样本集不完整即 fail-closed；Runner 完全离线，不访问 GitHub API | E2--E4 | CLI 行为测试与手工复现 | CANDIDATE_READY（24 项离线契约测试通过并接入 CI；真实 raw、外部 Seal 与 VM provenance 待 D13D/D Reviewer） |
 | 6 | E5/E7/E8/E9 | 以真实链路或正式等价回放生成 per-sample raw JSONL | E1--E4、E10、D13D VM | 原始结果完整可追溯 | BLOCKED |
 | 7 | E6/E12--E14 | 输出错误分类、四项汇总、真实 Gap、优化映射 | 第 6 项 | summary 与报告 | BLOCKED |
 | 8 | E11/E15 | 麒麟 VM 执行、D 非作者审查、审查返工 | D13D、D Reviewer | 证据包和 Reviewer 结论 | BLOCKED |
@@ -47,6 +47,8 @@ Gold Label，建立 fail-closed 正式 Runner，计算 Preference、Conflict、S
 ```text
 PYTHONPATH=memory-service python scripts/run_d13e_formal_eval.py \
   evaluation/d13e/D13E_FORMAL_BUNDLE_V1.json \
+  --review-seal <证据目录>/D13E_REVIEW_SEAL_V1.json \
+  --d13d-seal <证据目录>/D13D_EXECUTION_SEAL_V1.json \
   --output evidence/day13/d13e/summary.json
 ```
 
@@ -57,6 +59,13 @@ PYTHONPATH=memory-service python scripts/run_d13e_formal_eval.py \
 3. 未经麒麟 VM 实测的候选输入，输出仅可标记 `UNVERIFIED`，不得产生 `PASS`。
 
 以上边界不替代 D Reviewer 的独立审查，也不把单元测试当作 VM 执行证据。
+
+Runner 已完全离线：GitHub 联网核验迁移到麒麟 VM 外的可信封存阶段，VM 内
+只验证本地 `D13E_REVIEW_SEAL_V1.json`（d13e-review-seal/v1，含 approved
+hashes 与 reviewed_commit）与 `D13D_EXECUTION_SEAL_V1.json`
+（d13d-execution-seal/v1，冻结 execution attestation digest）。
+`.github/workflows/baseline-check.yml` 已新增
+`python3 -m unittest memory-service.tests.test_d13e_formal_eval -v` 步骤。
 
 ## 5. 待接收的 D13D 交付
 
@@ -74,3 +83,9 @@ PYTHONPATH=memory-service python scripts/run_d13e_formal_eval.py \
 
 没有这些字段时，Runner 和报告必须 fail-closed；不得以 `UNKNOWN`、`latest main`
 或历史 D11D 环境填充。
+
+除上述原始字段外，正式执行还需要 D13D 轨在证据目录冻结
+`D13D_EXECUTION_SEAL_V1.json`（attestation digest 外部可信根），并在 D
+Reviewer 对 Commit C 完成非作者批准后，由 VM 外可信 sealing 流程生成
+`D13E_REVIEW_SEAL_V1.json`；两者都是 Review / 冻结完成后的后置工件，不写回
+被审批的 Commit C。
