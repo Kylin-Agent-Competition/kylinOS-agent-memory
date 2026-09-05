@@ -66,8 +66,9 @@ Review Seal 必须使用 Ed25519 detached signature，含以下事实：
 
 ## 申请 B：VM 管理员 / 系统授权人
 
-当前 VM 用户 `kylin-agent` 属于 sudo 组，但 `sudo -n` 不可用；`/etc/kylin-memory/trust`
-不存在。请在收到申请 A 的 review 公钥和申请 C 的 D13D execution 公钥后，以 root 权限预置：
+Frozen Trust Root 已由授权流程安装并完成 `root:root`、权限、non-symlink 与正式加载核验。
+当前 VM 用户 `kylin-agent` 属于 sudo 组，但 `sudo -n` 不可用；后续仅在 Trust Root 内容或
+公钥发生合法轮换时，才由 VM 管理员以 root 权限按以下固定结构更新：
 
 ```text
 /etc/kylin-memory/trust/
