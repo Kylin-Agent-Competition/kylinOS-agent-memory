@@ -19,6 +19,13 @@ _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
+def _required_text(mapping: dict[str, Any], key: str, label: str) -> str:
+    value = mapping.get(key)
+    if not isinstance(value, str) or not value.strip() or value.upper() == "UNKNOWN":
+        raise ValueError(f"{label}.{key} 必须是非空且非 UNKNOWN 的文本")
+    return value
+
+
 def _read_json(path: Path, label: str) -> dict[str, Any]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -217,6 +224,20 @@ def validate_formal_bundle(bundle_path: Path) -> tuple[dict[str, Any], dict[str,
     manifest = _read_json(manifest_path, "manifest")
     if manifest.get("manifest_version") != "d13e-formal-manifest/v1":
         raise ValueError("manifest_version 必须为 'd13e-formal-manifest/v1'")
+    if manifest.get("seal_status") != "SEALED_BY_D_REVIEWER":
+        raise ValueError("manifest.seal_status 必须为 'SEALED_BY_D_REVIEWER'")
+    review = manifest.get("review")
+    if not isinstance(review, dict):
+        raise ValueError("manifest.review 必须是对象")
+    for key in ("status", "gold_review_status"):
+        if review.get(key) != "APPROVED_BY_D_NON_AUTHOR_REVIEWER":
+            raise ValueError(f"manifest.review.{key} 必须由 D 非作者 Reviewer 批准")
+    _required_text(review, "approval_reference", "manifest.review")
+    if bundle.get("formal_result_status") != "READY_FOR_FORMAL_EVALUATION":
+        raise ValueError("bundle.formal_result_status 必须为 'READY_FOR_FORMAL_EVALUATION'")
+    for key in ("dataset_version", "gold_label_version"):
+        if bundle.get(key) != _required_text(manifest, key, "manifest"):
+            raise ValueError(f"bundle.{key} 必须与 manifest.{key} 完全一致")
 
     provenance = manifest.get("provenance")
     if not isinstance(provenance, dict):
@@ -230,11 +251,12 @@ def validate_formal_bundle(bundle_path: Path) -> tuple[dict[str, Any], dict[str,
         "data_version_reference",
         "evidence_root",
     ):
-        value = provenance.get(key)
-        if not isinstance(value, str) or not value.strip() or value.upper() == "UNKNOWN":
-            raise ValueError(f"provenance.{key} 必须由 D13D 冻结交付")
+        _required_text(provenance, key, "provenance")
     if provenance.get("status") != "FROZEN_BY_D13D":
         raise ValueError("provenance.status 必须为 'FROZEN_BY_D13D'")
+    provenance_evidence = _required_text(provenance, "evidence_reference", "provenance")
+    if bundle.get("evidence_reference") != provenance_evidence:
+        raise ValueError("bundle.evidence_reference 必须与 D13D provenance 一致")
 
     for key, hash_key in (("dataset_file", "dataset_sha256"), ("gold_file", "gold_sha256")):
         bundle_value = bundle.get(key)
@@ -273,8 +295,13 @@ def compute_formal_report(bundle_path: Path) -> dict[str, Any]:
         if len(metric_dataset) != expected_counts.get(metric):
             raise ValueError(f"manifest.sample_count.{metric} 与 Dataset 实际数量不一致")
         for record in metric_dataset:
-            if gold[str(record["sample_id"])].get("metric") != metric:
+            gold_record = gold[str(record["sample_id"])]
+            if gold_record.get("metric") != metric:
                 raise ValueError(f"{metric} Gold 的 metric 必须与 Dataset 一致")
+            if gold_record.get("evaluation_status") not in {"valid", "boundary"}:
+                raise ValueError(f"{metric} Gold 必须声明 valid 或 boundary 状态")
+            if gold_record["evaluation_status"] != record.get("inclusion_status"):
+                raise ValueError(f"{metric} Gold 与 Dataset 的有效/边界状态不一致")
         raw_path = _relative_file(base, raw_files[metric], f"raw_result_files.{metric}")
         raw = _record_map(_read_jsonl(raw_path, f"{metric} raw result"), f"{metric} raw result")
         for record in raw.values():

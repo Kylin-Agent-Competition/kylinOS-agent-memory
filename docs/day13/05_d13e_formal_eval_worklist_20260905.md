@@ -35,7 +35,7 @@ Gold Label，建立 fail-closed 正式 Runner，计算 Preference、Conflict、S
 | 2 | E2 | 建立独立 D13E held-out Dataset，不复用 D6 Devset 为正式集 | D3/D6 规范 | JSONL 格式、稳定 ID、固定样本规模 | CANDIDATE_READY（待 D Reviewer 封存） |
 | 3 | E3 | 建立一对一 Gold，含判定依据与有效/边界状态 | E2；D Reviewer 复核 | Dataset/Gold ID 全等 | CANDIDATE_READY（17/17 ID 对应；待 D Reviewer） |
 | 4 | E4 | 计算 Dataset/Gold SHA-256，写入 Manifest 和 bundle | E2、E3 | 哈希可独立复算 | CANDIDATE_HASH_VERIFIED（候选哈希已复算） |
-| 5 | E10 | 建立正式 Runner；provenance、哈希、样本集不完整即 fail-closed | E2--E4 | CLI 行为测试与手工复现 | CANDIDATE_READY（3 项 CLI 契约测试通过；真实 raw 结果待 D13D） |
+| 5 | E10 | 建立正式 Runner；provenance、审核封存、版本、哈希、样本集不完整即 fail-closed | E2--E4 | CLI 行为测试与手工复现 | CANDIDATE_READY（5 项 CLI 契约测试通过；真实 raw 结果待 D13D） |
 | 6 | E5/E7/E8/E9 | 以真实链路或正式等价回放生成 per-sample raw JSONL | E1--E4、E10、D13D VM | 原始结果完整可追溯 | BLOCKED |
 | 7 | E6/E12--E14 | 输出错误分类、四项汇总、真实 Gap、优化映射 | 第 6 项 | summary 与报告 | BLOCKED |
 | 8 | E11/E15 | 麒麟 VM 执行、D 非作者审查、审查返工 | D13D、D Reviewer | 证据包和 Reviewer 结论 | BLOCKED |
