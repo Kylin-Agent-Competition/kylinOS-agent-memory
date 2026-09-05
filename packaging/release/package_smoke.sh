@@ -26,7 +26,8 @@ die() { echo "[d14a-smoke] FAIL: $*" >&2; exit 1; }
 
 UNIT_NAME="kylin-memory"
 SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/memory.sock"
-EMBED_SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/embedding.sock"
+# embedding.sock 用独立 /tmp 路径，避免被 systemd RuntimeDirectory(kylin-memory) 清理
+EMBED_SOCK="/tmp/kylin-d14a-embed.sock"
 
 # ── 0. 前置：包完整 + 真 SDK ──
 [ -f "$PKG_DIR/manifest.json" ] || die "package 缺失 manifest.json: $PKG_DIR"
@@ -42,7 +43,7 @@ if [ -d "$INSTALL_PREFIX" ]; then
   log "清理旧 prefix: $INSTALL_PREFIX"
   rm -rf "$INSTALL_PREFIX"
 fi
-rm -f "$SOCK"
+rm -f "$SOCK" "$EMBED_SOCK"
 
 # ── 2. 启动 embedding.server（真实 SDK，用于 verify 的 memory.embed） ──
 # embedding server 需在 install 前启动（verify 用）；从 package venv 启动，

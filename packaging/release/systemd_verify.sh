@@ -26,7 +26,7 @@ while [ $# -gt 0 ]; do
     *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
 done
-[ -n "$EMBED_SOCK" ] || EMBED_SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/embedding.sock"
+[ -n "$EMBED_SOCK" ] || EMBED_SOCK="/tmp/kylin-d14a-embed.sock"
 
 log() { echo "[d14a-verify] $*"; }
 die() { echo "[d14a-verify] FAIL: $*" >&2; exit 1; }
