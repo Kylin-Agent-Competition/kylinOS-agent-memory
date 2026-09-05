@@ -1,9 +1,13 @@
-# D14A 实施报告 v2（REWORK 修复后，2026-09-05）
+# D14A 实施报告 v2（REWORK 修复后，2026-09-05 · 溯源收口 v3）
 
 > 对应 D14A 交接文档 + 台账 D14-A「L3 干净虚拟机发布回归」。
 > 本报告为 D14A 第一阶段（发布包构建 + 发布链验证）完成记录；正式 L3 clean-VM
 > 回归待 D14D 干净快照 + D13D 冻结环境就绪后执行。
-> **状态：PACKAGE_IMPLEMENTATION_CANDIDATE**（按 D 主审 BLOCKER 5 口径；正式 L3 前不升 READY）。
+> **状态：PACKAGE_IMPLEMENTATION_CANDIDATE**（按 D 主审 BLOCKER 5 口径；正式 L3 前不升
+> READY；BLOCKER C（见 §6）解除前不宣称 runtime/model identity 闭环）。
+> v3 溯源收口：§3 引入四身份模型（source_commit / tested_runtime_commit / evidence_commit /
+> current_pr_head），§5.1 记录 git diff 复核结论，§4 修正 verify 为独立 embedding server
+> PID 实际加载校验表述，§6 新增 BLOCKER C；不改变既有 REWORK 事实与候选状态。
 
 ---
 
@@ -13,10 +17,10 @@ D 主审 5 个 BLOCKER 全部处置并重新验证：
 
 | BLOCKER | 处置 | 验证 |
 |---|---|---|
-| B1 launcher/install_prefix 失效 | 整包安装到 `<install_prefix>`；`~/.local/bin` 做 symlink；unit 渲染 `ExecStart=<prefix>/bin/kylin-memory-server` | smoke：unit 正确渲染 + 服务从 prefix 启动 + socket 就绪 |
+| B1 launcher/install_prefix 失效 | 整包复制到 `<install_prefix>`；`~/.local/bin` 做 launcher symlink 指向 `<install_prefix>/bin/kylin-memory-server`；unit 渲染 `ExecStart=<install_prefix>/bin/kylin-memory-server`（安装前缀 launcher） | smoke：unit 正确渲染 + 服务从 prefix 启动 + socket 就绪 |
 | B2 缺 Alembic 迁移 + env.py 重写错误 | install 前 `alembic upgrade head`；env.py 改为确定性重写（cwd 即 runtime/app）；构建时包内 migration smoke | migration head `20260902_add_memory_relation_conflict`；smoke PASS |
 | B3 install/verify fail-closed 缺失 | install 校验 SDK 版本+SHA/manifest；wait socket/journal/restart；verify 校验 PID==MainPID/cmdline/SDK SHA/memory.embed | smoke 全链 PASS |
-| B4 evidence 身份不一致 | 从最终 PR head `e3d4b9d` 重建；manifest.source_commit=完整 40 位 SHA | `source_commit=e3d4b9d565e2c3c153973125b3c071225e1b9e4d` |
+| B4 evidence 身份不一致 | 从最终 PR head `e3d4b9d` 重建 evidence；`manifest.source_commit` 记录该历史 head 的完整 40 位 SHA | 按 §3 四身份语义，该值归位为 tested_runtime_commit（真实 VM 实际执行提交），不得写成当前 PR head；证据文件已重建 |
 | B5 evidence 格式/语义 | 修复 JSON；补全 install/smoke/service identity/dependency audit；状态降级 | 16 个 evidence 文件全部合法 |
 
 ---
@@ -36,12 +40,15 @@ D 主审 5 个 BLOCKER 全部处置并重新验证：
 
 ---
 
-## 3. 发布包身份（冻结，最终 head）
+## 3. 发布包身份（四身份模型，禁止互相伪造相等）
 
 | 项 | 值 |
 |---|---|
 | package_name / version | `kylin-memory-a-d14a` / `0.1.0-d14a` |
-| **source_commit** | **`e3d4b9d565e2c3c153973125b3c071225e1b9e4d`（= PR head）** |
+| **source_commit**（构建声明基线） | **`5424d28e1178d3d16764ad7c050b878bc8981583`**（与契约 §1.1 口径一致；非执行/证据/当前 head） |
+| **tested_runtime_commit**（真实 VM 实际执行） | **`e3d4b9d565e2c3c153973125b3c071225e1b9e4d`**（原报告 §3 误标为 source_commit 的值，语义修正） |
+| **evidence_commit**（evidence-only 快照） | **`68bb8f764e204818759fceae0616cac0048753a2`** |
+| **current_pr_head**（R2 开工基线，动态） | **`15de7c67426909c7c872f9cb3f9a04a2575753fd`**（随新提交前移时必须回填本表并同步测试断言） |
 | package_tar_sha256 | `15d79383f5aed05407d849cf5dfafe6ab2195a80ee42d987294747c6f74081ce` |
 | manifest_sha256 | `18475655969b8fb6c88820d9e3ee94dc9c5e17a4e2c533b4cf65be46cb46ef22` |
 | bridge_so_sha256 | `a271891238102d0299395284d486c2e5afdaa4494e6ab0d1ff51a2d2ab9d4db6` |
@@ -49,6 +56,11 @@ D 主审 5 个 BLOCKER 全部处置并重新验证：
 | SDK 版本 | `libkylin-coreai-embedding 1.2.0.0-0k0.4` |
 | runtime | `kylin-ai-runtime 1.2.0.4-0k0.1`（内部 1.3.0，PARTIAL 已知） |
 | model | `ensemble-embd_gte-base_uint8-text`（dim=768） |
+
+> 四身份相互独立，**不得互相伪造相等**；尤其**不得把 `tested_runtime_commit` 写成当前 PR head**。
+> 历史 evidence（`evidence/l3-kylin-vm/d14a_20260905/`）中 `git_identity.json` / `summary.json`
+> 记录的 `source_commit=tested_commit=e3d4b9d…`，在四身份语义下归位为 **tested_runtime_commit**
+> （真实 VM 实际执行提交），不修改历史 evidence 文件本身。
 
 ---
 
@@ -64,7 +76,7 @@ package: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a
 [verify]  PASS: socket holder = MainPID
 [verify]  PASS: cmdline 指向发布包 venv（无开发目录依赖）
 [verify]  PASS: 真实 SDK memory.embed dim=768 (latency 205.5ms)
-[verify]  PASS: embedding server SDK 实际加载 SHA 校验
+[verify]  PASS: 独立 embedding server PID 实际加载 SDK 校验（/proc/<embedding_pid>/maps 路径+SHA = 契约 §6，非 gateway 单 PID 自加载）
 [verify]  ALL PASS
 [restart] verify 再次 ALL PASS (embed dim=768, latency 2.1ms)
 [rollback] symlink/unit/install_prefix 清理完成
@@ -83,7 +95,22 @@ dependency_audit/{ldd,readelf,path_scan}.txt
 recovery/{service_restart,process_crash,stale_socket}.log
 ```
 
-全部 JSON 合法；`tested_commit == PR head == manifest.source_commit == e3d4b9d…`。
+全部 JSON 合法；`git_identity.json` 与 `summary.json` 记录的
+`source_commit=tested_commit=e3d4b9d…` 即 **tested_runtime_commit**（§3 归位），
+`evidence_commit`（68bb8f7…）为证据落库快照，`current_pr_head`（15de7c6…）为 R2 开工
+基线；四者不得互相伪造相等。
+
+---
+
+## 5.1 git diff 复核结论（tested_runtime_commit → R2 开工基线）
+
+复核命令：`git diff --name-only e3d4b9d565e2c3c153973125b3c071225e1b9e4d..15de7c67426909c7c872f9cb3f9a04a2575753fd`
+
+结论：该范围内**无 D14A packaging/runtime 行为文件变化**（仅 docs/day14/01、evidence/
+l3-kylin-vm/d14a_20260905/*、main 合入的 memory-client/D13E/CI 等非 D14A runtime 内容）。
+
+要求：任何后续 **packaging/runtime 行为变更**必须 **重新打包 → 重算 hash → 重跑真实 VM** →
+回填新的 `tested_runtime_commit` / `evidence_commit`；仅文档/测试变更不触发重包。
 
 ---
 
@@ -92,8 +119,15 @@ recovery/{service_restart,process_crash,stale_socket}.log
 1. **D13A 可比性能回归**：正式 L3 上按 `scripts/run_day13a_benchmarks.sh` 复跑，budget 需 D 主审冻结。
 2. **c8/c16 高并发**：归入正式 L3。
 3. **正式 L3 clean-VM**：依赖 D14D 干净快照 + D13D 冻结环境；用本包 `systemd/install.sh` + `verify.sh`。
-4. **状态升级**：PACKAGE_IMPLEMENTATION_CANDIDATE → READY_CANDIDATE 待 D 主审对发布链 smoke + evidence 确认。
+4. **状态维持（不越级）**：保持 PACKAGE_IMPLEMENTATION_CANDIDATE；升 READY 须 D 主审
+   对发布链 smoke + evidence 与 BLOCKER C 解除共同确认；不产生任何宿主环境已验证、
+   三级验收通过或状态越级声明。
+5. **BLOCKER C — runtime/model 冻结身份缺失（fail-closed）**：runtime/model
+   identity/version/hash/vendor-frozen lock 尚无 D Reviewer 接受的可信外部冻结输入，
+   状态 **DEPENDENCY_BLOCKED / HANDOFF_REQUIRED**；不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence；
+   解除须外部可信冻结输入 + D Reviewer 会签，属独立后续事项，不在本任务解决。
 
 ---
 
-*D14A REWORK 修复完成；发布链 smoke 全 PASS，evidence 已从最终 head 重建。*
+*D14A REWORK 修复完成；发布链 smoke 全 PASS，证据已从最终 head 重建；四身份语义与
+BLOCKER C fail-closed 边界按 v3 收口表述。*

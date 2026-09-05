@@ -1,8 +1,11 @@
-# D14A Release Package Contract（冻结 v1）
+# D14A Release Package Contract（FROZEN_DRAFT · 溯源收口 v3）
 
 > 依据：D14A 交接文档（2026-09-05）§Phase 2 + §A14-B01 解除要求。
-> 状态：**FROZEN_DRAFT**（待 D 主审会签后升 FROZEN）。
+> 状态：**FROZEN_DRAFT**（待 D 主审会签后升 FROZEN；**D Reviewer 会签前不得升 FROZEN**）。
 > 冻结方式：本文件为 package contract 唯一真源；任何字段改动需 D 主审会签并升版。
+> v3 溯源收口：新增 §1.1 Provenance 四身份语义、§6bis BLOCKER C，并修正安装/verify
+> 架构描述（整包复制 install_prefix + `~/.local/bin` symlink + 安装前缀 launcher +
+> 独立 embedding server PID 实际加载校验）。
 
 ---
 
@@ -21,7 +24,7 @@
 |---|---|---|
 | `package_name` | `kylin-memory-a-d14a` | A 轨发布包名 |
 | `package_version` | `0.1.0-d14a` | 首个 D14A 版本 |
-| `source_commit` | **`5424d28e1178d3d16764ad7c050b878bc8981583`** | = 当前 main（D13A 合并提交）；若 main 前移，开工前重新冻结 |
+| `source_commit` | **`5424d28e1178d3d16764ad7c050b878bc8981583`** | **构建声明基线**（仅声明打包基线，非执行/证据/当前 head）；若 main 前移，开工前重新冻结；四身份语义见 §1.1，禁止互相伪造相等 |
 | `source_tree_dirty` | `false`（打包时 git status --porcelain 为空） | 打包入口强制检查 |
 | `target_os` | 银河麒麟桌面 V11 2603 x86_64（kernel 6.6.x） | 与 D14B/D14D 干净快照一致 |
 | `target_arch` | amd64 (x86_64) | |
@@ -32,6 +35,25 @@
 | `config_path` | `${XDG_CONFIG_HOME:-$HOME/.config}/kylin-memory/config.toml` | 未提供则默认值 |
 | `data_path` | `${XDG_DATA_HOME:-$HOME/.local/share}/kylin-memory/kylin_memory.db` | SQLite |
 | `state_path` | `${XDG_STATE_HOME:-$HOME/.local/state}/kylin-memory` | Outbox/journal 状态 |
+
+---
+
+## 1.1 Provenance 身份语义（四类字段，禁止互相伪造相等）
+
+| 身份字段 | 值（40 位 SHA） | 语义 |
+|---|---|---|
+| `source_commit` | `5424d28e1178d3d16764ad7c050b878bc8981583` | **构建时声明基线**（非执行/证据/当前 head） |
+| `tested_runtime_commit` | `e3d4b9d565e2c3c153973125b3c071225e1b9e4d` | 历史 runtime 包在真实 VM **实际执行**的提交 |
+| `evidence_commit` | `68bb8f764e204818759fceae0616cac0048753a2` | evidence-only 快照提交 |
+| `current_pr_head` | `15de7c67426909c7c872f9cb3f9a04a2575753fd` | **动态值**：R2 开工基线；随新提交前移时必须回填本表并同步测试断言 |
+
+- 四者独立，**不得互相伪造相等**；尤其**不得把 `tested_runtime_commit` 写成当前 PR head**。
+- 经 `git diff --name-only` 复核：`e3d4b9d565e2c3c153973125b3c071225e1b9e4d..15de7c67426909c7c872f9cb3f9a04a2575753fd`
+  范围内**无 D14A packaging/runtime 行为文件变化**（仅 docs/evidence 与 main 合入的
+  memory-client/D13E/CI 等非 D14A runtime 内容）。
+- 任何后续 **packaging/runtime 行为变更**必须 **重新打包 → 重算 hash → 重跑真实 VM** →
+  回填新的 `tested_runtime_commit` / `evidence_commit`；仅文档/测试变更不触发重包，
+  但 `current_pr_head` 前移时必须复核本表。
 
 ---
 
@@ -102,8 +124,8 @@ python3.12               (系统 python，用于创建包内 venv)
 | 检查 | 命令 | 必须结果 |
 |---|---|---|
 | Bridge 动态依赖 | `ldd runtime/bridge/kylin_embedding*.so` | 无 `not found`；全部 NEEDED 可解析 |
-| RPATH/RUNPATH | `readelf -d ... | grep -E 'RPATH|RUNPATH'` | 无开发机绝对路径 |
-| 硬编码路径 | `grep -RInE '(/home/|/Users/|[A-Za-z]:\\|.venv|d4d-venv|PYTHONPATH|--repo|build/)' runtime/ packaging/` | 无个人开发目录命中（或逐条登记结论） |
+| RPATH/RUNPATH | `readelf -d ... \| grep -E 'RPATH\|RUNPATH'` | 无开发机绝对路径 |
+| 硬编码路径 | `grep -RInE '(/home/\|/Users/\|[A-Za-z]:\\\|.venv\|d4d-venv\|PYTHONPATH\|--repo\|build/)' runtime/ packaging/` | 无个人开发目录命中（或逐条登记结论） |
 | SDK 身份 | `sha256sum` + `readelf -d` SONAME | = 合同 §6 |
 
 ---
@@ -119,7 +141,20 @@ python3.12               (系统 python，用于创建包内 venv)
 | runtime 版本 | `kylin-ai-runtime 1.2.0.4-0k0.1` |
 | 默认模型 | `ensemble-embd_gte-base_uint8-text`（dim=768, ondevice=True） |
 
-**验证**（clean VM）：`grep -F '.so' /proc/<PID>/maps` 中实际加载路径/hash 必须与上表一致。
+**验证**（clean VM）：SDK 由**独立 embedding server 进程**实际加载；定位**独立
+embedding server PID**，`grep -F '.so' /proc/<embedding_pid>/maps` 中实际加载路径/hash
+必须与上表一致（**非 gateway 单 PID 自加载**）。
+
+---
+
+## 6bis. BLOCKER C — runtime/model 冻结身份缺失（DEPENDENCY_BLOCKED / HANDOFF_REQUIRED）
+
+- runtime/model **identity / version / hash / vendor-frozen lock** 尚无 D Reviewer 接受的
+  可信外部冻结输入，状态 **DEPENDENCY_BLOCKED / HANDOFF_REQUIRED**（fail-closed）。
+- 不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence；
+  不由本文档或本 Task 补写虚构的 runtime/model version/hash/vendor lock/D Reviewer 会签。
+- 解除条件：外部可信冻结输入 + D Reviewer 会签后，回填本表并升版。
+- 解除前，安装 Gate（§7）与任何验收声明**不得宣称 runtime/model identity 闭环**。
 
 ---
 
@@ -130,7 +165,9 @@ bash systemd/install.sh install
 # 动作:
 #   1. 校验前置系统依赖（§3）存在 + 版本 + SHA-256（fail-closed）
 #   2. 校验 package manifest/SHA256SUMS（与已冻结 hash 一致）
-#   3. 复制 launcher/unit 到 $HOME/.config/systemd/user + $HOME/.local/bin
+#   3. 整包复制到 <install_prefix>（${XDG_DATA_HOME:-$HOME/.local/share}/kylin-memory-d14a）；
+#      $HOME/.local/bin 创建 launcher symlink 指向 <install_prefix>/bin/kylin-memory-server；
+#      unit 渲染 ExecStart=<install_prefix>/bin/kylin-memory-server（安装前缀 launcher）
 #   4. systemctl --user daemon-reload && enable --now kylin-memory
 #   5. wait socket + journal "Memory Service 就绪"
 #   6. restart 后再次 status_check
@@ -149,7 +186,8 @@ bash systemd/uninstall.sh rollback [--keep-unit]
 bash systemd/verify.sh
 # 1. systemctl --user is-active
 # 2. socket 存在且 holder PID 与 unit MainPID 一致
-# 3. /proc/<PID>/maps 中 SDK .so 实际加载路径 + hash = §6
+# 3. /proc/<embedding_pid>/maps 中 SDK .so 实际加载路径 + hash = §6
+#    （SDK 由独立 embedding server 进程实际加载并经 embedding PID 校验，非 gateway 单 PID 自加载）
 # 4. 真实 SDK smoke：memory.embed 返回 dim=768（fake=false）
 # 5. cmdline / cwd 不含源码 checkout 与个人 venv
 ```
@@ -161,6 +199,7 @@ bash systemd/verify.sh
 - `manifest.json`：`{source_commit, package_version, built_at, files:{path:{size,sha256}}, sdk:{...}, model:{...}}`
 - `SHA256SUMS`：打包后生成，作为正式 evidence 的 package 身份。
 - 后续任何 VM 测试只允许引用该 hash；若补文件 → 重新打包 → 新 hash → 重置 snapshot → 重测。
+- 任何 packaging/runtime 行为变更必须 **重新打包 → 重算 hash → 重跑真实 VM**，并回填 §1.1 身份表。
 
 ---
 
@@ -171,6 +210,11 @@ bash systemd/verify.sh
 - [ ] dependency audit PASS（无开发路径/RPATH/not-found）
 - [ ] clean-VM L3：package-only install + real SDK + recovery + D13A 可比性能
 - [ ] L3 evidence 完整（§12）
+
+> Gate 边界：contract FROZEN 仅可由 D 主审会签后达成（当前维持 **FROZEN_DRAFT**，
+> D Reviewer 会签前不得升 FROZEN）；本 Gate 清单与全文不产生任何状态越级声明
+> （既不宣称宿主环境已验证，也不宣称三级验收通过），且 BLOCKER C 解除前不得
+> 宣称 runtime/model identity 闭环。
 
 ## 12. Evidence 输出（`evidence/l3-kylin-vm/d14a_<run_id>/`）
 
@@ -187,4 +231,4 @@ cleanup.log  summary.json
 
 ---
 
-*本契约冻结 v1 由 A 轨编制，待 D 主审会签。*
+*本契约 v3 溯源收口（FROZEN_DRAFT）由 A 轨编制，D Reviewer 会签前不得升 FROZEN。*
