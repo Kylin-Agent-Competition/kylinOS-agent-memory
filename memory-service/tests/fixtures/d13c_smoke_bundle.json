@@ -12,7 +12,7 @@
     "warmup_count": 0,
     "repeat_count": 5,
     "concurrency": 1,
-    "stability_repeat": 5,
+    "stability_repeat": 1,
     "deadline_ms": 5000
   },
   "sessions": [

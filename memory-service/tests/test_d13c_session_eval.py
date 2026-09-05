@@ -46,7 +46,7 @@ CONFIG = {
     "warmup_count": 0,
     "repeat_count": 5,
     "concurrency": 1,
-    "stability_repeat": 5,
+    "stability_repeat": 1,
     "deadline_ms": 5000,
 }
 
@@ -145,6 +145,24 @@ def _report(sessions, config=None):
     return compute_session_report(sessions, cfg)
 
 
+def _round_session(round_no, group="demo-stability-run-001", session_id=None):
+    """构造带 R2 轮次证据的会话（execution_group_id + stability_round）。"""
+    s = _session(
+        session_id=session_id or f"session-round-{round_no:02d}",
+        scenario="stability_demo",
+        injected_context_text=f"[CTX] stability round {round_no}",
+    )
+    s["execution_group_id"] = group
+    s["stability_round"] = round_no
+    return s
+
+
+def _stability_config(repeat):
+    cfg = dict(CONFIG)
+    cfg["stability_repeat"] = repeat
+    return cfg
+
+
 # ── A. 成功 bundle 各指标 ─────────────────────────────────────────
 
 
@@ -189,7 +207,8 @@ def test_a5_stop_retry_no_violation_on_normal_turn():
     assert report["aggregate_metrics"]["stop_retry_violation_count"] == 0
 
 
-def test_a6_cross_session_isolation_ok():
+def test_a6_cross_session_no_comparable_pair_is_fail_closed():
+    # R1：两个不同 scenario 各 1 session → 无同 scenario 会话对 → 不可判定
     sessions = [
         _session("session-A", "cross_session_A",
                  injected_context_text="[CTX] A 内容"),
@@ -197,8 +216,12 @@ def test_a6_cross_session_isolation_ok():
                  injected_context_text="[CTX] B 内容"),
     ]
     report = _report(sessions)
-    # 不同 scenario 不会被 pair 比对；改为同 scenario 验证可区分
-    assert report["aggregate_metrics"]["cross_session_isolation_ok"] is True
+    assert report["aggregate_metrics"]["cross_session_isolation_ok"] is None
+    assert report["cross_session_isolation"]["pair_count"] == 0
+    assert (
+        report["cross_session_isolation"]["fail_closed_reason"]
+        == "NO_COMPARABLE_CROSS_SESSION_PAIR"
+    )
 
 
 def test_a6b_cross_session_isolation_distinct_same_scenario():
@@ -360,11 +383,22 @@ def test_n4_deadline_timeout_correct_failed_stage_no_violation():
     assert report["aggregate_metrics"]["deadline_violation_count"] == 0
 
 
-def test_n5_deadline_timeout_wrong_stage_violation():
+def test_n5_ok_timed_out_true_is_invalid_state_combo():
+    # R3：ok + timed_out=true 属非法状态组合 → 解析期 fail-closed
     steps = _happy_steps()
-    # timed_out=True 但 stage_final=ready → 违反
     steps[0] = _step("step1_prechat", "memory.retrieve",
                      stage_final="ready", timed_out=True,
+                     transitions=["idle", "querying", "ready"])
+    with pytest.raises(ValueError, match="状态组合"):
+        _report([_session(steps=steps)])
+
+
+def test_n5b_deadline_timeout_wrong_transition_tail_violation():
+    # 状态组合合法（timeout+failed+timed_out=True），但 stage_transitions 末态非 failed
+    steps = _happy_steps()
+    steps[0] = _step("step1_prechat", "memory.retrieve",
+                     response_status="timeout", stage_final="failed",
+                     latency_ms=0.0, timed_out=True,
                      transitions=["idle", "querying", "ready"])
     report = _report([_session(steps=steps)])
     assert report["aggregate_metrics"]["deadline_violation_count"] == 1
@@ -427,3 +461,189 @@ def test_invalid_guardrail_category_rejected():
                      violations=["unknown_category"])
     with pytest.raises(ValueError, match="guardrail_violations"):
         _report([_session(steps=steps)])
+
+
+
+# ── R1 扩展：跨会话隔离 fail-closed / 判定 ─────────────────────────
+
+
+def test_a6c_single_session_no_pair_is_fail_closed():
+    # R1：同 scenario 仅 1 session → 无 pair → 不可判定
+    report = _report([_session("session-A", "cross_session",
+                               injected_context_text="[CTX] A 内容")])
+    assert report["aggregate_metrics"]["cross_session_isolation_ok"] is None
+    assert report["cross_session_isolation"]["pair_count"] == 0
+    assert (
+        report["cross_session_isolation"]["fail_closed_reason"]
+        == "NO_COMPARABLE_CROSS_SESSION_PAIR"
+    )
+
+
+def test_a6d_same_scenario_equal_context_isolation_fail():
+    # R1：同 scenario 2 session、context 相同 → isolation FAIL（False）
+    sessions = [
+        _session("session-A", "cross_session",
+                 injected_context_text="[CTX] SAME"),
+        _session("session-B", "cross_session",
+                 injected_context_text="[CTX] SAME"),
+    ]
+    report = _report(sessions)
+    assert report["aggregate_metrics"]["cross_session_isolation_ok"] is False
+    assert report["cross_session_isolation"]["pair_count"] == 1
+
+
+def test_a6e_same_scenario_empty_context_isolation_fail():
+    # R1：任一 context 为空 → 不能证明可区分 → FAIL
+    sessions = [
+        _session("session-A", "cross_session",
+                 injected_context_text="[CTX] A 内容"),
+        _session("session-B", "cross_session",
+                 injected_context_text=""),
+    ]
+    report = _report(sessions)
+    assert report["aggregate_metrics"]["cross_session_isolation_ok"] is False
+
+
+def test_a6f_same_scenario_distinct_context_pass():
+    # R1：同 scenario 2 session、context 不同 → PASS（对照 A6b）
+    sessions = [
+        _session("session-A", "cross_session",
+                 injected_context_text="[CTX] A 内容"),
+        _session("session-B", "cross_session",
+                 injected_context_text="[CTX] B 内容"),
+    ]
+    report = _report(sessions)
+    assert report["aggregate_metrics"]["cross_session_isolation_ok"] is True
+    assert report["cross_session_isolation"]["fail_closed_reason"] is None
+
+
+# ── R2 扩展：stability_repeat 与实际轮次证据绑定 ──────────────────
+
+
+def test_r2_stability_full_5_rounds_pass():
+    sessions = [_round_session(r) for r in range(1, 6)]
+    report = _report(sessions, _stability_config(5))
+    assert report["aggregate_metrics"]["session_count"] == 5
+    assert report["fail_closed_reasons"] == []
+
+
+def test_r2_stability_only_4_rounds_fail_closed():
+    sessions = [_round_session(r) for r in range(1, 5)]
+    with pytest.raises(ValueError, match="missing"):
+        _report(sessions, _stability_config(5))
+
+
+def test_r2_stability_missing_round4_fail_closed():
+    sessions = [_round_session(r) for r in (1, 2, 3, 5)]
+    with pytest.raises(ValueError, match=r"missing=\[4\]"):
+        _report(sessions, _stability_config(5))
+
+
+def test_r2_stability_duplicate_round_fail_closed():
+    sessions = [_round_session(r) for r in range(1, 6)]
+    sessions.append(_round_session(3, session_id="dup-session-round-3"))
+    with pytest.raises(ValueError, match="duplicate"):
+        _report(sessions, _stability_config(5))
+
+
+def test_r2_stability_out_of_range_round_fail_closed():
+    sessions = [_round_session(r) for r in range(1, 6)]
+    sessions[-1] = _round_session(6, session_id="session-round-06")
+    with pytest.raises(ValueError, match="out_of_range"):
+        _report(sessions, _stability_config(5))
+
+
+def test_r2_stability_untagged_but_repeat5_fail_closed():
+    # 只有配置声称 5 轮、没有任何执行轮次证据 → fail-closed
+    with pytest.raises(ValueError, match="未携带任何执行轮次证据"):
+        _report([_session()], _stability_config(5))
+
+
+def test_r2_stability_round0_rejected():
+    s = _session()
+    s["execution_group_id"] = "demo-stability-run-001"
+    s["stability_round"] = 0
+    with pytest.raises(ValueError, match="stability_round"):
+        _report([s], _stability_config(1))
+
+
+def test_r2_stability_round_tag_must_be_pair():
+    # 只有 execution_group_id、没有 stability_round → 拒绝
+    s = _session()
+    s["execution_group_id"] = "demo-stability-run-001"
+    with pytest.raises(ValueError, match="成对"):
+        _report([s], _stability_config(1))
+
+
+def test_r2_single_round_untagged_repeat1_allowed():
+    # stability_repeat=1 且单 session（不带轮次标签）仍可正常评测其它指标
+    report = _report([_session()])
+    assert report["aggregate_metrics"] is not None
+    assert report["aggregate_metrics"]["session_count"] == 1
+
+
+# ── R3 扩展：状态组合矩阵 fail-closed ──────────────────────────────
+
+
+def test_state_combo_error_ready_rejected():
+    steps = _happy_steps()
+    steps[0] = _step("step1_prechat", "memory.retrieve",
+                     response_status="error", stage_final="ready")
+    with pytest.raises(ValueError, match="状态组合"):
+        _report([_session(steps=steps)])
+
+
+def test_state_combo_timeout_ready_rejected():
+    steps = _happy_steps()
+    steps[0] = _step("step1_prechat", "memory.retrieve",
+                     response_status="timeout", stage_final="ready",
+                     timed_out=True)
+    with pytest.raises(ValueError, match="状态组合"):
+        _report([_session(steps=steps)])
+
+
+def test_state_combo_timeout_timed_out_false_rejected():
+    steps = _happy_steps()
+    steps[0] = _step("step1_prechat", "memory.retrieve",
+                     response_status="timeout", stage_final="failed",
+                     latency_ms=0.0, timed_out=False,
+                     transitions=["idle", "querying", "failed"])
+    with pytest.raises(ValueError, match="状态组合"):
+        _report([_session(steps=steps)])
+
+
+def test_state_combo_disconnected_completed_rejected():
+    steps = _happy_steps()
+    steps[0] = _step("step1_prechat", "memory.retrieve",
+                     response_status="disconnected", stage_final="completed")
+    with pytest.raises(ValueError, match="状态组合"):
+        _report([_session(steps=steps)])
+
+
+def test_state_combo_unsupported_method_completed_rejected():
+    steps = _happy_steps()
+    steps[0] = _step("step1_prechat", "memory.retrieve",
+                     response_status="unsupported_method",
+                     stage_final="completed")
+    with pytest.raises(ValueError, match="状态组合"):
+        _report([_session(steps=steps)])
+
+
+def test_state_combo_awaiting_confirmation_requires_forget_preview():
+    steps = _happy_steps()
+    steps[0] = _step("step1_prechat", "memory.retrieve",
+                     stage_final="awaiting_confirmation")
+    with pytest.raises(ValueError, match="状态组合"):
+        _report([_session(steps=steps)])
+
+
+def test_state_combo_error_failed_allowed_not_completed():
+    # 合法 error+failed：不计入 completed（不抬高完成率）
+    steps = _happy_steps()
+    steps[0] = _step("step1_prechat", "memory.retrieve",
+                     response_status="error", stage_final="failed",
+                     latency_ms=0.0, transitions=["idle", "sending", "failed"])
+    report = _report([_session(steps=steps)])
+    per = report["per_session_metrics"][0]
+    assert per["completed_step_count"] == 6
+    assert report["aggregate_metrics"]["step_completion_rate"] == pytest.approx(6 / 7)

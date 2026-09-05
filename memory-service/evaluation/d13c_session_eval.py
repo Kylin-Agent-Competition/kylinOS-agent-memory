@@ -84,6 +84,41 @@ COMPLETED_STAGE_FINALS: frozenset[str] = frozenset(
 # step 失败态：用于 deadline timeout 路径校验（timed_out=True 必须 stage_final=failed）
 FAILED_STAGE_FINALS: frozenset[str] = frozenset({"failed", "timeout"})
 
+
+def _state_combo_is_legal(
+    method: str, response_status: str, timed_out: bool, stage_final: str
+) -> bool:
+    """R3：response_status × timed_out × stage_final 冻结合法状态组合矩阵。
+
+    | response_status    | timed_out | stage_final           | completed |
+    | ok                 | false     | ready/completed       | 是        |
+    | ok(forget.preview) | false     | awaiting_confirmation | 是        |
+    | error              | false     | failed                | 否        |
+    | timeout            | true      | timeout/failed        | 否        |
+    | disconnected       | false     | failed                | 否        |
+    | unsupported_method | false     | failed                | 否        |
+
+    非法组合（error+ready / timeout+ready / timeout+timed_out=false /
+    ok+timed_out=true / disconnected+completed / unsupported_method+completed /
+    非 forget.preview 的 awaiting_confirmation）在解析期直接 fail-closed。
+    """
+    if response_status == "ok":
+        if timed_out:
+            return False  # ok + timed_out=true 禁止
+        if stage_final == "awaiting_confirmation":
+            return method == "forget.preview"
+        return stage_final in ("ready", "completed")
+    if response_status == "error":
+        return (not timed_out) and stage_final == "failed"
+    if response_status == "timeout":
+        return timed_out and stage_final in ("timeout", "failed")
+    if response_status == "disconnected":
+        return (not timed_out) and stage_final == "failed"
+    if response_status == "unsupported_method":
+        return (not timed_out) and stage_final == "failed"
+    return False
+
+
 _VALID_RESPONSE_STATUSES: frozenset[str] = frozenset(
     {"ok", "error", "unsupported_method", "timeout", "disconnected"}
 )
@@ -219,7 +254,12 @@ class StepRecord:
 
     @property
     def completed(self) -> bool:
-        return self.stage_final in COMPLETED_STAGE_FINALS
+        return (
+            _state_combo_is_legal(
+                self.method, self.response_status, self.timed_out, self.stage_final
+            )
+            and self.stage_final in COMPLETED_STAGE_FINALS
+        )
 
     @classmethod
     def from_mapping(cls, position: int, raw: Mapping[str, Any]) -> "StepRecord":
@@ -299,6 +339,14 @@ class StepRecord:
         retry_of_turn_id = str(raw.get("retry_of_turn_id", "")).strip()
         turn_id = str(raw.get("turn_id", "")).strip()
 
+        # R3：非法状态组合在解析期 fail-closed（不允许进入指标计算）
+        if not _state_combo_is_legal(method, response_status, timed_out, stage_final):
+            raise ValueError(
+                f"steps[{position}] 非法状态组合：response_status={response_status!r} "
+                f"timed_out={timed_out!r} stage_final={stage_final!r} "
+                f"method={method!r}（对照 R3 冻结合法矩阵）"
+            )
+
         return cls(
             step_id=step_id,
             method=method,
@@ -345,6 +393,9 @@ class SessionRecord:
     scenario: str
     steps: tuple[StepRecord, ...]
     injected_context_text: str
+    # R2：稳定性复跑执行轮次证据（execution_group_id + stability_round 必须成对）
+    execution_group_id: str
+    stability_round: Optional[int]
 
     @classmethod
     def from_mapping(cls, position: int, raw: Mapping[str, Any]) -> "SessionRecord":
@@ -369,6 +420,26 @@ class SessionRecord:
                 )
             seen_step_ids.add(step.step_id)
             steps.append(step)
+        # R2：稳定性复跑轮次证据（可选，但 execution_group_id / stability_round 必须成对）
+        execution_group_id = str(raw.get("execution_group_id", "")).strip()
+        raw_round = raw.get("stability_round")
+        if raw_round is None:
+            stability_round: Optional[int] = None
+        else:
+            if isinstance(raw_round, bool) or not isinstance(raw_round, int):
+                raise ValueError(
+                    f"sessions[{position}].stability_round 必须是整数"
+                    "（不接受 bool/浮点/字符串）"
+                )
+            if raw_round < 1:
+                raise ValueError(
+                    f"sessions[{position}].stability_round 必须 >= 1（禁止 round=0/负值）"
+                )
+            stability_round = raw_round
+        if bool(execution_group_id) != (stability_round is not None):
+            raise ValueError(
+                f"sessions[{position}] execution_group_id 与 stability_round 必须成对提供"
+            )
         injected = str(raw.get("injected_context_text", "")).strip()
         # injected_context_text 允许空字符串（failed/skipped 注入场景），
         # 但跨会话隔离比对需要非空；空串在 cross_session_isolation 计算时单独处理。
@@ -377,6 +448,8 @@ class SessionRecord:
             scenario=scenario,
             steps=tuple(steps),
             injected_context_text=injected,
+            execution_group_id=execution_group_id,
+            stability_round=stability_round,
         )
 
 
@@ -503,6 +576,48 @@ def _session_metrics(session: SessionRecord) -> dict[str, Any]:
     }
 
 
+def _validate_stability_rounds(
+    sessions: list[SessionRecord], stability_repeat: int
+) -> None:
+    """R2：把 config.stability_repeat 与实际执行轮次证据绑定（fail-closed）。
+
+    当 stability_repeat > 1 时，bundle 必须：
+    - 每个 session 都携带 execution_group_id + stability_round（成对）；
+    - 全部属于同一 execution_group_id；
+    - stability_round 恰好覆盖 {1..stability_repeat}（禁止缺轮/重复轮/round=0/越界）。
+    证据不足直接抛 ValueError（CLI 统一 exit 2 + fail_closed_reasons）。
+    """
+    tagged = [
+        s for s in sessions
+        if s.execution_group_id or s.stability_round is not None
+    ]
+    if not tagged:
+        if stability_repeat > 1:
+            raise ValueError(
+                f"stability_repeat={stability_repeat} 但 bundle 未携带任何执行轮次证据"
+                "（sessions 缺少 execution_group_id/stability_round）"
+            )
+        return
+    if len(tagged) != len(sessions):
+        raise ValueError("sessions 混用带轮次证据与不带轮次证据的条目")
+    groups: dict[str, list[int]] = {}
+    for s in sessions:
+        groups.setdefault(s.execution_group_id, []).append(
+            s.stability_round if s.stability_round is not None else 0
+        )
+    if len(groups) != 1:
+        raise ValueError("稳定性复跑证据必须属于同一 execution_group_id")
+    rounds = groups[next(iter(groups))]
+    duplicates = sorted({r for r in rounds if rounds.count(r) > 1})
+    out_of_range = sorted({r for r in rounds if r < 1 or r > stability_repeat})
+    missing = [r for r in range(1, stability_repeat + 1) if r not in rounds]
+    if duplicates or out_of_range or missing:
+        raise ValueError(
+            f"stability_repeat={stability_repeat} 与实际轮次证据不一致："
+            f"missing={missing} duplicate={duplicates} out_of_range={out_of_range}"
+        )
+
+
 def _cross_session_isolation(sessions: list[SessionRecord]) -> dict[str, Any]:
     """跨会话隔离：同 scenario 组的 injected_context_text 必须可区分。
 
@@ -531,10 +646,19 @@ def _cross_session_isolation(sessions: list[SessionRecord]) -> dict[str, Any]:
                 })
                 if not ok:
                     overall_ok = False
+    if not pair_results:
+        # R1：没有任何可比较的同 scenario 会话对 → 不可判定（禁止空证据 PASS）
+        return {
+            "cross_session_isolation_ok": None,
+            "pair_count": 0,
+            "pairs": [],
+            "fail_closed_reason": "NO_COMPARABLE_CROSS_SESSION_PAIR",
+        }
     return {
         "cross_session_isolation_ok": overall_ok,
         "pair_count": len(pair_results),
         "pairs": pair_results,
+        "fail_closed_reason": None,
     }
 
 
@@ -557,6 +681,9 @@ def compute_session_report(
 
     if not parsed:
         return _empty_report(config, "NO_VALID_SESSIONS")
+
+    # R2：stability_repeat 与实际执行轮次证据绑定（缺轮/重复轮/越界/无证据均 fail-closed）
+    _validate_stability_rounds(parsed, config.stability_repeat)
 
     per_session = [_session_metrics(s) for s in parsed]
 

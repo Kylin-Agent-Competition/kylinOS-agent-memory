@@ -4,6 +4,8 @@
 （d13c-session-eval-config/v1）计算会话级指标与护栏统计，输出 JSON 报告。
 fail-closed：provenance/采样参数不完整或非法、config_version 不符、
 0 个有效 session 时，不输出可被误读为正式的指标。
+R2：config.stability_repeat>1 时，sessions 必须携带 execution_group_id +
+stability_round 并覆盖 1..stability_repeat（缺轮/重复轮/越界均 fail-closed）。
 
 用法：
     PYTHONPATH=memory-service python scripts/run_d13c_session_eval.py <bundle.json> [--output report.json]
@@ -64,13 +66,45 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "memory-service"))
 
 from evaluation.d13c_session_eval import (  # noqa: E402
+    REPORT_VERSION,
     EvalSessionConfig,
     compute_session_report,
 )
+
+
+def _error_report(reason: str, raw_config) -> dict:
+    """R4：统一受控 fail-closed 错误报告（aggregate_metrics=null、无 traceback）。"""
+    return {
+        "report_version": REPORT_VERSION,
+        "config": raw_config if isinstance(raw_config, dict) else {},
+        "aggregate_metrics": None,
+        "per_session_metrics": [],
+        "cross_session_isolation": None,
+        "critical_zero_ok": None,
+        "fail_closed_reasons": [reason],
+        "provenance": {
+            "note": (
+                "fail-closed：输入读取/JSON 解析/类型校验/配置/计算任一环节失败或"
+                "证据不足，不输出任何可被误读为正式的指标；"
+                "未取得麒麟 VM 实测前 Runtime 结论 UNVERIFIED。"
+            )
+        },
+    }
+
+
+def _emit(report: dict, output: Optional[str]) -> int:
+    text = json.dumps(report, ensure_ascii=False, indent=2)
+    if output:
+        Path(output).write_text(text, encoding="utf-8")
+    else:
+        print(text)
+    # fail-closed 报告（aggregate_metrics=null）统一 exit 2
+    return 2 if report.get("aggregate_metrics") is None else 0
 
 
 def main() -> int:
@@ -83,40 +117,52 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    raw = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    # R4：读取文件 → json.loads → root 类型 → config 类型 → sessions 类型 →
+    #      EvalSessionConfig → compute_session_report 全链受控异常，无 traceback。
     try:
-        config = EvalSessionConfig.from_mapping(raw.get("config", {}))
-        report = compute_session_report(raw.get("sessions", []), config)
+        raw_text = Path(args.input).read_text(encoding="utf-8")
+    except OSError as exc:
+        return _emit(_error_report(f"READ_FAILED:{exc}", None), args.output)
+
+    try:
+        root = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        return _emit(_error_report(f"INVALID_JSON:{exc}", None), args.output)
+
+    if not isinstance(root, dict):
+        return _emit(
+            _error_report("ROOT_NOT_OBJECT:根节点必须是 JSON 对象", None),
+            args.output,
+        )
+    if "config" not in root:
+        return _emit(_error_report("MISSING_CONFIG:bundle 缺少 config", None), args.output)
+    if "sessions" not in root:
+        return _emit(
+            _error_report("MISSING_SESSIONS:bundle 缺少 sessions", root["config"]),
+            args.output,
+        )
+    if not isinstance(root["config"], dict):
+        return _emit(
+            _error_report("CONFIG_NOT_OBJECT:config 必须是 JSON 对象", root["config"]),
+            args.output,
+        )
+    if not isinstance(root["sessions"], list):
+        return _emit(
+            _error_report("SESSIONS_NOT_ARRAY:sessions 必须是 JSON 数组", root["config"]),
+            args.output,
+        )
+
+    try:
+        config = EvalSessionConfig.from_mapping(root["config"])
+        report = compute_session_report(root["sessions"], config)
     except ValueError as exc:
-        # fail-closed：解析或校验失败，输出结构化错误而非零指标报告
-        error_report = {
-            "report_version": "d13c-session-eval-report/v1",
-            "config": raw.get("config", {}),
-            "aggregate_metrics": None,
-            "per_session_metrics": [],
-            "critical_zero_ok": None,
-            "fail_closed_reasons": [f"INVALID_INPUT:{exc}"],
-            "provenance": {
-                "note": (
-                    "fail-closed：输入解析/校验失败，不输出任何指标；"
-                    "未取得麒麟 VM 实测前 Runtime 结论 UNVERIFIED。"
-                )
-            },
-        }
-        text = json.dumps(error_report, ensure_ascii=False, indent=2)
-        if args.output:
-            Path(args.output).write_text(text, encoding="utf-8")
-        else:
-            print(text)
-        return 2
+        return _emit(
+            _error_report(f"INVALID_INPUT:{exc}", root.get("config")),
+            args.output,
+        )
 
-    text = json.dumps(report, ensure_ascii=False, indent=2)
-    if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
-    else:
-        print(text)
-    return 0
-
+    # compute 级 fail-closed（NO_VALID_SESSIONS / 轮次证据不足 / 无跨会话 pair 等）
+    return _emit(report, args.output)
 
 if __name__ == "__main__":
     raise SystemExit(main())
