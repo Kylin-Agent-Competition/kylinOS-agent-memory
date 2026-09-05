@@ -14,7 +14,8 @@
 #   ├── bin/kylin-memory-server        (可重定位 launcher)
 #   ├── runtime/app/                   (memory-service 模块级复制 + migrations)
 #   ├── runtime/bridge/                (kylin_embedding*.so)
-#   ├── runtime/python/                (内嵌 venv，重定位)
+#   ├── runtime/python/                (内嵌 venv，重定位：bin 仅保留 python symlink，
+#                                       无构建机绝对路径 console-script)
 #   ├── config/config.toml.example
 #   ├── systemd/                       (unit + install/uninstall/verify)
 #   ├── VERSION  manifest.json  SHA256SUMS
@@ -29,6 +30,8 @@ SOURCE_COMMIT=""
 PYTHON3="${PYTHON3:-/usr/bin/python3.12}"
 PACKAGE_VERSION="0.1.0-d14a"
 PACKAGE_NAME="kylin-memory-a-d14a"
+# 构建期 venv；包内 migration smoke（Phase 2.9）前删除，证明运行入口不依赖构建路径
+BUILD_VENV="/tmp/kylin-d14a-build-venv"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -66,13 +69,13 @@ FULL_COMMIT="$(git -C "$REPO_DIR" rev-parse "$SOURCE_COMMIT^{commit}" 2>/dev/nul
 
 # ── Phase 1: 构建 cpp-bridge（pybind11 模块） ──
 log "构建 cpp-bridge…"
-"$PYTHON3" -m venv /tmp/kylin-d14a-build-venv
+"$PYTHON3" -m venv "$BUILD_VENV"
 # memory-service 运行时依赖（contract §2 runtime/python）+ pybind11 构建依赖
-/tmp/kylin-d14a-build-venv/bin/pip install --quiet \
+"$BUILD_VENV/bin/pip" install --quiet \
   -r "$REPO_DIR/memory-service/requirements.txt" pybind11
 BRIDGE_BUILD="$REPO_DIR/cpp-bridge/build-d14a-release"
 cmake -S "$REPO_DIR/cpp-bridge" -B "$BRIDGE_BUILD" \
-  -Dpybind11_DIR="$(/tmp/kylin-d14a-build-venv/bin/python -m pybind11 --cmakedir)"
+  -Dpybind11_DIR="$("$BUILD_VENV/bin/python" -m pybind11 --cmakedir)"
 cmake --build "$BRIDGE_BUILD" -j"$(nproc)"
 
 # ── Phase 2: 组装发布包目录 ──
@@ -123,8 +126,23 @@ PYEOF
 
 # 2.4 内嵌 venv（重定位；tar 保留符号链接，规避 vboxsf 无法创建 symlink）
 mkdir -p "$DIST/runtime/python"
-tar -C /tmp/kylin-d14a-build-venv -cf - . | tar -C "$DIST/runtime/python" -xf -
+tar -C "$BUILD_VENV" -cf - . | tar -C "$DIST/runtime/python" -xf -
 sed -i 's/^command = .*/command = (relocatable)/' "$DIST/runtime/python/pyvenv.cfg"
+
+# 2.4.1 移除 runtime/python/bin 中内容含构建 venv 绝对路径的常规文件
+# （venv console-script shebang 硬编码 $BUILD_VENV/bin/python，破坏可重定位；
+#  python/python3 为 symlink（grep -r 不跟随），不受影响）
+log "扫描 runtime/python/bin 常规文件的构建路径残留（$BUILD_VENV）…"
+while IFS= read -r -d '' f; do
+  log "移除构建路径残留命令: $f"
+  rm -f "$f"
+done < <(grep -rlZF "$BUILD_VENV" "$DIST/runtime/python/bin" 2>/dev/null || true)
+
+# 2.4.2 fail-closed 二次残留扫描：常规文件仍含构建路径则终止打包并列出残留
+BUILD_PATH_RESIDUE="$(grep -rlF "$BUILD_VENV" "$DIST/runtime/python/bin" 2>/dev/null || true)"
+[ -z "$BUILD_PATH_RESIDUE" ] \
+  || die "runtime/python/bin 仍残留构建 venv 路径（不可重定位）: $BUILD_PATH_RESIDUE"
+log "runtime/python/bin 构建路径残留扫描: 通过"
 
 # 2.5 bin/kylin-memory-server（可重定位 launcher）
 cat > "$DIST/bin/kylin-memory-server" << 'LAUNCHER'
@@ -172,13 +190,16 @@ cp "$REPO_DIR/packaging/release/systemd_verify.sh" "$DIST/systemd/verify.sh"
 echo "$PACKAGE_VERSION" > "$DIST/VERSION"
 
 # ── Phase 2.9: 包内 Alembic migration smoke（BLOCKER 2 复审要求） ──
-# 在临时 DB 上执行 upgrade head，证明发布包内迁移链可用（无源码依赖）
+# 在临时 DB 上执行 upgrade head，证明发布包内迁移链可用（无源码依赖）。smoke 前置
+# 删除构建 venv：本步骤证明 <runtime python> -m alembic 模块入口不依赖构建期路径。
+log "删除构建 venv（smoke 前置，验证模块入口独立）…"
+rm -rf "$BUILD_VENV"
 log "包内 Alembic migration smoke…"
 MIGRATE_DB="/tmp/kylin-d14a-migrate-smoke.db"
 rm -f "$MIGRATE_DB"
 ( cd "$DIST/runtime/app" \
   && KYLIN_MEMORY_DB="$MIGRATE_DB" PYTHONPATH="$DIST/runtime/app" \
-     "$DIST/runtime/python/bin/alembic" -c migrations/alembic.ini upgrade head ) \
+     "$DIST/runtime/python/bin/python" -m alembic -c migrations/alembic.ini upgrade head ) \
   || die "包内 Alembic migration smoke 失败"
 "$DIST/runtime/python/bin/python" -c \
   "import sqlite3,os; c=sqlite3.connect('$MIGRATE_DB'); print('migrate head:', c.execute('SELECT version_num FROM alembic_version').fetchone()[0])" \

@@ -21,9 +21,10 @@ install →（事务化）rollback 全流程。
    → rollback 非零退出、stderr 含可诊断错误、旧 unit 备份仍在、事务目录未被删除。
 5. 中段失败可恢复性：mock 在 enable 时失败导致 install 非零退出（事务保留）→
    rollback 仍能完整恢复预置旧状态。
-6. L0 静态证据：以 subprocess 对三脚本（systemd_install.sh / systemd_uninstall.sh /
-   package_smoke.sh）分别执行 `bash -n` 并断言 exit 0（controller L0 白名单不接受
-   裸 bash -n，故以 pytest 形式提供；这仍是 L0 shell 静态证据，不是 L1/Runtime）。
+6. L0 静态证据：以 subprocess 对四脚本（build_release_package.sh /
+   systemd_install.sh / systemd_uninstall.sh / package_smoke.sh）分别执行 `bash -n`
+   并断言 exit 0（controller L0 白名单不接受裸 bash -n，故以 pytest 形式提供；
+   这仍是 L0 shell 静态证据，不是 L1/Runtime）。
 7. H-1：package_smoke.sh 的 upgrade-rollback 场景必须在调用 install/uninstall
    子脚本前 `export INSTALL_PREFIX`（静态顺序断言于真实脚本文本）+ 缺 --prefix 时
    提供清晰诊断（`${INSTALL_PREFIX:-}`，避免 set -u 掩盖 die）；
@@ -94,8 +95,31 @@ MANAGED_FILES = {
     "config/config.toml.example": b"[socket]\npath = \"$XDG_RUNTIME_DIR/kylin-memory/memory.sock\"\n",
 }
 
-# 包内 venv 桩：python 转发到 PYTHON3；alembic 在临时 DB 上写入 alembic_version
-PYTHON_STUB = "#!/usr/bin/env bash\nexec \"${PYTHON3:?PYTHON3 required}\" \"$@\"\n"
+# 包内 venv 桩：python 转发到 PYTHON3；argv 含 `-m alembic` 时执行与 ALEMBIC_STUB
+# 等价的 SQLite 写 alembic_version 行为（KYLIN_MEMORY_DB 守卫保留），其余参数转发。
+PYTHON_STUB = (
+    "#!/usr/bin/env bash\n"
+    "set -euo pipefail\n"
+    'prev=""\n'
+    'for a in "$@"; do\n'
+    '  if [ "$prev" = "-m" ] && [ "$a" = "alembic" ]; then\n'
+    "    db=\"${KYLIN_MEMORY_DB:?KYLIN_MEMORY_DB required}\"\n"
+    '    mkdir -p "$(dirname "$db")"\n'
+    '    exec "${PYTHON3:?PYTHON3 required}" - "$db" <<'"'"'PYEOF'"'"'\n'
+    "import sqlite3, sys\n"
+    "db = sys.argv[1]\n"
+    "conn = sqlite3.connect(db)\n"
+    'conn.execute("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)")\n'
+    'conn.execute("DELETE FROM alembic_version")\n'
+    "conn.execute(\"INSERT INTO alembic_version (version_num) VALUES ('d14a_head')\")\n"
+    "conn.commit()\n"
+    "print('mock alembic upgrade head: d14a_head')\n"
+    "PYEOF\n"
+    "  fi\n"
+    '  prev="$a"\n'
+    "done\n"
+    'exec "${PYTHON3:?PYTHON3 required}" "$@"\n'
+)
 ALEMBIC_STUB = (
     "#!/usr/bin/env bash\n"
     "db=\"${KYLIN_MEMORY_DB:?KYLIN_MEMORY_DB required}\"\n"
@@ -137,7 +161,8 @@ def build_package(root: Path) -> Path:
         f = pkg / rel
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_bytes(data)
-    # 包内 venv 桩：python 转发到 PYTHON3；alembic 在临时 DB 上写入 alembic_version
+    # 包内 venv 桩：python 转发到 PYTHON3 并识别 -m alembic；alembic 在临时 DB 上
+    # 写入 alembic_version（与 ALEMBIC_STUB 同语义；install 迁移现走模块入口）
     venv_bin = pkg / "runtime" / "python" / "bin"
     venv_bin.mkdir(parents=True)
     (venv_bin / "python").write_text(PYTHON_STUB, encoding="utf-8")
@@ -410,8 +435,9 @@ class TxnHarness:
 
 # ─────────────────────────── 0. L0 shell 静态证据（bash -n） ───────────────────────────
 
-def test_shell_syntax_bash_n_three_scripts(tmp_path):
-    for name in ("package_smoke.sh", "systemd_install.sh", "systemd_uninstall.sh"):
+def test_shell_syntax_bash_n_release_scripts(tmp_path):
+    for name in ("build_release_package.sh", "package_smoke.sh",
+                 "systemd_install.sh", "systemd_uninstall.sh"):
         script = TEST_DIR / name
         proc = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
         assert proc.returncode == 0, "bash -n 失败: %s\nstderr=%s" % (name, proc.stderr)

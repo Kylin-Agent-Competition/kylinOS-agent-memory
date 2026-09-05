@@ -320,13 +320,15 @@ sed "s|%h/.local/bin/kylin-memory-server|$INSTALL_PREFIX/bin/kylin-memory-server
 systemctl --user daemon-reload
 
 # ── 7. 首次启动前 Alembic 迁移（BLOCKER 2：clean VM 必须 upgrade head） ──
+# 可重定位：使用 <runtime python> -m alembic 模块入口（发布包内不含构建期 venv 的
+# console-script；其 shebang 携带构建机绝对路径，不可重定位）
 export KYLIN_MEMORY_DB="${KYLIN_MEMORY_DB:-$HOME/.local/share/kylin-memory/kylin_memory.db}"
 mkdir -p "$(dirname "$KYLIN_MEMORY_DB")"
 log "执行 Alembic 迁移（upgrade head）…"
 ( cd "$INSTALL_PREFIX/runtime/app" \
   && PYTHONPATH="$INSTALL_PREFIX/runtime/app" \
-     "$INSTALL_PREFIX/runtime/python/bin/alembic" \
-     -c migrations/alembic.ini upgrade head ) \
+     "$INSTALL_PREFIX/runtime/python/bin/python" \
+     -m alembic -c migrations/alembic.ini upgrade head ) \
   || die "Alembic migration 失败"
 # 校验 alembic_version 存在
 "$INSTALL_PREFIX/runtime/python/bin/python" - <<'PYEOF' || die "alembic_version 校验失败"
