@@ -172,6 +172,7 @@ turn.finalized / event.ingest / forget.* production 默认不注册 → UNSUPPOR
 | S2 | 完成 | `a8b78df` | ProductionSourceResolver（fixture SQLite L0，16 用例）；发现并规避 Qt 5.15 `QSQLITE_OPEN_READONLY=TRUE` 带值形式回退读写模式的缺陷 |
 | S3/S5 首轮 VM 回归 | 部分 | `6581d2f` | 见 `evidence/l2-kylin-vm/pr151_vm_test_report_20260905.md`；ctest 12/12、Hook 集成 20 PASS、QML 构建 OK；S3 patch 部署/TD-008 确认/S5 全链路未完成，发现 4 项（见 9.2） |
 | V1/V2 修复 | 完成 | `0764118` | QML Qt 5.12 兼容修复 + `qml_pages_load` 全量加载 L0 回归（见 9.2） |
+| V3-R（resolver 改造） | 完成 | `55ca828` | ProductionSourceResolver 适配真实 schema（RECORD + JSON blob，见 9.4）；L0 重构 16 → 25 用例，全套 ctest 13/13 绿（WSL Qt 5.15.3 本地验证）；生产注册保持 BLOCKED_BY_HOST_MAPPING，待 S5 复测 |
 | S4 | 未开始 | — | 依赖 S4-BLOCK-001 缓解 |
 | S6 | 未开始 | — | 依赖 S5 完成 |
 
@@ -195,13 +196,13 @@ VM 环境：银河麒麟 V11 x86_64（Qt 5.12）；报告：`evidence/l2-kylin-v
 | L0 ctest | 11/11 全绿（QML 2 项因 `qtquickcontrols2-5-dev` 被 KYSEC ostree guard 阻装而 gate 跳过，QML 验证由 mini loader 补位） |
 | QML 加载 | 14/14 PASS（现场编译 mini loader，等价 `qml_pages_load`；V2 修复在麒麟真实运行时确认，V1 无回归；V1 的 Qt 5.12 兼容性仍以 pr151 VM 复测为准） |
 | **V3 schema 确认** | **调查关闭**：`RECORD.message` 为 JSON blob——`author`（User/Bot）区分角色、Bot 终稿 `isEnd=true`、正文在 `$.message`、模型名在 `$.modelMsg`；查询模型 SQL（json_extract）已在真实 DB 验证（B1~B5 全过）；session 3/4 仅 User 无终稿 = 天然 fail-closed 场景样本 |
-| V3-R（resolver 改造） | 输入齐备待施工：schema 经 config 覆盖 + role/终稿判定改 JSON 路径 + turn 按 sessionID+msgIndex 配对 + 无终稿 fail-closed |
+| V3-R（resolver 改造） | **完成（`55ca828`）**：config 默认值 = 实测 schema（RECORD/ID/sessionID/msgIndex/message + JSON 字段 author/message/isEnd + 角色值 User/Bot）；role/终稿判定改 C++ 侧 QJsonDocument 解析（不依赖 SQLite JSON1，任意构建可用）；turn 按 sessionID+msgIndex 64 行回扫窗口配对最近 User 行（容忍流式中间行；窗口内任何行 JSON 损坏即 fail-closed，防跳过损坏行配错 turn；User 行超出窗口 fail-closed）；无终稿 fail-closed；L0 25 用例全绿（新增 A4 流式中间行、C11~C15 JSON/窗口 fail-closed、E1 窗口边界） |
 | S4-BLOCK-003 | 本 VM 不成立（dev 包齐备）；但系统 ostree guard 禁止装包——不触碰 /usr 正好符合红线 |
 | S3 / TD-007/008 | 本 VM 无宿主源码，不可行，状态不变 |
 
 ### 9.3 S5 复测前置条件（汇总）
 
-1. V3 schema 确认（真实数据样本或源码级 RECORD 写入逻辑）；
+1. ~~V3 schema 确认（真实数据样本或源码级 RECORD 写入逻辑）~~ **已关闭**（9.4：JSON blob 字段语义 + 查询模型实测 B1~B5 全过）；
 2. S4-BLOCK-003 缓解：VM dev 包与构建环境（S3 patch 编译部署前置）；
 3. S4-BLOCK-001 缓解：GUI 手动 Tool 触发方案（TD-007 三类事件采集前置）；
 4. 本轮 QML 修复在 VM 复跑 QML smoke 实测确认（修复依据 Qt 5.12 兼容性分析，以 VM 实测为准，不提前标注 HOST_VERIFIED）。
