@@ -1,10 +1,14 @@
 #include "adapters/production_source_resolver.h"
 
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QUuid>
 #include <QVariant>
+
+#include <cmath>
 
 namespace kylin::memory::client::v1 {
 
@@ -14,9 +18,24 @@ namespace {
 // 口径一致；变更须同步事件契约 v1 §7 与服务端 resolver）。
 constexpr const char kSourceRefPrefix[] = "ref:chat-record:";
 
+// User 行回扫窗口：从终稿 msgIndex-1 向前最多扫描 64 行寻找最近 User 行。
+// 依据：实测 turn 为 User N / Bot 终稿 N+1 相邻配对；窗口容忍少量中间行
+// （流式/刷新残留）。窗口内无 User 行 → fail-closed（不扩大扫描配错 turn）。
+constexpr int kUserScanWindowLimit = 64;
+
 QString sourceRefPrefixQString()
 {
     return QString::fromLatin1(kSourceRefPrefix);
+}
+
+// JSON blob → QJsonObject；解析失败/非对象 → nullopt（fail-closed）。
+std::optional<QJsonObject> parseJsonObject(const QString& blob)
+{
+    const QJsonDocument doc = QJsonDocument::fromJson(blob.toUtf8());
+    if (!doc.isObject()) {
+        return std::nullopt;
+    }
+    return doc.object();
 }
 
 }  // namespace
@@ -69,11 +88,12 @@ bool ProductionSourceResolver::open()
     if (opened_) {
         return true;
     }
-    // fail-closed 前置校验：路径 + 标识符（role 值走绑定参数，无需校验）。
+    // fail-closed 前置校验：路径 + 表/列标识符（JSON 字段名与角色值仅进入
+    // C++ 解析 / 绑定参数，无 SQL 注入面，无需标识符校验）。
     if (config_.databasePath.isEmpty() || !isValidIdentifier(config_.tableName)
-        || !isValidIdentifier(config_.messageIdColumn)
-        || !isValidIdentifier(config_.turnIdColumn) || !isValidIdentifier(config_.roleColumn)
-        || !isValidIdentifier(config_.contentColumn)) {
+        || !isValidIdentifier(config_.idColumn) || !isValidIdentifier(config_.sessionColumn)
+        || !isValidIdentifier(config_.msgIndexColumn)
+        || !isValidIdentifier(config_.messageColumn)) {
         return false;
     }
     // 文件预检（双重防御）：不存在/不可读直接 fail-closed，不进入 SQLite 打开，
@@ -116,53 +136,102 @@ std::optional<ResolvedTurnContent> ProductionSourceResolver::resolve(
         return std::nullopt;
     }
 
-    // ① 终稿消息行（assistant 角色 + 正文 + turn 关联键）。
+    // ① 终稿行（session 关联键 + 会话内序号 + JSON blob）。
+    //    messageId 为数字串时按整数绑定（对齐 INTEGER 主键），否则按文本
+    //    绑定（兼容 TEXT 主键的自定义 schema）。
     QSqlQuery finalQuery(db);
     finalQuery.setForwardOnly(true);
     const QString finalSql =
         QStringLiteral("SELECT %1, %2, %3 FROM %4 WHERE %5 = :message_id LIMIT 1")
-            .arg(config_.roleColumn, config_.contentColumn, config_.turnIdColumn,
-                 config_.tableName, config_.messageIdColumn);
+            .arg(config_.sessionColumn, config_.msgIndexColumn, config_.messageColumn,
+                 config_.tableName, config_.idColumn);
     if (!finalQuery.prepare(finalSql)) {
         return std::nullopt;
     }
-    finalQuery.bindValue(QStringLiteral(":message_id"), *messageId);
+    {
+        bool numericId = false;
+        const qlonglong idNum = messageId->toLongLong(&numericId);
+        finalQuery.bindValue(QStringLiteral(":message_id"),
+                             numericId ? QVariant(idNum) : QVariant(*messageId));
+    }
     if (!finalQuery.exec() || !finalQuery.next()) {
         return std::nullopt;  // 行缺失或 SQL 错误（含表缺失）
     }
-    if (finalQuery.value(0).toString() != config_.assistantRoleValue) {
-        return std::nullopt;  // 终稿消息须为 assistant 角色，否则 fail-closed
+    const QVariant sessionVar = finalQuery.value(0);
+    const QVariant msgIndexVar = finalQuery.value(1);
+    if (sessionVar.toString().isEmpty()) {
+        return std::nullopt;  // 无会话关联键，无法定位同 turn 用户消息
     }
-    const QString modelResponse = finalQuery.value(1).toString();
-    const QString turnKey = finalQuery.value(2).toString();
-    if (turnKey.isEmpty()) {
-        return std::nullopt;  // 无法关联同 turn 用户消息
+    bool indexOk = false;
+    const double finalIndex = msgIndexVar.toDouble(&indexOk);
+    if (!indexOk || std::isnan(finalIndex) || finalIndex < 0) {
+        return std::nullopt;  // 会话内序号缺失/非数值（无法配对）
     }
 
-    // ② 同 turn 用户消息正文 → original_user_text（必填非空）。
+    // ② 终稿行 JSON 校验：author=Bot + isEnd=true + 正文为字符串。
+    //    JSON 在 C++ 解析（QJsonDocument），不依赖 SQLite JSON1 扩展。
+    const std::optional<QJsonObject> finalJson =
+        parseJsonObject(finalQuery.value(2).toString());
+    if (!finalJson.has_value()) {
+        return std::nullopt;  // JSON 解析失败/非对象
+    }
+    {
+        const QJsonValue author = finalJson->value(config_.authorField);
+        if (!author.isString() || author.toString() != config_.assistantAuthorValue) {
+            return std::nullopt;  // 非 Bot 行（如被误指为终稿的 User 行）
+        }
+        const QJsonValue isEnd = finalJson->value(config_.isEndField);
+        if (!isEnd.isBool() || !isEnd.toBool()) {
+            return std::nullopt;  // 非终稿（流式/中间消息 isEnd=false 或字段缺失）
+        }
+    }
+    const QJsonValue responseValue = finalJson->value(config_.contentField);
+    if (!responseValue.isString()) {
+        return std::nullopt;  // 终稿正文字段缺失或非字符串
+    }
+    const QString modelResponse = responseValue.toString();
+
+    // ③ 同 turn 用户消息：同 session 内从终稿序号-1 向前回扫最近 User 行
+    //    （实测配对为 User N / Bot 终稿 N+1；窗口容忍少量中间行）。
     QSqlQuery userQuery(db);
     userQuery.setForwardOnly(true);
-    const QString userSql = QStringLiteral("SELECT %1 FROM %2 WHERE %3 = :turn_id AND %4 = :role LIMIT 1")
-                                .arg(config_.contentColumn, config_.tableName,
-                                     config_.turnIdColumn, config_.roleColumn);
+    const QString userSql =
+        QStringLiteral("SELECT %1 FROM %2 WHERE %3 = :session_id AND %4 < :final_index "
+                       "ORDER BY %4 DESC LIMIT %5")
+            .arg(config_.messageColumn, config_.tableName, config_.sessionColumn,
+                 config_.msgIndexColumn)
+            .arg(kUserScanWindowLimit);
     if (!userQuery.prepare(userSql)) {
         return std::nullopt;
     }
-    userQuery.bindValue(QStringLiteral(":turn_id"), turnKey);
-    userQuery.bindValue(QStringLiteral(":role"), config_.userRoleValue);
-    if (!userQuery.exec() || !userQuery.next()) {
-        return std::nullopt;  // 同 turn 无用户消息
+    userQuery.bindValue(QStringLiteral(":session_id"), sessionVar);
+    userQuery.bindValue(QStringLiteral(":final_index"), finalIndex);
+    if (!userQuery.exec()) {
+        return std::nullopt;
     }
-    const QString originalUserText = userQuery.value(0).toString();
-    if (originalUserText.isEmpty()) {
-        return std::nullopt;  // 空串视为未命中（NOT NULL 冻结语义）
+    while (userQuery.next()) {
+        // 窗口内任何行 JSON 损坏 → fail-closed：跳过损坏行可能把终稿配到
+        // 更早 turn 的 User 消息（配错 turn 比漏检更不可接受）。
+        const std::optional<QJsonObject> rowJson =
+            parseJsonObject(userQuery.value(0).toString());
+        if (!rowJson.has_value()) {
+            return std::nullopt;
+        }
+        const QJsonValue author = rowJson->value(config_.authorField);
+        if (author.isString() && author.toString() == config_.userAuthorValue) {
+            // 最近 User 行即本 turn 用户消息：正文必填非空（NOT NULL 冻结语义）。
+            const QJsonValue userText = rowJson->value(config_.contentField);
+            if (!userText.isString() || userText.toString().isEmpty()) {
+                return std::nullopt;  // 空串视为未命中，禁止空串替代
+            }
+            ResolvedTurnContent content;
+            content.originalUserText = userText.toString();
+            content.modelRequest.clear();  // 宿主 Chat DB 不提供模型请求侧原文，不编造
+            content.modelResponse = modelResponse;
+            return content;
+        }
     }
-
-    ResolvedTurnContent content;
-    content.originalUserText = originalUserText;
-    content.modelRequest.clear();  // 宿主 Chat DB 不提供模型请求侧原文，不编造
-    content.modelResponse = modelResponse;
-    return content;
+    return std::nullopt;  // 窗口内无 User 行（如模型未回复的 turn）→ fail-closed
 }
 
 }  // namespace kylin::memory::client::v1

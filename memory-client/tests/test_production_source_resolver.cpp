@@ -1,36 +1,53 @@
 // test_production_source_resolver.cpp — Host mapping 任务卡 S2 L0 契约测试
 //
+// fixture 复刻 bacon VM 实测真实 schema（V3-R，2026-09-05，报告
+// evidence/l2-kylin-vm/c_hm_bacon_vm_schema_and_regression_20260905.md §3）：
+//
+//   CREATE TABLE RECORD(ID, sessionID, msgIndex, message TEXT, operateTime)
+//   message = JSON blob：$.author "User"|"Bot"、$.isEnd bool、$.message 正文
+//   turn 配对：同 sessionID 内 User N / Bot 终稿 N+1（msgIndex 会话内序号）
+//
 // 范围（fixture SQLite 模拟宿主 Chat DB；生产注册仍 BLOCKED_BY_HOST_MAPPING）：
 //   §A 只读打开与命中
 //     A1 open() 成功 + isOpen
-//     A2 resolve 命中：originalUserText（同 turn 用户消息）+ modelResponse
-//        （终稿 assistant 消息）+ modelRequest 留空（不编造）
+//     A2 resolve 命中：originalUserText（同 session 最近 User 行）+
+//        modelResponse（Bot 终稿正文）+ modelRequest 留空（不编造）
 //     A3 与 TurnExtractionAdapter 集成：Extracted 状态、正文仅入
 //        providerCandidate、ipcEvent 序列化不含正文（原文隔离红线）
+//     A4 终稿与 User 行之间存在 Bot 流式中间行（isEnd=false）：窗口扫描
+//        跳过非 User 行仍命中最近 User 行
 //   §B 只读红线
 //     B1 chmod 0444 只读文件仍可打开并命中（证明 QSQLITE_OPEN_READONLY
 //        生效：若以读写模式打开 0444 文件会 SQLITE_CANTOPEN）[POSIX]
 //     B2 resolve 前后 DB 文件 SHA-256 不变（绝不写宿主 DB）
 //   §C fail-closed（一律 nullopt，禁止编造正文）
-//     C1 未 open() 即 resolve
-//     C2 DB 文件不存在 → open() false
-//     C3 chmod 000 不可读 → open() false [POSIX，root 下跳过]
-//     C4 表缺失（SQLite 惰性打开，open 成功但 resolve 未命中）
-//     C5 行缺失（message_id 无对应行）
-//     C6 同 turn 无用户消息
-//     C7 用户消息正文为空串（NOT NULL 冻结语义）
-//     C8 终稿消息 role 非 assistant（被误指为终稿的用户消息）
-//     C9 非受控引用格式（空串/无前缀/错误前缀/空 id/大小写不符/前导空格）
+//     C1  未 open() 即 resolve
+//     C2  DB 文件不存在 → open() false（且不得建库）
+//     C3  chmod 000 不可读 → open() false [POSIX，root 下跳过]
+//     C4  表缺失（SQLite 惰性打开，open 成功但 resolve 未命中）
+//     C5  行缺失（messageId 无对应行）
+//     C6  同 session 无 User 行（其它 session 有 User 行 → 兼验 session 隔离）
+//     C7  最近 User 行正文为空串（NOT NULL 冻结语义）
+//     C8  终稿行 author 非 Bot（被误指为终稿的 User 行）
+//     C9  非受控引用格式（空串/无前缀/错误前缀/空 id/大小写不符/前后缀污染）
 //     C10 config 标识符非法（SQL 注入防御）→ open() false
-//   §D schema 适配（VM 确认真实 schema 后经 config 覆盖，不改代码）
-//     D1 自定义表/列/角色值命中
+//     C11 终稿行 message 非 JSON / JSON 非对象（数组/字符串/截断）
+//     C12 终稿行 isEnd=false（Bot 流式/中间消息，非终稿）
+//     C13 终稿行 JSON 字段缺失或类型错误（author 缺失/非字符串、
+//         正文缺失/非字符串、isEnd 非布尔）
+//     C14 回扫窗口内行 JSON 损坏（跳过损坏行可能配错 turn → fail-closed）
+//     C15 最近 User 行超出 64 行回扫窗口（不扩大扫描配错 turn）
+//   §D schema 适配（config 覆盖，不改代码）
+//     D1 自定义表/列/JSON 字段名/角色值命中
+//   §E 窗口边界
+//     E1 User 行恰在窗口边界（回扫第 64 行）→ 命中
 //
 // 依赖：Qt5 Sql QSQLITE 驱动（CI 已装 libqt5sql5-sqlite；缺失时本测试
 //       失败而非跳过——L0 全绿必须意味着只读/fail-closed 行为真实验证）。
 //
 // 注意：本测试仅为 S2 生产 resolver 的 L0 契约验证（fixture SQLite 模拟），
-//       不声称真实宿主 Chat DB 已接入（生产状态保持 BLOCKED_BY_HOST_MAPPING，
-//       真实 schema 在麒麟 VM 从 kylin-aiassistant 源码确认后经 config 适配）。
+//       不声称真实宿主 Chat DB 已接入（生产状态保持 BLOCKED_BY_HOST_MAPPING；
+//       真实 schema 已在 bacon VM 实测确认，经 config 默认值适配）。
 
 #include "adapters/memory_source_resolver.h"
 #include "adapters/production_source_resolver.h"
@@ -39,6 +56,7 @@
 #include <QCryptographicHash>
 #include <QFile>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QtTest>
 #include <QSqlDatabase>
@@ -53,28 +71,84 @@ namespace client = kylin::memory::client::v1;
 
 namespace {
 
-// 默认 schema fixture（S2 假设默认值）：
-//   chat_record(message_id, turn_id, role, content)
-// 数据设计：
-//   turn-1  完整命中（user + assistant 终稿）
-//   turn-2  仅 assistant（无用户消息）→ C6
-//   turn-3  用户消息正文空串 → C7
-//   turn-4  用户消息被误指为终稿 → C8
-constexpr const char kDefaultCreateSql[] =
-    "CREATE TABLE chat_record ("
-    "message_id TEXT PRIMARY KEY, turn_id TEXT, role TEXT, content TEXT)";
-constexpr const char* kDefaultInsertSqls[] = {
-    "INSERT INTO chat_record VALUES ('msg-user-1','turn-1','user','用户真实提问正文')",
-    "INSERT INTO chat_record VALUES ('msg-asst-1','turn-1','assistant','助手终稿正文')",
-    "INSERT INTO chat_record VALUES ('msg-asst-2','turn-2','assistant','无用户消息的终稿')",
-    "INSERT INTO chat_record VALUES ('msg-user-3','turn-3','user','')",
-    "INSERT INTO chat_record VALUES ('msg-asst-3','turn-3','assistant','空用户正文的终稿')",
-    "INSERT INTO chat_record VALUES ('msg-user-4','turn-4','user','被误指为终稿的用户消息')",
-    "INSERT INTO chat_record VALUES ('msg-user-5','turn-5','user','第二条完整turn的用户正文')",
-    "INSERT INTO chat_record VALUES ('msg-asst-5','turn-5','assistant','第二条完整turn的终稿')",
+// ── JSON blob 构造（QJsonDocument 保证合法 JSON；resolver 在 C++ 侧解析）──
+
+QString blob(const QJsonObject& obj)
+{
+    return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+}
+
+QString userMsg(const QString& text)
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("author"), QStringLiteral("User"));
+    obj.insert(QStringLiteral("message"), text);
+    return blob(obj);
+}
+
+QString botFinalMsg(const QString& text)
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("author"), QStringLiteral("Bot"));
+    obj.insert(QStringLiteral("isEnd"), true);
+    obj.insert(QStringLiteral("message"), text);
+    return blob(obj);
+}
+
+QString botStreamMsg(const QString& text)
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("author"), QStringLiteral("Bot"));
+    obj.insert(QStringLiteral("isEnd"), false);
+    obj.insert(QStringLiteral("message"), text);
+    return blob(obj);
+}
+
+// ── fixture：RECORD 表（真实 schema 复刻，参数绑定写入 JSON blob）──
+
+struct RecordRow {
+    qint64 id = 0;
+    QString session;
+    int msgIndex = 0;
+    QString messageJson;  // JSON blob（可为损坏 JSON，供 fail-closed 用例）
 };
 
-// 用 QSQLITE 写模式创建 fixture（仅测试用；resolver 自身只读打开）。
+bool createRecordDb(const QString& path, const QList<RecordRow>& rows)
+{
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"));
+        db.setDatabaseName(path);
+        if (!db.open()) {
+            return false;
+        }
+        QSqlQuery q(db);
+        if (!q.exec(QStringLiteral(
+                "CREATE TABLE RECORD (ID INTEGER PRIMARY KEY, sessionID TEXT, "
+                "msgIndex INTEGER, message TEXT, operateTime TEXT)"))) {
+            return false;
+        }
+        QSqlQuery insert(db);
+        if (!insert.prepare(QStringLiteral(
+                "INSERT INTO RECORD (ID, sessionID, msgIndex, message, operateTime) "
+                "VALUES (:id, :session, :idx, :msg, :time)"))) {
+            return false;
+        }
+        for (const RecordRow& row : rows) {
+            insert.bindValue(QStringLiteral(":id"), row.id);
+            insert.bindValue(QStringLiteral(":session"), row.session);
+            insert.bindValue(QStringLiteral(":idx"), row.msgIndex);
+            insert.bindValue(QStringLiteral(":msg"), row.messageJson);
+            insert.bindValue(QStringLiteral(":time"), QStringLiteral("2026-09-05 12:00:00"));
+            if (!insert.exec()) {
+                return false;
+            }
+        }
+    }
+    QSqlDatabase::removeDatabase(QSqlDatabase::defaultConnection);
+    return true;
+}
+
+// 通用 fixture（任意 SQL；C4 无关表 / D1 自定义 schema / C11 损坏 JSON 行用）。
 bool createFixtureDb(const QString& path, const QString& createSql,
                      const QList<QString>& insertSqls)
 {
@@ -114,6 +188,32 @@ client::ProductionSourceResolverConfig defaultConfig(const QString& dbPath)
     return config;
 }
 
+// 默认 fixture 数据（真实 schema：RECORD + JSON blob）：
+//   sess-1  完整 turn（User 1 / Bot 终稿 2 相邻配对）→ A2/A3/B1/B2 命中
+//   sess-2  仅 Bot 终稿（其它 session 均有 User 行）→ C6（兼验 session 隔离：
+//           扫描必须限定同 sessionID，不得命中 sess-1 的 User 行）
+//   sess-3  User 正文空串 → C7
+//   sess-4  User 行被误指为终稿 → C8
+//   sess-5  第二条完整 turn → B2 第二次命中
+QList<RecordRow> defaultRecordRows()
+{
+    return {
+        {101, QStringLiteral("sess-1"), 1, userMsg(QStringLiteral("用户真实提问正文"))},
+        {102, QStringLiteral("sess-1"), 2, botFinalMsg(QStringLiteral("助手终稿正文"))},
+        {201, QStringLiteral("sess-2"), 1, botFinalMsg(QStringLiteral("无用户消息的终稿"))},
+        {301, QStringLiteral("sess-3"), 1, userMsg(QString())},
+        {302, QStringLiteral("sess-3"), 2, botFinalMsg(QStringLiteral("空用户正文的终稿"))},
+        {401, QStringLiteral("sess-4"), 1, userMsg(QStringLiteral("被误指为终稿的用户消息"))},
+        {501, QStringLiteral("sess-5"), 1, userMsg(QStringLiteral("第二条完整turn的用户正文"))},
+        {502, QStringLiteral("sess-5"), 2, botFinalMsg(QStringLiteral("第二条完整turn的终稿"))},
+    };
+}
+
+bool createDefaultRecordDb(const QString& path)
+{
+    return createRecordDb(path, defaultRecordRows());
+}
+
 }  // namespace
 
 class ProductionSourceResolverTest final : public QObject {
@@ -124,6 +224,7 @@ private slots:
     void openSucceedsOnReadableDatabase();          // A1
     void resolveHitsReturnsTurnContent();           // A2
     void resolveThroughTurnExtractionAdapter();     // A3
+    void resolveSkipsIntermediateBotRows();         // A4
 
     // §B 只读红线
     void readonlyOpenWorksOnWriteProtectedFile();   // B1
@@ -137,12 +238,20 @@ private slots:
     void failClosedOnMissingRow();                  // C5
     void failClosedWhenTurnHasNoUserMessage();      // C6
     void failClosedOnEmptyUserText();               // C7
-    void failClosedWhenFinalMessageNotAssistant();  // C8
+    void failClosedWhenFinalMessageNotBot();        // C8
     void failClosedOnNonControlledReferenceFormats();  // C9
     void invalidIdentifierConfigFailsOpen();        // C10
+    void failClosedOnMalformedFinalRowJson();       // C11
+    void failClosedOnNonFinalBotMessage();          // C12
+    void failClosedOnInvalidJsonFields();           // C13
+    void failClosedOnCorruptedRowInScanWindow();    // C14
+    void failClosedWhenUserRowBeyondScanWindow();   // C15
 
     // §D schema 适配
     void customSchemaConfigResolves();              // D1
+
+    // §E 窗口边界
+    void resolveHitsAtWindowBoundaryEdge();         // E1
 
 private:
     QTemporaryDir tempDir_;
@@ -153,8 +262,7 @@ private:
 void ProductionSourceResolverTest::openSucceedsOnReadableDatabase()  // A1
 {
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-a1.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
     QVERIFY(QFile::exists(dbPath));
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
@@ -167,14 +275,14 @@ void ProductionSourceResolverTest::openSucceedsOnReadableDatabase()  // A1
 void ProductionSourceResolverTest::resolveHitsReturnsTurnContent()  // A2
 {
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-a2.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY(resolver.open());
 
+    // sess-1：User msgIndex=1 / Bot 终稿 msgIndex=2（VM 实测相邻配对形态）。
     const std::optional<client::ResolvedTurnContent> hit =
-        resolver.resolve(QStringLiteral("ref:chat-record:msg-asst-1"));
+        resolver.resolve(QStringLiteral("ref:chat-record:102"));
     QVERIFY2(hit.has_value(), "受控引用应命中");
     QCOMPARE(hit->originalUserText, QStringLiteral("用户真实提问正文"));
     QCOMPARE(hit->modelResponse, QStringLiteral("助手终稿正文"));
@@ -184,17 +292,16 @@ void ProductionSourceResolverTest::resolveHitsReturnsTurnContent()  // A2
 void ProductionSourceResolverTest::resolveThroughTurnExtractionAdapter()  // A3
 {
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-a3.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY(resolver.open());
 
     client::TurnObservation obs;
     obs.userId = QStringLiteral("user-l0");
-    obs.sessionId = QStringLiteral("sess-s2-1");
+    obs.sessionId = QStringLiteral("sess-1");
     obs.turnId = QStringLiteral("turn-1");
-    obs.finalMessageId = QStringLiteral("msg-asst-1");  // → ref:chat-record:msg-asst-1
+    obs.finalMessageId = QStringLiteral("102");  // → ref:chat-record:102
     obs.finalizationReason = QStringLiteral("completed");
     obs.occurredAtIso = QStringLiteral("2026-09-05T12:00:00.456Z");
     obs.sourceType = QStringLiteral("chat");
@@ -218,6 +325,27 @@ void ProductionSourceResolverTest::resolveThroughTurnExtractionAdapter()  // A3
              "ipcEvent 不得包含助手正文");
 }
 
+void ProductionSourceResolverTest::resolveSkipsIntermediateBotRows()  // A4
+{
+    // 真实形态：User 与终稿之间存在 Bot 流式中间行（isEnd=false），
+    // 窗口扫描须跳过非 User 行命中最近 User 行（不因中间行 fail-closed）。
+    const QString dbPath = tempDir_.filePath(QStringLiteral("chat-a4.db"));
+    QVERIFY(createRecordDb(dbPath, {
+        {11, QStringLiteral("sess-a4"), 1, userMsg(QStringLiteral("流式场景的用户正文"))},
+        {12, QStringLiteral("sess-a4"), 2, botStreamMsg(QStringLiteral("流式中间片段1"))},
+        {13, QStringLiteral("sess-a4"), 3, botStreamMsg(QStringLiteral("流式中间片段2"))},
+        {14, QStringLiteral("sess-a4"), 4, botFinalMsg(QStringLiteral("流式场景的终稿正文"))},
+    }));
+
+    client::ProductionSourceResolver resolver(defaultConfig(dbPath));
+    QVERIFY(resolver.open());
+    const std::optional<client::ResolvedTurnContent> hit =
+        resolver.resolve(QStringLiteral("ref:chat-record:14"));
+    QVERIFY2(hit.has_value(), "中间流式行不应阻断配对");
+    QCOMPARE(hit->originalUserText, QStringLiteral("流式场景的用户正文"));
+    QCOMPARE(hit->modelResponse, QStringLiteral("流式场景的终稿正文"));
+}
+
 // ── §B 只读红线 ─────────────────────────────────────────────────────────────
 
 void ProductionSourceResolverTest::readonlyOpenWorksOnWriteProtectedFile()  // B1
@@ -227,8 +355,7 @@ void ProductionSourceResolverTest::readonlyOpenWorksOnWriteProtectedFile()  // B
         QSKIP("root 用户下 chmod 权限位不生效，无法验证只读打开语义");
     }
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-b1.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
     QVERIFY(::chmod(dbPath.toUtf8().constData(), 0444) == 0);
 
     // 0444 文件：只读打开必须成功（写保护不阻碍受控读取）。
@@ -238,7 +365,7 @@ void ProductionSourceResolverTest::readonlyOpenWorksOnWriteProtectedFile()  // B
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY2(resolver.open(), "只读模式应可打开 0444 文件（受控读取不受写保护阻碍）");
     const std::optional<client::ResolvedTurnContent> hit =
-        resolver.resolve(QStringLiteral("ref:chat-record:msg-asst-1"));
+        resolver.resolve(QStringLiteral("ref:chat-record:102"));
     QVERIFY2(hit.has_value(), "只读打开后应能命中");
     QCOMPARE(hit->originalUserText, QStringLiteral("用户真实提问正文"));
 
@@ -251,17 +378,16 @@ void ProductionSourceResolverTest::readonlyOpenWorksOnWriteProtectedFile()  // B
 void ProductionSourceResolverTest::resolveDoesNotModifyDatabaseFile()  // B2
 {
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-b2.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
 
     const QByteArray hashBefore = fileSha256(dbPath);
     QVERIFY(!hashBefore.isEmpty());
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY(resolver.open());
-    QVERIFY(resolver.resolve(QStringLiteral("ref:chat-record:msg-asst-1")).has_value());
-    QVERIFY(!resolver.resolve(QStringLiteral("ref:chat-record:no-such")).has_value());
-    QVERIFY(resolver.resolve(QStringLiteral("ref:chat-record:msg-asst-5")).has_value());
+    QVERIFY(resolver.resolve(QStringLiteral("ref:chat-record:102")).has_value());
+    QVERIFY(!resolver.resolve(QStringLiteral("ref:chat-record:999")).has_value());
+    QVERIFY(resolver.resolve(QStringLiteral("ref:chat-record:502")).has_value());
 
     QCOMPARE(fileSha256(dbPath), hashBefore);  // 绝不写宿主 DB（含 journal/wal）
 }
@@ -271,12 +397,11 @@ void ProductionSourceResolverTest::resolveDoesNotModifyDatabaseFile()  // B2
 void ProductionSourceResolverTest::failClosedWhenNotOpened()  // C1
 {
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c1.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY(!resolver.isOpen());
-    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:msg-asst-1")).has_value(),
+    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:102")).has_value(),
              "未 open() 必须 fail-closed");
 }
 
@@ -286,7 +411,7 @@ void ProductionSourceResolverTest::failClosedOnMissingDatabaseFile()  // C2
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY2(!resolver.open(), "文件不存在时 open() 必须失败");
     QVERIFY(!resolver.isOpen());
-    QVERIFY(!resolver.resolve(QStringLiteral("ref:chat-record:msg-asst-1")).has_value());
+    QVERIFY(!resolver.resolve(QStringLiteral("ref:chat-record:102")).has_value());
     // 只读红线回归：失败后不得在宿主侧创建 DB 文件（Qt 5.15 实测带值形式
     // "QSQLITE_OPEN_READONLY=TRUE" 不被识别，会以 READWRITE|CREATE 建库）。
     QVERIFY2(!QFile::exists(dbPath), "open() 失败不得创建数据库文件（绝不写宿主）");
@@ -299,13 +424,12 @@ void ProductionSourceResolverTest::failClosedOnUnreadableFile()  // C3
         QSKIP("root 用户下 chmod 权限位不生效，无法验证不可读语义");
     }
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c3.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
     QVERIFY(::chmod(dbPath.toUtf8().constData(), 0000) == 0);
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY2(!resolver.open(), "chmod 000 不可读文件 open() 必须失败（无权限 fail-closed）");
-    QVERIFY(!resolver.resolve(QStringLiteral("ref:chat-record:msg-asst-1")).has_value());
+    QVERIFY(!resolver.resolve(QStringLiteral("ref:chat-record:102")).has_value());
 
     ::chmod(dbPath.toUtf8().constData(), 0644);  // 恢复，便于临时目录清理
 #else
@@ -315,85 +439,85 @@ void ProductionSourceResolverTest::failClosedOnUnreadableFile()  // C3
 
 void ProductionSourceResolverTest::failClosedOnMissingTable()  // C4
 {
-    // SQLite 惰性打开：无表的 DB 文件 open() 成功，resolve 时表缺失 → fail-closed。
+    // SQLite 惰性打开：无 RECORD 表的 DB 文件 open() 成功，resolve 时表缺失
+    // → fail-closed。
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c4.db"));
     QVERIFY(createFixtureDb(dbPath, QStringLiteral("CREATE TABLE unrelated (x TEXT)"),
                             {QStringLiteral("INSERT INTO unrelated VALUES ('y')")}));
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY(resolver.open());  // 文件合法 SQLite，打开成功
-    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:msg-asst-1")).has_value(),
+    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:102")).has_value(),
              "表缺失必须 fail-closed");
 }
 
 void ProductionSourceResolverTest::failClosedOnMissingRow()  // C5
 {
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c5.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY(resolver.open());
-    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:no-such-msg")).has_value(),
+    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:999")).has_value(),
              "行缺失必须 fail-closed");
 }
 
 void ProductionSourceResolverTest::failClosedWhenTurnHasNoUserMessage()  // C6
 {
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c6.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY(resolver.open());
-    // turn-2 仅有 assistant 消息，无同 turn 用户消息。
-    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:msg-asst-2")).has_value(),
-             "同 turn 无用户消息必须 fail-closed");
+    // sess-2 仅 Bot 终稿；其它 session 均有 User 行——本用例兼验扫描的
+    // session 隔离：不得把 sess-1/sess-5 的 User 行配给 sess-2 的终稿。
+    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:201")).has_value(),
+             "同 session 无 User 行必须 fail-closed（不得跨 session 配对）");
 }
 
 void ProductionSourceResolverTest::failClosedOnEmptyUserText()  // C7
 {
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c7.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY(resolver.open());
-    // turn-3 用户消息正文为空串 → 视为未命中（NOT NULL 冻结语义，禁止空串替代）。
-    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:msg-asst-3")).has_value(),
+    // sess-3 最近 User 行正文为空串 → 视为未命中（NOT NULL 冻结语义，
+    // 禁止空串替代）。
+    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:302")).has_value(),
              "用户正文空串必须视为未命中");
 }
 
-void ProductionSourceResolverTest::failClosedWhenFinalMessageNotAssistant()  // C8
+void ProductionSourceResolverTest::failClosedWhenFinalMessageNotBot()  // C8
 {
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c8.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY(resolver.open());
-    // msg-user-4 是 user 角色行：不得作为终稿消息解析（fail-closed，不编造）。
-    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:msg-user-4")).has_value(),
-             "终稿消息 role 非 assistant 必须 fail-closed");
+    // 401 是 User 行（JSON author="User"）：不得作为终稿解析（fail-closed，
+    // 不编造）。
+    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:401")).has_value(),
+             "终稿行 author 非 Bot 必须 fail-closed");
 }
 
 void ProductionSourceResolverTest::failClosedOnNonControlledReferenceFormats()  // C9
 {
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c9.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
 
     client::ProductionSourceResolver resolver(defaultConfig(dbPath));
     QVERIFY(resolver.open());
 
     const QStringList nonControlledRefs = {
-        QString(),                                            // 空串
-        QStringLiteral("msg-asst-1"),                         // 无前缀
-        QStringLiteral("ref://turn/msg-asst-1"),              // 非受控前缀（test profile 格式）
-        QStringLiteral("ref:chat-record:"),                   // 前缀后空 id
-        QStringLiteral("REF:CHAT-RECORD:msg-asst-1"),         // 大小写不符（大小写敏感）
-        QStringLiteral(" ref:chat-record:msg-asst-1"),        // 前导空格
-        QStringLiteral("ref:chat-record:msg-asst-1 extra"),   // 后缀污染
+        QString(),                                        // 空串
+        QStringLiteral("102"),                            // 无前缀
+        QStringLiteral("ref://turn/102"),                 // 非受控前缀（test profile 格式）
+        QStringLiteral("ref:chat-record:"),               // 前缀后空 id
+        QStringLiteral("REF:CHAT-RECORD:102"),            // 大小写不符（大小写敏感）
+        QStringLiteral(" ref:chat-record:102"),           // 前导空格
+        QStringLiteral("ref:chat-record:102 extra"),      // 后缀污染
+        QStringLiteral("ref:chat-record:10 2"),           // id 中间空格（文本绑定亦无此行）
     };
     for (const QString& ref : nonControlledRefs) {
         QVERIFY2(!resolver.resolve(ref).has_value(),
@@ -404,53 +528,222 @@ void ProductionSourceResolverTest::failClosedOnNonControlledReferenceFormats()  
 void ProductionSourceResolverTest::invalidIdentifierConfigFailsOpen()  // C10
 {
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c10.db"));
-    QVERIFY(createFixtureDb(dbPath, QString::fromLatin1(kDefaultCreateSql),
-                            QList<QString>{std::begin(kDefaultInsertSqls), std::end(kDefaultInsertSqls)}));
+    QVERIFY(createDefaultRecordDb(dbPath));
 
     const QList<QString> maliciousIdentifiers = {
-        QStringLiteral("chat_record; DROP TABLE chat_record"),  // SQL 注入
-        QStringLiteral("chat-record"),                          // 连字符
-        QStringLiteral("`chat_record`"),                        // 反引号
-        QStringLiteral("chat\"record"),                         // 引号
-        QStringLiteral(""),                                     // 空表名
+        QStringLiteral("RECORD; DROP TABLE RECORD"),  // SQL 注入
+        QStringLiteral("chat-record"),                // 连字符
+        QStringLiteral("`RECORD`"),                   // 反引号
+        QStringLiteral("RE\"CORD"),                   // 引号
+        QStringLiteral(""),                           // 空表名
     };
     for (const QString& bad : maliciousIdentifiers) {
         client::ProductionSourceResolverConfig config = defaultConfig(dbPath);
         config.tableName = bad;
         client::ProductionSourceResolver resolver(config);
-        QVERIFY2(!resolver.open(), "非法标识符 config 必须 open() 失败（fail-closed）");
-        QVERIFY(!resolver.resolve(QStringLiteral("ref:chat-record:msg-asst-1")).has_value());
+        QVERIFY2(!resolver.open(), "非法表名 config 必须 open() 失败（fail-closed）");
+        QVERIFY(!resolver.resolve(QStringLiteral("ref:chat-record:102")).has_value());
     }
+    // 列名同样受标识符校验（至少覆盖一个列字段）。
+    {
+        client::ProductionSourceResolverConfig config = defaultConfig(dbPath);
+        config.msgIndexColumn = QStringLiteral("msgIndex; --");
+        client::ProductionSourceResolver resolver(config);
+        QVERIFY2(!resolver.open(), "非法列名 config 必须 open() 失败（fail-closed）");
+    }
+}
+
+void ProductionSourceResolverTest::failClosedOnMalformedFinalRowJson()  // C11
+{
+    // 终稿行 message 列非合法 JSON / JSON 非对象（数组、字符串）→ fail-closed。
+    const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c11.db"));
+    QVERIFY(createRecordDb(dbPath, {
+        // 正常 User 行（证明失败归因于终稿行 JSON 本身）。
+        {21, QStringLiteral("sess-c11a"), 1, userMsg(QStringLiteral("截断JSON前的用户正文"))},
+        {22, QStringLiteral("sess-c11a"), 2, QStringLiteral("{\"author\":\"Bot\",\"isEnd\":tr")},
+        {31, QStringLiteral("sess-c11b"), 1, userMsg(QStringLiteral("数组JSON前的用户正文"))},
+        {32, QStringLiteral("sess-c11b"), 2, QStringLiteral("[1,2,3]")},
+        {41, QStringLiteral("sess-c11c"), 1, userMsg(QStringLiteral("字符串JSON前的用户正文"))},
+        {42, QStringLiteral("sess-c11c"), 2, QStringLiteral("\"just a string\"")},
+        {51, QStringLiteral("sess-c11d"), 1, userMsg(QStringLiteral("非JSON文本前的用户正文"))},
+        {52, QStringLiteral("sess-c11d"), 2, QStringLiteral("not-json at all")},
+    }));
+
+    client::ProductionSourceResolver resolver(defaultConfig(dbPath));
+    QVERIFY(resolver.open());
+    for (const char* id : {"22", "32", "42", "52"}) {
+        QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:") + QLatin1String(id))
+                      .has_value(),
+                 "终稿行 message 非 JSON 对象必须 fail-closed");
+    }
+}
+
+void ProductionSourceResolverTest::failClosedOnNonFinalBotMessage()  // C12
+{
+    // Bot 流式/中间消息（isEnd=false）不是终稿 → fail-closed（模型未完成回复）。
+    const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c12.db"));
+    QVERIFY(createRecordDb(dbPath, {
+        {61, QStringLiteral("sess-c12"), 1, userMsg(QStringLiteral("流式未完成turn的用户正文"))},
+        {62, QStringLiteral("sess-c12"), 2, botStreamMsg(QStringLiteral("流式中间消息"))},
+    }));
+
+    client::ProductionSourceResolver resolver(defaultConfig(dbPath));
+    QVERIFY(resolver.open());
+    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:62")).has_value(),
+             "isEnd=false 的 Bot 行必须 fail-closed");
+}
+
+void ProductionSourceResolverTest::failClosedOnInvalidJsonFields()  // C13
+{
+    // 终稿行 JSON 字段缺失/类型错误（各 sub-case 独立 session，均带正常
+    // User 行，证明失败归因于终稿行字段校验）。
+    const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c13.db"));
+    QVERIFY(createRecordDb(dbPath, {
+        // author 字段缺失。
+        {71, QStringLiteral("sess-c13a"), 1, userMsg(QStringLiteral("author缺失前的用户正文"))},
+        {72, QStringLiteral("sess-c13a"), 2,
+         blob(QJsonObject{{QStringLiteral("isEnd"), true},
+                          {QStringLiteral("message"), QStringLiteral("author缺失的终稿")}})},
+        // author 非字符串。
+        {81, QStringLiteral("sess-c13b"), 1, userMsg(QStringLiteral("author非串前的用户正文"))},
+        {82, QStringLiteral("sess-c13b"), 2,
+         blob(QJsonObject{{QStringLiteral("author"), 123},
+                          {QStringLiteral("isEnd"), true},
+                          {QStringLiteral("message"), QStringLiteral("author非串的终稿")}})},
+        // isEnd 字段缺失。
+        {91, QStringLiteral("sess-c13c"), 1, userMsg(QStringLiteral("isEnd缺失前的用户正文"))},
+        {92, QStringLiteral("sess-c13c"), 2,
+         blob(QJsonObject{{QStringLiteral("author"), QStringLiteral("Bot")},
+                          {QStringLiteral("message"), QStringLiteral("isEnd缺失的终稿")}})},
+        // isEnd 非布尔（字符串 "true"）。
+        {111, QStringLiteral("sess-c13d"), 1, userMsg(QStringLiteral("isEnd非布尔前的用户正文"))},
+        {112, QStringLiteral("sess-c13d"), 2,
+         blob(QJsonObject{{QStringLiteral("author"), QStringLiteral("Bot")},
+                          {QStringLiteral("isEnd"), QStringLiteral("true")},
+                          {QStringLiteral("message"), QStringLiteral("isEnd非布尔的终稿")}})},
+        // 正文字段缺失。
+        {121, QStringLiteral("sess-c13e"), 1, userMsg(QStringLiteral("正文缺失前的用户正文"))},
+        {122, QStringLiteral("sess-c13e"), 2,
+         blob(QJsonObject{{QStringLiteral("author"), QStringLiteral("Bot")},
+                          {QStringLiteral("isEnd"), true}})},
+        // 正文非字符串。
+        {131, QStringLiteral("sess-c13f"), 1, userMsg(QStringLiteral("正文非串前的用户正文"))},
+        {132, QStringLiteral("sess-c13f"), 2,
+         blob(QJsonObject{{QStringLiteral("author"), QStringLiteral("Bot")},
+                          {QStringLiteral("isEnd"), true},
+                          {QStringLiteral("message"), 42}})},
+    }));
+
+    client::ProductionSourceResolver resolver(defaultConfig(dbPath));
+    QVERIFY(resolver.open());
+    for (const char* id : {"72", "82", "92", "112", "122", "132"}) {
+        QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:") + QLatin1String(id))
+                      .has_value(),
+                 "终稿行 JSON 字段缺失/类型错误必须 fail-closed");
+    }
+}
+
+void ProductionSourceResolverTest::failClosedOnCorruptedRowInScanWindow()  // C14
+{
+    // 回扫窗口内行 JSON 损坏：本 turn 的 User 行本身损坏时，"跳过损坏行"
+    // 的错误实现会继续扫到更早 turn 的 User 行（配错 turn 比漏检更不可
+    // 接受）→ 窗口内任何行损坏即整体 fail-closed。
+    // 布局：更早 turn User 1 / 终稿 2；本 turn User 行 3 损坏 / 终稿 4。
+    const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c14.db"));
+    QVERIFY(createRecordDb(dbPath, {
+        {141, QStringLiteral("sess-c14"), 1, userMsg(QStringLiteral("更早turn的用户正文"))},
+        {142, QStringLiteral("sess-c14"), 2, botFinalMsg(QStringLiteral("更早turn的终稿"))},
+        {143, QStringLiteral("sess-c14"), 3, QStringLiteral("{corrupted json")},
+        {144, QStringLiteral("sess-c14"), 4, botFinalMsg(QStringLiteral("本turn的终稿"))},
+    }));
+
+    client::ProductionSourceResolver resolver(defaultConfig(dbPath));
+    QVERIFY(resolver.open());
+    const std::optional<client::ResolvedTurnContent> hit =
+        resolver.resolve(QStringLiteral("ref:chat-record:144"));
+    QVERIFY2(!hit.has_value(), "窗口内 JSON 损坏必须 fail-closed（不得跳过损坏行配错 turn）");
+}
+
+void ProductionSourceResolverTest::failClosedWhenUserRowBeyondScanWindow()  // C15
+{
+    // 最近 User 行距终稿 65 行（窗口 64 行装不下）→ fail-closed，
+    // 不扩大扫描（扩大可能配错 turn）。
+    const QString dbPath = tempDir_.filePath(QStringLiteral("chat-c15.db"));
+    QList<RecordRow> rows;
+    rows.append({161, QStringLiteral("sess-c15"), 1, userMsg(QStringLiteral("超出窗口的用户正文"))});
+    for (int i = 2; i <= 65; ++i) {  // 64 行 Bot 中间行（合法 JSON，author=Bot）
+        rows.append({160 + i, QStringLiteral("sess-c15"), i,
+                     botStreamMsg(QStringLiteral("中间行%1").arg(i))});
+    }
+    rows.append({226, QStringLiteral("sess-c15"), 66, botFinalMsg(QStringLiteral("超出窗口的终稿"))});
+    QVERIFY(createRecordDb(dbPath, rows));
+
+    client::ProductionSourceResolver resolver(defaultConfig(dbPath));
+    QVERIFY(resolver.open());
+    QVERIFY2(!resolver.resolve(QStringLiteral("ref:chat-record:226")).has_value(),
+             "User 行超出 64 行窗口必须 fail-closed");
 }
 
 // ── §D schema 适配 ──────────────────────────────────────────────────────────
 
 void ProductionSourceResolverTest::customSchemaConfigResolves()  // D1
 {
-    // 模拟 VM 确认后的真实 schema：表/列名与角色值均与默认假设不同。
+    // 自定义表/列/JSON 字段名/角色值（config 覆盖，不改代码）：模拟其它
+    // 宿主 Chat DB 方言。
     const QString dbPath = tempDir_.filePath(QStringLiteral("chat-d1.db"));
     QVERIFY(createFixtureDb(
         dbPath,
-        QStringLiteral("CREATE TABLE messages (mid TEXT PRIMARY KEY, tid TEXT, role TEXT, body TEXT)"),
-        {QStringLiteral("INSERT INTO messages VALUES ('u-9','t-9','human','自定义schema的用户正文')"),
-         QStringLiteral("INSERT INTO messages VALUES ('a-9','t-9','ai','自定义schema的终稿正文')")}));
+        QStringLiteral("CREATE TABLE chat_msg (mid INTEGER PRIMARY KEY, conv TEXT, "
+                       "seq INTEGER, payload TEXT, ts TEXT)"),
+        {QStringLiteral("INSERT INTO chat_msg VALUES (901,'conv-9',1,"
+                        "'{\"role\":\"human\",\"text\":\"自定义schema的用户正文\"}','2026-09-05 12:00:00')"),
+         QStringLiteral("INSERT INTO chat_msg VALUES (902,'conv-9',2,"
+                        "'{\"role\":\"ai\",\"final\":true,\"text\":\"自定义schema的终稿正文\"}','2026-09-05 12:00:01')")}));
 
     client::ProductionSourceResolverConfig config = defaultConfig(dbPath);
-    config.tableName = QStringLiteral("messages");
-    config.messageIdColumn = QStringLiteral("mid");
-    config.turnIdColumn = QStringLiteral("tid");
-    config.roleColumn = QStringLiteral("role");
-    config.contentColumn = QStringLiteral("body");
-    config.userRoleValue = QStringLiteral("human");
-    config.assistantRoleValue = QStringLiteral("ai");
+    config.tableName = QStringLiteral("chat_msg");
+    config.idColumn = QStringLiteral("mid");
+    config.sessionColumn = QStringLiteral("conv");
+    config.msgIndexColumn = QStringLiteral("seq");
+    config.messageColumn = QStringLiteral("payload");
+    config.authorField = QStringLiteral("role");
+    config.contentField = QStringLiteral("text");
+    config.isEndField = QStringLiteral("final");
+    config.userAuthorValue = QStringLiteral("human");
+    config.assistantAuthorValue = QStringLiteral("ai");
 
     client::ProductionSourceResolver resolver(config);
     QVERIFY(resolver.open());
     const std::optional<client::ResolvedTurnContent> hit =
-        resolver.resolve(QStringLiteral("ref:chat-record:a-9"));
+        resolver.resolve(QStringLiteral("ref:chat-record:902"));
     QVERIFY2(hit.has_value(), "自定义 schema 应命中");
     QCOMPARE(hit->originalUserText, QStringLiteral("自定义schema的用户正文"));
     QCOMPARE(hit->modelResponse, QStringLiteral("自定义schema的终稿正文"));
+}
+
+// ── §E 窗口边界 ─────────────────────────────────────────────────────────────
+
+void ProductionSourceResolverTest::resolveHitsAtWindowBoundaryEdge()  // E1
+{
+    // User 行恰为回扫第 64 行（终稿 msgIndex=65，User msgIndex=1，
+    // 中间 63 行 Bot）：LIMIT 64 恰好覆盖 User 行 → 命中。
+    const QString dbPath = tempDir_.filePath(QStringLiteral("chat-e1.db"));
+    QList<RecordRow> rows;
+    rows.append({231, QStringLiteral("sess-e1"), 1, userMsg(QStringLiteral("窗口边界的用户正文"))});
+    for (int i = 2; i <= 64; ++i) {  // 63 行 Bot 中间行
+        rows.append({230 + i, QStringLiteral("sess-e1"), i,
+                     botStreamMsg(QStringLiteral("边界中间行%1").arg(i))});
+    }
+    rows.append({296, QStringLiteral("sess-e1"), 65, botFinalMsg(QStringLiteral("窗口边界的终稿"))});
+    QVERIFY(createRecordDb(dbPath, rows));
+
+    client::ProductionSourceResolver resolver(defaultConfig(dbPath));
+    QVERIFY(resolver.open());
+    const std::optional<client::ResolvedTurnContent> hit =
+        resolver.resolve(QStringLiteral("ref:chat-record:296"));
+    QVERIFY2(hit.has_value(), "User 行恰在窗口边界（第 64 行）应命中");
+    QCOMPARE(hit->originalUserText, QStringLiteral("窗口边界的用户正文"));
+    QCOMPARE(hit->modelResponse, QStringLiteral("窗口边界的终稿"));
 }
 
 QTEST_MAIN(ProductionSourceResolverTest)
