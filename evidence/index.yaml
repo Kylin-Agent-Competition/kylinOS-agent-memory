@@ -1812,6 +1812,7 @@ entries:
     source: "evidence/l2-kylin-vm/pr143_schema_guard_0baba38_20260905.log"
     report: "evidence/l2-kylin-vm/pr143_schema_guard_0baba38_20260905.md"
     tested_commit: "0baba38712c78211e76b1de4d641a1405d9c3293"
+    evidence_commit: "766cbf5e9fb87e1ec6423804f155ded7e0054cce"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
