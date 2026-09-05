@@ -12,6 +12,7 @@ import pytest
 from evaluation.d13d_execution_adapter import (
     ExecutionPreflightError,
     ExecutionRequest,
+    dispatch_stateless_sample,
     raw_record,
     validate_execution_request,
     write_raw_records,
@@ -201,6 +202,42 @@ def test_raw_writer_fails_closed_before_creating_output_for_missing_sample(tmp_p
         write_raw_records(validated, records[:-1])
 
     assert not validated.request.output_root.exists()
+
+
+def test_dispatch_stateless_preference_calls_the_real_provider(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+
+    record = dispatch_stateless_sample(validated, "d13e-pref-001")
+
+    assert record["sample_id"] == "d13e-pref-001"
+    assert record["metric"] == "preference"
+    assert record["actual"]["record_count"] >= 1
+    assert record["actual"]["records"][0]["scope"] == "global"
+    assert record["trace_reference"] == "preference:d13e-pref-001"
+
+
+def test_dispatch_stateless_conflict_calls_the_real_policy(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+
+    record = dispatch_stateless_sample(validated, "d13e-conflict-001")
+
+    assert record == {
+        "sample_id": "d13e-conflict-001",
+        "metric": "conflict",
+        "actual": {
+            "action": "keep_left",
+            "winner_id": "d13e-c-001-left",
+            "reason_code": "evidence_tier_priority",
+        },
+        "trace_reference": "conflict:d13e-conflict-001",
+    }
+
+
+def test_dispatch_stateless_rejects_stateful_metrics_without_an_environment_binding(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+
+    with pytest.raises(ExecutionPreflightError, match="isolated runtime binding"):
+        dispatch_stateless_sample(validated, "d13e-forget-001")
 
 
 def test_adapter_module_does_not_import_evaluator_owned_artifacts():

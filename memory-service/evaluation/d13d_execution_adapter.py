@@ -17,6 +17,9 @@ import re
 import subprocess
 from typing import Any, Callable, Iterable, Mapping
 
+from providers.extraction_provider import ExtractionProvider, TurnFinalizedEvent
+from service.conflict_resolution_policy import ConflictResolutionPolicy, ConflictSide
+
 
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _SAMPLE_ID = re.compile(r"^d13e-(pref|conflict|safety|forget)-\d{3}$")
@@ -265,19 +268,29 @@ def validate_execution_request(
     return ValidatedExecution(request=normalized, records=_validate_records(_read_jsonl(normalized.testset_path)))
 
 
+def _validate_evaluation_free(value: Any) -> None:
+    if isinstance(value, Mapping):
+        for key, nested_value in value.items():
+            if not isinstance(key, str) or key.lower() in _FORBIDDEN_EVALUATION_TOKENS:
+                raise ExecutionPreflightError("raw actual contains a forbidden evaluation field")
+            _validate_evaluation_free(nested_value)
+    elif isinstance(value, list):
+        for nested_value in value:
+            _validate_evaluation_free(nested_value)
+    elif isinstance(value, str) and value.upper() in {"PASS", "FAIL"}:
+        raise ExecutionPreflightError("raw actual contains a forbidden evaluation value")
+
+
 def _validate_actual(metric: str, actual: Mapping[str, Any]) -> None:
     missing = _REQUIRED_ACTUAL_FIELDS[metric].difference(actual)
     if missing:
         raise ExecutionPreflightError("raw actual is missing required fields")
     for key, value in actual.items():
-        if key.lower() in _FORBIDDEN_EVALUATION_TOKENS:
-            raise ExecutionPreflightError("raw actual contains a forbidden evaluation field")
         if key in _COUNTER_FIELDS and (
             not isinstance(value, int) or isinstance(value, bool) or value < 0
         ):
             raise ExecutionPreflightError("raw counter fields must be non-negative integers")
-        if isinstance(value, str) and value.upper() in {"PASS", "FAIL"}:
-            raise ExecutionPreflightError("raw actual contains a forbidden evaluation value")
+    _validate_evaluation_free(actual)
     try:
         json.dumps(actual, ensure_ascii=False, sort_keys=True)
     except (TypeError, ValueError) as exc:
@@ -301,6 +314,82 @@ def raw_record(*, sample_id: str, metric: str, actual: dict[str, Any], trace_ref
         "actual": actual,
         "trace_reference": trace_reference,
     }
+
+
+def _sample_by_id(validated: ValidatedExecution, sample_id: str) -> Mapping[str, Any]:
+    if not isinstance(validated, ValidatedExecution):
+        raise TypeError("validated must be a ValidatedExecution")
+    for sample in validated.records:
+        if sample["sample_id"] == sample_id:
+            return sample
+    raise ExecutionPreflightError("sample_id is not present in the validated Dataset")
+
+
+def _preference_actual(sample: Mapping[str, Any]) -> dict[str, Any]:
+    sample_input = sample["input"]
+    event = TurnFinalizedEvent(
+        session_id=sample_input["turn_id"],
+        user_text=sample_input["user_text"],
+        assistant_text="",
+        source_event_id=sample["sample_id"],
+    )
+    provider = ExtractionProvider()
+    try:
+        candidates = provider.extract_preferences(event)
+    finally:
+        provider.close()
+    return {
+        "record_count": len(candidates),
+        "records": [
+            {
+                "key": candidate.key,
+                "value": candidate.value,
+                "scope": candidate.scope,
+                "is_temporary": candidate.is_temporary,
+                "should_persist": candidate.should_persist,
+                "explicitness": candidate.explicitness,
+            }
+            for candidate in candidates
+        ],
+    }
+
+
+def _conflict_actual(sample: Mapping[str, Any]) -> dict[str, Any]:
+    sample_input = sample["input"]
+    decision = ConflictResolutionPolicy().resolve(
+        ConflictSide.model_validate(sample_input["left"]),
+        ConflictSide.model_validate(sample_input["right"]),
+    )
+    return {
+        "action": decision.action.value,
+        "winner_id": decision.winner_id,
+        "reason_code": decision.reason_code,
+    }
+
+
+def dispatch_stateless_sample(
+    validated: ValidatedExecution, sample_id: str
+) -> dict[str, Any]:
+    """Dispatch one validated Preference or Conflict sample through production code.
+
+    Stateful Safety and Forget samples require a separately validated isolated
+    runtime binding. They intentionally fail closed here rather than accepting
+    a caller-created database, target mapping, or retrieval observation.
+    """
+    sample = _sample_by_id(validated, sample_id)
+    metric = sample["metric"]
+    if metric == "preference":
+        actual = _preference_actual(sample)
+    elif metric == "conflict":
+        actual = _conflict_actual(sample)
+    else:
+        raise ExecutionPreflightError("metric requires an isolated runtime binding")
+    return raw_record(
+        sample_id=sample_id,
+        metric=metric,
+        actual=actual,
+        trace_reference=f"{metric}:{sample_id}",
+    )
 
 
 def _validated_raw_record(record: Mapping[str, Any]) -> dict[str, Any]:
