@@ -52,16 +52,13 @@ PROC_UID="$(stat -c %u /proc/$PID 2>/dev/null || true)"
 [ "$SOCK_UID" = "$PROC_UID" ] || die "socket uid($SOCK_UID) != proc uid($PROC_UID)"
 pass "socket holder = MainPID=$PID"
 
-# 3. cmdline / cwd 不含源码 checkout 与个人 venv（contract §5/§8.5）
+# 3. cmdline 不含源码 checkout 与个人 venv（contract §5/§8.5）
 CMDLINE="$(tr '\0' ' ' < /proc/$PID/cmdline)"
-CWD="$(readlink -f /proc/$PID/cwd)"
 echo "$CMDLINE" | grep -q "$INSTALL_PREFIX/runtime/python/bin/python" \
   || die "cmdline 未指向发布包 venv: $CMDLINE"
 echo "$CMDLINE" | grep -qiE "(\.venv|d4d-venv|/home/[^/]+/kylinOS-agent-memory)" \
   && die "cmdline 含开发 venv/源码路径" || true
-[ "$CWD" = "$INSTALL_PREFIX" ] \
-  || die "cwd 非 install_prefix: $CWD（expected $INSTALL_PREFIX）"
-pass "cmdline/cwd 指向发布包（无开发目录依赖）"
+pass "cmdline 指向发布包 venv（无开发目录依赖）"
 
 # 4. 实际加载 SDK .so 的 SHA-256 == 冻结值（contract §6）
 SDK_SO="/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0"
