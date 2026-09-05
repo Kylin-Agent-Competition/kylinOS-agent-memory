@@ -51,6 +51,8 @@ def _formal_environment(*, commit: str = "abc123") -> dict:
         "embedding_sdk_so_is_file": True,
         "embedding_sdk_so_sha256": "a" * 64,
         "embedding_model_version": "ensemble-embd_gte-base_uint8-text",
+        "ipc_socket": "/run/memory.sock",
+        "ipc_pid": 4321,
         "commands": {
             "git_rev_parse_HEAD": {"returncode": 0},
             "git_status_porcelain": {"returncode": 0},
@@ -170,6 +172,25 @@ def test_formal_environment_requires_frozen_expected_identity() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("field", "expected_error"),
+    [
+        ("ipc_pid", "ipc_pid 缺失或不是正整数"),
+        ("ipc_socket", "ipc_socket 缺失或不可验证"),
+    ],
+)
+def test_formal_environment_requires_ipc_identity(
+    field: str, expected_error: str
+) -> None:
+    environment = _formal_environment()
+    environment.pop(field)
+    assert expected_error in formal_environment_errors(
+        environment,
+        expected_commit="abc123",
+        expected_branch="perf/D13A-baseline-load",
+    )
+
+
 def test_formal_environment_binds_expected_identity_and_sdk_provenance() -> None:
     environment = _formal_environment()
     assert formal_environment_errors(
@@ -240,6 +261,27 @@ def test_formal_run_rejects_sdk_identity_drift() -> None:
         expected_branch="perf/D13A-baseline-load",
     )
     assert "embedding SDK SHA-256 与 environment 不一致" in errors
+
+
+@pytest.mark.parametrize(
+    ("field", "expected_error"),
+    [
+        ("ipc_pid", "ipc.echo environment.ipc_pid 缺失或不是正整数"),
+        ("ipc_socket", "ipc.echo environment.ipc_socket 缺失或不可验证"),
+    ],
+)
+def test_formal_ipc_evidence_requires_environment_identity(
+    field: str, expected_error: str
+) -> None:
+    summary = _complete_run(index_status="not_measured")
+    summary["environment"].pop(field)
+    errors = validate_run_completeness(
+        summary,
+        mode="partial",
+        expected_commit="abc123",
+        expected_branch="perf/D13A-baseline-load",
+    )
+    assert expected_error in errors
 
 
 def test_ipc_service_identity_requires_socket_owned_by_pid(tmp_path: Path) -> None:

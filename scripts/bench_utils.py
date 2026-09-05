@@ -308,7 +308,7 @@ def formal_environment_errors(
     expected_commit: Optional[str] = None,
     expected_branch: Optional[str] = None,
 ) -> list[str]:
-    """返回使一次 D13A 正式运行不可复现的 Git/SDK 身份缺陷。
+    """返回使一次 D13A 正式运行不可复现的 Git/SDK/IPC 身份缺陷。
 
     Git 命令失败时不能把 unknown 归约为 clean；该函数同时供 runner 与
     collection 汇总使用，保证两处都是 fail-closed。
@@ -336,6 +336,12 @@ def formal_environment_errors(
         errors.append("git_commit 与预期 commit 不一致")
     if isinstance(expected_branch, str) and expected_branch and branch != expected_branch:
         errors.append("git_branch 与预期 branch 不一致")
+    ipc_socket = environment.get("ipc_socket")
+    if not isinstance(ipc_socket, str) or not ipc_socket.strip():
+        errors.append("ipc_socket 缺失或不可验证")
+    ipc_pid = environment.get("ipc_pid")
+    if not isinstance(ipc_pid, int) or isinstance(ipc_pid, bool) or ipc_pid <= 0:
+        errors.append("ipc_pid 缺失或不是正整数")
     errors.extend(formal_sdk_environment_errors(environment))
     return errors
 
@@ -506,10 +512,14 @@ def _resource_completeness_errors(
     if summary.get("resource_sample_identity_valid") is not True:
         errors.append(f"{label} 未验证 resource_sample_pid 持有目标 UDS")
     expected_pid = environment.get("ipc_pid")
-    if isinstance(expected_pid, int) and not isinstance(expected_pid, bool) and pid != expected_pid:
+    if not isinstance(expected_pid, int) or isinstance(expected_pid, bool) or expected_pid <= 0:
+        errors.append(f"{label} environment.ipc_pid 缺失或不是正整数")
+    elif pid != expected_pid:
         errors.append(f"{label} resource_sample_pid 与 environment.ipc_pid 不一致")
     expected_socket = environment.get("ipc_socket")
-    if isinstance(expected_socket, str) and expected_socket and summary.get("socket") != expected_socket:
+    if not isinstance(expected_socket, str) or not expected_socket.strip():
+        errors.append(f"{label} environment.ipc_socket 缺失或不可验证")
+    elif summary.get("socket") != expected_socket:
         errors.append(f"{label} socket 与 environment.ipc_socket 不一致")
     rounds = summary.get("rounds")
     if not isinstance(rounds, Mapping):
