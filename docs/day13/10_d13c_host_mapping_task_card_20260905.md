@@ -186,6 +186,19 @@ VM 环境：银河麒麟 V11 x86_64（Qt 5.12）；报告：`evidence/l2-kylin-v
 | V3 | 真实宿主 Chat DB 与 S2 假设 schema 不匹配：实际 `RECORD(ID, sessionID, msgIndex, message, operateTime)`，**无 role / turn_id 列**；且当前 0 条 RECORD、0 session | **登记待办（不盲改）**：表名 / ID 列 / 正文列可经 `ProductionSourceResolverConfig` 覆盖；但 ① 无 role 列无法区分用户消息与 assistant 终稿、② sessionID 为会话级而非 turn 级——查询模型扩展须以真实数据确认 msgIndex 角色编码与 turn 划分规则为前提。fail-closed 原则下无真实数据不推断，S5 复测前置 = VM 产生真实对话数据，或从 kylin-aiassistant 源码确认 RECORD 写入逻辑 |
 | V4 | `memory-service` 的 `PRODUCTION_RESOLVER_STATUS` 保持 `BLOCKED_BY_HOST_MAPPING` | **符合预期**（红线 §三.3，非缺陷）：C 轨不改 memory-service |
 
+### 9.4 bacon VM 验证（2026-09-05 第二轮，报告：`evidence/l2-kylin-vm/c_hm_bacon_vm_schema_and_regression_20260905.md`）
+
+环境：银河麒麟 V11 x86_64（Qt 5.15.19，与 pr151 报告 VM 不同的实例）；SSH 脚本化执行。
+
+| 项 | 结果 |
+|----|------|
+| L0 ctest | 11/11 全绿（QML 2 项因 `qtquickcontrols2-5-dev` 被 KYSEC ostree guard 阻装而 gate 跳过，QML 验证由 mini loader 补位） |
+| QML 加载 | 14/14 PASS（现场编译 mini loader，等价 `qml_pages_load`；V2 修复在麒麟真实运行时确认，V1 无回归；V1 的 Qt 5.12 兼容性仍以 pr151 VM 复测为准） |
+| **V3 schema 确认** | **调查关闭**：`RECORD.message` 为 JSON blob——`author`（User/Bot）区分角色、Bot 终稿 `isEnd=true`、正文在 `$.message`、模型名在 `$.modelMsg`；查询模型 SQL（json_extract）已在真实 DB 验证（B1~B5 全过）；session 3/4 仅 User 无终稿 = 天然 fail-closed 场景样本 |
+| V3-R（resolver 改造） | 输入齐备待施工：schema 经 config 覆盖 + role/终稿判定改 JSON 路径 + turn 按 sessionID+msgIndex 配对 + 无终稿 fail-closed |
+| S4-BLOCK-003 | 本 VM 不成立（dev 包齐备）；但系统 ostree guard 禁止装包——不触碰 /usr 正好符合红线 |
+| S3 / TD-007/008 | 本 VM 无宿主源码，不可行，状态不变 |
+
 ### 9.3 S5 复测前置条件（汇总）
 
 1. V3 schema 确认（真实数据样本或源码级 RECORD 写入逻辑）；
