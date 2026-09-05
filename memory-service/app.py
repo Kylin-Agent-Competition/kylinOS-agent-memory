@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import threading
 from typing import Optional
 
@@ -38,6 +39,48 @@ from service.source_resolver import (
 logger = logging.getLogger(__name__)
 
 
+def _digest_key_bytes(raw: object) -> bytes:
+    if isinstance(raw, bytes):
+        key = raw
+    elif isinstance(raw, str):
+        if not raw.strip():
+            key = b""
+        else:
+            key = raw.encode("utf-8")
+    else:
+        key = b""
+    if not key:
+        raise ValueError("真实 Vector provider 必须配置非空 digest key")
+    return key
+
+
+def build_vector_provider(
+    engine,
+    *,
+    cli_path: Optional[str],
+    dimension: Optional[int],
+    digest_key_id: Optional[str] = None,
+    digest_key: Optional[str | bytes] = None,
+):
+    """按显式部署参数组装真实 Vector provider；默认保持 provider 未接线。"""
+    if cli_path is None and dimension is None:
+        return None
+    if not cli_path or dimension is None or dimension <= 0:
+        raise ValueError("真实 Vector provider 必须同时配置 --vector-cli 与正的 --vector-dimension")
+    if not isinstance(digest_key_id, str) or not digest_key_id.strip():
+        raise ValueError("真实 Vector provider 必须配置非空 digest key id")
+    key = _digest_key_bytes(digest_key)
+    from retrieval.real_vector_provider import VectorCliClient
+    from retrieval.sqlite_vector_provider import SqliteVectorProvider
+
+    return SqliteVectorProvider(
+        engine,
+        vector_client=VectorCliClient(cli_path, expected_dimension=dimension),
+        digest_keys={digest_key_id: key},
+        dimension=dimension,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Kylin Memory Service (D4D)")
     p.add_argument("--socket", default=None, help="UDS socket 路径（覆盖配置/环境变量）")
@@ -45,6 +88,27 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--db", default=None, help="SQLite 路径（等价 KYLIN_MEMORY_DB）")
     p.add_argument("--no-migrate", action="store_true", help="跳过建表（生产由 Alembic 迁移）")
     p.add_argument("--no-outbox", action="store_true", help="不启动 Outbox Worker（测试用）")
+    p.add_argument(
+        "--vector-cli",
+        default=os.environ.get("KYLIN_MEMORY_VECTOR_CLI"),
+        help="真实 vector_cli 可执行文件（配置后启用 memory.upserted 索引消费）",
+    )
+    p.add_argument(
+        "--vector-dimension",
+        type=int,
+        default=os.environ.get("KYLIN_MEMORY_VECTOR_DIMENSION"),
+        help="真实 Vector collection 维度；必须与 --vector-cli 一起提供",
+    )
+    p.add_argument(
+        "--digest-key-id",
+        default=os.environ.get("KYLIN_MEMORY_DIGEST_KEY_ID"),
+        help="真实 Vector 摘要密钥 ID（建议仅通过 KYLIN_MEMORY_DIGEST_KEY_ID 注入）",
+    )
+    p.add_argument(
+        "--digest-key",
+        default=os.environ.get("KYLIN_MEMORY_DIGEST_KEY"),
+        help="真实 Vector 摘要密钥（建议仅通过 KYLIN_MEMORY_DIGEST_KEY 注入）",
+    )
     p.add_argument(
         "--register-turn-finalized",
         action="store_true",
@@ -183,13 +247,23 @@ def main(argv: Optional[list[str]] = None) -> int:
     worker: Optional[OutboxWorker] = None
     if not args.no_outbox:
         # D9D D-REQ-05：注入 OutboxRouter（统一消费路由）。
-        # 生产尚未接线真实 Vector provider / EmbeddingService（D8D producer 未合并），
-        # 依赖为 None 时对应消费者不注册 → 事件按 UnknownEventTypeError 失败/重试/DL
-        # （真实结果，不假装成功）；`--no-outbox` 行为不变。
-        router = build_outbox_router(
-            vector_provider=None,
-            embedding_service=None,
+        vector_provider = build_vector_provider(
+            engine,
+            cli_path=args.vector_cli,
+            dimension=args.vector_dimension,
+            digest_key_id=args.digest_key_id,
+            digest_key=args.digest_key,
         )
+        if vector_provider is None:
+            router = build_outbox_router(embedding_service=None)
+        else:
+            digest_key = _digest_key_bytes(args.digest_key)
+            router = build_outbox_router(
+                vector_provider=vector_provider,
+                embedding_service=None,
+                digest_key_id=args.digest_key_id,
+                digest_key=digest_key,
+            )
         worker = OutboxWorker(
             engine,
             poll_interval_s=cfg.outbox_poll_interval_s,

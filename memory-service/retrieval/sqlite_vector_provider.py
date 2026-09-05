@@ -8,8 +8,9 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
 
 from db.schema import (
     memory_entries,
@@ -30,6 +31,9 @@ from retrieval.contracts import (
     VectorDeleteResult,
     VectorRebuildRequest,
     VectorRebuildResult,
+    VectorUpsertRequest,
+    VectorUpsertRejection,
+    VectorUpsertResult,
     ActivationMode,
     Watermark,
     digest_from_canonical,
@@ -57,6 +61,10 @@ class SqliteVectorProvider:
         self._index_text_resolver = index_text_resolver or (lambda payload: payload.get("index_text"))
         self._dimension = dimension
 
+    def has_digest_key(self, key_id: str, key: bytes) -> bool:
+        """判断 Router 注入的受控摘要密钥是否与 Provider 完全一致。"""
+        return bool(key_id) and bool(key) and self._digest_keys.get(key_id) == key
+
     @staticmethod
     def _semantic_payload(request: Any) -> dict[str, Any]:
         payload = request.model_dump(
@@ -68,7 +76,10 @@ class SqliteVectorProvider:
         return payload
 
     def _validate_payload(self, request: Any) -> RetrievalError | None:
-        key_id = request.payload_hash.split(":", 2)[1]
+        parts = request.payload_hash.split(":", 2)
+        if len(parts) != 3 or parts[0] != "hmac-sha256":
+            return self._error(RetrievalErrorCode.CONFLICT, "请求摘要格式不合法")
+        key_id = parts[1]
         key = self._digest_keys.get(key_id)
         if key is None:
             return self._error(RetrievalErrorCode.DIGEST_KEY_UNAVAILABLE, "请求摘要密钥不可用")
@@ -101,6 +112,309 @@ class SqliteVectorProvider:
             elapsed_ms=max(0, int((time.monotonic() - started) * 1000)),
             completed_at=datetime.now(timezone.utc),
         )
+
+    def upsert(self, request: VectorUpsertRequest) -> ProviderResult[VectorUpsertResult]:
+        """把 ``memory.upserted`` 的向量写入真实 Vector collection 并记账。
+
+        SQLite 账本负责代次、用户范围、幂等回执和当前版本；Vector CLI 只负责
+        承载可重建的派生向量。外部写入成功后才提交账本，失败时不 ACK 对应
+        Outbox 事件，由 Worker 负责重试。
+        """
+        started = time.monotonic()
+        if datetime.now(timezone.utc) >= request.deadline_at:
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                error=self._error(RetrievalErrorCode.DEADLINE_EXCEEDED, "写入截止时间已过"),
+            )
+        if self._dimension is None or self._dimension <= 0:
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                error=self._error(RetrievalErrorCode.PROVIDER_NOT_READY, "Vector 写入维度未配置"),
+            )
+        invalid = self._validate_payload(request)
+        if invalid is not None:
+            return self._result(request_id=request.request_id, started=started, error=invalid)
+
+        scope_id = request.source_watermark.domain.scope_id
+        if scope_id != f"user:{request.user_id}":
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                error=self._error(RetrievalErrorCode.USER_SCOPE_VIOLATION, "写入范围未绑定请求用户"),
+            )
+        with self._engine.connect() as conn:
+            receipt = conn.execute(
+                select(
+                    vector_index_receipts.c.payload_hash,
+                    vector_index_receipts.c.result_json,
+                ).where(
+                    vector_index_receipts.c.scope_id == scope_id,
+                    vector_index_receipts.c.user_id == request.user_id,
+                    vector_index_receipts.c.operation == "upsert",
+                    vector_index_receipts.c.generation == request.index_generation,
+                    vector_index_receipts.c.idempotency_key == request.idempotency_key,
+                )
+            ).mappings().one_or_none()
+        if receipt is not None:
+            if receipt["payload_hash"] != request.payload_hash:
+                return self._result(
+                    request_id=request.request_id,
+                    started=started,
+                    error=self._error(RetrievalErrorCode.CONFLICT, "幂等键的请求摘要冲突"),
+                )
+            try:
+                replayed = VectorUpsertResult.model_validate(json.loads(receipt["result_json"]))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return self._result(
+                    request_id=request.request_id,
+                    started=started,
+                    error=self._error(RetrievalErrorCode.PROVIDER_PROTOCOL_ERROR, "写入幂等回执损坏"),
+                )
+            return self._result(request_id=request.request_id, started=started, value=replayed)
+
+        accepted = []
+        rejections: list[VectorUpsertRejection] = []
+        for record in request.records:
+            if record.user_id != request.user_id:
+                rejections.append(VectorUpsertRejection(
+                    memory_id=record.memory_id, reason="user_scope_violation"
+                ))
+                continue
+            try:
+                numeric_id = int(record.memory_id)
+            except (TypeError, ValueError):
+                rejections.append(VectorUpsertRejection(
+                    memory_id=record.memory_id, reason="memory_id_not_positive_integer"
+                ))
+                continue
+            if numeric_id <= 0 or str(numeric_id) != record.memory_id:
+                rejections.append(VectorUpsertRejection(
+                    memory_id=record.memory_id, reason="memory_id_not_positive_integer"
+                ))
+                continue
+            if len(record.vector) != self._dimension:
+                rejections.append(VectorUpsertRejection(
+                    memory_id=record.memory_id, reason="dimension_mismatch"
+                ))
+                continue
+            accepted.append((record, numeric_id))
+
+        with self._engine.connect() as conn:
+            generation_row = conn.execute(
+                select(
+                    vector_index_generations.c.collection_name,
+                    vector_index_generations.c.status,
+                    vector_index_generations.c.source_watermark,
+                ).where(
+                    vector_index_generations.c.scope_id == scope_id,
+                    vector_index_generations.c.generation == request.index_generation,
+                )
+            ).mappings().one_or_none()
+        collection_name: str
+        if generation_row is None:
+            # 首个真实 upsert 可为该用户/代次建立空的 serving collection；后续
+            # 请求仍必须经过同一 SQLite 代次账本，避免隐式跨用户共享集合。
+            collection_name = self._collection_name(scope_id, request.index_generation)
+            try:
+                self._vector_client.create_collection(collection_name, self._dimension)
+            except Exception:
+                return self._result(
+                    request_id=request.request_id,
+                    started=started,
+                    error=self._error(RetrievalErrorCode.PROVIDER_UNAVAILABLE, "Vector collection 创建失败"),
+                )
+            try:
+                with self._engine.begin() as conn:
+                    conn.execute(
+                        update(vector_index_generations)
+                        .where(vector_index_generations.c.scope_id == scope_id)
+                        .values(is_serving=0)
+                    )
+                    conn.execute(insert(vector_index_generations).values(
+                        scope_id=scope_id,
+                        generation=request.index_generation,
+                        collection_name=collection_name,
+                        status="ready",
+                        schema_version="vector-retrieval/v1",
+                        source_watermark=json.dumps(request.source_watermark.model_dump(mode="json")),
+                        record_count=0,
+                        is_serving=1,
+                        created_at=datetime.now(timezone.utc).isoformat(),
+                        activated_at=datetime.now(timezone.utc).isoformat(),
+                    ))
+                generation_row = {
+                    "collection_name": collection_name,
+                    "status": "ready",
+                    "source_watermark": json.dumps(request.source_watermark.model_dump(mode="json")),
+                }
+            except IntegrityError:
+                # 另一个进程可能完成了相同代次的注册；复读账本，不重复改变
+                # 代次状态。Vector collection 的 create 本身是幂等目标状态。
+                with self._engine.connect() as conn:
+                    generation_row = conn.execute(
+                        select(
+                            vector_index_generations.c.collection_name,
+                            vector_index_generations.c.status,
+                            vector_index_generations.c.source_watermark,
+                        ).where(
+                            vector_index_generations.c.scope_id == scope_id,
+                            vector_index_generations.c.generation == request.index_generation,
+                        )
+                    ).mappings().one_or_none()
+                if generation_row is None:
+                    return self._result(
+                        request_id=request.request_id,
+                        started=started,
+                        error=self._error(RetrievalErrorCode.CONFLICT, "Vector 代次注册冲突"),
+                    )
+        if generation_row["status"] != "ready":
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                error=self._error(RetrievalErrorCode.PROVIDER_NOT_READY, "目标 Vector 代次不可用"),
+            )
+        collection_name = str(generation_row["collection_name"])
+
+        if generation_row["source_watermark"] is not None:
+            try:
+                current = Watermark.model_validate(json.loads(generation_row["source_watermark"]))
+                if request.source_watermark.compare(current) < 0:
+                    return self._result(
+                        request_id=request.request_id,
+                        started=started,
+                        error=self._error(RetrievalErrorCode.STALE_INDEX, "写入水位落后于当前代次"),
+                    )
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return self._result(
+                    request_id=request.request_id,
+                    started=started,
+                    error=self._error(RetrievalErrorCode.PROVIDER_PROTOCOL_ERROR, "代次水位账本损坏"),
+                )
+
+        if accepted:
+            records, numeric_ids = zip(*accepted, strict=True)
+            try:
+                self._vector_client.insert(
+                    collection_name,
+                    list(numeric_ids),
+                    [record.vector for record in records],
+                    user_ids=[record.user_id for record in records],
+                    version_ids=[record.version_id for record in records],
+                    scene_ids=[record.scene_id or "" for record in records],
+                    memory_statuses=["active"] * len(records),
+                    deleted_flags=[False] * len(records),
+                    object_types=[record.object_type.value for record in records],
+                    knowledge_types=[
+                        record.knowledge.knowledge_type if record.knowledge else ""
+                        for record in records
+                    ],
+                    primary_categories=[
+                        record.knowledge.primary_category if record.knowledge and record.knowledge.primary_category else ""
+                        for record in records
+                    ],
+                    source_event_ids=[
+                        record.knowledge.source_event_id if record.knowledge else ""
+                        for record in records
+                    ],
+                    deadline_at=request.deadline_at,
+                )
+            except Exception:
+                return self._result(
+                    request_id=request.request_id,
+                    started=started,
+                    error=self._error(RetrievalErrorCode.PROVIDER_UNAVAILABLE, "Vector upsert 失败"),
+                )
+
+        value = VectorUpsertResult(
+            accepted_count=len(accepted),
+            upserted_count=len(accepted),
+            unchanged_count=0,
+            rejected=rejections,
+            index_generation=request.index_generation,
+            applied_watermark=request.source_watermark,
+            outcome="partial" if rejections else "applied",
+        )
+        try:
+            with self._engine.begin() as conn:
+                for record, numeric_id in accepted:
+                    conn.execute(
+                        update(vector_index_entries)
+                        .where(
+                            vector_index_entries.c.scope_id == scope_id,
+                            vector_index_entries.c.generation == request.index_generation,
+                            vector_index_entries.c.user_id == request.user_id,
+                            vector_index_entries.c.memory_entry_id == numeric_id,
+                        )
+                        .values(is_active=0)
+                    )
+                    conn.execute(
+                        delete(vector_index_entries).where(
+                            vector_index_entries.c.scope_id == scope_id,
+                            vector_index_entries.c.generation == request.index_generation,
+                            vector_index_entries.c.user_id == request.user_id,
+                            vector_index_entries.c.memory_entry_id == numeric_id,
+                            vector_index_entries.c.version_id == record.version_id,
+                        )
+                    )
+                    conn.execute(insert(vector_index_entries).values(
+                        scope_id=scope_id,
+                        generation=request.index_generation,
+                        user_id=request.user_id,
+                        memory_entry_id=numeric_id,
+                        version_id=record.version_id,
+                        is_active=1,
+                    ))
+                active_count = conn.execute(
+                    select(func.count()).select_from(vector_index_entries).where(
+                        vector_index_entries.c.scope_id == scope_id,
+                        vector_index_entries.c.generation == request.index_generation,
+                        vector_index_entries.c.is_active == 1,
+                    )
+                ).scalar_one()
+                conn.execute(
+                    update(vector_index_generations)
+                    .where(
+                        vector_index_generations.c.scope_id == scope_id,
+                        vector_index_generations.c.generation == request.index_generation,
+                    )
+                    .values(
+                        source_watermark=json.dumps(request.source_watermark.model_dump(mode="json")),
+                        record_count=int(active_count),
+                    )
+                )
+                conn.execute(insert(vector_index_receipts).values(
+                    scope_id=scope_id,
+                    user_id=request.user_id,
+                    operation="upsert",
+                    generation=request.index_generation,
+                    idempotency_key=request.idempotency_key,
+                    payload_hash=request.payload_hash,
+                    result_json=json.dumps(value.model_dump(mode="json"), ensure_ascii=False),
+                    created_at=datetime.now(timezone.utc).isoformat(),
+                ))
+        except IntegrityError:
+            # Only a concurrent identical idempotency request may win this key.
+            with self._engine.connect() as conn:
+                concurrent = conn.execute(
+                    select(vector_index_receipts.c.payload_hash, vector_index_receipts.c.result_json).where(
+                        vector_index_receipts.c.scope_id == scope_id,
+                        vector_index_receipts.c.user_id == request.user_id,
+                        vector_index_receipts.c.operation == "upsert",
+                        vector_index_receipts.c.generation == request.index_generation,
+                        vector_index_receipts.c.idempotency_key == request.idempotency_key,
+                    )
+                ).mappings().one_or_none()
+            if concurrent is not None and concurrent["payload_hash"] == request.payload_hash:
+                value = VectorUpsertResult.model_validate(json.loads(concurrent["result_json"]))
+            else:
+                return self._result(
+                    request_id=request.request_id,
+                    started=started,
+                    error=self._error(RetrievalErrorCode.CONFLICT, "写入账本冲突"),
+                )
+        return self._result(request_id=request.request_id, started=started, value=value)
 
     def delete(self, request: VectorDeleteRequest) -> ProviderResult[VectorDeleteResult]:
         """按已确认的逻辑 ID/版本删除本代次中的已记账索引项。"""

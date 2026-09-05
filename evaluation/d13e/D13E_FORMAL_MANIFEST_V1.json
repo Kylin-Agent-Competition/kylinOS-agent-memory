@@ -1,0 +1,33 @@
+{
+  "manifest_version": "d13e-formal-manifest/v1",
+  "required_reviewer_track": "D",
+  "dataset_version": "d13e-formal-v1",
+  "gold_label_version": "d13e-gold-v1",
+  "dataset_file": "D13E_FORMAL_TESTSET_V1.jsonl",
+  "dataset_sha256": "9740c00f4a9d91471bec8e6fa8aeeeb52f890f8680d83f740a84db2b1701a44b",
+  "gold_file": "D13E_GOLD_V1.jsonl",
+  "gold_sha256": "aeea9beab5d25461083bb693424014a813cd91bae6b0d7b60443f817f33c6be0",
+  "threshold_config_file": "D13E_FORMAL_THRESHOLDS_V1.json",
+  "threshold_config_sha256": "561034df97ee5c73675784a40b18726c51f3ff1120022ad04f2c66b0366c7ff9",
+  "sample_count": {
+    "preference": 4,
+    "conflict": 4,
+    "safety": 4,
+    "forget": 5,
+    "total": 17
+  },
+  "provenance": {
+    "status": "PENDING_D13D",
+    "implementation_commit": null,
+    "environment_id": null,
+    "dependency_version_reference": null,
+    "data_version_reference": null,
+    "evidence_root": null,
+    "evidence_directory": null,
+    "evidence_reference": null,
+    "rule": "D13D fields are mandatory before a D13E result can be formal. UNKNOWN, latest main, and historical D11D values are forbidden substitutes."
+  },
+  "created_by_track": "E",
+  "created_by_identity": "gaoyizhe934",
+  "created_at": "2026-09-05"
+}

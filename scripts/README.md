@@ -12,6 +12,12 @@
 | `check_junit_totals.py` | 按 JUnit `testcase` 节点汇总实际结果，避免依赖 pytest 版本特定的 suite 属性 |
 | `run_d1_vector_baseline.sh` | D1 Vector 基线构建与分阶段探针运行；服务重启由操作者执行 |
 | `run_d2_vector_smoke.sh` | D2 旧客户端固定哈希构建、KySec/服务/DB/Socket 门禁、一次性 cleanup 授权和分阶段真实数据面验证 |
+| `bench_utils.py` | D13A 延迟分位数、CPU/RSS 采样、Git/SDK/模型身份快照，以及 partial/full fail-closed 汇总 |
+| `benchmark_embedding.py` | D13A Embedding Service/Provider 基线（真实 SDK；`--fake` 仅冒烟） |
+| `benchmark_bridge.py` | D13A 直接压测 pybind11/C++ `EmbeddingBridge` |
+| `benchmark_ipc.py` | D13A 真实 UDS Gateway round-trip 基线 |
+| `benchmark_outbox.py` | D13A 真实 SQLite OutboxWorker 队列积压与恢复测试（不等同于索引积压） |
+| `run_day13a_benchmarks.sh` | D13A 麒麟 VM 一键顺序运行与汇总；三轮产物强制位于 Git worktree 外，并冻结 expected Git identity |
 
 ## 当前状态
 
