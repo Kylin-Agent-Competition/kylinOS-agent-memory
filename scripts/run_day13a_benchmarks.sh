@@ -14,6 +14,7 @@ IPC_REQUESTS="${DAY13A_IPC_REQUESTS:-2000}"
 OUTBOX_EVENTS="${DAY13A_OUTBOX_EVENTS:-5000}"
 VECTOR_CLI="${DAY13A_VECTOR_CLI:-vector_cli}"
 VECTOR_DIMENSION="${DAY13A_VECTOR_DIMENSION:-4}"
+INDEX_DRAIN_TIMEOUT_S="${DAY13A_INDEX_DRAIN_TIMEOUT_S:-900}"
 IPC_PAYLOAD=${DAY13A_IPC_PAYLOAD:-'{"schema_version":"1.0","user_id":"day13a-benchmark"}'}
 
 if [[ -z "${IPC_SOCKET}" ]]; then
@@ -128,6 +129,7 @@ run_one() {
     "${PYTHON_BIN}" "${ROOT_DIR}/scripts/benchmark_index_backlog.py" \
       --db "${run_dir}/index-backlog.sqlite3" --cli "${VECTOR_CLI}" \
       --dimension "${VECTOR_DIMENSION}" --events "${OUTBOX_EVENTS}" \
+      --drain-timeout-s "${INDEX_DRAIN_TIMEOUT_S}" \
       --output-dir "${run_dir}"
   fi
 
