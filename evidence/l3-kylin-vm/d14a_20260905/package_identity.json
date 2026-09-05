@@ -1,1 +1,6 @@
-{"package_dir": "/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a", "package_tar_sha256": "e6e5716aa942a842a2fba24e08578bb4fe24989f0655ef353269d82c18519705", "manifest_sha256": "92884d6f2c96b6ad9179245c48eda089d4d27148956728c9f6f94b630b5ca11a", "bridge_so_sha256": "a271891238102d0299395284d486c2e5afdaa4494e6ab0d1ff51a2d2ab9d4db6", "launcher_sha256": "e0130e106ac973d4450ba68a358c47abc494012f19afa4b3c06f1cafcb0432e6"}
+{
+  "package_dir": "/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a",
+  "package_tar_sha256": "15d79383f5aed05407d849cf5dfafe6ab2195a80ee42d987294747c6f74081ce",
+  "manifest_sha256": "18475655969b8fb6c88820d9e3ee94dc9c5e17a4e2c533b4cf65be46cb46ef22",
+  "bridge_so_sha256": "a271891238102d0299395284d486c2e5afdaa4494e6ab0d1ff51a2d2ab9d4db6"
+}
