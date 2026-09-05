@@ -594,10 +594,16 @@ void TestD13CStability::s4_deadline_timeout_client_block()
         QLatin1String(kScene), 800,
         QString::fromUtf8(kOrigText1));
 
-    // 等待进入 failed / timeout 终态（最多 7000ms，留余量给 5000ms deadline）
+    // R5：配置断言 —— 实现实际使用的 deadline 默认值必须是冻结的 5000ms
+    QVERIFY2(client::kDefaultDeadlineMs == 5000,
+             qPrintable(QStringLiteral("D13C-S4 kDefaultDeadlineMs 必须 == 5000，"
+                                        "实际=%1")
+                            .arg(client::kDefaultDeadlineMs)));
+
+    // 等待进入 failed / timeout 终态（最多 8000ms，留余量给 5000ms deadline）
     const bool reached = waitForStage(
         [&]{ return vm.preChatStage() == "failed"
-                || vm.preChatStage() == "timeout"; }, 7000);
+                || vm.preChatStage() == "timeout"; }, 8000);
     const int elapsed = t.elapsed();
 
     QVERIFY2(reached,
@@ -607,11 +613,11 @@ void TestD13CStability::s4_deadline_timeout_client_block()
     // 诊断：输出 stage/error 便于排查
     qDebug() << "D13C-S4: elapsed=" << elapsed << "ms stage=" << vm.preChatStage()
              << "error=" << vm.lastError() << "retrieveCount=" << retrieveCount;
-    // 放宽至 >= 2000ms：CI 环境（GitHub Actions ubuntu-22.04）事件循环精度可能
-    // 与本地有差异；核心断言是 reached（stage 进入 failed/timeout）+ busy=false。
-    QVERIFY2(elapsed >= 2000,
-             qPrintable(QStringLiteral("D13C-S4 deadline 触发过早 elapsed=%1ms "
-                                       "(<2000ms)，stage=%2 error=%3")
+    // R5：行为断言 —— 围绕 5000ms 的 CI 容差窗口（4500ms~6500ms），防止实现回退成
+    // 2.1s/3s/10s 超时仍被误判为“5000ms deadline 通过”。
+    QVERIFY2(elapsed >= 4500 && elapsed <= 6500,
+             qPrintable(QStringLiteral("D13C-S4 deadline 未落在 5000ms 窗口 "
+                                        "elapsed=%1ms（期望 4500~6500ms），stage=%2 error=%3")
                             .arg(elapsed).arg(vm.preChatStage()).arg(vm.lastError())));
     QVERIFY2(!vm.preChatBusy(),
              "D13C-S4 timeout 后 preChatBusy 必须为 false（无 hang）");

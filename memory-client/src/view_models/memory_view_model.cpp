@@ -12,14 +12,16 @@
 
 namespace kylin::memory::client::v1 {
 
+// FRZ-IPC-006 §6.1：客户端发送 envelope 默认死线（与 MemoryClient 内部默认一致）。
+// 定义移到命名空间级，头文件 extern 声明供 L0 测试做配置断言（R5）。
+const int kDefaultDeadlineMs = 5000;
+
 namespace {
 
 // D5-C MemoryContext 标记前缀 — 用于 UI/DB 污染检测。
 constexpr const char* kContextMarkerPrefix = "[MEMORY-CONTEXT]";
 constexpr const char* kContextSeparator = "\n\n---\n\n";
 
-// FRZ-IPC-006 §6.1：客户端发送 envelope 默认死线（与 MemoryClient 内部常量保持一致）。
-constexpr int kDefaultDeadlineMs = 5000;
 constexpr const char* kErrClientTimeout = "ERR_CLIENT_TIMEOUT";
 
 }  // namespace
