@@ -28,6 +28,14 @@ D13 C 轨「端到端会话评测与主演示稳定性复测」需要一套会�
 - `docs/day13/05_d13c_pr_description.md`（新增）：本 PR 描述。
 - `docs/day13/06_d13c_l0l1_regression_20260903.log`（新增）：L0/L1 回归日志。
 
+### L2 需求与跨轨交付归档（2026-09-05 追加）
+
+- `docs/day13/07_d13c_l2_requirements_b_track.md`（新增）：B 轨 L2 需求清单（12 项）。
+- `docs/day13/08_d13c_l2_requirements_d_track.md`（新增+更新）：D 轨 L2 需求清单（20 项，附 PR #149 交付状态列）。
+- `docs/day13/09_d13c_l2_b_track_delivery_20260903.md`（新增）：B 轨 L2 交付归档（6 VERIFIED + 6 PARTIAL/BLOCKED）。
+- `docs/day13/10_d13c_l2_d_track_delivery_20260905.md`（新增）：D 轨 L2 交付归档（PR #149：4 VERIFIED + 2 FAILED→BLOCKED + 14 BLOCKED）。
+- `docs/day13/11_d13c_l2_status_summary_20260905.md`（新增）：B+D 轨合并视图、runtime_status 升级矩阵、C 轨专属 L2 待办（C-1~C-5）。
+
 ## 明确不修改范围
 
 - 不修改既有生产链路（memory-service/retrieval/、memory-client/src/）。
@@ -63,6 +71,11 @@ D13 C 轨「端到端会话评测与主演示稳定性复测」需要一套会�
 | `docs/day13/02_d13c_session_eval_worklist_20260903.md` | 新增 | D13C 工作清单 |
 | `docs/day13/05_d13c_pr_description.md` | 新增 | 本 PR 描述 |
 | `docs/day13/06_d13c_l0l1_regression_20260903.log` | 新增 | L0/L1 回归日志 |
+| `docs/day13/07_d13c_l2_requirements_b_track.md` | 新增 | B 轨 L2 需求清单（12 项） |
+| `docs/day13/08_d13c_l2_requirements_d_track.md` | 新增 | D 轨 L2 需求清单（20 项，附交付状态） |
+| `docs/day13/09_d13c_l2_b_track_delivery_20260903.md` | 新增 | B 轨 L2 交付归档 |
+| `docs/day13/10_d13c_l2_d_track_delivery_20260905.md` | 新增 | D 轨 L2 交付归档（PR #149） |
+| `docs/day13/11_d13c_l2_status_summary_20260905.md` | 新增 | L2 状态汇总 + C 轨待办 C-1~C-5 |
 | `evidence/index.yaml` | 修改 | 新增 D13C-L1-REGRESSION 条目 |
 | `memory-client/README.md` | 修改 | 新增 D13-C 章节说明 |
 
@@ -137,12 +150,14 @@ python scripts/run_d13c_session_eval.py memory-service/tests/fixtures/d13c_smoke
 
 ### L2 麒麟虚拟机证据
 
-本 PR 不包含 L2 麒麟 VM 证据。Runtime 结论标 `UNVERIFIED`：
-- 未取得麒麟 VM 实测
-- 未取得 D13D 冻结环境
-- 未取得 D13E 封存测试集
+本 PR 不包含 L2 麒麟 VM 证据本体，但已归档跨轨 L2 交付状态（2026-09-05）：
+- **B 轨交付**（main@`b70827c`）：12 项中 6 VERIFIED（FTS5/Vector 通道、检索延迟、跨会话区分、双通道精确删除）
+- **D 轨交付**（PR #149，VM baseline@`053754d`）：20 项中 4 VERIFIED（UDS socket/连接/编解码、retrieve 延迟 p50=1.703ms）
+- **BLOCKED 22 项**：根因为 gateway 检索主链未接线、host mapping 未生产化、C 轨编排未部署 VM
 
-正式会话评测结论待 VM 实测后另行归档。
+Runtime 结论整体保持 `UNVERIFIED`（fail-closed：部分通道 VERIFIED 不构成整体会话链路 VERIFIED）。
+C 轨待办 C-1~C-5 与逐指标升级矩阵见 `docs/day13/11_d13c_l2_status_summary_20260905.md`。
+正式会话评测结论待 C-1~C-4 完成后以真实 VM 会话 bundle 复算归档。
 
 ### L3 (全链路验收)
 
