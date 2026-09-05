@@ -1,0 +1,1 @@
+{"fake": false, "method": "memory.embed", "status": "ok", "dimension": 768, "vector_len": 768, "l2_norm": 1.0, "model": "ensemble-embd_gte-base_uint8-text", "sdk_loaded": true, "health": {"service": "ok", "bridge_loaded": true, "sdk_missing": false}}

@@ -1,0 +1,14 @@
+{
+  "os": ""Kylin V11"",
+  "kernel": "6.6.0-63-generic",
+  "arch": "x86_64",
+  "python": "Python 3.12.3",
+  "cpu": "",
+  "mem_mb": "",
+  "host": "Lyf-pc",
+  "sdk_so": "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0",
+  "sdk_sha256": "028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48",
+  "sdk_version": "1.2.0.0-0k0.4",
+  "runtime_version": "kylin-ai-runtime 1.2.0.4-0k0.1",
+  "model": "ensemble-embd_gte-base_uint8-text"
+}

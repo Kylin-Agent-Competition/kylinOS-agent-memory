@@ -1,0 +1,21 @@
+{
+  "d14a_status": "READY_CANDIDATE",
+  "tested_commit": "c1fdc528f0d68e0d534cae574f0d765bc0a2600f",
+  "package_version": "0.1.0-d14a",
+  "package_tar_sha256": "e6e5716aa942a842a2fba24e08578bb4fe24989f0655ef353269d82c18519705",
+  "vm": "KylinV11 (Lyf-pc) 麒麟桌面 V11 2603 x86_64 kernel 6.6.0-63",
+  "real_sdk": true,
+  "bridge_source": "package runtime/bridge (pybind11 cpython-312)",
+  "sdk_actual_load": "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0 (sha 028e7099...)",
+  "model": "ensemble-embd_gte-base_uint8-text dim=768",
+  "source_repo_dependency": "NONE (runtime/app module copy)",
+  "personal_venv_dependency": "NONE (package runtime/python venv)",
+  "hardcoded_dev_path": "NONE (launcher derives prefix from \$0; ldd 0 not-found; no RPATH)",
+  "real_sdk_smoke": "PASS (embed dim=768, l2=1.0)",
+  "restart_recovery": "PASS (socket rebuilt, SDK reloaded, embed/health ok)",
+  "performance_embedding_latency_ms": 105.3,
+  "performance_compare_d13a": "PENDING (D13A budget regression review required)",
+  "high_concurrency_errors": "NOT_TESTED in this phase (benchmark pending)",
+  "fake_fallback": false,
+  "notes": "L3 clean-VM formal regression pending D14D clean snapshot + D13D freeze; this is package-ready L1 smoke + real-SDK-on-package evidence"
+}
