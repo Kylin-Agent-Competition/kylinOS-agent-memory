@@ -25,3 +25,7 @@ jobs:
         run: |
           chmod +x scripts/verify_repository_baseline.sh
           ./scripts/verify_repository_baseline.sh
+
+      - name: D13E 正式评测契约测试
+        run: |
+          python3 -m unittest memory-service.tests.test_d13e_formal_eval -v
