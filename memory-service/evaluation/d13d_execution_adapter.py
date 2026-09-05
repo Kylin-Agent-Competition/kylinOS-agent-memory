@@ -174,11 +174,11 @@ def _validate_git_identity(request: ExecutionRequest, git_runner: Callable[..., 
         raise ExecutionPreflightError("tested_commit must equal HEAD")
 
 
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+def _parse_jsonl(testset_bytes: bytes) -> list[dict[str, Any]]:
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError as exc:
-        raise ExecutionPreflightError("testset does not exist") from exc
+        lines = testset_bytes.decode("utf-8").splitlines()
+    except UnicodeDecodeError as exc:
+        raise ExecutionPreflightError("testset must be valid UTF-8") from exc
     if not lines:
         raise ExecutionPreflightError("testset must not be empty")
     records: list[dict[str, Any]] = []
@@ -278,7 +278,7 @@ def validate_execution_request(
     actual_digest = hashlib.sha256(testset_bytes).hexdigest()
     if actual_digest != OFFICIAL_D13E_TESTSET_SHA256:
         raise ExecutionPreflightError("testset content SHA-256 does not match approved Dataset")
-    records = _validate_records(_read_jsonl(normalized.testset_path))
+    records = _validate_records(_parse_jsonl(testset_bytes))
     _validate_git_identity(normalized, git_runner)
     return ValidatedExecution(request=normalized, records=records)
 

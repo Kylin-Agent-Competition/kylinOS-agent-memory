@@ -17,6 +17,7 @@ from db.uow import UnitOfWork
 from gateway.handlers import register_default_handlers, register_event_ingest_handler
 from gateway.preference_handlers import register_preference_handlers
 from gateway.registry import HandlerRegistry
+import evaluation.d13d_execution_adapter as adapter
 from evaluation.d13d_execution_adapter import (
     OFFICIAL_D13E_TESTSET_SHA256,
     ExecutionPreflightError,
@@ -123,6 +124,69 @@ def test_preflight_rejects_missing_dataset_as_a_structured_error(tmp_path):
         )
 
 
+def _validate_altered_dataset(tmp_path, monkeypatch, content: str):
+    altered = tmp_path / "altered.jsonl"
+    altered.write_text(content, encoding="utf-8")
+    altered_sha = hashlib.sha256(altered.read_bytes()).hexdigest()
+    monkeypatch.setattr(adapter, "OFFICIAL_D13E_TESTSET_SHA256", altered_sha)
+    return validate_execution_request(
+        _request(tmp_path, testset_path=altered, testset_sha256=altered_sha),
+        git_runner=_git_runner,
+    )
+
+
+def test_preflight_rejects_malformed_jsonl_after_identity_validation(tmp_path, monkeypatch):
+    with pytest.raises(ExecutionPreflightError, match="line 1 is not JSON"):
+        _validate_altered_dataset(tmp_path, monkeypatch, "not-json\n")
+
+
+def test_preflight_rejects_unknown_metric_after_identity_validation(tmp_path, monkeypatch):
+    records = [json.loads(line) for line in TESTSET.read_text(encoding="utf-8").splitlines()]
+    records[0]["metric"] = "unknown"
+
+    with pytest.raises(ExecutionPreflightError, match="metric is invalid"):
+        _validate_altered_dataset(
+            tmp_path,
+            monkeypatch,
+            "\n".join(json.dumps(record) for record in records),
+        )
+
+
+def test_preflight_rejects_wrong_metric_distribution_after_identity_validation(tmp_path, monkeypatch):
+    records = [json.loads(line) for line in TESTSET.read_text(encoding="utf-8").splitlines()]
+    records[0]["metric"] = "conflict"
+    records[0]["sample_id"] = "d13e-conflict-005"
+    records[0]["input"] = records[4]["input"]
+
+    with pytest.raises(ExecutionPreflightError, match="metric distribution is invalid"):
+        _validate_altered_dataset(
+            tmp_path,
+            monkeypatch,
+            "\n".join(json.dumps(record) for record in records),
+        )
+
+
+@pytest.mark.parametrize("root_name", ["state_root", "evidence_root"])
+def test_preflight_rejects_existing_isolation_root(tmp_path, root_name):
+    existing_root = tmp_path / root_name
+    existing_root.mkdir()
+
+    with pytest.raises(ExecutionPreflightError, match=f"{root_name} must not already exist"):
+        validate_execution_request(
+            _request(tmp_path, **{root_name: existing_root}),
+            git_runner=_git_runner,
+        )
+
+
+@pytest.mark.parametrize("root_name", ["output_root", "state_root", "evidence_root"])
+def test_preflight_rejects_relative_isolation_root(tmp_path, root_name):
+    with pytest.raises(ExecutionPreflightError, match=f"{root_name} must be an absolute path"):
+        validate_execution_request(
+            _request(tmp_path, **{root_name: Path("relative-isolation-root")}),
+            git_runner=_git_runner,
+        )
+
+
 def test_cli_reports_missing_dataset_as_structured_rejection(tmp_path):
     completed = subprocess.run(
         [
@@ -167,6 +231,21 @@ def test_raw_record_has_only_formal_runner_contract_fields():
         trace_reference="source-events:controlled-trace",
     )
     assert set(record) == {"sample_id", "metric", "actual", "trace_reference"}
+
+
+def test_raw_record_rejects_missing_trace_reference():
+    with pytest.raises(ExecutionPreflightError, match="requires a trace_reference"):
+        raw_record(
+            sample_id="d13e-safety-001",
+            metric="safety",
+            actual={
+                "critical_gate_bypass_count": 0,
+                "normal_memory_write_count": 0,
+                "audit_plaintext_leak_count": 0,
+                "cross_user_violation_count": 0,
+            },
+            trace_reference="",
+        )
 
 
 @pytest.mark.parametrize(
