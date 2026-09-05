@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -19,6 +20,8 @@ from typing import Any, Callable, Iterable, Mapping
 
 from providers.extraction_provider import ExtractionProvider, TurnFinalizedEvent
 from service.conflict_resolution_policy import ConflictResolutionPolicy, ConflictSide
+from service.d13d_safety_observability import observe_safety_execution
+from gateway.registry import HandlerRegistry, RequestContext
 
 
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -389,6 +392,87 @@ def dispatch_stateless_sample(
         metric=metric,
         actual=actual,
         trace_reference=f"{metric}:{sample_id}",
+    )
+
+
+def dispatch_safety_sample(
+    validated: ValidatedExecution,
+    sample_id: str,
+    *,
+    registry: HandlerRegistry,
+    conn: Any,
+    foreign_user_id: str | None = None,
+) -> dict[str, Any]:
+    """Run one Safety sample through real ingestion and observation boundaries.
+
+    The caller supplies an already-isolated database and a production handler
+    registry. A foreign-user control is an explicit runtime binding, never an
+    adapter-created fixture. The function leaves raw persistence to
+    ``write_raw_records`` after all samples have been observed.
+    """
+    sample = _sample_by_id(validated, sample_id)
+    if sample["metric"] != "safety":
+        raise ExecutionPreflightError("sample is not a safety metric")
+    if not isinstance(registry, HandlerRegistry):
+        raise ExecutionPreflightError("safety dispatch requires a handler registry")
+    sample_input = sample["input"]
+    if "text" in sample_input:
+        user_id = sample_input["user_id"]
+        content_summary = sample_input["text"]
+        if not isinstance(foreign_user_id, str) or not foreign_user_id.strip():
+            raise ExecutionPreflightError("safety text sample requires a foreign_user_id binding")
+    else:
+        user_id = sample_input["actor_user_id"]
+        foreign_user_id = sample_input["target_user_id"]
+        if sample_input["operation"] != "read":
+            raise ExecutionPreflightError("safety cross-user sample must be a read operation")
+        content_summary = "D13D controlled cross-user read probe"
+    trace_id = f"d13d-safety-{sample_id}"
+    now = datetime.now(timezone.utc)
+    payload = {
+        "schema_version": "0.1",
+        "event_id": f"d13d-event-{sample_id}",
+        "user_id": user_id,
+        "actor_id": user_id,
+        "session_id": f"d13d-session-{sample_id}",
+        "idempotency_key": f"d13d-idem-{sample_id}",
+        "source_type": "chat",
+        "event_type": "user_message",
+        "occurred_at": (now - timedelta(seconds=1)).isoformat(),
+        "captured_at": now.isoformat(),
+        "content_summary": content_summary,
+        "consent_scope": "memory_only",
+    }
+    context = RequestContext(
+        request_id=f"d13d-request-{sample_id}",
+        trace_id=trace_id,
+        method="event.ingest",
+        deadline_ms=5000,
+        user_id=user_id,
+        session_id=payload["session_id"],
+        idempotency_key=payload["idempotency_key"],
+    )
+    try:
+        registry.route("event.ingest")(payload, context)
+        observed = observe_safety_execution(
+            conn,
+            user_id=user_id,
+            trace_id=trace_id,
+            foreign_user_id=foreign_user_id,
+        )
+    except Exception as exc:
+        raise ExecutionPreflightError("safety dispatch failed") from exc
+    actual = {
+        "critical_gate_bypass_count": observed["critical_gate_bypass_count"],
+        "normal_memory_write_count": observed["normal_memory_write_count"],
+        "audit_plaintext_leak_count": observed["audit_plaintext_leak_count"],
+        "cross_user_violation_count": observed["cross_user_violation_count"],
+    }
+    return raw_record(
+        sample_id=sample_id,
+        metric="safety",
+        actual=actual,
+        trace_reference=observed["trace_reference"],
     )
 
 

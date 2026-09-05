@@ -9,9 +9,16 @@ import ast
 
 import pytest
 
+from db import repositories as repo
+from db.engine import create_db_engine, init_schema
+from db.uow import UnitOfWork
+from gateway.handlers import register_default_handlers, register_event_ingest_handler
+from gateway.preference_handlers import register_preference_handlers
+from gateway.registry import HandlerRegistry
 from evaluation.d13d_execution_adapter import (
     ExecutionPreflightError,
     ExecutionRequest,
+    dispatch_safety_sample,
     dispatch_stateless_sample,
     raw_record,
     validate_execution_request,
@@ -238,6 +245,81 @@ def test_dispatch_stateless_rejects_stateful_metrics_without_an_environment_bind
 
     with pytest.raises(ExecutionPreflightError, match="isolated runtime binding"):
         dispatch_stateless_sample(validated, "d13e-forget-001")
+
+
+@pytest.fixture()
+def safety_runtime(tmp_path):
+    engine = create_db_engine(str(tmp_path / "adapter-safety.db"))
+    init_schema(engine)
+    registry = HandlerRegistry()
+    register_default_handlers(registry)
+    register_event_ingest_handler(registry, uow_factory=lambda: UnitOfWork(engine))
+    register_preference_handlers(registry, uow_factory=lambda: UnitOfWork(engine))
+    with engine.begin() as conn:
+        repo.insert_memory_entry(
+            conn,
+            user_id="user_d13e_beta",
+            entry_type="knowledge",
+            content={"value": "controlled foreign probe"},
+        )
+    return engine, registry
+
+
+def test_dispatch_safety_uses_real_event_ingest_and_observer(tmp_path, safety_runtime):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    engine, registry = safety_runtime
+
+    with engine.begin() as conn:
+        record = dispatch_safety_sample(
+            validated,
+            "d13e-safety-001",
+            registry=registry,
+            conn=conn,
+            foreign_user_id="user_d13e_beta",
+        )
+
+    assert record == {
+        "sample_id": "d13e-safety-001",
+        "metric": "safety",
+        "actual": {
+            "critical_gate_bypass_count": 0,
+            "normal_memory_write_count": 0,
+            "audit_plaintext_leak_count": 0,
+            "cross_user_violation_count": 0,
+        },
+        "trace_reference": "source-events:d13d-safety-d13e-safety-001",
+    }
+
+
+def test_dispatch_safety_cross_user_sample_uses_real_user_scoped_probe(tmp_path, safety_runtime):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    engine, registry = safety_runtime
+
+    with engine.begin() as conn:
+        record = dispatch_safety_sample(
+            validated,
+            "d13e-safety-003",
+            registry=registry,
+            conn=conn,
+        )
+
+    assert record["actual"]["cross_user_violation_count"] == 0
+    assert record["trace_reference"] == "source-events:d13d-safety-d13e-safety-003"
+
+
+def test_dispatch_safety_fails_closed_without_the_foreign_control(tmp_path, safety_runtime):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    engine, registry = safety_runtime
+    with engine.begin() as conn:
+        conn.execute(repo.memory_entries.delete())
+        with pytest.raises(ExecutionPreflightError, match="safety dispatch failed"):
+            dispatch_safety_sample(
+                validated,
+                "d13e-safety-001",
+                registry=registry,
+                conn=conn,
+                foreign_user_id="user_d13e_beta",
+            )
 
 
 def test_adapter_module_does_not_import_evaluator_owned_artifacts():
