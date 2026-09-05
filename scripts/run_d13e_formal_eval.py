@@ -1,7 +1,16 @@
 """D13E 正式评测 CLI（候选实现）。
 
-在读取或写入任何报告前，先校验 D13D 冻结 provenance。该入口不接受
-UNKNOWN、缺失 Commit 或候选环境来生成可误读的正式输出。
+正式执行路径完全离线：Runner 只读取本地证据目录中的 Bundle、Manifest、
+阈值、四类 raw、D13D execution attestation，以及两个由 D 轨外部流程冻结的
+Seal 工件：
+
+- D13E_REVIEW_SEAL_V1.json（Review 完成后由可信 sealing 流程生成）；
+- D13D_EXECUTION_SEAL_V1.json（D13D 轨冻结 attestation digest 后生成）。
+
+Runner 不访问 GitHub API；被审批工件（Dataset / Gold / Threshold / Runner）
+也不保存“谁批准 / 哪个 Review 批准 / 当前是否批准”等自报字段，审批结果只由
+外部 Seal 证明。在读取或写入任何报告前，先校验 D13D 冻结 provenance；该入口
+不接受 UNKNOWN、缺失 Commit 或候选环境来生成可误读的正式输出。
 """
 
 from __future__ import annotations
@@ -11,11 +20,8 @@ import hashlib
 import json
 import re
 import sys
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Iterable
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 
 
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -41,6 +47,8 @@ _GITHUB_REVIEW_REFERENCE = re.compile(
     r"^https://github\.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/148#pullrequestreview-([0-9]+)$"
 )
 _TRUSTED_D_REVIEWER_IDENTITIES = frozenset({"Ducknesses"})
+_REVIEW_SEAL_VERSION = "d13e-review-seal/v1"
+_D13D_EXECUTION_SEAL_VERSION = "d13d-execution-seal/v1"
 
 
 def _required_text(mapping: dict[str, Any], key: str, label: str) -> str:
@@ -62,163 +70,66 @@ def _read_json(path: Path, label: str) -> dict[str, Any]:
     return raw
 
 
-def _fetch_github_review(approval_reference: str) -> dict[str, Any]:
-    """从 GitHub 的 Review API 获取不可由 Manifest 自报替代的批准记录。"""
-    match = _GITHUB_REVIEW_REFERENCE.fullmatch(approval_reference)
-    if not match:
-        raise ValueError("approval_reference 必须是 PR #148 的 GitHub Review URL")
-    review_id = match.group(1)
-    api_url = "https://api.github.com/repos/Kylin-Agent-Competition/kylinOS-agent-memory/pulls/148/reviews/" + review_id
-    request = Request(api_url, headers={"Accept": "application/vnd.github+json", "User-Agent": "d13e-formal-eval"})
-    try:
-        with urlopen(request, timeout=15) as response:  # noqa: S310 -- fixed GitHub API origin above
-            payload = json.loads(response.read().decode("utf-8"))
-    except (OSError, URLError, json.JSONDecodeError) as exc:
-        raise ValueError("无法从 GitHub 核验 D Reviewer 批准记录") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("GitHub Review 响应必须是对象")
-    return payload
+def _load_review_seal(path: Path, author_identity: str | None = None) -> dict[str, Any]:
+    """加载 Review 完成后由可信 sealing 流程生成的 D13E Review Seal。
 
-
-def _fetch_github_reviews() -> list[dict[str, Any]]:
-    """读取 PR #148 全部 Review，以拒绝仍未收敛的变更请求。"""
-    reviews: list[dict[str, Any]] = []
-    page = 1
-    while True:
-        api_url = f"https://api.github.com/repos/Kylin-Agent-Competition/kylinOS-agent-memory/pulls/148/reviews?per_page=100&page={page}"
-        request = Request(api_url, headers={"Accept": "application/vnd.github+json", "User-Agent": "d13e-formal-eval"})
-        try:
-            with urlopen(request, timeout=15) as response:  # noqa: S310 -- fixed GitHub API origin above
-                payload = json.loads(response.read().decode("utf-8"))
-        except (OSError, URLError, json.JSONDecodeError) as exc:
-            raise ValueError("无法从 GitHub 核验 PR #148 reviewDecision") from exc
-        if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
-            raise ValueError("GitHub Reviews 响应必须是对象列表")
-        reviews.extend(payload)
-        if len(payload) < 100:
-            return reviews
-        page += 1
-
-
-def _fetch_github_pull_request() -> dict[str, Any]:
-    """获取 PR #148 的真实作者和当前 head，防止旧批准继续覆盖新提交。"""
-    api_url = "https://api.github.com/repos/Kylin-Agent-Competition/kylinOS-agent-memory/pulls/148"
-    request = Request(api_url, headers={"Accept": "application/vnd.github+json", "User-Agent": "d13e-formal-eval"})
-    try:
-        with urlopen(request, timeout=15) as response:  # noqa: S310 -- fixed GitHub API origin above
-            payload = json.loads(response.read().decode("utf-8"))
-    except (OSError, URLError, json.JSONDecodeError) as exc:
-        raise ValueError("无法从 GitHub 核验 PR #148 作者和当前 head") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("GitHub Pull Request 响应必须是对象")
-    return payload
-
-
-def _verify_review_decision(reviews: list[dict[str, Any]]) -> None:
-    """按每位 Reviewer 的最新有效 Review 近似 GitHub 的 reviewDecision。"""
-    latest: dict[str, dict[str, Any]] = {}
-    for review in reviews:
-        user = review.get("user")
-        login = user.get("login") if isinstance(user, dict) else None
-        if not isinstance(login, str) or not login:
-            continue
-        previous = latest.get(login)
-        if previous is None or (str(review.get("submitted_at", "")), int(review.get("id", 0))) >= (
-            str(previous.get("submitted_at", "")),
-            int(previous.get("id", 0)),
-        ):
-            latest[login] = review
-    if any(review.get("state") == "CHANGES_REQUESTED" for review in latest.values()):
-        raise ValueError("PR #148 reviewDecision 仍为 CHANGES_REQUESTED")
-
-
-def _approved_artifact_hashes(payload: dict[str, Any]) -> dict[str, str]:
-    body = payload.get("body")
-    if not isinstance(body, str):
-        raise ValueError("GitHub Review 必须包含 D13E 封存工件批准摘要")
-    lines = [line.strip() for line in body.splitlines() if line.strip()]
-    if not lines or lines[0] != "D13E_FORMAL_SEAL_APPROVAL":
-        raise ValueError("GitHub Review 缺少 D13E_FORMAL_SEAL_APPROVAL 摘要")
-    approved: dict[str, str] = {}
-    for line in lines[1:]:
-        key, separator, value = line.partition(":")
-        if separator and key in {"dataset_sha256", "gold_sha256", "threshold_config_sha256"}:
-            approved[key] = value.strip()
-    if set(approved) != {"dataset_sha256", "gold_sha256", "threshold_config_sha256"}:
-        raise ValueError("GitHub Review 必须批准 Dataset、Gold 与阈值配置的 SHA-256")
-    if not all(_SHA256.fullmatch(value) for value in approved.values()):
-        raise ValueError("GitHub Review 中的封存工件 SHA-256 格式不正确")
-    return approved
-
-
-def _validated_d_reviewer_claim(manifest: dict[str, Any]) -> tuple[str, str]:
-    review = manifest["review"]
-    if review.get("required_reviewer_track") != "D" or review.get("reviewer_track") != "D":
-        raise ValueError("D13E 封存必须由 D 轨 Reviewer 批准")
-    author_identity = _required_text(manifest, "created_by_identity", "manifest")
-    reviewer_identity = _required_text(review, "reviewer_identity", "manifest.review")
-    if reviewer_identity == author_identity:
+    Seal 是 Review 后置工件，本身不写入被审批的 Commit C；Runner 只消费它的
+    reviewer 身份、reviewed_commit、批准状态与批准的工件 SHA-256。
+    """
+    path = path.resolve()
+    if not path.is_file():
+        raise ValueError(f"D13E Review Seal 文件不存在：{path}")
+    seal = _read_json(path, "D13E review seal")
+    if seal.get("seal_version") != _REVIEW_SEAL_VERSION:
+        raise ValueError("review seal 的 seal_version 必须为 'd13e-review-seal/v1'")
+    if seal.get("source_pr") != 148:
+        raise ValueError("review seal 的 source_pr 必须为 148")
+    reviewed_commit = seal.get("reviewed_commit")
+    if not isinstance(reviewed_commit, str) or not _GIT_SHA.fullmatch(reviewed_commit):
+        raise ValueError("review seal 的 reviewed_commit 必须是 40 位小写 Git SHA")
+    reviewer_identity = _required_text(seal, "reviewer_identity", "review seal")
+    if seal.get("reviewer_track") != "D":
+        raise ValueError("review seal 的 reviewer_track 必须为 D")
+    if author_identity is not None and reviewer_identity == author_identity:
         raise ValueError("D13E 封存 Reviewer 必须是非作者")
     if reviewer_identity not in _TRUSTED_D_REVIEWER_IDENTITIES:
-        raise ValueError("D13E 封存 Reviewer 不在可信 D 轨身份注册表中")
-    reviewed_commit = review.get("reviewed_commit")
-    if not isinstance(reviewed_commit, str) or not _GIT_SHA.fullmatch(reviewed_commit):
-        raise ValueError("manifest.review.reviewed_commit 必须是 40 位小写 Git SHA")
-    approval_reference = _required_text(review, "approval_reference", "manifest.review")
-    if not _GITHUB_REVIEW_REFERENCE.fullmatch(approval_reference):
-        raise ValueError("approval_reference 必须是 PR #148 的 GitHub Review URL")
-    return approval_reference, reviewed_commit
+        raise ValueError("review seal 的 Reviewer 不在可信 D 轨身份注册表中")
+    if seal.get("review_state") != "APPROVED":
+        raise ValueError("review seal 的 review_state 必须为 APPROVED")
+    review_reference = _required_text(seal, "review_reference", "review seal")
+    if not _GITHUB_REVIEW_REFERENCE.fullmatch(review_reference):
+        raise ValueError("review seal 的 review_reference 必须是 PR #148 的 GitHub Review URL")
+    artifacts = seal.get("approved_artifacts")
+    required_artifacts = ("dataset_sha256", "gold_sha256", "threshold_sha256", "runner_sha256")
+    if not isinstance(artifacts, dict) or set(artifacts) != set(required_artifacts):
+        raise ValueError("review seal 的 approved_artifacts 必须完整包含 Dataset/Gold/阈值/Runner 的 SHA-256")
+    for key in required_artifacts:
+        value = artifacts[key]
+        if not isinstance(value, str) or not _SHA256.fullmatch(value):
+            raise ValueError(f"review seal 的 approved_artifacts.{key} 必须是 64 位小写 SHA-256")
+    return seal
 
 
-def _verify_d_reviewer_approval(
-    manifest: dict[str, Any],
-    review_fetcher: Callable[[str], dict[str, Any]],
-    review_list_fetcher: Callable[[], list[dict[str, Any]]],
-    pull_request_fetcher: Callable[[], dict[str, Any]],
-) -> None:
-    approval_reference, reviewed_commit = _validated_d_reviewer_claim(manifest)
-    review = manifest["review"]
-    reviewer_identity = review["reviewer_identity"]
-    payload = review_fetcher(approval_reference)
-    match = _GITHUB_REVIEW_REFERENCE.fullmatch(approval_reference)
-    assert match is not None
-    if payload.get("id") != int(match.group(1)):
-        raise ValueError("GitHub Review ID 与 approval_reference 不一致")
-    if payload.get("state") != "APPROVED":
-        raise ValueError("GitHub Review 尚未处于 APPROVED 状态")
-    user = payload.get("user")
-    if not isinstance(user, dict) or user.get("login") != reviewer_identity:
-        raise ValueError("GitHub Review 的 Reviewer 身份与 Manifest 不一致")
-    if payload.get("commit_id") != reviewed_commit:
-        raise ValueError("GitHub Review 的 commit 与 Manifest reviewed_commit 不一致")
-    pull_request = pull_request_fetcher()
-    author = pull_request.get("user")
-    head = pull_request.get("head")
-    if not isinstance(author, dict) or author.get("login") == reviewer_identity:
-        raise ValueError("GitHub PR 作者不得作为 D13E 封存 Reviewer")
-    if not isinstance(head, dict) or head.get("sha") != reviewed_commit:
-        raise ValueError("GitHub PR 当前 head 必须与 D Reviewer 批准的 commit 一致")
-    approved_hashes = _approved_artifact_hashes(payload)
-    expected_hashes = {
-        "dataset_sha256": manifest.get("dataset_sha256"),
-        "gold_sha256": manifest.get("gold_sha256"),
-        "threshold_config_sha256": manifest.get("threshold_config_sha256"),
-    }
-    if approved_hashes != expected_hashes:
-        raise ValueError("GitHub Review 批准的封存工件 SHA-256 与 Manifest 不一致")
-    _verify_review_decision(review_list_fetcher())
-
-
-def _relative_file(base: Path, value: object, label: str) -> Path:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{label} 必须是非空相对路径")
-    candidate = Path(value)
-    if candidate.is_absolute() or ".." in candidate.parts:
-        raise ValueError(f"{label} 必须位于 bundle 目录内")
-    resolved = (base / candidate).resolve()
-    if base not in resolved.parents:
-        raise ValueError(f"{label} 越出 bundle 目录")
-    return resolved
+def _load_d13d_execution_seal(path: Path) -> dict[str, Any]:
+    """加载 D13D 轨冻结的 execution seal（外部可信根）。"""
+    path = path.resolve()
+    if not path.is_file():
+        raise ValueError(f"D13D execution seal 文件不存在：{path}")
+    seal = _read_json(path, "D13D execution seal")
+    if seal.get("seal_version") != _D13D_EXECUTION_SEAL_VERSION:
+        raise ValueError("D13D execution seal 的 seal_version 必须为 'd13d-execution-seal/v1'")
+    attestation_sha256 = seal.get("attestation_sha256")
+    if not isinstance(attestation_sha256, str) or not _SHA256.fullmatch(attestation_sha256):
+        raise ValueError("D13D execution seal 的 attestation_sha256 必须是 64 位小写 SHA-256")
+    implementation_commit = seal.get("implementation_commit")
+    if not isinstance(implementation_commit, str) or not _GIT_SHA.fullmatch(implementation_commit):
+        raise ValueError("D13D execution seal 的 implementation_commit 必须是 40 位小写 Git SHA")
+    for key in ("environment_id", "evidence_root"):
+        _required_text(seal, key, "D13D execution seal")
+    if seal.get("frozen_by_track") != "D":
+        raise ValueError("D13D execution seal 必须由 D 轨冻结（frozen_by_track=D）")
+    _required_text(seal, "approval_reference", "D13D execution seal")
+    return seal
 
 
 def _validated_evidence_directory(bundle_base: Path, provenance: dict[str, Any]) -> Path:
@@ -267,6 +178,18 @@ def _record_map(records: Iterable[dict[str, Any]], label: str) -> dict[str, dict
             raise ValueError(f"{label} sample_id 不得重复：{sample_id}")
         mapped[sample_id] = record
     return mapped
+
+
+def _relative_file(base: Path, value: object, label: str) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} 必须是非空相对路径")
+    candidate = Path(value)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise ValueError(f"{label} 必须位于 bundle 目录内")
+    resolved = (base / candidate).resolve()
+    if base not in resolved.parents:
+        raise ValueError(f"{label} 越出 bundle 目录")
+    return resolved
 
 
 def _expected_matches(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
@@ -324,16 +247,55 @@ def _error_type(metric: str, expected: dict[str, Any], actual: dict[str, Any]) -
     return "FORGET_RESIDUAL_AFTER_REBUILD"
 
 
+def _validated_thresholds(bundle: dict[str, Any], manifest: dict[str, Any], base: Path) -> dict[str, dict[str, Any]]:
+    """读取经 Review Seal 批准且与 Manifest 绑定的四项正式阈值（纯被审批对象）。"""
+    if bundle.get("threshold_config_file") != manifest.get("threshold_config_file"):
+        raise ValueError("bundle.threshold_config_file 必须与 manifest 一致")
+    path = _relative_file(base, bundle.get("threshold_config_file"), "threshold_config_file")
+    _verify_sha256(path, manifest.get("threshold_config_sha256"), "threshold_config_sha256")
+    thresholds = _read_json(path, "threshold config")
+    if thresholds.get("threshold_version") != "d13e-formal-thresholds/v1":
+        raise ValueError("threshold config 的 threshold_version 不正确")
+    metrics = thresholds.get("metrics")
+    expected_fields = {
+        "preference": "minimum_accuracy",
+        "conflict": "minimum_accuracy",
+        "safety": "maximum_violation_count",
+        "forget": "maximum_violation_count",
+    }
+    if not isinstance(metrics, dict) or set(metrics) != set(expected_fields):
+        raise ValueError("threshold config.metrics 必须完整包含四类指标")
+    for metric, field in expected_fields.items():
+        definition = metrics[metric]
+        if not isinstance(definition, dict) or set(definition) != {field}:
+            raise ValueError(f"threshold config.metrics.{metric} 必须只包含 {field}")
+        value = definition[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"threshold config.metrics.{metric}.{field} 必须是数值")
+        if field == "minimum_accuracy" and not 0 <= value <= 1:
+            raise ValueError(f"threshold config.metrics.{metric}.{field} 必须在 0 到 1 之间")
+        if field == "maximum_violation_count" and (not isinstance(value, int) or value != 0):
+            raise ValueError(f"threshold config.metrics.{metric}.{field} 当前正式 Gate 必须为 0")
+    return metrics
+
+
 def _validated_raw_files(
     bundle: dict[str, Any],
     provenance: dict[str, Any],
     base: Path,
+    d13d_seal: dict[str, Any],
 ) -> dict[str, Path]:
-    """验证 D13D 冻结执行证明及其四类逐样本 raw 文件。"""
+    """验证 D13D 冻结执行证明及其四类逐样本 raw 文件。
+
+    attestation digest 同时受 Bundle 与 D13D execution seal（外部可信根）双重
+    冻结；E 轨只重写 raw + SHA256SUMS + attestation + bundle 无法制造
+    EXECUTED_ON_FROZEN_D13D。
+    """
     metrics = ("preference", "conflict", "safety", "forget")
     if bundle.get("execution_status") != "EXECUTED_ON_FROZEN_D13D":
         raise ValueError("bundle.execution_status 必须为 'EXECUTED_ON_FROZEN_D13D'")
     attestation_path = _relative_file(base, bundle.get("execution_attestation_file"), "execution_attestation_file")
+    _verify_sha256(attestation_path, d13d_seal.get("attestation_sha256"), "d13d execution seal.attestation_sha256")
     _verify_sha256(attestation_path, bundle.get("execution_attestation_sha256"), "execution_attestation_sha256")
     attestation = _read_json(attestation_path, "D13D execution attestation")
     if attestation.get("attestation_version") != "d13d-execution-attestation/v1":
@@ -351,6 +313,9 @@ def _validated_raw_files(
     ):
         if attestation.get(key) != provenance.get(key):
             raise ValueError(f"D13D execution attestation.{key} 必须与 provenance 一致")
+    for key in ("implementation_commit", "environment_id", "evidence_root"):
+        if attestation.get(key) != d13d_seal.get(key):
+            raise ValueError(f"D13D execution attestation.{key} 必须与 D13D execution seal 一致")
 
     raw_files = bundle.get("raw_result_files")
     if not isinstance(raw_files, dict) or set(raw_files) != set(metrics):
@@ -383,46 +348,6 @@ def _validated_raw_files(
         if sums.get(filename) != digest:
             raise ValueError(f"SHA256SUMS 缺少或错配受证明文件：{filename}")
     return paths
-
-
-def _validated_thresholds(bundle: dict[str, Any], manifest: dict[str, Any], base: Path) -> dict[str, dict[str, Any]]:
-    """读取经 D Reviewer 批准且与 Manifest 绑定的四项正式阈值。"""
-    if bundle.get("threshold_config_file") != manifest.get("threshold_config_file"):
-        raise ValueError("bundle.threshold_config_file 必须与 manifest 一致")
-    path = _relative_file(base, bundle.get("threshold_config_file"), "threshold_config_file")
-    _verify_sha256(path, manifest.get("threshold_config_sha256"), "threshold_config_sha256")
-    thresholds = _read_json(path, "threshold config")
-    if thresholds.get("threshold_version") != "d13e-formal-thresholds/v1":
-        raise ValueError("threshold config 的 threshold_version 不正确")
-    if thresholds.get("approval_status") != "APPROVED_BY_D_NON_AUTHOR_REVIEWER":
-        raise ValueError("threshold config 必须经 D 非作者 Reviewer 批准")
-    review = manifest["review"]
-    if thresholds.get("approval_reference") != review.get("approval_reference"):
-        raise ValueError("threshold config.approval_reference 必须与 Manifest Review 一致")
-    if thresholds.get("approved_by") != review.get("reviewer_identity"):
-        raise ValueError("threshold config.approved_by 必须与 D Reviewer 身份一致")
-    _required_text(thresholds, "source", "threshold config")
-    metrics = thresholds.get("metrics")
-    expected_fields = {
-        "preference": "minimum_accuracy",
-        "conflict": "minimum_accuracy",
-        "safety": "maximum_violation_count",
-        "forget": "maximum_violation_count",
-    }
-    if not isinstance(metrics, dict) or set(metrics) != set(expected_fields):
-        raise ValueError("threshold config.metrics 必须完整包含四类指标")
-    for metric, field in expected_fields.items():
-        definition = metrics[metric]
-        if not isinstance(definition, dict) or set(definition) != {field}:
-            raise ValueError(f"threshold config.metrics.{metric} 必须只包含 {field}")
-        value = definition[field]
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError(f"threshold config.metrics.{metric}.{field} 必须是数值")
-        if field == "minimum_accuracy" and not 0 <= value <= 1:
-            raise ValueError(f"threshold config.metrics.{metric}.{field} 必须在 0 到 1 之间")
-        if field == "maximum_violation_count" and (not isinstance(value, int) or value != 0):
-            raise ValueError(f"threshold config.metrics.{metric}.{field} 当前正式 Gate 必须为 0")
-    return metrics
 
 
 def _metric_report(
@@ -514,8 +439,33 @@ def _metric_report(
     return report
 
 
+def _validate_approved_artifact_hashes(
+    base: Path,
+    bundle: dict[str, Any],
+    manifest: dict[str, Any],
+    review_seal: dict[str, Any],
+) -> None:
+    """Review Seal 批准的本地工件 SHA-256 必须与实际文件一致（T3 Artifact drift）。"""
+    artifacts = review_seal["approved_artifacts"]
+    for key, hash_key in (("dataset_file", "dataset_sha256"), ("gold_file", "gold_sha256")):
+        approved = artifacts[hash_key]
+        if approved != manifest[hash_key]:
+            raise ValueError(f"review seal 批准的 {hash_key} 与 Manifest 不一致")
+        path = _relative_file(base, bundle[key], key)
+        _verify_sha256(path, approved, f"review seal.approved_artifacts.{hash_key}")
+    threshold_approved = artifacts["threshold_sha256"]
+    if threshold_approved != manifest["threshold_config_sha256"]:
+        raise ValueError("review seal 批准的 threshold_sha256 与 Manifest 不一致")
+    threshold_path = _relative_file(base, bundle["threshold_config_file"], "threshold_config_file")
+    _verify_sha256(threshold_path, threshold_approved, "review seal.approved_artifacts.threshold_sha256")
+    runner_path = Path(__file__).resolve()
+    if not runner_path.is_file():
+        raise ValueError("无法定位正在执行的 Runner 文件")
+    _verify_sha256(runner_path, artifacts["runner_sha256"], "review seal.approved_artifacts.runner_sha256")
+
+
 def validate_formal_bundle(bundle_path: Path) -> tuple[dict[str, Any], dict[str, Any], Path]:
-    """先验证 D13D provenance；任何失败都不得让调用方写报告。"""
+    """先验证 D13D provenance 与稳定工件绑定；任何失败都不得让调用方写报告。"""
     bundle_path = bundle_path.resolve()
     bundle = _read_json(bundle_path, "bundle")
     if bundle.get("bundle_version") != "d13e-formal-bundle/v1":
@@ -525,16 +475,9 @@ def validate_formal_bundle(bundle_path: Path) -> tuple[dict[str, Any], dict[str,
     manifest = _read_json(manifest_path, "manifest")
     if manifest.get("manifest_version") != "d13e-formal-manifest/v1":
         raise ValueError("manifest_version 必须为 'd13e-formal-manifest/v1'")
-    if manifest.get("seal_status") != "SEALED_BY_D_REVIEWER":
-        raise ValueError("manifest.seal_status 必须为 'SEALED_BY_D_REVIEWER'")
-    review = manifest.get("review")
-    if not isinstance(review, dict):
-        raise ValueError("manifest.review 必须是对象")
-    for key in ("status", "gold_review_status"):
-        if review.get(key) != "APPROVED_BY_D_NON_AUTHOR_REVIEWER":
-            raise ValueError(f"manifest.review.{key} 必须由 D 非作者 Reviewer 批准")
-    _required_text(review, "approval_reference", "manifest.review")
-    _validated_d_reviewer_claim(manifest)
+    if manifest.get("required_reviewer_track") != "D":
+        raise ValueError("manifest.required_reviewer_track 必须为 D")
+    _required_text(manifest, "created_by_identity", "manifest")
     if bundle.get("formal_result_status") != "READY_FOR_FORMAL_EVALUATION":
         raise ValueError("bundle.formal_result_status 必须为 'READY_FOR_FORMAL_EVALUATION'")
     for key in ("dataset_version", "gold_label_version"):
@@ -574,12 +517,17 @@ def validate_formal_bundle(bundle_path: Path) -> tuple[dict[str, Any], dict[str,
 
 def compute_formal_report(
     bundle_path: Path,
-    review_fetcher: Callable[[str], dict[str, Any]] = _fetch_github_review,
-    review_list_fetcher: Callable[[], list[dict[str, Any]]] = _fetch_github_reviews,
-    pull_request_fetcher: Callable[[], dict[str, Any]] = _fetch_github_pull_request,
+    review_seal_path: Path | None = None,
+    d13d_seal_path: Path | None = None,
 ) -> dict[str, Any]:
-    """计算 D13E 四类指标；仅接受已冻结 provenance 与全量逐样本原始结果。"""
+    """离线计算 D13E 四类指标；只消费本地证据与 D 轨冻结的两个 Seal。"""
     bundle, manifest, base = validate_formal_bundle(bundle_path)
+    if review_seal_path is None or d13d_seal_path is None:
+        raise ValueError("正式评测必须同时提供 --review-seal 与 --d13d-seal")
+    review_seal = _load_review_seal(Path(review_seal_path), author_identity=manifest.get("created_by_identity"))
+    d13d_seal = _load_d13d_execution_seal(Path(d13d_seal_path))
+    _validate_approved_artifact_hashes(base, bundle, manifest, review_seal)
+
     dataset_path = _relative_file(base, bundle["dataset_file"], "dataset_file")
     gold_path = _relative_file(base, bundle["gold_file"], "gold_file")
     dataset = _read_jsonl(dataset_path, "dataset")
@@ -598,7 +546,7 @@ def compute_formal_report(
     expected_counts = manifest.get("sample_count")
     if not isinstance(expected_counts, dict):
         raise ValueError("manifest.sample_count 必须是对象")
-    raw_paths = _validated_raw_files(bundle, manifest["provenance"], base)
+    raw_paths = _validated_raw_files(bundle, manifest["provenance"], base, d13d_seal)
 
     reports: dict[str, dict[str, Any]] = {}
     for metric in metrics:
@@ -613,8 +561,6 @@ def compute_formal_report(
                 raise ValueError(f"{metric} Gold 必须声明 valid 或 boundary 状态")
             if gold_record["evaluation_status"] != record.get("inclusion_status"):
                 raise ValueError(f"{metric} Gold 与 Dataset 的有效/边界状态不一致")
-            if gold_record.get("gold_status") != "SEALED_BY_D_REVIEWER":
-                raise ValueError(f"{metric} Gold 必须由 D Reviewer 封存（gold_status=SEALED_BY_D_REVIEWER）")
         raw = _record_map(_read_jsonl(raw_paths[metric], f"{metric} raw result"), f"{metric} raw result")
         for record in raw.values():
             if record.get("metric") != metric:
@@ -623,7 +569,6 @@ def compute_formal_report(
 
     if expected_counts.get("total") != len(dataset):
         raise ValueError("manifest.sample_count.total 与 Dataset 实际数量不一致")
-    _verify_d_reviewer_approval(manifest, review_fetcher, review_list_fetcher, pull_request_fetcher)
     provenance = manifest["provenance"]
     return {
         "status": "COMPUTED",
@@ -635,19 +580,34 @@ def compute_formal_report(
             "evidence_root": provenance["evidence_root"],
             "dataset_sha256": manifest["dataset_sha256"],
             "gold_sha256": manifest["gold_sha256"],
+            "reviewed_commit": review_seal["reviewed_commit"],
+            "reviewer_identity": review_seal["reviewer_identity"],
+            "review_reference": review_seal["review_reference"],
+            "attestation_sha256": d13d_seal["attestation_sha256"],
         },
         **reports,
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="D13E formal evaluation")
-    parser.add_argument("input", help="D13E formal bundle JSON")
+    parser = argparse.ArgumentParser(description="D13E formal evaluation（离线）")
+    parser.add_argument("input", nargs="?", help="D13E formal bundle JSON（或使用 --bundle）")
+    parser.add_argument("--bundle", dest="bundle_flag", help="D13E formal bundle JSON 路径")
+    parser.add_argument("--review-seal", help="D13E_REVIEW_SEAL_V1.json 路径")
+    parser.add_argument("--d13d-seal", help="D13D_EXECUTION_SEAL_V1.json 路径")
     parser.add_argument("--output", "-o", help="formal report JSON output")
     args = parser.parse_args()
 
+    bundle_value = args.bundle_flag or args.input
+    if not bundle_value:
+        parser.error("必须提供 D13E formal bundle JSON")
+
     try:
-        report = compute_formal_report(Path(args.input))
+        report = compute_formal_report(
+            Path(bundle_value),
+            review_seal_path=Path(args.review_seal) if args.review_seal else None,
+            d13d_seal_path=Path(args.d13d_seal) if args.d13d_seal else None,
+        )
     except ValueError as exc:
         print(f"D13E 正式评测拒绝执行：{exc}", file=sys.stderr)
         return 2
@@ -655,7 +615,7 @@ def main() -> int:
     text = json.dumps(report, ensure_ascii=False, indent=2)
     if args.output:
         output_path = Path(args.output).resolve()
-        evidence_directory = Path(args.input).resolve().parent
+        evidence_directory = Path(bundle_value).resolve().parent
         if output_path != evidence_directory and evidence_directory not in output_path.parents:
             print("D13E 正式评测拒绝写出报告：--output 必须位于 D13D 唯一证据目录", file=sys.stderr)
             return 2
