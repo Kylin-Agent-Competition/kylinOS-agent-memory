@@ -118,7 +118,7 @@ G1-G8 全 PASS → FORMAL RUN GO
 |---|---|---|---|---|
 | D14C-00 | 建立正式任务卡（本文件），冻结 scope / tested_commit / formal prerequisites / out-of-scope / evidence requirements | 用户授权（B 代 C 轨执行） | 任务卡字段齐全、初始状态 `PREPARED`、无禁止表述 | 进行中（本批） |
 | D14C-01 | 冻结唯一被测基线：Git SHA、release artifact、AI Assistant/MemoryClient/Memory Service artifact、VM snapshot、runtime 身份 | `origin/main` | 身份链可复核（SHA→构建物→安装物→进程） | 待开始 |
-| D14C-02 | 核对 Host Mapping 是否可进入 production：确认 #151/#134 已入 tested commit；检查 `turn.finalized` / `event.ingest` / `forget.preview` / `forget.execute` 当前处于 ACTIVE/CANDIDATE/BLOCKED_BY_HOST_MAPPING/UNSUPPORTED_METHOD 的哪一种；只记录，不改状态 | #151 已入 main | 状态核查记录；无 C 轨改状态常量行为 | 待开始 |
+| D14C-02 | 核对 Host Mapping 是否可进入 production：确认 #151/#134 已入 tested commit；检查 `turn.finalized` / `event.ingest` / `forget.preview` / `forget.execute` 当前处于 ACTIVE/CANDIDATE/BLOCKED_BY_HOST_MAPPING/UNSUPPORTED_METHOD 的哪一种；只记录，不改状态 | #151 已入 main | 状态核查记录；无 C 轨改状态常量行为 | 已完成（静态状态记录，见 docs/day14/03_d14c_host_mapping_route_status_20260906.md） |
 
 ### 阶段 B — 先清 Production Blocker
 
