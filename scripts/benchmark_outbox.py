@@ -146,7 +146,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             "status": "not_measured",
             "reason": (
                 "当前 workload 写入 turn.finalized，并使用可控 sleep consumer；"
-                "未经过 memory.upserted → index consumer → Vector/Embedding backend。"
+                "未经过 memory.upserted → index consumer → Vector index backend。"
             ),
         },
         "db": str(args.db),

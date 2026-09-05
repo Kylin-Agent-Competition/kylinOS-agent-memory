@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from sqlalchemy import select
 
 from app import build_vector_provider
@@ -153,7 +154,9 @@ def test_worker_routes_memory_upserted_to_real_provider(tmp_path):
         engine,
         poll_interval_s=1,
         max_retries=0,
-        consumer=build_outbox_router(vector_provider=provider).route,
+        consumer=build_outbox_router(
+            vector_provider=provider, digest_key_id=KEY_ID, digest_key=KEY
+        ).route,
     )
     worker._poll_once()
     assert worker.metrics()["backlog"] == 0
@@ -167,7 +170,46 @@ def test_app_builds_real_provider_only_when_vector_cli_is_configured(tmp_path):
     init_schema(engine)
 
     assert build_vector_provider(engine, cli_path=None, dimension=None) is None
-    provider = build_vector_provider(engine, cli_path="/usr/local/bin/vector_cli", dimension=2)
+    with pytest.raises(ValueError, match="digest key"):
+        build_vector_provider(engine, cli_path="/usr/local/bin/vector_cli", dimension=2)
+    with pytest.raises(ValueError, match="digest key"):
+        build_vector_provider(
+            engine,
+            cli_path="/usr/local/bin/vector_cli",
+            dimension=2,
+            digest_key_id=KEY_ID,
+            digest_key="   ",
+        )
+    provider = build_vector_provider(
+        engine,
+        cli_path="/usr/local/bin/vector_cli",
+        dimension=2,
+        digest_key_id=KEY_ID,
+        digest_key=KEY,
+    )
     assert isinstance(provider, SqliteVectorProvider)
     assert provider._vector_client.cli_path == "/usr/local/bin/vector_cli"
     assert provider._dimension == 2
+
+
+def test_router_requires_matching_controlled_digest_key(tmp_path):
+    engine = create_db_engine(str(tmp_path / "router.db"))
+    init_schema(engine)
+    provider = SqliteVectorProvider(
+        engine,
+        vector_client=RecordingVectorClient(),
+        digest_keys={KEY_ID: KEY},
+        dimension=2,
+    )
+    from outbox.router import build_outbox_router
+
+    with pytest.raises(ValueError, match="digest key"):
+        build_outbox_router(
+            vector_provider=provider,
+            digest_key_id=KEY_ID,
+            digest_key=b"wrong-controlled-key",
+        )
+    router = build_outbox_router(
+        vector_provider=provider, digest_key_id=KEY_ID, digest_key=KEY
+    )
+    assert router.has_route(repo.EVENT_MEMORY_UPSERTED)

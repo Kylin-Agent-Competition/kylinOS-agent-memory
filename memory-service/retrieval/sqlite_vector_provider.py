@@ -61,6 +61,10 @@ class SqliteVectorProvider:
         self._index_text_resolver = index_text_resolver or (lambda payload: payload.get("index_text"))
         self._dimension = dimension
 
+    def has_digest_key(self, key_id: str, key: bytes) -> bool:
+        """判断 Router 注入的受控摘要密钥是否与 Provider 完全一致。"""
+        return bool(key_id) and bool(key) and self._digest_keys.get(key_id) == key
+
     @staticmethod
     def _semantic_payload(request: Any) -> dict[str, Any]:
         payload = request.model_dump(

@@ -36,8 +36,19 @@ from retrieval.real_vector_provider import VectorCliClient
 from retrieval.sqlite_vector_provider import SqliteVectorProvider
 
 
-KEY_ID = "d9d-internal"
-KEY = b"kylin-memory-d9d-internal"
+KEY_ID_ENV = "KYLIN_MEMORY_DIGEST_KEY_ID"
+KEY_ENV = "KYLIN_MEMORY_DIGEST_KEY"
+
+
+def _digest_config() -> tuple[str, bytes]:
+    key_id = os.environ.get(KEY_ID_ENV, "").strip()
+    raw_key = os.environ.get(KEY_ENV, "")
+    key = raw_key.encode("utf-8") if raw_key.strip() else b""
+    if not key_id or not key:
+        raise ValueError(
+            f"真实 index benchmark 必须配置 {KEY_ID_ENV} 与 {KEY_ENV}"
+        )
+    return key_id, key
 
 
 def _cli_available(cli_path: str) -> bool:
@@ -88,17 +99,20 @@ def main(argv: Optional[list[str]] = None) -> int:
     engine = create_db_engine(str(args.db))
     init_schema(engine)
     client = VectorCliClient(args.cli, expected_dimension=args.dimension)
+    key_id, key = _digest_config()
     provider = SqliteVectorProvider(
         engine,
         vector_client=client,
-        digest_keys={KEY_ID: KEY},
+        digest_keys={key_id: key},
         dimension=args.dimension,
     )
     worker = OutboxWorker(
         engine,
         poll_interval_s=args.poll_interval_ms / 1000.0,
         max_retries=args.max_retries,
-        consumer=build_outbox_router(vector_provider=provider).route,
+        consumer=build_outbox_router(
+            vector_provider=provider, digest_key_id=key_id, digest_key=key
+        ).route,
     )
     initial = worker.metrics()
     if initial.get("backlog") != 0:
@@ -107,7 +121,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     generation = f"d13a-{time.time_ns()}-{os.getpid()}"
     user_id = "day13a-index-benchmark"
-    digest = "hmac-sha256:d9d-internal:" + "0" * 64
+    digest = f"hmac-sha256:{key_id}:" + "0" * 64
     timeline: list[dict[str, Any]] = []
     sampler = ResourceSampler(interval_s=args.sample_interval_ms / 1000.0)
     sampler.start()
@@ -190,7 +204,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     result = {
         "benchmark": "real_index_backlog_drain",
         "formal_run": True,
-        "measurement_scope": "outbox_queue_backlog_drain",
+        "measurement_scope": "real_vector_index_backlog_drain",
         "chain": [
             "memory.upserted",
             "OutboxWorker",

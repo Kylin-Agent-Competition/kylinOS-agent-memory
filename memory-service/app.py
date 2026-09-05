@@ -39,19 +39,44 @@ from service.source_resolver import (
 logger = logging.getLogger(__name__)
 
 
-def build_vector_provider(engine, *, cli_path: Optional[str], dimension: Optional[int]):
+def _digest_key_bytes(raw: object) -> bytes:
+    if isinstance(raw, bytes):
+        key = raw
+    elif isinstance(raw, str):
+        if not raw.strip():
+            key = b""
+        else:
+            key = raw.encode("utf-8")
+    else:
+        key = b""
+    if not key:
+        raise ValueError("真实 Vector provider 必须配置非空 digest key")
+    return key
+
+
+def build_vector_provider(
+    engine,
+    *,
+    cli_path: Optional[str],
+    dimension: Optional[int],
+    digest_key_id: Optional[str] = None,
+    digest_key: Optional[str | bytes] = None,
+):
     """按显式部署参数组装真实 Vector provider；默认保持 provider 未接线。"""
     if cli_path is None and dimension is None:
         return None
     if not cli_path or dimension is None or dimension <= 0:
         raise ValueError("真实 Vector provider 必须同时配置 --vector-cli 与正的 --vector-dimension")
+    if not isinstance(digest_key_id, str) or not digest_key_id.strip():
+        raise ValueError("真实 Vector provider 必须配置非空 digest key id")
+    key = _digest_key_bytes(digest_key)
     from retrieval.real_vector_provider import VectorCliClient
     from retrieval.sqlite_vector_provider import SqliteVectorProvider
 
     return SqliteVectorProvider(
         engine,
         vector_client=VectorCliClient(cli_path, expected_dimension=dimension),
-        digest_keys={"d9d-internal": b"kylin-memory-d9d-internal"},
+        digest_keys={digest_key_id: key},
         dimension=dimension,
     )
 
@@ -73,6 +98,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=os.environ.get("KYLIN_MEMORY_VECTOR_DIMENSION"),
         help="真实 Vector collection 维度；必须与 --vector-cli 一起提供",
+    )
+    p.add_argument(
+        "--digest-key-id",
+        default=os.environ.get("KYLIN_MEMORY_DIGEST_KEY_ID"),
+        help="真实 Vector 摘要密钥 ID（建议仅通过 KYLIN_MEMORY_DIGEST_KEY_ID 注入）",
+    )
+    p.add_argument(
+        "--digest-key",
+        default=os.environ.get("KYLIN_MEMORY_DIGEST_KEY"),
+        help="真实 Vector 摘要密钥（建议仅通过 KYLIN_MEMORY_DIGEST_KEY 注入）",
     )
     p.add_argument(
         "--register-turn-finalized",
@@ -213,12 +248,22 @@ def main(argv: Optional[list[str]] = None) -> int:
     if not args.no_outbox:
         # D9D D-REQ-05：注入 OutboxRouter（统一消费路由）。
         vector_provider = build_vector_provider(
-            engine, cli_path=args.vector_cli, dimension=args.vector_dimension
+            engine,
+            cli_path=args.vector_cli,
+            dimension=args.vector_dimension,
+            digest_key_id=args.digest_key_id,
+            digest_key=args.digest_key,
         )
-        router = build_outbox_router(
-            vector_provider=vector_provider,
-            embedding_service=None,
-        )
+        if vector_provider is None:
+            router = build_outbox_router(embedding_service=None)
+        else:
+            digest_key = _digest_key_bytes(args.digest_key)
+            router = build_outbox_router(
+                vector_provider=vector_provider,
+                embedding_service=None,
+                digest_key_id=args.digest_key_id,
+                digest_key=digest_key,
+            )
         worker = OutboxWorker(
             engine,
             poll_interval_s=cfg.outbox_poll_interval_s,

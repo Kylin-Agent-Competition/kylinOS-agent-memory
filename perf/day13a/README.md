@@ -15,7 +15,7 @@
 
 `memory.retrieve` 当前返回 empty context，因此它的 `measurement_scope` 是 `gateway_empty_context_ipc_baseline`：仅代表 UDS → Gateway → Registry → handler → response 的 IPC 基线，不能用作知识检索主链延迟或比赛“知识检索响应 ≤500ms”的达标证据。
 
-当前 `benchmark_outbox.py` 测的是 `outbox_queue_backlog_drain`，不是索引积压：它写入 `turn.finalized` 并使用可控 consumer。`full` 模式会在此基础上调用 `benchmark_index_backlog.py`，写入 `memory.upserted`，经真实 `OutboxWorker`、索引 consumer、`SqliteVectorProvider` 和 `VectorCliClient` 进入 Vector Engine，并将结果合并到 `outbox.summary.json.index_backlog_measurement`。只有该真实链路的结果为 `status=measured` 且通过完整性校验时，才可将索引积压列为已测量。
+当前 `benchmark_outbox.py` 测的是 `outbox_queue_backlog_drain`，不是索引积压：它写入 `turn.finalized` 并使用可控 consumer。`full` 模式会在此基础上调用 `benchmark_index_backlog.py`，写入 `memory.upserted`，经真实 `OutboxWorker`、索引 consumer、`SqliteVectorProvider` 和 `VectorCliClient` 进入 Vector Engine，并将结果合并到 `outbox.summary.json.index_backlog_measurement`。这里的真实 benchmark 验证的是 Vector 索引链（测试 payload 携带预计算向量），不经过 `EmbeddingService`；它不能单独证明 Embedding → Vector 的端到端链路。只有该真实链路的完整对象、计数、backend identity 和 `status=measured` 均通过 fail-closed 校验时，才可将索引积压列为已测量。
 
 项目内部 Embedding 查询预算是 **≤180ms**；比赛官方知识检索响应指标是 **≤500ms**。二者属于不同层级，不能互相替代。D13A 只记录基线，不设置回归 Gate，也不承担 D13B/D13C 的热点定位或优化。
 
@@ -44,9 +44,12 @@ PYTHONPATH=memory-service:scripts ./scripts/run_day13a_benchmarks.sh
 export DAY13A_BASELINE_MODE=full
 export DAY13A_VECTOR_CLI=/absolute/path/to/vector_cli
 export DAY13A_VECTOR_DIMENSION=4
+# 真实 Vector provider 与 benchmark 必须使用部署侧受控摘要密钥；不要使用源码默认测试值
+export DAY13A_DIGEST_KEY_ID=d13a-production
+export DAY13A_DIGEST_KEY='由 secret source 注入的密钥'
 ```
 
-若宿主没有真实 Vector CLI，仍应使用 `DAY13A_BASELINE_MODE=partial`；脚本会在负载前 fail-closed，不会把 queue-only 结果冒充索引积压证据。
+若宿主没有真实 Vector CLI 或受控摘要密钥，仍应使用 `DAY13A_BASELINE_MODE=partial`；脚本会在负载前 fail-closed，不会把 queue-only 结果冒充索引积压证据。启动 Memory Service 的真实 Vector 模式也必须设置 `KYLIN_MEMORY_DIGEST_KEY_ID` 与 `KYLIN_MEMORY_DIGEST_KEY`；两者会显式同时注入 `SqliteVectorProvider` 和 Outbox Router，缺失或失配会拒绝启动。
 
 运行目录结构如下（所有目录均在 `DAY13A_OUTPUT_DIR` 或默认的 `/tmp` 路径下）：
 

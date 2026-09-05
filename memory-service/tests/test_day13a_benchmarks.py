@@ -122,6 +122,34 @@ def _complete_run(*, index_status: str = "measured") -> dict:
             "events_processed": 1,
             "dead_letters": 0,
             "index_backlog_measurement": {"status": index_status},
+            "index_backlog": {
+                "benchmark": "real_index_backlog_drain",
+                "formal_run": True,
+                "measurement_scope": "real_vector_index_backlog_drain",
+                "chain": [
+                    "memory.upserted", "OutboxWorker", "index_consumer",
+                    "SqliteVectorProvider", "VectorCliClient", "Vector Engine",
+                ],
+                "events_submitted": 1,
+                "events_processed": 1,
+                "producer_errors": 0,
+                "dead_letters": 0,
+                "final_backlog": 0,
+                "vector_backend": {
+                    "provider": "VectorCliClient",
+                    "verified": True,
+                    "indexed_active_records": 1,
+                    "generation": "generation-1",
+                },
+                "index_backlog_measurement": {
+                    "status": index_status,
+                    "chain_verified": True,
+                    "events_submitted": 1,
+                    "events_processed": 1,
+                    "dead_letters": 0,
+                    "final_backlog": 0,
+                },
+            },
         },
     }
 
@@ -237,6 +265,36 @@ def test_formal_environment_binds_expected_identity_and_sdk_provenance() -> None
 def test_full_run_requires_each_core_benchmark(
     mutate, expected_error: str
 ) -> None:
+    summary = _complete_run()
+    mutate(summary)
+    assert expected_error in validate_run_completeness(summary, mode="full")
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected_error"),
+    [
+        (lambda summary: summary["outbox"].pop("index_backlog"), "outbox.index_backlog 缺失"),
+        (
+            lambda summary: summary["outbox"]["index_backlog"]["vector_backend"].update(
+                {"verified": False}
+            ),
+            "vector_backend.verified 不是 true",
+        ),
+        (
+            lambda summary: summary["outbox"]["index_backlog"].update(
+                {"events_processed": 0}
+            ),
+            "events_processed 未等于 submitted",
+        ),
+        (
+            lambda summary: summary["outbox"]["index_backlog"]["index_backlog_measurement"].pop(
+                "chain_verified"
+            ),
+            "measurement.chain_verified 不是 true",
+        ),
+    ],
+)
+def test_full_run_rejects_incomplete_real_index_evidence(mutate, expected_error: str) -> None:
     summary = _complete_run()
     mutate(summary)
     assert expected_error in validate_run_completeness(summary, mode="full")

@@ -492,6 +492,77 @@ _RESOURCE_METRICS = (
     "cpu_avg_percent", "cpu_peak_percent",
 )
 
+_REAL_INDEX_CHAIN = (
+    "memory.upserted",
+    "OutboxWorker",
+    "index_consumer",
+    "SqliteVectorProvider",
+    "VectorCliClient",
+    "Vector Engine",
+)
+
+
+def _real_index_completeness_errors(outbox: Mapping[str, Any]) -> list[str]:
+    """Require independently verifiable evidence for the full Vector path."""
+    index = outbox.get("index_backlog")
+    if not isinstance(index, Mapping):
+        return ["outbox.index_backlog 缺失，不能以 status=measured 代替真实索引证据"]
+
+    errors: list[str] = []
+    if index.get("formal_run") is not True:
+        errors.append("outbox.index_backlog.formal_run 不是 true")
+    if index.get("benchmark") != "real_index_backlog_drain":
+        errors.append("outbox.index_backlog benchmark 不是 real_index_backlog_drain")
+    if index.get("measurement_scope") != "real_vector_index_backlog_drain":
+        errors.append("outbox.index_backlog measurement_scope 不正确")
+    if index.get("chain") != list(_REAL_INDEX_CHAIN):
+        errors.append("outbox.index_backlog.chain 不完整或顺序不正确")
+
+    submitted = index.get("events_submitted")
+    if not isinstance(submitted, int) or isinstance(submitted, bool) or submitted <= 0:
+        errors.append("outbox.index_backlog.events_submitted 非正整数")
+        submitted = None
+    processed = index.get("events_processed")
+    if not isinstance(processed, int) or isinstance(processed, bool) or processed < 0:
+        errors.append("outbox.index_backlog.events_processed 缺失或非法")
+    elif submitted is not None and processed != submitted:
+        errors.append("outbox.index_backlog.events_processed 未等于 submitted")
+    for field in ("producer_errors", "dead_letters", "final_backlog"):
+        value = index.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            errors.append(f"outbox.index_backlog.{field} 缺失或非法")
+        elif value != 0:
+            errors.append(f"outbox.index_backlog.{field} 必须为 0")
+
+    backend = index.get("vector_backend")
+    if not isinstance(backend, Mapping):
+        errors.append("outbox.index_backlog.vector_backend 缺失")
+    else:
+        if backend.get("verified") is not True:
+            errors.append("outbox.index_backlog.vector_backend.verified 不是 true")
+        if not isinstance(backend.get("provider"), str) or not backend.get("provider"):
+            errors.append("outbox.index_backlog.vector_backend.provider 缺失")
+        if not isinstance(backend.get("generation"), str) or not backend.get("generation"):
+            errors.append("outbox.index_backlog.vector_backend.generation 缺失")
+        indexed = backend.get("indexed_active_records")
+        if not isinstance(indexed, int) or isinstance(indexed, bool) or indexed < 0:
+            errors.append("outbox.index_backlog.vector_backend.indexed_active_records 缺失或非法")
+        elif submitted is not None and indexed != submitted:
+            errors.append("outbox.index_backlog.vector_backend.indexed_active_records 未等于 submitted")
+
+    measurement = index.get("index_backlog_measurement")
+    if not isinstance(measurement, Mapping):
+        errors.append("outbox.index_backlog.index_backlog_measurement 缺失")
+    else:
+        if measurement.get("status") != "measured":
+            errors.append("真实索引积压 measurement.status 不是 measured")
+        if measurement.get("chain_verified") is not True:
+            errors.append("真实索引积压 measurement.chain_verified 不是 true")
+        for field in ("events_submitted", "events_processed", "dead_letters", "final_backlog"):
+            if measurement.get(field) != index.get(field):
+                errors.append(f"真实索引积压 measurement.{field} 与 benchmark 不一致")
+    return errors
+
 
 def _resource_completeness_errors(
     summary: Any,
@@ -651,11 +722,13 @@ def validate_run_completeness(
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 errors.append(f"outbox.{field} 缺失或非法")
         index_measurement = outbox.get("index_backlog_measurement")
-        if mode == "full" and (
-            not isinstance(index_measurement, Mapping)
-            or index_measurement.get("status") != "measured"
-        ):
-            errors.append("未测量真实索引积压")
+        if mode == "full":
+            if (
+                not isinstance(index_measurement, Mapping)
+                or index_measurement.get("status") != "measured"
+            ):
+                errors.append("未测量真实索引积压")
+            errors.extend(_real_index_completeness_errors(outbox))
     return errors
 
 
