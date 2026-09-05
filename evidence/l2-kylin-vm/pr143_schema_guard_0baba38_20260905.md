@@ -1,9 +1,9 @@
 # PR #143 Schema Guard L2 Evidence
 
-- Tested commit: `dc8765782e4fba07079fd4e7fad41ba5cccede3e`
+- Tested commit: `0baba38712c78211e76b1de4d641a1405d9c3293`
 - Environment: Kylin V11 (`VERSION_ID=v11`), kernel `6.6.0-76-generic`, Python 3.12.3 from existing `/home/kylin-agent/d4d-venv`
-- Source binding: Git archive created from the tested commit, SHA-256 `5bbfc95d03f1e7b47ac7881f748be49999cfd6aa61c9eb954ade20d31bbf81bd`
-- Raw log: `pr143_schema_guard_dc87657_20260904.log`, SHA-256 `3b5b2f8cdcf9a6b6b4b528d7df264cf255504adcb89f6f8bf2eb0db1fece4f96`
+- Source binding: Git archive created from the tested commit, SHA-256 `e39bfb4c4c0d6e1b7420c2e704419cd2b9ad706128c00de187e86efdcc9c7c1e`
+- Raw log: `pr143_schema_guard_0baba38_20260905.log`, SHA-256 `cdc175228f8b89afe2a83a9cc4b49e8edfbfc37ba354d44ff53001bd1fed522c`
 
 ## Commands And Results
 

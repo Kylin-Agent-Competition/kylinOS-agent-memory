@@ -1809,16 +1809,16 @@ entries:
     description: "PR #143 event.ingest 字段漂移入口防护：Kylin V11 validation profile 的定向回归与真实 UDS 请求验证"
     status: "HOST_VERIFIED"
     evidence_level: "E4"
-    source: "evidence/l2-kylin-vm/pr143_schema_guard_dc87657_20260904.log"
-    report: "evidence/l2-kylin-vm/pr143_schema_guard_dc87657_20260904.md"
-    tested_commit: "dc8765782e4fba07079fd4e7fad41ba5cccede3e"
+    source: "evidence/l2-kylin-vm/pr143_schema_guard_0baba38_20260905.log"
+    report: "evidence/l2-kylin-vm/pr143_schema_guard_0baba38_20260905.md"
+    tested_commit: "0baba38712c78211e76b1de4d641a1405d9c3293"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
-    date: "2026-09-04"
+    date: "2026-09-05"
     reviewer: "pending"
     limitations: "仅覆盖显式注册的 validation profile（trusted_identity=None）；production 默认不注册 event.ingest。未证明真实 C→D 宿主接入、部署成品化或 TD-060 的 C/D status mapping 冻结。"
-    checksum_sha256: "3b5b2f8cdcf9a6b6b4b528d7df264cf255504adcb89f6f8bf2eb0db1fece4f96"
+    checksum_sha256: "cdc175228f8b89afe2a83a9cc4b49e8edfbfc37ba354d44ff53001bd1fed522c"
     details: |
       Kylin V11, kernel 6.6.0-76-generic, Python 3.12.3。
       定向 pytest：35 passed。真实长度前缀 JSON UDS：5 类拒绝请求均 INVALID_REQUEST 且 source_events=0/idempotency_cache=0；canonical captured_at + malformed legacy collected_at 正向请求仅写入 source_events=1/idempotency_cache=1。
