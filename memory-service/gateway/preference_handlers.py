@@ -212,6 +212,7 @@ def preference_create_handler(payload: Dict[str, Any], ctx: RequestContext, uow_
                 evidence_fingerprint=fps["evidence_fingerprint"],
                 idempotency_key=idem_key,
                 request_fingerprint=fps["request_fingerprint"],
+                trace_id=ctx.trace_id,
             )
             return row
 
@@ -259,6 +260,7 @@ def preference_update_handler(payload: Dict[str, Any], ctx: RequestContext, uow_
                 evidence_fingerprint=fps["evidence_fingerprint"],
                 idempotency_key=idem_key,
                 request_fingerprint=fps["request_fingerprint"],
+                trace_id=ctx.trace_id,
             )
             return row
 
@@ -310,6 +312,7 @@ def preference_rollback_handler(payload: Dict[str, Any], ctx: RequestContext, uo
                         "target_version": target_version,
                     },
                 ),
+                trace_id=ctx.trace_id,
             )
             fresh_history = repo.list_preference_versions(
                 uow.conn,

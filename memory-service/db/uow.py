@@ -224,8 +224,9 @@ class UnitOfWork(AbstractContextManager["UnitOfWork"]):
     def _assert_execute_supported(plan: Dict[str, Any]) -> None:
         """Execute 前 fail-closed 门禁（契约 §四.4~§四.6；红线 §四）。
 
-        delete_mode=hard / is_cascade=true / topic / time_window / full_reset /
-        target_type in (event, all) → Runtime 未闭环，一律拒绝（不自动降级软删后报成功）。
+        delete_mode=hard / is_cascade=true / target_type=event → Runtime 未闭环，
+        一律拒绝（不自动降级软删后报成功）。full_reset 的 target_type=all
+        仅覆盖可删除的 memory entities，由 resolver/dispatcher 强制执行。
         """
         if plan["delete_mode"] == repo.DELETE_MODE_HARD:
             raise repo.UnsupportedForgetScopeError(
@@ -235,11 +236,7 @@ class UnitOfWork(AbstractContextManager["UnitOfWork"]):
             raise repo.UnsupportedForgetScopeError(
                 "cascade runtime not implemented (fail-closed)"
             )
-        if plan["forget_mode"] in ("topic", "time_window", "full_reset"):
-            raise repo.UnsupportedForgetScopeError(
-                f"forget_mode={plan['forget_mode']} runtime fail-closed"
-            )
-        if plan["target_type"] in ("event", "all"):
+        if plan["target_type"] == "event":
             raise repo.UnsupportedForgetScopeError(
                 f"target_type={plan['target_type']} runtime fail-closed"
             )
@@ -278,6 +275,8 @@ class UnitOfWork(AbstractContextManager["UnitOfWork"]):
                 target_type=target_type,
                 target_id=target_id,
                 target_session_id=target_session_id,
+                target_topic=target_topic,
+                target_time_range=target_time_range,
             )
             affected_count = len(resolved)
             selection_hash = repo.compute_selection_hash(resolved)

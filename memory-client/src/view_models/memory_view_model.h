@@ -12,6 +12,10 @@
 
 namespace kylin::memory::client::v1 {
 
+// FRZ-IPC-006 §6.1：客户端发送 envelope 默认死线 5000ms。
+// 对外暴露（供 L0 稳定性测试做配置断言；实现定义在 memory_view_model.cpp）。
+extern const int kDefaultDeadlineMs;
+
 // ============================================================================
 // MemoryViewModel — QML 公共 ViewModel（D5-C 垂直链路 Demo / Prototype 版）
 // ============================================================================

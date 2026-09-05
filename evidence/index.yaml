@@ -1823,3 +1823,27 @@ entries:
     details: |
       Kylin V11, kernel 6.6.0-76-generic, Python 3.12.3。
       定向 pytest：35 passed。真实长度前缀 JSON UDS：5 类拒绝请求均 INVALID_REQUEST 且 source_events=0/idempotency_cache=0；canonical captured_at + malformed legacy collected_at 正向请求仅写入 source_events=1/idempotency_cache=1。
+
+  - id: "D13C-L1-REGRESSION"
+    task_id: "D13C"
+    description: "D13C 端到端会话评测与主演示稳定性复测——Python 评测账本/CLI L1（config v2，82 passed）+ C++ L0 稳定性测试 S1-S6（CI SUCCESS）+ 文档/evidence 收口"
+    status: "PASS"
+    evidence_level: "E2"
+    source: "memory-service/tests/test_d13c_session_eval.py + memory-service/tests/test_d13c_session_eval_cli.py + memory-client/tests/test_d13c_stability.cpp"
+    tested_commit: "f3f9f0cf87c10945148b6fdce88e9d021ec72ee4"
+    date: "2026-09-06"
+    reviewer: "Ducknesses（PR #134 复审中）"
+    runtime_result: "Python L1: 82 passed（module + CLI）；CLI valid exit 0 / no-pair exit 2；C++ L0 ctest + Contract L0 ctest SUCCESS（GitHub Actions run 637 / 178）"
+    review_status: "PENDING"
+    merge_qualified: false
+    limitations: "仅 L0/L1 评测账本与稳定性测试（config d13c-session-eval-config/v2）；Runtime 仍 UNVERIFIED，麒麟 VM 会话闭环/五轮/跨会话/deadline 真实证据未执行；历史 worklist/log（09-03/09-05）保留为快照不回写"
+    checksum_sha256: "N/A（L1 源码级测试，无独立外部 evidence bundle）"
+    details: |
+      D13C Python L1（test_d13c_session_eval.py + test_d13c_session_eval_cli.py）: 82 passed（VM: Python 3.12.3 / pytest 9.1.1）
+      数据模型: Session 三件套 execution_group_id/stability_cohort_id/stability_round（同给同不给）+ execution_record_id（bundle 唯一键，session_id 允许跨 round 复用）
+      稳定性: A/B 固定真实 session × 5 轮 PASS；重复 execution_record FAIL；同一执行位置 (group,cohort,round,session) 重复 FAIL；缺轮/越界 FAIL
+      deadline: 逐 step deadline_ms == config.deadline_ms（5000/5000 PASS；3000/6000 漂移 FAIL → DEADLINE_CONFIG_EVIDENCE_MISMATCH）
+      已关闭回归: response/stage/timed_out 矩阵、no comparable pair 顶层 fail-closed、CLI malformed/root/config/sessions fail-closed、finalization_reason 非冻结、retry 真实 IPC（MemoryClient::sendRequest→Mock）、stop/retry violation、cross-session round-scoped
+      C++ L0（test_d13c_stability.cpp S1-S6）: GitHub Actions "Memory Client L0 ctest + Contract L0 ctest" SUCCESS（run 178）；"Repository Baseline Check" SUCCESS（run 637）
+      py_compile: PASS；git diff --check: PASS
+      详见: docs/day13/13_d13c_latest_review_rework_20260906.md、docs/day13/14_d13c_p1_closure_20260906.md
