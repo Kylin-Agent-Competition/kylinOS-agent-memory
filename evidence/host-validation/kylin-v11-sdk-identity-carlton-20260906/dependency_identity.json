@@ -1,0 +1,67 @@
+{
+  "schema_version": "host-validation/kylin-v11-sdk-identity-carlton/dependency_identity/v1",
+  "kind": "INDEPENDENT_KYLIN_HOST_VALIDATION_DEPENDENCY_IDENTITY",
+  "record": "r2 (Carlton independent host, non-authoritative for D14D)",
+  "collected_at_utc": "2026-09-06T07:54:37Z",
+  "raw_evidence": [
+    "raw/r2_dependencies.log"
+  ],
+  "target_packages": {
+    "libkylin-coreai-embedding": {
+      "version": "1.2.0.0-0k0.4",
+      "arch": "amd64",
+      "gate_status": "RAW_HOST_BASELINE"
+    },
+    "kylin-ai-runtime": {
+      "version": "1.2.0.4-0k0.1",
+      "arch": "amd64",
+      "gate_status": "RAW_HOST_BASELINE"
+    },
+    "kylin-gte-base-model": {
+      "version": "1.0.0.1-0k0.9",
+      "arch": "all",
+      "gate_status": "RAW_HOST_BASELINE"
+    },
+    "kylin-ai-subsystem": {
+      "version": "1.2.0.0-0k0.3",
+      "arch": "amd64",
+      "gate_status": "RAW_HOST_BASELINE"
+    },
+    "kylin-ai-parser-extension": {
+      "status": "NOT_INSTALLED",
+      "gate_status": "RAW_HOST_BASELINE_ABSENT"
+    }
+  },
+  "sdk_identity": {
+    "package_version": "1.2.0.0-0k0.4",
+    "canonical_so": "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0",
+    "soname": "libkysdk-coreai-embedding.so.1",
+    "sha256": "028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48",
+    "size_bytes": 366624,
+    "d14a_match": "MATCHES_D14A_FROZEN_SDK_IDENTITY",
+    "d14a_contract_reference": "docs/day14/00_d14a_release_package_contract.md section 6"
+  },
+  "runtime_identity": {
+    "package_version": "1.2.0.4-0k0.1",
+    "binary": "/usr/bin/kylin-ai-runtime",
+    "sha256": "b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225",
+    "size_bytes": 3174000
+  },
+  "model_identity": {
+    "package_version": "1.0.0.1-0k0.9",
+    "architecture": "all",
+    "gte_base_onnx": "/usr/share/kylin-ai/model-repository/embd_gte-base_uint8-text/1/gte-base-multilingual-model_QUInt8.onnx",
+    "gte_base_onnx_sha256": "cef0fc76165ee5bb4f3da5ab6b9b6e6fdfdd278d3077f2db2d4a6cde4d4c32b1",
+    "canonical_artifact_sha256_full_list": "raw/r2_dependencies.log (MODEL ARTIFACTS section)"
+  },
+  "comparison_with_authoritative_d14d_r3": {
+    "note": "Carlton independent host vs authoritative D14D Phase0 r3 VM (evidence/phase0/d14d-env-prepared-20260906-r3/); this package must not be mixed with or used as the authoritative root",
+    "sdk_runtime_model_same": true,
+    "subsystem_carlton": "1.2.0.0-0k0.3",
+    "subsystem_authoritative_r3": "1.3.0.1-0k0.1",
+    "parser_carlton": "NOT_INSTALLED",
+    "parser_authoritative_r3": "1.2.0.0-0k0.4",
+    "difference_kept_verbatim": true
+  },
+  "limitations": "All values come only from dpkg metadata and readable filesystem hashes in raw/r2_dependencies.log. The SDK matches the D14A frozen contract section 6 identity exactly (version, canonical .so path, SONAME, SHA-256, size) and is therefore marked MATCHES_D14A_FROZEN_SDK_IDENTITY for the SDK only. Runtime, model, subsystem and parser are recorded as host baseline facts from raw; they are not declared frozen, and no final package runtime validation is claimed. The subsystem/parser versions differ from the authoritative D14D r3 environment (1.3.0.1 and 1.2.0.0-0k0.4 there) and that difference is preserved verbatim. This file records dependency identity only; the environment-level system package count is recorded in environment.json, sourced from raw/r2_environment.log, and is not repeated here."
+}
