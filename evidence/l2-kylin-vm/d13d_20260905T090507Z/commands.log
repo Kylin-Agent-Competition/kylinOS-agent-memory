@@ -1,0 +1,18 @@
+# Command index for d13d_20260905T090507Z
+
+Raw commands, guest baseline, stdout/stderr, exit status and runner summaries are preserved in:
+
+- vm_probe_20260905_165513.log
+- d13d_preflight_20260905_0900.log
+- d13d_deployment_state_20260905_0902.log
+- d13d_candidate_worktree_20260905_0910.log
+- d13d_isolated_candidate_start_20260905_0915.log
+- d13d_isolated_candidate_probe_20260905_0920.log
+
+Host-side provenance:
+
+- VirtualBox snapshot: d13d-pre-7242935-20260905-0858
+- Bundle SHA-256: fc68fb7a651bbb81edc4bc7d895e6afce810d5a8247c5b540c9599f63b352d4d
+- Candidate commit: 7242935bee5f230cee0535d5e28dbe1e60a302f6
+
+No D13B formal evaluation command was run because D13E Dataset/Gold remain candidate inputs and the official threshold configuration is not approved.
