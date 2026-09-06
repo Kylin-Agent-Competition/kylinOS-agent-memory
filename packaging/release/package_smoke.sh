@@ -7,8 +7,14 @@
 #   old unit、old launcher（--old-launcher file|symlink 可切换）→ install 新包 →
 #   transactional rollback → 逐项断言旧 prefix 标记文件、旧 unit 字节、旧 launcher
 #   内容或 symlink target 一致，且不残留新 prefix / 事务目录。
-# 用法: bash package_smoke.sh [--package <pkg-dir>] [--prefix <install-prefix>]
-#       [--scenario clean|upgrade-rollback] [--old-launcher file|symlink]
+# 用法: bash package_smoke.sh [--package <pkg-dir>] --prefix <install-prefix>
+#       --expect-source-commit <sha> [--scenario clean|upgrade-rollback]
+#       [--old-launcher file|symlink]
+# 必填输入（fail-closed）：--prefix 必须显式给出隔离安装前缀，不得回退真实用户默认
+#   安装前缀；--expect-source-commit <sha>（或环境变量 EXPECT_SOURCE_COMMIT，参数优先）
+#   必须为 40 位小写十六进制，且值必须来自被 smoke 的 package/frozen build identity
+#   的显式可信输入（如 build_release_package.sh 输出或冻结构建记录），不得从当前
+#   checkout 或被测包 manifest 自行推断。
 # 前置: 真实 SDK 已装；当前用户 systemd --user 可用；embedding.server 由外部提供
 #       （本 smoke 通过已注册的 embedding.sock 或本地启动验证真实 SDK）
 # 退出码: 0 = 全链 PASS；非 0 = 失败
@@ -19,12 +25,15 @@ SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 PKG_DIR=""
 SCENARIO="clean"
 OLD_LAUNCHER="file"
+INSTALL_PREFIX=""
+EXPECT_SOURCE_COMMIT="${EXPECT_SOURCE_COMMIT:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --package) PKG_DIR="$2"; shift 2 ;;
     --prefix) INSTALL_PREFIX="$2"; shift 2 ;;
     --scenario) SCENARIO="$2"; shift 2 ;;
     --old-launcher) OLD_LAUNCHER="$2"; shift 2 ;;
+    --expect-source-commit) EXPECT_SOURCE_COMMIT="$2"; shift 2 ;;
     *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
 done
@@ -46,6 +55,18 @@ UNIT_NAME="kylin-memory"
 SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/memory.sock"
 # embedding.sock 用独立 /tmp 路径，避免被 systemd RuntimeDirectory(kylin-memory) 清理
 EMBED_SOCK="/tmp/kylin-d14a-embed.sock"
+
+# ── 必填输入（fail-closed）：显式 --prefix 与 EXPECT_SOURCE_COMMIT ──
+# clean 与 upgrade-rollback 两种场景都必须由调用方显式传入合法输入；缺失或非法
+# 一律非零失败，绝不回退真实用户默认安装前缀或跳过 install 完整性绑定
+[ -n "$INSTALL_PREFIX" ] \
+  || die "需要显式 --prefix <install-prefix>（不得回退真实用户默认安装前缀）"
+[ -n "$EXPECT_SOURCE_COMMIT" ] \
+  || die "需要显式 EXPECT_SOURCE_COMMIT（--expect-source-commit <40位十六进制>；值须来自被 smoke 包的冻结 build identity，不得从 checkout/manifest 推断）"
+echo "$EXPECT_SOURCE_COMMIT" | grep -qE '^[0-9a-f]{40}$' \
+  || die "EXPECT_SOURCE_COMMIT 非法（须为 40 位小写十六进制）: $EXPECT_SOURCE_COMMIT"
+export INSTALL_PREFIX
+export EXPECT_SOURCE_COMMIT
 
 # ── 0. 前置：包完整 + 真 SDK ──
 [ -f "$PKG_DIR/manifest.json" ] || die "package 缺失 manifest.json: $PKG_DIR"
@@ -149,7 +170,6 @@ if [ "$SCENARIO" = "upgrade-rollback" ]; then
 fi
 
 # ── 1. 清理旧状态，隔离 prefix ──
-INSTALL_PREFIX="$INSTALL_PREFIX"
 export INSTALL_PREFIX
 if [ -d "$INSTALL_PREFIX" ]; then
   log "清理旧 prefix: $INSTALL_PREFIX"
