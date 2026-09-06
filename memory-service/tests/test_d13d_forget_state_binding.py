@@ -72,6 +72,7 @@ def _samples():
             "target_identity": {"user_scope": "user_d13e_alpha", "db_id": 5005},
             "prerequisite_facts": {"knowledge_count": 1, "preference_count": 1},
             **base,
+            "same_user_controls": [],
         },
     ]
 
@@ -178,6 +179,14 @@ def test_forbidden_eval_keys_rejected():
     payload["samples"][4]["target_identity"]["expected"] = True
     payload["artifact_sha256"] = compute_artifact_sha256(payload)
     assert any("forbidden key" in err for err in validate_artifact(payload))
+
+
+def test_full_reset_requires_foreign_controls_even_when_same_user_empty():
+    payload = _retrieval_attach(_valid_artifact())
+    payload["samples"][4]["foreign_user_controls"] = []
+    payload["artifact_sha256"] = compute_artifact_sha256(payload)
+    assert any("foreign_user_controls must be a non-empty list" in err
+               for err in validate_artifact(payload))
 
 
 def test_json_roundtrip_stable():

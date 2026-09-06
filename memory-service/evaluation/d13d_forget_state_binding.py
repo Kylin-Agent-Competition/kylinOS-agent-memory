@@ -170,8 +170,13 @@ def validate_artifact(data: Any) -> List[str]:
                 errors.append(f"{sample_id} target_identity.db_id must be a real integer DB id")
         for grp in ("same_user_controls", "foreign_user_controls"):
             val = sample.get(grp)
-            if not isinstance(val, list) or not val:
-                errors.append(f"{sample_id} {grp} must be a non-empty list")
+            if not isinstance(val, list):
+                errors.append(f"{sample_id} {grp} must be a list")
+            elif not val:
+                # full_reset 以整用户为作用域：同用户 control 语义为空（全部实体即目标），
+                # 但仍要求列表存在；foreign-user control 任何模式都必须非空。
+                if grp != "same_user_controls" or sample_id != "d13e-forget-005":
+                    errors.append(f"{sample_id} {grp} must be a non-empty list")
         for grp in ("realtime_retrieval", "rebuild_retrieval"):
             ret = sample.get(grp)
             if not isinstance(ret, Mapping):
