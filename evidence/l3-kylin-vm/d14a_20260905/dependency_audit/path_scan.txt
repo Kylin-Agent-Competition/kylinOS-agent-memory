@@ -1,0 +1,2 @@
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/app/embedding/server.py:13:  PYTHONPATH=memory-service python -m embedding.server --socket /tmp/kylin-memory/embedding.sock
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/bin/kylin-memory-server:4:export PYTHONPATH="$SELF/runtime/app:$SELF/runtime/bridge"
