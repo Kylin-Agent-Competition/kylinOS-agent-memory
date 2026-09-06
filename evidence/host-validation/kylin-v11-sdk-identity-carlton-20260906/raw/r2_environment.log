@@ -1,0 +1,31 @@
+=== TIMESTAMP ===
+UTC=2026-09-06T07:54:20Z
+=== IDENTITY ===
+Carlton-pc
+Carlton
+uid=1000(Carlton) gid=1000(Carlton) 缁?1000(Carlton),0(root),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),100(users),114(lpadmin),989(sambashare)
+HOME=/home/Carlton
+=== OS RELEASE ===
+NAME="Kylin"
+FULL_NAME="kylin"
+VERSION="閾舵渤楹掗簾妗岄潰鎿嶄綔绯荤粺V11"
+VERSION_US="Kylin Linux Desktop V11"
+ID=kylin
+PRETTY_NAME="Kylin V11"
+VERSION_ID="v11"
+HOME_URL="http://www.kylinos.cn/"
+VERSION_CODENAME=kylin
+KYLIN_RELEASE_ID="2603"
+ID_LIKE=openKylin
+=== KERNEL ===
+Linux Carlton-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+6.6.0-63-generic
+x86_64
+=== PYTHON ===
+Python 3.12.3
+=== SYSTEMD ===
+systemd 255 (255.2-ok1.9k1.39)
+=== ROOT DISK ===
+鏂囦欢绯荤粺        澶у皬  宸茬敤  鍙敤 宸茬敤% 鎸傝浇鐐?/dev/sda3        38G   33G  3.9G   90% /
+=== INSTALLED PACKAGE COUNT ===
+2401

@@ -1,0 +1,80 @@
+{
+  "schema_version": "host-validation/kylin-v11-sdk-identity-carlton/clean_state_summary/v1",
+  "kind": "INDEPENDENT_KYLIN_HOST_VALIDATION_CLEAN_STATE_SUMMARY",
+  "record": "r2 (Carlton independent host, non-authoritative for D14D)",
+  "chronological_events": [
+    {
+      "seq": 1,
+      "evidence_file": "raw/r2_clean_gate.log",
+      "timestamp": "2026-09-06T07:51:42Z",
+      "stdout_result": "D14D_R2_CLEAN_STATE=PASS",
+      "classification": "PASS_RESULT_CAPTURED",
+      "exit_code": "NOT_CAPTURED_IN_ARCHIVED_RAW",
+      "notes": "Initial clean-state probe on the Carlton independent host."
+    },
+    {
+      "seq": 2,
+      "evidence_file": "raw/r2_host_snapshot_identity.log",
+      "timestamp": "2026-09-06T07:54:07Z",
+      "stdout_result": "VirtualBox/VM/snapshot identity capture; VMState=running at snapshot d14d-clean-base-20260906-r2",
+      "classification": "DIAGNOSTIC_ONLY",
+      "exit_code": "NOT_CAPTURED_IN_ARCHIVED_RAW",
+      "notes": "Host-side snapshot diagnostic, not a clean gate."
+    },
+    {
+      "seq": 3,
+      "evidence_file": "raw/r2_runtime_residue_gate.log",
+      "timestamp": "2026-09-06T07:59:36Z",
+      "stdout_result": "D14D_R2_RUNTIME_RESIDUE=PASS",
+      "classification": "PASS_RESULT_CAPTURED",
+      "exit_code": "NOT_CAPTURED_IN_ARCHIVED_RAW",
+      "notes": "Runtime residue probe."
+    },
+    {
+      "seq": 4,
+      "evidence_file": "raw/r2_host_final_state.log",
+      "timestamp": "2026-09-06T08:17:09Z",
+      "stdout_result": "VMState=poweroff; CurrentSnapshot=d14d-clean-base-20260906-r2",
+      "classification": "DIAGNOSTIC_ONLY",
+      "exit_code": "NOT_CAPTURED_IN_ARCHIVED_RAW",
+      "notes": "Final host state diagnostic."
+    },
+    {
+      "seq": 5,
+      "evidence_file": "raw/r2_clean_gate_strict.log",
+      "timestamp": "2026-09-06T08:20:17Z",
+      "stdout_result": "D14D_R2_CLEAN_FIND=ERROR; find: '/home/Carlton/.box': Operation not permitted",
+      "classification": "FAIL_CLOSED_ERROR_CAPTURED",
+      "exit_code": "NOT_CAPTURED_IN_ARCHIVED_RAW",
+      "notes": "Strict fail-closed probe hit an unreadable opaque home subdirectory. This is a recorded fail-closed historical event for an unverifiable region, not an engineering pass."
+    },
+    {
+      "seq": 6,
+      "evidence_file": "raw/r2_final_clean_gate.log",
+      "timestamp": "2026-09-06T08:30:11Z",
+      "stdout_result": "PATH=/home/Carlton/.box MODE=700 OWNER=Carlton GROUP=Carlton; ALLOWLIST_SCOPE=EXACT_PATH_ONLY; seven ABSENT D14A runtime paths; D14D_R2_RUNTIME_PATH_STATE=PASS; D14D_R2_HOME_FIND=PASS; D14D_R2_ALLOWLIST_VALIDATED=PASS; D14D_R2_CLEAN_STATE=PASS",
+      "classification": "ALLOWLIST_AWARE_PASS_RESULT_CAPTURED",
+      "exit_code": "NOT_CAPTURED_IN_ARCHIVED_RAW",
+      "notes": "Allowlist-aware final clean probe that explicitly covers the opaque home subdirectory and the D14A runtime path set."
+    },
+    {
+      "seq": 7,
+      "evidence_file": "raw/r2_host_final_state_after_gate.log",
+      "timestamp": "2026-09-06T09:47:30Z",
+      "stdout_result": "VMState=poweroff; CurrentSnapshot=d14d-clean-base-20260906-r2",
+      "classification": "DIAGNOSTIC_ONLY",
+      "exit_code": "NOT_CAPTURED_IN_ARCHIVED_RAW",
+      "notes": "Post-final-gate host state diagnostic."
+    }
+  ],
+  "raw_evidence": [
+    "raw/r2_clean_gate.log",
+    "raw/r2_host_snapshot_identity.log",
+    "raw/r2_runtime_residue_gate.log",
+    "raw/r2_host_final_state.log",
+    "raw/r2_clean_gate_strict.log",
+    "raw/r2_final_clean_gate.log",
+    "raw/r2_host_final_state_after_gate.log"
+  ],
+  "summary": "All clean and diagnostic gates observed on the Carlton host in raw are recorded in real chronological order. The strict EPERM event is preserved as a fail-closed historical event and is not presented as an engineering pass, and the instructions of the allowlist-aware probe are recorded exactly. Exit codes were not recorded in the archived raw logs and are therefore marked NOT_CAPTURED_IN_ARCHIVED_RAW; none are assumed to be 0."
+}

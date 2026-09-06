@@ -1,0 +1,6 @@
+=== D14D R2 STRICT FAIL-CLOSED CLEAN STATE GATE ===
+UTC=2026-09-06T08:20:17Z
+Carlton-pc
+Carlton
+D14D_R2_CLEAN_FIND=ERROR
+find: '/home/Carlton/.box': Operation not permitted

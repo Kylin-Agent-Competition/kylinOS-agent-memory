@@ -1,0 +1,20 @@
+{
+  "schema_version": "host-validation/kylin-v11-sdk-identity-carlton/provenance/v1",
+  "evidence_class": "INDEPENDENT_KYLIN_HOST_VALIDATION",
+  "authoritative_d14d_phase0": "NO",
+  "authoritative_d14d_root": "evidence/phase0/d14d-env-prepared-20260906-r3/",
+  "created_at_utc": "NOT_CAPTURED_IN_PACKAGING_LOG",
+  "d13d_frozen": "NO",
+  "derived_file_count": 12,
+  "formal_d14d_l3": "NO",
+  "host_verified_scope": "LIMITED_TO_RECORDED_FACTS",
+  "l3_ready": "NO",
+  "limitations": "This package archives existing Carlton Kylin V11 independent-host runtime evidence captured on the Windows Desktop; it does not run or rerun L2/L3, does not operate VirtualBox, and produces no new runtime conclusion. No evidence-supported packaging timestamp exists for this task, so created_at_utc is fail-closed marked NOT_CAPTURED_IN_PACKAGING_LOG rather than inventing a clock value. packaging_repository_head records the git HEAD at packaging time, not a tested runtime commit. This package is NON_AUTHORITATIVE_FOR_D14D and must not be mixed with or used as the authoritative D14D Phase0 root (evidence/phase0/d14d-env-prepared-20260906-r3/). Runtime/model/subsystem/parser carry no frozen claim; the SDK-only MATCHES_D14A_FROZEN_SDK_IDENTITY marker is documented in dependency_identity.json.",
+  "non_authoritative_for_d14d": true,
+  "packaging_branch": "docs/carlton-kylin-host-evidence",
+  "packaging_repository_head": "dc58e83479d718c8e3fbbbbb5d3b3f046f651973",
+  "raw_file_count": 10,
+  "release_ready": "NO",
+  "scope": "Sealed evidence package of 10 byte-for-byte archived raw files and 12 derived files under evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/: raw source inventory, environment identity, dependency identity, snapshot identity, chronological clean-state summary, provenance, README, evidence scope, evidence index, checksums, and the self-verification test.",
+  "source_evidence_root": "/mnt/c/Users/Carlton Benzol/Desktop/d14d-env-prepared-20260906-r2"
+}

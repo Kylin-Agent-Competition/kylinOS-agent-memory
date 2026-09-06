@@ -1,0 +1,52 @@
+{
+  "schema_version": "host-validation/kylin-v11-sdk-identity-carlton/snapshot_identity/v1",
+  "kind": "INDEPENDENT_KYLIN_HOST_VALIDATION_SNAPSHOT_IDENTITY",
+  "record": "r2 (Carlton independent host Kylin VM, non-authoritative for D14D)",
+  "virtualbox_version": "7.2.8r173730",
+  "vm": {
+    "name": "Kylin-Desktop-V11-2603-SDK",
+    "uuid": "23a31c42-63bb-482f-8856-e8a9f04176c8",
+    "source_file": "raw/r2_host_snapshot_identity.log",
+    "note": "VM identity from host-side VirtualBox metadata captured via Windows SSH; localized snapshot names in raw may contain mojibake which is preserved byte-for-byte and is not used as an identity gate fact"
+  },
+  "snapshot": {
+    "role": "d14d-clean-base",
+    "name": "d14d-clean-base-20260906-r2",
+    "uuid": "b2af169e-8bfc-46a8-9120-6348095eccf3"
+  },
+  "capture_events": [
+    {
+      "event": "host snapshot identity capture",
+      "evidence_file": "raw/r2_host_snapshot_identity.log",
+      "timestamp": "2026-09-06T07:54:07Z",
+      "vm_state": "running",
+      "current_snapshot": "d14d-clean-base-20260906-r2",
+      "captured_state": "RUNNING_AT_R2_SNAPSHOT_CAPTURE",
+      "exit_code": "NOT_CAPTURED_IN_ARCHIVED_RAW"
+    },
+    {
+      "event": "final host state capture",
+      "evidence_file": "raw/r2_host_final_state.log",
+      "timestamp": "2026-09-06T08:17:09Z",
+      "vm_state": "poweroff",
+      "current_snapshot": "d14d-clean-base-20260906-r2",
+      "captured_state": "POWERED_OFF_AT_R2",
+      "exit_code": "NOT_CAPTURED_IN_ARCHIVED_RAW"
+    },
+    {
+      "event": "post-final-gate host state capture",
+      "evidence_file": "raw/r2_host_final_state_after_gate.log",
+      "timestamp": "2026-09-06T09:47:30Z",
+      "vm_state": "poweroff",
+      "current_snapshot": "d14d-clean-base-20260906-r2",
+      "captured_state": "POWERED_OFF_AT_R2",
+      "exit_code": "NOT_CAPTURED_IN_ARCHIVED_RAW"
+    }
+  ],
+  "raw_evidence": [
+    "raw/r2_host_snapshot_identity.log",
+    "raw/r2_host_final_state.log",
+    "raw/r2_host_final_state_after_gate.log"
+  ],
+  "limitations": "VirtualBox/VM/snapshot identities and VM states come only from the three host-side VirtualBox metadata captures recorded in the raw logs; no capture exists for any other point in time and none is claimed. Timestamps are taken from raw where present. Exit codes were not recorded in the archived raw logs and are therefore marked NOT_CAPTURED_IN_ARCHIVED_RAW; none are assumed to be 0."
+}
