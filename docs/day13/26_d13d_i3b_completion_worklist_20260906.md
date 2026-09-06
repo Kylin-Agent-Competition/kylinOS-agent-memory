@@ -294,3 +294,10 @@ D13D_FROZEN = NO（本阶段不产生）
 - 五模式 resolver 端到端核验：single=[1]；session=[4,5]；topic=[8]；time_window=[11]；full_reset={knowledge+preference, count=11}。
 - Artifact：`evaluation/d13e/D13D_FORGET_STATE_BINDING_V1.json`，binding SHA-256 `915c6ae434a7695340aa189a98ff2d79119ac74435587f2149dc85d9a7e4d91f`，静态校验 PASS（`run_d13d_forget_state_binding.py verify`）。
 - 状态推进：P2-B 步骤 4–7 完成；步骤 8（#160 adapter 接入 binding validator + 五模式真实 dispatch + realtime/rebuild observation）待执行。
+
+### 9.5 Phase-2 收口状态（2026-09-06）
+
+- 已入库：#160 含 binding artifact V1（`915c6ae4…`）、校验工具/CLI、runtime binding 真实 forget handler 注册与冻结、`dispatch_forget_sample`（artifact 门禁 → preview → 快照 → execute → observation provider 缝 → receipt → raw）。
+- L1 回归（本 PR 相关 9 个测试文件）：**236 passed**（adapter 66 + binding 12 + forget/safety observability + preference rules/provider + domain contract + event.ingest + forget persistence）。
+- Phase-2 边界（依详细工作清单 §31/§43 与 §P2-D3）：I3b-completion 的生产/适配能力在**非正式 L1/isolated 环境**证明即满足；**正式 VM 五模式真实 dispatch + realtime/rebuild L2 证据属于 Phase 3**，须待 final tested_commit 选定、binding 重生成后执行——不在 Phase-2 声称完成，也不产生 formal raw/Seal/FROZEN。
+- 待 D/E Review：#160 本批（binding+dispatch 集成）连同 #161/#162 依各自独立 Review 门推进。
