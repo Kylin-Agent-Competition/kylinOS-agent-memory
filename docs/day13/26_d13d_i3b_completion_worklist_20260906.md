@@ -201,3 +201,57 @@ D13D_FROZEN / FORMAL PASS / L3_READY / HOST_VERIFIED / production ready
 - 验证：`git diff --check` PASS；UTF-8 无 BOM、LF；分支名不含 `codex`。
 - 已知阻塞（跨轨，不在本批闭合）：P2-A 需 D13E 独立 Safety projection PR；P2-B 需外部 Forget state-binding artifact（owner/approval/SHA-256）；P2-C 需业务 Owner + D13E Reviewer 具名裁决。
 - 后续：依赖闭合后按 §5 顺序推进代码集成（Commit 2-6），并同步权威任务卡状态。
+
+## 8. D/E 回执裁定与状态推进（2026-09-06）
+
+已收到 D/E 对跨轨协助请求（B-1/B-2/B-3）的书面回执。以下登记只做状态推进，不改写既有历史；作为 Phase 2 后续执行依据。
+
+### 8.1 B-1 / P2-A Safety projection → `DECISION_READY / WAITING_INDEPENDENT_D13E_PR_AND_REVIEW`
+
+D/E 裁定：
+
+1. 保持现有 D13E Dataset / Gold / Threshold / Runner bytes 不变；
+2. Safety projection 必须 Gold-independent；
+3. safety-001/002：`sensitivity` 来自真实 dispatch trace 对应 persisted `source_events.sensitivity`；`admission` 来自 persisted `admission_decision` 稳定投影；缺真实事件、来源冲突或字段不唯一时 fail-closed；
+4. safety-003：`operation` 来自已 SHA 验证的 Dataset input；`admission` 由真实 user-scoped repository read observation 推导，不得固定写 `reject`；
+5. safety-004 维持四个 hard-zero counter；四个 Safety sample 均输出四项 hard-zero counter；
+6. adapter 禁止读取 Gold / expected / threshold，禁止按 sample_id 写死 expected result。
+
+现有 Runner 已允许 `expected fields + safety hard-zero counters`，因此本裁定不要求修改正式 Runner/Gold。
+
+- D13D 侧待办：等 D13E 独立 projection PR 落地并 merge 后，作为 consumer 接入（§5 步骤 06–08）。
+
+### 8.2 B-2 / P2-B Forget external state binding → `ACCEPTED / BLOCKED_PENDING_VM_BINDING_ARTIFACT`
+
+D/E 裁定（接单，但仍需真实 VM state preparation）：
+
+- 由独立业务/VM Owner 在隔离麒麟 VM snapshot 使用真实生产 Repository/API 预置合成状态，产出 `D13D_FORGET_STATE_BINDING_V1.json`；
+- artifact 绑定 tested_commit / environment / VM snapshot / DB / state root；五个 sample 映射真实 DB/state identity；session/topic/time_window/full_reset 均须存在真实生产关系；每类 target kind 准备 same-user control 与 foreign-user same-kind control；
+- confirmation token 不进入 artifact，由真实 `forget.preview` 动态产生；
+- artifact 提供真实 realtime/full-rebuild retrieval 入口、snapshot/watermark/trace；
+- D13D adapter 不得创建测试目标、不得伪造 observation、不得补零；任一输入缺失即 fail-closed 且不写 canonical raw；
+- 正式执行可用 validation profile 显式注册真实 `forget.preview/forget.execute` handler；不得因此宣称 production default registration 已解除 `BLOCKED_BY_HOST_MAPPING`。
+
+- D13D 侧待办：binding artifact 到位并核验后接入（§5 步骤 09–13）。
+
+### 8.3 B-3 / P2-C pref-003 → `PRODUCTION_FIX_REQUIRED`
+
+D/E 正式裁定：**A（production behavior incorrect）**。
+
+- 根因：完整 `ExtractionProvider` candidate admission 入口使用 `PREFERENCE_EXPLICIT_PATTERN`，该表达式未覆盖 `优先使用/优先用/首选` 等显式工具选择表达；fallback instruction pattern 又要求临时时态限定词，导致 pref-003 在完整 production extraction path 中 false negative。
+- 处置：另开独立 production PR，最小修复显式 tool-selection preference marker，补完整 Provider 回归和负样本测试。
+- 禁止：修改 D13D adapter special-case pref-003；为通过 Gate 改写 Gold；降低 threshold。
+- 当前 Gold 与既有 Preference helper 业务语义一致，不启动 D13E Dataset/Gold/Threshold/Runner re-baseline。
+- 影响：修复走独立 PR（不入 PR #160）；合并后 D13D adapter 只消费修复后的真实结果。
+
+### 8.4 状态汇总（2026-09-06 回执后）
+
+```text
+P2-A = DECISION_READY / WAITING_INDEPENDENT_D13E_PR_AND_REVIEW
+P2-B = ACCEPTED / BLOCKED_PENDING_VM_BINDING_ARTIFACT
+P2-C = PRODUCTION_FIX_REQUIRED（裁定 A：production behavior incorrect → 独立 production PR）
+
+P0-I3b-completion 仍 = IN_PROGRESS / BLOCKED_PENDING_CROSS_TRACK_COMPLETION
+formal_tested_commit 仍 = PENDING_P0_I3_RESELECTION
+D13D_FROZEN = NO（本阶段不产生）
+```
