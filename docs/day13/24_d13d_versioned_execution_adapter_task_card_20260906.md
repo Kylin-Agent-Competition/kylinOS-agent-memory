@@ -14,11 +14,11 @@
 
 | Stage | Scope | Current state |
 | --- | --- | --- |
-| P0-I3a | Versioned preflight, approved Dataset SHA anchor, isolation/shape checks and L1 regressions | `IMPLEMENTED_PENDING_INDEPENDENT_REVIEW` |
-| P0-I3b-infra | Preference/Conflict real dispatch, Safety ValidatedRuntimeBinding + provenance, uniform execution receipts, Forget schema contract (`forget_mode`), canonical package layout under execution evidence root | `CANDIDATE_PENDING_INDEPENDENT_REVIEW`（PR #150 合并范围） |
-| P0-I3b-completion | Safety Gate-9 projection（需 D13E 独立裁定 Gold-independent projection 规则）与 Forget 真实 dispatch（需外部 state-binding + realtime/rebuild 观测） | `IN_PROGRESS`（独立 follow-up 已开工：分支 feat/d13d-i3b-completion + 任务卡 26_d13d_i3b_completion_worklist_20260906.md；非 PR #150 merge gate；P2-A/B/C 闭合前保持 `BLOCKED_PENDING_CROSS_TRACK_COMPLETION`） |
-| P0-I3c | 非作者独立 review 并 merge **partial candidate infrastructure（PR #150）** | `PENDING` |
-| P0-I3d | 在 I3b-completion 闭合后重新选择正式 tested_commit 并复验隔离 VM | `PENDING`（依赖 I3b-completion） |
+| P0-I3a | Versioned preflight, approved Dataset SHA anchor, isolation/shape checks and L1 regressions | `MERGED`（PR #150） |
+| P0-I3b-infra | Preference/Conflict real dispatch, Safety ValidatedRuntimeBinding + provenance, uniform execution receipts, Forget schema contract (`forget_mode`), canonical package layout under execution evidence root | `MERGED`（PR #150） |
+| P0-I3b-completion | Safety Gate-9 projection（需 D13E 独立裁定 Gold-independent projection 规则）与 Forget 真实 dispatch（需外部 state-binding + realtime/rebuild 观测） | `IN_PROGRESS / BLOCKED_PENDING_CROSS_TRACK_COMPLETION`（PR #160 Phase 2 载体） |
+| P0-I3c | 非作者独立 review 并 merge **partial candidate infrastructure（PR #150）** | `PARTIAL-INFRA COMPLETE / COMPLETION REVIEW PENDING` |
+| P0-I3d | 在 I3b-completion 闭合后重新选择正式 tested_commit 并复验隔离 VM | `BLOCKED`（依赖 I3b-completion） |
 
 PR #150 只推进 I3a + I3b-infra 的候选基础设施合并，不产生 formal raw、Seal、attestation、
 Runner 结论或 `D13D_FROZEN`；Safety Gate-9 投影与 Forget 真实 dispatch 的闭合在独立

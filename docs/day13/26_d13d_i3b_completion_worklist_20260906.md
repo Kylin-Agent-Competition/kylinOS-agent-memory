@@ -16,7 +16,8 @@
 | 状态 | `BLOCKED_PENDING_CROSS_TRACK_COMPLETION`（Draft 载体；P2-A/B/C 外部依赖闭合后逐项推进） |
 | 初始 PR 状态 | Draft（转 Ready for review 由用户手动执行） |
 | 编制日期 | 2026-09-06 |
-| 完整详细工作清单 | 本地权威清单 `可直接查看/PR_Phase2_D13D_I3b_Completion_详细工作清单.md`；本卡为其仓库内执行摘要与状态载体 |
+| 权威执行清单（SSOT） | `docs/day13/26_d13d_i3b_completion_worklist_20260906.md`（本文件，仓库内唯一权威） |
+| 本地个人施工清单 | `可直接查看/PR_Phase2_D13D_I3b_Completion_详细工作清单.md`：仅供执行辅助，不构成仓库权威，不得覆盖本文件状态 |
 
 ---
 
@@ -299,5 +300,5 @@ D13D_FROZEN = NO（本阶段不产生）
 
 - 已入库：#160 含 binding artifact V1（`915c6ae4…`）、校验工具/CLI、runtime binding 真实 forget handler 注册与冻结、`dispatch_forget_sample`（artifact 门禁 → preview → 快照 → execute → observation provider 缝 → receipt → raw）。
 - L1 回归（本 PR 相关 9 个测试文件）：**236 passed**（adapter 66 + binding 12 + forget/safety observability + preference rules/provider + domain contract + event.ingest + forget persistence）。
-- Phase-2 边界（依详细工作清单 §31/§43 与 §P2-D3）：I3b-completion 的生产/适配能力在**非正式 L1/isolated 环境**证明即满足；**正式 VM 五模式真实 dispatch + realtime/rebuild L2 证据属于 Phase 3**，须待 final tested_commit 选定、binding 重生成后执行——不在 Phase-2 声称完成，也不产生 formal raw/Seal/FROZEN。
+- Phase-2 边界（本文件权威口径）：I3b-completion 的生产/适配能力在**非正式 L1/isolated 环境**证明即满足；**正式 VM 五模式真实 dispatch + realtime/rebuild L2 证据属于 Phase 3**，须待 final tested_commit 选定、binding 重生成后执行——不在 Phase-2 声称完成，也不产生 formal raw/Seal/FROZEN。
 - 待 D/E Review：#160 本批（binding+dispatch 集成）连同 #161/#162 依各自独立 Review 门推进。
