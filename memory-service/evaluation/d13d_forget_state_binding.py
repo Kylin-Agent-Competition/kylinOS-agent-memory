@@ -1,10 +1,15 @@
-"""d13d_forget_state_binding.py — D13D Forget state binding artifact v1（校验模块）。
+"""d13d_forget_state_binding.py — D13D Forget state binding artifact 校验模块。
 
-纯标准库实现，只做 artifact 的**静态结构/身份/SHA 校验**，不连接 DB、不读取
-Gold/expected、不产生任何正式 raw。live 存在性核验由 adapter 在真实运行环境
-按 binding 引用执行（见 docs/day13/27_d13d_forget_state_binding_contract_20260906.md）。
+纯标准库，只做 artifact 的**静态结构/身份/SHA 校验**，不连接 DB、不读取
+Gold/expected、不产生任何正式 raw。live 文件/DB 校验由 adapter 的 runtime
+layer 执行（见 docs/day13/28_…v2 契约与 PR #160 R5）。
 
-契约单一真源：docs/day13/27_d13d_forget_state_binding_contract_20260906.md。
+版本：
+- v1（d13d-forget-state-binding/v1）= HISTORICAL / SUPERSEDED（V1 artifact 仅作
+  state-preparation evidence，见 27_ 契约与 26_ §9.5）。
+- v2（d13d-forget-state-binding/v2）= CURRENT NORMATIVE：拆开
+  state_preparation_commit 与 execution_compatibility.minimum_commit，并携带
+  source_state（sealed source DB）身份。
 """
 
 from __future__ import annotations
@@ -15,6 +20,8 @@ import re
 from typing import Any, Dict, List, Mapping
 
 BINDING_VERSION = "d13d-forget-state-binding/v1"
+BINDING_VERSION_V2 = "d13d-forget-state-binding/v2"
+_VERSIONS = frozenset({BINDING_VERSION, BINDING_VERSION_V2})
 
 # D13E Dataset 的五个 Forget sample 与 mode（顺序无关，集合相等即可）
 FORGET_SAMPLE_MODES: Dict[str, str] = {
@@ -25,7 +32,7 @@ FORGET_SAMPLE_MODES: Dict[str, str] = {
     "d13e-forget-005": "full_reset",
 }
 
-TOP_LEVEL_REQUIRED = (
+_V1_TOP_LEVEL_REQUIRED = (
     "binding_version",
     "artifact_sha256",
     "owner",
@@ -41,9 +48,35 @@ TOP_LEVEL_REQUIRED = (
     "created_by",
     "samples",
 )
+_V2_TOP_LEVEL_REQUIRED = (
+    "binding_version",
+    "artifact_sha256",
+    "owner",
+    "approved_by",
+    "approval_reference",
+    "state_preparation_commit",
+    "execution_compatibility",
+    "environment_id",
+    "vm_snapshot",
+    "source_state",
+    "retrieval_profile",
+    "created_at_utc",
+    "created_by",
+    "samples",
+)
 
 VM_SNAPSHOT_REQUIRED = ("vm", "snapshot", "snapshot_uuid")
 DB_IDENTITY_REQUIRED = ("path", "sha256")
+EXEC_COMPAT_REQUIRED = ("minimum_commit", "policy")
+SOURCE_STATE_REQUIRED = (
+    "state_root",
+    "sealed_db_path",
+    "sealed_db_sha256",
+    "db_size_bytes",
+    "sqlite_schema_fingerprint",
+    "prepared_on_vm_snapshot",
+    "prepared_at_utc",
+)
 
 SAMPLE_REQUIRED = (
     "sample_id",
@@ -75,7 +108,7 @@ def canonical_payload(data: Mapping[str, Any]) -> Dict[str, Any]:
 
 
 def canonical_bytes(data: Mapping[str, Any]) -> bytes:
-    """固定序列化口径（与契约 §7 一致）。"""
+    """固定序列化口径（v1 契约 §7 / v2 契约沿用同一口径）。"""
     return json.dumps(
         canonical_payload(data),
         ensure_ascii=False,
@@ -106,20 +139,8 @@ def _iter_keys(value: Any, path: str, errors: List[str]) -> None:
             errors.append(f"private key material detected at {path}")
 
 
-def validate_artifact(data: Any) -> List[str]:
-    """返回错误列表；空列表 = 静态校验通过。"""
-    errors: List[str] = []
-    if not isinstance(data, Mapping):
-        return ["artifact must be a JSON object"]
-
-    for key in TOP_LEVEL_REQUIRED:
-        if key not in data:
-            errors.append(f"missing top-level field: {key}")
-
-    if data.get("binding_version") != BINDING_VERSION:
-        errors.append(f"binding_version must be {BINDING_VERSION!r}")
-
-    # SHA-256 复核（存在时才复算；缺失已在 required 报错）
+def _sha_and_sample_checks(data: Mapping[str, Any], errors: List[str]) -> None:
+    """SHA-256 复核 + samples 结构 + 禁填扫描（v1/v2 共用）。"""
     if "artifact_sha256" in data:
         expected = data["artifact_sha256"]
         if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
@@ -130,15 +151,6 @@ def validate_artifact(data: Any) -> List[str]:
                 errors.append(
                     f"artifact_sha256 mismatch: declared={expected} computed={actual}"
                 )
-
-    if isinstance(data.get("vm_snapshot"), Mapping):
-        for key in VM_SNAPSHOT_REQUIRED:
-            if key not in data["vm_snapshot"]:
-                errors.append(f"vm_snapshot missing: {key}")
-    if isinstance(data.get("db_identity"), Mapping):
-        for key in DB_IDENTITY_REQUIRED:
-            if key not in data["db_identity"]:
-                errors.append(f"db_identity missing: {key}")
 
     samples = data.get("samples")
     if not isinstance(samples, list):
@@ -163,7 +175,6 @@ def validate_artifact(data: Any) -> List[str]:
                 f"{sample_id} forget_mode mismatch: expected "
                 f"{FORGET_SAMPLE_MODES.get(sample_id)!r}, got {mode!r}"
             )
-        # single_item 必须含真实数字 DB ID（契约 §5）
         if sample_id == "d13e-forget-001":
             tid = sample.get("target_identity")
             if not isinstance(tid, Mapping) or not isinstance(tid.get("db_id"), int):
@@ -173,8 +184,7 @@ def validate_artifact(data: Any) -> List[str]:
             if not isinstance(val, list):
                 errors.append(f"{sample_id} {grp} must be a list")
             elif not val:
-                # full_reset 以整用户为作用域：同用户 control 语义为空（全部实体即目标），
-                # 但仍要求列表存在；foreign-user control 任何模式都必须非空。
+                # full_reset 以整用户为作用域：同用户 control 语义为空；foreign 必须非空。
                 if grp != "same_user_controls" or sample_id != "d13e-forget-005":
                     errors.append(f"{sample_id} {grp} must be a non-empty list")
         for grp in ("realtime_retrieval", "rebuild_retrieval"):
@@ -192,7 +202,62 @@ def validate_artifact(data: Any) -> List[str]:
         )
 
     _iter_keys(data, "", errors)
+
+
+def _validate_v1(data: Mapping[str, Any]) -> List[str]:
+    errors: List[str] = []
+    for key in _V1_TOP_LEVEL_REQUIRED:
+        if key not in data:
+            errors.append(f"missing top-level field: {key}")
+    if data.get("binding_version") != BINDING_VERSION:
+        errors.append(f"binding_version must be {BINDING_VERSION!r}")
+    if isinstance(data.get("vm_snapshot"), Mapping):
+        for key in VM_SNAPSHOT_REQUIRED:
+            if key not in data["vm_snapshot"]:
+                errors.append(f"vm_snapshot missing: {key}")
+    if isinstance(data.get("db_identity"), Mapping):
+        for key in DB_IDENTITY_REQUIRED:
+            if key not in data["db_identity"]:
+                errors.append(f"db_identity missing: {key}")
+    _sha_and_sample_checks(data, errors)
     return errors
+
+
+def _validate_v2(data: Mapping[str, Any]) -> List[str]:
+    errors: List[str] = []
+    for key in _V2_TOP_LEVEL_REQUIRED:
+        if key not in data:
+            errors.append(f"missing top-level field: {key}")
+    if data.get("binding_version") != BINDING_VERSION_V2:
+        errors.append(f"binding_version must be {BINDING_VERSION_V2!r}")
+    if "applicable_source_commit" in data:
+        errors.append("v2 must not use legacy applicable_source_commit")
+    if isinstance(data.get("vm_snapshot"), Mapping):
+        for key in VM_SNAPSHOT_REQUIRED:
+            if key not in data["vm_snapshot"]:
+                errors.append(f"vm_snapshot missing: {key}")
+    if isinstance(data.get("execution_compatibility"), Mapping):
+        for key in EXEC_COMPAT_REQUIRED:
+            if key not in data["execution_compatibility"]:
+                errors.append(f"execution_compatibility missing: {key}")
+    if isinstance(data.get("source_state"), Mapping):
+        for key in SOURCE_STATE_REQUIRED:
+            if key not in data["source_state"]:
+                errors.append(f"source_state missing: {key}")
+    _sha_and_sample_checks(data, errors)
+    return errors
+
+
+def validate_artifact(data: Any) -> List[str]:
+    """返回错误列表；空列表 = 静态校验通过（v1 legacy / v2 normative）。"""
+    if not isinstance(data, Mapping):
+        return ["artifact must be a JSON object"]
+    version = data.get("binding_version")
+    if version == BINDING_VERSION:
+        return _validate_v1(data)
+    if version == BINDING_VERSION_V2:
+        return _validate_v2(data)
+    return [f"binding_version must be one of {sorted(_VERSIONS)}"]
 
 
 def verify_artifact_file(path: str) -> tuple[bool, List[str]]:
@@ -208,6 +273,7 @@ def verify_artifact_file(path: str) -> tuple[bool, List[str]]:
 
 __all__ = [
     "BINDING_VERSION",
+    "BINDING_VERSION_V2",
     "FORGET_SAMPLE_MODES",
     "canonical_payload",
     "canonical_bytes",

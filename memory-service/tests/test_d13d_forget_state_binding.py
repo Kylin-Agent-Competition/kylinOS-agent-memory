@@ -8,6 +8,7 @@ import json
 
 from evaluation.d13d_forget_state_binding import (
     BINDING_VERSION,
+    BINDING_VERSION_V2,
     compute_artifact_sha256,
     validate_artifact,
 )
@@ -187,6 +188,74 @@ def test_full_reset_requires_foreign_controls_even_when_same_user_empty():
     payload["artifact_sha256"] = compute_artifact_sha256(payload)
     assert any("foreign_user_controls must be a non-empty list" in err
                for err in validate_artifact(payload))
+
+
+def _v2_artifact():
+    v1 = _artifact_without_sha()
+    payload = {
+        "binding_version": BINDING_VERSION_V2,
+        "owner": v1["owner"],
+        "approved_by": v1["approved_by"],
+        "approval_reference": v1["approval_reference"],
+        "state_preparation_commit": TEST_COMMIT,
+        "execution_compatibility": {
+            "minimum_commit": TEST_COMMIT,
+            "policy": "descendant-and-contract-compatible",
+        },
+        "environment_id": v1["environment_id"],
+        "vm_snapshot": v1["vm_snapshot"],
+        "source_state": {
+            "state_root": "/var/lib/kylin-memory/state",
+            "sealed_db_path": "/var/lib/kylin-memory/state/p2b-forget-state.db",
+            "sealed_db_sha256": "9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f",
+            "db_size_bytes": 352256,
+            "sqlite_schema_fingerprint": "f" * 64,
+            "prepared_on_vm_snapshot": "d14d-clean-base-20260906-r2",
+            "prepared_at_utc": "2026-09-06T00:00:00Z",
+        },
+        "retrieval_profile": v1["retrieval_profile"],
+        "created_at_utc": v1["created_at_utc"],
+        "created_by": v1["created_by"],
+        "samples": v1["samples"],
+    }
+    payload = _retrieval_attach(payload)
+    payload["artifact_sha256"] = compute_artifact_sha256(payload)
+    return payload
+
+
+def test_v2_valid_artifact_passes():
+    assert validate_artifact(_v2_artifact()) == []
+
+
+def test_v2_rejects_legacy_applicable_source_commit():
+    payload = _v2_artifact()
+    payload["applicable_source_commit"] = TEST_COMMIT
+    payload["artifact_sha256"] = compute_artifact_sha256(payload)
+    assert any("must not use legacy applicable_source_commit" in e
+               for e in validate_artifact(payload))
+
+
+def test_v2_requires_execution_compatibility_minimum_commit():
+    payload = _v2_artifact()
+    del payload["execution_compatibility"]["minimum_commit"]
+    payload["artifact_sha256"] = compute_artifact_sha256(payload)
+    assert any("execution_compatibility missing: minimum_commit" in e
+               for e in validate_artifact(payload))
+
+
+def test_v2_requires_source_state_identity():
+    payload = _v2_artifact()
+    del payload["source_state"]["sealed_db_sha256"]
+    payload["artifact_sha256"] = compute_artifact_sha256(payload)
+    assert any("source_state missing: sealed_db_sha256" in e
+               for e in validate_artifact(payload))
+
+
+def test_unknown_binding_version_rejected():
+    payload = _artifact_without_sha()
+    payload["binding_version"] = "d13d-forget-state-binding/v9"
+    payload["artifact_sha256"] = compute_artifact_sha256(payload)
+    assert any("binding_version must be one of" in e for e in validate_artifact(payload))
 
 
 def test_json_roundtrip_stable():
