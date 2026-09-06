@@ -1,13 +1,19 @@
-# D14A 实施报告 v2（REWORK 修复后，2026-09-05 · 溯源收口 v3）
+# D14A 实施报告 v2（REWORK 修复后，2026-09-05 · 溯源收口 v4）
 
 > 对应 D14A 交接文档 + 台账 D14-A「L3 干净虚拟机发布回归」。
 > 本报告为 D14A 第一阶段（发布包构建 + 发布链验证）完成记录；正式 L3 clean-VM
 > 回归待 D14D 干净快照 + D13D 冻结环境就绪后执行。
 > **状态：PACKAGE_IMPLEMENTATION_CANDIDATE**（按 D 主审 BLOCKER 5 口径；正式 L3 前不升
 > READY；BLOCKER C（见 §6）解除前不宣称 runtime/model identity 闭环）。
-> v3 溯源收口：§3 引入四身份模型（source_commit / tested_runtime_commit / evidence_commit /
-> current_pr_head），§5.1 记录 git diff 复核结论，§4 修正 verify 为独立 embedding server
-> PID 实际加载校验表述，§6 新增 BLOCKER C；不改变既有 REWORK 事实与候选状态。
+> **证据新鲜性（执行时事实）**：当前 runtime evidence 相对本 PR HEAD
+> （`git rev-parse HEAD` 执行时事实）为 **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**——
+> 需重新打包 → 重算 hash → 真实 VM 重测并回填 `tested_runtime_commit` /
+> `evidence_commit` 后方可更新；正式刷新明确超出本 Task 且尚未执行。
+> v4 溯源收口：§3 四身份模型中 `current_pr_head` 不再落库固定 SHA，改以
+> `git rev-parse HEAD` 执行时事实为唯一真源；§5.1 复核改为执行时三分类
+> （EVIDENCE_CURRENT / DOCS_EVIDENCE_ONLY / RUNTIME_EVIDENCE_STALE）并如实记录
+> 当前真实分类；§4 修正 verify 为独立 embedding server PID 实际加载校验表述，
+> §6 新增/维持 BLOCKER C；不改变既有 REWORK 事实与候选状态。
 
 ---
 
@@ -20,7 +26,7 @@ D 主审 5 个 BLOCKER 全部处置并重新验证：
 | B1 launcher/install_prefix 失效 | 整包复制到 `<install_prefix>`；`~/.local/bin` 做 launcher symlink 指向 `<install_prefix>/bin/kylin-memory-server`；unit 渲染 `ExecStart=<install_prefix>/bin/kylin-memory-server`（安装前缀 launcher） | smoke：unit 正确渲染 + 服务从 prefix 启动 + socket 就绪 |
 | B2 缺 Alembic 迁移 + env.py 重写错误 | install 前 `alembic upgrade head`；env.py 改为确定性重写（cwd 即 runtime/app）；构建时包内 migration smoke | migration head `20260902_add_memory_relation_conflict`；smoke PASS |
 | B3 install/verify fail-closed 缺失 | install 校验 SDK 版本+SHA/manifest；wait socket/journal/restart；verify 校验 PID==MainPID/cmdline/SDK SHA/memory.embed | smoke 全链 PASS |
-| B4 evidence 身份不一致 | 从最终 PR head `e3d4b9d` 重建 evidence；`manifest.source_commit` 记录该历史 head 的完整 40 位 SHA | 按 §3 四身份语义，该值归位为 tested_runtime_commit（真实 VM 实际执行提交），不得写成当前 PR head；证据文件已重建 |
+| B4 evidence 身份不一致 | 从 `e3d4b9d`（当时最终 head）重建 evidence；`manifest.source_commit` 记录该历史 head 的完整 40 位 SHA | 按 §3 四身份语义，该值归位为 tested_runtime_commit（真实 VM 实际执行提交），不得写成当前 PR head；证据文件已重建；该 evidence 相对后续 PR head 为 STALE（见 §5.1），刷新属后续独立事项 |
 | B5 evidence 格式/语义 | 修复 JSON；补全 install/smoke/service identity/dependency audit；状态降级 | 16 个 evidence 文件全部合法 |
 
 ---
@@ -48,7 +54,7 @@ D 主审 5 个 BLOCKER 全部处置并重新验证：
 | **source_commit**（构建声明基线） | **`5424d28e1178d3d16764ad7c050b878bc8981583`**（与契约 §1.1 口径一致；非执行/证据/当前 head） |
 | **tested_runtime_commit**（真实 VM 实际执行） | **`e3d4b9d565e2c3c153973125b3c071225e1b9e4d`**（原报告 §3 误标为 source_commit 的值，语义修正） |
 | **evidence_commit**（evidence-only 快照） | **`68bb8f764e204818759fceae0616cac0048753a2`** |
-| **current_pr_head**（R2 开工基线，动态） | **`15de7c67426909c7c872f9cb3f9a04a2575753fd`**（随新提交前移时必须回填本表并同步测试断言） |
+| **current_pr_head**（动态） | **`<git rev-parse HEAD 输出>`**（执行时事实：本表不落库固定 SHA，以 `git rev-parse HEAD` 输出为唯一真源；随新提交前移，禁止把 `tested_runtime_commit` 写成 current_pr_head） |
 | package_tar_sha256 | `15d79383f5aed05407d849cf5dfafe6ab2195a80ee42d987294747c6f74081ce` |
 | manifest_sha256 | `18475655969b8fb6c88820d9e3ee94dc9c5e17a4e2c533b4cf65be46cb46ef22` |
 | bridge_so_sha256 | `a271891238102d0299395284d486c2e5afdaa4494e6ab0d1ff51a2d2ab9d4db6` |
@@ -97,20 +103,43 @@ recovery/{service_restart,process_crash,stale_socket}.log
 
 全部 JSON 合法；`git_identity.json` 与 `summary.json` 记录的
 `source_commit=tested_commit=e3d4b9d…` 即 **tested_runtime_commit**（§3 归位），
-`evidence_commit`（68bb8f7…）为证据落库快照，`current_pr_head`（15de7c6…）为 R2 开工
-基线；四者不得互相伪造相等。
+`evidence_commit`（68bb8f7…）为证据落库快照，`current_pr_head` 为执行时
+`git rev-parse HEAD` 动态事实（**不落库固定 SHA，也不把 tested_runtime_commit
+写成 current_pr_head**）；四者不得互相伪造相等。
+
+**证据新鲜性声明**：上述历史 evidence 均在 `tested_runtime_commit`（e3d4b9d…）
+上执行；当前 PR HEAD 相对该提交已引入 packaging/runtime 行为变更（§5.1），
+因此这些历史 evidence 相对当前 head 为 **RUNTIME_EVIDENCE_STALE / 未刷新**——
+不描述为"与当前 head 一致"，正式刷新属后续独立事项（超出本 Task 尚未执行）。
 
 ---
 
-## 5.1 git diff 复核结论（tested_runtime_commit → R2 开工基线）
+## 5.1 git diff 三分类复核结论（tested_runtime_commit → 当前 PR head，执行时判定）
 
-复核命令：`git diff --name-only e3d4b9d565e2c3c153973125b3c071225e1b9e4d..15de7c67426909c7c872f9cb3f9a04a2575753fd`
+复核命令：`git diff --name-only tested_runtime_commit..HEAD`（`tested_runtime_commit`
+为 §3 表中 `e3d4b9d565e2c3c153973125b3c071225e1b9e4d`；`HEAD` 为执行时
+`git rev-parse HEAD` 事实，不落库固定 SHA）。按 §1.1/§3 三分类规则判定：
 
-结论：该范围内**无 D14A packaging/runtime 行为文件变化**（仅 docs/day14/01、evidence/
-l3-kylin-vm/d14a_20260905/*、main 合入的 memory-client/D13E/CI 等非 D14A runtime 内容）。
+- `EVIDENCE_CURRENT`：diff 为空（即当前 head 与真实 VM 执行提交一致）；
+- `DOCS_EVIDENCE_ONLY`：diff 非空且不含 `packaging/`、`memory-service/`、
+  `cpp-bridge/`、`migrations/`、`config/` 任一前缀（仅 docs/evidence 等转换，不触发重包）；
+- `RUNTIME_EVIDENCE_STALE`：diff 含上述任一前缀——必须 **重新打包 → 重算 hash →
+  重跑真实 VM** → 回填新的 `tested_runtime_commit` / `evidence_commit`。
 
-要求：任何后续 **packaging/runtime 行为变更**必须 **重新打包 → 重算 hash → 重跑真实 VM** →
-回填新的 `tested_runtime_commit` / `evidence_commit`；仅文档/测试变更不触发重包。
+**当前真实结论（执行时事实）**：本批次 Task1/2b/2/3 已引入 packaging/runtime 行为
+变更，当前 HEAD 相对 `tested_runtime_commit` 分类为 **RUNTIME_EVIDENCE_STALE /
+RUNTIME_UNVERIFIED**，命中示例：`packaging/release/`（build_release_package.sh、
+package_smoke.sh、systemd_install.sh、systemd_uninstall.sh、systemd_verify.sh、
+test_d14a_package_integrity.py、test_d14a_transactional_rollback.py 等）、
+`memory-service/`（db/、gateway/、pipeline/、service/、tests/ 等）、
+`migrations/versions/`（20260906_add_forget_topic_key.py、
+20260906_add_preference_receipt_trace.py）。
+
+要求：正式「重新打包 → 重算 hash → 重跑真实 VM」并回填新
+`tested_runtime_commit` / `evidence_commit` 属后续独立事项，**超出本 Task 且尚未
+执行**——完成前 runtime evidence 保持 **STALE / RUNTIME_UNVERIFIED**，不得宣称与
+当前 head 一致；仅文档/测试变更（`DOCS_EVIDENCE_ONLY`）不触发重包，本报告
+不再沿用旧式『范围内无 packaging/runtime 行为变化』结论。
 
 ---
 
@@ -129,5 +158,7 @@ l3-kylin-vm/d14a_20260905/*、main 合入的 memory-client/D13E/CI 等非 D14A r
 
 ---
 
-*D14A REWORK 修复完成；发布链 smoke 全 PASS，证据已从最终 head 重建；四身份语义与
-BLOCKER C fail-closed 边界按 v3 收口表述。*
+*D14A REWORK 修复完成；发布链 smoke 全 PASS，历史 evidence 从 `tested_runtime_commit`
+（e3d4b9d…）重建并归位；四身份语义与 BLOCKER C fail-closed 边界按 v4 收口表述；
+当前 runtime evidence 相对本 PR HEAD 为 RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED，
+正式重打包 → 重算 hash → 真实 VM 重测属后续独立事项，完成前保持候选态。*

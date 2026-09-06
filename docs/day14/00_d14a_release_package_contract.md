@@ -1,11 +1,15 @@
-# D14A Release Package Contract（FROZEN_DRAFT · 溯源收口 v3）
+# D14A Release Package Contract（FROZEN_DRAFT · 溯源收口 v4）
 
 > 依据：D14A 交接文档（2026-09-05）§Phase 2 + §A14-B01 解除要求。
 > 状态：**FROZEN_DRAFT**（待 D 主审会签后升 FROZEN；**D Reviewer 会签前不得升 FROZEN**）。
 > 冻结方式：本文件为 package contract 唯一真源；任何字段改动需 D 主审会签并升版。
-> v3 溯源收口：新增 §1.1 Provenance 四身份语义、§6bis BLOCKER C，并修正安装/verify
-> 架构描述（整包复制 install_prefix + `~/.local/bin` symlink + 安装前缀 launcher +
-> 独立 embedding server PID 实际加载校验）。
+> v4 溯源收口：§1.1 中 `current_pr_head` 不再落库固定 SHA，改为以
+> `git rev-parse HEAD` 执行时事实为唯一真源；复核改为执行时三分类
+> （EVIDENCE_CURRENT / DOCS_EVIDENCE_ONLY / RUNTIME_EVIDENCE_STALE）；如实声明
+> 当前 runtime evidence 相对本 PR HEAD 为 **RUNTIME_EVIDENCE_STALE**（需重新打包 →
+> 重算 hash → 重跑真实 VM 后回填；正式刷新超出本 Task 尚未执行）。其余四身份语义、
+> §6bis BLOCKER C 与安装/verify 架构（整包复制 install_prefix + `~/.local/bin`
+> symlink + 安装前缀 launcher + 独立 embedding server PID 实际加载校验）不变。
 
 ---
 
@@ -40,20 +44,31 @@
 
 ## 1.1 Provenance 身份语义（四类字段，禁止互相伪造相等）
 
-| 身份字段 | 值（40 位 SHA） | 语义 |
+| 身份字段 | 值 | 语义 |
 |---|---|---|
 | `source_commit` | `5424d28e1178d3d16764ad7c050b878bc8981583` | **构建时声明基线**（非执行/证据/当前 head） |
 | `tested_runtime_commit` | `e3d4b9d565e2c3c153973125b3c071225e1b9e4d` | 历史 runtime 包在真实 VM **实际执行**的提交 |
 | `evidence_commit` | `68bb8f764e204818759fceae0616cac0048753a2` | evidence-only 快照提交 |
-| `current_pr_head` | `15de7c67426909c7c872f9cb3f9a04a2575753fd` | **动态值**：R2 开工基线；随新提交前移时必须回填本表并同步测试断言 |
+| `current_pr_head` | `<git rev-parse HEAD 输出>`（执行时事实） | **动态值**：本表不落库固定 SHA，以 `git rev-parse HEAD` 输出为唯一真源；随新提交前移，禁止把 `tested_runtime_commit` 写成 current_pr_head |
 
 - 四者独立，**不得互相伪造相等**；尤其**不得把 `tested_runtime_commit` 写成当前 PR head**。
-- 经 `git diff --name-only` 复核：`e3d4b9d565e2c3c153973125b3c071225e1b9e4d..15de7c67426909c7c872f9cb3f9a04a2575753fd`
-  范围内**无 D14A packaging/runtime 行为文件变化**（仅 docs/evidence 与 main 合入的
-  memory-client/D13E/CI 等非 D14A runtime 内容）。
-- 任何后续 **packaging/runtime 行为变更**必须 **重新打包 → 重算 hash → 重跑真实 VM** →
-  回填新的 `tested_runtime_commit` / `evidence_commit`；仅文档/测试变更不触发重包，
-  但 `current_pr_head` 前移时必须复核本表。
+- 证据新鲜性以 `git diff --name-only tested_runtime_commit..HEAD`（HEAD 为执行时
+  `git rev-parse HEAD` 事实，不落库固定 SHA）做三分类：
+  - `EVIDENCE_CURRENT`：diff 为空；
+  - `DOCS_EVIDENCE_ONLY`：diff 非空且不含 `packaging/`、`memory-service/`、
+    `cpp-bridge/`、`migrations/`、`config/` 任一前缀（仅 docs/evidence 等转换）；
+  - `RUNTIME_EVIDENCE_STALE`：diff 含上述任一 packaging/runtime 前缀——必须
+    **重新打包 → 重算 hash → 重跑真实 VM** → 回填新的 `tested_runtime_commit` /
+    `evidence_commit` 后才可更新 runtime evidence。
+- **当前事实（执行时判定）**：本批次 Task1/2b/2/3 已引入 `packaging/`、
+  `memory-service/`、`migrations/` 等 packaging/runtime 行为变更（§1.1 三分类命中
+  `packaging/release/*`、`memory-service/db|gateway|pipeline|service|tests`、
+  `migrations/versions/20260906_*`），当前 HEAD 相对 `tested_runtime_commit` 分类为
+  **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**；正式「重新打包 → 重算 hash →
+  重跑真实 VM」并回填 `tested_runtime_commit` / `evidence_commit` 属后续独立事项
+  （超出本 Task、尚未执行），完成前不得宣称 runtime evidence 与当前 head 一致。
+- 仅文档/测试变更（`DOCS_EVIDENCE_ONLY`）不触发重包，但 `current_pr_head` 前移时
+  仍须按上述三分类复核。
 
 ---
 
@@ -200,6 +215,10 @@ bash systemd/verify.sh
 - `SHA256SUMS`：打包后生成，作为正式 evidence 的 package 身份。
 - 后续任何 VM 测试只允许引用该 hash；若补文件 → 重新打包 → 新 hash → 重置 snapshot → 重测。
 - 任何 packaging/runtime 行为变更必须 **重新打包 → 重算 hash → 重跑真实 VM**，并回填 §1.1 身份表。
+- **当前声明**：本 PR HEAD（`git rev-parse HEAD` 执行时事实）相对 `tested_runtime_commit`
+  （`e3d4b9d…`）的 runtime evidence 为 **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**——
+  正式 package 未重建、正式 hash 未重算、真实 VM 未重跑，刷新属后续独立事项；完成前
+  §10 的 hash/§11 的 Gate 引用仅以刷新后的 runtime evidence 为前提。
 
 ---
 
@@ -215,6 +234,10 @@ bash systemd/verify.sh
 > D Reviewer 会签前不得升 FROZEN）；本 Gate 清单与全文不产生任何状态越级声明
 > （既不宣称宿主环境已验证，也不宣称三级验收通过），且 BLOCKER C 解除前不得
 > 宣称 runtime/model identity 闭环。
+> 备注：Gate 各条引用仅以**刷新后的 runtime evidence** 为前提——当前 runtime evidence
+> 相对 HEAD 为 **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**（见 §1.1/§10），
+> 正式重打包 → 重算 hash → 真实 VM 重测完成前，本条 Gate 不因任何本地静态结果
+> 视为已达成。
 
 ## 12. Evidence 输出（`evidence/l3-kylin-vm/d14a_<run_id>/`）
 
@@ -231,4 +254,4 @@ cleanup.log  summary.json
 
 ---
 
-*本契约 v3 溯源收口（FROZEN_DRAFT）由 A 轨编制，D Reviewer 会签前不得升 FROZEN。*
+*本契约 v4 溯源收口（FROZEN_DRAFT）由 A 轨编制，D Reviewer 会签前不得升 FROZEN。*
