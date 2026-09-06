@@ -1,0 +1,121 @@
+name: PR Sync Sentinel
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - integration
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  verify-pr-sync:
+    name: PR synchronize consistency
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Compare branch HEAD with PR HEAD
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          echo "Repository : $REPO"
+          echo "Branch     : $BRANCH"
+          echo "Push SHA   : $PUSH_SHA"
+
+          # 找出当前 branch 对应的 open PR。
+          # 不依赖 pull_request event，因为 Sentinel 的目的
+          # 就是在 pull_request synchronize 本身失效时仍能运行。
+          PR_NUMBER="$(
+            gh api --paginate \
+              "repos/$REPO/pulls?state=open&per_page=100" \
+            | jq -r --arg branch "$BRANCH" \
+              '.[] | select(.head.ref == $branch) | .number' \
+            | head -n 1
+          )"
+
+          if [[ -z "${PR_NUMBER:-}" ]]; then
+            echo "No open PR found for branch '$BRANCH'."
+            echo "PR_SYNC_NOT_APPLICABLE"
+            exit 0
+          fi
+
+          echo "PR         : #$PR_NUMBER"
+
+          # GitHub 正常 synchronize 通常只需要数秒。
+          # 给后台最多 180 秒收敛，避免正常异步造成误报。
+          for attempt in $(seq 1 18); do
+
+            PR_SHA="$(
+              gh api "repos/$REPO/pulls/$PR_NUMBER" \
+                --jq '.head.sha'
+            )"
+
+            PULL_REF_SHA="$(
+              gh api "repos/$REPO/git/ref/pull/$PR_NUMBER/head" \
+                --jq '.object.sha' 2>/dev/null || true
+            )"
+
+            MERGEABLE_STATE="$(
+              gh api "repos/$REPO/pulls/$PR_NUMBER" \
+                --jq '.mergeable_state'
+            )"
+
+            echo
+            echo "Attempt     : $attempt / 18"
+            echo "Push SHA    : $PUSH_SHA"
+            echo "PR SHA      : $PR_SHA"
+            echo "Pull Ref SHA: ${PULL_REF_SHA:-UNAVAILABLE}"
+            echo "Merge state : $MERGEABLE_STATE"
+
+            if [[ "$PR_SHA" == "$PUSH_SHA" \
+               && "$PULL_REF_SHA" == "$PUSH_SHA" ]]; then
+
+              echo
+              echo "======================================"
+              echo "PR_SYNC_OK"
+              echo "branch / PR metadata / pull ref aligned"
+              echo "SHA=$PUSH_SHA"
+              echo "======================================"
+
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo
+          echo "::error title=GitHub PR synchronize stale::branch HEAD and PR internal HEAD did not converge within 180 seconds."
+
+          echo
+          echo "======================================"
+          echo "PR_SYNC_STALE"
+          echo "======================================"
+          echo "Push SHA    : $PUSH_SHA"
+          echo "PR SHA      : $PR_SHA"
+          echo "Pull Ref SHA: ${PULL_REF_SHA:-UNAVAILABLE}"
+          echo
+          echo "Likely GitHub PR synchronize / metadata"
+          echo "processing delay or partial-sync."
+          echo
+          echo "DO NOT:"
+          echo "  - force push"
+          echo "  - rewrite history"
+          echo "  - modify CI to fix this symptom"
+          echo
+          echo "Recommended:"
+          echo "  1. capture SHA evidence"
+          echo "  2. verify remote branch"
+          echo "  3. use a clean fast-forward empty commit"
+          echo "     only if manual retrigger is required"
+          echo "======================================"
+
+          exit 1
+
