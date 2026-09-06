@@ -15,6 +15,15 @@ from types import MappingProxyType
 
 from db import repositories as repo
 import evaluation.d13d_execution_adapter as adapter
+
+@pytest.fixture(autouse=True)
+def _d13d_patch_git_ancestry(monkeypatch):
+    """CI checkout 为 fetch-depth=1（浅克隆），无完整历史。
+
+    生产 preflight 仍走真实 git merge-base；测试注入 ancestry 结果以保证在
+    Actions 浅克隆下也可执行（not-ancestor 用例单独覆盖为 False）。
+    """
+    monkeypatch.setattr(adapter, "_is_ancestor", lambda *a, **k: True)
 from evaluation.d13d_execution_adapter import (
     D13E_RAW_RESULT_SCHEMA_STATUS,
     OFFICIAL_D13E_TESTSET_SHA256,
@@ -1296,7 +1305,8 @@ def test_prepare_rejects_source_db_sha_mismatch(tmp_path):
         adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
 
 
-def test_prepare_rejects_state_prep_not_ancestor(tmp_path):
+def test_prepare_rejects_state_prep_not_ancestor(tmp_path, monkeypatch):
+    monkeypatch.setattr(adapter, "_is_ancestor", lambda *a, **k: False)
     src, sha = _make_sealed_source(tmp_path)
     art = _write_v2_artifact(tmp_path, src, sha, sp="0" * 40)
     validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
