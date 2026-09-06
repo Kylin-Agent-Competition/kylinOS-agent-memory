@@ -165,6 +165,24 @@ def test_explicitness():
     assert not is_explicit_expression("")
 
 
+def test_explicitness_tool_selection_markers():
+    """D13D Phase 2 pref-003 裁定 A：显式工具选择标记判定为 explicit。
+
+    覆盖：优先使用/优先用/优先选择/首选/默认使用/默认用。
+    """
+    for text in ("优先使用 git 命令行工具", "优先用 git 命令行工具",
+                 "优先选择 python 脚本", "首选用 vim 编辑",
+                 "默认使用命令行工具", "默认用浏览器打开"):
+        assert is_explicit_expression(text), text
+
+
+def test_explicitness_bare_priority_marker_is_not_enough():
+    """负向：裸“优先/先”不构成显式工具选择标记，不得误判为 explicit。"""
+    for text in ("优先保证安全，再执行操作", "优先考虑风险再决定",
+                 "先确保权限再执行", "今天天气不错", ""):
+        assert not is_explicit_expression(text), text
+
+
 # ── 规则置信度基线 ──
 
 def test_rule_confidence():

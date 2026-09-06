@@ -362,7 +362,8 @@ def _extract_preferences_rules(event: TurnFinalizedEvent,
     类别键派生、显式置信度基线——全部来自 providers/preference_rules.py。
 
     两阶段规则入口（PR #36 HIGH-01 修复）：
-    1. 显式偏好词（PREFERENCE_EXPLICIT_PATTERN，如 我喜欢/以后/希望…）
+    1. 显式偏好词（PREFERENCE_EXPLICIT_PATTERN：通用显式词 我喜欢/以后/希望…，
+       以及显式工具选择标记 优先使用/优先用/优先选择/首选/默认使用/默认用…）
     2. 显式词未命中时，尝试指令式表达（PREFERENCE_INSTRUCTION_PATTERN，
        如 TABLE 20 原句 "这次只用三句话回答"——时态限定词 + 指令动词）
     两阶段均非硬编码特判；阶段 1 命中时不再执行阶段 2（避免重复候选）。

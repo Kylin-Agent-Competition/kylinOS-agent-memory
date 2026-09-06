@@ -169,10 +169,18 @@ def derive_preference_scope(text: str) -> str:
 
 # ── 显式/隐式判定（E 轨 §2.5 expression_type） ──
 
-# 显式偏好表述正则（与 extraction_provider 共享语义：我喜欢/我偏好/请总是/以后/总是…）
-# 覆盖架构 TABLE 20 长期例："以后所有会议总结都控制在三段内"（"以后" 而非仅 "以后都"）
+# 显式偏好表述正则（与 extraction_provider 共享语义）：
+# - 通用显式词：我喜欢/我偏好/我习惯/请总是/总是/以后/尽量/希望/偏好/更倾向/
+#   prefer/like to/always/make sure/i want…；覆盖架构 TABLE 20 长期例
+#   "以后所有会议总结都控制在三段内"（"以后" 而非仅 "以后都"）。
+# - 显式工具选择偏好标记（D13D Phase 2 pref-003 裁定 A / production PR）：
+#   优先使用/优先用/优先选择/首选/默认使用/默认用。此类句子不含通用显式词但明确表达
+#   工具选择偏好（如 "优先使用 git 命令行工具"）；若不在显式 admission 覆盖，
+#   会落入要求时态限定词的 fallback 指令式模式并产生 false negative。
+#   注意：不收录裸 "优先"，避免 "优先保证安全…" 等非工具选择表达被误判为显式偏好。
 PREFERENCE_EXPLICIT_PATTERN = re.compile(
-    r"(?i)(我喜欢|我偏好|我习惯|请总是|总是|以后|尽量|希望|偏好|更倾向|prefer|like to|always|"
+    r"(?i)(优先使用|优先用|优先选择|首选|默认使用|默认用|"
+    r"我喜欢|我偏好|我习惯|请总是|总是|以后|尽量|希望|偏好|更倾向|prefer|like to|always|"
     r"make sure|i want)\s*[:：]?\s*(.{2,60}?)(?=[，。！？.!?；;]|$)"
 )
 
