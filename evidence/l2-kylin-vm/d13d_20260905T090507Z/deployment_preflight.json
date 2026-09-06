@@ -1,0 +1,25 @@
+{
+  "tested_commit": "7242935bee5f230cee0535d5e28dbe1e60a302f6",
+  "preexisting_service": {
+    "state": "active",
+    "socket": "/run/user/1000/kylin-memory/memory.sock",
+    "database": "/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db",
+    "wrapper_target": "/home/kylin-agent/kylinOS-agent-memory/memory-service/app.py",
+    "observed_worktree_head": "053754d611801548fdac59b2894c6862bf85cf56"
+  },
+  "isolation": {
+    "pre_deploy_snapshot": "d13d-pre-7242935-20260905-0858",
+    "candidate_worktree": "/home/kylin-agent/kylinOS-agent-memory-d13d-7242935",
+    "candidate_socket": "/run/user/1000/kylin-memory/d13d-7242935.sock",
+    "candidate_database": "/home/kylin-agent/.local/share/kylin-memory/d13d-7242935/kylin_memory.db",
+    "candidate_state_dir": "/home/kylin-agent/.local/state/kylin-memory/d13d-7242935",
+    "production_service_modified": false
+  },
+  "observed_result": {
+    "alembic_head": "20260902_add_memory_relation_conflict",
+    "socket_mode": "0600",
+    "health_envelope_status": "ok",
+    "health_data_status": "degraded because --no-outbox was used for isolated preflight",
+    "echo": "ok"
+  }
+}

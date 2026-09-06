@@ -1,0 +1,19 @@
+# Existing service observed before D13D candidate preparation
+# Path: /home/kylin-agent/.config/systemd/user/kylin-memory.service
+# State: active
+# Wrapper target remained /home/kylin-agent/kylinOS-agent-memory/memory-service/app.py
+
+[Service]
+ExecStart=%h/.local/bin/kylin-memory-server --socket %t/kylin-memory/memory.sock --no-migrate
+RuntimeDirectory=kylin-memory
+RuntimeDirectoryMode=0700
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX
+
+# D13D candidate preflight did not modify this unit. It used an isolated manual process:
+# /home/kylin-agent/d4d-venv/bin/python memory-service/app.py
+#   --socket /run/user/1000/kylin-memory/d13d-7242935.sock
+#   --db /home/kylin-agent/.local/share/kylin-memory/d13d-7242935/kylin_memory.db
+#   --no-migrate --no-outbox

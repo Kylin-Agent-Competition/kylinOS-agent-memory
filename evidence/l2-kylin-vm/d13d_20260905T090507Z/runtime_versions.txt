@@ -1,0 +1,11 @@
+guest_os=Kylin V11 2603
+guest_kernel=Linux 6.6.0-76-generic x86_64
+guest_python=Python 3.12.3
+candidate_python=/home/kylin-agent/d4d-venv/bin/python
+alembic=1.19.1
+pydantic=2.13.4
+sqlalchemy=2.0.52
+candidate_alembic_head=20260902_add_memory_relation_conflict
+sqlite_version=not collected in this preparation run
+
+All entries above were obtained from the Kylin VM runner logs in this directory, except sqlite_version which remains UNVERIFIED for this run.
