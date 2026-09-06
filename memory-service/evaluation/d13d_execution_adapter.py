@@ -106,6 +106,7 @@ D13E_RAW_RESULT_SCHEMA_V1 = {
         },
         "forget": {
             "required": (
+                "forget_mode",
                 "missed_target_items",
                 "wrongly_deleted_items",
                 "cross_user_violation_count",
@@ -113,6 +114,7 @@ D13E_RAW_RESULT_SCHEMA_V1 = {
                 "residual_after_full_rebuild",
             ),
             "allowed": (
+                "forget_mode",
                 "missed_target_items",
                 "wrongly_deleted_items",
                 "cross_user_violation_count",
@@ -122,6 +124,9 @@ D13E_RAW_RESULT_SCHEMA_V1 = {
         },
     },
 }
+_FORGET_MODES = frozenset(
+    {"single_item", "session", "topic", "time_window", "full_reset"}
+)
 _COUNTER_FIELDS = frozenset(
     {
         "record_count",
@@ -404,6 +409,10 @@ def _validate_actual(metric: str, actual: Mapping[str, Any]) -> None:
     missing = required.difference(actual)
     if missing:
         raise ExecutionPreflightError("raw actual is missing required fields")
+    if metric == "forget" and actual.get("forget_mode") not in _FORGET_MODES:
+        raise ExecutionPreflightError(
+            "forget_mode must be one of the five frozen forget modes"
+        )
     for key, value in actual.items():
         if key in _COUNTER_FIELDS and (
             not isinstance(value, int) or isinstance(value, bool) or value < 0
@@ -477,23 +486,31 @@ def _validate_trace_reference(metric: str, sample_id: str, trace_reference: str)
         raise ExecutionPreflightError("safety trace_reference must reference the source-events trace")
 
 
-def _write_stateless_execution_receipt(
+def _write_execution_receipt(
     validated: ValidatedExecution,
     *,
     sample_id: str,
     metric: str,
     actual: Mapping[str, Any],
     entrypoint: str,
+    runtime_scope: str,
+    trace_reference: str,
 ) -> str:
-    """Persist one real stateless execution receipt under the evidence root.
+    """Persist one real execution receipt under the evidence root (all metrics).
 
-    ``trace_reference`` points to ``<evidence_root>/dispatch/<sample_id>.json``,
-    a record an independent reviewer can open to verify sample_id/metric/
-    tested_commit/actual_digest/UTC/entrypoint of the real dispatch, instead of
-    trusting a self-describing trace string.
+    ``<evidence_root>/dispatch/<sample_id>.json`` is written with exclusive
+    create so a repeated dispatch of the same sample can never silently
+    overwrite the first execution evidence.  The receipt binds sample_id,
+    metric, full tested_commit, actual_digest, UTC, entrypoint, runtime_scope
+    (binding identity for stateful dispatch) and the raw trace_reference, so an
+    independent reviewer can re-locate the real execution facts.
     """
     if not isinstance(validated, ValidatedExecution):
         raise TypeError("validated must be a ValidatedExecution")
+    if not isinstance(runtime_scope, str) or not runtime_scope.strip():
+        raise ExecutionPreflightError("execution receipt requires a runtime scope")
+    if not isinstance(trace_reference, str) or not trace_reference.strip():
+        raise ExecutionPreflightError("execution receipt requires a trace_reference")
     evidence_root = _canonical_path(
         validated.request.execution_evidence_root, label="execution_evidence_root"
     )
@@ -506,11 +523,11 @@ def _write_stateless_execution_receipt(
         "actual_digest": digest,
         "utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "entrypoint": entrypoint,
+        "runtime_scope": runtime_scope,
+        "trace_reference": trace_reference,
     }
     trace_path = evidence_root / "dispatch" / f"{sample_id}.json"
     trace_path.parent.mkdir(parents=True, exist_ok=True)
-    # Exclusive create: a repeated dispatch of the same sample must never
-    # silently overwrite the first execution evidence.
     try:
         with trace_path.open("x", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(receipt, ensure_ascii=False, sort_keys=True) + "\n")
@@ -521,38 +538,50 @@ def _write_stateless_execution_receipt(
     return f"dispatch/{sample_id}.json"
 
 
-def _verify_stateless_trace(validated: ValidatedExecution, record: ObservedRawRecord) -> None:
-    """Fail closed unless the stateless trace target exists and matches the record.
+def _verify_execution_receipt(validated: ValidatedExecution, record: ObservedRawRecord) -> None:
+    """Fail closed unless this record has evidence-root-backed dispatch provenance.
 
-    The trace target must live under the validated evidence_root and its receipt
-    must bind the same sample_id/metric/tested_commit/actual_digest.
+    Every canonical record (stateless Preference/Conflict, stateful
+    Safety/Forget) must have a matching execution receipt under
+    ``<evidence_root>/dispatch/<sample_id>.json`` that binds the same
+    sample_id/metric/tested_commit/actual_digest/runtime_scope/trace_reference.
+    A synthetic or hand-constructed receipt without real execution provenance
+    therefore cannot enter the canonical package.
     """
     evidence_root = _canonical_path(
         validated.request.execution_evidence_root, label="execution_evidence_root"
     )
-    trace_parts = Path(record.trace_reference).parts
-    if ".." in trace_parts or Path(record.trace_reference).is_absolute():
-        raise ExecutionPreflightError("stateless trace target must stay under the evidence root")
-    target = (evidence_root / record.trace_reference).resolve(strict=False)
+    target = (evidence_root / "dispatch" / f"{record.sample_id}.json").resolve(strict=False)
     if not _is_under(target, evidence_root):
-        raise ExecutionPreflightError("stateless trace target escapes the evidence root")
+        raise ExecutionPreflightError("execution receipt target escapes the evidence root")
     if not target.exists():
-        raise ExecutionPreflightError("stateless trace target does not exist under evidence_root")
+        raise ExecutionPreflightError(
+            "execution receipt does not exist under the evidence root for sample "
+            + record.sample_id
+        )
     try:
         lines = target.read_text(encoding="utf-8").splitlines()
         receipt = json.loads(lines[0]) if lines else None
     except (OSError, ValueError, IndexError) as exc:
-        raise ExecutionPreflightError("stateless trace target is not a readable receipt") from exc
+        raise ExecutionPreflightError("execution receipt target is not a readable receipt") from exc
     if not isinstance(receipt, dict):
-        raise ExecutionPreflightError("stateless trace target is not a JSON receipt object")
+        raise ExecutionPreflightError("execution receipt target is not a JSON receipt object")
     if receipt.get("sample_id") != record.sample_id:
-        raise ExecutionPreflightError("stateless trace belongs to a different sample")
+        raise ExecutionPreflightError("execution receipt belongs to a different sample")
     if receipt.get("metric") != record.metric:
-        raise ExecutionPreflightError("stateless trace belongs to a different metric")
+        raise ExecutionPreflightError("execution receipt belongs to a different metric")
     if receipt.get("tested_commit") != validated.request.tested_commit:
-        raise ExecutionPreflightError("stateless trace belongs to a different tested_commit")
+        raise ExecutionPreflightError("execution receipt belongs to a different tested_commit")
     if receipt.get("actual_digest") != record.actual_digest:
-        raise ExecutionPreflightError("stateless trace digest does not match the record")
+        raise ExecutionPreflightError("execution receipt digest does not match the record")
+    if receipt.get("runtime_scope") != record.runtime_scope:
+        raise ExecutionPreflightError(
+            "execution receipt runtime scope does not match the record"
+        )
+    if receipt.get("trace_reference") != record.trace_reference:
+        raise ExecutionPreflightError(
+            "execution receipt trace_reference does not match the record"
+        )
 
 
 def _raw_record(
@@ -668,12 +697,15 @@ def dispatch_stateless_sample(
         actual = _conflict_actual(sample)
     else:
         raise ExecutionPreflightError("metric requires an isolated runtime binding")
-    trace_reference = _write_stateless_execution_receipt(
+    trace_reference = f"dispatch/{sample_id}.json"
+    _write_execution_receipt(
         validated,
         sample_id=sample_id,
         metric=metric,
         actual=actual,
         entrypoint="dispatch_stateless_sample",
+        runtime_scope=f"stateless:{metric}",
+        trace_reference=trace_reference,
     )
     return _raw_record(
         sample_id=sample_id,
@@ -904,11 +936,21 @@ def dispatch_safety_sample(
         "audit_plaintext_leak_count": observed["audit_plaintext_leak_count"],
         "cross_user_violation_count": observed["cross_user_violation_count"],
     }
+    trace_reference = observed["trace_reference"]
+    _write_execution_receipt(
+        validated,
+        sample_id=sample_id,
+        metric="safety",
+        actual=actual,
+        entrypoint="dispatch_safety_sample",
+        runtime_scope=binding.binding_id,
+        trace_reference=trace_reference,
+    )
     return _raw_record(
         sample_id=sample_id,
         metric="safety",
         actual=actual,
-        trace_reference=observed["trace_reference"],
+        trace_reference=trace_reference,
         runtime_scope=binding.binding_id,
     )
 
@@ -948,8 +990,7 @@ def _validate_receipt(
     _validate_trace_reference(record.metric, sample_id, record.trace_reference)
     if not isinstance(record.runtime_scope, str) or not record.runtime_scope.strip():
         raise ExecutionPreflightError("raw record has no runtime dispatch scope")
-    if record.metric in ("preference", "conflict"):
-        _verify_stateless_trace(validated, record)
+    _verify_execution_receipt(validated, record)
 
 
 def _write_raw_records(

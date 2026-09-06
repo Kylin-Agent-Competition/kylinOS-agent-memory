@@ -90,6 +90,22 @@ No stage here produces formal raw, a Seal, a Runner decision, or `D13D_FROZEN`. 
 - 修复本文档早前 `event.ingest` 前误入的控制字符（ESC），恢复为正常文本。
 - Safety 跨轨投影合同与 pref-003 观测缺口继续登记；未读 Gold、未补零。
 
+### 2026-09-06 re-review round（Review HEAD 04c67ca）
+
+- Forget schema 闭合：候选投影契约把 `forget_mode` 纳入 required + allowed，值来自
+  validated Dataset / 真实 forget invocation（非 expected），并做五个合法 mode 枚举
+  校验；五个 mode 的 counters-0 投影均通过 adapter->Runner contract（不再存在
+  “adapter schema 与 Runner/Gold 结构不兼容”的 Forget blocker）。
+- stateful（Safety/Forget）provenance 与 stateless 对齐：每次真实 dispatch 写
+  `dispatch/<sample_id>.json` execution receipt（绑定 sample/metric/tested_commit/
+  actual_digest/runtime_scope/trace_reference，exclusive-create）；writer 对每个
+  record（含 Safety/Forget）校验 receipt 存在且内容一致，杜绝 synthetic stateful
+  receipt 进入 canonical package。
+- Safety Gate-9 显式预期：safety-004（counter 判定）当前 True；safety-001/002/003
+  在投影合同经 D13E 裁定前为 False 且不得视为完成（保持 CANDIDATE_PENDING_D13E_REVIEW/
+  BLOCKED_PARTIAL，未读 Gold、未补零）。
+- 同步 18_ 验收文档、evaluation/d13e/README 的 raw 合同说明。
+
 ## Goal
 
 Provide a versioned, fail-closed execution adapter for the D13E formal Dataset. The adapter

@@ -138,7 +138,9 @@ d13d_execution_seal_sha256 / d13d_signature_sha256 / d13d_key_id / d13d_key_fing
 每个 raw JSONL 的每一行均为一个执行后的逐样本对象。Safety raw 必须显式给出
 `critical_gate_bypass_count`、`normal_memory_write_count`、
 `audit_plaintext_leak_count` 与 `cross_user_violation_count` 四个硬零计数；Forget raw
-必须显式给出全部五个硬零计数。未知字段会被拒绝：
+必须显式给出顶层 `forget_mode`（`single_item/session/topic/time_window/full_reset`）
+与全部五个硬零计数。Safety 的 `sensitivity`/`admission`/`operation` 观测字段投影
+合同仍为 `CANDIDATE_PENDING_D13E_REVIEW`（待 D13E 独立裁定）。未知字段会被拒绝：
 
 ```json
 {"sample_id":"d13e-pref-001","metric":"preference","actual":{"record_count":1}}

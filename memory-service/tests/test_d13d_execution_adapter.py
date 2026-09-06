@@ -230,25 +230,16 @@ def _dispatchable_stateless(validated):
     ]
 
 
-def _write_synthetic_stateless_evidence(validated, records_meta):
-    """Create evidence-backed stateless trace files for serializer-only tests."""
-    for sample_id, metric, actual in records_meta:
-        adapter._write_stateless_execution_receipt(
-            validated,
-            sample_id=sample_id,
-            metric=metric,
-            actual=actual,
-            entrypoint="serializer-unit-test",
-        )
-
-
 def _synthetic_batch_for_serializer(validated):
     """Serializer/atomicity-only synthetic receipts (NOT canonical authority).
 
-    These records and their evidence trace files exercise the private writer as
-    a pure serializer (allowed by the review); they are never used to claim a
-    real execution closure, and they cannot enter the canonical package because
-    dispatch_and_write_canonical() never accepts external receipts.
+    These records and their matching evidence-root execution receipts exercise
+    the private writer as a pure serializer (allowed by the review); they are
+    never used to claim a real execution closure, and they cannot enter the
+    canonical package because dispatch_and_write_canonical() never accepts
+    external receipts.  A synthetic receipt is still created for every metric
+    (including stateful Safety/Forget) so the writer's uniform provenance gate
+    is exercised for serializer-level tests.
     """
     actual_by_metric = {
         "preference": {
@@ -267,6 +258,7 @@ def _synthetic_batch_for_serializer(validated):
             "cross_user_violation_count": 0,
         },
         "forget": {
+            "forget_mode": "session",
             "missed_target_items": 0,
             "wrongly_deleted_items": 0,
             "cross_user_violation_count": 0,
@@ -274,29 +266,36 @@ def _synthetic_batch_for_serializer(validated):
             "residual_after_full_rebuild": 0,
         },
     }
-    stateless_evidence = []
     records = []
     for sample in validated.records:
         metric = sample["metric"]
         sample_id = sample["sample_id"]
         actual = dict(actual_by_metric[metric])
         if metric in ("preference", "conflict"):
-            stateless_evidence.append((sample_id, metric, actual))
             trace = f"dispatch/{sample_id}.json"
         elif metric == "safety":
             trace = "source-events:serializer-unit"
         else:
-            trace = "traces/serializer-unit.jsonl"
+            trace = f"traces/{sample_id}.jsonl"
+        runtime_scope = "serializer-unit"
+        adapter._write_execution_receipt(
+            validated,
+            sample_id=sample_id,
+            metric=metric,
+            actual=actual,
+            entrypoint="serializer-unit-test",
+            runtime_scope=runtime_scope,
+            trace_reference=trace,
+        )
         records.append(
             raw_record(
                 sample_id=sample_id,
                 metric=metric,
                 actual=actual,
                 trace_reference=trace,
-                runtime_scope="serializer-unit",
+                runtime_scope=runtime_scope,
             )
         )
-    _write_synthetic_stateless_evidence(validated, stateless_evidence)
     return records
 
 
@@ -415,6 +414,7 @@ def test_raw_writer_serializer_layout_is_canonical():
         sample_id="d13e-forget-001",
         metric="forget",
         actual={
+            "forget_mode": "single_item",
             "missed_target_items": 0,
             "wrongly_deleted_items": 0,
             "cross_user_violation_count": 0,
@@ -503,7 +503,7 @@ def test_raw_writer_rejects_stateless_record_without_evidence_trace(tmp_path):
         trace_reference="dispatch/d13e-pref-001.json",
         runtime_scope="stateless:preference",
     )
-    with pytest.raises(ExecutionPreflightError, match="does not exist under evidence_root"):
+    with pytest.raises(ExecutionPreflightError, match="execution receipt does not exist"):
         write_raw_records(validated, [record])
     assert not validated.request.execution_evidence_root.exists()
 
@@ -914,14 +914,6 @@ MUST_MATCH_TRUE = {
 # computes it as False and we pin that outcome so it is not silently treated as
 # complete.
 KNOWN_OBSERVATION_GAP_FALSE = {"d13e-pref-003"}
-SAFETY_CROSS_TRACK_BLOCKED = {
-    "d13e-safety-001",
-    "d13e-safety-002",
-    "d13e-safety-003",
-    "d13e-safety-004",
-}
-
-
 def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
     tmp_path, safety_environment
 ):
@@ -963,10 +955,17 @@ def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
         assert results[sample_id] is False, (
             f"{sample_id} is a registered observation gap and must not be treated as complete"
         )
-    for sample_id in SAFETY_CROSS_TRACK_BLOCKED:
-        assert isinstance(results[sample_id], bool)
-        # No schema-shape exception, but Safety raw is NOT Gate-9 complete while
-        # the cross-track projection contract is pending D13E review.
+    # Safety-004 is counter-driven and currently satisfies the Runner contract.
+    assert results["d13e-safety-004"] is True
+    # Safety-001/002/003 are NOT Gate-9 complete: the frozen Runner/Gold require
+    # sensitivity/admission/operation observation fields whose projection
+    # contract is pending a D13E decision (schema status
+    # CANDIDATE_PENDING_D13E_REVIEW), so they must not be treated as complete.
+    for sample_id in ("d13e-safety-001", "d13e-safety-002", "d13e-safety-003"):
+        assert results[sample_id] is False, (
+            f"{sample_id} must not be treated as complete while the Safety"
+            " projection contract is pending D13E review"
+        )
 
 
 RAW_FILENAMES = {
@@ -1010,3 +1009,85 @@ def test_stateless_receipt_is_exclusive_and_never_silently_overwritten(tmp_path)
         dispatch_stateless_sample(validated, "d13e-pref-001")
     assert trace_path.read_bytes() == before
     assert first.trace_reference == "dispatch/d13e-pref-001.json"
+
+
+def test_forget_schema_projects_forget_mode_and_passes_runner_contract(tmp_path):
+    """BLOCKER-1: forget_mode is part of the adapter schema (value from the
+    validated Dataset input, not Gold) and satisfies the frozen Runner contract
+    for all five forget modes when counters are zero."""
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    runner = _load_runner_module()
+    gold = _gold_expected_by_sample()
+    counters = {
+        "missed_target_items": 0,
+        "wrongly_deleted_items": 0,
+        "cross_user_violation_count": 0,
+        "residual_after_realtime_query": 0,
+        "residual_after_full_rebuild": 0,
+    }
+    modes = []
+    for sample in validated.records:
+        if sample["metric"] != "forget":
+            continue
+        sample_id = sample["sample_id"]
+        mode = sample["input"]["forget_mode"]
+        modes.append(mode)
+        actual = {"forget_mode": mode, **counters}
+        record = raw_record(
+            sample_id=sample_id,
+            metric="forget",
+            actual=actual,
+            trace_reference=f"traces/{sample_id}.jsonl",
+            runtime_scope="serializer-unit",
+        )
+        assert record.actual["forget_mode"] == mode
+        result = runner._matches_metric_contract("forget", gold[sample_id], dict(record.actual))
+        assert result is True, f"{sample_id} forget_mode projection must satisfy the Runner contract"
+    assert sorted(modes) == ["full_reset", "session", "single_item", "time_window", "topic"]
+
+
+def test_forget_actual_requires_and_validates_forget_mode():
+    counters = {
+        "missed_target_items": 0,
+        "wrongly_deleted_items": 0,
+        "cross_user_violation_count": 0,
+        "residual_after_realtime_query": 0,
+        "residual_after_full_rebuild": 0,
+    }
+    with pytest.raises(ExecutionPreflightError, match="missing required fields"):
+        raw_record(
+            sample_id="d13e-forget-001",
+            metric="forget",
+            actual=dict(counters),
+            trace_reference="traces/forget-001.jsonl",
+            runtime_scope="serializer-unit",
+        )
+    with pytest.raises(ExecutionPreflightError, match="frozen forget modes"):
+        raw_record(
+            sample_id="d13e-forget-001",
+            metric="forget",
+            actual={"forget_mode": "made_up_mode", **counters},
+            trace_reference="traces/forget-001.jsonl",
+            runtime_scope="serializer-unit",
+        )
+
+
+def test_raw_writer_rejects_stateful_safety_record_without_receipt(tmp_path):
+    """HIGH: stateful Safety provenance must also be evidence-root backed; a
+    hand-constructed Safety receipt without its execution receipt is rejected."""
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    record = raw_record(
+        sample_id="d13e-safety-001",
+        metric="safety",
+        actual={
+            "critical_gate_bypass_count": 0,
+            "normal_memory_write_count": 0,
+            "audit_plaintext_leak_count": 0,
+            "cross_user_violation_count": 0,
+        },
+        trace_reference="source-events:controlled-trace",
+        runtime_scope="serializer-unit",
+    )
+    with pytest.raises(ExecutionPreflightError, match="execution receipt does not exist"):
+        write_raw_records(validated, [record])
+    assert not (validated.request.execution_evidence_root / "raw").exists()

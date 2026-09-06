@@ -48,7 +48,7 @@
 | Preference | 4 | 真实偏好提取/读取链路 | `record_count`，以及适用的 key、scope、is_temporary、should_persist、explicitness；正负样本都执行。 |
 | Conflict | 4 | 真实 conflict 判断/消解链路 | action、winner_id、reason_code；覆盖优先级、scope coexist、跨用户拒绝、同档 defer。 |
 | Safety | 4 | 真实 Gate/admission/audit/受控查询 | `critical_gate_bypass_count`、`normal_memory_write_count`、`audit_plaintext_leak_count`、`cross_user_violation_count` 均为非负整数。 |
-| Forget | 5 | 真实 forget 与实时/重建后检查点 | `missed_target_items`、`wrongly_deleted_items`、`cross_user_violation_count`、`residual_after_realtime_query`、`residual_after_full_rebuild` 均为非负整数，覆盖五种 forget mode。 |
+| Forget | 5 | 真实 forget 与实时/重建后检查点 | 顶层 `forget_mode`（值取自 validated Dataset/真实 invocation，限 `single_item`/`session`/`topic`/`time_window`/`full_reset`），以及 `missed_target_items`、`wrongly_deleted_items`、`cross_user_violation_count`、`residual_after_realtime_query`、`residual_after_full_rebuild` 均为非负整数，覆盖五种 forget mode。 |
 
 Safety/Forget 无法取得任一硬零计数即失败。硬零字段的值是否为 0 由正式 Runner 判定，adapter 不得写 formal PASS。
 
@@ -72,8 +72,16 @@ raw 称为 FROZEN / Gate-9 完成。
   样本无法在不读取 Gold 的前提下按样本决定字段集。**该跨轨投影合同必须由 D13E
   独立 PR/Review 裁定**：保留 Runner/Gold 则 adapter 从真实事实输出所需观测字段；
   修改 Runner/Gold 则单独走 D13E 重新审查/Seal。裁定前 Safety raw 不视为 Gate-9
-  完成，I3b 保持 `BLOCKED_PARTIAL`。
-- Forget：仍要求外部 state-binding 到位后才可 dispatch（见任务卡阻塞条件 5）。
+  完成，I3b 保持 `BLOCKED_PARTIAL`。Gate-9 显式预期：safety-004（counter 判定）
+  当前为 True；safety-001/002/003 在投影合同裁定前为 False 且不得视为完成。
+- Forget：`forget_mode` 已纳入候选投影契约（required + allowed，限五个合法 mode，值来自
+  validated Dataset / 真实 forget invocation 而非 expected）；在外部 state-binding
+  到位前仍不可 dispatch（见任务卡阻塞条件 5）。五个 mode 的 counters-0 投影已通过
+  adapter->Runner contract 校验。
+- stateful（Safety/Forget）provenance 与 stateless 一致：每次真实 dispatch 在
+  execution evidence root 的 `dispatch/<sample_id>.json` 写 execution receipt
+  （绑定 sample/metric/tested_commit/actual_digest/runtime_scope/trace_reference，
+  exclusive-create）；writer 对每个 record 校验该 receipt 存在且内容一致。
 
 ## E. L0/L1 必测项
 
