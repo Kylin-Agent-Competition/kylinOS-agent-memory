@@ -909,9 +909,16 @@ def _verify_sealed_source(artifact: Mapping[str, Any]) -> Path:
         raise ExecutionPreflightError("source DB SHA-256 does not match the artifact")
     if db_path.stat().st_size != int(source.get("db_size_bytes", -1)):
         raise ExecutionPreflightError("source DB size does not match the artifact")
-    if _sqlite_schema_fingerprint(db_path) != source.get("sqlite_schema_fingerprint"):
+    try:
+        fingerprint = _sqlite_schema_fingerprint(db_path)
+        integrity_ok = _sqlite_integrity_ok(db_path)
+    except sqlite3.Error as exc:
+        raise ExecutionPreflightError(
+            "source DB is not a valid sqlite database"
+        ) from exc
+    if fingerprint != source.get("sqlite_schema_fingerprint"):
         raise ExecutionPreflightError("source DB schema fingerprint does not match the artifact")
-    if not _sqlite_integrity_ok(db_path):
+    if not integrity_ok:
         raise ExecutionPreflightError("source DB integrity check failed")
     return db_path
 

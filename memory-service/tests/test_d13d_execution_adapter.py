@@ -1311,3 +1311,54 @@ def test_prepare_rejects_reused_runtime_root(tmp_path):
     adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
     with pytest.raises(ExecutionPreflightError, match="runtime root must not already exist"):
         adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+def test_prepare_rejects_missing_source_db(tmp_path):
+    import json
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha)
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["source_state"]["sealed_db_path"] = str(tmp_path / "missing.db")
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="source DB does not exist"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+
+def test_prepare_rejects_source_db_symlink(tmp_path):
+    import json, os
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    src, sha = _make_sealed_source(tmp_path)
+    link = tmp_path / "source-link.db"
+    try:
+        os.symlink(src, link)
+    except OSError as exc:  # Windows 无权限创建 symlink 时跳过
+        pytest.skip(f"cannot create symlink: {exc}")
+    art = _write_v2_artifact(tmp_path, src, sha)
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["source_state"]["sealed_db_path"] = str(link)
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="must not be a symlink"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+
+def test_prepare_rejects_non_sqlite_source(tmp_path):
+    import json, hashlib
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    real, _ = _make_sealed_source(tmp_path)
+    garbage = tmp_path / "garbage.db"
+    garbage.write_bytes(b"this is not a sqlite database at all")
+    art = _write_v2_artifact(tmp_path, real, hashlib.sha256(real.read_bytes()).hexdigest())
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["source_state"]["sealed_db_path"] = str(garbage)
+    data["source_state"]["sealed_db_sha256"] = hashlib.sha256(garbage.read_bytes()).hexdigest()
+    data["source_state"]["db_size_bytes"] = garbage.stat().st_size
+    data["source_state"]["sqlite_schema_fingerprint"] = "0" * 64
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="not a valid sqlite database"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
