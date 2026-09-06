@@ -1453,3 +1453,59 @@ def test_forget_handler_uow_bound_to_own_sample_runtime_db(tmp_path):
     assert state["d13e-forget-001"] == 1, "sample-001 自身 DB 应已软删目标"
     for sid in ("d13e-forget-002", "d13e-forget-003", "d13e-forget-004", "d13e-forget-005"):
         assert state[sid] == 0, f"{sid} DB 不应被 sample-001 的 handler 改动（late-binding）"
+
+
+def test_fts_observer_probe_realtime_rebuild(tmp_path):
+    """P2-B FTS：pre-delete probe 命中；realtime（删除消费）与 rebuild 后目标不再返回。"""
+    import hashlib
+    from db.engine import create_db_engine, init_schema
+    from db import repositories as repo
+    from retrieval.evaluation import evaluate_forget_residual, ForgetResidualPhase
+    from service.d13d_forget_observability import capture_forget_execution_snapshot
+    from evaluation.d13d_forget_fts_observer import D13DForgetFtsObserver
+
+    db_path = tmp_path / "run.db"
+    engine = create_db_engine(str(db_path))
+    init_schema(engine)
+    with engine.begin() as conn:
+        target = repo.insert_memory_entry(
+            conn, user_id="user_d13e_alpha", entry_type="knowledge",
+            content={"value": "prepared-target-alpha-001"}, confidence=0.9,
+        )
+        control = repo.insert_memory_entry(
+            conn, user_id="user_d13e_alpha", entry_type="knowledge",
+            content={"value": "prepared-control-alpha-002"}, confidence=0.9,
+        )
+        repo.insert_memory_entry(
+            conn, user_id="user_d13e_beta", entry_type="knowledge",
+            content={"value": "prepared-foreign-alpha-003"}, confidence=0.9,
+        )
+    observer = D13DForgetFtsObserver(
+        engine, user_id="user_d13e_alpha", fts_db=str(tmp_path / "fts.db")
+    )
+    observer.initialize()
+    confirmed = (f"knowledge:{target}",)
+    observer.probe_pre_delete(confirmed)  # pre-delete 必须命中
+
+    # 模拟 forget.execute：软删目标后先做 realtime（删除消费），再做 rebuild
+    with engine.begin() as conn:
+        count, _ = repo.soft_delete_resolved_targets(
+            conn, user_id="user_d13e_alpha", target_type="knowledge",
+            resolved_target_ids=[str(target)], forget_plan_id="fts-plan",
+        )
+    assert count == 1
+    rt = observer.realtime(confirmed)
+    assert rt.sample.confirmed_target_ids == confirmed
+    assert all(tid not in rt.sample.ranked_ids for tid in confirmed)
+    rb = observer.rebuild(confirmed)
+    assert all(tid not in rb.sample.ranked_ids for tid in confirmed)
+    # observer 计算真实 residual（不允许测试注入 0）
+    for phase, obs in ((ForgetResidualPhase.REALTIME_DELETE, rt),
+                       (ForgetResidualPhase.REBUILD, rb)):
+        report = evaluate_forget_residual(
+            [obs.sample], phase=phase, dataset_version=obs.dataset_version,
+            source_snapshot_id=obs.source_snapshot_id,
+            source_watermark=obs.source_watermark,
+        )
+        assert report.residual_target_count == 0
+    engine.dispose()
