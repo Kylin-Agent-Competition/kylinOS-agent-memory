@@ -9,7 +9,8 @@
 | 字段 | 值 |
 | --- | --- |
 | 任务 | D14D：L3 干净快照发布 Gate、安装生命周期、回退与证据闭环 |
-| 责任轨道 | D |
+| 责任轨道（original_owner → current_executor） | D → B（2026-09-06 接管） |
+| authorization_status | FULLY_AUTHORIZED_FOR_EXECUTION（执行/集成授权；不替代独立 Review/Seal——D/E Reviewer 独立批准权保留） |
 | 工作类型 | `release/test-infrastructure`；不修改业务、IPC、Schema、数据库或 SDK ABI |
 | 关联任务 | D13D 环境冻结、D13E 正式封存、D14A 发布包（PR #152）、D14B/C L3 发布回归 |
 | 输出边界 | D14B 只消费 `L3_READY` 的干净快照与发布包输入；本 PR 不代表 D14D PASS |
@@ -34,6 +35,8 @@ D14A_FORMAL_L3_GO = NO
 本 PR 禁止提前写入：`L3_READY`、`HOST_VERIFIED`、`production ready`、
 `release ready`、`D14D complete`。
 
+- 2026-09-06 B 轨接管后已完成 Phase0 状态同步与证据复验；本 PR 仍为 `DRAFT`，转 Ready for review 与独立 Review 待用户/D 轨操作（B 不代行独立 Review/Seal）。
+
 ## 2. 当前已完成内容（2026-09-06）
 
 ### 2.1 仲裁、代码线与 CI 收敛
@@ -50,6 +53,8 @@ D14A_FORMAL_L3_GO = NO
   后随提交仅 docs/CI）。
 - GitHub CI：`Repository Baseline Check` PASS、`D14A packaging + provenance L1` PASS。
 - L0/L1：PR head packaging + provenance 独立实测 `77 passed`（WSL；不替代麒麟 L3）。
+- 第四轮 Review（Reviewer D / Ducknesses，2026-09-06 04:21 UTC）已执行 @ `f24c29b…`：第三轮核心 BLOCKER/HIGH/MEDIUM 全部 CLOSED，返工增量（26e8c00→f24c29b）无新增 BLOCKER/HIGH/MEDIUM，残留仅 4 LOW；结论 `WAIT_FOR_MAIN_SYNC`（COMMENT，未 APPROVE）。
+- PR #152 已同步 main（2026-09-06）：D14A 当前候选 head = `8a044417847e0bf6a36b051dbcccf95e5c41b02c`（behind=0 / ahead=25，merge-base = main@`3e233af`）。`8a044417…` 仅为 D14A 当前候选 head，**不是** final tested_commit（后者未选定）；正式 G0/G2 冻结前不得写 final。
 
 仲裁明细与契约收敛记录已在 D14A 载体可见：
 - [00_d14a_release_package_contract.md](00_d14a_release_package_contract.md)（#152 分支，FROZEN v4）
@@ -92,6 +97,7 @@ D14A_FORMAL_L3_GO = NO
 - `trust_root_candidate.md`：Trust Root candidate + 重验证入口（PEM/Seal 属 W6）。
 - `raw/` + `checksums.txt`：kylin_vm_test.py 原始日志（首个 probe 因 sshd 未就绪
   BLOCKED，重试用新 run-id PASS，未覆盖）。
+- B 轨接管复验（2026-09-06）：`checksums.txt` 15 项逐文件 SHA-256 复验通过；复验发现 4 个 `raw/*.json` 曾因提交时 EOL 被规范化为 LF 与清单不符，已恢复为与 checksums.txt 一致的 CRLF 原字节（内容不变，逐项哈希复验 PASS；evidence 语义未改）。
 - 边界：ENV_PREPARED ≠ D14D PASS；未执行 FORMAL_L3
   install/restart/reboot/rollback/Release Gate。
 
@@ -99,7 +105,7 @@ D14A_FORMAL_L3_GO = NO
 
 | Gate | 状态 | 说明 |
 | --- | --- | --- |
-| G0 基线 | BLOCKED | 需正式 tested_commit（f24c29b）工作树干净、runtime/model 身份 G0 采集、D13D FROZEN |
+| G0 基线 | BLOCKED | 需正式 tested_commit（当前候选 head `8a044417…`；final 未选定）工作树干净、runtime/model 身份 G0 采集、D13D FROZEN |
 | G1 快照 | READY（起点） / NOT_RUN | r1 已 poweroff 待命；正式运行前从 r1 恢复 |
 | G2 包审计 | NOT_RUN（工具 READY） | 正式包须从 tested_commit 重建并冻结 tar/manifest/SHA256SUMS |
 | G3 安装 | NOT_RUN | 正式 run 未执行 |
@@ -114,7 +120,7 @@ D14A_FORMAL_L3_GO = NO
 
 | 编号 | 阻塞 | 责任人 / 动作 |
 | --- | --- | --- |
-| B1 | Ducknesses 第四轮 review 未执行；PR #152 `reviewDecision=CHANGES_REQUESTED`（head f24c29b） | D 主审 / Ducknesses 复审 |
+| B1 | PR #152 第四轮 review 已执行 @ `f24c29b…`（Reviewer D，2026-09-06）：核心 BLOCKER/HIGH/MEDIUM 已关闭，残留 4 LOW，结论 `WAIT_FOR_MAIN_SYNC`（COMMENT，未 APPROVE；GitHub 仍显示 CHANGES_REQUESTED＝第三轮遗留）。#152 已同步 main → head `8a044417…`（behind=0）。等待 final-head 独立 APPROVE（先清 4 LOW + 复跑 CI） | A 主审（LOW 清理）/ Reviewer D（final APPROVE） |
 | B2 | D13D FROZEN 未闭合；TD-061 Open（High）；无 Seal / 17 raw / Runner Gate 0–10 | D13D 实施方 / D Reviewer |
 | B3 | runtime/model 已按 r1 实测产出 host baseline（dependency_identity.json）；契约 vendor-lock / D Reviewer 会签仍 `HANDOFF_REQUIRED`，待正式 G0 采集升版 | D14D 执行（正式 run） |
 | B4 | 正式 package 未从 tested_commit 重建 / hash 未冻结 | A/D14D（G2/G3 解锁后） |
@@ -123,7 +129,7 @@ D14A_FORMAL_L3_GO = NO
 
 ## 5. 下一步（不在本 draft 内代执行）
 
-1. PR #152 完成第四轮 review 会签（或依最新 review 状态同步）；
+1. PR #152 final-head 独立 APPROVE：在 `8a044417…` 上清理剩余 4 LOW、复跑受影响 CI/L1 后，由 Reviewer D 对最终 head 作最终 APPROVE；D14D 正式 run 选定收敛 `tested_commit` 后重新打包并刷新 VM runtime evidence；
 2. D13D 在收敛 `tested_commit` 上闭合 FROZEN（TD-061、Seal、17 raw、Runner Gate 0–10）；
 3. 从 `tested_commit` 重建唯一正式发布包并冻结身份/hash；
 4. 从 r1 恢复并在预建、不可复用的 evidence root 上执行正式 G0–G9；
