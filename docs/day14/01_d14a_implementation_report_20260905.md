@@ -5,6 +5,11 @@
 > 回归待 D14D 干净快照 + D13D 冻结环境就绪后执行。
 > **状态：PACKAGE_IMPLEMENTATION_CANDIDATE**（按 D 主审 BLOCKER 5 口径；正式 L3 前不升
 > READY；BLOCKER C（见 §6）解除前不宣称 runtime/model identity 闭环）。
+> **2026-09-06 仲裁收口**：契约 §3/§6bis 按 D14D 人工裁决 D-03 统一为
+> `HANDOFF_REQUIRED`（SDK 全量 fail-closed；runtime/model 由正式 D14D G0 采集冻结后
+> 回填升版）；契约依 D-03/D-04 以 v4 升 **FROZEN**；正式 package version 依 D-05 固定
+> `0.1.0-d14a`。BLOCKER C 不再以 DEPENDENCY_BLOCKED 阻塞 packaging 代码线收敛，但仍
+> 未解除，不得宣称 runtime/model identity 闭环。
 > **证据新鲜性（执行时事实）**：当前 runtime evidence 相对本 PR HEAD
 > （`git rev-parse HEAD` 执行时事实）为 **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**——
 > 需重新打包 → 重算 hash → 真实 VM 重测并回填 `tested_runtime_commit` /
@@ -151,14 +156,18 @@ test_d14a_package_integrity.py、test_d14a_transactional_rollback.py 等）、
 4. **状态维持（不越级）**：保持 PACKAGE_IMPLEMENTATION_CANDIDATE；升 READY 须 D 主审
    对发布链 smoke + evidence 与 BLOCKER C 解除共同确认；不产生任何宿主环境已验证、
    三级验收通过或状态越级声明。
-5. **BLOCKER C — runtime/model 冻结身份缺失（fail-closed）**：runtime/model
+5. **BLOCKER C — runtime/model 冻结身份（2026-09-06 裁决 HANDOFF_REQUIRED）**：runtime/model
    identity/version/hash/vendor-frozen lock 尚无 D Reviewer 接受的可信外部冻结输入，
-   状态 **DEPENDENCY_BLOCKED / HANDOFF_REQUIRED**；不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence；
-   解除须外部可信冻结输入 + D Reviewer 会签，属独立后续事项，不在本任务解决。
+   状态 **HANDOFF_REQUIRED**（不再以 DEPENDENCY_BLOCKED 阻塞本 PR 收敛）；不得伪造
+   runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence；
+   解除须正式 D14D G0 采集冻结（或外部可信冻结输入 + D Reviewer 会签），属独立后续
+   事项，不在本任务解决。
 
 ---
 
 *D14A REWORK 修复完成；发布链 smoke 全 PASS，历史 evidence 从 `tested_runtime_commit`
 （e3d4b9d…）重建并归位；四身份语义与 BLOCKER C fail-closed 边界按 v4 收口表述；
+2026-09-06 仲裁后 BLOCKER C 状态为 HANDOFF_REQUIRED、契约升 FROZEN v4、正式 package
+version 固定 `0.1.0-d14a`；
 当前 runtime evidence 相对本 PR HEAD 为 RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED，
 正式重打包 → 重算 hash → 真实 VM 重测属后续独立事项，完成前保持候选态。*

@@ -239,7 +239,7 @@ bash systemd/verify.sh
 
 ## 11. 验收 Gate（D14A READY 前置）
 
-- [ ] contract FROZEN（D 主审会签）
+- [x] contract FROZEN（2026-09-06 D-03/D-04 仲裁会签 v4）
 - [ ] 本地/L1 package smoke PASS（build → install → start → real SDK smoke → restart → rollback）
 - [ ] dependency audit PASS（无开发路径/RPATH/not-found）
 - [ ] clean-VM L3：package-only install + real SDK + recovery + D13A 可比性能

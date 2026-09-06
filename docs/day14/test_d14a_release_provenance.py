@@ -36,12 +36,12 @@
    ExecStart 安装前缀 launcher；
 7. verify 架构：SDK 经独立 embedding server PID 实际加载校验
    （/proc/<embedding_pid>/maps 生效路径+hash），非 gateway 单 PID 自加载；
-8. Contract 保持 FROZEN_DRAFT，D Reviewer 会签前不得升 FROZEN；
+8. Contract 经 2026-09-06 D14D 仲裁 D-03/D-04 升 FROZEN v4（§3/§6bis 语义统一）；
 9. Report 保持 PACKAGE_IMPLEMENTATION_CANDIDATE；两文档全文不出现 HOST_VERIFIED、
    L3 PASS 字面量与状态越级声明；
-10. BLOCKER C fail-closed：DEPENDENCY_BLOCKED / HANDOFF_REQUIRED，且文档声明
-    不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟
-    evidence。
+10. BLOCKER C fail-closed：状态 HANDOFF_REQUIRED，且文档声明
+     不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟
+     evidence。
 """
 
 import re
@@ -353,12 +353,12 @@ def test_verify_embedding_pid_report():
     )
 
 
-# ---------- 8. Contract 状态：FROZEN_DRAFT，会签前不得升 FROZEN ----------
+# ---------- 8. Contract 状态：FROZEN v4（2026-09-06 仲裁会签） ----------
 
-def test_contract_status_frozen_draft():
+def test_contract_status_frozen_v4():
     _assert_all(
         _docs()["contract"],
-        ["FROZEN_DRAFT", "会签前不得升 FROZEN"],
+        ["FROZEN", "溯源收口 v4"],
         "contract",
     )
 
@@ -384,7 +384,6 @@ def test_blocker_c_fail_closed_contract():
         _docs()["contract"],
         [
             "BLOCKER C",
-            "DEPENDENCY_BLOCKED",
             "HANDOFF_REQUIRED",
             "fail-closed",
             "不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence",
@@ -398,7 +397,6 @@ def test_blocker_c_fail_closed_report():
         _docs()["report"],
         [
             "BLOCKER C",
-            "DEPENDENCY_BLOCKED",
             "HANDOFF_REQUIRED",
             "fail-closed",
             "不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence",
@@ -439,8 +437,8 @@ def _assert_documentation_consistency(cls: str):
     """按 live 判定的分类对两文档做一致性断言（fail-closed 负向断言全部生效）：
 
     - 任意分类下：重打包/重算 hash/重跑真实 VM 规则必须存在；report 必须为
-      PACKAGE_IMPLEMENTATION_CANDIDATE；contract 必须含 FROZEN_DRAFT + BLOCKER C
-      + DEPENDENCY_BLOCKED + HANDOFF_REQUIRED；两文档不得含 HOST_VERIFIED /
+      PACKAGE_IMPLEMENTATION_CANDIDATE；contract 必须含 FROZEN v4 + BLOCKER C
+      + HANDOFF_REQUIRED；两文档不得含 HOST_VERIFIED /
       L3 PASS / 旧『无 D14A packaging/runtime 行为文件变化』结论。
     - 接受真实 RUNTIME_EVIDENCE_STALE 为已声明中间态（PASS），不因"确实 stale"
       红门禁；错误分类、越级声明、伪造相等/伪造身份、缺失重打包/VM 规则仍失败。
@@ -458,12 +456,12 @@ def _assert_documentation_consistency(cls: str):
     )
     _assert_all(
         texts["contract"],
-        ["FROZEN_DRAFT", "BLOCKER C", "DEPENDENCY_BLOCKED", "HANDOFF_REQUIRED"],
+        ["FROZEN", "BLOCKER C", "HANDOFF_REQUIRED"],
         "contract",
     )
     _assert_all(
         texts["report"],
-        ["BLOCKER C", "DEPENDENCY_BLOCKED", "HANDOFF_REQUIRED"],
+        ["BLOCKER C", "HANDOFF_REQUIRED"],
         "report",
     )
     # 分类具体语义（供日志记录；不额外断言——分类本身由 live 事实决定）。
