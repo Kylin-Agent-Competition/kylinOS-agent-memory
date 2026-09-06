@@ -22,8 +22,8 @@
 “正式 L3 / Release Gate”互相锁死：
 
 ```text
-D14D_ENV_PREPARED = READY（r2 Route A，2026-09-06；fail-closed clean Gate PASS；待 CI/复审确认）
-D14D_PHASE0       = r2 ACTIVE（r1 SUPERSEDED；H1/M1 由 r2 evidence 关闭）
+D14D_ENV_PREPARED = READY（r3 ACTIVE；fail-closed Gate 脚本 + 正/负向证据；待 CI/复审确认）
+D14D_PHASE0       = r3 ACTIVE（r1/r2 SUPERSEDED 历史；H1 由 r3 可审计 fail-closed 证据关闭）
 D14D_FORMAL_L3    = BLOCKED / NOT_STARTED（不是 L3_READY）
 L3                = NOT_STARTED
 D14A_FORMAL_L3_GO = NO
@@ -118,15 +118,15 @@ D14A_FORMAL_L3_GO = NO
 
 | ID | 级别 | 问题 | 处理 |
 |---|---|---|---|
-| H1 | HIGH | r1 clean-state residue 与 summary 矛盾，ENV_PREPARED=READY 证据不足 | CLOSED（r2 Route A）：清 7 个 build 残留 → `d14d-clean-base-20260906-r2` → fail-closed Gate PASS → W5a/W5b/deps 重跑 → 新 evidence root |
-| M1 | MEDIUM | `checksums.txt` 14 条，缺 `.gitattributes` | CLOSED（r2）：新 root `checksums.txt` 13/13 含 `.gitattributes`，file-count==entry-count，`sha256sum -c` PASS |
+| H1 | HIGH | r1 clean-state residue 与 summary 矛盾，ENV_PREPARED=READY 证据不足 | CLOSED（r3 最终）：r2 Route A 基础 + r3 提交固定 `clean_state_gate.sh`（SHA `f90939d1…`）并保存真实调用：正向 `/home/yanmouren778` PASS/exit 0；受控注入 build → FAIL/exit 1（负向验证） |
+| M1 | MEDIUM | `checksums.txt` 14 条，缺 `.gitattributes` | CLOSED（r3）：checksums 16/16 含 `.gitattributes`；r3 `evidence_root_policy.md` §5 交接指向 r3 ACTIVE（不再指向 r1） |
 | M2 | MEDIUM | PR Body / GitHub 元数据 / head 漂移 | CLOSED：标题去 Draft；PR Body/文档同步 REWORK→r2；待本批 commit 后最终同步 |
 | L1 | LOW | 两个 #152 相对链接在 #159 404 | 已修：固定到 #152 head `6ae281a0` 的完整 URL |
 | L2 | LOW | `dist_id` 被写成 r1 实测（os-release） | 已修：`dist_id` 标 REFERENCE_ONLY / HISTORICAL，正式 G0 重采 |
 
-### 2.5 r2 evidence（Route A · 2026-09-06）
+### 2.5 r2 evidence（Route A · 2026-09-06；中间证据，已被 r3 取代为 ACTIVE）
 
-- 路径：`evidence/phase0/d14d-env-prepared-20260906-r2/`（新 root；r1 root 保持 SUPERSEDED 历史，未改写）。
+- 路径：`evidence/phase0/d14d-env-prepared-20260906-r2/`（中间证据 root，现 SUPERSEDED 历史，未改写）。
 - snapshot：`d14d-clean-base-20260906-r2`（UUID `c5e3c3de-1c70-4f58-b22a-ab07b2d2d56d`），父链 20-btrack-test-deps-20260821 → D14D → d14d-r2-prep-before-provision-20260906；VM `Kylin-V11-2603-BTrack-Base`（UUID `103fb8a8-…`）。
 - Route A（D 轨授权，2026-09-06）：删除 `/home/yanmouren778` 下 7 个 build 残留；维护模式安装冻结版 `libkylin-coreai-embedding 1.2.0.0-0k0.4` / `kylin-ai-runtime 1.2.0.4-0k0.1` / `kylin-gte-base-model 1.0.0.1-0k0.9` / `kylin-ai-subsystem 1.3.0.1-0k0.1` / `kylin-ai-parser-extension 1.2.0.0-0k0.4` 并提交持久层；冷启动 r2 后 normal 模式复验通过。
 - clean-state Gate（fail-closed）：probe 全 0 → `CLEAN_STATE_PASS`（raw `envprep_probe_20260906_r2.log`）。
@@ -134,6 +134,18 @@ D14A_FORMAL_L3_GO = NO
 - 差异登记：kernel 为 `6.6.0-63-generic`（Route A 新基础；superseded r1 记录为不同 VM 的 `6.6.0-76`）；VM/snapshot 身份按本环境重新冻结。
 - checksums：`checksums.txt` = 13 条，覆盖含 `.gitattributes` 在内的全部 13 个 regular files（root 共 14 个，排除自身）；`file-count == entry-count`，逐文件 SHA-256 复验 PASS。
 - VM 状态：证据采集后优雅关机，`poweroff @ d14d-clean-base-20260906-r2`。
+
+### 2.6 r3 ACTIVE evidence（第三轮 Review 修正 · 2026-09-06）
+
+- 路径：`evidence/phase0/d14d-env-prepared-20260906-r3/`（**ACTIVE** root；r1/r2 均为 SUPERSEDED 历史，未改写）。
+- 第三轮 Review（Review ID 5124446136 后续，2026-09-06）要求：r2 raw 未保存可复核的 fail-closed probe 脚本/命令，且 r2 内 `evidence_root_policy.md` §5 交接仍指向 r1。因 root 不可改写，按 immutable 纪律新增 r3 修正版（绑定同一 r2 snapshot `c5e3c3de…`）。
+- 固定 Gate 脚本：`clean_state_gate.sh`（SHA `f90939d1b19c74ea06c182516ab21f7b0efc8791657a1945c7830345e8adc9cf`，提交于 r3 root 内）。
+- 正向运行（ROOT=/home/yanmouren778）：8 类 count 全 0 → `CLEAN_STATE_PASS` / exit 0（raw `envprep_probe_20260906_r3.log`）。
+- 负向验证（受控注入 build，临时 root，测后删除，不污染 /home）：`build_dir_count=1` → `CLEAN_STATE_FAIL` / exit 1（raw `envprep_neg_20260906_r3.log`）。
+- identity 复采：SDK `028e7099…`、runtime `b3f83fc9…`、model ONNX `cef0fc76…`；installed pkgs = 2030（重采无 grep 错误）。
+- policy：`evidence_root_policy.md` §5 交接指向本 r3 ACTIVE root（D13D I3d / A package 消费入口）。
+- checksums：16/16 全文件闭环（含 `.gitattributes` 与 `clean_state_gate.sh`）；`file-count == entry-count`，逐文件 SHA-256 复验 PASS。
+- VM 状态：采集后关机并恢复 r2 snapshot，`poweroff @ d14d-clean-base-20260906-r2`（快照未变）。
 
 ## 3. 正式 Gate 状态（阶段二）
 
