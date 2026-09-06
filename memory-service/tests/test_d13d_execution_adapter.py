@@ -957,18 +957,20 @@ def _gold_expected_by_sample():
 MUST_MATCH_TRUE = {
     "d13e-pref-001",
     "d13e-pref-002",
+    "d13e-pref-003",
     "d13e-pref-004",
     "d13e-conflict-001",
     "d13e-conflict-002",
     "d13e-conflict-003",
     "d13e-conflict-004",
 }
-# pref-003: the current provider extracts zero candidates while the frozen D13E
-# Gold expects one tool-selection preference.  This is a registered observation
-# gap (Dataset/pipeline alignment), not a schema blocker; the Runner correctly
-# computes it as False and we pin that outcome so it is not silently treated as
-# complete.
-KNOWN_OBSERVATION_GAP_FALSE = {"d13e-pref-003"}
+# pref-003 (d13e-pref-003): the production false negative was closed by the
+# explicit tool-selection marker fix (PREFERENCE_EXPLICIT_PATTERN now admits
+# 优先使用/优先用/优先选择/首选/默认使用/默认用), so no observation gaps
+# remain and the sample must satisfy the frozen Runner contract (True).
+KNOWN_OBSERVATION_GAP_FALSE: set[str] = set()
+
+
 def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
     tmp_path, safety_environment
 ):
@@ -977,10 +979,11 @@ def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
     Gold is read here only to drive the Runner's per-sample contract (the same
     way formal Gate 9 consumes raw); it is never used to generate ``actual``.
     Preference/Conflict samples that must satisfy the contract are asserted
-    True, the registered observation gap is asserted False, and Safety samples
-    are asserted shape-legal but explicitly NOT treated as complete because the
-    sensitivity/admission/operation projection contract is still pending a D13E
-    Runner/Gold decision (schema status CANDIDATE_PENDING_D13E_REVIEW).
+    True (the pref-003 observation gap is closed by the production fix), and
+    Safety samples are asserted shape-legal but explicitly NOT treated as
+    complete because the sensitivity/admission/operation projection contract is
+    still pending a D13E Runner/Gold decision (schema status
+    CANDIDATE_PENDING_D13E_REVIEW).
     """
     validated, binding = safety_environment
     assert D13E_RAW_RESULT_SCHEMA_STATUS == "CANDIDATE_PENDING_D13E_REVIEW"

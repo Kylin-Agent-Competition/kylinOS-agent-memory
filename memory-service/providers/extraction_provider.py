@@ -81,6 +81,7 @@ from providers.knowledge_rules import (
 )
 from providers.preference_rules import (
     PREFERENCE_EXPLICIT_PATTERN,
+    match_explicit_tool_selection,
     PREFERENCE_INSTRUCTION_PATTERN,
     classify_preference_category,
     classify_temporality,
@@ -361,11 +362,15 @@ def _extract_preferences_rules(event: TurnFinalizedEvent,
     D7：类别识别（TABLE 19）、临时/长期（TABLE 20）、scope 推导（E 轨 §2.9）、
     类别键派生、显式置信度基线——全部来自 providers/preference_rules.py。
 
-    两阶段规则入口（PR #36 HIGH-01 修复）：
-    1. 显式偏好词（PREFERENCE_EXPLICIT_PATTERN，如 我喜欢/以后/希望…）
-    2. 显式词未命中时，尝试指令式表达（PREFERENCE_INSTRUCTION_PATTERN，
-       如 TABLE 20 原句 "这次只用三句话回答"——时态限定词 + 指令动词）
-    两阶段均非硬编码特判；阶段 1 命中时不再执行阶段 2（避免重复候选）。
+    阶段化规则入口：
+    1. 通用显式偏好词（PREFERENCE_EXPLICIT_PATTERN：我喜欢/以后/希望…）；
+    2. 显式工具选择偏好（match_explicit_tool_selection：句首 marker + 真实工具
+       语境，如 "优先使用 git 命令行工具"；marker 单独命中不构成 admission，
+       事实/描述句不会进入——D13D Phase 2 pref-003 Review MEDIUM-01）；
+    3. 通用显式词与工具选择均未命中时，尝试指令式表达
+       （PREFERENCE_INSTRUCTION_PATTERN：时态限定词 + 指令动词，
+        TABLE 20 原句 "这次只用三句话回答"）。
+    各阶段均非硬编码特判；前一阶段命中即返回（避免重复候选）。
 
     R5 安全：候选 value/evidence 若命中 high/critical 敏感原文 → 拒绝
     （不进入正常候选；由调用方决定审计）。
@@ -380,7 +385,14 @@ def _extract_preferences_rules(event: TurnFinalizedEvent,
             if cand is not None:
                 candidates.append(cand)
         return candidates
-    # TABLE 20 临时指令式表达：显式偏好词未命中时启用指令模式
+    # 显式工具选择偏好（句首 marker + 工具语境；marker 单独不构成 admission）
+    tool_value = match_explicit_tool_selection(text)
+    if tool_value is not None:
+        cand = _build_preference_rule_candidate(tool_value, text, source_event_id)
+        if cand is not None:
+            candidates.append(cand)
+        return candidates
+    # TABLE 20 临时指令式表达：显式偏好词/工具选择均未命中时启用指令模式
     for m in PREFERENCE_INSTRUCTION_PATTERN.finditer(text):
         cand = _build_preference_rule_candidate(
             m.group(1), text, source_event_id)

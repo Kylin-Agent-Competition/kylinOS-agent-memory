@@ -24,6 +24,7 @@ from providers.preference_rules import (
     has_long_term_marker,
     has_temporary_marker,
     is_explicit_expression,
+    is_explicit_tool_selection_preference,
     rule_confidence,
 )
 
@@ -163,6 +164,34 @@ def test_explicitness():
     assert is_explicit_expression("以后都用中文")
     assert not is_explicit_expression("今天天气不错")
     assert not is_explicit_expression("")
+
+
+def test_explicitness_tool_selection_markers():
+    """显式工具选择偏好 = 句首 marker + 真实工具语境（非仅 marker）。
+
+    覆盖：优先使用/优先用/优先选择/首选/默认使用/默认用 + 工具 token。
+    """
+    for text in ("优先使用 git 命令行工具", "优先用 git 命令行工具",
+                 "优先选择 python 脚本", "首选用 vim 编辑",
+                 "默认使用命令行工具", "默认用浏览器打开"):
+        assert is_explicit_tool_selection_preference(text), text
+        assert not is_explicit_expression(text), text  # marker 不入通用显式
+
+
+def test_explicitness_tool_selection_fact_or_description_is_not_preference():
+    """Review MEDIUM-01：事实/配置/选项/方案描述即使含 marker 也不是偏好。"""
+    for text in ("系统默认使用 UTF-8 编码", "Git 默认使用 master 分支",
+                 "首选项是自动保存", "我们首选方案 A"):
+        assert not is_explicit_tool_selection_preference(text), text
+        assert not is_explicit_expression(text), text
+
+
+def test_explicitness_bare_priority_marker_is_not_enough():
+    """负向：裸“优先/先”不构成显式工具选择，不得误判为 explicit。"""
+    for text in ("优先保证安全，再执行操作", "优先考虑风险再决定",
+                 "先确保权限再执行", "今天天气不错", ""):
+        assert not is_explicit_expression(text), text
+        assert not is_explicit_tool_selection_preference(text), text
 
 
 # ── 规则置信度基线 ──
