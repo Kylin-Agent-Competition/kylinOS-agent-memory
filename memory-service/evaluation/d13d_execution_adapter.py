@@ -35,6 +35,11 @@ from gateway.preference_handlers import register_preference_handlers
 from gateway.registry import HandlerRegistry, RequestContext
 from providers.extraction_provider import ExtractionProvider, TurnFinalizedEvent
 from service.conflict_resolution_policy import ConflictResolutionPolicy, ConflictSide
+from evaluation.d13d_forget_state_binding import verify_artifact_file
+from service.d13d_forget_observability import (
+    capture_forget_execution_snapshot,
+    observe_forget_execution,
+)
 from service.d13d_safety_observability import observe_safety_execution
 
 
@@ -163,6 +168,7 @@ class ExecutionRequest:
     testset_sha256: str
     execution_evidence_root: Path
     state_root: Path
+    binding_artifact_path: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -204,6 +210,11 @@ def _validate_isolation(request: ExecutionRequest) -> ExecutionRequest:
         request.execution_evidence_root, label="execution_evidence_root"
     )
     state_root = _canonical_path(request.state_root, label="state_root")
+    binding_artifact_path = (
+        _canonical_path(request.binding_artifact_path, label="binding_artifact_path")
+        if request.binding_artifact_path is not None
+        else None
+    )
     roots = {
         "execution_evidence_root": execution_evidence_root,
         "state_root": state_root,
@@ -225,6 +236,7 @@ def _validate_isolation(request: ExecutionRequest) -> ExecutionRequest:
         tested_commit=request.tested_commit,
         testset_path=_canonical_path(request.testset_path, label="testset_path"),
         testset_sha256=request.testset_sha256,
+        binding_artifact_path=binding_artifact_path,
         execution_evidence_root=execution_evidence_root,
         state_root=state_root,
     )
@@ -977,6 +989,178 @@ def dispatch_safety_sample(
         runtime_scope=binding.binding_id,
     )
 
+
+def _tagged_confirmed(mode: str, resolved: list[str]) -> list[str]:
+    """把 preview 解析结果规范成 observer 需要的 tagged 目标 ID。
+
+    single_item/session/topic/time_window 解析为裸 memory_entries.id；
+    full_reset 已带 knowledge:/preference: 标签。
+    """
+    if mode == "full_reset":
+        return list(resolved)
+    return [f"knowledge:{rid}" for rid in resolved]
+
+
+def dispatch_forget_sample(
+    validated: ValidatedExecution,
+    sample_id: str,
+    *,
+    binding: ValidatedRuntimeBinding,
+    retrieval_observations: Callable[..., Any] | None = None,
+) -> ObservedRawRecord:
+    """Run one Forget sample through the real production preview/execute chain.
+
+    - Binding 必须携带被冻结的真实 forget.preview / forget.execute handler
+      （validation profile 注册，见 build_runtime_binding）。
+    - 必须提供 Forget state binding artifact（ExecutionRequest.
+      binding_artifact_path）：先静态校验，且 applicable_source_commit 必须等于
+      validated tested_commit。
+    - confirmation token 由真实 forget.preview 一次性返回，execute 只消费该凭据；
+      adapter 不创建/修补目标、不从 Dataset 推导 DB ID、不伪造 observation。
+    - retrieval_observations(validated, sample_id, binding) 必须返回
+      (realtime, rebuild) 两个真实 ForgetRetrievalObservation；缺失即 fail-closed，
+      不写 canonical raw。
+    """
+    sample = _sample_by_id(validated, sample_id)
+    if sample["metric"] != "forget":
+        raise ExecutionPreflightError("sample is not a forget metric")
+    _validate_binding(binding, validated)
+    artifact_path = validated.request.binding_artifact_path
+    if artifact_path is None:
+        raise ExecutionPreflightError(
+            "forget dispatch requires the D13D forget state binding artifact"
+        )
+    ok, errors = verify_artifact_file(str(artifact_path))
+    if not ok:
+        raise ExecutionPreflightError(
+            "forget state binding artifact failed validation: "
+            + "; ".join(errors[:3])
+        )
+    artifact = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
+    if artifact.get("applicable_source_commit") != validated.request.tested_commit:
+        raise ExecutionPreflightError(
+            "forget state binding applicable_source_commit does not match tested_commit"
+        )
+    entry = next(
+        (s for s in artifact.get("samples", []) if s.get("sample_id") == sample_id), None
+    )
+    if entry is None:
+        raise ExecutionPreflightError(f"binding artifact has no entry for {sample_id}")
+
+    mode = entry["forget_mode"]
+    user_id = entry["user_id"]
+    foreign_user_id = "user_d13e_beta"
+    selector = entry.get("target_selector") or sample["input"].get("target_selector") or {}
+    target_selector = json.dumps(selector, ensure_ascii=False)
+    target_id = target_session_id = target_topic = target_time_range = None
+    target_type = "knowledge"
+    if mode == "single_item":
+        target_id = str(entry["target_identity"]["db_id"])
+    elif mode == "session":
+        target_session_id = entry["target_identity"]["session_id"]
+    elif mode == "topic":
+        target_topic = entry["target_identity"]["topic_key"]
+    elif mode == "time_window":
+        target_time_range = json.dumps(selector, ensure_ascii=False)
+    elif mode == "full_reset":
+        target_type = "all"
+    else:
+        raise ExecutionPreflightError(f"unsupported forget mode: {mode}")
+
+    forget_plan_id = f"d13d-plan-{sample_id}-{secrets.token_hex(6)}"
+    trace_id = f"d13d-forget-{sample_id}"
+    session_id = target_session_id or f"d13d-session-{sample_id}"
+
+    def _ctx(method: str, idem: str) -> RequestContext:
+        return RequestContext(
+            request_id=f"d13d-request-{sample_id}",
+            trace_id=trace_id,
+            method=method,
+            deadline_ms=10000,
+            user_id=user_id,
+            session_id=session_id,
+            idempotency_key=idem,
+        )
+
+    preview_payload = {
+        "forget_plan_id": forget_plan_id,
+        "user_id": user_id,
+        "forget_mode": mode,
+        "target_selector": target_selector,
+        "target_type": target_type,
+        "target_id": target_id,
+        "target_session_id": target_session_id,
+        "target_topic": target_topic,
+        "target_time_range": target_time_range,
+        "requires_confirmation": True,
+        "is_cascade": False,
+        "delete_mode": "soft",
+    }
+    try:
+        with binding.engine.begin() as conn:
+            preview = binding.forget_preview_handler(
+                preview_payload, _ctx("forget.preview", f"d13d-preview-{sample_id}")
+            )
+            confirmation_token = preview.get("confirmation_token")
+            resolved = list(preview.get("resolved_target_ids") or [])
+            if not confirmation_token or not resolved:
+                raise ExecutionPreflightError(
+                    "forget.preview did not return a one-time confirmation credential / targets"
+                )
+            confirmed = _tagged_confirmed(mode, resolved)
+            snapshot = capture_forget_execution_snapshot(
+                conn,
+                user_id=user_id,
+                foreign_user_id=foreign_user_id,
+                confirmed_target_ids=confirmed,
+            )
+        # execute 使用真实 preview 凭据（独立事务，预删除快照之后）
+        with binding.engine.begin() as conn:
+            binding.forget_execute_handler(
+                {
+                    "forget_plan_id": forget_plan_id,
+                    "user_id": user_id,
+                    "confirmation_token": confirmation_token,
+                },
+                _ctx("forget.execute", f"d13d-execute-{sample_id}"),
+            )
+        if retrieval_observations is None:
+            raise ExecutionPreflightError(
+                "forget dispatch requires a real retrieval observations provider"
+            )
+        realtime_observation, rebuild_observation = retrieval_observations(
+            validated, sample_id, binding
+        )
+        with binding.engine.connect() as conn:
+            observed = observe_forget_execution(
+                conn,
+                snapshot=snapshot,
+                realtime_observation=realtime_observation,
+                rebuild_observation=rebuild_observation,
+            )
+    except ExecutionPreflightError:
+        raise
+    except Exception as exc:  # noqa: BLE001 -- dispatch envelope keeps errors safe
+        raise ExecutionPreflightError("forget dispatch failed") from exc
+
+    actual = {"forget_mode": mode, **observed}
+    trace_reference = f"dispatch/{sample_id}.json"
+    _write_execution_receipt(
+        validated,
+        sample_id=sample_id,
+        metric="forget",
+        actual=actual,
+        entrypoint="dispatch_forget_sample",
+        runtime_scope=binding.binding_id,
+        trace_reference=trace_reference,
+    )
+    return _raw_record(
+        sample_id=sample_id,
+        metric="forget",
+        actual=actual,
+        trace_reference=trace_reference,
+        runtime_scope=binding.binding_id,
+    )
 
 def _write_text_file(path: Path, content: str) -> None:
     """I/O seam for raw writes (injected by the atomicity fault test)."""

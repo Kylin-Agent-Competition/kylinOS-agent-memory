@@ -24,6 +24,7 @@ from evaluation.d13d_execution_adapter import (
     ValidatedRuntimeBinding,
     _record_to_line,
     build_runtime_binding,
+    dispatch_forget_sample,
     dispatch_safety_sample,
     dispatch_stateless_sample,
     validate_execution_request,
@@ -785,6 +786,38 @@ def test_runtime_binding_fails_closed_when_forget_handler_unregistered(safety_en
             binding=binding,
             foreign_user_id="user_d13e_beta",
         )
+
+
+def _forget_validated_and_binding(tmp_path, artifact_path):
+    validated = validate_execution_request(
+        _request(tmp_path, binding_artifact_path=artifact_path), git_runner=_git_runner
+    )
+    binding = build_runtime_binding(validated)
+    return validated, binding
+
+
+def test_forget_dispatch_requires_binding_artifact(safety_environment):
+    """P2-B：没有 Forget state binding artifact 必须 fail-closed。"""
+    validated, binding = safety_environment
+    with pytest.raises(ExecutionPreflightError, match="requires the D13D forget state binding artifact"):
+        dispatch_forget_sample(validated, "d13e-forget-001", binding=binding)
+
+
+def test_forget_dispatch_rejects_artifact_commit_mismatch(tmp_path):
+    """P2-B：artifact applicable_source_commit 必须等于 tested_commit。"""
+    artifact = REPOSITORY_ROOT / "evaluation" / "d13e" / "D13D_FORGET_STATE_BINDING_V1.json"
+    assert artifact.exists()
+    validated, binding = _forget_validated_and_binding(tmp_path, artifact)
+    with pytest.raises(ExecutionPreflightError, match="does not match tested_commit"):
+        dispatch_forget_sample(validated, "d13e-forget-001", binding=binding)
+
+
+def test_forget_dispatch_fails_closed_when_forget_handler_unregistered(safety_environment):
+    """P2-B：forget.execute 被注销后 dispatch 必须 fail-closed（binding 身份冻结）。"""
+    validated, binding = safety_environment
+    binding.registry.unregister("forget.execute")
+    with pytest.raises(ExecutionPreflightError, match="replaced or unregistered"):
+        dispatch_forget_sample(validated, "d13e-forget-001", binding=binding)
 
 
 def _other_binding(tmp_path):
