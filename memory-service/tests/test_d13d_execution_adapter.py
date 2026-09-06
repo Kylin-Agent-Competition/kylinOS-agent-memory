@@ -798,33 +798,54 @@ def test_runtime_binding_fails_closed_when_forget_handler_unregistered(safety_en
         )
 
 
-def _forget_validated_and_binding(tmp_path, artifact_path):
+def _prepared_forget_env(tmp_path, *, profile="d13d-validation-profile-v2"):
+    """构造 R5 sealed source + v2 artifact + 5 个 restored runtime bindings。"""
+    import json
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha)
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["retrieval_profile"] = profile
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     validated = validate_execution_request(
-        _request(tmp_path, binding_artifact_path=artifact_path), git_runner=_git_runner
+        _request(tmp_path, binding_artifact_path=art), git_runner=_git_runner
     )
-    binding = build_runtime_binding(validated)
-    return validated, binding
+    bindings = adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+    return validated, art, bindings
 
 
-def test_forget_dispatch_requires_binding_artifact(safety_environment):
-    """P2-B：没有 Forget state binding artifact 必须 fail-closed。"""
+def test_forget_dispatch_requires_matching_sample_binding(safety_environment):
+    """R6：dispatch 的 sample 必须等于 binding.sample_id（缺省/错配 fail-closed）。"""
     validated, binding = safety_environment
-    with pytest.raises(ExecutionPreflightError, match="requires the D13D forget state binding artifact"):
+    with pytest.raises(ExecutionPreflightError, match="sample_id does not match"):
         dispatch_forget_sample(validated, "d13e-forget-001", binding=binding)
 
 
-def test_forget_dispatch_rejects_artifact_commit_mismatch(tmp_path):
-    """P2-B：artifact applicable_source_commit 必须等于 tested_commit。"""
-    artifact = REPOSITORY_ROOT / "evaluation" / "d13e" / "D13D_FORGET_STATE_BINDING_V1.json"
-    assert artifact.exists()
-    validated, binding = _forget_validated_and_binding(tmp_path, artifact)
-    with pytest.raises(ExecutionPreflightError, match="does not match tested_commit"):
-        dispatch_forget_sample(validated, "d13e-forget-001", binding=binding)
+def test_forget_dispatch_rejects_wrong_sample_binding(tmp_path):
+    """R6/F13：binding 为 d13e-forget-001，dispatch d13e-forget-002 → fail-closed。"""
+    validated, _art, bindings = _prepared_forget_env(tmp_path)
+    with pytest.raises(ExecutionPreflightError, match="sample_id does not match"):
+        dispatch_forget_sample(
+            validated, "d13e-forget-002", binding=bindings["d13e-forget-001"]
+        )
 
 
-def test_forget_dispatch_fails_closed_when_forget_handler_unregistered(safety_environment):
-    """P2-B：forget.execute 被注销后 dispatch 必须 fail-closed（binding 身份冻结）。"""
-    validated, binding = safety_environment
+def test_forget_dispatch_fails_closed_when_retrieval_profile_not_approved(tmp_path):
+    """R8/F18：retrieval_profile 不在 closed allowlist → preview 前 fail-closed。"""
+    validated, _art, bindings = _prepared_forget_env(
+        tmp_path, profile="unknown-profile-v9"
+    )
+    with pytest.raises(ExecutionPreflightError, match="no approved retrieval observation profile"):
+        dispatch_forget_sample(
+            validated, "d13e-forget-001", binding=bindings["d13e-forget-001"]
+        )
+
+
+def test_forget_dispatch_fails_closed_when_forget_handler_unregistered(tmp_path):
+    """R6/F19：forget.execute 被注销后 dispatch 必须 fail-closed（binding 身份冻结）。"""
+    validated, _art, bindings = _prepared_forget_env(tmp_path)
+    binding = bindings["d13e-forget-001"]
     binding.registry.unregister("forget.execute")
     with pytest.raises(ExecutionPreflightError, match="replaced or unregistered"):
         dispatch_forget_sample(validated, "d13e-forget-001", binding=binding)

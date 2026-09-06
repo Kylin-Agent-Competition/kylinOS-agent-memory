@@ -164,6 +164,12 @@ _FORBIDDEN_EVALUATION_TOKENS = frozenset(
 
 _ENGINE_BINDING_TOKENS: dict[int, str] = {}
 
+# R8：Forget realtime/rebuild observation provider closed allowlist。
+# key = artifact retrieval_profile；value = callable(binding, artifact, sample_id)
+# -> (realtime_observation, rebuild_observation)。空字典 = 尚未批准任何 profile，
+# dispatch 遇到未知/缺失 profile 一律 fail-closed，禁止调用方注入任意 Callable。
+OBSERVATION_PROFILES: dict[str, Any] = {}
+
 
 class ExecutionPreflightError(ValueError):
     """An invocation is not safe to dispatch against an isolated environment."""
@@ -1264,46 +1270,38 @@ def dispatch_forget_sample(
     sample_id: str,
     *,
     binding: ValidatedRuntimeBinding,
-    retrieval_observations: Callable[..., Any] | None = None,
 ) -> ObservedRawRecord:
     """Run one Forget sample through the real production preview/execute chain.
 
-    - Binding 必须携带被冻结的真实 forget.preview / forget.execute handler
-      （validation profile 注册，见 build_runtime_binding）。
-    - 必须提供 Forget state binding artifact（ExecutionRequest.
-      binding_artifact_path）：先静态校验，且 applicable_source_commit 必须等于
-      validated tested_commit。
+    - binding 必须是本 sample 的 restored runtime binding（R5）：sample_id 匹配 +
+      provenance（artifact sha / state_prep commit / source sha / initial sha / restore id）。
+    - artifact 必须是 v2（ExecutionRequest.binding_artifact_path）；HEAD == tested_commit
+      由 preflight 锁定；不再存在单一 applicable_source_commit equality。
     - confirmation token 由真实 forget.preview 一次性返回，execute 只消费该凭据；
       adapter 不创建/修补目标、不从 Dataset 推导 DB ID、不伪造 observation。
-    - retrieval_observations(validated, sample_id, binding) 必须返回
-      (realtime, rebuild) 两个真实 ForgetRetrievalObservation；缺失即 fail-closed，
-      不写 canonical raw。
+    - realtime/rebuild observation 只来自 closed allowlist OBSERVATION_PROFILES[
+      artifact.retrieval_profile]；缺失/未知 profile 即 fail-closed，不写 canonical raw。
     """
     sample = _sample_by_id(validated, sample_id)
     if sample["metric"] != "forget":
         raise ExecutionPreflightError("sample is not a forget metric")
+    if binding.sample_id != sample_id:
+        raise ExecutionPreflightError(
+            "forget runtime binding sample_id does not match the dispatched sample"
+        )
     _validate_binding(binding, validated)
-    artifact_path = validated.request.binding_artifact_path
-    if artifact_path is None:
-        raise ExecutionPreflightError(
-            "forget dispatch requires the D13D forget state binding artifact"
-        )
-    ok, errors = verify_artifact_file(str(artifact_path))
-    if not ok:
-        raise ExecutionPreflightError(
-            "forget state binding artifact failed validation: "
-            + "; ".join(errors[:3])
-        )
-    artifact = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
-    if artifact.get("applicable_source_commit") != validated.request.tested_commit:
-        raise ExecutionPreflightError(
-            "forget state binding applicable_source_commit does not match tested_commit"
-        )
+    artifact = _load_forget_artifact_v2(validated.request.binding_artifact_path)
     entry = next(
         (s for s in artifact.get("samples", []) if s.get("sample_id") == sample_id), None
     )
     if entry is None:
         raise ExecutionPreflightError(f"binding artifact has no entry for {sample_id}")
+    builder = OBSERVATION_PROFILES.get(artifact.get("retrieval_profile"))
+    if builder is None:
+        raise ExecutionPreflightError(
+            "no approved retrieval observation profile: "
+            + str(artifact.get("retrieval_profile"))
+        )
 
     mode = entry["forget_mode"]
     user_id = entry["user_id"]
@@ -1382,13 +1380,7 @@ def dispatch_forget_sample(
                 },
                 _ctx("forget.execute", f"d13d-execute-{sample_id}"),
             )
-        if retrieval_observations is None:
-            raise ExecutionPreflightError(
-                "forget dispatch requires a real retrieval observations provider"
-            )
-        realtime_observation, rebuild_observation = retrieval_observations(
-            validated, sample_id, binding
-        )
+        realtime_observation, rebuild_observation = builder(binding, artifact, sample_id)
         with binding.engine.connect() as conn:
             observed = observe_forget_execution(
                 conn,
