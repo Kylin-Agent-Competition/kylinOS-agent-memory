@@ -22,15 +22,15 @@
 “正式 L3 / Release Gate”互相锁死：
 
 ```text
-D14D_ENV_PREPARED = PARTIAL / BLOCKED（r1 clean-state Gate 未 fail-closed，Review 后降级）
-D14D_PHASE0       = REWORK（r1 SUPERSEDED；r2 清理重建并复验 PASS 后才恢复 READY）
+D14D_ENV_PREPARED = READY（r2 Route A，2026-09-06；fail-closed clean Gate PASS；待 CI/复审确认）
+D14D_PHASE0       = r2 ACTIVE（r1 SUPERSEDED；H1/M1 由 r2 evidence 关闭）
 D14D_FORMAL_L3    = BLOCKED / NOT_STARTED（不是 L3_READY）
 L3                = NOT_STARTED
 D14A_FORMAL_L3_GO = NO
 ```
 
 - `D14D_ENV_PREPARED` 按两阶段模型与 D13D_FROZEN / A final package / 第四轮 review 解耦；
-  但在 r2 clean-state Gate（fail-closed）PASS 前保持 `PARTIAL / BLOCKED`，不作为 READY 输入向下游消费。
+  r2 已通过 fail-closed clean Gate（2026-09-06）；该状态与 D13D_FROZEN / A final package / L3 仍解耦，不构成 READY 之外任何结论。
 - `D14D_FORMAL_L3` 依赖 `D13D_FROZEN + A_FINAL_PACKAGE_READY + final tested commit/package hash`；
   正式 G0–G9 与 Release Gate 只在此阶段执行。
 
@@ -59,10 +59,9 @@ D14A_FORMAL_L3_GO = NO
 - 第四轮 Review 结论（Reviewer D / Ducknesses，2026-09-06 04:21 UTC）：第三轮核心 BLOCKER/HIGH/MEDIUM
   全部 CLOSED，返工增量（26e8c00→f24c29b）无新增 BLOCKER/HIGH/MEDIUM，残留 4 LOW；
   结论 `WAIT_FOR_MAIN_SYNC`（COMMENT，未 APPROVE）。
-- PR #152 此后前移：D14A 当前候选 head = `6ae281a0b6d8680ddc56f467c43d3df9c9ecf2de`
-  （A 轨已关闭第四轮 4 LOW；Reviewer D 最终 APPROVE 尚未发生）。
-  `6ae281a0…` 仅为 D14A 当前候选 head，**不是** final tested_commit（后者未选定）；
-  正式 G0/G2 冻结前不得写 final。
+- PR #152 已获 Reviewer D APPROVE（2026-09-06 06:41 UTC，head `6ae281a0b6d8680ddc56f467c43d3df9c9ecf2de`）：仅批准 `PACKAGE_IMPLEMENTATION_CANDIDATE`；第四轮 4 LOW 已关闭。
+  未批准：READY / L3_READY / FINAL_P freeze / formal package rebuild / formal hash freeze / D14D Formal L3。
+  final tested_commit：`NOT_SELECTED`；D14A final package：`NOT_FROZEN`；D14A formal package hash：`NOT_FROZEN`。
 
 仲裁明细与契约收敛记录已在 D14A 载体可见（固定到 #152 当前候选 head `6ae281a0`，避免在 #159 页面 404）：
 - [00_d14a_release_package_contract.md](https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/blob/6ae281a0b6d8680ddc56f467c43d3df9c9ecf2de/docs/day14/00_d14a_release_package_contract.md)（FROZEN v4）
@@ -119,18 +118,29 @@ D14A_FORMAL_L3_GO = NO
 
 | ID | 级别 | 问题 | 处理 |
 |---|---|---|---|
-| H1 | HIGH | r1 clean-state residue 与 summary 矛盾，ENV_PREPARED=READY 证据不足 | 状态降级（本文档）；residue 清理 + r2 snapshot + fail-closed 重跑 = 待 VM 宿主执行 |
-| M1 | MEDIUM | `checksums.txt` 14 条，缺 `.gitattributes` | r1 不改写（policy）；r2 新 root 生成含 `.gitattributes` 的完整 checksums（15/15） |
-| M2 | MEDIUM | PR Body / GitHub 元数据 / head 漂移 | 本文档已同步（REWORK、non-draft、evidence 已推送）；PR Body 更新待本批执行 |
+| H1 | HIGH | r1 clean-state residue 与 summary 矛盾，ENV_PREPARED=READY 证据不足 | CLOSED（r2 Route A）：清 7 个 build 残留 → `d14d-clean-base-20260906-r2` → fail-closed Gate PASS → W5a/W5b/deps 重跑 → 新 evidence root |
+| M1 | MEDIUM | `checksums.txt` 14 条，缺 `.gitattributes` | CLOSED（r2）：新 root `checksums.txt` 13/13 含 `.gitattributes`，file-count==entry-count，`sha256sum -c` PASS |
+| M2 | MEDIUM | PR Body / GitHub 元数据 / head 漂移 | CLOSED：标题去 Draft；PR Body/文档同步 REWORK→r2；待本批 commit 后最终同步 |
 | L1 | LOW | 两个 #152 相对链接在 #159 404 | 已修：固定到 #152 head `6ae281a0` 的完整 URL |
 | L2 | LOW | `dist_id` 被写成 r1 实测（os-release） | 已修：`dist_id` 标 REFERENCE_ONLY / HISTORICAL，正式 G0 重采 |
+
+### 2.5 r2 evidence（Route A · 2026-09-06）
+
+- 路径：`evidence/phase0/d14d-env-prepared-20260906-r2/`（新 root；r1 root 保持 SUPERSEDED 历史，未改写）。
+- snapshot：`d14d-clean-base-20260906-r2`（UUID `c5e3c3de-1c70-4f58-b22a-ab07b2d2d56d`），父链 20-btrack-test-deps-20260821 → D14D → d14d-r2-prep-before-provision-20260906；VM `Kylin-V11-2603-BTrack-Base`（UUID `103fb8a8-…`）。
+- Route A（D 轨授权，2026-09-06）：删除 `/home/yanmouren778` 下 7 个 build 残留；维护模式安装冻结版 `libkylin-coreai-embedding 1.2.0.0-0k0.4` / `kylin-ai-runtime 1.2.0.4-0k0.1` / `kylin-gte-base-model 1.0.0.1-0k0.9` / `kylin-ai-subsystem 1.3.0.1-0k0.1` / `kylin-ai-parser-extension 1.2.0.0-0k0.4` 并提交持久层；冷启动 r2 后 normal 模式复验通过。
+- clean-state Gate（fail-closed）：probe 全 0 → `CLEAN_STATE_PASS`（raw `envprep_probe_20260906_r2.log`）。
+- 身份（r2 实测，与 r1/D14A 契约一致的项）：SDK `.so` SHA `028e7099…`、runtime `/usr/bin/kylin-ai-runtime` SHA `b3f83fc9…`、model ONNX SHA `cef0fc76…`；installed pkgs = 2030。
+- 差异登记：kernel 为 `6.6.0-63-generic`（Route A 新基础；superseded r1 记录为不同 VM 的 `6.6.0-76`）；VM/snapshot 身份按本环境重新冻结。
+- checksums：`checksums.txt` = 13 条，覆盖含 `.gitattributes` 在内的全部 13 个 regular files（root 共 14 个，排除自身）；`file-count == entry-count`，逐文件 SHA-256 复验 PASS。
+- VM 状态：证据采集后优雅关机，`poweroff @ d14d-clean-base-20260906-r2`。
 
 ## 3. 正式 Gate 状态（阶段二）
 
 | Gate | 状态 | 说明 |
 | --- | --- | --- |
 | G0 基线 | BLOCKED | 需正式 tested_commit（D14A 当前候选 head `6ae281a0…`；final 未选定）工作树干净、runtime/model 身份 G0 采集、D13D FROZEN |
-| G1 快照 | BLOCKED / NOT_READY | r1 因 clean-state residue 未 fail-closed 被降级；待 r2 snapshot 建立 + cold boot 复验 PASS 后恢复起点 READY（FORMAL NOT_RUN） |
+| G1 快照 | READY（起点）/ FORMAL NOT_RUN | r2 snapshot `d14d-clean-base-20260906-r2` 已建（UUID `c5e3c3de…`）；cold boot 复验 clean Gate PASS；VM poweroff @ r2 |
 | G2 包审计 | NOT_RUN（工具 READY） | 正式包须从 tested_commit 重建并冻结 tar/manifest/SHA256SUMS |
 | G3 安装 | NOT_RUN | 正式 run 未执行 |
 | G4 真 SDK | NOT_RUN | 正式 run 未执行 |
@@ -144,32 +154,28 @@ D14A_FORMAL_L3_GO = NO
 
 | 编号 | 阻塞 | 责任人 / 动作 |
 | --- | --- | --- |
-| B1 | PR #152：第四轮 review（Reviewer D）@ f24c29b = WAIT_FOR_MAIN_SYNC；A 轨已前移至 6ae281a0… 并关闭 4 LOW；Reviewer D 最终 APPROVE 未发生；final tested_commit 未选定 | A 主审 / Reviewer D（final APPROVE） |
+| B1 | PR #152：Reviewer D 已于 2026-09-06 06:41 UTC APPROVE（仅 `PACKAGE_IMPLEMENTATION_CANDIDATE`，head `6ae281a0…`）；final package `NOT_FROZEN`；final tested_commit `NOT_SELECTED`；D14A formal hash `NOT_FROZEN` | D14D（正式 run 阶段基于最终 tested_commit 重新打包冻结） |
 | B2 | D13D FROZEN 未闭合；TD-061 Open（High）；无 Seal / 17 raw / Runner Gate 0–10 | D13D 实施方 / D Reviewer |
-| B3 | runtime/model host baseline 为 r1 记录（SUPERSEDED）；契约 vendor-lock / D Reviewer 会签仍 `HANDOFF_REQUIRED`，待 r2 重采 + 正式 G0 升版 | D14D 执行（r2 / 正式 run） |
+| B3 | runtime/model host baseline 已按 r2 重采（dependency_identity.json，r2 root）；契约 vendor-lock / D Reviewer 会签仍 `HANDOFF_REQUIRED`，待正式 G0 升版 | D14D 执行（正式 run） |
 | B4 | 正式 package 未从 tested_commit 重建 / hash 未冻结 | A/D14D（G2/G3 解锁后） |
 | B5 | G8 package-only runner/阈值未批准 | D 主审 + D13A owner |
 | B6 | 正式 evidence root 上 G0–G9 未执行、非作者独立审查未完成 | D14D 执行 + D/E Reviewer |
-| B7 | #159 Review HIGH-1/M1：r1 clean-state residue + checksums 未闭环 | D14D 执行（r2 清理重建 + 新 evidence root，VM 宿主）；本机未注册 D14D VM |
+| B7 | PR159 Review H1/M1（r1 residue + checksums 未闭环） | CLOSED（r2 evidence root 已生成并本地 13/13 闭环；待 CI/复审） |
 
 ## 5. 下一步
 
-1. r2（VM 宿主）：确认并清理 `/home/kylin-agent/featday9-embedding-throughput/` 历史开发残留
-   （或按方案 B 正式 allowlist 裁决），用 fail-closed clean probe（有残留即 exit≠0）复验；
-2. 创建 `d14d-clean-base-20260906-r2` snapshot → cold boot → 重跑 W5a/W5b/dependency identity；
-   恢复 VM 至 r2 poweroff；
-3. 生成新 evidence root `evidence/phase0/d14d-env-prepared-20260906-r2/`：environment.json 与 raw
-   一致（结构化 clean-state counts），checksums.txt 含 `.gitattributes` 并 `sha256sum -c` + file-count 闭环；
-4. clean Gate PASS 后恢复 `D14D_ENV_PREPARED = READY`、G1 = READY（起点）/ FORMAL NOT_RUN；
-5. 同步 PR Body 与 head/元数据（本批文档已先行同步）；请求复审；
-6. PR #152：等 Reviewer D 对 `6ae281a0…` 最终 APPROVE；D13D 在收敛 tested_commit 上闭合 FROZEN；
-7. 阶段二：从收敛 tested_commit 重建唯一正式发布包，正式 G0–G9 + 非作者独立审查。
+1. ✅（本批已完成）r2 Route A：清除 7 个 build 残留；维护模式安装冻结版 SDK/runtime/model/subsystem/parser 并提交持久层；建 `d14d-clean-base-20260906-r2` 快照；冷启动复验 clean Gate（fail-closed）PASS；W5a/W5b/dependency identity 重跑；生成 `evidence/phase0/d14d-env-prepared-20260906-r2/`（13/13 全文件闭环）；VM 恢复 `poweroff @ r2`。
+2. 提交本批（状态文档 + r2 evidence root）→ push PR #159 → 等待 Repository Baseline Check PASS。
+3. 独立 Reviewer 复审（撤销 REQUEST_CHANGES / APPROVE）→ merge PR #159（需另行授权）。
+4. PR #152：已 APPROVE（仅 PACKAGE_IMPLEMENTATION_CANDIDATE）；final package / formal hash 冻结留待 final tested_commit 选定后的正式 D14D run。
+5. D13D：Safety Gate-9 projection 与 Forget real dispatch follow-up → I3b-completion → 选定 final tested_commit → VM 环境复验/ENVIRONMENT_FROZEN → 17 raw → Final Manifest + Review Seal → attestation + Execution Seal → Runner Gate 0–10 → `D13D_FROZEN`。
+6. D14D Formal：基于 r2 起点与最终 tested_commit 执行 G0–G9 → 非作者独立审查 → `L3_READY` → 交接 D14B/C。
 
 ## 6. Reviewer 检查重点
 
 - 是否守住“ENV_PREPARED ≠ PASS；FORMAL_L3 未闭合前不得 L3_READY”边界；
 - 本 PR 是否未虚报正式 VM G0–G9、D13D FROZEN、D14A 最终包或 D14D 完成；
-- 状态值（第四轮被审 head `f24c29b` / 当前候选 head `6ae281a0…` / r1 SUPERSEDED / `0.1.0-d14a` /
+- 状态值（第四轮被审 head `f24c29b` / APPROVED candidate head `6ae281a0…` / r1 SUPERSEDED / `0.1.0-d14a` /
   SDK identity）是否与 PR #152、契约 v4 与本地仲裁记录一致；
 - HIGH-1/M1 是否按返工清单闭合：r2 clean-state Gate fail-closed、新 root checksums 含
   `.gitattributes` 全文件闭环、README 只在真实闭环后写“全部文件”；
