@@ -39,3 +39,16 @@
 - 本文件（#160 分支）
 - `docs/day13/29_d13d_forget_retrieval_profile_contract_20260906.md`（E 确认规则 + 阻塞登记）
 - `docs/day13/28_d13d_forget_state_binding_v2_contract_20260906.md`
+
+## 5. 闭合状态更新（2026-09-06）
+
+| 缺口 | 状态 | 提交/说明 |
+|---|---|---|
+| G1 | ✅ 已核对（生产者已存在） | `uow.execute_forget_plan` 已 enqueue `EVENT_FORGET_EXECUTED`；无需新增 |
+| G3 | ✅ 已闭合 + L1 | `repositories.soft_delete_resolved_targets` knowledge 返回稳定 `v<version>`、`all` 汇聚 versions；`deletion_consumer._build_delete_request` 规范化 tagged ids 并强制 version_ids 对齐；提交 `2e3fa45` |
+| G2 | ⏳ 待 D/E 决策 | adapter validation runtime 是否挂 `build_forget_consumer` + `SqliteVectorProvider`（涉及 production routing 边界：默认 route 是否放开） |
+| G4 | ⏳ 待 D/E 决策 | preference 是否进入 Vector 重建真源（feature：memory_items/memory_versions 索引文本=key+value）；或保持 key-value 非 Vector 语义并**显式 fail-closed 排除**（防止静默漏清理） |
+| G5 | ⏳ 环境/实现 | seeded state 的 embedding + `memory.upserted` index producer（pre-delete probe 需先命中） |
+| G6 | ⏳ 环境 | 0k1.1 `Database.h` headers 获取 + `vector_bridge_cli` 编译/smoke |
+
+请在 G2/G4 二选一裁决后，B 立即继续；G5/G6 依环境/头文件就绪后执行。
