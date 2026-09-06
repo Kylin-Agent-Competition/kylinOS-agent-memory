@@ -1,11 +1,14 @@
 """Fail-closed preflight and raw projection for the versioned D13D execution adapter.
 
 This module deliberately validates only the public formal Dataset inputs and the
-frozen, Gold-independent raw projection schema (:data:`D13E_RAW_RESULT_SCHEMA_V1`).
-It does not import any evaluator-owned decision artifact and it never decides
-whether an observed result passes.  Dispatch and raw production stay behind the
-separately frozen VM execution gate described in the D13D task card; the adapter
-only consumes observations produced by the real production seams it dispatches.
+Gold-independent raw projection schema (:data:`D13E_RAW_RESULT_SCHEMA_V1`), which is
+CANDIDATE_PENDING_D13E_REVIEW and not frozen: the Safety cross-track projection
+contract still needs a D13E Runner/Gold decision before Safety raw can be treated
+as Gate-9 complete.  The module imports no evaluator-owned decision artifact and
+never decides whether an observed result passes.  Dispatch and raw production
+stay behind the separately frozen VM execution gate described in the D13D task
+card; the adapter only consumes observations produced by the real production
+seams it dispatches.
 """
 
 from __future__ import annotations
@@ -15,9 +18,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import secrets
+import shutil
 import subprocess
+from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping
 
 from db.engine import create_db_engine, init_schema
@@ -49,15 +56,23 @@ _RAW_FILENAMES = {
     "forget": "forget_raw.jsonl",
 }
 
-# Frozen, Gold-independent raw projection contract for the formal Runner.
+# Candidate, Gold-independent raw projection contract for the formal Runner.
 #
-# ``actual`` is validated against the per-metric ``allowed``/``required`` sets
-# below (strict whitelist: an actual carrying any field outside ``allowed`` is
-# rejected before it can become a canonical raw record).  The sets intentionally
-# mirror only the top-level fields the frozen Runner can consume without the
-# adapter reading Gold: Preference/Conflict/Safety/Forget observations are
-# flattened to stable top-level fields, never wrapped in nested record lists.
+# STATUS: CANDIDATE_PENDING_D13E_REVIEW (not frozen).  The Safety allowed-field
+# set below mirrors only the hard-zero counters that the sealed Runner accepts
+# for every Safety sample.  The current formal Gold additionally expects
+# sensitivity/admission (safety-001/002/003) observation fields, so Safety raw
+# is NOT Gate-9 complete until a D13E Runner/Gold re-baseline decides the
+# projection contract; I3b stays BLOCKED_PARTIAL.  Preference/Conflict/Forget
+# sets are stable top-level fields never wrapped in nested record lists.
+#
+# ``actual`` is validated against the per-metric ``required``/``allowed`` sets
+# below (strict whitelist: any field outside ``allowed`` is rejected before it
+# can become a canonical raw record), and no evaluation artifact
+# (Gold/expected/threshold) is read to build ``actual``.
+D13E_RAW_RESULT_SCHEMA_STATUS = "CANDIDATE_PENDING_D13E_REVIEW"
 D13E_RAW_RESULT_SCHEMA_V1 = {
+    "status": D13E_RAW_RESULT_SCHEMA_STATUS,
     "schema_version": "d13e-raw-result-schema/v1",
     "metrics": {
         "preference": {
@@ -123,6 +138,9 @@ _COUNTER_FIELDS = frozenset(
 _FORBIDDEN_EVALUATION_TOKENS = frozenset(
     {"gold", "expected", "threshold", "pass", "fail", "formal_result", "formal_pass"}
 )
+
+
+_ENGINE_BINDING_TOKENS: dict[int, str] = {}
 
 
 class ExecutionPreflightError(ValueError):
@@ -348,7 +366,7 @@ def _schema_for(metric: str) -> dict[str, Any]:
 
 
 def _validate_actual(metric: str, actual: Mapping[str, Any]) -> None:
-    """Validate ``actual`` against the frozen per-metric raw projection schema.
+    """Validate ``actual`` against the candidate per-metric raw projection schema.
 
     This is a strict whitelist contract, not a "required fields exist + anything
     else is allowed" check: every field in ``actual`` must be declared by
@@ -361,7 +379,7 @@ def _validate_actual(metric: str, actual: Mapping[str, Any]) -> None:
     unknown = set(actual) - allowed
     if unknown:
         raise ExecutionPreflightError(
-            "raw actual contains fields outside the frozen schema: "
+            "raw actual contains fields outside the candidate schema: "
             + ", ".join(sorted(unknown))
         )
     missing = required.difference(actual)
@@ -380,28 +398,79 @@ def _validate_actual(metric: str, actual: Mapping[str, Any]) -> None:
 
 @dataclass(frozen=True)
 class ObservedRawRecord:
-    """A strong-typed raw record produced only by a real D13D dispatch.
+    """An immutable, strong-typed raw record produced by a real D13D dispatch.
 
-    ``runtime_scope`` binds the record to the dispatch that produced it:
-    ``"stateless:<metric>"`` for Preference/Conflict, or the
-    :class:`ValidatedRuntimeBinding` binding id for Safety.  A record with an
-    empty scope can never be accepted into the canonical package.
+    ``actual`` is an immutable :class:`types.MappingProxyType` snapshot taken at
+    creation time, so it cannot be mutated after dispatch.  Every record also
+    carries ``actual_digest`` (SHA-256 of the canonical actual bytes); the
+    writer re-validates the full record and the digest before any canonical
+    file is written.  ``runtime_scope`` binds the record to the dispatch that
+    produced it: ``"stateless:<metric>"`` for Preference/Conflict or the
+    :class:`ValidatedRuntimeBinding` binding id for Safety.
     """
 
     sample_id: str
     metric: str
-    actual: dict[str, Any]
+    actual: Mapping[str, Any]
     trace_reference: str
     runtime_scope: str
+    actual_digest: str
 
-    def as_canonical_mapping(self) -> dict[str, str | dict[str, Any]]:
+    def as_canonical_mapping(self) -> dict[str, Any]:
         """Top-level mapping consumed by the formal Runner (no provenance)."""
         return {
             "sample_id": self.sample_id,
             "metric": self.metric,
-            "actual": self.actual,
+            "actual": dict(self.actual),
             "trace_reference": self.trace_reference,
         }
+
+
+def _canonical_actual_bytes(actual: Mapping[str, Any]) -> bytes:
+    return json.dumps(
+        dict(actual), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+
+
+def _actual_digest(actual: Mapping[str, Any]) -> str:
+    return hashlib.sha256(_canonical_actual_bytes(actual)).hexdigest()
+
+
+def _snapshot_actual(actual: Mapping[str, Any]) -> MappingProxyType:
+    """Deep-copy and freeze an actual so it cannot change after dispatch."""
+    return MappingProxyType(json.loads(_canonical_actual_bytes(actual).decode("utf-8")))
+
+
+def _validate_trace_reference(metric: str, sample_id: str, trace_reference: str) -> None:
+    """A trace must be a relative record or a stable trace ID bound to the sample."""
+    if not isinstance(trace_reference, str) or not trace_reference.strip():
+        raise ExecutionPreflightError("raw record requires a trace_reference")
+    if trace_reference.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:[\\/]", trace_reference):
+        raise ExecutionPreflightError("raw record trace_reference must be relative or an opaque trace ID")
+    if metric in ("preference", "conflict"):
+        prefix = f"dispatch-v1/{metric}/{sample_id}/"
+        if not trace_reference.startswith(prefix):
+            raise ExecutionPreflightError("trace_reference does not bind the dispatched sample")
+    elif metric == "safety" and not trace_reference.startswith("source-events:"):
+        raise ExecutionPreflightError("safety trace_reference must reference the source-events trace")
+
+
+def _stateless_trace_reference(
+    validated: ValidatedExecution,
+    sample_id: str,
+    metric: str,
+    actual: Mapping[str, Any],
+) -> str:
+    """A stable, independently auditable trace ID for a stateless dispatch.
+
+    The trace binds the sample_id, the tested commit, the UTC dispatch time and
+    the digest of the observed actual, so it can be re-located to this run's
+    real execution facts instead of being a plain sample-id label.
+    """
+    commit = validated.request.tested_commit[:12]
+    utc = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    digest = _actual_digest(actual)[:12]
+    return f"dispatch-v1/{metric}/{sample_id}/{commit}/{utc}/{digest}"
 
 
 def raw_record(
@@ -418,18 +487,17 @@ def raw_record(
     if not isinstance(actual, dict) or not actual:
         raise ExecutionPreflightError("raw record actual must be a non-empty object")
     _validate_actual(metric, actual)
-    if not isinstance(trace_reference, str) or not trace_reference.strip():
-        raise ExecutionPreflightError("raw record requires a trace_reference")
-    if trace_reference.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:[\\/]", trace_reference):
-        raise ExecutionPreflightError("raw record trace_reference must be relative or an opaque trace ID")
+    _validate_trace_reference(metric, sample_id, trace_reference)
     if not isinstance(runtime_scope, str) or not runtime_scope.strip():
         raise ExecutionPreflightError("raw record requires a runtime scope from real dispatch")
+    digest = _actual_digest(actual)
     return ObservedRawRecord(
         sample_id=sample_id,
         metric=metric,
-        actual=actual,
+        actual=_snapshot_actual(actual),
         trace_reference=trace_reference,
         runtime_scope=runtime_scope,
+        actual_digest=digest,
     )
 
 
@@ -522,7 +590,7 @@ def dispatch_stateless_sample(
         sample_id=sample_id,
         metric=metric,
         actual=actual,
-        trace_reference=f"{metric}:{sample_id}",
+        trace_reference=_stateless_trace_reference(validated, sample_id, metric, actual),
         runtime_scope=f"stateless:{metric}",
     )
 
@@ -543,6 +611,7 @@ class ValidatedRuntimeBinding:
     db_path: Path
     engine: Any
     registry: HandlerRegistry
+    run_token_sha256: str
 
 
 def _is_under(path: Path, root: Path) -> bool:
@@ -582,6 +651,13 @@ def build_runtime_binding(
     register_default_handlers(registry)
     register_event_ingest_handler(registry, uow_factory=lambda: UnitOfWork(engine))
     register_preference_handlers(registry, uow_factory=lambda: UnitOfWork(engine))
+    # Bind engine <-> registry <-> canonical db path with an unforgeable run
+    # token: the engine is registered under its object id and the registry
+    # carries the same token, so a caller-constructed binding with a foreign
+    # engine or registry cannot pass _validate_binding().
+    run_token = secrets.token_hex(32)
+    _ENGINE_BINDING_TOKENS[id(engine)] = run_token
+    setattr(registry, "d13d_runtime_token", run_token)
     binding_id = (
         f"d13d-runtime-binding/v1:{validated.request.tested_commit[:12]}:{database_name}"
     )
@@ -591,13 +667,20 @@ def build_runtime_binding(
         db_path=db_path,
         engine=engine,
         registry=registry,
+        run_token_sha256=hashlib.sha256(run_token.encode("ascii")).hexdigest(),
     )
 
 
 def _validate_binding(
     binding: ValidatedRuntimeBinding, validated: ValidatedExecution
 ) -> None:
-    """Fail closed unless the binding is bound to this validated isolation state."""
+    """Fail closed unless the binding is bound to this validated isolation state.
+
+    The engine's canonical DB path must equal ``binding.db_path``, the engine
+    must be one created by :func:`build_runtime_binding` (run-token registry),
+    and the handler registry must carry the same run token.  A caller-constructed
+    binding with a foreign engine/registry can therefore never pass.
+    """
     if not isinstance(binding, ValidatedRuntimeBinding):
         raise ExecutionPreflightError("safety dispatch requires a ValidatedRuntimeBinding")
     if binding.validated != validated:
@@ -614,6 +697,33 @@ def _validate_binding(
         raise ExecutionPreflightError("runtime binding db does not exist")
     if binding.engine is None or binding.registry is None:
         raise ExecutionPreflightError("runtime binding is incomplete")
+
+    database = getattr(binding.engine, "url", None)
+    database_path = getattr(database, "database", None)
+    if not isinstance(database_path, str) or not database_path:
+        raise ExecutionPreflightError(
+            "runtime binding engine must expose a canonical file database"
+        )
+    engine_db = _canonical_path(Path(database_path), label="engine.url.database")
+    if engine_db != db_path:
+        raise ExecutionPreflightError(
+            "runtime binding engine is not connected to binding.db_path"
+        )
+
+    registered_token = _ENGINE_BINDING_TOKENS.get(id(binding.engine))
+    if not isinstance(registered_token, str) or not registered_token:
+        raise ExecutionPreflightError(
+            "runtime binding engine was not created by the controlled builder"
+        )
+    if hashlib.sha256(registered_token.encode("ascii")).hexdigest() != binding.run_token_sha256:
+        raise ExecutionPreflightError(
+            "runtime binding engine token does not match the binding"
+        )
+    registry_token = getattr(binding.registry, "d13d_runtime_token", None)
+    if registry_token != registered_token:
+        raise ExecutionPreflightError(
+            "runtime binding registry is not bound to the same engine/run"
+        )
 
 
 def dispatch_safety_sample(
@@ -699,6 +809,42 @@ def dispatch_safety_sample(
     )
 
 
+def _write_text_file(path: Path, content: str) -> None:
+    """I/O seam for raw writes (injected by the atomicity fault test)."""
+    path.write_text(content, encoding="utf-8", newline="\n")
+
+
+def _validate_receipt(
+    record: ObservedRawRecord,
+    *,
+    expected_metric_by_id: Mapping[str, str],
+) -> None:
+    """Re-run the full record/actual/trace contract before canonical writing.
+
+    The receipt is re-validated here so that an actual mutated or forged after
+    dispatch can never reach a canonical raw file: the actual must be an
+    immutable dispatch snapshot, its digest must match, and every field must
+    still satisfy the candidate schema whitelist.
+    """
+    if not isinstance(record, ObservedRawRecord):
+        raise ExecutionPreflightError(
+            "raw record must be an ObservedRawRecord produced by real dispatch"
+        )
+    sample_id = record.sample_id
+    if expected_metric_by_id.get(sample_id) != record.metric:
+        raise ExecutionPreflightError("raw sample_id and metric must match the Dataset")
+    if not isinstance(record.actual, Mapping) or type(record.actual) is not MappingProxyType:
+        raise ExecutionPreflightError(
+            "raw record actual must be an immutable dispatch snapshot"
+        )
+    _validate_actual(record.metric, dict(record.actual))
+    if record.actual_digest != _actual_digest(record.actual):
+        raise ExecutionPreflightError("raw record actual digest does not match its content")
+    _validate_trace_reference(record.metric, sample_id, record.trace_reference)
+    if not isinstance(record.runtime_scope, str) or not record.runtime_scope.strip():
+        raise ExecutionPreflightError("raw record has no runtime dispatch scope")
+
+
 def write_raw_records(
     validated: ValidatedExecution,
     raw_records: Iterable[ObservedRawRecord],
@@ -706,12 +852,12 @@ def write_raw_records(
     """Serialize dispatch-produced receipts into the four canonical raw files.
 
     This seam is the internal serializer of the future formal orchestration
-    path: it accepts only strong-typed :class:`ObservedRawRecord` instances
-    produced by real dispatch and rejects any caller-supplied raw Mapping.  It
-    validates every record and the complete sample set before creating the new
-    output root, so an invalid batch cannot leave a partial canonical raw
-    package behind.  Serialization alone is not evidence of a real execution
-    closure; provenance is proven by the dispatch receipts themselves.
+    path.  It accepts only immutable, digest-carrying :class:`ObservedRawRecord`
+    receipts produced by real dispatch; every receipt is re-validated before
+    writing.  The four files are written into a sibling temporary directory and
+    atomically renamed into ``output_root`` only after the whole batch has been
+    written and re-checked, so an I/O failure can never leave a partial
+    canonical package under the formal ``output_root``.
     """
     if not isinstance(validated, ValidatedExecution):
         raise TypeError("validated must be a ValidatedExecution")
@@ -721,31 +867,37 @@ def write_raw_records(
     grouped: dict[str, list[ObservedRawRecord]] = {metric: [] for metric in _METRICS}
     seen_sample_ids: set[str] = set()
     for source_record in raw_records:
-        if not isinstance(source_record, ObservedRawRecord):
-            raise ExecutionPreflightError(
-                "raw record must be an ObservedRawRecord produced by real dispatch"
-            )
-        record = source_record
-        sample_id = record.sample_id
+        _validate_receipt(source_record, expected_metric_by_id=expected_metric_by_id)
+        sample_id = source_record.sample_id
         if sample_id in seen_sample_ids:
             raise ExecutionPreflightError("raw sample_id must be unique")
-        if expected_metric_by_id.get(sample_id) != record.metric:
-            raise ExecutionPreflightError("raw sample_id and metric must match the Dataset")
-        if not isinstance(record.runtime_scope, str) or not record.runtime_scope.strip():
-            raise ExecutionPreflightError("raw record has no runtime dispatch scope")
         seen_sample_ids.add(sample_id)
-        grouped[record.metric].append(record)
+        grouped[source_record.metric].append(source_record)
     if seen_sample_ids != set(expected_metric_by_id):
         raise ExecutionPreflightError("raw samples do not match the complete Dataset")
-    if validated.request.output_root.exists():
+    output_root = validated.request.output_root
+    if output_root.exists():
         raise ExecutionPreflightError("output_root must not already exist")
 
-    raw_root = validated.request.output_root / "raw"
-    raw_root.mkdir(parents=True)
-    written: dict[str, Path] = {}
-    for metric, filename in _RAW_FILENAMES.items():
-        path = raw_root / filename
-        serialized = "".join(_record_to_line(record) + "\n" for record in grouped[metric])
-        path.write_text(serialized, encoding="utf-8", newline="\n")
-        written[metric] = path
-    return written
+    tmp_root = output_root.parent / (
+        f".{output_root.name}.tmp-{os.getpid()}-{secrets.token_hex(4)}"
+    )
+    written_tmp: dict[str, Path] = {}
+    try:
+        raw_root = tmp_root / "raw"
+        raw_root.mkdir(parents=True)
+        for metric, filename in _RAW_FILENAMES.items():
+            path = raw_root / filename
+            serialized = "".join(_record_to_line(record) + "\n" for record in grouped[metric])
+            _write_text_file(path, serialized)
+            written_tmp[metric] = path
+        for metric in _METRICS:
+            if len(grouped[metric]) != _EXPECTED_DISTRIBUTION[metric]:
+                raise ExecutionPreflightError("raw package distribution is incomplete")
+        tmp_root.rename(output_root)
+    except Exception:
+        shutil.rmtree(tmp_root, ignore_errors=True)
+        raise
+    return {
+        metric: output_root / "raw" / _RAW_FILENAMES[metric] for metric in _METRICS
+    }

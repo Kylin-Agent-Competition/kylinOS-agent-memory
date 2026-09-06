@@ -23,8 +23,9 @@ No stage here produces formal raw, a Seal, a Runner decision, or `D13D_FROZEN`. 
 
 ### 2026-09-06 PR #150 review round（codex 批次）
 
-- 冻结 Gold-independent raw projection schema `D13E_RAW_RESULT_SCHEMA_V1`；`raw_record`
-  与 writer 改为按 metric 精确白名单校验，`actual` 的未知字段 fail-closed。
+- 候选 Gold-independent raw projection schema `D13E_RAW_RESULT_SCHEMA_V1`
+  （状态 `CANDIDATE_PENDING_D13E_REVIEW`，未冻结）；`raw_record` 与 writer 改为按
+  metric 精确白名单校验，`actual` 的未知字段 fail-closed。
 - Preference actual 改为顶层稳定字段投影，移除 `records[]`（消除正式 Runner Gate 9 对
   Preference 的未知字段崩溃）。
 - Safety dispatch 只接受 `ValidatedRuntimeBinding`：engine/registry/DB canonical path
@@ -34,7 +35,26 @@ No stage here produces formal raw, a Seal, a Runner decision, or `D13D_FROZEN`. 
   （拒绝手工 raw Mapping），并保持完整性校验；正式 orchestration 待 Forget 外部
   binding 到位后闭合。
 - 未闭合跨轨依赖：Safety `sensitivity`/`admission`/`operation` 投影需要 D13E 对正式
-  Runner/Gold 重新基线（见 18_ 文档“冻结投影契约”）；Forget 仍 BLOCKED。
+  Runner/Gold 重新基线（见 18_ 文档“候选投影契约”）；Forget 仍 BLOCKED。
+
+### 2026-09-06 re-review round（Review HEAD 04fc080）
+
+- schema 状态改为 `CANDIDATE_PENDING_D13E_REVIEW`，不再自称冻结；Safety 跨轨投影
+  合同未由 D13E 裁定前，Safety raw 不视为 Gate-9 完成。
+- `ValidatedRuntimeBinding` 三重绑定：engine.url.database 必须等于 db_path，engine
+  与 registry 必须携带同一受控 run token；新增 engine 指向外部 DB / registry 绑定
+  另一 engine 的 fail-closed 负测。
+- `ObservedRawRecord.actual` 改为不可变快照（MappingProxyType + digest）；writer 写
+  入前重新执行完整 actual/trace/runtime 校验；手工 plain-dict 构造与篡改均无法进入
+  canonical package。
+- Preference/Conflict dispatch 生成真实可审计 trace ID（绑定 sample_id、tested
+  commit、UTC、actual digest）；wrong-sample trace 负测。
+- raw package 改为 sibling temp + atomic rename，I/O 中途失败不留正式 output（故障
+  注入测试覆盖）。
+- 09 任务卡执行清单修正 Seal 顺序（D13D Execution Seal 在 attestation 之后），并把
+  `freeze_status` 拆为 `environment_status` + `evidence_status`（legacy 仅派生）。
+- 集成测试改为逐样本显式期望：must-True / 已登记观测缺口（pref-003）/ Safety
+  跨轨 blocked 三组分别断言。
 
 ## Goal
 

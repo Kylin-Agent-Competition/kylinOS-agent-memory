@@ -11,9 +11,12 @@ import sys
 
 import pytest
 
+from types import MappingProxyType
+
 from db import repositories as repo
 import evaluation.d13d_execution_adapter as adapter
 from evaluation.d13d_execution_adapter import (
+    D13E_RAW_RESULT_SCHEMA_STATUS,
     OFFICIAL_D13E_TESTSET_SHA256,
     ExecutionPreflightError,
     ExecutionRequest,
@@ -226,6 +229,58 @@ def _dispatchable_stateless(validated):
     ]
 
 
+def _synthetic_batch_for_serializer(validated):
+    """Serializer/atomicity-only synthetic receipts (NOT canonical authority).
+
+    These records exercise the writer as a pure serializer (allowed by the
+    review); they are never used to claim a real execution closure.
+    """
+    actual_by_metric = {
+        "preference": {
+            "record_count": 1,
+            "key": "k",
+            "scope": "global",
+            "is_temporary": False,
+            "should_persist": True,
+            "explicitness": "explicit",
+        },
+        "conflict": {"action": "defer", "winner_id": None, "reason_code": "same_tier"},
+        "safety": {
+            "critical_gate_bypass_count": 0,
+            "normal_memory_write_count": 0,
+            "audit_plaintext_leak_count": 0,
+            "cross_user_violation_count": 0,
+        },
+        "forget": {
+            "missed_target_items": 0,
+            "wrongly_deleted_items": 0,
+            "cross_user_violation_count": 0,
+            "residual_after_realtime_query": 0,
+            "residual_after_full_rebuild": 0,
+        },
+    }
+    records = []
+    for sample in validated.records:
+        metric = sample["metric"]
+        sample_id = sample["sample_id"]
+        if metric in ("preference", "conflict"):
+            trace = f"dispatch-v1/{metric}/{sample_id}/serializer"
+        elif metric == "safety":
+            trace = "source-events:serializer-unit"
+        else:
+            trace = "traces/serializer-unit.jsonl"
+        records.append(
+            raw_record(
+                sample_id=sample_id,
+                metric=metric,
+                actual=dict(actual_by_metric[metric]),
+                trace_reference=trace,
+                runtime_scope="serializer-unit",
+            )
+        )
+    return records
+
+
 def test_raw_record_canonical_top_level_is_runner_contract():
     record = raw_record(
         sample_id="d13e-safety-001",
@@ -240,6 +295,8 @@ def test_raw_record_canonical_top_level_is_runner_contract():
         runtime_scope="stateless:safety",
     )
     assert isinstance(record, ObservedRawRecord)
+    assert type(record.actual) is MappingProxyType
+    assert len(record.actual_digest) == 64
     assert set(record.as_canonical_mapping()) == {
         "sample_id",
         "metric",
@@ -248,7 +305,7 @@ def test_raw_record_canonical_top_level_is_runner_contract():
     }
     line = json.loads(_record_to_line(record))
     assert set(line) == {"sample_id", "metric", "actual", "trace_reference"}
-    assert line["actual"] == record.actual
+    assert line["actual"] == dict(record.actual)
 
 
 def test_raw_record_rejects_missing_trace_reference():
@@ -283,6 +340,17 @@ def test_raw_record_rejects_empty_runtime_scope():
         )
 
 
+def test_raw_record_rejects_wrong_sample_trace_binding():
+    with pytest.raises(ExecutionPreflightError, match="does not bind the dispatched sample"):
+        raw_record(
+            sample_id="d13e-pref-001",
+            metric="preference",
+            actual={"record_count": 1},
+            trace_reference="dispatch-v1/preference/d13e-pref-002/commit/utc/digest",
+            runtime_scope="stateless:preference",
+        )
+
+
 @pytest.mark.parametrize(
     ("metric", "actual", "message"),
     [
@@ -302,7 +370,7 @@ def test_raw_record_rejects_empty_runtime_scope():
         (
             "preference",
             {"record_count": 1, "records": [{"key": "k"}]},
-            "frozen schema",
+            "candidate schema",
         ),
     ],
 )
@@ -312,16 +380,19 @@ def test_raw_record_rejects_incomplete_or_evaluation_shaped_actual(metric, actua
             sample_id=f"d13e-{metric if metric != 'preference' else 'pref'}-001",
             metric=metric,
             actual=actual,
-            trace_reference="traces/sample-001.jsonl",
+            trace_reference=(
+                "dispatch-v1/preference/d13e-pref-001/commit/utc/digest"
+                if metric == "preference"
+                else "source-events:controlled-trace"
+            ),
             runtime_scope="stateless:test",
         )
 
 
 def test_raw_writer_serializer_layout_is_canonical():
-    # Pure serializer unit coverage: write_raw_records is the internal
-    # serializer of the formal orchestration path and is not, by itself,
-    # evidence of a real execution closure (see its docstring).
-    record = ObservedRawRecord(
+    # Pure serializer unit coverage: the writer is the internal serializer of
+    # the formal orchestration path, not by itself evidence of a real closure.
+    record = raw_record(
         sample_id="d13e-forget-001",
         metric="forget",
         actual={
@@ -336,7 +407,7 @@ def test_raw_writer_serializer_layout_is_canonical():
     )
     line = json.loads(_record_to_line(record))
     assert set(line) == {"sample_id", "metric", "actual", "trace_reference"}
-    assert line["actual"] == record.actual
+    assert line["actual"] == dict(record.actual)
 
 
 def test_raw_writer_rejects_hand_built_raw_mapping(tmp_path):
@@ -345,9 +416,61 @@ def test_raw_writer_rejects_hand_built_raw_mapping(tmp_path):
         "sample_id": "d13e-pref-001",
         "metric": "preference",
         "actual": {"record_count": 1},
-        "trace_reference": "preference:d13e-pref-001",
+        "trace_reference": "dispatch-v1/preference/d13e-pref-001/commit/utc/digest",
     }
     with pytest.raises(ExecutionPreflightError, match="ObservedRawRecord produced by real dispatch"):
+        write_raw_records(validated, [forged])
+    assert not validated.request.output_root.exists()
+
+
+def test_raw_writer_rejects_hand_constructed_plain_dict_actual(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    forged = ObservedRawRecord(
+        sample_id="d13e-pref-001",
+        metric="preference",
+        actual={"record_count": 1},
+        trace_reference="dispatch-v1/preference/d13e-pref-001/commit/utc/digest",
+        runtime_scope="stateless:preference",
+        actual_digest="0" * 64,
+    )
+    with pytest.raises(ExecutionPreflightError, match="immutable dispatch snapshot"):
+        write_raw_records(validated, [forged])
+
+
+def test_receipt_actual_is_immutable_after_dispatch(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    record = dispatch_stateless_sample(validated, "d13e-pref-001")
+    assert type(record.actual) is MappingProxyType
+    with pytest.raises(TypeError):
+        record.actual["gold"] = "tampered"  # type: ignore[index]
+
+
+def test_raw_writer_revalidates_actual_before_writing(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    forged = ObservedRawRecord(
+        sample_id="d13e-pref-001",
+        metric="preference",
+        actual=MappingProxyType({"record_count": 1, "gold": "tampered"}),
+        trace_reference="dispatch-v1/preference/d13e-pref-001/commit/utc/digest",
+        runtime_scope="stateless:preference",
+        actual_digest="0" * 64,
+    )
+    with pytest.raises(ExecutionPreflightError, match="forbidden"):
+        write_raw_records(validated, [forged])
+    assert not validated.request.output_root.exists()
+
+
+def test_raw_writer_rejects_wrong_sample_trace_reference(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    forged = ObservedRawRecord(
+        sample_id="d13e-pref-001",
+        metric="preference",
+        actual=MappingProxyType({"record_count": 1}),
+        trace_reference="dispatch-v1/preference/d13e-pref-002/commit/utc/digest",
+        runtime_scope="stateless:preference",
+        actual_digest=adapter._actual_digest({"record_count": 1}),
+    )
+    with pytest.raises(ExecutionPreflightError, match="does not bind the dispatched sample"):
         write_raw_records(validated, [forged])
     assert not validated.request.output_root.exists()
 
@@ -361,6 +484,37 @@ def test_raw_writer_fails_closed_when_dispatch_is_not_complete(tmp_path):
     assert not validated.request.output_root.exists()
 
 
+def test_raw_writer_serializer_full_batch_layout_is_four_files(tmp_path):
+    # Serializer-only positive layout: proves the canonical JSONL shape and the
+    # atomic temp->rename path, not a real execution closure.
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    batch = _synthetic_batch_for_serializer(validated)
+    assert len(batch) == 17
+    written = write_raw_records(validated, batch)
+    assert set(written) == {"preference", "conflict", "safety", "forget"}
+    expected_lines = {"preference": 4, "conflict": 4, "safety": 4, "forget": 5}
+    for metric, path in written.items():
+        assert len(path.read_text(encoding="utf-8").splitlines()) == expected_lines[metric]
+
+
+def test_raw_writer_never_leaves_partial_output_on_io_failure(tmp_path, monkeypatch):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    batch = _synthetic_batch_for_serializer(validated)
+    calls = {"count": 0}
+
+    def flaky_write(_path, _content):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise OSError("injected io failure")
+
+    monkeypatch.setattr(adapter, "_write_text_file", flaky_write)
+    with pytest.raises(OSError, match="injected io failure"):
+        write_raw_records(validated, batch)
+    assert not validated.request.output_root.exists()
+    leftovers = [p for p in validated.request.output_root.parent.glob(".*.tmp-*")]
+    assert leftovers == []
+
+
 def test_dispatch_stateless_preference_projects_top_level_fields(tmp_path):
     validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
 
@@ -368,6 +522,7 @@ def test_dispatch_stateless_preference_projects_top_level_fields(tmp_path):
 
     assert record.sample_id == "d13e-pref-001"
     assert record.metric == "preference"
+    assert type(record.actual) is MappingProxyType
     assert "records" not in record.actual
     assert record.actual == {
         "record_count": 1,
@@ -377,7 +532,10 @@ def test_dispatch_stateless_preference_projects_top_level_fields(tmp_path):
         "should_persist": True,
         "explicitness": "explicit",
     }
-    assert record.trace_reference == "preference:d13e-pref-001"
+    assert record.trace_reference.startswith(
+        "dispatch-v1/preference/d13e-pref-001/17dce3696066/"
+    )
+    assert record.trace_reference.endswith(record.actual_digest[:12])
     assert record.runtime_scope == "stateless:preference"
 
 
@@ -393,7 +551,9 @@ def test_dispatch_stateless_conflict_calls_the_real_policy(tmp_path):
         "winner_id": "d13e-c-001-left",
         "reason_code": "evidence_tier_priority",
     }
-    assert record.trace_reference == "conflict:d13e-conflict-001"
+    assert record.trace_reference.startswith(
+        "dispatch-v1/conflict/d13e-conflict-001/17dce3696066/"
+    )
     assert record.runtime_scope == "stateless:conflict"
 
 
@@ -423,6 +583,7 @@ def test_runtime_binding_lives_under_the_validated_state_root(safety_environment
     assert binding.db_path.resolve().is_relative_to(validated.request.state_root.resolve())
     assert binding.db_path.exists()
     assert binding.binding_id.startswith("d13d-runtime-binding/v1:")
+    assert len(binding.run_token_sha256) == 64
 
 
 def test_runtime_binding_cannot_reuse_an_existing_database(safety_environment):
@@ -475,6 +636,12 @@ def test_dispatch_safety_fails_closed_without_the_foreign_control(safety_environ
         )
 
 
+def _other_binding(tmp_path):
+    (tmp_path / "other").mkdir()
+    other = validate_execution_request(_request(tmp_path / "other"), git_runner=_git_runner)
+    return build_runtime_binding(other)
+
+
 def test_dispatch_safety_rejects_binding_outside_validated_state_root(safety_environment, tmp_path):
     validated, binding = safety_environment
     forged = ValidatedRuntimeBinding(
@@ -483,6 +650,7 @@ def test_dispatch_safety_rejects_binding_outside_validated_state_root(safety_env
         db_path=tmp_path / "outside-state-root.db",
         engine=binding.engine,
         registry=binding.registry,
+        run_token_sha256=binding.run_token_sha256,
     )
     with pytest.raises(ExecutionPreflightError, match="validated state_root"):
         dispatch_safety_sample(
@@ -497,14 +665,54 @@ def test_dispatch_safety_rejects_binding_from_a_different_validated_execution(
     safety_environment, tmp_path
 ):
     validated, _binding = safety_environment
-    (tmp_path / "other").mkdir()
-    other = validate_execution_request(_request(tmp_path / "other"), git_runner=_git_runner)
-    other_binding = build_runtime_binding(other)
+    other_binding = _other_binding(tmp_path)
     with pytest.raises(ExecutionPreflightError, match="not created from this validated execution"):
         dispatch_safety_sample(
             validated,
             "d13e-safety-001",
             binding=other_binding,
+            foreign_user_id="user_d13e_beta",
+        )
+
+
+def test_dispatch_safety_rejects_engine_pointing_to_another_database(
+    safety_environment, tmp_path
+):
+    validated, binding = safety_environment
+    other_binding = _other_binding(tmp_path)
+    forged = ValidatedRuntimeBinding(
+        validated=validated,
+        binding_id="forged",
+        db_path=binding.db_path,
+        engine=other_binding.engine,
+        registry=other_binding.registry,
+        run_token_sha256=other_binding.run_token_sha256,
+    )
+    with pytest.raises(ExecutionPreflightError, match="not connected to binding.db_path"):
+        dispatch_safety_sample(
+            validated,
+            "d13e-safety-001",
+            binding=forged,
+            foreign_user_id="user_d13e_beta",
+        )
+
+
+def test_dispatch_safety_rejects_registry_bound_to_another_engine(safety_environment, tmp_path):
+    validated, binding = safety_environment
+    other_binding = _other_binding(tmp_path)
+    forged = ValidatedRuntimeBinding(
+        validated=validated,
+        binding_id="forged",
+        db_path=binding.db_path,
+        engine=binding.engine,
+        registry=other_binding.registry,
+        run_token_sha256=binding.run_token_sha256,
+    )
+    with pytest.raises(ExecutionPreflightError, match="registry is not bound to the same engine/run"):
+        dispatch_safety_sample(
+            validated,
+            "d13e-safety-001",
+            binding=forged,
             foreign_user_id="user_d13e_beta",
         )
 
@@ -537,7 +745,6 @@ def test_adapter_module_does_not_import_evaluator_owned_artifacts():
     assert all(not name.startswith("evaluation.d13e") for name in imports)
 
 
-
 RUNNER_SCRIPT = REPOSITORY_ROOT / "scripts" / "run_d13e_formal_eval.py"
 GOLD_FILE = REPOSITORY_ROOT / "evaluation" / "d13e" / "D13E_GOLD_V1.jsonl"
 
@@ -560,17 +767,47 @@ def _gold_expected_by_sample():
     return expected
 
 
-def test_adapter_raw_feed_does_not_fail_the_runner_field_contract(tmp_path, safety_environment):
-    """Adapter raw -> frozen Runner contract: no per-sample field-shape failure.
+MUST_MATCH_TRUE = {
+    "d13e-pref-001",
+    "d13e-pref-002",
+    "d13e-pref-004",
+    "d13e-conflict-001",
+    "d13e-conflict-002",
+    "d13e-conflict-003",
+    "d13e-conflict-004",
+}
+# pref-003: the current provider extracts zero candidates while the frozen D13E
+# Gold expects one tool-selection preference.  This is a registered observation
+# gap (Dataset/pipeline alignment), not a schema blocker; the Runner correctly
+# computes it as False and we pin that outcome so it is not silently treated as
+# complete.
+KNOWN_OBSERVATION_GAP_FALSE = {"d13e-pref-003"}
+SAFETY_CROSS_TRACK_BLOCKED = {
+    "d13e-safety-001",
+    "d13e-safety-002",
+    "d13e-safety-003",
+    "d13e-safety-004",
+}
 
-    Gold is read here only to drive the Runner's per-sample allowed-field
-    contract (the same way formal Gate 9 consumes raw); it is never used to
-    generate `actual`. Forget is intentionally excluded because its external
-    state binding is still BLOCKED.
+
+def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
+    tmp_path, safety_environment
+):
+    """Adapter raw -> frozen Runner contract with explicit per-sample outcomes.
+
+    Gold is read here only to drive the Runner's per-sample contract (the same
+    way formal Gate 9 consumes raw); it is never used to generate ``actual``.
+    Preference/Conflict samples that must satisfy the contract are asserted
+    True, the registered observation gap is asserted False, and Safety samples
+    are asserted shape-legal but explicitly NOT treated as complete because the
+    sensitivity/admission/operation projection contract is still pending a D13E
+    Runner/Gold decision (schema status CANDIDATE_PENDING_D13E_REVIEW).
     """
     validated, binding = safety_environment
+    assert D13E_RAW_RESULT_SCHEMA_STATUS == "CANDIDATE_PENDING_D13E_REVIEW"
     runner = _load_runner_module()
     gold = _gold_expected_by_sample()
+    results = {}
     for sample in validated.records:
         if sample["metric"] == "forget":
             continue
@@ -585,6 +822,16 @@ def test_adapter_raw_feed_does_not_fail_the_runner_field_contract(tmp_path, safe
                 record = dispatch_safety_sample(validated, sample_id, binding=binding)
         else:
             record = dispatch_stateless_sample(validated, sample_id)
-        expected = gold[sample_id]
-        result = runner._matches_metric_contract(metric, expected, record.actual)
-        assert isinstance(result, bool)
+        results[sample_id] = runner._matches_metric_contract(
+            metric, gold[sample_id], dict(record.actual)
+        )
+    for sample_id in MUST_MATCH_TRUE:
+        assert results[sample_id] is True, f"{sample_id} must satisfy the Runner contract"
+    for sample_id in KNOWN_OBSERVATION_GAP_FALSE:
+        assert results[sample_id] is False, (
+            f"{sample_id} is a registered observation gap and must not be treated as complete"
+        )
+    for sample_id in SAFETY_CROSS_TRACK_BLOCKED:
+        assert isinstance(results[sample_id], bool)
+        # No schema-shape exception, but Safety raw is NOT Gate-9 complete while
+        # the cross-track projection contract is pending D13E review.

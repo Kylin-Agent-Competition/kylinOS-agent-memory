@@ -52,23 +52,27 @@
 
 Safety/Forget 无法取得任一硬零计数即失败。硬零字段的值是否为 0 由正式 Runner 判定，adapter 不得写 formal PASS。
 
-### 冻结投影契约（D13E_RAW_RESULT_SCHEMA_V1）
+### 候选投影契约（D13E_RAW_RESULT_SCHEMA_V1）
 
-`actual` 必须满足 adapter 内冻结的、独立于 Gold 的公开投影契约
-`evaluation.d13d_execution_adapter.D13E_RAW_RESULT_SCHEMA_V1`：按 metric 精确
+`actual` 必须满足 adapter 内、独立于 Gold 的候选投影契约
+`evaluation.d13d_execution_adapter.D13E_RAW_RESULT_SCHEMA_V1`
+（状态 `CANDIDATE_PENDING_D13E_REVIEW`，**未冻结**）：按 metric 精确
 `required`/`allowed` 字段白名单校验，任何 allowed 之外的字段在成为 canonical raw
-前即 fail-closed。
+前即 fail-closed。在 Safety 跨轨投影合同获 D13E 裁定前，不得把该 schema 或 Safety
+raw 称为 FROZEN / Gate-9 完成。
 
 - Preference：真实 provider 观测投影为 Runner 可消费的顶层稳定字段
   （`record_count` 及适用的 `key`/`scope`/`is_temporary`/`should_persist`/
   `explicitness`）；`records[]` 不再作为 canonical actual。零候选观测投影
   `record_count=0` + `should_persist=false`；多候选无法无损投影时 fail-closed。
-- Safety：当前冻结字段为四个硬零计数。Review 要求投影的
-  `sensitivity`/`admission`/`operation` 观测字段需要 D13E 对正式 Runner/Gold 重新
-  基线：当前封存 Runner 按每条 Gold `expected` 定义 allowed 字段集，safety-004 的
-  allowed 集只含硬零计数（禁止 `sensitivity`/`admission`），而 001/002/003 的
-  `expected` 又要求这些字段存在；观测一致的文本样本无法在不读取 Gold 的前提下按样本
-  决定字段集。该项为跨轨依赖，未随本轮 adapter 代码闭合。
+- Safety：当前候选字段为四个硬零计数。正式 Gold 仍要求 001/002=
+  `sensitivity+admission`、003=`operation+admission`、004=counter；当前封存 Runner
+  按每条 Gold `expected` 定义 allowed 字段集，safety-004 只允许硬零计数（禁止
+  `sensitivity`/`admission`），而 001/002/003 又要求这些字段存在；观测一致的文本
+  样本无法在不读取 Gold 的前提下按样本决定字段集。**该跨轨投影合同必须由 D13E
+  独立 PR/Review 裁定**：保留 Runner/Gold 则 adapter 从真实事实输出所需观测字段；
+  修改 Runner/Gold 则单独走 D13E 重新审查/Seal。裁定前 Safety raw 不视为 Gate-9
+  完成，I3b 保持 `BLOCKED_PARTIAL`。
 - Forget：仍要求外部 state-binding 到位后才可 dispatch（见任务卡阻塞条件 5）。
 
 ## E. L0/L1 必测项

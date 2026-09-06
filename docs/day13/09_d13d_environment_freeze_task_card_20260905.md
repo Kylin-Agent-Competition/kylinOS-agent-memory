@@ -38,7 +38,10 @@
 | VM 运行环境 | `Kylin-desktop-neo` 为 VERSION_MAP 目标环境 | READY_FOR_CAPTURE | 每次冻结须实际采集，历史基线不可替代当前 commit 的 L2 证据。 |
 | 正式统一证据目录 | 未创建 | BLOCKED | 历史 `d13d_20260905T090507Z` 仅为旧基线准备记录；必须为本次正式运行创建新的唯一目录、最终 Manifest 和校验清单后才登记索引。 |
 
-只有所有 `BLOCKED` 项解除，且 L2 采集完成、校验和复核无误，D13D 才可由 `PREPARED` 转为 `FROZEN`。
+只有所有 `BLOCKED` 项解除，且 L2 采集完成、校验和复核无误，`environment_status`
+才可推进到 `ENVIRONMENT_FROZEN`；`evidence_status` 只有在四类真实 raw、双 Seal、
+最终清单/校验和与 Gate 0--10 均通过后才能进入 `D13D_FROZEN`。两字段不得混用，
+单一 legacy `FROZEN` 不得用于推断正式闭环。
 
 ## 被测基线决定
 
@@ -116,20 +119,40 @@ evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>/
   README.md
 ```
 
-`environment_freeze.json` 最少包含以上输入登记字段、生成时间（UTC）、采集者、命令退出码和 `freeze_status`。`freeze_status` 只能为 `PREPARED`、`BLOCKED`、`FROZEN` 或 `INVALIDATED`；任一必填输入缺失、哈希不匹配、工作树不干净或部署 SHA 不一致时必须为 `BLOCKED` 或 `INVALIDATED`。
+`environment_freeze.json` 最少包含以上输入登记字段、生成时间（UTC）、采集者、
+命令退出码，以及两个独立状态字段：
+
+- `environment_status`：`PENDING_REVALIDATION` → `ENVIRONMENT_FROZEN`（或
+  `INVALIDATED`），只回答“是否已在对应 VM 对当前候选完成重验”；
+- `evidence_status`：`BLOCKED` → `RAW_READY_PENDING_SEALS` →
+  `SEALED_READY_FOR_RUNNER` → `D13D_FROZEN`，只回答正式证据闭环。
+
+任一必填输入缺失、哈希不匹配、工作树不干净或部署 SHA 不一致时，
+`environment_status` 为 `PENDING_REVALIDATION`/`INVALIDATED`、`evidence_status`
+为 `BLOCKED`。若为兼容保留 legacy `freeze_status`（`PREPARED/BLOCKED/FROZEN/
+INVALIDATED`），它只能是由上述两字段导出的派生字段，并写明唯一映射规则；
+`freeze_status=FROZEN` 不得单独作为正式闭环判据，只有
+`evidence_status=D13D_FROZEN` 才是完整 formal closure。
 
 ## 执行清单
 
+前置（进入证据目录前）：
 - [ ] 选择并人工确认 `tested_commit`，记录批准来源。
 - [ ] 从干净/可回退 VM 快照创建本轮工作副本；记录 VM UUID、资源、OS 与快照信息。
 - [ ] 部署精确 `tested_commit`，核对 VM 内 `git rev-parse HEAD` 和 `git status --porcelain`。
 - [ ] 采集 service unit、active 状态、Memory Service socket 权限、数据库路径及 Python/SQLite/依赖版本。
 - [ ] 取得 D13E 封存集、Gold、阈值和评测配置；逐一执行 SHA-256 校验并记录条目数。
 - [ ] 核验 `/etc/kylin-memory/trust` 的固定路径、root owner、非 symlink 与 group/other 非写权限；未授权不得自行安装或生成公钥。
-- [ ] 接收并离线验签 D13E Review Seal、D13D Execution Seal；两份 Seal/.sig 必须位于本轮 evidence root 内。
-- [ ] 创建唯一证据目录，记录所有实际执行命令、退出码与原始输出。
-- [ ] 由 D13B 在同一冻结目录运行正式评测；结果和报告与环境清单中的 `tested_commit`、数据集和配置哈希一致。
-- [ ] 对目录内所有交付物生成 `SHA256SUMS` 并独立复核。
+
+证据链（严格按序；D13D Execution Seal 必须绑定最终 attestation_sha256，故必须在 attestation 之后签发）：
+- [ ] 创建唯一证据目录 `evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>`，记录所有实际执行命令、退出码与原始输出。
+- [ ] 在冻结 VM 执行真实四类 raw（Preference 4 / Conflict 4 / Safety 4 / Forget 5），逐样本记录 trace/evidence；失败样本保留、不删除、不补零。
+- [ ] 完成最终 `FROZEN_BY_D13D` Manifest 并复算其 SHA-256（与 raw/provenance 一致）。
+- [ ] 由 D Reviewer 对最终 Manifest 复算 hash 后签发 D13E Review Seal/.sig（放入 evidence root）。
+- [ ] 生成 execution log、`SHA256SUMS`、`evidence/index.yaml` 与 execution attestation（attestation 绑定最终 raw/Manifest hash）。
+- [ ] 由非作者独立 D13D Execution Reviewer 对最终 `attestation_sha256` 签发 D13D Execution Seal/.sig（放入 evidence root）。
+- [ ] 离线复核并验签两份 Seal（D13E Review Seal 与 D13D Execution Seal），确认 key_id 与 Frozen Trust Root 一致、均在 evidence root 内。
+- [ ] 在冻结 VM 对同一 `tested_commit` 运行正式 Runner Gate 0--10；全部通过且 summary 落盘后才可标记 `evidence_status=D13D_FROZEN`。
 - [ ] 将状态、限制和校验和登记到 `evidence/index.yaml`；`tested_commit` 与 `evidence_commit` 分开记录。
 - [ ] 复核无敏感正文、凭据、Token、私钥或可识别用户原文进入日志/报告；失败样例只保留脱敏标识和错误分类。
 
