@@ -158,8 +158,7 @@ test_d14a_package_integrity.py、test_d14a_transactional_rollback.py 等）、
    三级验收通过或状态越级声明。
 5. **BLOCKER C — runtime/model 冻结身份（2026-09-06 裁决 HANDOFF_REQUIRED）**：runtime/model
    identity/version/hash/vendor-frozen lock 尚无 D Reviewer 接受的可信外部冻结输入，
-   状态 **HANDOFF_REQUIRED**（不再以 DEPENDENCY_BLOCKED 阻塞本 PR 收敛）；不得伪造
-   runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence；
+   状态 **HANDOFF_REQUIRED**（不再以 DEPENDENCY_BLOCKED 阻塞本 PR 收敛）；不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence；
    解除须正式 D14D G0 采集冻结（或外部可信冻结输入 + D Reviewer 会签），属独立后续
    事项，不在本任务解决。
 
