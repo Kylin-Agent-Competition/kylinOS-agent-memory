@@ -181,6 +181,16 @@ def test_d7_no_false_positive_for_bare_priority_marker():
         assert cands == [], f"{text!r} 不应产生 PreferenceCandidate"
 
 
+def test_d7_no_false_positive_for_tool_selection_fact_or_description():
+    """Review MEDIUM-01：事实/配置/选项/方案描述含 marker 也不得产 candidate。"""
+    p = ExtractionProvider()
+    for text in ("系统默认使用 UTF-8 编码", "Git 默认使用 master 分支",
+                 "首选项是自动保存", "我们首选方案 A"):
+        cands = p.extract_preferences(
+            _turn(user_text=text, source_event_id="evt_preffact"))
+        assert cands == [], f"{text!r} 不应产生 PreferenceCandidate（事实/描述句）"
+
+
 def test_d7_rule_contract_signature_kept():
     """Day3 契约保持：extract_preferences(event) 单参数。"""
     p = ExtractionProvider()
