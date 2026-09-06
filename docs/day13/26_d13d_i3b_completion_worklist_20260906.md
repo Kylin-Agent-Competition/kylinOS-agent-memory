@@ -257,6 +257,17 @@ formal_tested_commit 仍 = PENDING_P0_I3_RESELECTION
 D13D_FROZEN = NO（本阶段不产生）
 ```
 
+### 8.5 状态更新（#161/#162 已 merge，2026-09-06）
+
+main 已并入 #162（Safety contract，merge `1a58df8…`）与 #161（pref-003 production fix，merge `3138e94…`）；
+#160 分支已 merge `origin/main`（merge `8bb7e2d…`），相关 L1（adapter/binding/preference/domain）153 passed。
+
+```text
+P2-A = CONTRACT_MERGED / CONSUMER_IN_PROGRESS
+P2-B = IN_PROGRESS / BLOCKED_UNTIL_5_OF_5_E2E
+P2-C = PRODUCTION_FIX_MERGED / VERIFICATION_IN_PROGRESS
+```
+
 ## 9. P2-B 承接与执行记录（2026-09-06）
 
 ### 9.1 授权与状态
@@ -300,5 +311,8 @@ D13D_FROZEN = NO（本阶段不产生）
 
 - 已入库：#160 含 binding artifact V1（`915c6ae4…`）、校验工具/CLI、runtime binding 真实 forget handler 注册与冻结、`dispatch_forget_sample`（artifact 门禁 → preview → 快照 → execute → observation provider 缝 → receipt → raw）。
 - L1 回归（本 PR 相关 9 个测试文件）：**236 passed**（adapter 66 + binding 12 + forget/safety observability + preference rules/provider + domain contract + event.ingest + forget persistence）。
-- Phase-2 边界（本文件权威口径）：I3b-completion 的生产/适配能力在**非正式 L1/isolated 环境**证明即满足；**正式 VM 五模式真实 dispatch + realtime/rebuild L2 证据属于 Phase 3**，须待 final tested_commit 选定、binding 重生成后执行——不在 Phase-2 声称完成，也不产生 formal raw/Seal/FROZEN。
+- Phase-2 completion Gate（统一口径，取代任何“Phase 2 只需 L1 capability”降级表述）：Phase 2 必须在**隔离非正式环境**真实证明
+  `Safety 4/4（Gold-independent projection）`、`Preference 4/4（pref-003 已消费 #161）`、`Conflict 4/4`、`Forget 5/5 real preview/execute/realtime/rebuild`、`5/5 receipt + provenance`、`Gold isolation PASS`、`independent Review APPROVE`。
+  Phase 3 才负责：final tested_commit、正式 Kylin VM 17 raw、Final Manifest、Review Seal、Execution Seal、attestation、Runner Gate 0–10、`D13D_FROZEN`。
+- V1 artifact（`915c6ae4…`）仅记录 state-preparation evidence；按 R4 将 SUPERSEDED/HISTORICAL，执行规范以 V2 为准（后续 commit）。
 - 待 D/E Review：#160 本批（binding+dispatch 集成）连同 #161/#162 依各自独立 Review 门推进。
