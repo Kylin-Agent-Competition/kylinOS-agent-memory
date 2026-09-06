@@ -104,16 +104,32 @@ def _build_delete_request(
         raise ValueError(
             f"forget.executed payload 缺字段: {', '.join(missing)} (event_id={event_id})"
         )
-    memory_ids = [str(x) for x in resolved_target_ids]
+    # G3（E 授权 #160）：接受 knowledge:/preference: tagged 目标，规范化成数字 memory id；
+    # 未知 tag / 非数字 fail-closed。
+    memory_ids = []
+    for raw in resolved_target_ids:
+        token = str(raw)
+        if ":" in token:
+            kind, _, num = token.partition(":")
+            if kind not in ("knowledge", "preference") or not num.isdecimal():
+                raise ValueError(
+                    f"forget.executed 目标含未知 kind/非数字 id: {token!r} (event_id={event_id})"
+                )
+            memory_ids.append(num)
+        else:
+            memory_ids.append(token)
     if not memory_ids:
         raise ValueError(f"forget.executed resolved_target_ids 为空 (event_id={event_id})")
-    if version_ids is not None:
-        version_ids = [str(x) for x in version_ids]
-        if len(version_ids) != len(memory_ids):
-            raise ValueError(
-                f"forget.executed version_ids 与 resolved_target_ids 长度不一致 "
-                f"(event_id={event_id})"
-            )
+    if version_ids is None:
+        raise ValueError(
+            f"forget.executed version_ids 缺失（Vector 需按版本精确删除）(event_id={event_id})"
+        )
+    version_ids = [str(x) for x in version_ids]
+    if len(version_ids) != len(memory_ids):
+        raise ValueError(
+            f"forget.executed version_ids 与 resolved_target_ids 长度不一致 "
+            f"(event_id={event_id})"
+        )
 
     preview_ref = str(payload.get("forget_plan_id") or payload.get("preview_ref") or event_id)
     preview_hash = Digest(selection_hash)

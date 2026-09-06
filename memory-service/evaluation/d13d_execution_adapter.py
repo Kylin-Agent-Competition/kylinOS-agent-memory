@@ -22,18 +22,33 @@ import os
 from pathlib import Path
 import re
 import secrets
+import sqlite3
 import shutil
 import subprocess
 from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping
 
+from sqlalchemy import and_, select, text
+from db.schema import source_events
+
 from db.engine import create_db_engine, init_schema
 from db.uow import UnitOfWork
+from gateway.forget_handlers import register_forget_handlers
 from gateway.handlers import register_default_handlers, register_event_ingest_handler
 from gateway.preference_handlers import register_preference_handlers
 from gateway.registry import HandlerRegistry, RequestContext
 from providers.extraction_provider import ExtractionProvider, TurnFinalizedEvent
 from service.conflict_resolution_policy import ConflictResolutionPolicy, ConflictSide
+from evaluation.d13d_forget_fts_observer import build_fts_observer
+from evaluation.d13d_forget_state_binding import (
+    BINDING_VERSION_V2,
+    FORGET_SAMPLE_MODES,
+    verify_artifact_file,
+)
+from service.d13d_forget_observability import (
+    capture_forget_execution_snapshot,
+    observe_forget_execution,
+)
 from service.d13d_safety_observability import observe_safety_execution
 
 
@@ -102,6 +117,9 @@ D13E_RAW_RESULT_SCHEMA_V1 = {
                 "normal_memory_write_count",
                 "audit_plaintext_leak_count",
                 "cross_user_violation_count",
+                "sensitivity",
+                "admission",
+                "operation",
             ),
         },
         "forget": {
@@ -147,6 +165,16 @@ _FORBIDDEN_EVALUATION_TOKENS = frozenset(
 
 _ENGINE_BINDING_TOKENS: dict[int, str] = {}
 
+# R8/B1：Forget realtime/rebuild observation closed allowlist。
+# 唯一 approved profile = d13d-validation-profile-v2（FTS5 真实通道，E 裁定 2026-09-07）。
+# value = builder(binding, artifact, sample_id) -> D13DForgetFtsObserver（initialize 已完成）。
+# artifact 只能引用 allowlist 内 profile；未知/缺失一律 fail-closed。
+OBSERVATION_PROFILES: dict[str, Any] = {
+    # canonical（E 裁定）；v1 名保留兼容既有 V1-based artifact 引用，同一 FTS 实现
+    "d13d-validation-profile-v2": build_fts_observer,
+    "d13d-validation-profile-v1": build_fts_observer,
+}
+
 
 class ExecutionPreflightError(ValueError):
     """An invocation is not safe to dispatch against an isolated environment."""
@@ -162,6 +190,7 @@ class ExecutionRequest:
     testset_sha256: str
     execution_evidence_root: Path
     state_root: Path
+    binding_artifact_path: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -203,6 +232,11 @@ def _validate_isolation(request: ExecutionRequest) -> ExecutionRequest:
         request.execution_evidence_root, label="execution_evidence_root"
     )
     state_root = _canonical_path(request.state_root, label="state_root")
+    binding_artifact_path = (
+        _canonical_path(request.binding_artifact_path, label="binding_artifact_path")
+        if request.binding_artifact_path is not None
+        else None
+    )
     roots = {
         "execution_evidence_root": execution_evidence_root,
         "state_root": state_root,
@@ -224,6 +258,7 @@ def _validate_isolation(request: ExecutionRequest) -> ExecutionRequest:
         tested_commit=request.tested_commit,
         testset_path=_canonical_path(request.testset_path, label="testset_path"),
         testset_sha256=request.testset_sha256,
+        binding_artifact_path=binding_artifact_path,
         execution_evidence_root=execution_evidence_root,
         state_root=state_root,
     )
@@ -495,6 +530,7 @@ def _write_execution_receipt(
     entrypoint: str,
     runtime_scope: str,
     trace_reference: str,
+    provenance: Optional[Mapping[str, Any]] = None,
 ) -> str:
     """Persist one real execution receipt under the evidence root (all metrics).
 
@@ -504,6 +540,11 @@ def _write_execution_receipt(
     metric, full tested_commit, actual_digest, UTC, entrypoint, runtime_scope
     (binding identity for stateful dispatch) and the raw trace_reference, so an
     independent reviewer can re-locate the real execution facts.
+
+    ``provenance``（R9，Forget）：把 approved source / isolated runtime restore /
+    observation 来源一并写入 receipt（binding_version、artifact sha、
+    state_preparation_commit、source_db_sha256、runtime_db_initial_sha256、
+    restore_id、sample_id，以及 R10 产生的 realtime/rebuild snapshot/watermark）。
     """
     if not isinstance(validated, ValidatedExecution):
         raise TypeError("validated must be a ValidatedExecution")
@@ -526,6 +567,14 @@ def _write_execution_receipt(
         "runtime_scope": runtime_scope,
         "trace_reference": trace_reference,
     }
+    if provenance:
+        receipt = {**receipt, **dict(provenance)}
+        try:
+            json.dumps(receipt, ensure_ascii=False, sort_keys=True)
+        except (TypeError, ValueError) as exc:
+            raise ExecutionPreflightError(
+                "execution receipt provenance must be JSON serializable"
+            ) from exc
     trace_path = evidence_root / "dispatch" / f"{sample_id}.json"
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -734,6 +783,14 @@ class ValidatedRuntimeBinding:
     registry: HandlerRegistry
     event_ingest_handler: Any
     run_token_sha256: str
+    forget_preview_handler: Any = None
+    forget_execute_handler: Any = None
+    binding_artifact_sha256: Optional[str] = None
+    state_preparation_commit: Optional[str] = None
+    source_db_sha256: Optional[str] = None
+    runtime_db_initial_sha256: Optional[str] = None
+    sample_id: Optional[str] = None
+    restore_id: Optional[str] = None
 
 
 def _is_under(path: Path, root: Path) -> bool:
@@ -773,6 +830,9 @@ def build_runtime_binding(
     register_default_handlers(registry)
     register_event_ingest_handler(registry, uow_factory=lambda: UnitOfWork(engine))
     register_preference_handlers(registry, uow_factory=lambda: UnitOfWork(engine))
+    # D/E P2-B 裁定：validation profile 显式注册真实 forget.preview/forget.execute
+    # handler（生产 default 不注册，本 binding 即该 profile 的受控注册点）。
+    register_forget_handlers(registry, uow_factory=lambda: UnitOfWork(engine))
     # Bind engine <-> registry <-> canonical db path with an unforgeable run
     # token: the engine is registered under its object id and the registry
     # carries the same token, so a caller-constructed binding with a foreign
@@ -788,6 +848,9 @@ def build_runtime_binding(
     # this object, so a later register()/unregister() overwrite cannot swap in
     # a fake handler before real dispatch.
     event_ingest_handler = registry.route("event.ingest")
+    # P2-B：同时冻结 forget.preview / forget.execute 的真实 handler 身份。
+    forget_preview_handler = registry.route("forget.preview")
+    forget_execute_handler = registry.route("forget.execute")
     return ValidatedRuntimeBinding(
         validated=validated,
         binding_id=binding_id,
@@ -795,9 +858,177 @@ def build_runtime_binding(
         engine=engine,
         registry=registry,
         event_ingest_handler=event_ingest_handler,
+        forget_preview_handler=forget_preview_handler,
+        forget_execute_handler=forget_execute_handler,
         run_token_sha256=hashlib.sha256(run_token.encode("ascii")).hexdigest(),
     )
 
+
+def _is_ancestor(repository_root: Path, ancestor: str) -> bool:
+    """state_preparation/minimum commit 是否为 repository HEAD 的祖先。"""
+    completed = subprocess.run(
+        ["git", "-C", str(repository_root), "merge-base", "--is-ancestor",
+         ancestor, "HEAD"],
+        capture_output=True, text=True,
+    )
+    return completed.returncode == 0
+
+
+def _sqlite_integrity_ok(db_path: Path) -> bool:
+    con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        row = con.execute("PRAGMA quick_check(1)").fetchone()
+    finally:
+        con.close()
+    return bool(row) and str(row[0]).lower() == "ok"
+
+
+def _sqlite_schema_fingerprint(db_path: Path) -> str:
+    """sqlite_master canonical SHA-256（schema 兼容现场校验）。"""
+    con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        rows = con.execute(
+            "SELECT type || '|' || name || '|' || COALESCE(sql, '') "
+            "FROM sqlite_master ORDER BY name"
+        ).fetchall()
+    finally:
+        con.close()
+    canonical = "\n".join(row[0] for row in rows).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _load_forget_artifact_v2(artifact_path: Path) -> dict[str, Any]:
+    if artifact_path is None:
+        raise ExecutionPreflightError("forget dispatch requires the D13D forget state binding artifact")
+    ok, errors = verify_artifact_file(str(artifact_path))
+    if not ok:
+        raise ExecutionPreflightError(
+            "forget state binding artifact failed validation: " + "; ".join(errors[:3])
+        )
+    artifact = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
+    if artifact.get("binding_version") != BINDING_VERSION_V2:
+        raise ExecutionPreflightError(
+            "forget dispatch requires binding_version " + BINDING_VERSION_V2
+        )
+    return artifact
+
+
+def _verify_sealed_source(artifact: Mapping[str, Any]) -> Path:
+    """V2 sealed source DB：拒绝 symlink、SHA/字节数/schema/integrity 现场复核。"""
+    source = artifact.get("source_state")
+    if not isinstance(source, Mapping):
+        raise ExecutionPreflightError("artifact source_state is missing")
+    raw_path = source.get("sealed_db_path")
+    db_path = Path(raw_path)
+    if db_path.is_symlink():
+        raise ExecutionPreflightError("source DB must not be a symlink")
+    if not db_path.exists():
+        raise ExecutionPreflightError("source DB does not exist")
+    if hashlib.sha256(db_path.read_bytes()).hexdigest() != source.get("sealed_db_sha256"):
+        raise ExecutionPreflightError("source DB SHA-256 does not match the artifact")
+    if db_path.stat().st_size != int(source.get("db_size_bytes", -1)):
+        raise ExecutionPreflightError("source DB size does not match the artifact")
+    try:
+        fingerprint = _sqlite_schema_fingerprint(db_path)
+        integrity_ok = _sqlite_integrity_ok(db_path)
+    except sqlite3.Error as exc:
+        raise ExecutionPreflightError(
+            "source DB is not a valid sqlite database"
+        ) from exc
+    if fingerprint != source.get("sqlite_schema_fingerprint"):
+        raise ExecutionPreflightError("source DB schema fingerprint does not match the artifact")
+    if not integrity_ok:
+        raise ExecutionPreflightError("source DB integrity check failed")
+    return db_path
+
+
+def prepare_forget_runtime_bindings(
+    validated: ValidatedExecution,
+    *,
+    artifact_path: Path,
+) -> dict[str, ValidatedRuntimeBinding]:
+    """R5：sealed source → 每 sample 独立 isolated runtime clone（带 provenance）。
+
+    - 校验 artifact（v2）、source DB（SHA/size/schema/integrity/拒绝 symlink）；
+    - state_preparation_commit 与 execution_compatibility.minimum_commit 必须是
+      repository HEAD 祖先；
+    - 每个 Forget sample 在 state_root/runtime/<sample_id>/runtime.db 生成 fresh
+      copy（初始 SHA == source SHA），并注册冻结真实 handlers；
+    - ValidatedRuntimeBinding 携带 provenance（artifact sha / state_prep commit /
+      source sha / initial sha / sample_id / restore_id）。
+    """
+    artifact = _load_forget_artifact_v2(Path(artifact_path))
+    exec_compat = artifact.get("execution_compatibility") or {}
+    if exec_compat.get("policy") != "descendant-and-contract-compatible":
+        raise ExecutionPreflightError("execution_compatibility.policy is unsupported")
+    repository_root = _canonical_path(
+        validated.request.repository_root, label="repository_root"
+    )
+    sp_commit = artifact.get("state_preparation_commit")
+    min_commit = exec_compat.get("minimum_commit")
+    if not _is_ancestor(repository_root, sp_commit):
+        raise ExecutionPreflightError(
+            "state_preparation_commit is not an ancestor of repository HEAD"
+        )
+    if not _is_ancestor(repository_root, min_commit):
+        raise ExecutionPreflightError(
+            "execution_compatibility.minimum_commit is not an ancestor of repository HEAD"
+        )
+    source_db = _verify_sealed_source(artifact)
+
+    state_root = _canonical_path(validated.request.state_root, label="state_root")
+    runtime_root = state_root / "runtime"
+    if runtime_root.exists():
+        raise ExecutionPreflightError("runtime root must not already exist")
+    runtime_root.mkdir(parents=True, exist_ok=False)
+
+    artifact_sha = artifact.get("artifact_sha256")
+    source_sha = artifact["source_state"]["sealed_db_sha256"]
+    bindings: dict[str, ValidatedRuntimeBinding] = {}
+    for sample_id in sorted(FORGET_SAMPLE_MODES):
+        sample_root = runtime_root / sample_id
+        sample_root.mkdir(parents=False)
+        db_path = sample_root / "runtime.db"
+        shutil.copyfile(source_db, db_path)
+        initial_sha = hashlib.sha256(db_path.read_bytes()).hexdigest()
+        if initial_sha != source_sha:
+            raise ExecutionPreflightError("runtime clone initial SHA does not match source")
+        engine = create_db_engine(str(db_path))
+        registry = HandlerRegistry()
+        register_default_handlers(registry)
+        # Review BLOCKER-01：冻结当前 engine，避免循环变量 late-binding 让
+        # 前 4 个 sample 的 handler 共用最后一个 engine（closure default-arg 绑定）。
+        uow_factory = lambda engine=engine: UnitOfWork(engine)
+        register_event_ingest_handler(registry, uow_factory=uow_factory)
+        register_preference_handlers(registry, uow_factory=uow_factory)
+        register_forget_handlers(registry, uow_factory=uow_factory)
+        run_token = secrets.token_hex(32)
+        _ENGINE_BINDING_TOKENS[id(engine)] = run_token
+        setattr(registry, "d13d_runtime_token", run_token)
+        binding_id = (
+            f"d13d-runtime-binding/v2:{validated.request.tested_commit[:12]}:{sample_id}"
+        )
+        event_ingest_handler = registry.route("event.ingest")
+        forget_preview_handler = registry.route("forget.preview")
+        forget_execute_handler = registry.route("forget.execute")
+        bindings[sample_id] = ValidatedRuntimeBinding(
+            validated=validated,
+            binding_id=binding_id,
+            db_path=db_path,
+            engine=engine,
+            registry=registry,
+            event_ingest_handler=event_ingest_handler,
+            forget_preview_handler=forget_preview_handler,
+            forget_execute_handler=forget_execute_handler,
+            run_token_sha256=hashlib.sha256(run_token.encode("ascii")).hexdigest(),
+            binding_artifact_sha256=artifact_sha,
+            state_preparation_commit=sp_commit,
+            source_db_sha256=source_sha,
+            runtime_db_initial_sha256=initial_sha,
+            sample_id=sample_id,
+            restore_id=f"restore:{sample_id}:{secrets.token_hex(6)}",
+        )
+    return bindings
 
 def _validate_binding(
     binding: ValidatedRuntimeBinding, validated: ValidatedExecution
@@ -860,7 +1091,102 @@ def _validate_binding(
         raise ExecutionPreflightError(
             "runtime binding event.ingest handler was replaced or unregistered"
         )
+    for method, frozen in (
+        ("forget.preview", binding.forget_preview_handler),
+        ("forget.execute", binding.forget_execute_handler),
+    ):
+        try:
+            routed = binding.registry.route(method)
+        except Exception:  # noqa: BLE001 -- unregistered handler is a replaced binding
+            routed = None
+        if routed is not frozen:
+            raise ExecutionPreflightError(
+                f"runtime binding {method} handler was replaced or unregistered"
+            )
+    # R5：带 provenance 的 Forget runtime binding 进一步校验 sample/restore 身份。
+    if binding.sample_id is not None:
+        if binding.sample_id not in FORGET_SAMPLE_MODES:
+            raise ExecutionPreflightError("runtime binding sample_id is invalid")
+        expected_dir = state_root / "runtime" / binding.sample_id
+        if not _is_under(db_path, expected_dir):
+            raise ExecutionPreflightError(
+                "runtime binding db is not under its sample runtime dir"
+            )
+        for attr in (
+            "binding_artifact_sha256",
+            "state_preparation_commit",
+            "source_db_sha256",
+            "runtime_db_initial_sha256",
+            "restore_id",
+        ):
+            if not getattr(binding, attr):
+                raise ExecutionPreflightError(f"runtime binding missing provenance: {attr}")
 
+
+def _persisted_safety_event_fields(conn, *, user_id: str, trace_id: str) -> tuple[str, str]:
+    """真实持久化 source_events 的 (sensitivity, admission_decision)。
+
+    必须唯一可确定：无事件、多值或冲突 → 抛 ValueError（fail-closed）。
+    """
+    rows = conn.execute(
+        select(
+            source_events.c.sensitivity,
+            source_events.c.admission_decision,
+        )
+        .where(
+            and_(
+                source_events.c.user_id == user_id,
+                source_events.c.trace_id == trace_id,
+            )
+        )
+        .order_by(source_events.c.id.asc())
+    ).mappings().all()
+    if not rows:
+        raise ValueError("no persisted source event for the safety trace")
+    sensitivities = {row["sensitivity"] for row in rows}
+    admissions = {row["admission_decision"] for row in rows}
+    if len(sensitivities) != 1 or len(admissions) != 1:
+        raise ValueError("persisted safety observation is conflicting or not unique")
+    return sensitivities.pop(), admissions.pop()
+
+
+def _project_safety_actual(
+    *,
+    sample_id: str,
+    sample_input: Mapping[str, Any],
+    observed: Mapping[str, Any],
+    conn: Any,
+    user_id: str,
+    trace_id: str,
+) -> dict[str, Any]:
+    """把真实观测投影为 Safety raw actual（消费 #162 frozen contract）。
+
+    - safety-001/002：+ sensitivity/admission（来自真实 persisted source_events）；
+    - safety-003：+ operation/admission（operation 来自 SHA 验证 Dataset input；
+      admission 由真实 user-scoped repository read observation 推导，不固定 reject）；
+    - safety-004：仅四 hard-zero counter（真实来源）。
+    观测缺失/冲突 fail-closed；真实安全违规（cross_user_violation_count>0）原样写入，
+    不吞 raw、不代 Runner 判 FAIL。
+    """
+    actual = {
+        "critical_gate_bypass_count": observed["critical_gate_bypass_count"],
+        "normal_memory_write_count": observed["normal_memory_write_count"],
+        "audit_plaintext_leak_count": observed["audit_plaintext_leak_count"],
+        "cross_user_violation_count": observed["cross_user_violation_count"],
+    }
+    if sample_id in ("d13e-safety-001", "d13e-safety-002"):
+        sensitivity, admission = _persisted_safety_event_fields(
+            conn, user_id=user_id, trace_id=trace_id
+        )
+        actual["sensitivity"] = sensitivity
+        actual["admission"] = admission
+    elif sample_id == "d13e-safety-003":
+        actual["operation"] = sample_input["operation"]
+        # user-scoped repository read observation：越界返回（violation）≠ 观测不可用。
+        actual["admission"] = (
+            "reject" if actual["cross_user_violation_count"] == 0 else "allow"
+        )
+    return actual
 
 def dispatch_safety_sample(
     validated: ValidatedExecution,
@@ -928,14 +1254,16 @@ def dispatch_safety_sample(
                 trace_id=trace_id,
                 foreign_user_id=foreign_user_id,
             )
+            actual = _project_safety_actual(
+                sample_id=sample_id,
+                sample_input=sample_input,
+                observed=observed,
+                conn=conn,
+                user_id=user_id,
+                trace_id=trace_id,
+            )
     except Exception as exc:
         raise ExecutionPreflightError("safety dispatch failed") from exc
-    actual = {
-        "critical_gate_bypass_count": observed["critical_gate_bypass_count"],
-        "normal_memory_write_count": observed["normal_memory_write_count"],
-        "audit_plaintext_leak_count": observed["audit_plaintext_leak_count"],
-        "cross_user_violation_count": observed["cross_user_violation_count"],
-    }
     trace_reference = observed["trace_reference"]
     _write_execution_receipt(
         validated,
@@ -954,6 +1282,204 @@ def dispatch_safety_sample(
         runtime_scope=binding.binding_id,
     )
 
+
+def _tagged_confirmed(mode: str, resolved: list[str]) -> list[str]:
+    """把 preview 解析结果规范成 observer 需要的 tagged 目标 ID。
+
+    single_item/session/topic/time_window 解析为裸 memory_entries.id；
+    full_reset 已带 knowledge:/preference: 标签。
+    """
+    if mode == "full_reset":
+        return list(resolved)
+    return [f"knowledge:{rid}" for rid in resolved]
+
+
+def _load_forget_executed_payload(engine: Any, forget_plan_id: str) -> Optional[Dict[str, Any]]:
+    """读取 execute 同事务写入的真实 forget.executed outbox payload（路由真源）。"""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT payload FROM outbox "
+                "WHERE aggregate_type = 'forget' AND aggregate_id = :plan "
+                "AND event_type = 'forget.executed' ORDER BY id DESC LIMIT 1"
+            ),
+            {"plan": forget_plan_id},
+        ).mappings().first()
+    if row is None:
+        return None
+    return json.loads(row["payload"])
+
+def dispatch_forget_sample(
+    validated: ValidatedExecution,
+    sample_id: str,
+    *,
+    binding: ValidatedRuntimeBinding,
+) -> ObservedRawRecord:
+    """Run one Forget sample through the real production preview/execute chain.
+
+    - binding 必须是本 sample 的 restored runtime binding（R5）：sample_id 匹配 +
+      provenance（artifact sha / state_prep commit / source sha / initial sha / restore id）。
+    - artifact 必须是 v2（ExecutionRequest.binding_artifact_path）；HEAD == tested_commit
+      由 preflight 锁定；不再存在单一 applicable_source_commit equality。
+    - confirmation token 由真实 forget.preview 一次性返回，execute 只消费该凭据；
+      adapter 不创建/修补目标、不从 Dataset 推导 DB ID、不伪造 observation。
+    - realtime/rebuild observation 只来自 closed allowlist OBSERVATION_PROFILES[
+      artifact.retrieval_profile]；缺失/未知 profile 即 fail-closed，不写 canonical raw。
+    """
+    sample = _sample_by_id(validated, sample_id)
+    if sample["metric"] != "forget":
+        raise ExecutionPreflightError("sample is not a forget metric")
+    if binding.sample_id != sample_id:
+        raise ExecutionPreflightError(
+            "forget runtime binding sample_id does not match the dispatched sample"
+        )
+    _validate_binding(binding, validated)
+    artifact = _load_forget_artifact_v2(validated.request.binding_artifact_path)
+    entry = next(
+        (s for s in artifact.get("samples", []) if s.get("sample_id") == sample_id), None
+    )
+    if entry is None:
+        raise ExecutionPreflightError(f"binding artifact has no entry for {sample_id}")
+    builder = OBSERVATION_PROFILES.get(artifact.get("retrieval_profile"))
+    if builder is None:
+        raise ExecutionPreflightError(
+            "no approved retrieval observation profile: "
+            + str(artifact.get("retrieval_profile"))
+        )
+    # B1：受控 builder 构造 observer（initialize 建 FTS 索引），preview 前就绪。
+    observer = builder(binding, artifact, sample_id)
+
+    mode = entry["forget_mode"]
+    user_id = entry["user_id"]
+    foreign_user_id = "user_d13e_beta"
+    selector = entry.get("target_selector") or sample["input"].get("target_selector") or {}
+    target_selector = json.dumps(selector, ensure_ascii=False)
+    target_id = target_session_id = target_topic = target_time_range = None
+    target_type = "knowledge"
+    if mode == "single_item":
+        target_id = str(entry["target_identity"]["db_id"])
+    elif mode == "session":
+        target_session_id = entry["target_identity"]["session_id"]
+    elif mode == "topic":
+        target_topic = entry["target_identity"]["topic_key"]
+    elif mode == "time_window":
+        target_time_range = json.dumps(selector, ensure_ascii=False)
+    elif mode == "full_reset":
+        target_type = "all"
+    else:
+        raise ExecutionPreflightError(f"unsupported forget mode: {mode}")
+
+    forget_plan_id = f"d13d-plan-{sample_id}-{secrets.token_hex(6)}"
+    trace_id = f"d13d-forget-{sample_id}"
+    session_id = target_session_id or f"d13d-session-{sample_id}"
+
+    def _ctx(method: str, idem: str) -> RequestContext:
+        return RequestContext(
+            request_id=f"d13d-request-{sample_id}",
+            trace_id=trace_id,
+            method=method,
+            deadline_ms=10000,
+            user_id=user_id,
+            session_id=session_id,
+            idempotency_key=idem,
+        )
+
+    preview_payload = {
+        "forget_plan_id": forget_plan_id,
+        "user_id": user_id,
+        "forget_mode": mode,
+        "target_selector": target_selector,
+        "target_type": target_type,
+        "target_id": target_id,
+        "target_session_id": target_session_id,
+        "target_topic": target_topic,
+        "target_time_range": target_time_range,
+        "requires_confirmation": True,
+        "is_cascade": False,
+        "delete_mode": "soft",
+    }
+    try:
+        with binding.engine.begin() as conn:
+            preview = binding.forget_preview_handler(
+                preview_payload, _ctx("forget.preview", f"d13d-preview-{sample_id}")
+            )
+            confirmation_token = preview.get("confirmation_token")
+            resolved = list(preview.get("resolved_target_ids") or [])
+            if not confirmation_token or not resolved:
+                raise ExecutionPreflightError(
+                    "forget.preview did not return a one-time confirmation credential / targets"
+                )
+            confirmed = _tagged_confirmed(mode, resolved)
+            observer.probe_pre_delete(confirmed)  # pre-delete 必须先命中
+            snapshot = capture_forget_execution_snapshot(
+                conn,
+                user_id=user_id,
+                foreign_user_id=foreign_user_id,
+                confirmed_target_ids=confirmed,
+            )
+        # execute 使用真实 preview 凭据（独立事务，预删除快照之后）
+        with binding.engine.begin() as conn:
+            binding.forget_execute_handler(
+                {
+                    "forget_plan_id": forget_plan_id,
+                    "user_id": user_id,
+                    "confirmation_token": confirmation_token,
+                },
+                _ctx("forget.execute", f"d13d-execute-{sample_id}"),
+            )
+        # HIGH-01：realtime 前必须先消费真实 forget.executed outbox（FTS deletion-consumer）。
+        # 缺 outbox / 消费失败 → fail-closed，realtime 不得自证已清理。
+        executed_payload = _load_forget_executed_payload(binding.engine, forget_plan_id)
+        if executed_payload is None:
+            raise ExecutionPreflightError(
+                "forget.executed outbox missing - deletion consumer cannot ACK"
+            )
+        observer.apply_deletion_payload(executed_payload)
+        realtime_observation = observer.realtime(confirmed)
+        rebuild_observation = observer.rebuild(confirmed)
+        with binding.engine.connect() as conn:
+            observed = observe_forget_execution(
+                conn,
+                snapshot=snapshot,
+                realtime_observation=realtime_observation,
+                rebuild_observation=rebuild_observation,
+            )
+    except ExecutionPreflightError:
+        raise
+    except Exception as exc:  # noqa: BLE001 -- dispatch envelope keeps errors safe
+        raise ExecutionPreflightError("forget dispatch failed") from exc
+
+    actual = {"forget_mode": mode, **observed}
+    trace_reference = f"dispatch/{sample_id}.json"
+    _write_execution_receipt(
+        validated,
+        sample_id=sample_id,
+        metric="forget",
+        actual=actual,
+        entrypoint="dispatch_forget_sample",
+        runtime_scope=binding.binding_id,
+        trace_reference=trace_reference,
+        provenance={
+            "forget_binding_version": artifact.get("binding_version"),
+            "forget_binding_artifact_sha256": binding.binding_artifact_sha256,
+            "forget_state_preparation_commit": binding.state_preparation_commit,
+            "forget_source_db_sha256": binding.source_db_sha256,
+            "forget_runtime_db_initial_sha256": binding.runtime_db_initial_sha256,
+            "forget_restore_id": binding.restore_id,
+            "forget_sample_id": binding.sample_id,
+            "forget_realtime_snapshot_id": realtime_observation.source_snapshot_id,
+            "forget_realtime_watermark": realtime_observation.source_watermark.model_dump(mode="json"),
+            "forget_rebuild_snapshot_id": rebuild_observation.source_snapshot_id,
+            "forget_rebuild_watermark": rebuild_observation.source_watermark.model_dump(mode="json"),
+        },
+    )
+    return _raw_record(
+        sample_id=sample_id,
+        metric="forget",
+        actual=actual,
+        trace_reference=trace_reference,
+        runtime_scope=binding.binding_id,
+    )
 
 def _write_text_file(path: Path, content: str) -> None:
     """I/O seam for raw writes (injected by the atomicity fault test)."""

@@ -1839,6 +1839,7 @@ def soft_delete_resolved_targets(
     """
     if target_type == "knowledge":
         executed = 0
+        version_ids: List[str] = []
         for raw in resolved_target_ids:
             try:
                 entry_id = int(raw)
@@ -1860,7 +1861,10 @@ def soft_delete_resolved_targets(
                 # later forget CAS fail after any lifecycle transition.
                 current_row_revision=int(entry["row_revision"]),
             )
-        return executed, []
+            # G3（E 授权 #160）：knowledge 的 vector 删除需稳定 version identity
+            # （= memory_entries.version，与 vector ledger version_id=v<version> 对齐）。
+            version_ids.append(f"v{int(entry['version'])}")
+        return executed, version_ids
     if target_type == "preference":
         executed = 0
         version_ids: List[str] = []
@@ -1888,13 +1892,14 @@ def soft_delete_resolved_targets(
             except (AttributeError, ValueError) as exc:
                 raise UnsupportedForgetScopeError("full_reset target must be tagged") from exc
             if kind == "knowledge":
-                count, _ = soft_delete_resolved_targets(
+                count, versions = soft_delete_resolved_targets(
                     conn,
                     user_id=user_id,
                     target_type="knowledge",
                     resolved_target_ids=[raw_id],
                     forget_plan_id=forget_plan_id,
                 )
+                version_ids.extend(versions)
             elif kind == "preference":
                 count, versions = soft_delete_resolved_targets(
                     conn,

@@ -224,3 +224,45 @@ def test_observation_fails_closed_for_missing_or_unbound_retrieval_observation(s
                 realtime_observation=_retrieval("knowledge:999"),
                 rebuild_observation=_retrieval(target_id),
             )
+
+
+def test_g3_knowledge_delete_returns_stable_version_id(state):
+    """G3：knowledge 软删返回稳定 version identity（v<memory_entries.version>），供 Vector 精确删除。"""
+    engine, target, _control, _foreign = state
+    with engine.begin() as conn:
+        count, versions = repo.soft_delete_resolved_targets(
+            conn,
+            user_id=USER,
+            target_type="knowledge",
+            resolved_target_ids=[str(target)],
+            forget_plan_id="g3-knowledge-plan",
+        )
+    assert count == 1
+    assert versions == ["v1"]
+
+
+def test_g3_all_delete_returns_aligned_versions_for_kind_and_preference(state):
+    """G3：full_reset（all）删除返回与目标等长的 version ids（knowledge+preference）。"""
+    engine, target, _control, _foreign = state
+    with engine.begin() as conn:
+        pref = repo.save_preference_version(
+            conn,
+            user_id=USER,
+            preference_key="g3_theme",
+            preference_scope="global",
+            preference_value="dark",
+            memory_status="active",
+            evidence_fingerprint="g3-pref-evidence",
+            idempotency_key=None,
+            request_fingerprint="g3-pref-request",
+        )
+        target_ids = [f"knowledge:{target}", f"preference:{pref['memory_item_id']}"]
+        count, versions = repo.soft_delete_resolved_targets(
+            conn,
+            user_id=USER,
+            target_type="all",
+            resolved_target_ids=target_ids,
+            forget_plan_id="g3-all-plan",
+        )
+    assert count == 2
+    assert len(versions) == len(target_ids)

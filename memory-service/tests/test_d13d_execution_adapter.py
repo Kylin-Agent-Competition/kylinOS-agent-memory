@@ -15,6 +15,15 @@ from types import MappingProxyType
 
 from db import repositories as repo
 import evaluation.d13d_execution_adapter as adapter
+
+@pytest.fixture(autouse=True)
+def _d13d_patch_git_ancestry(monkeypatch):
+    """CI checkout 为 fetch-depth=1（浅克隆），无完整历史。
+
+    生产 preflight 仍走真实 git merge-base；测试注入 ancestry 结果以保证在
+    Actions 浅克隆下也可执行（not-ancestor 用例单独覆盖为 False）。
+    """
+    monkeypatch.setattr(adapter, "_is_ancestor", lambda *a, **k: True)
 from evaluation.d13d_execution_adapter import (
     D13E_RAW_RESULT_SCHEMA_STATUS,
     OFFICIAL_D13E_TESTSET_SHA256,
@@ -24,6 +33,7 @@ from evaluation.d13d_execution_adapter import (
     ValidatedRuntimeBinding,
     _record_to_line,
     build_runtime_binding,
+    dispatch_forget_sample,
     dispatch_safety_sample,
     dispatch_stateless_sample,
     validate_execution_request,
@@ -702,12 +712,21 @@ def test_dispatch_safety_uses_real_event_ingest_and_observer(safety_environment)
 
     assert record.sample_id == "d13e-safety-001"
     assert record.metric == "safety"
-    assert record.actual == {
+    # #162 consumer：四 hard-zero counter 来自真实 observer；sensitivity/admission
+    # 来自真实 persisted source_events（P2-A 裁定后连字符云 Key 判 critical/reject）。
+    assert {
+        "critical_gate_bypass_count": record.actual["critical_gate_bypass_count"],
+        "normal_memory_write_count": record.actual["normal_memory_write_count"],
+        "audit_plaintext_leak_count": record.actual["audit_plaintext_leak_count"],
+        "cross_user_violation_count": record.actual["cross_user_violation_count"],
+    } == {
         "critical_gate_bypass_count": 0,
         "normal_memory_write_count": 0,
         "audit_plaintext_leak_count": 0,
         "cross_user_violation_count": 0,
     }
+    assert record.actual["sensitivity"] == "critical"
+    assert record.actual["admission"] == "reject"
     assert record.trace_reference == "source-events:d13d-safety-d13e-safety-001"
     assert record.runtime_scope == binding.binding_id
 
@@ -763,6 +782,120 @@ def test_dispatch_safety_fails_closed_when_ingest_handler_unregistered(safety_en
             binding=binding,
             foreign_user_id="user_d13e_beta",
         )
+
+
+def test_runtime_binding_registers_and_freezes_forget_handlers(safety_environment):
+    """P2-B：validation profile 显式注册真实 forget.preview/forget.execute 并冻结身份。"""
+    validated, binding = safety_environment
+    assert callable(binding.forget_preview_handler)
+    assert callable(binding.forget_execute_handler)
+    assert binding.registry.route("forget.preview") is binding.forget_preview_handler
+    assert binding.registry.route("forget.execute") is binding.forget_execute_handler
+
+
+def test_runtime_binding_fails_closed_when_forget_handler_unregistered(safety_environment):
+    """P2-B：替换/注销 forget handler 后任何 dispatch（含 safety）必须 fail-closed。"""
+    validated, binding = safety_environment
+    binding.registry.unregister("forget.preview")
+    with pytest.raises(ExecutionPreflightError, match="replaced or unregistered"):
+        dispatch_safety_sample(
+            validated,
+            "d13e-safety-001",
+            binding=binding,
+            foreign_user_id="user_d13e_beta",
+        )
+
+
+def _prepared_forget_env(tmp_path, *, profile="d13d-validation-profile-v2"):
+    """构造 R5 sealed source + v2 artifact + 5 个 restored runtime bindings。"""
+    import json
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha)
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["retrieval_profile"] = profile
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    validated = validate_execution_request(
+        _request(tmp_path, binding_artifact_path=art), git_runner=_git_runner
+    )
+    bindings = adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+    return validated, art, bindings
+
+
+def test_forget_dispatch_requires_matching_sample_binding(safety_environment):
+    """R6：dispatch 的 sample 必须等于 binding.sample_id（缺省/错配 fail-closed）。"""
+    validated, binding = safety_environment
+    with pytest.raises(ExecutionPreflightError, match="sample_id does not match"):
+        dispatch_forget_sample(validated, "d13e-forget-001", binding=binding)
+
+
+def test_forget_dispatch_rejects_wrong_sample_binding(tmp_path):
+    """R6/F13：binding 为 d13e-forget-001，dispatch d13e-forget-002 → fail-closed。"""
+    validated, _art, bindings = _prepared_forget_env(tmp_path)
+    with pytest.raises(ExecutionPreflightError, match="sample_id does not match"):
+        dispatch_forget_sample(
+            validated, "d13e-forget-002", binding=bindings["d13e-forget-001"]
+        )
+
+
+def test_forget_dispatch_fails_closed_when_retrieval_profile_not_approved(tmp_path):
+    """R8/F18：retrieval_profile 不在 closed allowlist → preview 前 fail-closed。"""
+    validated, _art, bindings = _prepared_forget_env(
+        tmp_path, profile="unknown-profile-v9"
+    )
+    with pytest.raises(ExecutionPreflightError, match="no approved retrieval observation profile"):
+        dispatch_forget_sample(
+            validated, "d13e-forget-001", binding=bindings["d13e-forget-001"]
+        )
+
+
+def test_forget_dispatch_fails_closed_when_forget_handler_unregistered(tmp_path):
+    """R6/F19：forget.execute 被注销后 dispatch 必须 fail-closed（binding 身份冻结）。"""
+    validated, _art, bindings = _prepared_forget_env(tmp_path)
+    binding = bindings["d13e-forget-001"]
+    binding.registry.unregister("forget.execute")
+    with pytest.raises(ExecutionPreflightError, match="replaced or unregistered"):
+        dispatch_forget_sample(validated, "d13e-forget-001", binding=binding)
+
+
+def test_safety_projection_does_not_swallow_real_cross_user_violation():
+    """#162 §5.2：观测成功但发现安全违规 → 写真实 counter，adapter 不吞、不代 Runner 判 FAIL。"""
+    actual = adapter._project_safety_actual(
+        sample_id="d13e-safety-003",
+        sample_input={"operation": "read"},
+        observed={
+            "critical_gate_bypass_count": 0,
+            "normal_memory_write_count": 0,
+            "audit_plaintext_leak_count": 0,
+            "cross_user_violation_count": 1,
+        },
+        conn=None,
+        user_id="user_d13e_alpha",
+        trace_id="t",
+    )
+    assert actual["cross_user_violation_count"] == 1
+    assert actual["admission"] == "allow"  # 越界返回的观测事实，非固定 reject
+    assert actual["operation"] == "read"
+
+
+def test_safety_projection_read_uses_dataset_operation_input():
+    """safety-003：operation 必须来自 SHA 验证 Dataset input（read），不读 Gold。"""
+    actual = adapter._project_safety_actual(
+        sample_id="d13e-safety-003",
+        sample_input={"operation": "read"},
+        observed={
+            "critical_gate_bypass_count": 0,
+            "normal_memory_write_count": 0,
+            "audit_plaintext_leak_count": 0,
+            "cross_user_violation_count": 0,
+        },
+        conn=None,
+        user_id="user_d13e_alpha",
+        trace_id="t",
+    )
+    assert actual["operation"] == "read"
+    assert actual["admission"] == "reject"
 
 
 def _other_binding(tmp_path):
@@ -908,11 +1041,16 @@ MUST_MATCH_TRUE = {
     "d13e-conflict-002",
     "d13e-conflict-003",
     "d13e-conflict-004",
+    "d13e-safety-001",
+    "d13e-safety-002",
+    "d13e-safety-003",
+    "d13e-safety-004",
 }
-# pref-003 (d13e-pref-003): the production false negative was closed by the
-# explicit tool-selection marker fix (PREFERENCE_EXPLICIT_PATTERN now admits
-# 优先使用/优先用/优先选择/首选/默认使用/默认用), so no observation gaps
-# remain and the sample must satisfy the frozen Runner contract (True).
+# pref-003: closed by #161 production fix.
+# safety-001..004: closed — actual projects persisted sensitivity/admission
+# (001/002), operation/read-derived admission (003), real hard-zero counters
+# (004).  Safety-001 detector gap closed by A-track hyphenated cloud-key rule
+# (E 授权裁定 P2-A).  No registered observation gaps remain.
 KNOWN_OBSERVATION_GAP_FALSE: set[str] = set()
 
 
@@ -923,12 +1061,9 @@ def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
 
     Gold is read here only to drive the Runner's per-sample contract (the same
     way formal Gate 9 consumes raw); it is never used to generate ``actual``.
-    Preference/Conflict samples that must satisfy the contract are asserted
-    True (the pref-003 observation gap is closed by the production fix), and
-    Safety samples are asserted shape-legal but explicitly NOT treated as
-    complete because the sensitivity/admission/operation projection contract is
-    still pending a D13E Runner/Gold decision (schema status
-    CANDIDATE_PENDING_D13E_REVIEW).
+    Preference/Conflict and Safety samples that must satisfy the contract are
+    asserted True; no registered observation gaps remain (Safety-001 detector
+    gap closed by the hyphenated cloud-key rule under E-authorized P2-A ruling).
     """
     validated, binding = safety_environment
     assert D13E_RAW_RESULT_SCHEMA_STATUS == "CANDIDATE_PENDING_D13E_REVIEW"
@@ -958,17 +1093,7 @@ def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
         assert results[sample_id] is False, (
             f"{sample_id} is a registered observation gap and must not be treated as complete"
         )
-    # Safety-004 is counter-driven and currently satisfies the Runner contract.
-    assert results["d13e-safety-004"] is True
-    # Safety-001/002/003 are NOT Gate-9 complete: the frozen Runner/Gold require
-    # sensitivity/admission/operation observation fields whose projection
-    # contract is pending a D13E decision (schema status
-    # CANDIDATE_PENDING_D13E_REVIEW), so they must not be treated as complete.
-    for sample_id in ("d13e-safety-001", "d13e-safety-002", "d13e-safety-003"):
-        assert results[sample_id] is False, (
-            f"{sample_id} must not be treated as complete while the Safety"
-            " projection contract is pending D13E review"
-        )
+
 
 
 RAW_FILENAMES = {
@@ -1094,3 +1219,358 @@ def test_raw_writer_rejects_stateful_safety_record_without_receipt(tmp_path):
     with pytest.raises(ExecutionPreflightError, match="execution receipt does not exist"):
         write_raw_records(validated, [record])
     assert not (validated.request.execution_evidence_root / "raw").exists()
+
+def _make_sealed_source(tmp_path):
+    import hashlib
+    from db.engine import create_db_engine, init_schema
+    src = tmp_path / "source.db"
+    engine = create_db_engine(str(src))
+    init_schema(engine)
+    engine.dispose()
+    return src, hashlib.sha256(src.read_bytes()).hexdigest()
+
+
+def _write_v2_artifact(tmp_path, source_path, source_sha, *, sp=None, minc=None):
+    import json
+    from evaluation.d13d_forget_state_binding import (
+        BINDING_VERSION_V2,
+        compute_artifact_sha256,
+    )
+    sp = sp or "dc58e83479d718c8e3fbbbbb5d3b3f046f651973"
+    v1 = json.loads(
+        (REPOSITORY_ROOT / "evaluation" / "d13e" / "D13D_FORGET_STATE_BINDING_V1.json")
+        .read_text(encoding="utf-8")
+    )
+    art = {k: v1[k] for k in (
+        "owner", "approved_by", "approval_reference", "environment_id",
+        "vm_snapshot", "retrieval_profile", "created_at_utc", "created_by",
+        "samples",
+    )}
+    art["binding_version"] = BINDING_VERSION_V2
+    art["state_preparation_commit"] = sp
+    art["execution_compatibility"] = {
+        "minimum_commit": minc or sp,
+        "policy": "descendant-and-contract-compatible",
+    }
+    art["source_state"] = {
+        "state_root": str(source_path.parent),
+        "sealed_db_path": str(source_path),
+        "sealed_db_sha256": source_sha,
+        "db_size_bytes": source_path.stat().st_size,
+        "sqlite_schema_fingerprint": adapter._sqlite_schema_fingerprint(source_path),
+        "prepared_on_vm_snapshot": "d14d-clean-base-20260906-r2",
+        "prepared_at_utc": "2026-09-06T00:00:00Z",
+    }
+    art["artifact_sha256"] = compute_artifact_sha256(art)
+    out = tmp_path / "binding_v2.json"
+    out.write_text(json.dumps(art, ensure_ascii=False), encoding="utf-8")
+    return out
+
+
+def test_prepare_forget_runtime_bindings_creates_five_fresh_clones(tmp_path):
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha)
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    bindings = adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+    assert set(bindings) == set(adapter.FORGET_SAMPLE_MODES)
+    for sample_id, binding in bindings.items():
+        assert binding.sample_id == sample_id
+        assert binding.runtime_db_initial_sha256 == sha
+        assert binding.source_db_sha256 == sha
+        assert binding.state_preparation_commit
+        assert binding.binding_artifact_sha256
+        assert binding.db_path.exists()
+        assert binding.db_path.resolve().is_relative_to(validated.request.state_root.resolve())
+        adapter._validate_binding(binding, validated)
+
+
+def test_prepare_rejects_source_db_sha_mismatch(tmp_path):
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha)
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["source_state"]["sealed_db_sha256"] = "0" * 64
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="SHA-256 does not match"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+
+def test_prepare_rejects_state_prep_not_ancestor(tmp_path, monkeypatch):
+    monkeypatch.setattr(adapter, "_is_ancestor", lambda *a, **k: False)
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha, sp="0" * 40)
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="not an ancestor"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+
+def test_prepare_rejects_reused_runtime_root(tmp_path):
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha)
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+    with pytest.raises(ExecutionPreflightError, match="runtime root must not already exist"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+def test_prepare_rejects_missing_source_db(tmp_path):
+    import json
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha)
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["source_state"]["sealed_db_path"] = str(tmp_path / "missing.db")
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="source DB does not exist"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+
+def test_prepare_rejects_source_db_symlink(tmp_path):
+    import json, os
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    src, sha = _make_sealed_source(tmp_path)
+    link = tmp_path / "source-link.db"
+    try:
+        os.symlink(src, link)
+    except OSError as exc:  # Windows 无权限创建 symlink 时跳过
+        pytest.skip(f"cannot create symlink: {exc}")
+    art = _write_v2_artifact(tmp_path, src, sha)
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["source_state"]["sealed_db_path"] = str(link)
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="must not be a symlink"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+
+def test_prepare_rejects_non_sqlite_source(tmp_path):
+    import json, hashlib
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    real, _ = _make_sealed_source(tmp_path)
+    garbage = tmp_path / "garbage.db"
+    garbage.write_bytes(b"this is not a sqlite database at all")
+    art = _write_v2_artifact(tmp_path, real, hashlib.sha256(real.read_bytes()).hexdigest())
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["source_state"]["sealed_db_path"] = str(garbage)
+    data["source_state"]["sealed_db_sha256"] = hashlib.sha256(garbage.read_bytes()).hexdigest()
+    data["source_state"]["db_size_bytes"] = garbage.stat().st_size
+    data["source_state"]["sqlite_schema_fingerprint"] = "0" * 64
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="not a valid sqlite database"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+def test_prepare_rejects_schema_fingerprint_mismatch(tmp_path):
+    """F10：sealed DB schema fingerprint 与 artifact 不一致 → fail-closed。"""
+    import json, sqlite3, hashlib, shutil
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    db1, sha1 = _make_sealed_source(tmp_path)
+    db2 = tmp_path / "source-extra.db"
+    shutil.copyfile(db1, db2)
+    con = sqlite3.connect(str(db2))
+    con.execute("CREATE TABLE extra_table (id INTEGER PRIMARY KEY)")
+    con.commit()
+    con.close()
+    art = _write_v2_artifact(tmp_path, db1, sha1)
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["source_state"]["sealed_db_path"] = str(db2)
+    data["source_state"]["sealed_db_sha256"] = hashlib.sha256(db2.read_bytes()).hexdigest()
+    data["source_state"]["db_size_bytes"] = db2.stat().st_size
+    # 保留 db1 的 schema fingerprint → 与 db2 不符
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="schema fingerprint does not match"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+
+def _seed_alpha_single_knowledge(db_path):
+    """在 sealed source DB 预置一条 alpha knowledge（id=1），供 handler 回归用。"""
+    from db.engine import create_db_engine, init_schema
+    from db import repositories as repo
+    engine = create_db_engine(str(db_path))
+    init_schema(engine)
+    with engine.begin() as conn:
+        repo.insert_memory_entry(
+            conn, user_id="user_d13e_alpha", entry_type="knowledge",
+            content={"value": "d13e single target"}, confidence=0.9,
+        )
+    engine.dispose()
+
+
+def test_forget_handler_uow_bound_to_own_sample_runtime_db(tmp_path):
+    """Review BLOCKER-01 回归：sample-001 的 preview/execute 只改 sample-001 DB。"""
+    import json, hashlib
+    from sqlalchemy import text as sql_text
+    from db.engine import create_db_engine
+    src = tmp_path / "source.db"
+    _seed_alpha_single_knowledge(src)
+    sha = hashlib.sha256(src.read_bytes()).hexdigest()
+    art = _write_v2_artifact(tmp_path, src, sha)
+    validated = validate_execution_request(
+        _request(tmp_path, binding_artifact_path=art), git_runner=_git_runner
+    )
+    bindings = adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+    b = bindings["d13e-forget-001"]
+    plan_id = "d13d-plan-g3reg-1"
+    ctx = adapter.RequestContext(
+        request_id="req-g3reg", trace_id="trace-g3reg", method="forget.preview",
+        deadline_ms=10000, user_id="user_d13e_alpha", session_id="s1",
+        idempotency_key="idem-preview-g3reg",
+    )
+    payload = {
+        "forget_plan_id": plan_id, "user_id": "user_d13e_alpha",
+        "forget_mode": "single_item", "target_selector": "{\"memory_id\": \"d13e-memory-001\"}",
+        "target_type": "knowledge", "target_id": "1",
+        "target_session_id": None, "target_topic": None, "target_time_range": None,
+        "requires_confirmation": True, "is_cascade": False, "delete_mode": "soft",
+    }
+    preview = b.forget_preview_handler(payload, ctx)
+    token = preview["confirmation_token"]
+    exec_ctx = adapter.RequestContext(
+        request_id="req-g3reg-x", trace_id="trace-g3reg-x", method="forget.execute",
+        deadline_ms=10000, user_id="user_d13e_alpha", session_id="s1",
+        idempotency_key="idem-execute-g3reg",
+    )
+    b.forget_execute_handler(
+        {"forget_plan_id": plan_id, "user_id": "user_d13e_alpha",
+         "confirmation_token": token},
+        exec_ctx,
+    )
+    state = {}
+    for sid, bb in bindings.items():
+        engine = create_db_engine(str(bb.db_path))
+        with engine.connect() as conn:
+            state[sid] = conn.execute(
+                sql_text("SELECT is_deleted FROM memory_entries WHERE id = 1")
+            ).scalar_one()
+        engine.dispose()
+    assert state["d13e-forget-001"] == 1, "sample-001 自身 DB 应已软删目标"
+    for sid in ("d13e-forget-002", "d13e-forget-003", "d13e-forget-004", "d13e-forget-005"):
+        assert state[sid] == 0, f"{sid} DB 不应被 sample-001 的 handler 改动（late-binding）"
+
+
+def test_fts_observer_probe_realtime_rebuild(tmp_path):
+    """P2-B FTS：pre-delete probe 命中；realtime（删除消费）与 rebuild 后目标不再返回。"""
+    import hashlib
+    from db.engine import create_db_engine, init_schema
+    from db import repositories as repo
+    from retrieval.evaluation import evaluate_forget_residual, ForgetResidualPhase
+    from service.d13d_forget_observability import capture_forget_execution_snapshot
+    from evaluation.d13d_forget_fts_observer import D13DForgetFtsObserver
+
+    db_path = tmp_path / "run.db"
+    engine = create_db_engine(str(db_path))
+    init_schema(engine)
+    with engine.begin() as conn:
+        target = repo.insert_memory_entry(
+            conn, user_id="user_d13e_alpha", entry_type="knowledge",
+            content={"value": "prepared-target-alpha-001"}, confidence=0.9,
+        )
+        control = repo.insert_memory_entry(
+            conn, user_id="user_d13e_alpha", entry_type="knowledge",
+            content={"value": "prepared-control-alpha-002"}, confidence=0.9,
+        )
+        repo.insert_memory_entry(
+            conn, user_id="user_d13e_beta", entry_type="knowledge",
+            content={"value": "prepared-foreign-alpha-003"}, confidence=0.9,
+        )
+    observer = D13DForgetFtsObserver(
+        engine, user_id="user_d13e_alpha", fts_db=str(tmp_path / "fts.db")
+    )
+    observer.initialize()
+    confirmed = (f"knowledge:{target}",)
+    observer.probe_pre_delete(confirmed)  # pre-delete 必须命中
+
+    # 模拟 forget.execute：软删目标
+    with engine.begin() as conn:
+        count, _ = repo.soft_delete_resolved_targets(
+            conn, user_id="user_d13e_alpha", target_type="knowledge",
+            resolved_target_ids=[str(target)], forget_plan_id="fts-plan",
+        )
+    assert count == 1
+    # 防自证回归：未消费 forget.executed 时，realtime 必须观察到 residual（不自行清理）
+    rt_no_ack = observer.realtime(confirmed)
+    report_no_ack = evaluate_forget_residual(
+        [rt_no_ack.sample], phase=ForgetResidualPhase.REALTIME_DELETE,
+        dataset_version=rt_no_ack.dataset_version,
+        source_snapshot_id=rt_no_ack.source_snapshot_id,
+        source_watermark=rt_no_ack.source_watermark,
+    )
+    assert report_no_ack.residual_target_count > 0, (
+        "deletion consumer 未 ACK 时不得自证已清理（HIGH-01）"
+    )
+    # 真实 forget.executed payload 经 FTS deletion-consumer 消费后再 realtime
+    observer.apply_deletion_payload(
+        {
+            "event_id": "evt-fts-plan",
+            "user_id": "user_d13e_alpha",
+            "forget_plan_id": "fts-plan",
+            "resolved_target_ids": [str(target)],
+            "version_ids": ["v1"],
+            "selection_hash": "sel",
+        }
+    )
+    rt = observer.realtime(confirmed)
+    assert all(tid not in rt.sample.ranked_ids for tid in confirmed)
+    rb = observer.rebuild(confirmed)
+    assert all(tid not in rb.sample.ranked_ids for tid in confirmed)
+    # observer 计算真实 residual（不允许测试注入 0）
+    for phase, obs in ((ForgetResidualPhase.REALTIME_DELETE, rt),
+                       (ForgetResidualPhase.REBUILD, rb)):
+        report = evaluate_forget_residual(
+            [obs.sample], phase=phase, dataset_version=obs.dataset_version,
+            source_snapshot_id=obs.source_snapshot_id,
+            source_watermark=obs.source_watermark,
+        )
+        assert report.residual_target_count == 0
+    engine.dispose()
+
+
+def _seed_e2e_single_source(db_path):
+    """真实 Repository/API 预置：alpha target(id1)/control(id2)，beta foreign(id3)。"""
+    from db.engine import create_db_engine, init_schema
+    from db import repositories as repo
+    engine = create_db_engine(str(db_path))
+    init_schema(engine)
+    with engine.begin() as conn:
+        repo.insert_memory_entry(conn, user_id="user_d13e_alpha", entry_type="knowledge",
+                                 content={"value": "targetalpha001"}, confidence=0.9)
+        repo.insert_memory_entry(conn, user_id="user_d13e_alpha", entry_type="knowledge",
+                                 content={"value": "controlalpha002"}, confidence=0.9)
+        repo.insert_memory_entry(conn, user_id="user_d13e_beta", entry_type="knowledge",
+                                 content={"value": "foreignbeta003"}, confidence=0.9)
+    engine.dispose()
+
+
+def test_forget_single_item_e2e_dispatch_fts(tmp_path):
+    """P2-B：single_item 走完整 dispatch（preview→execute→FTS realtime/rebuild→observe→receipt）。"""
+    import hashlib, json
+    src = tmp_path / "source.db"
+    _seed_e2e_single_source(src)
+    sha = hashlib.sha256(src.read_bytes()).hexdigest()
+    art = _write_v2_artifact(tmp_path, src, sha)
+    validated = validate_execution_request(
+        _request(tmp_path, binding_artifact_path=art), git_runner=_git_runner
+    )
+    bindings = adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+    record = dispatch_forget_sample(
+        validated, "d13e-forget-001", binding=bindings["d13e-forget-001"]
+    )
+    assert record.metric == "forget"
+    assert record.actual["forget_mode"] == "single_item"
+    for key in ("missed_target_items", "wrongly_deleted_items",
+                "cross_user_violation_count", "residual_after_realtime_query",
+                "residual_after_full_rebuild"):
+        assert record.actual[key] == 0, f"{key} 应来自真实 observer 且为 0"
+    receipt = validated.request.execution_evidence_root / "dispatch" / "d13e-forget-001.json"
+    assert receipt.exists()
+    data = json.loads(receipt.read_text(encoding="utf-8"))
+    assert data["forget_binding_artifact_sha256"] == bindings["d13e-forget-001"].binding_artifact_sha256
+    assert data.get("forget_realtime_snapshot_id")
+    assert data.get("forget_rebuild_snapshot_id")
