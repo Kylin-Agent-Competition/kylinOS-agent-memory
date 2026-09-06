@@ -29,6 +29,7 @@ from typing import Any, Callable, Iterable, Mapping
 
 from db.engine import create_db_engine, init_schema
 from db.uow import UnitOfWork
+from gateway.forget_handlers import register_forget_handlers
 from gateway.handlers import register_default_handlers, register_event_ingest_handler
 from gateway.preference_handlers import register_preference_handlers
 from gateway.registry import HandlerRegistry, RequestContext
@@ -734,6 +735,8 @@ class ValidatedRuntimeBinding:
     registry: HandlerRegistry
     event_ingest_handler: Any
     run_token_sha256: str
+    forget_preview_handler: Any = None
+    forget_execute_handler: Any = None
 
 
 def _is_under(path: Path, root: Path) -> bool:
@@ -773,6 +776,9 @@ def build_runtime_binding(
     register_default_handlers(registry)
     register_event_ingest_handler(registry, uow_factory=lambda: UnitOfWork(engine))
     register_preference_handlers(registry, uow_factory=lambda: UnitOfWork(engine))
+    # D/E P2-B 裁定：validation profile 显式注册真实 forget.preview/forget.execute
+    # handler（生产 default 不注册，本 binding 即该 profile 的受控注册点）。
+    register_forget_handlers(registry, uow_factory=lambda: UnitOfWork(engine))
     # Bind engine <-> registry <-> canonical db path with an unforgeable run
     # token: the engine is registered under its object id and the registry
     # carries the same token, so a caller-constructed binding with a foreign
@@ -788,6 +794,9 @@ def build_runtime_binding(
     # this object, so a later register()/unregister() overwrite cannot swap in
     # a fake handler before real dispatch.
     event_ingest_handler = registry.route("event.ingest")
+    # P2-B：同时冻结 forget.preview / forget.execute 的真实 handler 身份。
+    forget_preview_handler = registry.route("forget.preview")
+    forget_execute_handler = registry.route("forget.execute")
     return ValidatedRuntimeBinding(
         validated=validated,
         binding_id=binding_id,
@@ -795,6 +804,8 @@ def build_runtime_binding(
         engine=engine,
         registry=registry,
         event_ingest_handler=event_ingest_handler,
+        forget_preview_handler=forget_preview_handler,
+        forget_execute_handler=forget_execute_handler,
         run_token_sha256=hashlib.sha256(run_token.encode("ascii")).hexdigest(),
     )
 
@@ -860,6 +871,18 @@ def _validate_binding(
         raise ExecutionPreflightError(
             "runtime binding event.ingest handler was replaced or unregistered"
         )
+    for method, frozen in (
+        ("forget.preview", binding.forget_preview_handler),
+        ("forget.execute", binding.forget_execute_handler),
+    ):
+        try:
+            routed = binding.registry.route(method)
+        except Exception:  # noqa: BLE001 -- unregistered handler is a replaced binding
+            routed = None
+        if routed is not frozen:
+            raise ExecutionPreflightError(
+                f"runtime binding {method} handler was replaced or unregistered"
+            )
 
 
 def dispatch_safety_sample(

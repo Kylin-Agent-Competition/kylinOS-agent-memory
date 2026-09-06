@@ -765,6 +765,28 @@ def test_dispatch_safety_fails_closed_when_ingest_handler_unregistered(safety_en
         )
 
 
+def test_runtime_binding_registers_and_freezes_forget_handlers(safety_environment):
+    """P2-B：validation profile 显式注册真实 forget.preview/forget.execute 并冻结身份。"""
+    validated, binding = safety_environment
+    assert callable(binding.forget_preview_handler)
+    assert callable(binding.forget_execute_handler)
+    assert binding.registry.route("forget.preview") is binding.forget_preview_handler
+    assert binding.registry.route("forget.execute") is binding.forget_execute_handler
+
+
+def test_runtime_binding_fails_closed_when_forget_handler_unregistered(safety_environment):
+    """P2-B：替换/注销 forget handler 后任何 dispatch（含 safety）必须 fail-closed。"""
+    validated, binding = safety_environment
+    binding.registry.unregister("forget.preview")
+    with pytest.raises(ExecutionPreflightError, match="replaced or unregistered"):
+        dispatch_safety_sample(
+            validated,
+            "d13e-safety-001",
+            binding=binding,
+            foreign_user_id="user_d13e_beta",
+        )
+
+
 def _other_binding(tmp_path):
     (tmp_path / "other").mkdir()
     other = validate_execution_request(_request(tmp_path / "other"), git_runner=_git_runner)
