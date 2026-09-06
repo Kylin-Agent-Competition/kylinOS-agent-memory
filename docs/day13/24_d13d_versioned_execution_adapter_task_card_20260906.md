@@ -56,6 +56,25 @@ No stage here produces formal raw, a Seal, a Runner decision, or `D13D_FROZEN`. 
 - 集成测试改为逐样本显式期望：must-True / 已登记观测缺口（pref-003）/ Safety
   跨轨 blocked 三组分别断言。
 
+### 2026-09-06 re-review round（Review HEAD dd089f9）
+
+- ValidatedExecution.records 递归不可变快照（dict->MappingProxyType、list->tuple），
+  Dataset SHA 校验后不可再改写样本 input 后以官方身份 dispatch；负测覆盖顶层、pref
+  user_text、conflict side、forget target_selector。
+- RuntimeBinding 冻结 production vent.ingest handler identity：dispatch 前要求
+  registry.route() 返回 builder 记录的同一 callable；覆盖/unregister 后 fail-closed，
+  fake handler 不会被调用。
+- receipt provenance 边界：_raw_record/_write_raw_records 降为内部私有 seam；
+  正式 canonical 唯一入口为 dispatch_and_write_canonical()（不接受外部 receipts，
+  内部完成 dispatch->serialize）；Forget binding 未到位前该入口 fail-closed，不产生
+  任何 output。
+- Preference/Conflict trace 升级为 evidence-backed：每次 dispatch 在 evidence_root/
+  dispatch/<sample_id>.json 落一条 execution receipt（sample/metric/tested_commit/
+  actual_digest/UTC/entrypoint），writer 收件时校验 trace 目标存在且 sample/metric/
+  commit/digest 一致；负测覆盖 missing trace / cross-sample / cross-commit。
+- Safety 跨轨投影合同与 pref-003 观测缺口保持 CANDIDATE_PENDING_D13E_REVIEW /
+  登记缺口处理，未读取 Gold、未补零。
+
 ## Goal
 
 Provide a versioned, fail-closed execution adapter for the D13E formal Dataset. The adapter

@@ -26,10 +26,14 @@ from evaluation.d13d_execution_adapter import (
     build_runtime_binding,
     dispatch_safety_sample,
     dispatch_stateless_sample,
-    raw_record,
     validate_execution_request,
-    write_raw_records,
 )
+
+# Serializer-level aliases to the private construction seam / writer.  These are
+# NOT provenance authority: only the formal orchestrator
+# (adapter.dispatch_and_write_canonical) may produce the canonical package.
+raw_record = adapter._raw_record
+write_raw_records = adapter._write_raw_records
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -229,11 +233,25 @@ def _dispatchable_stateless(validated):
     ]
 
 
+def _write_synthetic_stateless_evidence(validated, records_meta):
+    """Create evidence-backed stateless trace files for serializer-only tests."""
+    for sample_id, metric, actual in records_meta:
+        adapter._write_stateless_execution_receipt(
+            validated,
+            sample_id=sample_id,
+            metric=metric,
+            actual=actual,
+            entrypoint="serializer-unit-test",
+        )
+
+
 def _synthetic_batch_for_serializer(validated):
     """Serializer/atomicity-only synthetic receipts (NOT canonical authority).
 
-    These records exercise the writer as a pure serializer (allowed by the
-    review); they are never used to claim a real execution closure.
+    These records and their evidence trace files exercise the private writer as
+    a pure serializer (allowed by the review); they are never used to claim a
+    real execution closure, and they cannot enter the canonical package because
+    dispatch_and_write_canonical() never accepts external receipts.
     """
     actual_by_metric = {
         "preference": {
@@ -259,12 +277,15 @@ def _synthetic_batch_for_serializer(validated):
             "residual_after_full_rebuild": 0,
         },
     }
+    stateless_evidence = []
     records = []
     for sample in validated.records:
         metric = sample["metric"]
         sample_id = sample["sample_id"]
+        actual = dict(actual_by_metric[metric])
         if metric in ("preference", "conflict"):
-            trace = f"dispatch-v1/{metric}/{sample_id}/serializer"
+            stateless_evidence.append((sample_id, metric, actual))
+            trace = f"dispatch/{sample_id}.json"
         elif metric == "safety":
             trace = "source-events:serializer-unit"
         else:
@@ -273,11 +294,12 @@ def _synthetic_batch_for_serializer(validated):
             raw_record(
                 sample_id=sample_id,
                 metric=metric,
-                actual=dict(actual_by_metric[metric]),
+                actual=actual,
                 trace_reference=trace,
                 runtime_scope="serializer-unit",
             )
         )
+    _write_synthetic_stateless_evidence(validated, stateless_evidence)
     return records
 
 
@@ -346,7 +368,7 @@ def test_raw_record_rejects_wrong_sample_trace_binding():
             sample_id="d13e-pref-001",
             metric="preference",
             actual={"record_count": 1},
-            trace_reference="dispatch-v1/preference/d13e-pref-002/commit/utc/digest",
+            trace_reference="dispatch/d13e-pref-002.json",
             runtime_scope="stateless:preference",
         )
 
@@ -381,7 +403,7 @@ def test_raw_record_rejects_incomplete_or_evaluation_shaped_actual(metric, actua
             metric=metric,
             actual=actual,
             trace_reference=(
-                "dispatch-v1/preference/d13e-pref-001/commit/utc/digest"
+                "dispatch/d13e-pref-001.json"
                 if metric == "preference"
                 else "source-events:controlled-trace"
             ),
@@ -390,8 +412,8 @@ def test_raw_record_rejects_incomplete_or_evaluation_shaped_actual(metric, actua
 
 
 def test_raw_writer_serializer_layout_is_canonical():
-    # Pure serializer unit coverage: the writer is the internal serializer of
-    # the formal orchestration path, not by itself evidence of a real closure.
+    # Pure serializer unit coverage: the private writer is the serializer of the
+    # formal orchestration path, not by itself evidence of a real closure.
     record = raw_record(
         sample_id="d13e-forget-001",
         metric="forget",
@@ -416,7 +438,7 @@ def test_raw_writer_rejects_hand_built_raw_mapping(tmp_path):
         "sample_id": "d13e-pref-001",
         "metric": "preference",
         "actual": {"record_count": 1},
-        "trace_reference": "dispatch-v1/preference/d13e-pref-001/commit/utc/digest",
+        "trace_reference": "dispatch/d13e-pref-001.json",
     }
     with pytest.raises(ExecutionPreflightError, match="ObservedRawRecord produced by real dispatch"):
         write_raw_records(validated, [forged])
@@ -429,7 +451,7 @@ def test_raw_writer_rejects_hand_constructed_plain_dict_actual(tmp_path):
         sample_id="d13e-pref-001",
         metric="preference",
         actual={"record_count": 1},
-        trace_reference="dispatch-v1/preference/d13e-pref-001/commit/utc/digest",
+        trace_reference="dispatch/d13e-pref-001.json",
         runtime_scope="stateless:preference",
         actual_digest="0" * 64,
     )
@@ -451,7 +473,7 @@ def test_raw_writer_revalidates_actual_before_writing(tmp_path):
         sample_id="d13e-pref-001",
         metric="preference",
         actual=MappingProxyType({"record_count": 1, "gold": "tampered"}),
-        trace_reference="dispatch-v1/preference/d13e-pref-001/commit/utc/digest",
+        trace_reference="dispatch/d13e-pref-001.json",
         runtime_scope="stateless:preference",
         actual_digest="0" * 64,
     )
@@ -466,12 +488,58 @@ def test_raw_writer_rejects_wrong_sample_trace_reference(tmp_path):
         sample_id="d13e-pref-001",
         metric="preference",
         actual=MappingProxyType({"record_count": 1}),
-        trace_reference="dispatch-v1/preference/d13e-pref-002/commit/utc/digest",
+        trace_reference="dispatch/d13e-pref-002.json",
         runtime_scope="stateless:preference",
         actual_digest=adapter._actual_digest({"record_count": 1}),
     )
     with pytest.raises(ExecutionPreflightError, match="does not bind the dispatched sample"):
         write_raw_records(validated, [forged])
+    assert not validated.request.output_root.exists()
+
+
+def test_raw_writer_rejects_stateless_record_without_evidence_trace(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    record = raw_record(
+        sample_id="d13e-pref-001",
+        metric="preference",
+        actual={"record_count": 1},
+        trace_reference="dispatch/d13e-pref-001.json",
+        runtime_scope="stateless:preference",
+    )
+    with pytest.raises(ExecutionPreflightError, match="does not exist under evidence_root"):
+        write_raw_records(validated, [record])
+    assert not validated.request.output_root.exists()
+
+
+def test_raw_writer_rejects_stateless_trace_of_another_commit(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    digest = adapter._actual_digest({"record_count": 1})
+    trace_path = validated.request.evidence_root / "dispatch" / "d13e-pref-001.json"
+    trace_path.parent.mkdir(parents=True)
+    trace_path.write_text(
+        json.dumps(
+            {
+                "receipt_version": "d13d-execution-receipt/v1",
+                "sample_id": "d13e-pref-001",
+                "metric": "preference",
+                "tested_commit": "0" * 40,
+                "actual_digest": digest,
+                "utc": "2026-09-06T00:00:00Z",
+                "entrypoint": "other-commit",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    record = raw_record(
+        sample_id="d13e-pref-001",
+        metric="preference",
+        actual={"record_count": 1},
+        trace_reference="dispatch/d13e-pref-001.json",
+        runtime_scope="stateless:preference",
+    )
+    with pytest.raises(ExecutionPreflightError, match="different tested_commit"):
+        write_raw_records(validated, [record])
     assert not validated.request.output_root.exists()
 
 
@@ -515,6 +583,13 @@ def test_raw_writer_never_leaves_partial_output_on_io_failure(tmp_path, monkeypa
     assert leftovers == []
 
 
+def test_canonical_orchestrator_is_blocked_and_never_accepts_external_receipts(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="forget requires an external state binding"):
+        adapter.dispatch_and_write_canonical(validated)
+    assert not validated.request.output_root.exists()
+
+
 def test_dispatch_stateless_preference_projects_top_level_fields(tmp_path):
     validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
 
@@ -532,11 +607,17 @@ def test_dispatch_stateless_preference_projects_top_level_fields(tmp_path):
         "should_persist": True,
         "explicitness": "explicit",
     }
-    assert record.trace_reference.startswith(
-        "dispatch-v1/preference/d13e-pref-001/17dce3696066/"
-    )
-    assert record.trace_reference.endswith(record.actual_digest[:12])
+    assert record.trace_reference == "dispatch/d13e-pref-001.json"
     assert record.runtime_scope == "stateless:preference"
+    receipt = json.loads(
+        (validated.request.evidence_root / "dispatch" / "d13e-pref-001.json")
+        .read_text(encoding="utf-8")
+        .splitlines()[0]
+    )
+    assert receipt["sample_id"] == "d13e-pref-001"
+    assert receipt["metric"] == "preference"
+    assert receipt["tested_commit"] == HEAD
+    assert receipt["actual_digest"] == record.actual_digest
 
 
 def test_dispatch_stateless_conflict_calls_the_real_policy(tmp_path):
@@ -551,9 +632,7 @@ def test_dispatch_stateless_conflict_calls_the_real_policy(tmp_path):
         "winner_id": "d13e-c-001-left",
         "reason_code": "evidence_tier_priority",
     }
-    assert record.trace_reference.startswith(
-        "dispatch-v1/conflict/d13e-conflict-001/17dce3696066/"
-    )
+    assert record.trace_reference == "dispatch/d13e-conflict-001.json"
     assert record.runtime_scope == "stateless:conflict"
 
 
@@ -562,6 +641,25 @@ def test_dispatch_stateless_rejects_stateful_metrics_without_an_environment_bind
 
     with pytest.raises(ExecutionPreflightError, match="isolated runtime binding"):
         dispatch_stateless_sample(validated, "d13e-forget-001")
+
+
+def test_validated_dataset_records_are_recursively_immutable(tmp_path):
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    by_id = {sample["sample_id"]: sample for sample in validated.records}
+    pref = by_id["d13e-pref-001"]
+    conflict = by_id["d13e-conflict-001"]
+    forget = by_id["d13e-forget-001"]
+    with pytest.raises(TypeError):
+        pref["sample_id"] = "altered"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        pref["input"]["user_text"] = "altered after SHA validation"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        conflict["input"]["left"]["evidence_tier"] = "altered"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        forget["input"]["target_selector"]["knowledge_id"] = "altered"  # type: ignore[index]
+    # Dispatch still observes the immutable official input.
+    record = dispatch_stateless_sample(validated, "d13e-pref-001")
+    assert record.actual["key"] == "response.language"
 
 
 @pytest.fixture()
@@ -584,6 +682,7 @@ def test_runtime_binding_lives_under_the_validated_state_root(safety_environment
     assert binding.db_path.exists()
     assert binding.binding_id.startswith("d13d-runtime-binding/v1:")
     assert len(binding.run_token_sha256) == 64
+    assert callable(binding.event_ingest_handler)
 
 
 def test_runtime_binding_cannot_reuse_an_existing_database(safety_environment):
@@ -636,6 +735,37 @@ def test_dispatch_safety_fails_closed_without_the_foreign_control(safety_environ
         )
 
 
+def test_dispatch_safety_fails_closed_when_ingest_handler_replaced(safety_environment):
+    validated, binding = safety_environment
+    calls = {"count": 0}
+
+    def fake_ingest(_payload, _ctx):
+        calls["count"] += 1
+        return {}
+
+    binding.registry.register("event.ingest", fake_ingest)
+    with pytest.raises(ExecutionPreflightError, match="handler was replaced"):
+        dispatch_safety_sample(
+            validated,
+            "d13e-safety-001",
+            binding=binding,
+            foreign_user_id="user_d13e_beta",
+        )
+    assert calls["count"] == 0
+
+
+def test_dispatch_safety_fails_closed_when_ingest_handler_unregistered(safety_environment):
+    validated, binding = safety_environment
+    binding.registry.unregister("event.ingest")
+    with pytest.raises(ExecutionPreflightError, match="replaced or unregistered"):
+        dispatch_safety_sample(
+            validated,
+            "d13e-safety-001",
+            binding=binding,
+            foreign_user_id="user_d13e_beta",
+        )
+
+
 def _other_binding(tmp_path):
     (tmp_path / "other").mkdir()
     other = validate_execution_request(_request(tmp_path / "other"), git_runner=_git_runner)
@@ -650,6 +780,7 @@ def test_dispatch_safety_rejects_binding_outside_validated_state_root(safety_env
         db_path=tmp_path / "outside-state-root.db",
         engine=binding.engine,
         registry=binding.registry,
+        event_ingest_handler=binding.event_ingest_handler,
         run_token_sha256=binding.run_token_sha256,
     )
     with pytest.raises(ExecutionPreflightError, match="validated state_root"):
@@ -686,6 +817,7 @@ def test_dispatch_safety_rejects_engine_pointing_to_another_database(
         db_path=binding.db_path,
         engine=other_binding.engine,
         registry=other_binding.registry,
+        event_ingest_handler=other_binding.event_ingest_handler,
         run_token_sha256=other_binding.run_token_sha256,
     )
     with pytest.raises(ExecutionPreflightError, match="not connected to binding.db_path"):
@@ -706,6 +838,7 @@ def test_dispatch_safety_rejects_registry_bound_to_another_engine(safety_environ
         db_path=binding.db_path,
         engine=binding.engine,
         registry=other_binding.registry,
+        event_ingest_handler=binding.event_ingest_handler,
         run_token_sha256=binding.run_token_sha256,
     )
     with pytest.raises(ExecutionPreflightError, match="registry is not bound to the same engine/run"):

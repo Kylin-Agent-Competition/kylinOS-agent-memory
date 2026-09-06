@@ -165,7 +165,7 @@ class ValidatedExecution:
     """A validated Dataset and the immutable identity used to validate it."""
 
     request: ExecutionRequest
-    records: tuple[dict[str, Any], ...]
+    records: tuple[Mapping[str, Any], ...]
 
 
 def _run_git(repository_root: Path, *args: str) -> str:
@@ -257,6 +257,27 @@ def _parse_jsonl(testset_bytes: bytes) -> list[dict[str, Any]]:
     return records
 
 
+def _deep_freeze(value: Any) -> Any:
+    """Recursively freeze validated Dataset records.
+
+    ``tuple(...)`` only freezes the container; nested sample/input dicts must
+    also be immutable (dict -> MappingProxyType, list -> tuple) so that after
+    the official Dataset SHA-256 is verified no caller can mutate a sample and
+    dispatch it under the official Dataset identity.
+    """
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {key: _deep_freeze(nested) for key, nested in value.items()}
+        )
+    if isinstance(value, list):
+        return tuple(_deep_freeze(nested) for nested in value)
+    if isinstance(value, tuple):
+        return tuple(_deep_freeze(nested) for nested in value)
+    if isinstance(value, set):
+        return frozenset(_deep_freeze(nested) for nested in value)
+    return value
+
+
 def _require_input_shape(metric: str, value: object) -> None:
     if not isinstance(value, dict):
         raise ExecutionPreflightError(f"{metric} sample input must be an object")
@@ -340,7 +361,7 @@ def validate_execution_request(
     actual_digest = hashlib.sha256(testset_bytes).hexdigest()
     if actual_digest != OFFICIAL_D13E_TESTSET_SHA256:
         raise ExecutionPreflightError("testset content SHA-256 does not match approved Dataset")
-    records = _validate_records(_parse_jsonl(testset_bytes))
+    records = _deep_freeze(_validate_records(_parse_jsonl(testset_bytes)))
     _validate_git_identity(normalized, git_runner)
     return ValidatedExecution(request=normalized, records=records)
 
@@ -442,38 +463,93 @@ def _snapshot_actual(actual: Mapping[str, Any]) -> MappingProxyType:
 
 
 def _validate_trace_reference(metric: str, sample_id: str, trace_reference: str) -> None:
-    """A trace must be a relative record or a stable trace ID bound to the sample."""
+    """A trace must be a relative record under evidence_root or a stable ID."""
     if not isinstance(trace_reference, str) or not trace_reference.strip():
         raise ExecutionPreflightError("raw record requires a trace_reference")
     if trace_reference.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:[\\/]", trace_reference):
         raise ExecutionPreflightError("raw record trace_reference must be relative or an opaque trace ID")
+    if ".." in Path(trace_reference).parts:
+        raise ExecutionPreflightError("raw record trace_reference must not escape the evidence root")
     if metric in ("preference", "conflict"):
-        prefix = f"dispatch-v1/{metric}/{sample_id}/"
-        if not trace_reference.startswith(prefix):
-            raise ExecutionPreflightError("trace_reference does not bind the dispatched sample")
+        if trace_reference != f"dispatch/{sample_id}.json":
+            raise ExecutionPreflightError(
+                "trace_reference does not bind the dispatched sample evidence record"
+            )
     elif metric == "safety" and not trace_reference.startswith("source-events:"):
         raise ExecutionPreflightError("safety trace_reference must reference the source-events trace")
 
 
-def _stateless_trace_reference(
+def _write_stateless_execution_receipt(
     validated: ValidatedExecution,
+    *,
     sample_id: str,
     metric: str,
     actual: Mapping[str, Any],
+    entrypoint: str,
 ) -> str:
-    """A stable, independently auditable trace ID for a stateless dispatch.
+    """Persist one real stateless execution receipt under the evidence root.
 
-    The trace binds the sample_id, the tested commit, the UTC dispatch time and
-    the digest of the observed actual, so it can be re-located to this run's
-    real execution facts instead of being a plain sample-id label.
+    ``trace_reference`` points to ``<evidence_root>/dispatch/<sample_id>.json``,
+    a record an independent reviewer can open to verify sample_id/metric/
+    tested_commit/actual_digest/UTC/entrypoint of the real dispatch, instead of
+    trusting a self-describing trace string.
     """
-    commit = validated.request.tested_commit[:12]
-    utc = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    digest = _actual_digest(actual)[:12]
-    return f"dispatch-v1/{metric}/{sample_id}/{commit}/{utc}/{digest}"
+    if not isinstance(validated, ValidatedExecution):
+        raise TypeError("validated must be a ValidatedExecution")
+    evidence_root = _canonical_path(validated.request.evidence_root, label="evidence_root")
+    digest = _actual_digest(actual)
+    receipt = {
+        "receipt_version": "d13d-execution-receipt/v1",
+        "sample_id": sample_id,
+        "metric": metric,
+        "tested_commit": validated.request.tested_commit,
+        "actual_digest": digest,
+        "utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "entrypoint": entrypoint,
+    }
+    trace_path = evidence_root / "dispatch" / f"{sample_id}.json"
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+    trace_path.write_text(
+        json.dumps(receipt, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    return f"dispatch/{sample_id}.json"
 
 
-def raw_record(
+def _verify_stateless_trace(validated: ValidatedExecution, record: ObservedRawRecord) -> None:
+    """Fail closed unless the stateless trace target exists and matches the record.
+
+    The trace target must live under the validated evidence_root and its receipt
+    must bind the same sample_id/metric/tested_commit/actual_digest.
+    """
+    evidence_root = _canonical_path(validated.request.evidence_root, label="evidence_root")
+    trace_parts = Path(record.trace_reference).parts
+    if ".." in trace_parts or Path(record.trace_reference).is_absolute():
+        raise ExecutionPreflightError("stateless trace target must stay under the evidence root")
+    target = (evidence_root / record.trace_reference).resolve(strict=False)
+    if not _is_under(target, evidence_root):
+        raise ExecutionPreflightError("stateless trace target escapes the evidence root")
+    if not target.exists():
+        raise ExecutionPreflightError("stateless trace target does not exist under evidence_root")
+    try:
+        lines = target.read_text(encoding="utf-8").splitlines()
+        receipt = json.loads(lines[0]) if lines else None
+    except (OSError, ValueError, IndexError) as exc:
+        raise ExecutionPreflightError("stateless trace target is not a readable receipt") from exc
+    if not isinstance(receipt, dict):
+        raise ExecutionPreflightError("stateless trace target is not a JSON receipt object")
+    if receipt.get("sample_id") != record.sample_id:
+        raise ExecutionPreflightError("stateless trace belongs to a different sample")
+    if receipt.get("metric") != record.metric:
+        raise ExecutionPreflightError("stateless trace belongs to a different metric")
+    if receipt.get("tested_commit") != validated.request.tested_commit:
+        raise ExecutionPreflightError("stateless trace belongs to a different tested_commit")
+    if receipt.get("actual_digest") != record.actual_digest:
+        raise ExecutionPreflightError("stateless trace digest does not match the record")
+
+
+def _raw_record(
     *,
     sample_id: str,
     metric: str,
@@ -481,7 +557,7 @@ def raw_record(
     trace_reference: str,
     runtime_scope: str,
 ) -> ObservedRawRecord:
-    """Create the only permitted raw record shape after a real execution."""
+    """Internal construction seam for dispatch receipts (not a provenance gate)."""
     if not _SAMPLE_ID.fullmatch(sample_id) or metric not in _METRICS:
         raise ExecutionPreflightError("raw record identity is invalid")
     if not isinstance(actual, dict) or not actual:
@@ -586,11 +662,18 @@ def dispatch_stateless_sample(
         actual = _conflict_actual(sample)
     else:
         raise ExecutionPreflightError("metric requires an isolated runtime binding")
-    return raw_record(
+    trace_reference = _write_stateless_execution_receipt(
+        validated,
         sample_id=sample_id,
         metric=metric,
         actual=actual,
-        trace_reference=_stateless_trace_reference(validated, sample_id, metric, actual),
+        entrypoint="dispatch_stateless_sample",
+    )
+    return _raw_record(
+        sample_id=sample_id,
+        metric=metric,
+        actual=actual,
+        trace_reference=trace_reference,
         runtime_scope=f"stateless:{metric}",
     )
 
@@ -611,6 +694,7 @@ class ValidatedRuntimeBinding:
     db_path: Path
     engine: Any
     registry: HandlerRegistry
+    event_ingest_handler: Any
     run_token_sha256: str
 
 
@@ -661,12 +745,18 @@ def build_runtime_binding(
     binding_id = (
         f"d13d-runtime-binding/v1:{validated.request.tested_commit[:12]}:{database_name}"
     )
+    # Freeze the production event.ingest callable identity created by this
+    # builder; _validate_binding() requires registry.route() to return exactly
+    # this object, so a later register()/unregister() overwrite cannot swap in
+    # a fake handler before real dispatch.
+    event_ingest_handler = registry.route("event.ingest")
     return ValidatedRuntimeBinding(
         validated=validated,
         binding_id=binding_id,
         db_path=db_path,
         engine=engine,
         registry=registry,
+        event_ingest_handler=event_ingest_handler,
         run_token_sha256=hashlib.sha256(run_token.encode("ascii")).hexdigest(),
     )
 
@@ -723,6 +813,14 @@ def _validate_binding(
     if registry_token != registered_token:
         raise ExecutionPreflightError(
             "runtime binding registry is not bound to the same engine/run"
+        )
+    try:
+        routed_ingest = binding.registry.route("event.ingest")
+    except Exception:  # noqa: BLE001 -- unregistered handler is a replaced binding
+        routed_ingest = None
+    if routed_ingest is not binding.event_ingest_handler:
+        raise ExecutionPreflightError(
+            "runtime binding event.ingest handler was replaced or unregistered"
         )
 
 
@@ -785,7 +883,7 @@ def dispatch_safety_sample(
     )
     try:
         with binding.engine.begin() as conn:
-            binding.registry.route("event.ingest")(payload, context)
+            binding.event_ingest_handler(payload, context)
             observed = observe_safety_execution(
                 conn,
                 user_id=user_id,
@@ -800,7 +898,7 @@ def dispatch_safety_sample(
         "audit_plaintext_leak_count": observed["audit_plaintext_leak_count"],
         "cross_user_violation_count": observed["cross_user_violation_count"],
     }
-    return raw_record(
+    return _raw_record(
         sample_id=sample_id,
         metric="safety",
         actual=actual,
@@ -818,6 +916,7 @@ def _validate_receipt(
     record: ObservedRawRecord,
     *,
     expected_metric_by_id: Mapping[str, str],
+    validated: ValidatedExecution,
 ) -> None:
     """Re-run the full record/actual/trace contract before canonical writing.
 
@@ -843,21 +942,23 @@ def _validate_receipt(
     _validate_trace_reference(record.metric, sample_id, record.trace_reference)
     if not isinstance(record.runtime_scope, str) or not record.runtime_scope.strip():
         raise ExecutionPreflightError("raw record has no runtime dispatch scope")
+    if record.metric in ("preference", "conflict"):
+        _verify_stateless_trace(validated, record)
 
 
-def write_raw_records(
+def _write_raw_records(
     validated: ValidatedExecution,
     raw_records: Iterable[ObservedRawRecord],
 ) -> dict[str, Path]:
-    """Serialize dispatch-produced receipts into the four canonical raw files.
+    """Private serializer of dispatch receipts into the four canonical raw files.
 
-    This seam is the internal serializer of the future formal orchestration
-    path.  It accepts only immutable, digest-carrying :class:`ObservedRawRecord`
-    receipts produced by real dispatch; every receipt is re-validated before
-    writing.  The four files are written into a sibling temporary directory and
-    atomically renamed into ``output_root`` only after the whole batch has been
-    written and re-checked, so an I/O failure can never leave a partial
-    canonical package under the formal ``output_root``.
+    PRIVATE: the only public production entry for the canonical package is
+    dispatch_and_write_canonical(), which dispatches inside one controlled call
+    and never accepts externally supplied receipts.  This serializer re-validates
+    every immutable receipt (actual/digest/trace/runtime scope), requires
+    stateless trace targets to exist under the evidence root, writes into a
+    sibling temporary directory and atomically renames into ``output_root`` so
+    an I/O failure can never leave a partial package.
     """
     if not isinstance(validated, ValidatedExecution):
         raise TypeError("validated must be a ValidatedExecution")
@@ -867,7 +968,11 @@ def write_raw_records(
     grouped: dict[str, list[ObservedRawRecord]] = {metric: [] for metric in _METRICS}
     seen_sample_ids: set[str] = set()
     for source_record in raw_records:
-        _validate_receipt(source_record, expected_metric_by_id=expected_metric_by_id)
+        _validate_receipt(
+            source_record,
+            expected_metric_by_id=expected_metric_by_id,
+            validated=validated,
+        )
         sample_id = source_record.sample_id
         if sample_id in seen_sample_ids:
             raise ExecutionPreflightError("raw sample_id must be unique")
@@ -901,3 +1006,26 @@ def write_raw_records(
     return {
         metric: output_root / "raw" / _RAW_FILENAMES[metric] for metric in _METRICS
     }
+
+
+
+
+def dispatch_and_write_canonical(validated: ValidatedExecution) -> dict[str, Path]:
+    """Formal canonical raw package production (orchestration-only entry).
+
+    This is the ONLY public production entry for the canonical package and it
+    never accepts externally supplied raw receipts: all 17 samples are
+    dispatched through the real dispatchers inside one controlled call and then
+    serialized by the private `_write_raw_records`.  Forget still requires the
+    externally supplied state binding (BLOCKED), so this call currently fails
+    closed before any output is created.
+    """
+    if not isinstance(validated, ValidatedExecution):
+        raise TypeError("validated must be a ValidatedExecution")
+    if any(sample["metric"] == "forget" for sample in validated.records):
+        raise ExecutionPreflightError(
+            "canonical dispatch is BLOCKED: forget requires an external state binding"
+        )
+    raise ExecutionPreflightError(
+        "canonical dispatch is not executable until every sample can be dispatched"
+    )
