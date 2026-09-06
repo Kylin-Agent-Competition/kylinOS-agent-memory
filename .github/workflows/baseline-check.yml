@@ -54,6 +54,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # provenance live 门禁需要 tested_runtime_commit（e3d4b9d…）完整历史；
+          # 默认 fetch-depth=1 会导致 git diff <tested>..HEAD 失败。
+          fetch-depth: 0
 
       - name: Install pytest
         run: python3 -m pip install --quiet pytest
