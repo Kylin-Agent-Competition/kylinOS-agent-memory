@@ -11,7 +11,7 @@
 
 | 编号 | 缺口 | 代码事实 |
 |---|---|---|
-| G1 | `forget.executed` **无生产者** | `repositories.EVENT_FORGET_EXECUTED`（repositories.py:92）仅常量；全仓无 enqueue；`uow.execute_forget_plan` 未发 outbox 事件 |
+| G1 | `forget.executed` 生产者**已存在**（核对更正） | `uow.execute_forget_plan` 终态事务已 enqueue `EVENT_FORGET_EXECUTED`（priority=FORGET_PRIORITY），payload 含 user_id/forget_plan_id/target_type/forget_mode/resolved_target_ids/version_ids/selection_hash/confirmation_ref/trace_id；无需再实现生产者 |
 | G2 | 统一 router 未接入 deletion consumer（P1-1） | `outbox/router.build_outbox_router` 需 vector_provider/embedding_service；`app.py` production default 未接线；adapter validation runtime 未挂 router |
 | G3 | payload version/kind mapping 缺口（P0-1） | `deletion_consumer._build_delete_request` 接受 `resolved_target_ids`/`version_ids`，无 `knowledge:`/`preference:` kind 映射；preference（memory_items）无 version_ids 真源 |
 | G4 | SnapshotReader 重建真源缺 preference（P0-2） | `retrieval/sqlite_vector_snapshot.py` 重建真源仅覆盖 memory_entries（knowledge），未覆盖 memory_items/memory_versions |
@@ -20,7 +20,7 @@
 
 ## 2. 建议闭合顺序与责任
 
-1. **D13D/B（本 PR 或独立 runtime PR）**：G1 生产者——`forget.execute` 终态事务内 enqueue `EVENT_FORGET_EXECUTED`，payload 含 user_id、tagged resolved_target_ids、version_ids（knowledge=memory_entries.id+row_revision；preference=memory_items.id+version）、selection_hash、forget_plan_id、event_id；
+1. **D13D/B（本 PR）**：G3 kind/version 规范化——`outbox.deletion_consumer._build_delete_request` 接受 `knowledge:`/`preference:` tagged memory_ids，strip tag→数字 id，version_ids 与 memory_ids 长度对齐，未知 tag fail-closed；补 L1；
 2. **B**：G3 deletion consumer 的 kind/version 映射（strip tag → 对应 collection/logical id），补 L1；
 3. **B**：G4 `SqliteVectorSnapshotReader` 重建真源并入 preference（memory_items/memory_versions），补 L1；
 4. **B**：G2 validation profile 内接线统一 router（vector_provider + embedding_service.invalidator），execute 后等待 forget.executed 消费 ACK 再进 realtime，补 L1；
