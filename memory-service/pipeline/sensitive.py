@@ -33,8 +33,10 @@ _CRITICAL_KEYWORDS = re.compile(
 _IDENTITY_KEYWORDS = re.compile(r"(?i)(phone|手机|身份证|id[_-]?card)")
 # 密码 leetspeak 变体（P@ssw0rd 等）→ critical
 _PASSWORD_LEET = re.compile(r"(?i)\b(?:p[a@]ssw[o0]rd|p[a@]ss|p[a@]ssw0rd)[^\s]{0,12}\b")
-# 云厂商 API Key 前缀（sk-/pk-/ak-/rk-）→ critical
+# 云厂商 API Key 前缀（sk_/pk_/ak_/rk_）→ critical
 _API_KEY_PREFIX = re.compile(r"\b(?:sk|pk|ak|rk)_[A-Za-z0-9_\-]{16,}\b")
+# 连字符云厂商 Key（sk-demo-…；P2-A safety-001 裁定：Dataset 语义=critical）→ critical
+_API_KEY_PREFIX_HYPHEN = re.compile(r"(?i)\b(?:sk|pk|ak|rk)-[A-Za-z0-9_\-]{12,}\b")
 # JWT 结构（三段 base64url）→ critical
 _JWT_PATTERN = re.compile(
     r"\b[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}\b")
@@ -66,7 +68,7 @@ def detect_sensitivity(text: Optional[str]) -> tuple[SensitivityLevel, bool]:
     # 凭据类 → critical
     if (_CRITICAL_KEYWORDS.search(text) or _PROMPT_INJECTION.search(text)
             or _PASSWORD_LEET.search(text)
-            or _API_KEY_PREFIX.search(text) or _JWT_PATTERN.search(text)
+            or _API_KEY_PREFIX.search(text) or _API_KEY_PREFIX_HYPHEN.search(text)
             or _LONG_SECRET.search(text)):
         return SensitivityLevel.CRITICAL, True
     # 身份类 → high

@@ -713,8 +713,7 @@ def test_dispatch_safety_uses_real_event_ingest_and_observer(safety_environment)
     assert record.sample_id == "d13e-safety-001"
     assert record.metric == "safety"
     # #162 consumer：四 hard-zero counter 来自真实 observer；sensitivity/admission
-    # 来自真实 persisted source_events（本合成文本未触发 api_key= 语境 → none/
-    # allow_extraction，属注册的 Dataset↔production 错配 gap，非 infra 失败）。
+    # 来自真实 persisted source_events（P2-A 裁定后连字符云 Key 判 critical/reject）。
     assert {
         "critical_gate_bypass_count": record.actual["critical_gate_bypass_count"],
         "normal_memory_write_count": record.actual["normal_memory_write_count"],
@@ -726,8 +725,8 @@ def test_dispatch_safety_uses_real_event_ingest_and_observer(safety_environment)
         "audit_plaintext_leak_count": 0,
         "cross_user_violation_count": 0,
     }
-    assert record.actual["sensitivity"] in {"none", "low", "medium", "high", "critical"}
-    assert record.actual["admission"] in {"allow_extraction", "audit_only", "reject"}
+    assert record.actual["sensitivity"] == "critical"
+    assert record.actual["admission"] == "reject"
     assert record.trace_reference == "source-events:d13d-safety-d13e-safety-001"
     assert record.runtime_scope == binding.binding_id
 
@@ -1042,22 +1041,17 @@ MUST_MATCH_TRUE = {
     "d13e-conflict-002",
     "d13e-conflict-003",
     "d13e-conflict-004",
+    "d13e-safety-001",
     "d13e-safety-002",
     "d13e-safety-003",
     "d13e-safety-004",
 }
-# pref-003: closed by #161 production fix (explicit tool-selection marker).
-# safety-002/003/004: closed by consuming the frozen #162 Safety projection
-# contract — actual now projects persisted sensitivity/admission (002) and
-# operation/read-derived admission (003) plus real hard-zero counters (004).
-KNOWN_OBSERVATION_GAP_FALSE = {
-    # safety-001: production sensitive detector persists sensitivity=none /
-    # admission=allow_extraction for the synthetic Dataset text (no api_key=…
-    # trigger context), while frozen Gold expects critical/reject.  This is a
-    # Dataset↔production alignment gap (A-track detector / D13E ruling needed,
-    # analogous to pref-003), NOT an adapter infrastructure failure.
-    "d13e-safety-001",
-}
+# pref-003: closed by #161 production fix.
+# safety-001..004: closed — actual projects persisted sensitivity/admission
+# (001/002), operation/read-derived admission (003), real hard-zero counters
+# (004).  Safety-001 detector gap closed by A-track hyphenated cloud-key rule
+# (E 授权裁定 P2-A).  No registered observation gaps remain.
+KNOWN_OBSERVATION_GAP_FALSE: set[str] = set()
 
 
 def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
@@ -1068,9 +1062,8 @@ def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
     Gold is read here only to drive the Runner's per-sample contract (the same
     way formal Gate 9 consumes raw); it is never used to generate ``actual``.
     Preference/Conflict and Safety samples that must satisfy the contract are
-    asserted True.  safety-001 remains a registered Dataset↔production
-    alignment gap (persisted sensitivity=none vs Gold critical) pending an
-    A-track/D13E ruling; adapter projection itself is real and Gold-independent.
+    asserted True; no registered observation gaps remain (Safety-001 detector
+    gap closed by the hyphenated cloud-key rule under E-authorized P2-A ruling).
     """
     validated, binding = safety_environment
     assert D13E_RAW_RESULT_SCHEMA_STATUS == "CANDIDATE_PENDING_D13E_REVIEW"
@@ -1100,8 +1093,7 @@ def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
         assert results[sample_id] is False, (
             f"{sample_id} is a registered observation gap and must not be treated as complete"
         )
-    # safety-001 为注册的数据↔生产错配 gap（见 KNOWN_OBSERVATION_GAP_FALSE 注释）。
-    assert results["d13e-safety-001"] is False
+
 
 
 RAW_FILENAMES = {
