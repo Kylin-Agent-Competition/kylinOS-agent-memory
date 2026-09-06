@@ -17,7 +17,12 @@
 6. SHA256SUMS 语法异常：空清单 / 重复路径 / 绝对路径 / 路径穿越 → 全部 FAIL；
 7. 双向不一致：SHA256SUMS 多余条目 / manifest 多余条目 / manifest 缺失条目 → FAIL；
 8. 文件内容修改但 SHA256SUMS 已同步（manifest 未同步）→ FAIL；
-9. manifest identity 不一致：package_name / source_commit / sdk 冻结值 / VERSION 内容 → FAIL。
+9. manifest identity 不一致：package_name / source_commit / sdk 冻结值 / VERSION 内容 → FAIL；
+10. 磁盘存在 manifest/SHA256SUMS 均未登记的额外实际常规文件 → FAIL（三向闭合）；
+11. package_version 为冻结值以外值（非空非法值）→ FAIL（精确比较，非仅非空）；
+12. EXPECT_SOURCE_COMMIT 缺失（未注入）→ FAIL（正式必填，无格式校验回退）；
+13. EXPECT_SOURCE_COMMIT 与 manifest.source_commit 不符 → FAIL（精确绑定）；
+14. builder 把短 source_commit 规范化为完整 40 位 SHA（静态传参 + git rev-parse 行为级）。
 
 所有 FAIL 案例均断言返回码非 0 且「无副作用顺序」成立。
 """
@@ -32,6 +37,7 @@ from pathlib import Path
 
 TEST_DIR = Path(__file__).resolve().parent
 INSTALL_SCRIPT_SRC = TEST_DIR / "systemd_install.sh"
+BUILD_SCRIPT_SRC = TEST_DIR / "build_release_package.sh"
 
 PACKAGE_NAME = "kylin-memory-a-d14a"
 PACKAGE_VERSION = "0.1.0-d14a"
@@ -67,8 +73,10 @@ def sha256_bytes(data: bytes) -> str:
 def build_package(root: Path, *, tamper=None) -> Path:
     """构造最小合格包；tamper 为可选的回调 (pkg_dir) -> None 用于事后篡改。
 
-    布局镜像生产构建（Phase 2.7 先复制 systemd 脚本，Phase 3 再 walk 生成清单）：
-    systemd/install.sh 是受管理常规文件，位于 manifest.files / SHA256SUMS 内。
+    布局镜像生产构建（Phase 2.7 先复制 systemd 脚本，Phase 2.8 写 VERSION，
+    Phase 3 再 walk 生成清单）：
+    systemd/install.sh 与 VERSION 都是受管理常规文件，位于 manifest.files /
+    SHA256SUMS 内；manifest.json / SHA256SUMS 在 walk 后生成且自身不进清单。
     """
     pkg = Path(root) / "kylin-memory-a-d14a-0.1.0-d14a"
     pkg.mkdir(parents=True)
@@ -85,7 +93,9 @@ def build_package(root: Path, *, tamper=None) -> Path:
         (pkg / rel).chmod(0o755)
     (pkg / "systemd" / "install.sh").chmod(0o755)
 
-    # 镜像构建侧：先 walk 磁盘计算 files（manifest.json/SHA256SUMS 尚不存在）
+    # 镜像生产构建顺序（Phase 2.8 → Phase 3）：VERSION 先于 walk 写入，成为受管理
+    # 文件并进入 manifest.files 与 SHA256SUMS；manifest.json/SHA256SUMS 尚不存在。
+    (pkg / "VERSION").write_text(PACKAGE_VERSION + "\n", encoding="utf-8")
     files = {}
     for dirpath, _dirs, fnames in os.walk(pkg):
         for fn in fnames:
@@ -111,7 +121,6 @@ def build_package(root: Path, *, tamper=None) -> Path:
     (pkg / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    (pkg / "VERSION").write_text(PACKAGE_VERSION + "\n", encoding="utf-8")
     sums = "".join("%s  %s\n" % (files[rel]["sha256"], rel) for rel in sorted(files))
     (pkg / "SHA256SUMS").write_text(sums, encoding="utf-8")
 
@@ -141,12 +150,17 @@ def install_script_rel(root: Path) -> Path:
     return root / "systemd" / "install.sh"
 
 
-def run_install(pkg: Path, home: Path, mode: str = "install"):
+def run_install(pkg: Path, home: Path, mode: str = "install",
+                expect_source_commit: str = SOURCE_COMMIT):
     """以 mock PATH + 临时 HOME/INSTALL_PREFIX 驱动完整性 Gate。
 
     执行仓库内的真实 install 脚本，并通过 PKG_DIR 环境变量把完整性 Gate 指向
     临时构造的发布包（生产布局下 PKG_DIR 由 systemd/install.sh 的 SELF_DIR 推导，
     此处用测试缝显式覆盖，使篡改包内 install 脚本副本也能被真实 Gate 检出）。
+
+    expect_source_commit：调用方期望的 source commit（默认 = SOURCE_COMMIT 测试
+    fixture，即 manifest 内构造值），作为 EXPECT_SOURCE_COMMIT 注入环境；
+    传 None 表示不注入（用于断言“缺失即 fail-closed”的必填语义）。
 
     返回 (returncode, stdout, stderr, marker_path, prefix_path)。
     """
@@ -176,6 +190,8 @@ def run_install(pkg: Path, home: Path, mode: str = "install"):
         "PATH": str(mock_bin) + os.pathsep + os.environ.get("PATH", ""),
         "MOCK_MARKER": str(marker),
     }
+    if expect_source_commit is not None:
+        env["EXPECT_SOURCE_COMMIT"] = expect_source_commit
     proc = subprocess.run(
         ["bash", str(INSTALL_SCRIPT_SRC), mode],
         env=env,
@@ -471,8 +487,31 @@ def test_identity_sdk_frozen_mismatch_fails(tmp_path):
 
 
 def test_version_file_mismatch_fails(tmp_path):
+    """VERSION 内容与 manifest.package_version 不一致 → FAIL（步骤 7 内容检查）。
+
+    VERSION 为受管理文件（生产 Phase 2.8 先写、Phase 3 walk 入清单），故篡改必须
+    同步 SHA256SUMS 与 manifest 的 hash（等长替换保持 size 不变），使 Gate 越过
+    步骤 5 的 hash/size 校验，专门命中步骤 7 的 VERSION==package_version 检查。"""
+
     def tamper(pkg):
-        (pkg / "VERSION").write_text("9.9.9-evil\n", encoding="utf-8")
+        p = pkg / "VERSION"
+        new_data = b"0.2.0-evil\n"  # 与 "0.1.0-d14a\n" 等长，size 不变
+        assert len(new_data) == p.stat().st_size, "等长替换前提失效"
+        p.write_bytes(new_data)
+        lines = (pkg / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
+        out = []
+        for line in lines:
+            _s, rel = line.split()
+            if rel == "VERSION":
+                out.append("%s  %s" % (sha256_bytes(new_data), rel))
+            else:
+                out.append(line)
+        (pkg / "SHA256SUMS").write_text("\n".join(out) + "\n", encoding="utf-8")
+        manifest = json.loads((pkg / "manifest.json").read_text(encoding="utf-8"))
+        manifest["files"]["VERSION"]["sha256"] = sha256_bytes(new_data)
+        (pkg / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
 
     pkg = build_package(tmp_path, tamper=tamper)
     home = tmp_path / "home"
@@ -494,3 +533,117 @@ def test_identity_package_version_empty_fails(tmp_path):
     home = tmp_path / "home"
     rc, out, err, _m, _p = run_install(pkg, home, mode="_integrity-gate")
     assert rc != 0 and "package_version" in err, "空 package_version 应 FAIL: %s" % err
+
+
+# ─────────────────────── 三向闭合（磁盘实际文件集） ───────────────────────
+
+def test_extra_unmanaged_actual_file_on_disk_fails(tmp_path):
+    """磁盘存在 manifest/SHA256SUMS 均未登记的额外实际常规文件 → FAIL（三向闭合，
+    覆盖“磁盘侧越界”，区别于既有“清单侧越界”用例）。"""
+
+    def tamper(pkg):
+        (pkg / "runtime/app/evil_external.py").write_bytes(b"x = 1\n")
+
+    pkg = build_package(tmp_path, tamper=tamper)
+    home = tmp_path / "home"
+    rc, out, err, marker, prefix = run_install(pkg, home, mode="install")
+    assert rc != 0, "磁盘额外未受管文件应 FAIL"
+    assert "未受管实际文件" in err and "evil_external.py" in err, \
+        "应报未受管实际文件: %s" % err
+    assert_no_side_effects(marker, prefix, home)
+
+
+# ─────────────────────── identity 精确比较与正式必填 ───────────────────────
+
+def test_wrong_package_version_fails_exact_compare(tmp_path):
+    """manifest.package_version 为冻结值以外值（非空非法）→ FAIL：
+    证明 Gate 对 package_version 精确比较（0.1.0-d14a），而非仅检查非空。"""
+
+    def tamper(pkg):
+        manifest = json.loads((pkg / "manifest.json").read_text(encoding="utf-8"))
+        manifest["package_version"] = "0.2.0-evil"
+        (pkg / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+    pkg = build_package(tmp_path, tamper=tamper)
+    home = tmp_path / "home"
+    rc, out, err, marker, prefix = run_install(pkg, home, mode="install")
+    assert rc != 0, "非空但错误的 package_version 应 FAIL（精确比较）"
+    assert "package_version 不符" in err and "0.2.0-evil" in err, \
+        "应报 package_version 不符: %s" % err
+    assert_no_side_effects(marker, prefix, home)
+
+
+def test_expect_source_commit_missing_fails_closed(tmp_path):
+    """EXPECT_SOURCE_COMMIT 未设置 → FAIL（正式必填语义，无“缺失时仅格式校验”
+    回退；值必须由调用方显式提供）。"""
+
+    pkg = build_package(tmp_path)
+    home = tmp_path / "home"
+    rc, out, err, marker, prefix = run_install(
+        pkg, home, mode="install", expect_source_commit=None)
+    assert rc != 0, "EXPECT_SOURCE_COMMIT 缺失应 FAIL（fail-closed）"
+    assert "EXPECT_SOURCE_COMMIT" in err and "缺失" in err, \
+        "应报 EXPECT_SOURCE_COMMIT 缺失: %s" % err
+    assert_no_side_effects(marker, prefix, home)
+
+
+def test_expect_source_commit_mismatch_fails_closed(tmp_path):
+    """EXPECT_SOURCE_COMMIT 与 manifest.source_commit 不符（均为合法 40-hex 但不等）
+    → FAIL（精确绑定，防“错误包被安装到期望不同 commit 的环境”）。"""
+
+    pkg = build_package(tmp_path)
+    home = tmp_path / "home"
+    rc, out, err, marker, prefix = run_install(
+        pkg, home, mode="install", expect_source_commit="b" * 40)
+    assert rc != 0, "EXPECT_SOURCE_COMMIT 与 manifest 不符应 FAIL（fail-closed）"
+    assert "EXPECT_SOURCE_COMMIT 不符" in err, \
+        "应报 EXPECT_SOURCE_COMMIT 不符: %s" % err
+    assert_no_side_effects(marker, prefix, home)
+
+
+def test_builder_normalizes_short_source_commit_to_full_sha(tmp_path):
+    """builder 把用户传入的短 source_commit 规范化为完整 40 位 SHA。
+    a) 静态：Phase 3 manifest 生成调用必须传 $FULL_COMMIT（已解析 40 位），不得把
+       原始 $SOURCE_COMMIT 写入 manifest（短输入若原样落盘，install Gate 无法用
+       单一 40 位值精确绑定）；
+    b) 行为：临时 git 仓库经 commit-tree（GIT_AUTHOR_*/GIT_COMMITTER_* 环境变量，
+       无需用户配置）造真实 commit，复刻 builder Phase 0 精确命令
+       `git -C <repo> rev-parse "<short>^{commit}"`，断言解析结果 == 完整 40 位
+       HEAD。零 SDK/systemd 依赖；本测试 SHA 仅作隔离 fixture，非正式包 hash。"""
+    build = BUILD_SCRIPT_SRC.read_text(encoding="utf-8")
+
+    # a) 静态钉住 Phase 3 传参
+    assert 'python3 - "$DIST" "$PACKAGE_NAME" "$PACKAGE_VERSION" "$FULL_COMMIT" <<' in build, \
+        "Phase 3 必须把已解析的 FULL_COMMIT 传入 manifest 生成"
+    assert 'python3 - "$DIST" "$PACKAGE_NAME" "$PACKAGE_VERSION" "$SOURCE_COMMIT"' not in build, \
+        "Phase 3 不得再把原始 $SOURCE_COMMIT 传入 manifest 生成"
+
+    # b) 行为级：复刻 builder Phase 0 的短 SHA 规范化
+    repo = tmp_path / "fake-repo"
+    repo.mkdir()
+    env = dict(os.environ)
+    env.update({
+        "GIT_AUTHOR_NAME": "fixture",
+        "GIT_AUTHOR_EMAIL": "fixture@example.com",
+        "GIT_AUTHOR_DATE": "2026-09-06T00:00:00+00:00",
+        "GIT_COMMITTER_NAME": "fixture",
+        "GIT_COMMITTER_EMAIL": "fixture@example.com",
+        "GIT_COMMITTER_DATE": "2026-09-06T00:00:00+00:00",
+    })
+    subprocess.run(["git", "-C", str(repo), "init", "-q"],
+                   env=env, check=True, capture_output=True)
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "hash-object", "-w", "-t", "tree", "/dev/null"],
+        env=env, check=True, capture_output=True, text=True).stdout.strip()
+    full = subprocess.run(
+        ["git", "-C", str(repo), "commit-tree", tree, "-m", "fixture"],
+        env=env, check=True, capture_output=True, text=True).stdout.strip()
+    assert len(full) == 40, "commit-tree 应产出完整 40 位 SHA: %r" % full
+    short = full[:8]
+    resolved = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "%s^{commit}" % short],
+        env=env, check=True, capture_output=True, text=True).stdout.strip()
+    assert resolved == full, \
+        "短 SHA 应解析为完整 40 位 commit: %r != %r" % (resolved, full)

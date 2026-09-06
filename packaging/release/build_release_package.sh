@@ -208,7 +208,9 @@ rm -f "$MIGRATE_DB"
 log "包内 Alembic migration smoke: PASS"
 
 # ── Phase 3: manifest + SHA256SUMS ──
-python3 - "$DIST" "$PACKAGE_NAME" "$PACKAGE_VERSION" "$SOURCE_COMMIT" << 'PYEOF'
+# 身份闭合：manifest.source_commit 必须写入 Phase 0 已解析的 40 位 FULL_COMMIT，
+# 不得保留用户传入的短 SHA（短输入经 rev-parse 规范化后恒为完整 commit）。
+python3 - "$DIST" "$PACKAGE_NAME" "$PACKAGE_VERSION" "$FULL_COMMIT" << 'PYEOF'
 import sys, os, json, hashlib, datetime
 
 dist = sys.argv[1]

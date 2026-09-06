@@ -28,6 +28,12 @@ EXPECT_PACKAGE_NAME="kylin-memory-a-d14a"
 EXPECT_SDK_SO_PATH="/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0"
 EXPECT_SDK_VERSION="1.2.0.0-0k0.4"
 EXPECT_SDK_SHA="028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48"
+# 契约 §1 冻结的 package version（install Gate 精确比较，替换“仅非空”检查）
+EXPECT_PACKAGE_VERSION="0.1.0-d14a"
+# 调用方显式可信输入（必填，fail-closed）：期望的 source commit 完整 40 位 SHA。
+# 不得从当前 checkout / 被测包自身推断，也不得硬编码当前工作树 SHA；未设置或
+# 空值即终止（无“缺失时仅格式校验”的 opt-in 回退）。
+EXPECT_SOURCE_COMMIT="${EXPECT_SOURCE_COMMIT:-}"
 
 log() { echo "[d14a-install] $*"; }
 die() { echo "[d14a-install] ERROR: $*" >&2; exit 1; }
@@ -52,13 +58,20 @@ verify_package_integrity() {
   [ -f "$manifest" ] || die "发布包缺失 manifest.json"
   [ -f "$version_file" ] || die "发布包缺失 VERSION"
 
+  # EXPECT_SOURCE_COMMIT 正式必填语义（fail-closed）：未设置或空值即终止，
+  # 无“缺失时仅格式校验”回退。该值必须由调用方显式提供（可信输入）。
+  [ -n "$EXPECT_SOURCE_COMMIT" ] \
+    || die "EXPECT_SOURCE_COMMIT 缺失：调用方必须显式提供期望 source commit（fail-closed）"
+
   "$PYTHON3" - "$manifest" "$version_file" "$pkg" \
     "$EXPECT_PACKAGE_NAME" "$EXPECT_SDK_SO_PATH" "$EXPECT_SDK_VERSION" "$EXPECT_SDK_SHA" \
+    "$EXPECT_PACKAGE_VERSION" "$EXPECT_SOURCE_COMMIT" \
     <<'PYEOF' || die "包完整性 Gate 失败（详见上方错误）"
 import json, sys, os, hashlib, re
 
 manifest_path, version_path, pkg = sys.argv[1], sys.argv[2], sys.argv[3]
 exp_name, exp_so, exp_ver, exp_sha = sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7]
+exp_version, exp_src_commit = sys.argv[8], sys.argv[9]
 sha_path = os.path.join(pkg, "SHA256SUMS")
 
 def die(msg): sys.exit("完整性Gate: " + msg)
@@ -100,16 +113,30 @@ try:
 except Exception as e:
     die("manifest.json 解析失败: %s" % e)
 
-# ── 4. 双向一致：manifest.files 键集 == SHA256SUMS 文件集 ──
+# ── 4. 三向闭合：manifest.files 键集 == SHA256SUMS 文件集 == 磁盘实际常规文件集 ──
+# on_disk 用与 builder Phase 3 相同的 os.walk fnames 收集（含对文件的 symlink 条目，
+# 与 find -type f 侧一致性一致），剔除 manifest.json 与 SHA256SUMS 两个 Gate 自身文件。
+# 任何额外未受管文件 / 缺项均 fail-closed，且早于任何安装副作用。
 man_files = manifest.get("files", {})
 sum_set = set(rel for rel, _ in entries)
 man_set = set(man_files.keys())
+on_disk = set()
+for _root, _dirs, fnames in os.walk(pkg):
+    for f in fnames:
+        on_disk.add(os.path.relpath(os.path.join(_root, f), pkg))
+on_disk -= {"manifest.json", "SHA256SUMS"}
 missing_in_sum = man_set - sum_set
 unmanaged_in_sum = sum_set - man_set
+missing_on_disk = man_set - on_disk
+extra_on_disk = on_disk - man_set
 if missing_in_sum:
     die("manifest 声明但 SHA256SUMS 未覆盖: %s" % sorted(missing_in_sum))
 if unmanaged_in_sum:
     die("SHA256SUMS 含 manifest 未登记文件: %s" % sorted(unmanaged_in_sum))
+if missing_on_disk:
+    die("受管理文件缺失: %s" % sorted(missing_on_disk))
+if extra_on_disk:
+    die("未受管实际文件: %s" % sorted(extra_on_disk))
 
 # ── 5. 全量 sha256 + size 校验（SHA256SUMS 全集，且与 manifest.files 双向一致） ──
 def sha256(path):
@@ -134,10 +161,13 @@ for rel, expect_sha in entries:
 # ── 6. manifest identity ──
 if manifest.get("package_name") != exp_name:
     die("package_name 不符: expected=%r actual=%r" % (exp_name, manifest.get("package_name")))
-if not manifest.get("package_version"):
-    die("package_version 缺失")
-if not re.fullmatch(r"[0-9a-f]{40}", str(manifest.get("source_commit", ""))):
-    die("source_commit 非法（须 40 位 SHA）: %r" % manifest.get("source_commit"))
+if manifest.get("package_version") != exp_version:
+    die("package_version 不符: expected=%r actual=%r" % (exp_version, manifest.get("package_version")))
+src_commit = str(manifest.get("source_commit", ""))
+if not re.fullmatch(r"[0-9a-f]{40}", src_commit):
+    die("source_commit 非法（须 40 位 SHA）: %r" % src_commit)
+if src_commit != exp_src_commit:
+    die("source_commit 与调用方 EXPECT_SOURCE_COMMIT 不符: expected=%r actual=%r" % (exp_src_commit, src_commit))
 sdk = manifest.get("sdk") or {}
 if sdk.get("so_path") != exp_so:
     die("sdk.so_path 不符: expected=%r actual=%r" % (exp_so, sdk.get("so_path")))
@@ -152,7 +182,7 @@ if actual_version != manifest.get("package_version"):
     die("VERSION(%r) != manifest.package_version(%r)" %
         (actual_version, manifest.get("package_version")))
 
-print("包完整性 Gate: PASS（%d 文件，双向一致，identity 绑定）" % len(entries))
+print("包完整性 Gate: PASS（%d 文件，三向闭合，identity 绑定）" % len(entries))
 PYEOF
 }
 
