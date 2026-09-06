@@ -1,0 +1,36 @@
+{
+  "schema_version": "d14d-env-prepared/snapshot_identity/v1",
+  "kind": "W5a-snapshot-identity",
+  "task": "D14D_ENV_PREPARED",
+  "record": "r3 ACTIVE evidence package（绑定 snapshot d14d-clean-base-20260906-r2；r1/r2 roots SUPERSEDED 历史）",
+  "route_a": "Route A re-base on B-track base VM per D-track authorization (2026-09-06). r3 adds auditable fail-closed clean-state gate evidence + corrected handoff policy on the same r2 snapshot.",
+  "vm": {
+    "name": "Kylin-V11-2603-BTrack-Base",
+    "uuid": "103fb8a8-cc85-4897-836a-70b68edb5745",
+    "virtualbox_guest_os_profile": "Ubuntu (64-bit)",
+    "actual_guest_os": "Kylin V11 (KYLIN_RELEASE_ID=2603) - see environment.json",
+    "memory_mb": 8192,
+    "cpus": 4,
+    "firmware": "BIOS",
+    "nic1": { "type": "NAT", "mac": "080027BA188E", "port_forward_rule": "ssh: host 127.0.0.1:2222 -> guest 22" }
+  },
+  "snapshots": [
+    { "role": "long-lived-base", "name": "20-btrack-test-deps-20260821", "uuid": "0ef35f2c-2746-46b1-a584-fa74b8493698" },
+    { "role": "parent-d14d", "name": "D14D", "uuid": "006bde87-8695-4406-b349-902190e832aa" },
+    { "role": "pre-provision-rollback", "name": "d14d-r2-prep-before-provision-20260906", "uuid": "cf08647f-6f0d-4acc-9250-0760a669ec96" },
+    { "role": "current-formal-start", "name": "d14d-clean-base-20260906-r2", "uuid": "c5e3c3de-1c70-4f58-b22a-ab07b2d2d56d", "current": true }
+  ],
+  "state_after_evidence_collection": {
+    "vm_state": "poweroff",
+    "current_snapshot_name": "d14d-clean-base-20260906-r2",
+    "current_snapshot_uuid": "c5e3c3de-1c70-4f58-b22a-ab07b2d2d56d",
+    "note": "r3 evidence collected during one cold boot of r2 snapshot (gate positive/negative + env + deps); VM then powered off and restored to r2 snapshot, discarding the temporary collection layer. Snapshot r2 unchanged; left poweroff @ r2 (pristine)."
+  },
+  "collected_at_utc": "2026-09-06T10:05Z",
+  "collector": "D14D execution workspace (B-track executor)",
+  "raw_evidence": [
+    "raw/envprep_probe_20260906_r3.log",
+    "raw/envprep_neg_20260906_r3.log"
+  ],
+  "limitations": "VM/snapshot UUIDs from host-side VirtualBox metadata. Kernel on this base is 6.6.0-63-generic (superseded r1 recorded 6.6.0-76 on a different VM); Route A re-freezes identity for this environment."
+}
