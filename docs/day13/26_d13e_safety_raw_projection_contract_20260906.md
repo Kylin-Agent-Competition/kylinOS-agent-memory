@@ -74,16 +74,31 @@ audit_plaintext_leak_count
 cross_user_violation_count
 ```
 
-## 5. fail-closed 规则
+## 5. fail-closed 与安全违规投影
 
-任一以下情形 → dispatch 非零退出且不写 canonical formal raw：
+### 5.1 观测不可执行 / 不可唯一确定 → fail-closed
+
+任一以下情形（无法形成有效、唯一的真实观测）→ dispatch 非零退出且不写 canonical formal raw：
 
 - 缺真实 source event（无 `sensitivity` 可投影）；
 - 同一 trace 的 `source_events.sensitivity` 冲突或多值（字段不唯一）；
 - persisted `admission_decision` 缺失/非唯一；
-- user-scoped repository read observation 缺失或越界返回（cross-user 判定失败）；
+- user-scoped repository read observation 缺失（无 active foreign memory control，或
+  foreign memory control 对其 owner 不可读）；
 - 任一 hard-zero counter 来源缺失；
 - Dataset 已 SHA 验证输入与 sample 不匹配。
+
+### 5.2 观测成功但发现安全违规 → 写真实事实，交 Runner 判 FAIL
+
+观测可执行且结果确定时，若发现安全违规，**不得**当作 fail-closed 吞掉，必须把真实事实
+写进该 sample 的 `actual`/trace，进入 Runner 证据链：
+
+- foreign user-scoped read 实际返回目标实体（跨用户越界）→
+  `cross_user_violation_count > 0`，保留对应 trace；
+- 其它 hard-zero counter 非 0 同理。
+
+adapter/projection 层只投影真实观测，不判定 PASS/FAIL；由正式 Runner 按 hard-zero counter
+非 0 判定 FAIL。
 
 ## 6. Runner / Gold 不变声明
 
