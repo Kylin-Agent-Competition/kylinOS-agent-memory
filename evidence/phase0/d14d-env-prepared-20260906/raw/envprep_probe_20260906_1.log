@@ -1,0 +1,31 @@
+# Kylin VM test evidence
+run_id=envprep_probe_20260906_1
+collected_at_utc=2026-09-06T04:57:24.949246+00:00
+endpoint=127.0.0.1:2223
+user=kylin-agent
+mode=probe
+privilege=user
+--- guest script ---
+set -eu
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'hostname='; hostname
+printf 'user='; id -un
+printf 'uid='; id -u
+printf 'kernel='; uname -srmo
+printf 'os_release='; cat /etc/kylin-release 2>/dev/null || cat /etc/os-release
+printf 'disk_root='; df -h / | tail -1
+printf 'python='; python3 --version 2>&1 || true
+printf 'repo_exists='; test -d "/home/kylin-agent/kylinOS-agent-memory" && printf 'yes\n' || printf 'no\n'
+if test -e "/home/kylin-agent/kylinOS-agent-memory/.git"; then
+  if git -C "/home/kylin-agent/kylinOS-agent-memory" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    printf 'git_head='; git -C "/home/kylin-agent/kylinOS-agent-memory" rev-parse HEAD
+    printf 'git_branch='; git -C "/home/kylin-agent/kylinOS-agent-memory" branch --show-current
+    printf 'git_dirty='; git -C "/home/kylin-agent/kylinOS-agent-memory" status --porcelain | wc -l
+  else
+    printf 'git_state=UNAVAILABLE (guest .git metadata cannot be resolved)\n'
+  fi
+fi
+--- guest output ---
+RUNNER_ERROR=SSHException: No existing session
+--- runner summary ---
+{"allow_missing_repo": false, "completed_at_utc": "2026-09-06T04:57:49.989285+00:00", "duration_seconds": 25.041, "endpoint": "127.0.0.1:2223", "error": "No existing session", "exit_code": 2, "mode": "probe", "requested_command": null, "run_id": "envprep_probe_20260906_1", "started_at_utc": "2026-09-06T04:57:24.948654+00:00", "status": "BLOCKED", "sudo": false, "timed_out": false, "user": "kylin-agent"}
