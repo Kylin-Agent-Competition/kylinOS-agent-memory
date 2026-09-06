@@ -263,9 +263,9 @@ main 已并入 #162（Safety contract，merge `1a58df8…`）与 #161（pref-003
 #160 分支已 merge `origin/main`（merge `8bb7e2d…`），相关 L1（adapter/binding/preference/domain）153 passed。
 
 ```text
-P2-A = CONTRACT_MERGED / CONSUMER_IN_PROGRESS
+P2-A = CONTRACT_MERGED / CONSUMER_IN_PROGRESS（safety-002/003/004 consumer True；safety-001 数据↔生产错配 gap 待 D/E/A 裁定）
 P2-B = IN_PROGRESS / BLOCKED_UNTIL_5_OF_5_E2E
-P2-C = PRODUCTION_FIX_MERGED / VERIFICATION_IN_PROGRESS
+P2-C = COMPLETE（#161 production fix 已 merge 并被 #160 真实 Provider/adapter contract 消费：pref 4/4 True；事实/描述负例通过）
 ```
 
 ## 9. P2-B 承接与执行记录（2026-09-06）
