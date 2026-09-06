@@ -20,7 +20,9 @@
 ## 0. 目的
 
 定义 A 轨「正式发布包」的内容、身份、安装、验证与回退契约，使：
-- 干净 VM 仅凭发布包 + 声明的前置依赖即可完成 install → start → real SDK smoke → restart → status；
+- 干净 VM 仅凭发布包 + 声明的前置依赖即可完成 install → start → real SDK smoke → restart → status
+  （real SDK smoke 前置：先启动真实独立 embedding server 并取得其真实 PID，见 §9；
+  非 gateway 单 PID 自加载）；
 - **不依赖**源码 checkout、个人 venv、开发者 HOME 下的残留；
 - Bridge/SDK/model/runtime 的身份可追溯（声明的即实际加载的）。
 
@@ -64,13 +66,20 @@
   - `RUNTIME_EVIDENCE_STALE`：diff 含上述任一 packaging/runtime 前缀——必须
     **重新打包 → 重算 hash → 重跑真实 VM** → 回填新的 `tested_runtime_commit` /
     `evidence_commit` 后才可更新 runtime evidence。
-- **当前事实（执行时判定）**：本批次 Task1/2b/2/3 已引入 `packaging/`、
-  `memory-service/`、`migrations/` 等 packaging/runtime 行为变更（§1.1 三分类命中
-  `packaging/release/*`、`memory-service/db|gateway|pipeline|service|tests`、
-  `migrations/versions/20260906_*`），当前 HEAD 相对 `tested_runtime_commit` 分类为
-  **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**；正式「重新打包 → 重算 hash →
-  重跑真实 VM」并回填 `tested_runtime_commit` / `evidence_commit` 属后续独立事项
-  （超出本 Task、尚未执行），完成前不得宣称 runtime evidence 与当前 head 一致。
+- **当前事实（执行时判定）**：`git diff --name-only tested_runtime_commit..HEAD`
+  前缀扫描命中的 packaging/runtime 路径按 git history/diff 事实归因如下（归因拆分见
+  报告 §5.1 A/B）：`packaging/release/*` 属 **PR152 自有 remediation** 引入——
+  由 PR152 自有 D14A commit（4fb71cc/bf0fe65/c06c718/93b9325/26e8c00/ebcdbbd 第一父链）
+  引入；`memory-service/`（db|gateway|pipeline|service|tests）、
+  `migrations/versions/20260906_*`、`evaluation/`、`scripts/` 等属
+  **Upstream/main synchronization** 引入——由 main 同步 merge
+  （15de7c6/c3a5489/8a04441，另含 02ca7a0 handoff 同步）带入的
+  upstream PR #150/#157/#134/#148 变更，**非 PR152 引入**。当前 HEAD 相对
+  `tested_runtime_commit` 分类为 **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**——
+  该分类是前缀扫描的**客观分类结果**，不是对 PR152 路径的归因断言；正式
+  「重新打包 → 重算 hash → 重跑真实 VM」并回填 `tested_runtime_commit` /
+  `evidence_commit` 属后续独立事项（超出本 Task、尚未执行），完成前不得宣称
+  runtime evidence 与当前 head 一致。
 - 仅文档/测试变更（`DOCS_EVIDENCE_ONLY`）不触发重包，但 `current_pr_head` 前移时
   仍须按上述三分类复核。
 
@@ -145,14 +154,42 @@ python3.12               (系统 python，用于创建包内 venv)
 
 ---
 
-## 5. Dependency Audit（打包时强制）
+## 5. Dependency Audit（正式候选发布包 / D14D evidence Gate 前强制完成）
+
+Dependency Audit 按责任阶段分为两层：**A. Build-time Builder Gate**（构建期由
+`build_release_package.sh` 当前实际已实现的强制能力）与 **B. Formal Candidate /
+D14D Evidence Gate**（正式候选发布包 / L3 前 **REQUIRED** 的依赖与身份审计）。
+两层均**非 optional、非「建议执行」**；B 类不得在构建期提前宣称已完成。
+
+### 5.1 A. Build-time Builder Gate（`build_release_package.sh` 当前实际已实现）
+
+| 检查 | 实现位置/方式 | 必须结果 |
+|---|---|---|
+| 包结构组装 | Phase 2 组装 | dist 目录结构完整（bin/runtime/config/systemd/VERSION/manifest/SHA256SUMS） |
+| VERSION / package_version | Phase 2 写入 | `0.1.0-d14a` 一致 |
+| source identity Gate | Phase 0（`--source-commit` 必填且须与 HEAD 一致） | 构建声明基线 = manifest.source_commit，fail-closed |
+| dirty-tree Gate | Phase 0 | 构建时 `git status --porcelain` 为空（source_tree_dirty=false） |
+| Python/SDK 前置 | Phase 0 | Python≥3.10 与 SDK `.so` 存在性检查 |
+| 构建路径残留扫描 | Phase 2.4.2 | 无开发机绝对路径/构建残留（fail-closed） |
+| 包内 migration smoke | Phase 2.9 | 包内 `alembic upgrade head` smoke 通过 |
+| manifest 生成 + files 全集 | Phase 3 | manifest 含 source_commit/sdk identity/files 全集，与磁盘双向一致断言 |
+| SHA256SUMS | Phase 3 | 打包后对所有文件生成 |
+| install 侧完整性 Gate | `systemd/install.sh` | manifest/SHA256SUMS 校验 + SDK 三向闭合完整性 Gate，fail-closed |
+
+### 5.2 B. Formal Candidate / D14D Evidence Gate（正式候选发布包 / L3 前 REQUIRED）
 
 | 检查 | 命令 | 必须结果 |
 |---|---|---|
 | Bridge 动态依赖 | `ldd runtime/bridge/kylin_embedding*.so` | 无 `not found`；全部 NEEDED 可解析 |
 | RPATH/RUNPATH | `readelf -d ... \| grep -E 'RPATH\|RUNPATH'` | 无开发机绝对路径 |
 | 硬编码路径 | `grep -RInE '(/home/\|/Users/\|[A-Za-z]:\\\|.venv\|d4d-venv\|PYTHONPATH\|--repo\|build/)' runtime/ packaging/` | 无个人开发目录命中（或逐条登记结论） |
-| SDK 身份 | `sha256sum` + `readelf -d` SONAME | = 合同 §6 |
+| SDK 身份审计 | 独立 embedding server `/proc/<embedding_pid>/maps` 实际加载路径+hash + `sha256sum` + `readelf -d` SONAME | = 合同 §6（声明的即实际加载的） |
+
+> 现状：B 类审计当前仅以**历史证据采集形态**存在于
+> `evidence/l3-kylin-vm/d14a_20260905/dependency_audit/`（采集于历史
+> `tested_runtime_commit`），仅记录证据，**未构成**正式候选包 / L3 的 REQUIRED Gate；
+> 正式 D14D 候选包 / L3 前必须按上表以 REQUIRED Gate 重新执行——
+> 不得因历史采集形态将其降为 optional 或「建议执行」。
 
 ---
 
@@ -190,11 +227,17 @@ embedding server PID**，`grep -F '.so' /proc/<embedding_pid>/maps` 中实际加
 ## 7. Install 契约（`systemd/install.sh`）
 
 ```bash
-bash systemd/install.sh install
+EXPECT_SOURCE_COMMIT=<40位完整 source commit> bash systemd/install.sh install
+# EXPECT_SOURCE_COMMIT：必填（fail-closed），必须为 40 位完整 SHA，且必须等于被安装
+#   正式 package 的 manifest.source_commit——即该正式 package 对应的 source identity
+#   （构建声明基线，见 §1.1）；该值由调用方对正式 package 显式可信提供，不得从
+#   checkout/被测包推断、不得使用短 SHA、不得使用不解释来源的占位符；无 optional
+#   语义，缺失/格式错误/与 manifest 不匹配均为 fail-closed 拒绝。
 # 动作:
-#   1. SDK（§3/§6）存在 + exact package version + SHA-256（fail-closed）；
+#   1. 校验 EXPECT_SOURCE_COMMIT 与 manifest.source_commit 绑定（fail-closed）＋
+#      manifest/SHA256SUMS 校验（与已冻结 hash 一致）
+#   2. SDK（§3/§6）存在 + exact package version + SHA-256（fail-closed）；
 #      runtime/model 按 §6bis 为 HANDOFF_REQUIRED，本版不做 hash Gate
-#   2. 校验 package manifest/SHA256SUMS（与已冻结 hash 一致）
 #   3. 整包复制到 <install_prefix>（${XDG_DATA_HOME:-$HOME/.local/share}/kylin-memory-d14a）；
 #      $HOME/.local/bin 创建 launcher symlink 指向 <install_prefix>/bin/kylin-memory-server；
 #      unit 渲染 ExecStart=<install_prefix>/bin/kylin-memory-server（安装前缀 launcher）
@@ -213,7 +256,13 @@ bash systemd/uninstall.sh rollback [--keep-unit]
 ## 9. Verify / Smoke 契约（`systemd/verify.sh`）
 
 ```bash
-bash systemd/verify.sh
+# 前置步骤（必需）：install 完成（§7）→ 启动真实独立 embedding server（正式发布包
+#   runtime venv 的 `python -m embedding.server`）→ 取得其真实 PID → embedding.sock
+#   就绪后，执行：
+bash systemd/verify.sh --embed-socket <EMBED_SOCK> --embed-pid <REAL_EMBEDDING_SERVER_PID>
+# --embed-pid：必填（fail-closed），必须是独立 embedding server 进程的真实 PID
+#   （SDK 由它实际加载），不是 gateway PID、不是随便选择的 Python PID——错误 PID
+#   会在 /proc/<embedding_pid>/maps 的 SDK 路径/SHA Gate FAIL。
 # 1. systemctl --user is-active
 # 2. socket 存在且 holder PID 与 unit MainPID 一致
 # 3. /proc/<embedding_pid>/maps 中 SDK .so 实际加载路径 + hash = §6

@@ -14,6 +14,12 @@
 > （`git rev-parse HEAD` 执行时事实）为 **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**——
 > 需重新打包 → 重算 hash → 真实 VM 重测并回填 `tested_runtime_commit` /
 > `evidence_commit` 后方可更新；正式刷新明确超出本 Task 且尚未执行。
+> **Historical result only**：本报告 §1/§2/§4（以及 §3 身份表、§5 evidence）中的
+> 历史 runtime / package smoke 结论均为**历史证据**——实际发生在
+> `tested_runtime_commit=e3d4b9d565e2c3c153973125b3c071225e1b9e4d`
+> （历史真实 VM 实际执行提交），**does not prove current HEAD**；历史 PASS 仅表示
+> 历史 commit 上实际发生的结果，不表示当前 PR head PASS；当前 HEAD 状态继续为
+> **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**（归因见 §5.1 A/B）。
 > v4 溯源收口：§3 四身份模型中 `current_pr_head` 不再落库固定 SHA，改以
 > `git rev-parse HEAD` 执行时事实为唯一真源；§5.1 复核改为执行时三分类
 > （EVIDENCE_CURRENT / DOCS_EVIDENCE_ONLY / RUNTIME_EVIDENCE_STALE）并如实记录
@@ -34,6 +40,13 @@ D 主审 5 个 BLOCKER 全部处置并重新验证：
 | B4 evidence 身份不一致 | 从 `e3d4b9d`（当时最终 head）重建 evidence；`manifest.source_commit` 记录该历史 head 的完整 40 位 SHA | 按 §3 四身份语义，该值归位为 tested_runtime_commit（真实 VM 实际执行提交），不得写成当前 PR head；证据文件已重建；该 evidence 相对后续 PR head 为 STALE（见 §5.1），刷新属后续独立事项 |
 | B5 evidence 格式/语义 | 修复 JSON；补全 install/smoke/service identity/dependency audit；状态降级 | 16 个 evidence 文件全部合法 |
 
+> **Historical evidence（就地标记）**：上表 B1–B5 的全部处置验证均为**历史
+> smoke/package 结论**，实际发生在
+> `tested_runtime_commit=e3d4b9d565e2c3c153973125b3c071225e1b9e4d`
+> （历史真实 VM 实际执行提交）；仅表示历史 commit 上实际发生的结果，
+> **does not prove current HEAD**——当前 HEAD 为 RUNTIME_EVIDENCE_STALE /
+> RUNTIME_UNVERIFIED（归因见 §5.1 A/B）。
+
 ---
 
 ## 2. 完成情况总览
@@ -48,6 +61,15 @@ D 主审 5 个 BLOCKER 全部处置并重新验证：
 | 异常恢复（restart） | ✅ | restart 后 verify 全 PASS |
 | 性能基线 | ⏳ | 单次 embed 205.5ms/restart 后 2.1ms；D13A 可比基准待 L3 |
 | A READY 声明 | ⏳ | 待 D 主审 + L3 clean-VM + D13A 性能回归 |
+
+> **Historical evidence（就地标记）**：上表 ✅ 完成项（冻结 contract / 构建正式包 /
+> 消除开发目录依赖 / 发布链 install→migrate→start→verify→restart→rollback /
+> 真实 SDK 调用 / 异常恢复 restart）均为**历史 runtime/package smoke 结论**，
+> 实际发生在 `tested_runtime_commit=e3d4b9d565e2c3c153973125b3c071225e1b9e4d`
+> （历史真实 VM 实际执行提交）；历史 PASS 仅表示历史 commit 上实际发生的结果，
+> **does not prove current HEAD**——当前 HEAD 为 RUNTIME_EVIDENCE_STALE /
+> RUNTIME_UNVERIFIED，正式重打包 → 重算 hash → 真实 VM 重测并回填新
+> tested_runtime_commit 属后续独立事项（尚未执行）。
 
 ---
 
@@ -94,6 +116,12 @@ package: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a
 ALL PASS: install → migration → start → verify(real SDK) → restart → rollback
 ```
 
+> **Historical evidence（就地标记）**：以上 ALL PASS 发布链输出为**历史 smoke 日志**，
+> 实际发生在 `tested_runtime_commit=e3d4b9d565e2c3c153973125b3c071225e1b9e4d`
+> （历史真实 VM 实际执行提交），仅表示历史 commit 上实际发生的结果，
+> **does not prove current HEAD**；当前 HEAD 为 **RUNTIME_EVIDENCE_STALE /
+> RUNTIME_UNVERIFIED**（归因见 §5.1 A/B），不描述为"与当前 head 一致"。
+
 ---
 
 ## 5. Evidence（`evidence/l3-kylin-vm/d14a_20260905/`）
@@ -131,14 +159,23 @@ recovery/{service_restart,process_crash,stale_socket}.log
 - `RUNTIME_EVIDENCE_STALE`：diff 含上述任一前缀——必须 **重新打包 → 重算 hash →
   重跑真实 VM** → 回填新的 `tested_runtime_commit` / `evidence_commit`。
 
-**当前真实结论（执行时事实）**：本批次 Task1/2b/2/3 已引入 packaging/runtime 行为
-变更，当前 HEAD 相对 `tested_runtime_commit` 分类为 **RUNTIME_EVIDENCE_STALE /
-RUNTIME_UNVERIFIED**，命中示例：`packaging/release/`（build_release_package.sh、
-package_smoke.sh、systemd_install.sh、systemd_uninstall.sh、systemd_verify.sh、
-test_d14a_package_integrity.py、test_d14a_transactional_rollback.py 等）、
-`memory-service/`（db/、gateway/、pipeline/、service/、tests/ 等）、
-`migrations/versions/`（20260906_add_forget_topic_key.py、
-20260906_add_preference_receipt_trace.py）。
+**当前真实结论（执行时事实）**：`git diff --name-only tested_runtime_commit..HEAD`
+前缀扫描命中 `packaging/`、`memory-service/`、`migrations/` 等 runtime 前缀，
+当前 HEAD 相对 `tested_runtime_commit` 分类为 **RUNTIME_EVIDENCE_STALE /
+RUNTIME_UNVERIFIED**。该分类是 provenance 三分类前缀扫描的**客观分类结果**，
+不是对 PR152 的归因断言。命中路径按 git history/diff 事实拆分为两类：
+
+- **A. PR152 自有 remediation 引入**：`packaging/release/*`（build_release_package.sh、
+  package_smoke.sh、systemd_install.sh、systemd_uninstall.sh、systemd_verify.sh、
+  test_d14a_package_integrity.py、test_d14a_transactional_rollback.py 等）——
+  由 PR152 自有 D14A commit（4fb71cc/bf0fe65/c06c718/93b9325/26e8c00/ebcdbbd
+  第一父链）引入；
+- **B. Upstream/main synchronization 引入**：`memory-service/`（db/、gateway/、
+  pipeline/、service/、tests/ 等）、`migrations/versions/20260906_*`
+  （20260906_add_forget_topic_key.py、20260906_add_preference_receipt_trace.py）、
+  `evaluation/`、`scripts/`、`memory-client/`、`os-agent-integration/`、
+  `docs/day13/*` 等——由 main 同步 merge（15de7c6/c3a5489/8a04441，另含 02ca7a0
+  handoff 同步）带入的 upstream PR #150/#157/#134/#148 变更，**非 PR152 引入**。
 
 要求：正式「重新打包 → 重算 hash → 重跑真实 VM」并回填新
 `tested_runtime_commit` / `evidence_commit` 属后续独立事项，**超出本 Task 且尚未
