@@ -1,0 +1,48 @@
+{
+  "schema_version": "d14d-env-prepared/snapshot_identity/v1",
+  "kind": "W5a-snapshot-identity",
+  "task": "D14D_ENV_PREPARED",
+  "vm": {
+    "name": "Kylin-D14D-clean-vdi-20260906",
+    "uuid": "70ca1ea3-c27e-483d-aaba-0cac7dc5c77c",
+    "virtualbox_guest_os_profile": "Ubuntu (64-bit)",
+    "actual_guest_os": "Kylin V11 (KYLIN_RELEASE_ID=2603) - see environment.json",
+    "memory_mb": 8192,
+    "cpus": 8,
+    "vram_mb": 16,
+    "nic1": {
+      "type": "NAT",
+      "mac": "080027A71EEE",
+      "port_forward_rule": "ssh: host 127.0.0.1:2223 -> guest 22"
+    }
+  },
+  "snapshots": [
+    {
+      "role": "parent-clean-base",
+      "name": "d14d-clean-base-20260906-vdi",
+      "uuid": "509ade1b-ba48-4add-93a6-0d834ed5974f",
+      "description": "D14D clean base on independent VDI: Kylin V11 x86_64, no source checkout/Git metadata, no personal venv, no user memory unit/socket/database/state; official SDK/runtime/model prerequisites retained. Base probe PASS at 127.0.0.1:2223."
+    },
+    {
+      "role": "current-formal-start",
+      "name": "d14d-clean-base-20260906-r1",
+      "uuid": "4eeade26-5cd3-4467-a31b-c7440c5b04e0",
+      "description": "D14D corrected clean base: verified absent checkout, D4D venv, stale launcher, memory unit/socket/database/state; official SDK and core text embedding retained.",
+      "current": true
+    }
+  ],
+  "state_after_evidence_collection": {
+    "vm_state": "poweroff",
+    "current_snapshot_name": "d14d-clean-base-20260906-r1",
+    "current_snapshot_uuid": "4eeade26-5cd3-4467-a31b-c7440c5b04e0",
+    "note": "VM was booted once for read-only collection, then force-stopped, snapshot r1 restored, saved state discarded, and left poweroff at r1 (D-11 discipline)."
+  },
+  "creation_time": "2026-09-06 (per D14D project records; VirtualBox CLI does not expose snapshot creation timestamps)",
+  "collected_at_utc": "2026-09-06T05:01:31Z",
+  "collector": "D14D execution workspace",
+  "raw_evidence": [
+    "raw/envprep_probe_20260906_2.log",
+    "raw/envprep_probe_20260906_1.log"
+  ],
+  "limitations": "Identity recorded from host-side VirtualBox metadata and guest probe. Fresh guest-side capture of .kyinfo/os-release at formal G0 will be appended to the formal evidence root; this snapshot_identity.json is the ENV_PREPARED frozen start-point identity."
+}

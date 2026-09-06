@@ -1,0 +1,45 @@
+{
+  "schema_version": "d14d-env-prepared/environment_identity/v1",
+  "kind": "W5b-environment-identity",
+  "task": "D14D_ENV_PREPARED",
+  "collected_at_utc": "2026-09-06T04:58-04:59Z (raw runs)",
+  "guest": {
+    "hostname": "kylin-agent-pc",
+    "user": "kylin-agent",
+    "uid": 1000,
+    "kernel_full": "Linux kylin-agent-pc 6.6.0-76-generic #86r2-KYLINOS SMP PREEMPT_DYNAMIC Tue Aug  4 06:44:37 UTC 2026 x86_64 GNU/Linux",
+    "kernel": "6.6.0-76-generic",
+    "arch": "x86_64",
+    "python": "Python 3.12.3",
+    "systemd": "systemd 255 (see raw env log first line after header)",
+    "disk_root": "/dev/sda3 93G total, 36G used, 52G available (41% used)"
+  },
+  "os_release": {
+    "name": "Kylin",
+    "pretty_name": "Kylin V11",
+    "version": "银河麒麟桌面操作系统V11",
+    "version_id": "v11",
+    "kylin_release_id": "2603",
+    "id_like": "openKylin",
+    "home_url": "http://www.kylinos.cn/"
+  },
+  "clean_state_probe": {
+    "project_checkout": "NO_CHECKOUT (/home/kylin-agent/kylinOS-agent-memory absent)",
+    "memory_install_prefix": "NO_MEMORY_PREFIX",
+    "stale_launcher": "NO_STALE_LAUNCHER",
+    "memory_unit": "UNIT_INACTIVE",
+    "memory_socket": "NO_MEMORY_SOCK",
+    "venv_or_build_dirs": "none found under /home/kylin-agent (maxdepth 3)"
+  },
+  "system_package_baseline": {
+    "installed_package_count": 2036,
+    "full_inventory_source": "raw/envprep_deps_20260906_1.log (full sorted dpkg-query -W listing)",
+    "note": "Full inventory is embedded in the raw dependency log; targeted canonical dependency values are frozen in dependency_identity.json."
+  },
+  "raw_evidence": [
+    "raw/envprep_probe_20260906_2.log",
+    "raw/envprep_env_20260906_1.log",
+    "raw/envprep_deps_20260906_1.log"
+  ],
+  "limitations": "Collected as unprivileged kylin-agent over SSH after cold boot from snapshot r1; collection is read-only. .kyinfo dist_id/servicekey block was not captured to avoid exposing any key material; KYLIN_RELEASE_ID=2603 is sourced from /etc/os-release in the raw log."
+}

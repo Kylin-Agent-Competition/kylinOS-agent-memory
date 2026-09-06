@@ -1,0 +1,101 @@
+# Kylin VM test evidence
+run_id=envprep_env_20260906_1
+collected_at_utc=2026-09-06T04:58:50.426621+00:00
+endpoint=127.0.0.1:2223
+user=kylin-agent
+mode=command
+privilege=user
+requested_command=set -eu
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'hostname='; hostname
+printf 'kernel_full='; uname -a
+printf 'arch='; uname -m
+printf '%s\n' '--- /etc/os-release ---'
+cat /etc/os-release
+printf '%s\n' '--- /etc/kylin-release ---'
+cat /etc/kylin-release 2>/dev/null || echo NONE
+printf '%s\n' '--- python ---'
+python3 --version
+printf '%s\n' '--- systemd ---'
+systemctl --version | head -1
+printf '%s\n' '--- disk_root ---'
+df -h / | tail -1
+printf '%s\n' '--- user ---'
+id
+printf '%s\n' '--- no-project-residue ---'
+test -d /home/kylin-agent/kylinOS-agent-memory && echo CHECKOUT_PRESENT || echo NO_CHECKOUT
+ls -d /home/kylin-agent/.local/share/kylin-memory* 2>/dev/null || echo NO_MEMORY_PREFIX
+ls -l /home/kylin-agent/.local/bin/kylin-memory-server 2>/dev/null || echo NO_STALE_LAUNCHER
+systemctl --user is-active kylin-memory 2>/dev/null || echo UNIT_INACTIVE
+ls -l /run/user/1000/kylin-memory/memory.sock 2>/dev/null || echo NO_MEMORY_SOCK
+find /home/kylin-agent -maxdepth 3 -type d \( -name '.venv' -o -name 'build*' -o -name 'kylin-memory-d14a' \) 2>/dev/null | head -20 || true
+--- guest script ---
+set -eu
+printf 'repo_exists='; test -d /home/kylin-agent/kylinOS-agent-memory && printf 'yes\n' || printf 'no\n'
+set +e
+bash -lc 'set -eu
+printf '"'"'guest_utc='"'"'; date -u +%FT%TZ
+printf '"'"'hostname='"'"'; hostname
+printf '"'"'kernel_full='"'"'; uname -a
+printf '"'"'arch='"'"'; uname -m
+printf '"'"'%s\n'"'"' '"'"'--- /etc/os-release ---'"'"'
+cat /etc/os-release
+printf '"'"'%s\n'"'"' '"'"'--- /etc/kylin-release ---'"'"'
+cat /etc/kylin-release 2>/dev/null || echo NONE
+printf '"'"'%s\n'"'"' '"'"'--- python ---'"'"'
+python3 --version
+printf '"'"'%s\n'"'"' '"'"'--- systemd ---'"'"'
+systemctl --version | head -1
+printf '"'"'%s\n'"'"' '"'"'--- disk_root ---'"'"'
+df -h / | tail -1
+printf '"'"'%s\n'"'"' '"'"'--- user ---'"'"'
+id
+printf '"'"'%s\n'"'"' '"'"'--- no-project-residue ---'"'"'
+test -d /home/kylin-agent/kylinOS-agent-memory && echo CHECKOUT_PRESENT || echo NO_CHECKOUT
+ls -d /home/kylin-agent/.local/share/kylin-memory* 2>/dev/null || echo NO_MEMORY_PREFIX
+ls -l /home/kylin-agent/.local/bin/kylin-memory-server 2>/dev/null || echo NO_STALE_LAUNCHER
+systemctl --user is-active kylin-memory 2>/dev/null || echo UNIT_INACTIVE
+ls -l /run/user/1000/kylin-memory/memory.sock 2>/dev/null || echo NO_MEMORY_SOCK
+find /home/kylin-agent -maxdepth 3 -type d \( -name '"'"'.venv'"'"' -o -name '"'"'build*'"'"' -o -name '"'"'kylin-memory-d14a'"'"' \) 2>/dev/null | head -20 || true'
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+repo_exists=no
+guest_utc=2026-09-06T04:58:51Z
+hostname=kylin-agent-pc
+kernel_full=Linux kylin-agent-pc 6.6.0-76-generic #86r2-KYLINOS SMP PREEMPT_DYNAMIC Tue Aug  4 06:44:37 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+arch=x86_64
+--- /etc/os-release ---
+NAME="Kylin"
+FULL_NAME="kylin"
+VERSION="银河麒麟桌面操作系统V11"
+VERSION_US="Kylin Linux Desktop V11"
+ID=kylin
+PRETTY_NAME="Kylin V11"
+VERSION_ID="v11"
+HOME_URL="http://www.kylinos.cn/"
+VERSION_CODENAME=kylin
+KYLIN_RELEASE_ID="2603"
+ID_LIKE=openKylin
+--- /etc/kylin-release ---
+NONE
+--- python ---
+Python 3.12.3
+--- systemd ---
+systemd 255 (255.2-ok1.9k1.42)
+--- disk_root ---
+/dev/sda3        93G   36G   52G   41% /
+--- user ---
+uid=1000(kylin-agent) gid=1000(kylin-agent) 组=1000(kylin-agent),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),100(users),114(lpadmin),987(vboxsf),989(sambashare)
+--- no-project-residue ---
+NO_CHECKOUT
+NO_MEMORY_PREFIX
+NO_STALE_LAUNCHER
+inactive
+UNIT_INACTIVE
+NO_MEMORY_SOCK
+/home/kylin-agent/featday9-embedding-throughput/cpp-bridge/build
+VM_TEST_EXIT=0
+--- runner summary ---
+{"allow_missing_repo": true, "completed_at_utc": "2026-09-06T04:58:52.796351+00:00", "duration_seconds": 2.37, "endpoint": "127.0.0.1:2223", "exit_code": 0, "mode": "command", "requested_command": "set -eu\nprintf 'guest_utc='; date -u +%FT%TZ\nprintf 'hostname='; hostname\nprintf 'kernel_full='; uname -a\nprintf 'arch='; uname -m\nprintf '%s\\n' '--- /etc/os-release ---'\ncat /etc/os-release\nprintf '%s\\n' '--- /etc/kylin-release ---'\ncat /etc/kylin-release 2>/dev/null || echo NONE\nprintf '%s\\n' '--- python ---'\npython3 --version\nprintf '%s\\n' '--- systemd ---'\nsystemctl --version | head -1\nprintf '%s\\n' '--- disk_root ---'\ndf -h / | tail -1\nprintf '%s\\n' '--- user ---'\nid\nprintf '%s\\n' '--- no-project-residue ---'\ntest -d /home/kylin-agent/kylinOS-agent-memory && echo CHECKOUT_PRESENT || echo NO_CHECKOUT\nls -d /home/kylin-agent/.local/share/kylin-memory* 2>/dev/null || echo NO_MEMORY_PREFIX\nls -l /home/kylin-agent/.local/bin/kylin-memory-server 2>/dev/null || echo NO_STALE_LAUNCHER\nsystemctl --user is-active kylin-memory 2>/dev/null || echo UNIT_INACTIVE\nls -l /run/user/1000/kylin-memory/memory.sock 2>/dev/null || echo NO_MEMORY_SOCK\nfind /home/kylin-agent -maxdepth 3 -type d \\( -name '.venv' -o -name 'build*' -o -name 'kylin-memory-d14a' \\) 2>/dev/null | head -20 || true", "run_id": "envprep_env_20260906_1", "started_at_utc": "2026-09-06T04:58:50.426204+00:00", "status": "PASS", "sudo": false, "timed_out": false, "user": "kylin-agent"}

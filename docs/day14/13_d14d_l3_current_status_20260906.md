@@ -20,7 +20,7 @@
 “正式 L3 / Release Gate”互相锁死：
 
 ```text
-D14D_ENV_PREPARED = READY（候选已具备；正式身份工件按需冷启 r1 产出）
+D14D_ENV_PREPARED = READY（正式身份工件已产出，2026-09-06 r1 实测）
 D14D_FORMAL_L3    = BLOCKED / PARTIAL（不是 L3_READY）
 L3                = NOT_STARTED
 D14A_FORMAL_L3_GO = NO
@@ -66,18 +66,34 @@ D14A_FORMAL_L3_GO = NO
 - 上述内容保留在本地工作分支（`chore/d14d-*`）与本地工作区 `docs/`，本次未随
   docs-only draft 推送；正式 run 与独立审查完成前不宣称 L3。
 
-### 2.3 ENV_PREPARED 冻结值（候选）
+### 2.3 ENV_PREPARED 冻结值（r1 实测已产出）
 
 | 项 | 值 | 状态 |
 | --- | --- | --- |
-| VM | `Kylin-D14D-clean-vdi-20260906`（UUID `70ca1ea3-c27e-483d-aaba-0cac7dc5c77c`） | 候选冻结 |
-| 正式起点 snapshot | `d14d-clean-base-20260906-r1`（UUID `4eeade26-5cd3-4467-a31b-c7440c5b04e0`），poweroff 待命 | D-11 |
-| OS | 银河麒麟桌面 V11（`KYLIN_RELEASE_ID=2603`；`dist_id=Kylin-Desktop-V11-2603-Release-20260228-X86_64`） | 正式 G0 现场重采 |
-| kernel / arch | Linux `6.6.0-63-generic` / x86_64 | 正式 G0 现场重采 |
-| SDK | `libkylin-coreai-embedding 1.2.0.0-0k0.4`；`.so` SHA `028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48` | FROZEN（D14D r1 raw / d14a evidence） |
-| runtime / model | runtime `kylin-ai-runtime 1.2.0.4-0k0.1`；model `kylin-gte-base-model 1.0.0.1-0k0.9`（默认 `ensemble-embd_gte-base_uint8-text`） | 参考值；vendor/hash freeze = `HANDOFF_REQUIRED`，正式 G0 采集后升版 |
+| VM | `Kylin-D14D-clean-vdi-20260906`（UUID `70ca1ea3-c27e-483d-aaba-0cac7dc5c77c`） | 已冻结（snapshot_identity.json） |
+| 正式起点 snapshot | `d14d-clean-base-20260906-r1`（UUID `4eeade26-5cd3-4467-a31b-c7440c5b04e0`），poweroff 待命 | D-11 + 已产出 |
+| OS | 银河麒麟桌面 V11（`KYLIN_RELEASE_ID=2603`；`dist_id=Kylin-Desktop-V11-2603-Release-20260228-X86_64`） | r1 实测（os-release）；正式 G0 重采 |
+| kernel / arch | Linux `6.6.0-76-generic` / x86_64 | r1 实测（probe/raw 日志） |
+| SDK | `libkylin-coreai-embedding 1.2.0.0-0k0.4`；`.so` SHA `028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48` | FROZEN（dependency_identity.json） |
+| runtime / model | runtime `kylin-ai-runtime 1.2.0.4-0k0.1`（/usr/bin SHA `b3f83fc9…`）；model `kylin-gte-base-model 1.0.0.1-0k0.9`（ONNX SHA `cef0fc76…`，默认 `ensemble-embd_gte-base_uint8-text`） | r1 实测 host baseline（dependency_identity.json）；契约 vendor-lock = `HANDOFF_REQUIRED`，正式 G0 / D Reviewer 升版 |
 | Trust Root | candidate `D13E_TRUST_ROOTS_V1.json` + public PEM；`--trust-roots` 重验入口已定义 | 重验/Seal 属阶段二（D13D I3d / W6） |
 | evidence root | `d14d_<UTC-RUN-ID>_<前7位SHA>`；预创建、空、不可复用、单次执行 | D-11 / Phase0 TaskCard |
+
+#### 2.3.1 ENV_PREPARED 证据包（已产出）
+
+- 路径：`evidence/phase0/d14d-env-prepared-20260906/`
+- `snapshot_identity.json`（W5a）：VM / r1 / 父快照 UUID、NIC 2223→22、采集后
+  `poweroff @ r1`。
+- `environment.json`（W5b）：`KYLIN_RELEASE_ID=2603`、kernel
+  `6.6.0-76-generic` x86_64、Python 3.12.3、2036 installed pkgs、无项目残留。
+- `dependency_identity.json`：SDK FROZEN；runtime/model 按 r1 实测冻结为 host
+  baseline（含 canonical artifact SHA）；完整 2036 包清单在 raw 日志。
+- `evidence_root_policy.md`（W5c）：命名 / 权限 / 不可复用 / 只追加 index 规则。
+- `trust_root_candidate.md`：Trust Root candidate + 重验证入口（PEM/Seal 属 W6）。
+- `raw/` + `checksums.txt`：kylin_vm_test.py 原始日志（首个 probe 因 sshd 未就绪
+  BLOCKED，重试用新 run-id PASS，未覆盖）。
+- 边界：ENV_PREPARED ≠ D14D PASS；未执行 FORMAL_L3
+  install/restart/reboot/rollback/Release Gate。
 
 ## 3. 正式 Gate 状态（阶段二）
 
@@ -100,7 +116,7 @@ D14A_FORMAL_L3_GO = NO
 | --- | --- | --- |
 | B1 | Ducknesses 第四轮 review 未执行；PR #152 `reviewDecision=CHANGES_REQUESTED`（head f24c29b） | D 主审 / Ducknesses 复审 |
 | B2 | D13D FROZEN 未闭合；TD-061 Open（High）；无 Seal / 17 raw / Runner Gate 0–10 | D13D 实施方 / D Reviewer |
-| B3 | runtime/model 依赖为 `HANDOFF_REQUIRED`，未在正式 G0 采集冻结 | D14D 执行（正式 run） |
+| B3 | runtime/model 已按 r1 实测产出 host baseline（dependency_identity.json）；契约 vendor-lock / D Reviewer 会签仍 `HANDOFF_REQUIRED`，待正式 G0 采集升版 | D14D 执行（正式 run） |
 | B4 | 正式 package 未从 tested_commit 重建 / hash 未冻结 | A/D14D（G2/G3 解锁后） |
 | B5 | G8 package-only runner/阈值未批准 | D 主审 + D13A owner |
 | B6 | 正式 evidence root 上 G0–G9 未执行、非作者独立审查未完成 | D14D 执行 + D/E Reviewer |
