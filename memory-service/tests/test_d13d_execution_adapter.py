@@ -1362,3 +1362,26 @@ def test_prepare_rejects_non_sqlite_source(tmp_path):
     validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
     with pytest.raises(ExecutionPreflightError, match="not a valid sqlite database"):
         adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+def test_prepare_rejects_schema_fingerprint_mismatch(tmp_path):
+    """F10：sealed DB schema fingerprint 与 artifact 不一致 → fail-closed。"""
+    import json, sqlite3, hashlib, shutil
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    db1, sha1 = _make_sealed_source(tmp_path)
+    db2 = tmp_path / "source-extra.db"
+    shutil.copyfile(db1, db2)
+    con = sqlite3.connect(str(db2))
+    con.execute("CREATE TABLE extra_table (id INTEGER PRIMARY KEY)")
+    con.commit()
+    con.close()
+    art = _write_v2_artifact(tmp_path, db1, sha1)
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["source_state"]["sealed_db_path"] = str(db2)
+    data["source_state"]["sealed_db_sha256"] = hashlib.sha256(db2.read_bytes()).hexdigest()
+    data["source_state"]["db_size_bytes"] = db2.stat().st_size
+    # 保留 db1 的 schema fingerprint → 与 db2 不符
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="schema fingerprint does not match"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)

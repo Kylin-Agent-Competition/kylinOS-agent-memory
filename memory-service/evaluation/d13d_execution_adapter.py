@@ -525,6 +525,7 @@ def _write_execution_receipt(
     entrypoint: str,
     runtime_scope: str,
     trace_reference: str,
+    provenance: Optional[Mapping[str, Any]] = None,
 ) -> str:
     """Persist one real execution receipt under the evidence root (all metrics).
 
@@ -534,6 +535,11 @@ def _write_execution_receipt(
     metric, full tested_commit, actual_digest, UTC, entrypoint, runtime_scope
     (binding identity for stateful dispatch) and the raw trace_reference, so an
     independent reviewer can re-locate the real execution facts.
+
+    ``provenance``（R9，Forget）：把 approved source / isolated runtime restore /
+    observation 来源一并写入 receipt（binding_version、artifact sha、
+    state_preparation_commit、source_db_sha256、runtime_db_initial_sha256、
+    restore_id、sample_id，以及 R10 产生的 realtime/rebuild snapshot/watermark）。
     """
     if not isinstance(validated, ValidatedExecution):
         raise TypeError("validated must be a ValidatedExecution")
@@ -556,6 +562,14 @@ def _write_execution_receipt(
         "runtime_scope": runtime_scope,
         "trace_reference": trace_reference,
     }
+    if provenance:
+        receipt = {**receipt, **dict(provenance)}
+        try:
+            json.dumps(receipt, ensure_ascii=False, sort_keys=True)
+        except (TypeError, ValueError) as exc:
+            raise ExecutionPreflightError(
+                "execution receipt provenance must be JSON serializable"
+            ) from exc
     trace_path = evidence_root / "dispatch" / f"{sample_id}.json"
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -1410,6 +1424,15 @@ def dispatch_forget_sample(
         entrypoint="dispatch_forget_sample",
         runtime_scope=binding.binding_id,
         trace_reference=trace_reference,
+        provenance={
+            "forget_binding_version": artifact.get("binding_version"),
+            "forget_binding_artifact_sha256": binding.binding_artifact_sha256,
+            "forget_state_preparation_commit": binding.state_preparation_commit,
+            "forget_source_db_sha256": binding.source_db_sha256,
+            "forget_runtime_db_initial_sha256": binding.runtime_db_initial_sha256,
+            "forget_restore_id": binding.restore_id,
+            "forget_sample_id": binding.sample_id,
+        },
     )
     return _raw_record(
         sample_id=sample_id,
