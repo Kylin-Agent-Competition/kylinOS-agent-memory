@@ -1,0 +1,13 @@
+guest_utc=2026-09-06T09:38:07Z
+hostname=yanmouren778-pc
+user=yanmouren778 uid=1000
+--- fail-closed clean-state probe ---
+project_checkout_count=0
+memory_prefix_count=0
+stale_launcher_count=0
+active_memory_unit_count=0
+memory_socket_count=0
+venv_count=0
+build_dir_count=0
+d14a_workdir_count=0
+CLEAN_STATE_PASS

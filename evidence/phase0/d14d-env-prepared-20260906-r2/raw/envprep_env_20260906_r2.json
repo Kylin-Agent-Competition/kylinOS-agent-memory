@@ -1,0 +1,23 @@
+{
+  "schema_version": "d14d-env-prepared/raw-summary/v1",
+  "run_id": "envprep_env_20260906_r2",
+  "mode": "command",
+  "status": "PASS",
+  "exit_code": 0,
+  "endpoint": "127.0.0.1:2222",
+  "guest_utc": "2026-09-06T09:38:07Z",
+  "hostname": "yanmouren778-pc",
+  "log_file": "envprep_env_20260906_r2.log",
+  "summary": {
+    "kernel": "6.6.0-63-generic",
+    "arch": "x86_64",
+    "kylin_release_id": "2603",
+    "python": "Python 3.12.3",
+    "systemd": "systemd 255",
+    "no_checkout": true,
+    "no_memory_prefix": true,
+    "no_stale_launcher": true,
+    "unit_inactive": true,
+    "no_memory_sock": true
+  }
+}

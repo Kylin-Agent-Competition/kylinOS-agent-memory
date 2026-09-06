@@ -1,0 +1,23 @@
+{
+  "schema_version": "d14d-env-prepared/raw-summary/v1",
+  "run_id": "envprep_probe_20260906_r2",
+  "mode": "probe",
+  "status": "PASS",
+  "exit_code": 0,
+  "endpoint": "127.0.0.1:2222",
+  "guest_utc": "2026-09-06T09:38:07Z",
+  "hostname": "yanmouren778-pc",
+  "user": "yanmouren778",
+  "log_file": "envprep_probe_20260906_r2.log",
+  "counts": {
+    "project_checkout_count": 0,
+    "memory_install_prefix_count": 0,
+    "stale_launcher_count": 0,
+    "active_memory_unit_count": 0,
+    "memory_socket_count": 0,
+    "venv_count": 0,
+    "build_dir_count": 0,
+    "d14a_workdir_count": 0
+  },
+  "clean_state": "PASS"
+}
