@@ -21,6 +21,21 @@
 
 No stage here produces formal raw, a Seal, a Runner decision, or `D13D_FROZEN`. The tested commit remains `PENDING_P0_I3_RESELECTION`.
 
+### 2026-09-06 PR #150 review round（codex 批次）
+
+- 冻结 Gold-independent raw projection schema `D13E_RAW_RESULT_SCHEMA_V1`；`raw_record`
+  与 writer 改为按 metric 精确白名单校验，`actual` 的未知字段 fail-closed。
+- Preference actual 改为顶层稳定字段投影，移除 `records[]`（消除正式 Runner Gate 9 对
+  Preference 的未知字段崩溃）。
+- Safety dispatch 只接受 `ValidatedRuntimeBinding`：engine/registry/DB canonical path
+  由受控 builder 在 validated `state_root` 下一次性创建；不再接受调用方裸
+  `conn` + `registry`。负测覆盖 state_root 外 DB、跨 validated binding、复用既有 DB。
+- canonical raw 生产权收紧：writer 只接受真实 dispatch 产出的 `ObservedRawRecord`
+  （拒绝手工 raw Mapping），并保持完整性校验；正式 orchestration 待 Forget 外部
+  binding 到位后闭合。
+- 未闭合跨轨依赖：Safety `sensitivity`/`admission`/`operation` 投影需要 D13E 对正式
+  Runner/Gold 重新基线（见 18_ 文档“冻结投影契约”）；Forget 仍 BLOCKED。
+
 ## Goal
 
 Provide a versioned, fail-closed execution adapter for the D13E formal Dataset. The adapter

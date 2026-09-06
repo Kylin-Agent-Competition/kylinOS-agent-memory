@@ -63,9 +63,11 @@ D13D_EXECUTION_SEAL_V1.json    +  D13D_EXECUTION_SEAL_V1.sig
   非 symlink（`lstat`）；目录/普通文件类型正确；owner = root（`uid=0`）；
   group/other 不可写（`mode & 0o022 == 0`）；`public_key_file` 只允许 basename。
 
-- Private key 归属：Review Seal 由 D Reviewer / D 轨受控私钥签名；D13D Seal 由
-  D13D-owned process 签名。正式私钥**禁止 commit、禁止进入 evidence、禁止进入
-  CI、禁止交给 E actor**。CI 与测试只使用 TEST-ONLY 私钥。
+- Private key 归属：Review Seal 由 D Reviewer / D 轨受控私钥签名；D13D Execution
+  Seal 由项目负责人具名指定的**非作者独立 Execution Reviewer** 在其受控边界以受控
+  私钥签名（author/self-signing 不得作为 Execution Seal，见 D13D PR #150 治理边界）。
+  正式私钥**禁止 commit、禁止进入 evidence、禁止进入 CI、禁止交给 E actor**。
+  CI 与测试只使用 TEST-ONLY 私钥。
 
 ## Seal Payload（被签名内容）
 

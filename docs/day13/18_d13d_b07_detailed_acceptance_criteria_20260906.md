@@ -52,6 +52,25 @@
 
 Safety/Forget 无法取得任一硬零计数即失败。硬零字段的值是否为 0 由正式 Runner 判定，adapter 不得写 formal PASS。
 
+### 冻结投影契约（D13E_RAW_RESULT_SCHEMA_V1）
+
+`actual` 必须满足 adapter 内冻结的、独立于 Gold 的公开投影契约
+`evaluation.d13d_execution_adapter.D13E_RAW_RESULT_SCHEMA_V1`：按 metric 精确
+`required`/`allowed` 字段白名单校验，任何 allowed 之外的字段在成为 canonical raw
+前即 fail-closed。
+
+- Preference：真实 provider 观测投影为 Runner 可消费的顶层稳定字段
+  （`record_count` 及适用的 `key`/`scope`/`is_temporary`/`should_persist`/
+  `explicitness`）；`records[]` 不再作为 canonical actual。零候选观测投影
+  `record_count=0` + `should_persist=false`；多候选无法无损投影时 fail-closed。
+- Safety：当前冻结字段为四个硬零计数。Review 要求投影的
+  `sensitivity`/`admission`/`operation` 观测字段需要 D13E 对正式 Runner/Gold 重新
+  基线：当前封存 Runner 按每条 Gold `expected` 定义 allowed 字段集，safety-004 的
+  allowed 集只含硬零计数（禁止 `sensitivity`/`admission`），而 001/002/003 的
+  `expected` 又要求这些字段存在；观测一致的文本样本无法在不读取 Gold 的前提下按样本
+  决定字段集。该项为跨轨依赖，未随本轮 adapter 代码闭合。
+- Forget：仍要求外部 state-binding 到位后才可 dispatch（见任务卡阻塞条件 5）。
+
 ## E. L0/L1 必测项
 
 - Dataset SHA、总数 17、各 metric 4/4/4/5 不匹配时非零退出。

@@ -66,9 +66,11 @@ Review Seal 必须使用 Ed25519 detached signature，含以下事实：
 
 ## 申请 B：VM 管理员 / 系统授权人
 
-Frozen Trust Root 已由授权流程安装并完成 `root:root`、权限、non-symlink 与正式加载核验。
-当前 VM 用户 `kylin-agent` 属于 sudo 组，但 `sudo -n` 不可用；后续仅在 Trust Root 内容或
-公钥发生合法轮换时，才由 VM 管理员以 root 权限按以下固定结构更新：
+旧 Trust Root（绑定旧 Execution key 与 4a32... 历史基线）的安装仅为 historical observation，
+不再代表当前有效状态；当前 Trust Root 状态为 `PENDING_REVALIDATION`。在项目负责人具名指定
+非作者独立 D13D Execution Reviewer 并创建其受控密钥后，才由 VM 管理员以 root 权限重新安装并
+复核以下固定结构（`root:root`、权限、non-symlink 与正式加载核验）。当前 VM 用户 `kylin-agent`
+属于 sudo 组，但 `sudo -n` 不可用；安装/复核只能由 VM 管理员执行：
 
 ```text
 /etc/kylin-memory/trust/
