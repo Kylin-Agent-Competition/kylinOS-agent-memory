@@ -1197,3 +1197,96 @@ def test_raw_writer_rejects_stateful_safety_record_without_receipt(tmp_path):
     with pytest.raises(ExecutionPreflightError, match="execution receipt does not exist"):
         write_raw_records(validated, [record])
     assert not (validated.request.execution_evidence_root / "raw").exists()
+
+def _make_sealed_source(tmp_path):
+    import hashlib
+    from db.engine import create_db_engine, init_schema
+    src = tmp_path / "source.db"
+    engine = create_db_engine(str(src))
+    init_schema(engine)
+    engine.dispose()
+    return src, hashlib.sha256(src.read_bytes()).hexdigest()
+
+
+def _write_v2_artifact(tmp_path, source_path, source_sha, *, sp=None, minc=None):
+    import json
+    from evaluation.d13d_forget_state_binding import (
+        BINDING_VERSION_V2,
+        compute_artifact_sha256,
+    )
+    sp = sp or "dc58e83479d718c8e3fbbbbb5d3b3f046f651973"
+    v1 = json.loads(
+        (REPOSITORY_ROOT / "evaluation" / "d13e" / "D13D_FORGET_STATE_BINDING_V1.json")
+        .read_text(encoding="utf-8")
+    )
+    art = {k: v1[k] for k in (
+        "owner", "approved_by", "approval_reference", "environment_id",
+        "vm_snapshot", "retrieval_profile", "created_at_utc", "created_by",
+        "samples",
+    )}
+    art["binding_version"] = BINDING_VERSION_V2
+    art["state_preparation_commit"] = sp
+    art["execution_compatibility"] = {
+        "minimum_commit": minc or sp,
+        "policy": "descendant-and-contract-compatible",
+    }
+    art["source_state"] = {
+        "state_root": str(source_path.parent),
+        "sealed_db_path": str(source_path),
+        "sealed_db_sha256": source_sha,
+        "db_size_bytes": source_path.stat().st_size,
+        "sqlite_schema_fingerprint": adapter._sqlite_schema_fingerprint(source_path),
+        "prepared_on_vm_snapshot": "d14d-clean-base-20260906-r2",
+        "prepared_at_utc": "2026-09-06T00:00:00Z",
+    }
+    art["artifact_sha256"] = compute_artifact_sha256(art)
+    out = tmp_path / "binding_v2.json"
+    out.write_text(json.dumps(art, ensure_ascii=False), encoding="utf-8")
+    return out
+
+
+def test_prepare_forget_runtime_bindings_creates_five_fresh_clones(tmp_path):
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha)
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    bindings = adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+    assert set(bindings) == set(adapter.FORGET_SAMPLE_MODES)
+    for sample_id, binding in bindings.items():
+        assert binding.sample_id == sample_id
+        assert binding.runtime_db_initial_sha256 == sha
+        assert binding.source_db_sha256 == sha
+        assert binding.state_preparation_commit
+        assert binding.binding_artifact_sha256
+        assert binding.db_path.exists()
+        assert binding.db_path.resolve().is_relative_to(validated.request.state_root.resolve())
+        adapter._validate_binding(binding, validated)
+
+
+def test_prepare_rejects_source_db_sha_mismatch(tmp_path):
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha)
+    data = json.loads(art.read_text(encoding="utf-8"))
+    data["source_state"]["sealed_db_sha256"] = "0" * 64
+    from evaluation.d13d_forget_state_binding import compute_artifact_sha256
+    data["artifact_sha256"] = compute_artifact_sha256(data)
+    art.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="SHA-256 does not match"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+
+def test_prepare_rejects_state_prep_not_ancestor(tmp_path):
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha, sp="0" * 40)
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    with pytest.raises(ExecutionPreflightError, match="not an ancestor"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+
+def test_prepare_rejects_reused_runtime_root(tmp_path):
+    src, sha = _make_sealed_source(tmp_path)
+    art = _write_v2_artifact(tmp_path, src, sha)
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+    with pytest.raises(ExecutionPreflightError, match="runtime root must not already exist"):
+        adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)

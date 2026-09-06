@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import sqlite3
 import shutil
 import subprocess
 from types import MappingProxyType
@@ -38,7 +39,11 @@ from gateway.preference_handlers import register_preference_handlers
 from gateway.registry import HandlerRegistry, RequestContext
 from providers.extraction_provider import ExtractionProvider, TurnFinalizedEvent
 from service.conflict_resolution_policy import ConflictResolutionPolicy, ConflictSide
-from evaluation.d13d_forget_state_binding import verify_artifact_file
+from evaluation.d13d_forget_state_binding import (
+    BINDING_VERSION_V2,
+    FORGET_SAMPLE_MODES,
+    verify_artifact_file,
+)
 from service.d13d_forget_observability import (
     capture_forget_execution_snapshot,
     observe_forget_execution,
@@ -755,6 +760,12 @@ class ValidatedRuntimeBinding:
     run_token_sha256: str
     forget_preview_handler: Any = None
     forget_execute_handler: Any = None
+    binding_artifact_sha256: Optional[str] = None
+    state_preparation_commit: Optional[str] = None
+    source_db_sha256: Optional[str] = None
+    runtime_db_initial_sha256: Optional[str] = None
+    sample_id: Optional[str] = None
+    restore_id: Optional[str] = None
 
 
 def _is_under(path: Path, root: Path) -> bool:
@@ -827,6 +838,162 @@ def build_runtime_binding(
         run_token_sha256=hashlib.sha256(run_token.encode("ascii")).hexdigest(),
     )
 
+
+def _is_ancestor(repository_root: Path, ancestor: str) -> bool:
+    """state_preparation/minimum commit 是否为 repository HEAD 的祖先。"""
+    completed = subprocess.run(
+        ["git", "-C", str(repository_root), "merge-base", "--is-ancestor",
+         ancestor, "HEAD"],
+        capture_output=True, text=True,
+    )
+    return completed.returncode == 0
+
+
+def _sqlite_integrity_ok(db_path: Path) -> bool:
+    con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        row = con.execute("PRAGMA quick_check(1)").fetchone()
+    finally:
+        con.close()
+    return bool(row) and str(row[0]).lower() == "ok"
+
+
+def _sqlite_schema_fingerprint(db_path: Path) -> str:
+    """sqlite_master canonical SHA-256（schema 兼容现场校验）。"""
+    con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        rows = con.execute(
+            "SELECT type || '|' || name || '|' || COALESCE(sql, '') "
+            "FROM sqlite_master ORDER BY name"
+        ).fetchall()
+    finally:
+        con.close()
+    canonical = "\n".join(row[0] for row in rows).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _load_forget_artifact_v2(artifact_path: Path) -> dict[str, Any]:
+    if artifact_path is None:
+        raise ExecutionPreflightError("forget dispatch requires the D13D forget state binding artifact")
+    ok, errors = verify_artifact_file(str(artifact_path))
+    if not ok:
+        raise ExecutionPreflightError(
+            "forget state binding artifact failed validation: " + "; ".join(errors[:3])
+        )
+    artifact = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
+    if artifact.get("binding_version") != BINDING_VERSION_V2:
+        raise ExecutionPreflightError(
+            "forget dispatch requires binding_version " + BINDING_VERSION_V2
+        )
+    return artifact
+
+
+def _verify_sealed_source(artifact: Mapping[str, Any]) -> Path:
+    """V2 sealed source DB：拒绝 symlink、SHA/字节数/schema/integrity 现场复核。"""
+    source = artifact.get("source_state")
+    if not isinstance(source, Mapping):
+        raise ExecutionPreflightError("artifact source_state is missing")
+    raw_path = source.get("sealed_db_path")
+    db_path = Path(raw_path)
+    if db_path.is_symlink():
+        raise ExecutionPreflightError("source DB must not be a symlink")
+    if not db_path.exists():
+        raise ExecutionPreflightError("source DB does not exist")
+    if hashlib.sha256(db_path.read_bytes()).hexdigest() != source.get("sealed_db_sha256"):
+        raise ExecutionPreflightError("source DB SHA-256 does not match the artifact")
+    if db_path.stat().st_size != int(source.get("db_size_bytes", -1)):
+        raise ExecutionPreflightError("source DB size does not match the artifact")
+    if _sqlite_schema_fingerprint(db_path) != source.get("sqlite_schema_fingerprint"):
+        raise ExecutionPreflightError("source DB schema fingerprint does not match the artifact")
+    if not _sqlite_integrity_ok(db_path):
+        raise ExecutionPreflightError("source DB integrity check failed")
+    return db_path
+
+
+def prepare_forget_runtime_bindings(
+    validated: ValidatedExecution,
+    *,
+    artifact_path: Path,
+) -> dict[str, ValidatedRuntimeBinding]:
+    """R5：sealed source → 每 sample 独立 isolated runtime clone（带 provenance）。
+
+    - 校验 artifact（v2）、source DB（SHA/size/schema/integrity/拒绝 symlink）；
+    - state_preparation_commit 与 execution_compatibility.minimum_commit 必须是
+      repository HEAD 祖先；
+    - 每个 Forget sample 在 state_root/runtime/<sample_id>/runtime.db 生成 fresh
+      copy（初始 SHA == source SHA），并注册冻结真实 handlers；
+    - ValidatedRuntimeBinding 携带 provenance（artifact sha / state_prep commit /
+      source sha / initial sha / sample_id / restore_id）。
+    """
+    artifact = _load_forget_artifact_v2(Path(artifact_path))
+    exec_compat = artifact.get("execution_compatibility") or {}
+    if exec_compat.get("policy") != "descendant-and-contract-compatible":
+        raise ExecutionPreflightError("execution_compatibility.policy is unsupported")
+    repository_root = _canonical_path(
+        validated.request.repository_root, label="repository_root"
+    )
+    sp_commit = artifact.get("state_preparation_commit")
+    min_commit = exec_compat.get("minimum_commit")
+    if not _is_ancestor(repository_root, sp_commit):
+        raise ExecutionPreflightError(
+            "state_preparation_commit is not an ancestor of repository HEAD"
+        )
+    if not _is_ancestor(repository_root, min_commit):
+        raise ExecutionPreflightError(
+            "execution_compatibility.minimum_commit is not an ancestor of repository HEAD"
+        )
+    source_db = _verify_sealed_source(artifact)
+
+    state_root = _canonical_path(validated.request.state_root, label="state_root")
+    runtime_root = state_root / "runtime"
+    if runtime_root.exists():
+        raise ExecutionPreflightError("runtime root must not already exist")
+    runtime_root.mkdir(parents=True, exist_ok=False)
+
+    artifact_sha = artifact.get("artifact_sha256")
+    source_sha = artifact["source_state"]["sealed_db_sha256"]
+    bindings: dict[str, ValidatedRuntimeBinding] = {}
+    for sample_id in sorted(FORGET_SAMPLE_MODES):
+        sample_root = runtime_root / sample_id
+        sample_root.mkdir(parents=False)
+        db_path = sample_root / "runtime.db"
+        shutil.copyfile(source_db, db_path)
+        initial_sha = hashlib.sha256(db_path.read_bytes()).hexdigest()
+        if initial_sha != source_sha:
+            raise ExecutionPreflightError("runtime clone initial SHA does not match source")
+        engine = create_db_engine(str(db_path))
+        registry = HandlerRegistry()
+        register_default_handlers(registry)
+        register_event_ingest_handler(registry, uow_factory=lambda: UnitOfWork(engine))
+        register_preference_handlers(registry, uow_factory=lambda: UnitOfWork(engine))
+        register_forget_handlers(registry, uow_factory=lambda: UnitOfWork(engine))
+        run_token = secrets.token_hex(32)
+        _ENGINE_BINDING_TOKENS[id(engine)] = run_token
+        setattr(registry, "d13d_runtime_token", run_token)
+        binding_id = (
+            f"d13d-runtime-binding/v2:{validated.request.tested_commit[:12]}:{sample_id}"
+        )
+        event_ingest_handler = registry.route("event.ingest")
+        forget_preview_handler = registry.route("forget.preview")
+        forget_execute_handler = registry.route("forget.execute")
+        bindings[sample_id] = ValidatedRuntimeBinding(
+            validated=validated,
+            binding_id=binding_id,
+            db_path=db_path,
+            engine=engine,
+            registry=registry,
+            event_ingest_handler=event_ingest_handler,
+            forget_preview_handler=forget_preview_handler,
+            forget_execute_handler=forget_execute_handler,
+            run_token_sha256=hashlib.sha256(run_token.encode("ascii")).hexdigest(),
+            binding_artifact_sha256=artifact_sha,
+            state_preparation_commit=sp_commit,
+            source_db_sha256=source_sha,
+            runtime_db_initial_sha256=initial_sha,
+            sample_id=sample_id,
+            restore_id=f"restore:{sample_id}:{secrets.token_hex(6)}",
+        )
+    return bindings
 
 def _validate_binding(
     binding: ValidatedRuntimeBinding, validated: ValidatedExecution
@@ -901,6 +1068,24 @@ def _validate_binding(
             raise ExecutionPreflightError(
                 f"runtime binding {method} handler was replaced or unregistered"
             )
+    # R5：带 provenance 的 Forget runtime binding 进一步校验 sample/restore 身份。
+    if binding.sample_id is not None:
+        if binding.sample_id not in FORGET_SAMPLE_MODES:
+            raise ExecutionPreflightError("runtime binding sample_id is invalid")
+        expected_dir = state_root / "runtime" / binding.sample_id
+        if not _is_under(db_path, expected_dir):
+            raise ExecutionPreflightError(
+                "runtime binding db is not under its sample runtime dir"
+            )
+        for attr in (
+            "binding_artifact_sha256",
+            "state_preparation_commit",
+            "source_db_sha256",
+            "runtime_db_initial_sha256",
+            "restore_id",
+        ):
+            if not getattr(binding, attr):
+                raise ExecutionPreflightError(f"runtime binding missing provenance: {attr}")
 
 
 def _persisted_safety_event_fields(conn, *, user_id: str, trace_id: str) -> tuple[str, str]:
