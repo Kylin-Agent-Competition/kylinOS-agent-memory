@@ -172,7 +172,10 @@ def build_package(root: Path) -> Path:
     (pkg / "systemd" / "install.sh").chmod(0o755)
     (pkg / "systemd" / "uninstall.sh").chmod(0o755)
 
-    # 镜像构建侧：先 walk 磁盘计算 files，再写 manifest/VERSION/SHA256SUMS
+    # 镜像生产构建顺序（build_release_package.sh Phase 2.8 → Phase 3）：VERSION 先于
+    # walk 写入成为受管理文件并进入 manifest.files 与 SHA256SUMS；manifest.json/
+    # SHA256SUMS 在 walk 后生成且自身不进清单。
+    (pkg / "VERSION").write_text(PACKAGE_VERSION + "\n", encoding="utf-8")
     files = {}
     for dirpath, _dirs, fnames in os.walk(pkg):
         for fn in fnames:
@@ -193,7 +196,6 @@ def build_package(root: Path) -> Path:
         "files": files,
     }
     (pkg / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
-    (pkg / "VERSION").write_text(PACKAGE_VERSION + "\n", encoding="utf-8")
     sums = "".join("%s  %s\n" % (files[rel]["sha256"], rel) for rel in sorted(files))
     (pkg / "SHA256SUMS").write_text(sums, encoding="utf-8")
     return pkg
@@ -380,9 +382,13 @@ class TxnHarness:
         )
 
     def install(self, fail_enable=False, extra_env=None):
-        extra = {"FAIL_ENABLE": "1"} if (self.fail_enable or fail_enable) else None
+        # 预适配 Task2 正式必填语义（EXPECT_SOURCE_COMMIT 缺失 fail-closed）：经既有
+        # extra_env 通道显式注入固定合法测试值 SOURCE_COMMIT（非仓库 checkout SHA）；
+        # 调用方显式传入的同名键可覆盖 base。
+        extra = {"EXPECT_SOURCE_COMMIT": SOURCE_COMMIT}
+        if self.fail_enable or fail_enable:
+            extra["FAIL_ENABLE"] = "1"
         if extra_env:
-            extra = dict(extra or {})
             extra.update(extra_env)
         return self.run(self.pkg / "systemd" / "install.sh", ["install"], extra_env=extra)
 
@@ -441,6 +447,26 @@ def test_shell_syntax_bash_n_release_scripts(tmp_path):
         script = TEST_DIR / name
         proc = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
         assert proc.returncode == 0, "bash -n 失败: %s\nstderr=%s" % (name, proc.stderr)
+
+
+# ─────────────────── 0a. 夹具构建顺序：VERSION 为受管理文件 ───────────────────
+
+def test_rollback_fixture_manifest_includes_version(tmp_path):
+    """夹具契约断言（纯 stdlib）：镜像生产构建顺序（Phase 2.8 → Phase 3）后，
+    VERSION 先于 walk 写入，必须同时进入 manifest.files 与 SHA256SUMS；
+    manifest.json/SHA256SUMS 自身不入清单；VERSION 内容 == PACKAGE_VERSION；
+    manifest.files 键集与 SHA256SUMS 文件集双向一致（两侧同步含 VERSION）。"""
+    pkg = build_package(tmp_path)
+    manifest = json.loads((pkg / "manifest.json").read_text(encoding="utf-8"))
+    assert "VERSION" in manifest["files"], "VERSION 应作为受管理文件进入 manifest.files"
+    sums = (pkg / "SHA256SUMS").read_text(encoding="utf-8")
+    assert any(line.endswith("  VERSION") for line in sums.splitlines()), \
+        "SHA256SUMS 应包含 VERSION 行"
+    assert "manifest.json" not in manifest["files"], "manifest.json 自身不得入清单"
+    assert "SHA256SUMS" not in manifest["files"], "SHA256SUMS 自身不得入清单"
+    assert (pkg / "VERSION").read_text(encoding="utf-8").strip() == PACKAGE_VERSION
+    sums_files = {line.rsplit("  ", 1)[1] for line in sums.splitlines() if line.strip()}
+    assert set(manifest["files"]) == sums_files, "manifest.files 与 SHA256SUMS 应双向一致"
 
 
 # ─────────────────────────── 1. 旧 launcher 普通文件 ───────────────────────────
