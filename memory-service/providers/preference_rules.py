@@ -169,25 +169,57 @@ def derive_preference_scope(text: str) -> str:
 
 # ── 显式/隐式判定（E 轨 §2.5 expression_type） ──
 
-# 显式偏好表述正则（与 extraction_provider 共享语义）：
-# - 通用显式词：我喜欢/我偏好/我习惯/请总是/总是/以后/尽量/希望/偏好/更倾向/
-#   prefer/like to/always/make sure/i want…；覆盖架构 TABLE 20 长期例
-#   "以后所有会议总结都控制在三段内"（"以后" 而非仅 "以后都"）。
-# - 显式工具选择偏好标记（D13D Phase 2 pref-003 裁定 A / production PR）：
-#   优先使用/优先用/优先选择/首选/默认使用/默认用。此类句子不含通用显式词但明确表达
-#   工具选择偏好（如 "优先使用 git 命令行工具"）；若不在显式 admission 覆盖，
-#   会落入要求时态限定词的 fallback 指令式模式并产生 false negative。
-#   注意：不收录裸 "优先"，避免 "优先保证安全…" 等非工具选择表达被误判为显式偏好。
+# 显式偏好表述正则（与 extraction_provider 共享语义，仅“通用显式词”）：
+# 我喜欢/我偏好/我习惯/请总是/总是/以后/尽量/希望/偏好/更倾向/
+# prefer/like to/always/make sure/i want…；覆盖架构 TABLE 20 长期例
+# "以后所有会议总结都控制在三段内"（"以后" 而非仅 "以后都"）。
+# 注意：工具选择 marker（优先使用/首选/默认使用…）**不**进入本正则——marker 本身
+# 不构成偏好 admission（D13D Phase 2 pref-003 Review MEDIUM-01），见下方
+# match_explicit_tool_selection / is_explicit_tool_selection_preference。
 PREFERENCE_EXPLICIT_PATTERN = re.compile(
-    r"(?i)(优先使用|优先用|优先选择|首选|默认使用|默认用|"
-    r"我喜欢|我偏好|我习惯|请总是|总是|以后|尽量|希望|偏好|更倾向|prefer|like to|always|"
+    r"(?i)(我喜欢|我偏好|我习惯|请总是|总是|以后|尽量|希望|偏好|更倾向|prefer|like to|always|"
     r"make sure|i want)\s*[:：]?\s*(.{2,60}?)(?=[，。！？.!?；;]|$)"
 )
 
 
 def is_explicit_expression(text: str) -> bool:
-    """是否为显式偏好表达（E 轨 §2.5 explicit）。"""
+    """是否为显式偏好表达（E 轨 §2.5 explicit，仅通用显式词）。"""
     return bool(text) and bool(PREFERENCE_EXPLICIT_PATTERN.search(text))
+
+
+# ── 显式工具选择偏好（D13D Phase 2 pref-003 Review MEDIUM-01 收紧） ──
+# 工具选择 marker 必须同时满足“工具选择语境”，否则只是事实/配置/选项/方案描述：
+#   系统默认使用 UTF-8 编码        → 事实描述，非偏好
+#   Git 默认使用 master 分支       → 事实描述，非偏好
+#   首选项是自动保存               → 配置描述，非偏好
+#   我们首选方案 A                 → 方案陈述，非偏好
+# 准入 = 句首 marker + 其后短语含真实工具选择 token（独立证据，不与 category 自证）。
+
+_TOOL_SELECTION_MARKER_RE = re.compile(
+    r"^\s*(优先使用|优先用|优先选择|首选|默认使用|默认用)\s*"
+)
+_TOOL_CONTEXT_TOKEN_RE = re.compile(
+    r"(?i)(git|命令行|终端|vim|vi|emacs|编辑器|浏览器|搜索引擎|搜索工具|翻译工具|"
+    r"计算器|工具|软件|应用|命令|脚本|python|word|excel)"
+)
+
+
+def match_explicit_tool_selection(text: str) -> Optional[str]:
+    """命中“显式工具选择偏好”时返回 marker 后的偏好值；否则返回 None。"""
+    if not text:
+        return None
+    marker = _TOOL_SELECTION_MARKER_RE.match(text)
+    if marker is None:
+        return None
+    rest = text[marker.end():]
+    if not _TOOL_CONTEXT_TOKEN_RE.search(rest):
+        return None
+    return rest.strip("，。！？,.!?；; ")
+
+
+def is_explicit_tool_selection_preference(text: str) -> bool:
+    """是否为显式工具选择偏好（marker + 工具语境双条件）。"""
+    return match_explicit_tool_selection(text) is not None
 
 
 # ── 指令式/临时偏好表达（架构 TABLE 20 临时例） ──
