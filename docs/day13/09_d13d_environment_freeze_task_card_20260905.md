@@ -101,22 +101,40 @@ P0-I3 在 adapter 经独立审查并合并后，必须记录新的完整 `tested
 
 ### 输出目录
 
-本轮目录固定为 `evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>/`，其中 `<UTC_RUN_ID>` 为 `YYYYMMDDTHHMMSSZ`。不得混入其他 commit 或重复使用目录。
+正式执行使用一个**仓库外、全新且唯一**的 execution evidence root（如
+`/var/kylin-memory/d13d_<UTC_RUN_ID>`，`<UTC_RUN_ID>=YYYYMMDDTHHMMSSZ`）。该 root
+同时容纳 `dispatch/`（逐样本 execution receipt，exclusive-create）与 `raw/`（四类
+canonical raw），以及 commands/Manifest/attestation/两份 Seal；adapter 与正式 Runner
+都以该 root 作为 D13D 唯一证据目录。Gate 0--10 全部通过后，再以 immutable
+import/copy 将最终证据登记为仓库 delivery 副本 `evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>/`。
+execution path 与 repository delivery path 必须区分，禁止把仓库路径当作 adapter 执行根。
 
+execution evidence root（仓库外，adapter/Runner 使用）：
 ```text
-evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>/
+d13d_<UTC_RUN_ID>/
   environment_freeze.json
   deployment_preflight.json
   runtime_versions.txt
   service_unit.txt
   commands.log
+  dispatch/d13e-pref-001.json     # 逐样本 execution receipt（exclusive-create）
+  dispatch/d13e-conflict-001.json
   raw/preference_raw.jsonl
   raw/conflict_raw.jsonl
   raw/safety_raw.jsonl
   raw/forget_raw.jsonl
-  derived/d13b_report.json
+  D13E_REVIEW_SEAL_V1.json / D13E_REVIEW_SEAL_V1.sig
+  D13D_EXECUTION_SEAL_V1.json / D13D_EXECUTION_SEAL_V1.sig
+  execution_attestation.json
   SHA256SUMS
   README.md
+```
+
+repository delivery（Gate 后 immutable import，只登记只读副本）：
+```text
+evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>/
+  ...（同上文件的只读副本，供仓库索引与 Review 复核）
+  derived/d13b_report.json
 ```
 
 `environment_freeze.json` 最少包含以上输入登记字段、生成时间（UTC）、采集者、
@@ -145,7 +163,7 @@ INVALIDATED`），它只能是由上述两字段导出的派生字段，并写�
 - [ ] 核验 `/etc/kylin-memory/trust` 的固定路径、root owner、非 symlink 与 group/other 非写权限；未授权不得自行安装或生成公钥。
 
 证据链（严格按序；D13D Execution Seal 必须绑定最终 attestation_sha256，故必须在 attestation 之后签发）：
-- [ ] 创建唯一证据目录 `evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>`，记录所有实际执行命令、退出码与原始输出。
+- [ ] 创建仓库外唯一 execution evidence root（如 `/var/kylin-memory/d13d_<UTC_RUN_ID>`），记录所有实际执行命令、退出码与原始输出。
 - [ ] 在冻结 VM 执行真实四类 raw（Preference 4 / Conflict 4 / Safety 4 / Forget 5），逐样本记录 trace/evidence；失败样本保留、不删除、不补零。
 - [ ] 完成最终 `FROZEN_BY_D13D` Manifest 并复算其 SHA-256（与 raw/provenance 一致）。
 - [ ] 由 D Reviewer 对最终 Manifest 复算 hash 后签发 D13E Review Seal/.sig（放入 evidence root）。
@@ -153,6 +171,7 @@ INVALIDATED`），它只能是由上述两字段导出的派生字段，并写�
 - [ ] 由非作者独立 D13D Execution Reviewer 对最终 `attestation_sha256` 签发 D13D Execution Seal/.sig（放入 evidence root）。
 - [ ] 离线复核并验签两份 Seal（D13E Review Seal 与 D13D Execution Seal），确认 key_id 与 Frozen Trust Root 一致、均在 evidence root 内。
 - [ ] 在冻结 VM 对同一 `tested_commit` 运行正式 Runner Gate 0--10；全部通过且 summary 落盘后才可标记 `evidence_status=D13D_FROZEN`。
+- [ ] Gate 通过后以 immutable import/copy 将 execution evidence root 登记为仓库 delivery 副本 `evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>`；不得在仓库路径上重跑执行。
 - [ ] 将状态、限制和校验和登记到 `evidence/index.yaml`；`tested_commit` 与 `evidence_commit` 分开记录。
 - [ ] 复核无敏感正文、凭据、Token、私钥或可识别用户原文进入日志/报告；失败样例只保留脱敏标识和错误分类。
 

@@ -61,7 +61,7 @@ No stage here produces formal raw, a Seal, a Runner decision, or `D13D_FROZEN`. 
 - ValidatedExecution.records 递归不可变快照（dict->MappingProxyType、list->tuple），
   Dataset SHA 校验后不可再改写样本 input 后以官方身份 dispatch；负测覆盖顶层、pref
   user_text、conflict side、forget target_selector。
-- RuntimeBinding 冻结 production vent.ingest handler identity：dispatch 前要求
+- RuntimeBinding 冻结 production vent.ingest handler identity：dispatch 前要求
   registry.route() 返回 builder 记录的同一 callable；覆盖/unregister 后 fail-closed，
   fake handler 不会被调用。
 - receipt provenance 边界：_raw_record/_write_raw_records 降为内部私有 seam；
@@ -74,6 +74,21 @@ No stage here produces formal raw, a Seal, a Runner decision, or `D13D_FROZEN`. 
   commit/digest 一致；负测覆盖 missing trace / cross-sample / cross-commit。
 - Safety 跨轨投影合同与 pref-003 观测缺口保持 CANDIDATE_PENDING_D13E_REVIEW /
   登记缺口处理，未读取 Gold、未补零。
+
+### 2026-09-06 re-review round（Review HEAD dc3ca63）
+
+- Evidence root 生命周期统一（方案 A）：adapter 以仓库外、全新且唯一的
+  `execution_evidence_root` 为 D13D 唯一证据目录，`dispatch/` receipts 与 `raw/`
+  canonical 四文件同根；取消独立 output/evidence 双根互斥。preflight 只要求
+  execution evidence root 与 state_root 全新、互不 overlap、不与仓库 overlap。
+  Gate 0--10 通过后 immutable import 到仓库
+  `evidence/l2-kylin-vm/d13d_<UTC_RUN_ID>` delivery 副本（见 09 任务卡“输出目录”）。
+- stateless execution receipt 改为 **exclusive-create**：同一 sample 重复 dispatch
+  fail-closed，绝不静默覆盖首条执行证据；负测覆盖。
+- 新增 integration test：canonical 四文件位于 execution evidence root/raw，且经
+  Runner evidence-root path gate 解析后仍在唯一证据目录内。
+- 修复本文档早前 `event.ingest` 前误入的控制字符（ESC），恢复为正常文本。
+- Safety 跨轨投影合同与 pref-003 观测缺口继续登记；未读 Gold、未补零。
 
 ## Goal
 

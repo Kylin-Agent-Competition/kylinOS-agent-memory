@@ -26,9 +26,8 @@ def main() -> int:
     parser.add_argument("--tested-commit", required=True)
     parser.add_argument("--testset", required=True, type=Path)
     parser.add_argument("--testset-sha256", required=True)
-    parser.add_argument("--output-root", required=True, type=Path)
+    parser.add_argument("--execution-evidence-root", required=True, type=Path)
     parser.add_argument("--state-root", required=True, type=Path)
-    parser.add_argument("--evidence-root", required=True, type=Path)
     args = parser.parse_args()
     try:
         validated = validate_execution_request(
@@ -37,9 +36,8 @@ def main() -> int:
                 tested_commit=args.tested_commit,
                 testset_path=args.testset,
                 testset_sha256=args.testset_sha256,
-                output_root=args.output_root,
+                execution_evidence_root=args.execution_evidence_root,
                 state_root=args.state_root,
-                evidence_root=args.evidence_root,
             )
         )
     except ExecutionPreflightError as exc:
@@ -50,6 +48,7 @@ def main() -> int:
             {
                 "status": "PREFLIGHT_ONLY",
                 "tested_commit": validated.request.tested_commit,
+                "execution_evidence_root": str(validated.request.execution_evidence_root),
                 "sample_count": len(validated.records),
                 "formal_dispatch": "DISABLED_PENDING_FROZEN_VM",
             }

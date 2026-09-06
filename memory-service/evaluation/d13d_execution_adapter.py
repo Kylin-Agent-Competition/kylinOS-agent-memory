@@ -155,9 +155,8 @@ class ExecutionRequest:
     tested_commit: str
     testset_path: Path
     testset_sha256: str
-    output_root: Path
+    execution_evidence_root: Path
     state_root: Path
-    evidence_root: Path
 
 
 @dataclass(frozen=True)
@@ -195,13 +194,13 @@ def _validate_isolation(request: ExecutionRequest) -> ExecutionRequest:
     repository_root = _canonical_path(request.repository_root, label="repository_root")
     if not (repository_root / ".git").exists():
         raise ExecutionPreflightError("repository_root is not a Git worktree")
-    output_root = _canonical_path(request.output_root, label="output_root")
+    execution_evidence_root = _canonical_path(
+        request.execution_evidence_root, label="execution_evidence_root"
+    )
     state_root = _canonical_path(request.state_root, label="state_root")
-    evidence_root = _canonical_path(request.evidence_root, label="evidence_root")
     roots = {
-        "output_root": output_root,
+        "execution_evidence_root": execution_evidence_root,
         "state_root": state_root,
-        "evidence_root": evidence_root,
     }
     for label, path in roots.items():
         if path.exists():
@@ -220,9 +219,8 @@ def _validate_isolation(request: ExecutionRequest) -> ExecutionRequest:
         tested_commit=request.tested_commit,
         testset_path=_canonical_path(request.testset_path, label="testset_path"),
         testset_sha256=request.testset_sha256,
-        output_root=output_root,
+        execution_evidence_root=execution_evidence_root,
         state_root=state_root,
-        evidence_root=evidence_root,
     )
 
 
@@ -496,7 +494,9 @@ def _write_stateless_execution_receipt(
     """
     if not isinstance(validated, ValidatedExecution):
         raise TypeError("validated must be a ValidatedExecution")
-    evidence_root = _canonical_path(validated.request.evidence_root, label="evidence_root")
+    evidence_root = _canonical_path(
+        validated.request.execution_evidence_root, label="execution_evidence_root"
+    )
     digest = _actual_digest(actual)
     receipt = {
         "receipt_version": "d13d-execution-receipt/v1",
@@ -509,11 +509,15 @@ def _write_stateless_execution_receipt(
     }
     trace_path = evidence_root / "dispatch" / f"{sample_id}.json"
     trace_path.parent.mkdir(parents=True, exist_ok=True)
-    trace_path.write_text(
-        json.dumps(receipt, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    # Exclusive create: a repeated dispatch of the same sample must never
+    # silently overwrite the first execution evidence.
+    try:
+        with trace_path.open("x", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(receipt, ensure_ascii=False, sort_keys=True) + "\n")
+    except FileExistsError as exc:
+        raise ExecutionPreflightError(
+            f"execution receipt already exists and must not be overwritten: {trace_path.name}"
+        ) from exc
     return f"dispatch/{sample_id}.json"
 
 
@@ -523,7 +527,9 @@ def _verify_stateless_trace(validated: ValidatedExecution, record: ObservedRawRe
     The trace target must live under the validated evidence_root and its receipt
     must bind the same sample_id/metric/tested_commit/actual_digest.
     """
-    evidence_root = _canonical_path(validated.request.evidence_root, label="evidence_root")
+    evidence_root = _canonical_path(
+        validated.request.execution_evidence_root, label="execution_evidence_root"
+    )
     trace_parts = Path(record.trace_reference).parts
     if ".." in trace_parts or Path(record.trace_reference).is_absolute():
         raise ExecutionPreflightError("stateless trace target must stay under the evidence root")
@@ -956,9 +962,12 @@ def _write_raw_records(
     dispatch_and_write_canonical(), which dispatches inside one controlled call
     and never accepts externally supplied receipts.  This serializer re-validates
     every immutable receipt (actual/digest/trace/runtime scope), requires
-    stateless trace targets to exist under the evidence root, writes into a
-    sibling temporary directory and atomically renames into ``output_root`` so
-    an I/O failure can never leave a partial package.
+    stateless trace targets to exist under the evidence root, writes ``raw/``
+    into a sibling temporary directory and atomically renames it into the
+    execution evidence root so an I/O failure can never leave a partial
+    package.  Both ``dispatch/`` receipts and ``raw/`` canonical files live
+    under the same execution evidence root, matching the formal Runner's
+    evidence-directory path gate.
     """
     if not isinstance(validated, ValidatedExecution):
         raise TypeError("validated must be a ValidatedExecution")
@@ -980,31 +989,33 @@ def _write_raw_records(
         grouped[source_record.metric].append(source_record)
     if seen_sample_ids != set(expected_metric_by_id):
         raise ExecutionPreflightError("raw samples do not match the complete Dataset")
-    output_root = validated.request.output_root
-    if output_root.exists():
-        raise ExecutionPreflightError("output_root must not already exist")
-
-    tmp_root = output_root.parent / (
-        f".{output_root.name}.tmp-{os.getpid()}-{secrets.token_hex(4)}"
+    evidence_root = _canonical_path(
+        validated.request.execution_evidence_root, label="execution_evidence_root"
     )
+    raw_root = evidence_root / "raw"
+    if raw_root.exists():
+        raise ExecutionPreflightError(
+            "raw package must not already exist under the execution evidence root"
+        )
+
+    tmp_raw_root = evidence_root / f".raw.tmp-{os.getpid()}-{secrets.token_hex(4)}"
     written_tmp: dict[str, Path] = {}
     try:
-        raw_root = tmp_root / "raw"
-        raw_root.mkdir(parents=True)
+        tmp_raw_root.mkdir(parents=True)
         for metric, filename in _RAW_FILENAMES.items():
-            path = raw_root / filename
+            path = tmp_raw_root / filename
             serialized = "".join(_record_to_line(record) + "\n" for record in grouped[metric])
             _write_text_file(path, serialized)
             written_tmp[metric] = path
         for metric in _METRICS:
             if len(grouped[metric]) != _EXPECTED_DISTRIBUTION[metric]:
                 raise ExecutionPreflightError("raw package distribution is incomplete")
-        tmp_root.rename(output_root)
+        tmp_raw_root.rename(raw_root)
     except Exception:
-        shutil.rmtree(tmp_root, ignore_errors=True)
+        shutil.rmtree(tmp_raw_root, ignore_errors=True)
         raise
     return {
-        metric: output_root / "raw" / _RAW_FILENAMES[metric] for metric in _METRICS
+        metric: evidence_root / "raw" / _RAW_FILENAMES[metric] for metric in _METRICS
     }
 
 

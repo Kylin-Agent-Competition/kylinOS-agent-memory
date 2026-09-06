@@ -60,9 +60,8 @@ def _request(tmp_path: Path, **overrides) -> ExecutionRequest:
         "tested_commit": HEAD,
         "testset_path": canonical_testset,
         "testset_sha256": TESTSET_SHA256,
-        "output_root": tmp_path / "output",
+        "execution_evidence_root": tmp_path / "evidence",
         "state_root": tmp_path / "state",
-        "evidence_root": tmp_path / "evidence",
     }
     values.update(overrides)
     return ExecutionRequest(**values)
@@ -82,7 +81,7 @@ def test_valid_dataset_preflight_is_read_only_and_has_all_17_samples(tmp_path):
         ({"tested_commit": "bad"}, "full lowercase Git SHA"),
         ({"tested_commit": "0" * 40}, "equal HEAD"),
         ({"testset_sha256": "0" * 64}, "must equal the approved"),
-        ({"output_root": REPOSITORY_ROOT / "generated"}, "overlap repository_root"),
+        ({"execution_evidence_root": REPOSITORY_ROOT / "generated"}, "overlap repository_root"),
     ],
 )
 def test_preflight_rejects_untrusted_identity_or_nonisolated_paths(tmp_path, overrides, message):
@@ -101,7 +100,7 @@ def test_preflight_rejects_dirty_worktree(tmp_path):
 def test_preflight_rejects_nested_isolation_roots(tmp_path):
     with pytest.raises(ExecutionPreflightError, match="must not overlap"):
         validate_execution_request(
-            _request(tmp_path, state_root=tmp_path / "output" / "nested"),
+            _request(tmp_path, state_root=tmp_path / "evidence" / "nested"),
             git_runner=_git_runner,
         )
 
@@ -172,7 +171,7 @@ def test_preflight_rejects_wrong_metric_distribution_after_identity_validation(t
         )
 
 
-@pytest.mark.parametrize("root_name", ["state_root", "evidence_root"])
+@pytest.mark.parametrize("root_name", ["state_root", "execution_evidence_root"])
 def test_preflight_rejects_existing_isolation_root(tmp_path, root_name):
     existing_root = tmp_path / root_name
     existing_root.mkdir()
@@ -184,7 +183,7 @@ def test_preflight_rejects_existing_isolation_root(tmp_path, root_name):
         )
 
 
-@pytest.mark.parametrize("root_name", ["output_root", "state_root", "evidence_root"])
+@pytest.mark.parametrize("root_name", ["execution_evidence_root", "state_root"])
 def test_preflight_rejects_relative_isolation_root(tmp_path, root_name):
     with pytest.raises(ExecutionPreflightError, match=f"{root_name} must be an absolute path"):
         validate_execution_request(
@@ -204,12 +203,10 @@ def test_cli_reports_missing_dataset_as_structured_rejection(tmp_path):
             str(tmp_path / "missing.jsonl"),
             "--testset-sha256",
             TESTSET_SHA256,
-            "--output-root",
-            str(tmp_path / "output"),
+            "--execution-evidence-root",
+            str(tmp_path / "evidence"),
             "--state-root",
             str(tmp_path / "state"),
-            "--evidence-root",
-            str(tmp_path / "evidence"),
         ],
         capture_output=True,
         text=True,
@@ -442,7 +439,7 @@ def test_raw_writer_rejects_hand_built_raw_mapping(tmp_path):
     }
     with pytest.raises(ExecutionPreflightError, match="ObservedRawRecord produced by real dispatch"):
         write_raw_records(validated, [forged])
-    assert not validated.request.output_root.exists()
+    assert not validated.request.execution_evidence_root.exists()
 
 
 def test_raw_writer_rejects_hand_constructed_plain_dict_actual(tmp_path):
@@ -479,7 +476,7 @@ def test_raw_writer_revalidates_actual_before_writing(tmp_path):
     )
     with pytest.raises(ExecutionPreflightError, match="forbidden"):
         write_raw_records(validated, [forged])
-    assert not validated.request.output_root.exists()
+    assert not validated.request.execution_evidence_root.exists()
 
 
 def test_raw_writer_rejects_wrong_sample_trace_reference(tmp_path):
@@ -494,7 +491,7 @@ def test_raw_writer_rejects_wrong_sample_trace_reference(tmp_path):
     )
     with pytest.raises(ExecutionPreflightError, match="does not bind the dispatched sample"):
         write_raw_records(validated, [forged])
-    assert not validated.request.output_root.exists()
+    assert not validated.request.execution_evidence_root.exists()
 
 
 def test_raw_writer_rejects_stateless_record_without_evidence_trace(tmp_path):
@@ -508,13 +505,13 @@ def test_raw_writer_rejects_stateless_record_without_evidence_trace(tmp_path):
     )
     with pytest.raises(ExecutionPreflightError, match="does not exist under evidence_root"):
         write_raw_records(validated, [record])
-    assert not validated.request.output_root.exists()
+    assert not validated.request.execution_evidence_root.exists()
 
 
 def test_raw_writer_rejects_stateless_trace_of_another_commit(tmp_path):
     validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
     digest = adapter._actual_digest({"record_count": 1})
-    trace_path = validated.request.evidence_root / "dispatch" / "d13e-pref-001.json"
+    trace_path = validated.request.execution_evidence_root / "dispatch" / "d13e-pref-001.json"
     trace_path.parent.mkdir(parents=True)
     trace_path.write_text(
         json.dumps(
@@ -540,7 +537,7 @@ def test_raw_writer_rejects_stateless_trace_of_another_commit(tmp_path):
     )
     with pytest.raises(ExecutionPreflightError, match="different tested_commit"):
         write_raw_records(validated, [record])
-    assert not validated.request.output_root.exists()
+    assert not (validated.request.execution_evidence_root / "raw").exists()
 
 
 def test_raw_writer_fails_closed_when_dispatch_is_not_complete(tmp_path):
@@ -549,7 +546,7 @@ def test_raw_writer_fails_closed_when_dispatch_is_not_complete(tmp_path):
     assert len(stateless) == 8
     with pytest.raises(ExecutionPreflightError, match="raw samples do not match"):
         write_raw_records(validated, stateless)
-    assert not validated.request.output_root.exists()
+    assert not (validated.request.execution_evidence_root / "raw").exists()
 
 
 def test_raw_writer_serializer_full_batch_layout_is_four_files(tmp_path):
@@ -578,16 +575,18 @@ def test_raw_writer_never_leaves_partial_output_on_io_failure(tmp_path, monkeypa
     monkeypatch.setattr(adapter, "_write_text_file", flaky_write)
     with pytest.raises(OSError, match="injected io failure"):
         write_raw_records(validated, batch)
-    assert not validated.request.output_root.exists()
-    leftovers = [p for p in validated.request.output_root.parent.glob(".*.tmp-*")]
+    # dispatch receipts already created the execution evidence root; the raw
+    # package itself must never appear as a partial canonical dir.
+    leftovers = [p for p in validated.request.execution_evidence_root.glob(".*.tmp-*")]
     assert leftovers == []
+    assert not (validated.request.execution_evidence_root / "raw").exists()
 
 
 def test_canonical_orchestrator_is_blocked_and_never_accepts_external_receipts(tmp_path):
     validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
     with pytest.raises(ExecutionPreflightError, match="forget requires an external state binding"):
         adapter.dispatch_and_write_canonical(validated)
-    assert not validated.request.output_root.exists()
+    assert not validated.request.execution_evidence_root.exists()
 
 
 def test_dispatch_stateless_preference_projects_top_level_fields(tmp_path):
@@ -610,7 +609,7 @@ def test_dispatch_stateless_preference_projects_top_level_fields(tmp_path):
     assert record.trace_reference == "dispatch/d13e-pref-001.json"
     assert record.runtime_scope == "stateless:preference"
     receipt = json.loads(
-        (validated.request.evidence_root / "dispatch" / "d13e-pref-001.json")
+        (validated.request.execution_evidence_root / "dispatch" / "d13e-pref-001.json")
         .read_text(encoding="utf-8")
         .splitlines()[0]
     )
@@ -968,3 +967,46 @@ def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
         assert isinstance(results[sample_id], bool)
         # No schema-shape exception, but Safety raw is NOT Gate-9 complete while
         # the cross-track projection contract is pending D13E review.
+
+
+RAW_FILENAMES = {
+    "preference": "preference_raw.jsonl",
+    "conflict": "conflict_raw.jsonl",
+    "safety": "safety_raw.jsonl",
+    "forget": "forget_raw.jsonl",
+}
+
+
+def test_canonical_package_lives_under_execution_evidence_root_and_passes_runner_resolver(tmp_path):
+    """BLOCKER lifecycle: raw + dispatch receipts share ONE evidence root and the
+    resulting raw descriptors satisfy the formal Runner's evidence-root path gate
+    (raw_result_files.*.file resolves inside the D13D unique evidence directory)."""
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    root = validated.request.execution_evidence_root
+    batch = _synthetic_batch_for_serializer(validated)
+    written = write_raw_records(validated, batch)
+    assert {metric: path.relative_to(root) for metric, path in written.items()} == {
+        metric: Path("raw") / filename for metric, filename in RAW_FILENAMES.items()
+    }
+    runner = _load_runner_module()
+    for metric, filename in RAW_FILENAMES.items():
+        resolved = runner._relative_file(root, f"raw/{filename}", f"raw_result_files.{metric}.file")
+        assert resolved == written[metric].resolve()
+        assert resolved.is_relative_to(root.resolve())
+        assert resolved.exists()
+
+
+def test_stateless_receipt_is_exclusive_and_never_silently_overwritten(tmp_path):
+    """MEDIUM-1: a repeated dispatch of the same sample must fail closed instead of
+    silently overwriting the first execution receipt."""
+    validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
+    first = dispatch_stateless_sample(validated, "d13e-pref-001")
+    trace_path = (
+        validated.request.execution_evidence_root / "dispatch" / "d13e-pref-001.json"
+    )
+    assert trace_path.exists()
+    before = trace_path.read_bytes()
+    with pytest.raises(ExecutionPreflightError, match="must not be overwritten"):
+        dispatch_stateless_sample(validated, "d13e-pref-001")
+    assert trace_path.read_bytes() == before
+    assert first.trace_reference == "dispatch/d13e-pref-001.json"
