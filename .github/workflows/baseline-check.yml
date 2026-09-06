@@ -44,3 +44,25 @@ jobs:
             memory-service/tests/test_forget_persistence_d10d.py \
             memory-service/tests/retrieval/test_evaluation.py \
             -q
+
+  d14a-packaging-provenance:
+    name: D14A packaging + provenance L1
+    runs-on: ubuntu-latest
+    # 2026-09-06 D14D 人工裁决 D-14：把 packaging 4 个 Python 测试与
+    # docs/day14/test_d14a_release_provenance.py 加入 CI，使 head 漂移/包完整性
+    # 问题在合并前自动失败（本地 WSL 实测 77 passed）。
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pytest
+        run: python3 -m pip install --quiet pytest
+
+      - name: D14A packaging + provenance L1 tests
+        run: |
+          python3 -m pytest -q \
+            packaging/release/test_d14a_package_integrity.py \
+            packaging/release/test_d14a_relocatable_runtime.py \
+            packaging/release/test_d14a_transactional_rollback.py \
+            packaging/release/test_d14a_verify_smoke.py \
+            docs/day14/test_d14a_release_provenance.py
