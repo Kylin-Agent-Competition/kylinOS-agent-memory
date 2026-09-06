@@ -27,6 +27,9 @@ import subprocess
 from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping
 
+from sqlalchemy import and_, select
+from db.schema import source_events
+
 from db.engine import create_db_engine, init_schema
 from db.uow import UnitOfWork
 from gateway.forget_handlers import register_forget_handlers
@@ -108,6 +111,9 @@ D13E_RAW_RESULT_SCHEMA_V1 = {
                 "normal_memory_write_count",
                 "audit_plaintext_leak_count",
                 "cross_user_violation_count",
+                "sensitivity",
+                "admission",
+                "operation",
             ),
         },
         "forget": {
@@ -897,6 +903,71 @@ def _validate_binding(
             )
 
 
+def _persisted_safety_event_fields(conn, *, user_id: str, trace_id: str) -> tuple[str, str]:
+    """真实持久化 source_events 的 (sensitivity, admission_decision)。
+
+    必须唯一可确定：无事件、多值或冲突 → 抛 ValueError（fail-closed）。
+    """
+    rows = conn.execute(
+        select(
+            source_events.c.sensitivity,
+            source_events.c.admission_decision,
+        )
+        .where(
+            and_(
+                source_events.c.user_id == user_id,
+                source_events.c.trace_id == trace_id,
+            )
+        )
+        .order_by(source_events.c.id.asc())
+    ).mappings().all()
+    if not rows:
+        raise ValueError("no persisted source event for the safety trace")
+    sensitivities = {row["sensitivity"] for row in rows}
+    admissions = {row["admission_decision"] for row in rows}
+    if len(sensitivities) != 1 or len(admissions) != 1:
+        raise ValueError("persisted safety observation is conflicting or not unique")
+    return sensitivities.pop(), admissions.pop()
+
+
+def _project_safety_actual(
+    *,
+    sample_id: str,
+    sample_input: Mapping[str, Any],
+    observed: Mapping[str, Any],
+    conn: Any,
+    user_id: str,
+    trace_id: str,
+) -> dict[str, Any]:
+    """把真实观测投影为 Safety raw actual（消费 #162 frozen contract）。
+
+    - safety-001/002：+ sensitivity/admission（来自真实 persisted source_events）；
+    - safety-003：+ operation/admission（operation 来自 SHA 验证 Dataset input；
+      admission 由真实 user-scoped repository read observation 推导，不固定 reject）；
+    - safety-004：仅四 hard-zero counter（真实来源）。
+    观测缺失/冲突 fail-closed；真实安全违规（cross_user_violation_count>0）原样写入，
+    不吞 raw、不代 Runner 判 FAIL。
+    """
+    actual = {
+        "critical_gate_bypass_count": observed["critical_gate_bypass_count"],
+        "normal_memory_write_count": observed["normal_memory_write_count"],
+        "audit_plaintext_leak_count": observed["audit_plaintext_leak_count"],
+        "cross_user_violation_count": observed["cross_user_violation_count"],
+    }
+    if sample_id in ("d13e-safety-001", "d13e-safety-002"):
+        sensitivity, admission = _persisted_safety_event_fields(
+            conn, user_id=user_id, trace_id=trace_id
+        )
+        actual["sensitivity"] = sensitivity
+        actual["admission"] = admission
+    elif sample_id == "d13e-safety-003":
+        actual["operation"] = sample_input["operation"]
+        # user-scoped repository read observation：越界返回（violation）≠ 观测不可用。
+        actual["admission"] = (
+            "reject" if actual["cross_user_violation_count"] == 0 else "allow"
+        )
+    return actual
+
 def dispatch_safety_sample(
     validated: ValidatedExecution,
     sample_id: str,
@@ -963,14 +1034,16 @@ def dispatch_safety_sample(
                 trace_id=trace_id,
                 foreign_user_id=foreign_user_id,
             )
+            actual = _project_safety_actual(
+                sample_id=sample_id,
+                sample_input=sample_input,
+                observed=observed,
+                conn=conn,
+                user_id=user_id,
+                trace_id=trace_id,
+            )
     except Exception as exc:
         raise ExecutionPreflightError("safety dispatch failed") from exc
-    actual = {
-        "critical_gate_bypass_count": observed["critical_gate_bypass_count"],
-        "normal_memory_write_count": observed["normal_memory_write_count"],
-        "audit_plaintext_leak_count": observed["audit_plaintext_leak_count"],
-        "cross_user_violation_count": observed["cross_user_violation_count"],
-    }
     trace_reference = observed["trace_reference"]
     _write_execution_receipt(
         validated,

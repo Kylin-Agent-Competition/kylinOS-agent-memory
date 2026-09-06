@@ -703,12 +703,22 @@ def test_dispatch_safety_uses_real_event_ingest_and_observer(safety_environment)
 
     assert record.sample_id == "d13e-safety-001"
     assert record.metric == "safety"
-    assert record.actual == {
+    # #162 consumer：四 hard-zero counter 来自真实 observer；sensitivity/admission
+    # 来自真实 persisted source_events（本合成文本未触发 api_key= 语境 → none/
+    # allow_extraction，属注册的 Dataset↔production 错配 gap，非 infra 失败）。
+    assert {
+        "critical_gate_bypass_count": record.actual["critical_gate_bypass_count"],
+        "normal_memory_write_count": record.actual["normal_memory_write_count"],
+        "audit_plaintext_leak_count": record.actual["audit_plaintext_leak_count"],
+        "cross_user_violation_count": record.actual["cross_user_violation_count"],
+    } == {
         "critical_gate_bypass_count": 0,
         "normal_memory_write_count": 0,
         "audit_plaintext_leak_count": 0,
         "cross_user_violation_count": 0,
     }
+    assert record.actual["sensitivity"] in {"none", "low", "medium", "high", "critical"}
+    assert record.actual["admission"] in {"allow_extraction", "audit_only", "reject"}
     assert record.trace_reference == "source-events:d13d-safety-d13e-safety-001"
     assert record.runtime_scope == binding.binding_id
 
@@ -818,6 +828,45 @@ def test_forget_dispatch_fails_closed_when_forget_handler_unregistered(safety_en
     binding.registry.unregister("forget.execute")
     with pytest.raises(ExecutionPreflightError, match="replaced or unregistered"):
         dispatch_forget_sample(validated, "d13e-forget-001", binding=binding)
+
+
+def test_safety_projection_does_not_swallow_real_cross_user_violation():
+    """#162 §5.2：观测成功但发现安全违规 → 写真实 counter，adapter 不吞、不代 Runner 判 FAIL。"""
+    actual = adapter._project_safety_actual(
+        sample_id="d13e-safety-003",
+        sample_input={"operation": "read"},
+        observed={
+            "critical_gate_bypass_count": 0,
+            "normal_memory_write_count": 0,
+            "audit_plaintext_leak_count": 0,
+            "cross_user_violation_count": 1,
+        },
+        conn=None,
+        user_id="user_d13e_alpha",
+        trace_id="t",
+    )
+    assert actual["cross_user_violation_count"] == 1
+    assert actual["admission"] == "allow"  # 越界返回的观测事实，非固定 reject
+    assert actual["operation"] == "read"
+
+
+def test_safety_projection_read_uses_dataset_operation_input():
+    """safety-003：operation 必须来自 SHA 验证 Dataset input（read），不读 Gold。"""
+    actual = adapter._project_safety_actual(
+        sample_id="d13e-safety-003",
+        sample_input={"operation": "read"},
+        observed={
+            "critical_gate_bypass_count": 0,
+            "normal_memory_write_count": 0,
+            "audit_plaintext_leak_count": 0,
+            "cross_user_violation_count": 0,
+        },
+        conn=None,
+        user_id="user_d13e_alpha",
+        trace_id="t",
+    )
+    assert actual["operation"] == "read"
+    assert actual["admission"] == "reject"
 
 
 def _other_binding(tmp_path):
@@ -963,12 +1012,22 @@ MUST_MATCH_TRUE = {
     "d13e-conflict-002",
     "d13e-conflict-003",
     "d13e-conflict-004",
+    "d13e-safety-002",
+    "d13e-safety-003",
+    "d13e-safety-004",
 }
-# pref-003 (d13e-pref-003): the production false negative was closed by the
-# explicit tool-selection marker fix (PREFERENCE_EXPLICIT_PATTERN now admits
-# 优先使用/优先用/优先选择/首选/默认使用/默认用), so no observation gaps
-# remain and the sample must satisfy the frozen Runner contract (True).
-KNOWN_OBSERVATION_GAP_FALSE: set[str] = set()
+# pref-003: closed by #161 production fix (explicit tool-selection marker).
+# safety-002/003/004: closed by consuming the frozen #162 Safety projection
+# contract — actual now projects persisted sensitivity/admission (002) and
+# operation/read-derived admission (003) plus real hard-zero counters (004).
+KNOWN_OBSERVATION_GAP_FALSE = {
+    # safety-001: production sensitive detector persists sensitivity=none /
+    # admission=allow_extraction for the synthetic Dataset text (no api_key=…
+    # trigger context), while frozen Gold expects critical/reject.  This is a
+    # Dataset↔production alignment gap (A-track detector / D13E ruling needed,
+    # analogous to pref-003), NOT an adapter infrastructure failure.
+    "d13e-safety-001",
+}
 
 
 def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
@@ -978,12 +1037,10 @@ def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
 
     Gold is read here only to drive the Runner's per-sample contract (the same
     way formal Gate 9 consumes raw); it is never used to generate ``actual``.
-    Preference/Conflict samples that must satisfy the contract are asserted
-    True (the pref-003 observation gap is closed by the production fix), and
-    Safety samples are asserted shape-legal but explicitly NOT treated as
-    complete because the sensitivity/admission/operation projection contract is
-    still pending a D13E Runner/Gold decision (schema status
-    CANDIDATE_PENDING_D13E_REVIEW).
+    Preference/Conflict and Safety samples that must satisfy the contract are
+    asserted True.  safety-001 remains a registered Dataset↔production
+    alignment gap (persisted sensitivity=none vs Gold critical) pending an
+    A-track/D13E ruling; adapter projection itself is real and Gold-independent.
     """
     validated, binding = safety_environment
     assert D13E_RAW_RESULT_SCHEMA_STATUS == "CANDIDATE_PENDING_D13E_REVIEW"
@@ -1013,17 +1070,8 @@ def test_adapter_raw_feed_runner_contract_has_explicit_per_sample_expectations(
         assert results[sample_id] is False, (
             f"{sample_id} is a registered observation gap and must not be treated as complete"
         )
-    # Safety-004 is counter-driven and currently satisfies the Runner contract.
-    assert results["d13e-safety-004"] is True
-    # Safety-001/002/003 are NOT Gate-9 complete: the frozen Runner/Gold require
-    # sensitivity/admission/operation observation fields whose projection
-    # contract is pending a D13E decision (schema status
-    # CANDIDATE_PENDING_D13E_REVIEW), so they must not be treated as complete.
-    for sample_id in ("d13e-safety-001", "d13e-safety-002", "d13e-safety-003"):
-        assert results[sample_id] is False, (
-            f"{sample_id} must not be treated as complete while the Safety"
-            " projection contract is pending D13E review"
-        )
+    # safety-001 为注册的数据↔生产错配 gap（见 KNOWN_OBSERVATION_GAP_FALSE 注释）。
+    assert results["d13e-safety-001"] is False
 
 
 RAW_FILENAMES = {
