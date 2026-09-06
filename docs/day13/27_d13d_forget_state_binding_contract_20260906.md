@@ -62,7 +62,7 @@
   "forget_mode": "single_item",
   "target_selector": { "…": "来自 D13E Dataset 的 selector 原样" },
   "target_identity": { "…": "真实、同用户、活动 DB/state 身份（含真实数字 DB ID）" },
-  "same_user_controls": [ "≥1 个同用户、同 kind 的控制身份" ],
+  "same_user_controls": [ "≥1 个同用户、同 kind 的控制身份（full_reset 除外：整用户为作用域，可为空）" ],
   "foreign_user_controls": [ "≥1 个 foreign-user 同 kind 控制身份" ],
   "prerequisite_facts": { "…": "该 mode 的真实持久化前置事实引用（不含正文）" },
   "realtime_retrieval": { "entrypoint": "…", "trace_reference": "…", "snapshot": "…", "watermark": "…" },
@@ -113,7 +113,7 @@ verifier 重算并比对；任何 bytes 变化须重算 SHA 并重新独立复�
 - [ ] binding_version / artifact_sha256 / owner / approval_reference 齐全且 SHA 复核 PASS
 - [ ] applicable_source_commit / environment_id / vm_snapshot / state_root / db_identity 齐全
 - [ ] 5 sample 均有真实 DB/state 目标身份与前置事实
-- [ ] 每 sample 有 same-user control 与 foreign-user same-kind control
+- [ ] 每 sample 有 foreign-user same-kind control；same-user control 除 full_reset（全量作用域允许空）外必填
 - [ ] realtime/rebuild retrieval entrypoint + snapshot + watermark + trace 齐全
 - [ ] 无 Gold/expected/confirmation/凭据/用户正文
 - [ ] adapter 只读验证 + preview/execute 权限范围已声明（`retrieval_profile`）

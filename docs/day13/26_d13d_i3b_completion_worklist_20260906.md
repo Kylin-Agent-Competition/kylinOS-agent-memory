@@ -285,3 +285,12 @@ D13D_FROZEN = NO（本阶段不产生）
 - artifact 提供真实 realtime/full-rebuild retrieval 入口、snapshot/watermark/trace；
 - adapter 不得创建测试目标/伪造 observation/补零；缺输入 fail-closed 且不写 canonical raw；
 - 正式执行可用 validation profile 显式注册真实 `forget.preview/forget.execute` handler；不得宣称解除 `BLOCKED_BY_HOST_MAPPING`。
+
+### 9.4 binding artifact V1 生成记录（2026-09-06，VM 预置完成）
+
+- VM 身份：`Kylin-V11-2603-BTrack-Base`（uuid `103fb8a8-cc85-4897-836a-70b68edb5745`）/ snapshot `d14d-clean-base-20260906-r2`（uuid `c5e3c3de-1c70-4f58-b22a-ab07b2d2d56d`），SSH `127.0.0.1:2222`；预置前 CLEAN_STATE_PASS（8/8 计数 0）。
+- 候选 tested_commit：`main@dc58e834…`（VM 内 git HEAD 复验一致、worktree clean）。
+- 状态 DB：`/home/yanmouren778/p2b-prep-20260906/state/p2b-forget-state.db`（0600），SHA-256 `9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f`；真实生产 Repository/API（upsert_conversation/insert_turn/insert_source_event/insert_knowledge_entry/save_preference_version）预置，无 raw SQL、无 Gold/expected。
+- 五模式 resolver 端到端核验：single=[1]；session=[4,5]；topic=[8]；time_window=[11]；full_reset={knowledge+preference, count=11}。
+- Artifact：`evaluation/d13e/D13D_FORGET_STATE_BINDING_V1.json`，binding SHA-256 `915c6ae434a7695340aa189a98ff2d79119ac74435587f2149dc85d9a7e4d91f`，静态校验 PASS（`run_d13d_forget_state_binding.py verify`）。
+- 状态推进：P2-B 步骤 4–7 完成；步骤 8（#160 adapter 接入 binding validator + 五模式真实 dispatch + realtime/rebuild observation）待执行。
