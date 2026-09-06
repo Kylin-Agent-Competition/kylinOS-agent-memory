@@ -1395,3 +1395,69 @@ def test_prepare_rejects_schema_fingerprint_mismatch(tmp_path):
     validated = validate_execution_request(_request(tmp_path), git_runner=_git_runner)
     with pytest.raises(ExecutionPreflightError, match="schema fingerprint does not match"):
         adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+
+
+def _seed_alpha_single_knowledge(db_path):
+    """在 sealed source DB 预置一条 alpha knowledge（id=1），供 handler 回归用。"""
+    from db.engine import create_db_engine, init_schema
+    from db import repositories as repo
+    engine = create_db_engine(str(db_path))
+    init_schema(engine)
+    with engine.begin() as conn:
+        repo.insert_memory_entry(
+            conn, user_id="user_d13e_alpha", entry_type="knowledge",
+            content={"value": "d13e single target"}, confidence=0.9,
+        )
+    engine.dispose()
+
+
+def test_forget_handler_uow_bound_to_own_sample_runtime_db(tmp_path):
+    """Review BLOCKER-01 回归：sample-001 的 preview/execute 只改 sample-001 DB。"""
+    import json, hashlib
+    from sqlalchemy import text as sql_text
+    from db.engine import create_db_engine
+    src = tmp_path / "source.db"
+    _seed_alpha_single_knowledge(src)
+    sha = hashlib.sha256(src.read_bytes()).hexdigest()
+    art = _write_v2_artifact(tmp_path, src, sha)
+    validated = validate_execution_request(
+        _request(tmp_path, binding_artifact_path=art), git_runner=_git_runner
+    )
+    bindings = adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+    b = bindings["d13e-forget-001"]
+    plan_id = "d13d-plan-g3reg-1"
+    ctx = adapter.RequestContext(
+        request_id="req-g3reg", trace_id="trace-g3reg", method="forget.preview",
+        deadline_ms=10000, user_id="user_d13e_alpha", session_id="s1",
+        idempotency_key="idem-preview-g3reg",
+    )
+    payload = {
+        "forget_plan_id": plan_id, "user_id": "user_d13e_alpha",
+        "forget_mode": "single_item", "target_selector": "{\"memory_id\": \"d13e-memory-001\"}",
+        "target_type": "knowledge", "target_id": "1",
+        "target_session_id": None, "target_topic": None, "target_time_range": None,
+        "requires_confirmation": True, "is_cascade": False, "delete_mode": "soft",
+    }
+    preview = b.forget_preview_handler(payload, ctx)
+    token = preview["confirmation_token"]
+    exec_ctx = adapter.RequestContext(
+        request_id="req-g3reg-x", trace_id="trace-g3reg-x", method="forget.execute",
+        deadline_ms=10000, user_id="user_d13e_alpha", session_id="s1",
+        idempotency_key="idem-execute-g3reg",
+    )
+    b.forget_execute_handler(
+        {"forget_plan_id": plan_id, "user_id": "user_d13e_alpha",
+         "confirmation_token": token},
+        exec_ctx,
+    )
+    state = {}
+    for sid, bb in bindings.items():
+        engine = create_db_engine(str(bb.db_path))
+        with engine.connect() as conn:
+            state[sid] = conn.execute(
+                sql_text("SELECT is_deleted FROM memory_entries WHERE id = 1")
+            ).scalar_one()
+        engine.dispose()
+    assert state["d13e-forget-001"] == 1, "sample-001 自身 DB 应已软删目标"
+    for sid in ("d13e-forget-002", "d13e-forget-003", "d13e-forget-004", "d13e-forget-005"):
+        assert state[sid] == 0, f"{sid} DB 不应被 sample-001 的 handler 改动（late-binding）"

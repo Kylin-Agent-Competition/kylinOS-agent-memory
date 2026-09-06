@@ -991,9 +991,12 @@ def prepare_forget_runtime_bindings(
         engine = create_db_engine(str(db_path))
         registry = HandlerRegistry()
         register_default_handlers(registry)
-        register_event_ingest_handler(registry, uow_factory=lambda: UnitOfWork(engine))
-        register_preference_handlers(registry, uow_factory=lambda: UnitOfWork(engine))
-        register_forget_handlers(registry, uow_factory=lambda: UnitOfWork(engine))
+        # Review BLOCKER-01：冻结当前 engine，避免循环变量 late-binding 让
+        # 前 4 个 sample 的 handler 共用最后一个 engine（closure default-arg 绑定）。
+        uow_factory = lambda engine=engine: UnitOfWork(engine)
+        register_event_ingest_handler(registry, uow_factory=uow_factory)
+        register_preference_handlers(registry, uow_factory=uow_factory)
+        register_forget_handlers(registry, uow_factory=uow_factory)
         run_token = secrets.token_hex(32)
         _ENGINE_BINDING_TOKENS[id(engine)] = run_token
         setattr(registry, "d13d_runtime_token", run_token)
