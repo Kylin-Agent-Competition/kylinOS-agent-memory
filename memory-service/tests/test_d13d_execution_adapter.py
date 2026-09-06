@@ -1509,3 +1509,47 @@ def test_fts_observer_probe_realtime_rebuild(tmp_path):
         )
         assert report.residual_target_count == 0
     engine.dispose()
+
+
+def _seed_e2e_single_source(db_path):
+    """真实 Repository/API 预置：alpha target(id1)/control(id2)，beta foreign(id3)。"""
+    from db.engine import create_db_engine, init_schema
+    from db import repositories as repo
+    engine = create_db_engine(str(db_path))
+    init_schema(engine)
+    with engine.begin() as conn:
+        repo.insert_memory_entry(conn, user_id="user_d13e_alpha", entry_type="knowledge",
+                                 content={"value": "targetalpha001"}, confidence=0.9)
+        repo.insert_memory_entry(conn, user_id="user_d13e_alpha", entry_type="knowledge",
+                                 content={"value": "controlalpha002"}, confidence=0.9)
+        repo.insert_memory_entry(conn, user_id="user_d13e_beta", entry_type="knowledge",
+                                 content={"value": "foreignbeta003"}, confidence=0.9)
+    engine.dispose()
+
+
+def test_forget_single_item_e2e_dispatch_fts(tmp_path):
+    """P2-B：single_item 走完整 dispatch（preview→execute→FTS realtime/rebuild→observe→receipt）。"""
+    import hashlib, json
+    src = tmp_path / "source.db"
+    _seed_e2e_single_source(src)
+    sha = hashlib.sha256(src.read_bytes()).hexdigest()
+    art = _write_v2_artifact(tmp_path, src, sha)
+    validated = validate_execution_request(
+        _request(tmp_path, binding_artifact_path=art), git_runner=_git_runner
+    )
+    bindings = adapter.prepare_forget_runtime_bindings(validated, artifact_path=art)
+    record = dispatch_forget_sample(
+        validated, "d13e-forget-001", binding=bindings["d13e-forget-001"]
+    )
+    assert record.metric == "forget"
+    assert record.actual["forget_mode"] == "single_item"
+    for key in ("missed_target_items", "wrongly_deleted_items",
+                "cross_user_violation_count", "residual_after_realtime_query",
+                "residual_after_full_rebuild"):
+        assert record.actual[key] == 0, f"{key} 应来自真实 observer 且为 0"
+    receipt = validated.request.execution_evidence_root / "dispatch" / "d13e-forget-001.json"
+    assert receipt.exists()
+    data = json.loads(receipt.read_text(encoding="utf-8"))
+    assert data["forget_binding_artifact_sha256"] == bindings["d13e-forget-001"].binding_artifact_sha256
+    assert data.get("forget_realtime_snapshot_id")
+    assert data.get("forget_rebuild_snapshot_id")

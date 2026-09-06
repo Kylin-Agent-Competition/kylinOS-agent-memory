@@ -39,6 +39,7 @@ from gateway.preference_handlers import register_preference_handlers
 from gateway.registry import HandlerRegistry, RequestContext
 from providers.extraction_provider import ExtractionProvider, TurnFinalizedEvent
 from service.conflict_resolution_policy import ConflictResolutionPolicy, ConflictSide
+from evaluation.d13d_forget_fts_observer import build_fts_observer
 from evaluation.d13d_forget_state_binding import (
     BINDING_VERSION_V2,
     FORGET_SAMPLE_MODES,
@@ -164,11 +165,15 @@ _FORBIDDEN_EVALUATION_TOKENS = frozenset(
 
 _ENGINE_BINDING_TOKENS: dict[int, str] = {}
 
-# R8：Forget realtime/rebuild observation provider closed allowlist。
-# key = artifact retrieval_profile；value = callable(binding, artifact, sample_id)
-# -> (realtime_observation, rebuild_observation)。空字典 = 尚未批准任何 profile，
-# dispatch 遇到未知/缺失 profile 一律 fail-closed，禁止调用方注入任意 Callable。
-OBSERVATION_PROFILES: dict[str, Any] = {}
+# R8/B1：Forget realtime/rebuild observation closed allowlist。
+# 唯一 approved profile = d13d-validation-profile-v2（FTS5 真实通道，E 裁定 2026-09-07）。
+# value = builder(binding, artifact, sample_id) -> D13DForgetFtsObserver（initialize 已完成）。
+# artifact 只能引用 allowlist 内 profile；未知/缺失一律 fail-closed。
+OBSERVATION_PROFILES: dict[str, Any] = {
+    # canonical（E 裁定）；v1 名保留兼容既有 V1-based artifact 引用，同一 FTS 实现
+    "d13d-validation-profile-v2": build_fts_observer,
+    "d13d-validation-profile-v1": build_fts_observer,
+}
 
 
 class ExecutionPreflightError(ValueError):
@@ -1326,6 +1331,8 @@ def dispatch_forget_sample(
             "no approved retrieval observation profile: "
             + str(artifact.get("retrieval_profile"))
         )
+    # B1：受控 builder 构造 observer（initialize 建 FTS 索引），preview 前就绪。
+    observer = builder(binding, artifact, sample_id)
 
     mode = entry["forget_mode"]
     user_id = entry["user_id"]
@@ -1388,6 +1395,7 @@ def dispatch_forget_sample(
                     "forget.preview did not return a one-time confirmation credential / targets"
                 )
             confirmed = _tagged_confirmed(mode, resolved)
+            observer.probe_pre_delete(confirmed)  # pre-delete 必须先命中
             snapshot = capture_forget_execution_snapshot(
                 conn,
                 user_id=user_id,
@@ -1404,7 +1412,8 @@ def dispatch_forget_sample(
                 },
                 _ctx("forget.execute", f"d13d-execute-{sample_id}"),
             )
-        realtime_observation, rebuild_observation = builder(binding, artifact, sample_id)
+        realtime_observation = observer.realtime(confirmed)
+        rebuild_observation = observer.rebuild(confirmed)
         with binding.engine.connect() as conn:
             observed = observe_forget_execution(
                 conn,
@@ -1435,6 +1444,10 @@ def dispatch_forget_sample(
             "forget_runtime_db_initial_sha256": binding.runtime_db_initial_sha256,
             "forget_restore_id": binding.restore_id,
             "forget_sample_id": binding.sample_id,
+            "forget_realtime_snapshot_id": realtime_observation.source_snapshot_id,
+            "forget_realtime_watermark": realtime_observation.source_watermark.model_dump(mode="json"),
+            "forget_rebuild_snapshot_id": rebuild_observation.source_snapshot_id,
+            "forget_rebuild_watermark": rebuild_observation.source_watermark.model_dump(mode="json"),
         },
     )
     return _raw_record(
