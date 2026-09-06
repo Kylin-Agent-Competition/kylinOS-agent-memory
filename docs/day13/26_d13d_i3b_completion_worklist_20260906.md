@@ -255,3 +255,33 @@ P0-I3b-completion 仍 = IN_PROGRESS / BLOCKED_PENDING_CROSS_TRACK_COMPLETION
 formal_tested_commit 仍 = PENDING_P0_I3_RESELECTION
 D13D_FROZEN = NO（本阶段不产生）
 ```
+
+## 9. P2-B 承接与执行记录（2026-09-06）
+
+### 9.1 授权与状态
+
+- B（高翌哲）已获**完整明确授权**（用户 2026-09-06 确认）以业务/VM Owner 身份完成 P2-B Forget external state binding（D/E B-2 回执 ACCEPTED / BLOCKED_PENDING_VM_BINDING_ARTIFACT）。
+- binding 目标 tested_commit：候选 `main@dc58e83479d718c8e3fbbbbb5d3b3f046f651973`（用户已确认；正式 tested_commit 仍 `PENDING_P0_I3_RESELECTION`，若 Phase 3 最终基线变化须重生成 binding）。
+- 执行方式：VM 直连（用户选项 2），连接信息待用户提供后继续 VM 侧步骤。
+- 状态：`P2-B = IN_PROGRESS`（本机可交付部分：#1 schema 契约 + #2 generator/verifier + #3 任务卡登记）。
+
+### 9.2 执行清单
+
+1. binding artifact V1 schema/字段冻结（见 `docs/day13/27_d13d_forget_state_binding_contract_20260906.md`）；
+2. binding generator/verifier（模块 `memory-service/evaluation/d13d_forget_state_binding.py` + CLI `scripts/run_d13d_forget_state_binding.py` + 单测）；
+3. 独立 Review（generator/verifier 代码与契约）；
+4. 隔离麒麟 VM 干净快照 restore（候选 `d14d-clean-base-20260906-r2`）；
+5. 真实生产 Repository/API 预置 5 sample（single_item/session/topic/time_window/full_reset）目标与 same-user/foreign-user controls；
+6. 采集真实 DB/state identity + realtime/rebuild retrieval 入口/snapshot/watermark/trace → 生成 `D13D_FORGET_STATE_BINDING_V1.json` + SHA-256；
+7. 独立复核 binding（confirmation token 不入 artifact；不读 Gold/expected）；
+8. 接入本 PR：#160 集成 binding validator + 五模式真实 dispatch + observation。
+
+### 9.3 约束（D/E B-2 裁定，不回写历史）
+
+- artifact 绑定 tested_commit/environment/VM snapshot/DB/state root；
+- 5 sample 映射真实 DB/state identity；session/topic/time_window/full_reset 须有真实生产关系；
+- 每 target kind 备 same-user control 与 foreign-user same-kind control；
+- confirmation token 不入 artifact，由真实 `forget.preview` 动态产生；
+- artifact 提供真实 realtime/full-rebuild retrieval 入口、snapshot/watermark/trace；
+- adapter 不得创建测试目标/伪造 observation/补零；缺输入 fail-closed 且不写 canonical raw；
+- 正式执行可用 validation profile 显式注册真实 `forget.preview/forget.execute` handler；不得宣称解除 `BLOCKED_BY_HOST_MAPPING`。
