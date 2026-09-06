@@ -1,10 +1,11 @@
-# D13D Forget State Binding V1 Contract（artifact 规范，冻结）
+# D13D Forget State Binding V1 Contract（HISTORICAL / SUPERSEDED）
 
 | 字段 | 内容 |
 |------|------|
 | 契约名 | `D13D_FORGET_STATE_BINDING_V1` |
 | 用途 | D13D Phase 2 P2-B：为五条正式 Forget sample 提供可复核的真实状态绑定与检索观测入口 |
-| 状态 | `FROZEN_BY_B（获授权业务/VM Owner）`：契约冻结；artifact 生成待 VM 状态预置 |
+| 状态 | `HISTORICAL / SUPERSEDED`（PR #160 R4：V1 仅作 state-preparation evidence，不再作为执行规范） |
+| 现行规范 | `docs/day13/28_d13d_forget_state_binding_v2_contract_20260906.md`（`d13d-forget-state-binding/v2`，CURRENT NORMATIVE） |
 | 裁定/授权 | D/E 书面回执 B-2（2026-09-06，ACCEPTED）+ B 完整明确授权（2026-09-06） |
 | binding tested_commit | 候选 `main@dc58e83479d718c8e3fbbbbb5d3b3f046f651973`（用户确认；Phase 3 最终 tested_commit 变化须重生成） |
 | 建议文件路径 | `evaluation/d13e/D13D_FORGET_STATE_BINDING_V1.json`（或仓库外 artifact + SHA-256） |

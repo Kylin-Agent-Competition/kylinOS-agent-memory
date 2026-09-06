@@ -314,5 +314,5 @@ P2-C = COMPLETE（#161 production fix 已 merge 并被 #160 真实 Provider/adap
 - Phase-2 completion Gate（统一口径，取代任何“Phase 2 只需 L1 capability”降级表述）：Phase 2 必须在**隔离非正式环境**真实证明
   `Safety 4/4（Gold-independent projection）`、`Preference 4/4（pref-003 已消费 #161）`、`Conflict 4/4`、`Forget 5/5 real preview/execute/realtime/rebuild`、`5/5 receipt + provenance`、`Gold isolation PASS`、`independent Review APPROVE`。
   Phase 3 才负责：final tested_commit、正式 Kylin VM 17 raw、Final Manifest、Review Seal、Execution Seal、attestation、Runner Gate 0–10、`D13D_FROZEN`。
-- V1 artifact（`915c6ae4…`）仅记录 state-preparation evidence；按 R4 将 SUPERSEDED/HISTORICAL，执行规范以 V2 为准（后续 commit）。
+- V1 artifact（`915c6ae4…`）＝ `HISTORICAL / SUPERSEDED`（仅 state-preparation evidence，27_ 已标记）；执行规范以 **V2** 为准（`docs/day13/28_d13d_forget_state_binding_v2_contract_20260906.md`）。
 - 待 D/E Review：#160 本批（binding+dispatch 集成）连同 #161/#162 依各自独立 Review 门推进。
