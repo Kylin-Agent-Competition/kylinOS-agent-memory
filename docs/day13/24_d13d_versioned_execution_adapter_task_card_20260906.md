@@ -15,11 +15,15 @@
 | Stage | Scope | Current state |
 | --- | --- | --- |
 | P0-I3a | Versioned preflight, approved Dataset SHA anchor, isolation/shape checks and L1 regressions | `IMPLEMENTED_PENDING_INDEPENDENT_REVIEW` |
-| P0-I3b | All four real dispatchers and only canonical 4/4/4/5 raw output | `BLOCKED_PARTIAL`: Preference/Conflict/Safety are review-pending code candidates; Forget needs an externally supplied state binding plus real retrieval observations. |
-| P0-I3c | Non-author independent review and merge of the complete adapter | `PENDING` |
-| P0-I3d | Reselect the post-adapter formal tested commit and revalidate an isolated VM | `PENDING` |
+| P0-I3b-infra | Preference/Conflict real dispatch, Safety ValidatedRuntimeBinding + provenance, uniform execution receipts, Forget schema contract (`forget_mode`), canonical package layout under execution evidence root | `CANDIDATE_PENDING_INDEPENDENT_REVIEW`（PR #150 合并范围） |
+| P0-I3b-completion | Safety Gate-9 projection（需 D13E 独立裁定 Gold-independent projection 规则）与 Forget 真实 dispatch（需外部 state-binding + realtime/rebuild 观测） | `BLOCKED`（独立 follow-up，**不是** PR #150 的 merge gate） |
+| P0-I3c | 非作者独立 review 并 merge **partial candidate infrastructure（PR #150）** | `PENDING` |
+| P0-I3d | 在 I3b-completion 闭合后重新选择正式 tested_commit 并复验隔离 VM | `PENDING`（依赖 I3b-completion） |
 
-No stage here produces formal raw, a Seal, a Runner decision, or `D13D_FROZEN`. The tested commit remains `PENDING_P0_I3_RESELECTION`.
+PR #150 只推进 I3a + I3b-infra 的候选基础设施合并，不产生 formal raw、Seal、attestation、
+Runner 结论或 `D13D_FROZEN`；Safety Gate-9 投影与 Forget 真实 dispatch 的闭合在独立
+follow-up（I3b-completion）完成后，才进入正式 I3d 与冻结流程。tested commit 保持
+`PENDING_P0_I3_RESELECTION`。
 
 ### 2026-09-06 PR #150 review round（codex 批次）
 
@@ -105,6 +109,19 @@ No stage here produces formal raw, a Seal, a Runner decision, or `D13D_FROZEN`. 
   在投影合同经 D13E 裁定前为 False 且不得视为完成（保持 CANDIDATE_PENDING_D13E_REVIEW/
   BLOCKED_PARTIAL，未读 Gold、未补零）。
 - 同步 18_ 验收文档、evaluation/d13e/README 的 raw 合同说明。
+
+### 2026-09-06 re-review round（Review HEAD 4a16cf6，第七轮 re-scope）
+
+- Reviewer 已确认关闭：Forget `forget_mode` schema BLOCKER；stateful/stateless 统一
+  execution receipt provenance HIGH。
+- 剩余唯一核心 BLOCKER 为 Safety Gate-9 projection（需 D13E 独立裁定 Gold-independent
+  规则，adapter 不得读 Gold/expected；改 Runner/Gold 需独立 D13E 变更与重新 Seal）。
+- 本 PR 按 Reviewer 提议 re-scope 为 **partial candidate infrastructure merge**：
+  合并范围 = I3a + I3b-infra；I3c merge gate 只针对该基础设施，不再宣称“complete
+  adapter”；Safety Gate-9 projection 与 Forget 真实 dispatch 登记为独立 follow-up
+  （I3b-completion），完成后才进入正式 I3d/冻结。
+- 集成测试对 Safety 保持显式 Gate-9 预期：safety-004=True；safety-001/002/003 在
+  D13E 裁定前为 False 且不得视为完成（未读 Gold、未补零）。
 
 ## Goal
 
