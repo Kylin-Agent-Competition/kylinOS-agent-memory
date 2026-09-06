@@ -1487,15 +1487,36 @@ def test_fts_observer_probe_realtime_rebuild(tmp_path):
     confirmed = (f"knowledge:{target}",)
     observer.probe_pre_delete(confirmed)  # pre-delete 必须命中
 
-    # 模拟 forget.execute：软删目标后先做 realtime（删除消费），再做 rebuild
+    # 模拟 forget.execute：软删目标
     with engine.begin() as conn:
         count, _ = repo.soft_delete_resolved_targets(
             conn, user_id="user_d13e_alpha", target_type="knowledge",
             resolved_target_ids=[str(target)], forget_plan_id="fts-plan",
         )
     assert count == 1
+    # 防自证回归：未消费 forget.executed 时，realtime 必须观察到 residual（不自行清理）
+    rt_no_ack = observer.realtime(confirmed)
+    report_no_ack = evaluate_forget_residual(
+        [rt_no_ack.sample], phase=ForgetResidualPhase.REALTIME_DELETE,
+        dataset_version=rt_no_ack.dataset_version,
+        source_snapshot_id=rt_no_ack.source_snapshot_id,
+        source_watermark=rt_no_ack.source_watermark,
+    )
+    assert report_no_ack.residual_target_count > 0, (
+        "deletion consumer 未 ACK 时不得自证已清理（HIGH-01）"
+    )
+    # 真实 forget.executed payload 经 FTS deletion-consumer 消费后再 realtime
+    observer.apply_deletion_payload(
+        {
+            "event_id": "evt-fts-plan",
+            "user_id": "user_d13e_alpha",
+            "forget_plan_id": "fts-plan",
+            "resolved_target_ids": [str(target)],
+            "version_ids": ["v1"],
+            "selection_hash": "sel",
+        }
+    )
     rt = observer.realtime(confirmed)
-    assert rt.sample.confirmed_target_ids == confirmed
     assert all(tid not in rt.sample.ranked_ids for tid in confirmed)
     rb = observer.rebuild(confirmed)
     assert all(tid not in rb.sample.ranked_ids for tid in confirmed)

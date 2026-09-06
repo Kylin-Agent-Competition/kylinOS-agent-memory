@@ -126,6 +126,8 @@ class D13DForgetFtsObserver:
         self._docs: Dict[str, _IndexedDoc] = {}
         self._fts: Optional[Fts5Index] = None
         self._initialized = False
+        self._realtime_generation = 0
+        self._rebuild_generation = 0
 
     # ── 构建/同步 ──
 
@@ -187,26 +189,59 @@ class D13DForgetFtsObserver:
             if not any(hit.memory_id == tagged_id for hit in found):
                 raise ValueError(f"pre-delete probe miss: {tagged_id}")
 
-    def realtime(self, confirmed: tuple[str, ...]) -> ForgetRetrievalObservation:
-        """execute + FTS 删除消费后的真实检索。"""
-        if not self._initialized:
+    def apply_deletion_payload(self, payload: Dict[str, Any]) -> None:
+        """真实 deletion-consumer（FTS 通道）：只消费真实 forget.executed payload。
+
+        解析 payload 的 resolved_target_ids（与 deletion_consumer 同口径）删除索引文档，
+        删除成功即该事件 ACK；绝不用 preview 的 confirmed 列表自行删索引。
+        """
+        if payload.get("user_id") != self._user_id:
+            raise ValueError("forget.executed user_id 与 observer user 不一致")
+        resolved = payload.get("resolved_target_ids") or []
+        version_ids = payload.get("version_ids")
+        if version_ids is not None and len(version_ids) != len(resolved):
+            raise ValueError("forget.executed version_ids 与 resolved_target_ids 长度不一致")
+        if not self._initialized or self._fts is None:
             raise ValueError("observer 必须先 initialize()")
-        assert self._fts is not None
-        for tagged_id in confirmed:
+        normalized: List[str] = []
+        for raw in resolved:
+            token = str(raw)
+            if ":" in token:
+                kind, _, num = token.partition(":")
+                if kind not in ("knowledge", "preference") or not num.isdecimal():
+                    raise ValueError(f"forget.executed 目标含未知 kind/非数字 id: {token!r}")
+                normalized.append(f"{kind}:{num}")
+            else:
+                normalized.append(f"knowledge:{token}")
+        for tagged_id in normalized:
             doc = self._docs.get(tagged_id)
             if doc is not None:
                 self._fts.delete(doc.tagged_id, doc.version_id, self._user_id)
+        self._realtime_generation += 1
+
+    def realtime(self, confirmed: tuple[str, ...]) -> ForgetRetrievalObservation:
+        """真实 deletion-consumer ACK 之后的真实检索（observer 不自行删索引）。"""
+        if not self._initialized:
+            raise ValueError("observer 必须先 initialize()")
+        assert self._fts is not None
         ranked = self._rank(self._fts, confirmed)
         return self._observation(
-            ForgetResidualPhase.REALTIME_DELETE, confirmed, ranked, "fts:realtime"
+            ForgetResidualPhase.REALTIME_DELETE,
+            confirmed,
+            ranked,
+            f"fts:{self._user_id}:realtime:g{self._realtime_generation}",
         )
 
     def rebuild(self, confirmed: tuple[str, ...]) -> ForgetRetrievalObservation:
-        """full rebuild 后真实检索（新索引代次）。"""
+        """full rebuild 后真实检索（新索引代次，代次由实际 rebuild 产生）。"""
+        self._rebuild_generation += 1
         fts = self._rebuild_fts()
         ranked = self._rank(fts, confirmed)
         return self._observation(
-            ForgetResidualPhase.REBUILD, confirmed, ranked, "fts:rebuild"
+            ForgetResidualPhase.REBUILD,
+            confirmed,
+            ranked,
+            f"fts:{self._user_id}:rebuild:g{self._rebuild_generation}",
         )
 
     # ── 内部 ──
@@ -237,6 +272,10 @@ class D13DForgetFtsObserver:
             confirmed_target_ids=confirmed,
             ranked_ids=ranked,
         )
+        generation = (
+            self._realtime_generation if phase == ForgetResidualPhase.REALTIME_DELETE
+            else self._rebuild_generation
+        )
         return ForgetRetrievalObservation(
             sample=sample,
             dataset_version="d13d-forget-v2",
@@ -246,10 +285,10 @@ class D13DForgetFtsObserver:
                     scope_id=f"user:{self._user_id}",
                     stream="forget_fts5",
                     partition="default",
-                    source_generation=phase.value,
+                    source_generation=snapshot_id,
                 ),
                 kind=WatermarkKind.MONOTONIC_INT,
-                value=1,
+                value=generation,
             ),
         )
 

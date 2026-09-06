@@ -28,7 +28,7 @@ import subprocess
 from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, text
 from db.schema import source_events
 
 from db.engine import create_db_engine, init_schema
@@ -1294,6 +1294,21 @@ def _tagged_confirmed(mode: str, resolved: list[str]) -> list[str]:
     return [f"knowledge:{rid}" for rid in resolved]
 
 
+def _load_forget_executed_payload(engine: Any, forget_plan_id: str) -> Optional[Dict[str, Any]]:
+    """读取 execute 同事务写入的真实 forget.executed outbox payload（路由真源）。"""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT payload FROM outbox "
+                "WHERE aggregate_type = 'forget' AND aggregate_id = :plan "
+                "AND event_type = 'forget.executed' ORDER BY id DESC LIMIT 1"
+            ),
+            {"plan": forget_plan_id},
+        ).mappings().first()
+    if row is None:
+        return None
+    return json.loads(row["payload"])
+
 def dispatch_forget_sample(
     validated: ValidatedExecution,
     sample_id: str,
@@ -1412,6 +1427,14 @@ def dispatch_forget_sample(
                 },
                 _ctx("forget.execute", f"d13d-execute-{sample_id}"),
             )
+        # HIGH-01：realtime 前必须先消费真实 forget.executed outbox（FTS deletion-consumer）。
+        # 缺 outbox / 消费失败 → fail-closed，realtime 不得自证已清理。
+        executed_payload = _load_forget_executed_payload(binding.engine, forget_plan_id)
+        if executed_payload is None:
+            raise ExecutionPreflightError(
+                "forget.executed outbox missing - deletion consumer cannot ACK"
+            )
+        observer.apply_deletion_payload(executed_payload)
         realtime_observation = observer.realtime(confirmed)
         rebuild_observation = observer.rebuild(confirmed)
         with binding.engine.connect() as conn:
