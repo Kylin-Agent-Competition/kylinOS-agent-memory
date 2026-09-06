@@ -149,6 +149,48 @@ def test_d7_rule_tool_selection():
     assert c.key == "tool_selection.preference"
 
 
+def test_d7_rule_explicit_tool_selection_marker_pref003():
+    """pref-003（d13e-pref-003）：不带“我偏好”前缀的显式工具选择句必须被抽取。
+
+    D/E 裁定 A（production behavior incorrect）：PREFERENCE_EXPLICIT_PATTERN
+    增加显式工具选择标记（优先使用/优先用/优先选择/首选/默认使用/默认用），
+    使完整 ExtractionProvider 不再对 "优先使用 git 命令行工具" false negative。
+    """
+    p = ExtractionProvider()
+    for text in ("优先使用 git 命令行工具", "优先用 git 命令行工具",
+                 "首选用浏览器打开文档", "默认使用命令行工具"):
+        cands = p.extract_preferences(
+            _turn(user_text=text, source_event_id="evt_pref003"))
+        assert len(cands) == 1, f"{text!r} 应抽取 1 个显式工具选择候选"
+        c = cands[0]
+        assert c.category == "tool_selection"
+        assert c.scope == "tool"
+        assert c.key == "tool_selection.preference"
+        assert c.is_temporary is False
+        assert c.should_persist is True
+        assert c.explicitness == "explicit"
+
+
+def test_d7_no_false_positive_for_bare_priority_marker():
+    """负向：裸“优先/先”+ 非工具选择内容不得被新增标记误抽取。"""
+    p = ExtractionProvider()
+    for text in ("优先保证安全，再执行操作", "优先考虑风险再决定",
+                 "先确保权限再执行"):
+        cands = p.extract_preferences(
+            _turn(user_text=text, source_event_id="evt_prefneg"))
+        assert cands == [], f"{text!r} 不应产生 PreferenceCandidate"
+
+
+def test_d7_no_false_positive_for_tool_selection_fact_or_description():
+    """Review MEDIUM-01：事实/配置/选项/方案描述含 marker 也不得产 candidate。"""
+    p = ExtractionProvider()
+    for text in ("系统默认使用 UTF-8 编码", "Git 默认使用 master 分支",
+                 "首选项是自动保存", "我们首选方案 A"):
+        cands = p.extract_preferences(
+            _turn(user_text=text, source_event_id="evt_preffact"))
+        assert cands == [], f"{text!r} 不应产生 PreferenceCandidate（事实/描述句）"
+
+
 def test_d7_rule_contract_signature_kept():
     """Day3 契约保持：extract_preferences(event) 单参数。"""
     p = ExtractionProvider()
