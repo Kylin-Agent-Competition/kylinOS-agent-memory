@@ -1,16 +1,22 @@
 # EVIDENCE INDEX — Carlton Kylin V11 Independent Host Validation
 
-> EVIDENCE_CLASS=INDEPENDENT_KYLIN_HOST_VALIDATION · NON_AUTHORITATIVE_FOR_D14D
+> EVIDENCE_CLASS=INDEPENDENT_KYLIN_HOST_VALIDATION · NON_AUTHORITATIVE_FOR_D14D · VERIFY_ONLY=YES
 > Source environment（全部 raw）: Carlton 银河麒麟 V11 x86_64 独立宿主
 > （VM `Kylin-Desktop-V11-2603-SDK`，VirtualBox 7.2.8r173730，Windows host SSH 抓取，只读源目录
-> `/mnt/c/Users/Carlton Benzol/Desktop/d14d-env-prepared-20260906-r2/`）
+> `/mnt/c/Users/Carlton Benzol/Desktop/d14d-env-prepared-20260906-r2/`，仅用于可选 source revalidation）
+
+## 自校验证据（控制器独立归档 TEST_EVIDENCE_PATHS）
+
+- 正向日志：`test_normal_package` / `test_missing_optional_source` / `test_raw_sha_baseline_and_manifest`（`VERIFY_MODE=READ_ONLY`、`AUTO_HEAL=DISABLED`、`RESEAL_IN_VERIFIER=DISABLED`、`MISSING_SOURCE_TEST=PASS`）
+- 负向日志：`test_missing_checksums`（REJECT/NO_REGENERATION）、`test_tampered_raw`（REJECT/NO_AUTO_HEAL）、`test_derived_drift`（REJECT/NO_REWRITE），均在 pytest `tmp_path` 副本执行并以 PASS 退出
+- 完整性日志：L1 全量 `-q -s`（`RAW_FILE_COUNT=10`、`RAW_SHA_UNCHANGED=PASS`、`CHECKSUM_VERIFY=PASS`、`JSON_VERIFY=PASS`）
 
 ## Raw 证据登记（失败证据必须登记）
 
 | Evidence ID | File | Type | Source Environment | Observed Fact | Result | SHA256（前 12 位，全文见 source_inventory.json / checksums.txt） | Limitation |
 |---|---|---|---|---|---|---|---|
 | EVID-CARLTON-R2-01 | raw/r2_clean_gate.log | Clean gate probe | Carlton Kylin V11 host | UTC=2026-09-06T07:51:42Z；hostname=Carlton-pc；user=Carlton；D14D_R2_CLEAN_STATE=PASS | PASS_RESULT_CAPTURED | ee9e83e4dc9b | exit code 未在 archived raw 记录 → NOT_CAPTURED_IN_ARCHIVED_RAW |
-| EVID-CARLTON-R2-02 | raw/r2_clean_gate_strict.log | Fail-closed strict clean probe | Carlton Kylin V11 host | UTC=2026-09-06T08:20:17Z；D14D_R2_CLEAN_FIND=ERROR；`find: '/home/Carlton/.box': Operation not permitted` | FAIL_CLOSED_ERROR_CAPTURED | 7fded644f2e1 | 不可验证区域 fail-closed 历史事件，不是工程通过证据；exit code 未记录 |
+| EVID-CARLTON-R2-02 | raw/r2_clean_gate_strict.log | Fail-closed strict clean probe | Carlton Kylin V11 host | UTC=2026-09-06T08:20:17Z；D14D_R2_CLEAN_FIND=ERROR；`find: '/home/Carlton/.box': Operation not permitted` | STRICT_PROBE_ERROR_CAPTURED | 7fded644f2e1 | 不可验证区域 fail-closed 历史事件，不是工程通过证据；verbatim output 已保存，但 command/script/exit code 未独立捕获；不得宣称 archived raw 证明 RC=2 |
 | EVID-CARLTON-R2-03 | raw/r2_dependencies.log | Dependency identity inventory | Carlton Kylin V11 host | SDK/runtime/model/subsystem/parser 目标包身份 + full package inventory；SDK SHA 028e7099… 与 D14A FROZEN §6 一致 | CAPTURED（identity 记录于 dependency_identity.json） | 0f1cfd1db598 | 仅 dpkg 可读状态；exit code 未记录；系统包计数不在本文件 |
 | EVID-CARLTON-R2-04 | raw/r2_environment.log | Environment identity | Carlton Kylin V11 host | UTC=2026-09-06T07:54:20Z；OS/kernel/python/systemd/root disk/包计数；ASCII identity 字段 | CAPTURED（identity 记录于 environment.json） | 8e5e898428c3 | 本地化 VERSION 行在 raw 中为 Windows SSH 抓取 mojibake，按字节保留，不作为身份门禁；系统包计数仅记录于 environment.json |
 | EVID-CARLTON-R2-05 | raw/r2_final_clean_gate.log | Allowlist-aware final clean probe | Carlton Kylin V11 host | UTC=2026-09-06T08:30:11Z；PATH=/home/Carlton/.box MODE=700 OWNER=Carlton GROUP=Carlton；EXACT_PATH_ONLY；7 个 ABSENT 的 D14A runtime path；D14D_R2_RUNTIME_PATH_STATE=PASS；HOME_FIND=PASS；ALLOWLIST_VALIDATED=PASS；CLEAN_STATE=PASS | ALLOWLIST_AWARE_PASS_RESULT_CAPTURED | dbbd708d7d24 | 覆盖 opaque home 子目录的 allowlist-aware 探针；exit code 未记录 |
@@ -30,9 +36,9 @@
 | evidence_scope.md | 可证明/不可证明清单 + authoritative r3 引用 + 混用禁令 |
 | source_inventory.json | 10 个 raw 的 relative_path/size_bytes/sha256（与实测一致） |
 | environment.json | raw/r2_environment.log + raw/r2_os-release.raw（ASCII identity 字段；系统包计数唯一位置） |
-| dependency_identity.json | raw/r2_dependencies.log（SDK-only MATCHES_D14A_FROZEN_SDK_IDENTITY；不含计数） |
+| dependency_identity.json | raw/r2_dependencies.log（SDK-only MATCHES_D14A_FROZEN_SDK_IDENTITY；size_bytes 分离到 sdk_size_bytes_provenance，不属 D14A frozen exact identity；不含计数） |
 | snapshot_identity.json | raw/r2_host_snapshot_identity.log、raw/r2_host_final_state.log、raw/r2_host_final_state_after_gate.log |
-| clean_state_summary.json | 上表 EVID-CARLTON-R2-01/02/05 + 3 个 diagnostic + runtime residue（7 事件时间序） |
+| clean_state_summary.json | 上表 EVID-CARLTON-R2-01/02/05 + 3 个 diagnostic + runtime residue（7 事件时间序；strict EPERM 记 STRICT_PROBE_ERROR_CAPTURED） |
 | provenance.json | 封存元数据（packaging HEAD/branch、计数、source/authoritative root、scope、limitations；created_at fail-closed） |
-| checksums.txt | 由 test_package_closure.py 基于当前文件集确定性生成（稳定排序，`<sha256>  <path>`） |
-| test_package_closure.py | 自校验闭环测试（证据包组成部分，纳入 checksums 闭环） |
+| checksums.txt | 由外部 one-off deterministic 命令在全部 derived 修改完成后按 `.gitattributes` 字节稳定 reseal（稳定排序，`<sha256>  <path>`）；verifier 只读校验（VERIFY_ONLY），缺失时 REJECT，不重新生成 |
+| test_package_closure.py | VERIFY_ONLY 只读自校验测试（证据包组成部分，纳入 checksums 闭环；含 6 个命名用例：normal / missing-optional-source / missing-checksums / tampered-raw / derived-drift / raw-sha-baseline，负向在 pytest tmp_path 副本执行） |

@@ -1,15 +1,15 @@
 # Evidence Scope — Carlton Kylin V11 Independent Host Validation
 
-> EVIDENCE_CLASS=INDEPENDENT_KYLIN_HOST_VALIDATION · NON_AUTHORITATIVE_FOR_D14D
+> EVIDENCE_CLASS=INDEPENDENT_KYLIN_HOST_VALIDATION · NON_AUTHORITATIVE_FOR_D14D · VERIFY_ONLY=YES
 > AUTHORITATIVE_D14D_PHASE0=NO · FORMAL_D14D_L3=NO · L3_READY=NO
 > HOST_VERIFIED_SCOPE=LIMITED_TO_RECORDED_FACTS · RELEASE_READY=NO · D13D_FROZEN=NO
 
 ## 可证明（raw 实际支持）
 
 1. 存在第二套真实 Kylin V11 x86_64 宿主身份：hostname=Carlton-pc、user=Carlton、uid/gid=1000、Kernel 6.6.0-63-generic、arch=x86_64、Python 3.12.3、systemd 255、KYLIN_RELEASE_ID=2603、VERSION_ID=v11。
-2. 已记录系统与依赖身份：SDK（libkylin-coreai-embedding 1.2.0.0-0k0.4 amd64，`.so` 路径/SONAME/SHA-256/size）、runtime（kylin-ai-runtime 1.2.0.4-0k0.1，binary SHA-256/size）、model（kylin-gte-base-model 1.0.0.1-0k0.9 all，ONNX 等 artifacts）、subsystem（1.2.0.0-0k0.3）、parser（NOT_INSTALLED）。
-3. SDK 冻结身份匹配：SDK SHA/版本/路径/SONAME 与 D14A FROZEN contract §6 精确一致（`MATCHES_D14A_FROZEN_SDK_IDENTITY`，仅 SDK）。
-4. 已记录 clean-state / snapshot observations：7 个 clean gate / diagnostic 事件时间序（含 strict fail-closed EPERM 历史事件与 allowlist-aware final PASS）；VBox 7.2.8r173730、VM `Kylin-Desktop-V11-2603-SDK`、snapshot `d14d-clean-base-20260906-r2` 及三个 capture 的 VMState/当前快照。
+2. 已记录系统与依赖身份：SDK（libkylin-coreai-embedding 1.2.0.0-0k0.4 amd64，`.so` 路径/SONAME/SHA-256；size=366624 为 Carlton raw host observation，额外匹配 authoritative D14D r3 host baseline，见 `sdk_size_bytes_provenance`）、runtime（kylin-ai-runtime 1.2.0.4-0k0.1，binary SHA-256/size）、model（kylin-gte-base-model 1.0.0.1-0k0.9 all，ONNX 等 artifacts）、subsystem（1.2.0.0-0k0.3）、parser（NOT_INSTALLED）。
+3. SDK 冻结身份匹配：SDK 版本/路径/SONAME/SHA-256 与 D14A FROZEN contract §6 精确一致（`MATCHES_D14A_FROZEN_SDK_IDENTITY`，仅 SDK；D14A frozen exact identity 不含 size_bytes）。
+4. 已记录 clean-state / snapshot observations：7 个 clean gate / diagnostic 事件时间序（含 strict fail-closed EPERM 历史事件，分类 `STRICT_PROBE_ERROR_CAPTURED`，与 allowlist-aware final PASS）；VBox 7.2.8r173730、VM `Kylin-Desktop-V11-2603-SDK`、snapshot `d14d-clean-base-20260906-r2` 及三个 capture 的 VMState/当前快照。
 5. 真实宿主适配旁证：Windows Desktop 作为采集渠道产生的真实抓取记录（含 mojibake 本地化文本，按字节保留）。
 
 ## 不可证明（超出本包范围）
@@ -20,7 +20,9 @@
 - final tested_commit、FINAL_P；
 - formal package hash、release/production ready；
 - D13D_FROZEN；
-- D14A final package runtime validation（本包仅封存既有身份与 clean-state 观测，不证明任何运行时行为）。
+- D14A final package runtime validation（本包仅封存既有身份与 clean-state 观测，不证明任何运行时行为）；
+- 自校验测试（WSL L0/L1，VERIFY_ONLY 只读）不是麒麟 Runtime Test，不产生任何 L2/L3 或 HOST_VERIFIED_SCOPE 之外的宿主验证结论；
+- archived raw 中未被独立捕获的 command/script/exit code（如 strict EPERM 探针的 RC=2）不可由本包证明。
 
 ## Authoritative root 与混用禁令
 

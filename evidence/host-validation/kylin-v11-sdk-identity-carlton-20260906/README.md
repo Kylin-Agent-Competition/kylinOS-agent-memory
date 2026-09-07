@@ -8,6 +8,7 @@
 - HOST_VERIFIED_SCOPE=LIMITED_TO_RECORDED_FACTS
 - RELEASE_READY=NO
 - D13D_FROZEN=NO
+- VERIFY_ONLY=YES（自校验测试为只读 fail-closed 校验，无 raw 修复、复制、heal、reseal 或任何写入能力）
 
 ## 本包是什么
 
@@ -30,12 +31,12 @@
 | Arch | x86_64 |
 | 主机身份 | hostname=Carlton-pc，user=Carlton，uid/gid=1000 |
 | Python / systemd | Python 3.12.3；systemd 255 (255.2-ok1.9k1.39) |
-| SDK | libkylin-coreai-embedding 1.2.0.0-0k0.4 amd64；`.so` `/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0`；SONAME `libkysdk-coreai-embedding.so.1`；SHA-256 `028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48`；size=366624 —— 与 D14A FROZEN contract §6 精确一致 → `MATCHES_D14A_FROZEN_SDK_IDENTITY`（仅 SDK） |
+| SDK | libkylin-coreai-embedding 1.2.0.0-0k0.4 amd64；`.so` `/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0`；SONAME `libkysdk-coreai-embedding.so.1`；SHA-256 `028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48` —— 与 D14A FROZEN contract §6 精确一致 → `MATCHES_D14A_FROZEN_SDK_IDENTITY`（仅 SDK；D14A frozen exact identity 仅含 package_version / canonical .so path / SONAME / SHA-256）；size=366624 为 Carlton raw host observation，额外匹配 authoritative D14D r3 host baseline（详见 dependency_identity.json `sdk_size_bytes_provenance`） |
 | Runtime | kylin-ai-runtime 1.2.0.4-0k0.1 amd64；`/usr/bin/kylin-ai-runtime` SHA-256 `b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225`、size=3174000 |
 | Model | kylin-gte-base-model 1.0.0.1-0k0.9 all；ONNX `/usr/share/kylin-ai/model-repository/embd_gte-base_uint8-text/1/gte-base-multilingual-model_QUInt8.onnx` SHA-256 `cef0fc76165ee5bb4f3da5ab6b9b6e6fdfdd278d3077f2db2d4a6cde4d4c32b1` 等 artifacts（完整列表见 raw） |
 | Subsystem / parser | kylin-ai-subsystem 1.2.0.0-0k0.3 amd64；kylin-ai-parser-extension NOT_INSTALLED（与 authoritative r3 的 1.3.0.1 / 1.2.0.0-0k0.4 差异如实保留） |
 | Snapshot / VM identity | VBox 7.2.8r173730；VM `Kylin-Desktop-V11-2603-SDK` UUID `23a31c42-63bb-482f-8856-e8a9f04176c8`；snapshot `d14d-clean-base-20260906-r2` UUID `b2af169e-8bfc-46a8-9120-6348095eccf3` |
-| Clean-state observation | raw 中按真实时间顺序记录 7 个 clean gate / diagnostic 事件（初始 clean PASS、runtime residue PASS、strict fail-closed EPERM 历史事件、allowlist-aware final PASS、3 个 diagnostic）；strict EPERM 是不可验证区域的 fail-closed 历史事件，不是工程通过证据；所有 raw 未记录的 exit code 一律 `NOT_CAPTURED_IN_ARCHIVED_RAW`，未记录时间写 `NOT_CAPTURED` |
+| Clean-state observation | raw 中按真实时间顺序记录 7 个 clean gate / diagnostic 事件（初始 clean PASS、runtime residue PASS、strict fail-closed EPERM 历史事件、allowlist-aware final PASS、3 个 diagnostic）；strict EPERM 是不可验证区域的 fail-closed 历史事件（`STRICT_PROBE_ERROR_CAPTURED`），不是工程通过证据；allowlist probe 只保存 verbatim output，其 command/script/exit code 未被 archived raw 独立捕获，不得宣称 archived raw 证明 RC=2；所有 raw 未记录的 exit code 一律 `NOT_CAPTURED_IN_ARCHIVED_RAW`，未记录时间写 `NOT_CAPTURED` |
 | 环境包计数 | 系统包计数记录于 environment.json（唯一位置），来源 raw/r2_environment.log |
 
 原始 raw 均为不可修改的事实来源：执行退出码在 raw 中未记录时不得推断为 0。
@@ -62,11 +63,19 @@ evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/
 ├── clean_state_summary.json      # 7 个 clean gate/diagnostic 事件时间序整理
 ├── provenance.json               # 封存元数据（fail-closed 时间戳等）
 ├── checksums.txt                 # 除自身外全部 regular files 的 SHA-256（稳定排序）
-├── test_package_closure.py       # 自校验闭环测试（证据包组成部分）
+├── test_package_closure.py       # VERIFY_ONLY 只读自校验测试（证据包组成部分）
 └── raw/                          # 10 个 byte-for-byte 源文件
 ```
 
-## 封存完整性自校验
+## VERIFY_ONLY 封存完整性自校验
+
+本包自校验是**只读 fail-closed** 验证（`VERIFY_MODE=READ_ONLY`、`AUTO_HEAL=DISABLED`、`RESEAL_IN_VERIFIER=DISABLED`）：
+
+- `test_package_closure.py` 的 verifier 源码经 AST/标识符自检证明不含 `write_bytes` / `write_text` / `mkdir` / `unlink` / `rename` / `replace` / `copy` / 任何 `open` 写模式，也没有 seal/repair/heal 路径，因此**无法**修改本包；
+- `checksums.txt` 必须已存在：缺失时 REJECT（不重新生成，reseal 只能由外部 one-off deterministic 命令在全部 derived 修改完成后执行，绝不进入 verifier）；
+- raw 缺失或哈希不符时 REJECT（不 auto-heal、不自动采用新哈希）；raw 的 SHA 必须始终等于 `SOURCE_SHA256_EXPECTED` / `source_inventory.json`（`ddd8d30` 封存 commit 基线）；
+- 任一 derived 内容漂移、checksum 漂移或 unexpected regular file 时 REJECT（不重写）；
+- `SOURCE_EVIDENCE_ROOT` 仅用于可选 source revalidation，缺失时 repository verification 仍 PASS（`MISSING_SOURCE_TEST=PASS`）。
 
 在**证据包根目录**（`evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/`）执行：
 
@@ -80,15 +89,17 @@ sha256sum -c checksums.txt
 sha256sum --directory evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906 -c checksums.txt
 ```
 
-自校验测试（L0 与 L1 使用同一命令，退出码必须为 0，无 skip）：
+6 个命名 pytest 用例（各自可被 `-k` 独立选择，退出码必须为 0，无 skip），负向用例在 pytest `tmp_path` 副本执行、绝不触碰正式 evidence root；`-s` 输出 PASS/REJECT/NO_REGENERATION/NO_AUTO_HEAL/NO_REWRITE 标记，交由控制器分别独立归档为正向、负向、完整性 TEST_EVIDENCE_PATHS：
 
 ```bash
-python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q
+python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q -s -k test_normal_package
+python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q -s -k test_missing_optional_source
+python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q -s -k test_missing_checksums
+python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q -s -k test_tampered_raw
+python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q -s -k test_derived_drift
+python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q -s -k test_raw_sha_baseline_and_manifest
+python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q -s
 ```
-
-- 首封存：checksums.txt 缺失时由一次 pytest 运行确定性生成；
-- 只读验证：checksums.txt 存在时后续 pytest 运行只验证，任何内容漂移一律 FAIL（不静默改写）；
-- raw 缺失或哈希不符时，测试从只读源目录以 bytes 模式复制并断言 源 SHA == SOURCE_SHA256_EXPECTED == 目标 SHA，源不可达或哈希不符则 FAIL（fail-closed，不自动采用新哈希）。
 
 ## Limitations
 
@@ -96,8 +107,9 @@ python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-202609
 2. 本包不是 authoritative D14D Phase0，不替代 `evidence/phase0/d14d-env-prepared-20260906-r3/`。
 3. raw 中部分本地化文本为 Windows SSH 抓取产生的 mojibake，已按字节保留在 raw/；派生 JSON 只使用 ASCII identity 字段，不把乱码当身份门禁。
 4. 所有 raw 未记录的 exit code 一律 `NOT_CAPTURED_IN_ARCHIVED_RAW`（时间 `NOT_CAPTURED`），禁止推断为 0。
-5. strict EPERM 事件（`find: '/home/Carlton/.box': Operation not permitted`）是 fail-closed 历史事件，不是工程通过证据。
-6. runtime/model/subsystem/parser 按 raw+contract 状态写 host baseline，不声明 FROZEN；SDK-only 的 `MATCHES_D14A_FROZEN_SDK_IDENTITY` 见 dependency_identity.json。
+5. strict EPERM 事件（`find: '/home/Carlton/.box': Operation not permitted`）是 fail-closed 历史事件（`STRICT_PROBE_ERROR_CAPTURED`），不是工程通过证据；allowlist probe 只保存 verbatim output，其 command/script/exit code 未被 archived raw 独立捕获，不得宣称 archived raw 证明 RC=2。
+6. runtime/model/subsystem/parser 按 raw+contract 状态写 host baseline，不声明 FROZEN；SDK-only 的 `MATCHES_D14A_FROZEN_SDK_IDENTITY` 与 size provenance 分离口径见 dependency_identity.json（size_bytes 为 Carlton raw host observation，额外匹配 authoritative D14D r3 host baseline，不属于 D14A frozen exact identity）。
 7. 本任务不存在受控注入的证据化 packaging 时间戳，provenance.json `created_at_utc` 按 fail-closed 标记为 `NOT_CAPTURED_IN_PACKAGING_LOG`。
 8. 无 final tested_commit / FINAL_P / formal package hash / release-ready 声明。
 9. 系统包计数仅记录于 environment.json（来源 raw/r2_environment.log），不属于依赖身份文件。
+10. 自校验测试为 VERIFY_ONLY 只读校验（WSL L0/L1，`VERIFY_MODE=READ_ONLY`），不是麒麟 Runtime Test，不构成 L2/L3 或任何 HOST_VERIFIED_SCOPE 之外的宿主验证结论；正向/负向/完整性 pytest 日志由控制器独立归档为 TEST_EVIDENCE_PATHS。

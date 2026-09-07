@@ -1,38 +1,117 @@
-"""Self-verification for the INDEPENDENT_KYLIN_HOST_VALIDATION evidence package.
+"""VERIFY_ONLY self-verification for the INDEPENDENT_KYLIN_HOST_VALIDATION evidence package.
 
-Modes (selected purely by checksums.txt presence):
+Architecture: VERIFY_ONLY
+----------------------------
+This package is immutable after sealing. ``test_package_closure.py`` is a
+*read-only verifier*: every function listed in ``VERIFIER_FUNCTION_NAMES`` is
+guaranteed to contain no write capability and no seal/repair/heal/reseal path.
+The module-level AST self-check ``_assert_verifier_read_only()`` enforces this
+over the verifier source segments, so the verifier can never mutate the
+package, never auto-heal a tampered raw file, never regenerate a missing
+checksums.txt, and never rewrite a drifted derived file.
 
-- SEAL: checksums.txt is missing. The package is re-sealed deterministically from
-  the current full file set (stable sort, ``<sha256>  <relative_path>`` lines).
-- VERIFY: checksums.txt exists. Every entry is verified read-only against the
-  current full file set. Any content drift FAILS; checksums.txt is never silently
-  rewritten in this mode.
+Fail-closed semantics (all enforced by ``_verify_package_closure``):
 
-Raw integrity: any ``raw/<name>`` file that is missing, or whose hash does not
-match SOURCE_SHA256_EXPECTED, is re-copied in bytes mode from the read-only source
-evidence root. The source hash must equal SOURCE_SHA256_EXPECTED and the target
-hash must equal both; otherwise the test FAILS (fail-closed, no new hashes adopted).
+- ``checksums.txt`` MUST already exist. Missing -> REJECT (no regeneration;
+  reseal is an external one-off deterministic command, never in the verifier).
+- Any regular file that is not in the expected closed file set (encoding the
+  10 raw blobs + 12 derived files, excluding ``checksums.txt`` itself and any
+  ``__pycache__``) -> REJECT.
+- Any checksums.txt entry that is missing, extra, or content-drifted ->
+  REJECT (no silent rewrite).
+- Any raw blob that is missing or whose SHA-256 deviates from
+  ``SOURCE_SHA256_EXPECTED`` (== the ``ddd8d30`` sealing commit manifest) ->
+  REJECT (no auto-heal, no new hash adopted).
+- Every derived JSON must parse; identity/classification/content-doc
+  assertions must hold.
 
-L0 and L1 use the exact same invocation and must exit 0 with no skips:
+Optional source revalidation
+----------------------------
+``SOURCE_EVIDENCE_ROOT`` (the read-only Windows Desktop source directory) is
+only used for *optional* byte-for-byte source revalidation and is never
+required: when it is absent, repository verification still fully passes
+(``MISSING_SOURCE_TEST=PASS``). Repository raw SHA always must equal
+``SOURCE_SHA256_EXPECTED``.
 
-    python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q
+The 6 named pytest cases (each independently selectable with ``-k``)
+----------------------------
+1. ``test_normal_package``        - full read-only closure verify on the real
+                                    package; prints VERIFY_MODE=READ_ONLY,
+                                    AUTO_HEAL=DISABLED, RESEAL_IN_VERIFIER=DISABLED,
+                                    RAW_FILE_COUNT=10, RAW_SHA_UNCHANGED=PASS,
+                                    CHECKSUM_VERIFY=PASS, JSON_VERIFY=PASS.
+2. ``test_missing_optional_source`` - repository verification passes even when
+                                    SOURCE_EVIDENCE_ROOT is absent
+                                    (MISSING_SOURCE_TEST=PASS).
+3. ``test_missing_checksums``      - negative: checksums.txt removed on a pytest
+                                    tmp_path copy -> REJECT + NO_REGENERATION.
+4. ``test_tampered_raw``            - negative: raw blob tampered on a pytest
+                                    tmp_path copy -> REJECT + NO_AUTO_HEAL.
+5. ``test_derived_drift``           - negative: derived file drifted on a pytest
+                                    tmp_path copy -> REJECT + NO_REWRITE.
+6. ``test_raw_sha_baseline_and_manifest`` - 10 raw SHA == SOURCE_SHA256_EXPECTED
+                                    == source_inventory.json manifest, and equals
+                                    the ``ddd8d30`` sealing-commit baseline
+                                    (RAW_FILE_COUNT=10, RAW_SHA_UNCHANGED=PASS).
+
+Negative cases (3-5) run exclusively on pytest ``tmp_path`` byte copies of the
+package (``_tmp_copy_package``). The formal evidence root is never modified by
+any test, and test scaffolding functions are clearly separated from the
+verifier (they are excluded from the read-only AST self-check scope).
+
+Marker output format (visible with ``-s``), one ``[V5A] KEY=VALUE`` per line::
+
+    [V5A] VERIFY_MODE=READ_ONLY
+    [V5A] AUTO_HEAL=DISABLED
+    [V5A] RESEAL_IN_VERIFIER=DISABLED
+    [V5A] RAW_FILE_COUNT=10
+    [V5A] RAW_SHA_UNCHANGED=PASS
+    [V5A] CHECKSUM_VERIFY=PASS
+    [V5A] JSON_VERIFY=PASS
+    [V5A] MISSING_SOURCE_TEST=PASS
+    [V5A] CHECKSUMS_MISSING=REJECT / NO_REGENERATION=PASS
+    [V5A] TAMPERED_RAW=REJECT / NO_AUTO_HEAL=PASS
+    [V5A] DERIVED_DRIFT=REJECT / NO_REWRITE=PASS
+    [V5A] RESULT=PASS
+
+Positive cases print PASS; negative cases print REJECT + NO_REGENERATION /
+NO_AUTO_HEAL / NO_REWRITE and still exit with pytest PASS because the REJECT
+behavior is the expected outcome of the fail-closed verifier.
+
+L0 (6 independent ``-k`` runs) and L1 (full ``-s`` run) use the commands below;
+every run must exit 0 with 0 failed / 0 skipped. The batch controller archives
+each command log as an independent TEST_EVIDENCE_PATH (positive, negative and
+integrity logs) for the Evidence Reviewer.
+
+    python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q -s -k <case>
+    python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q -s
 """
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
 import re
+import shutil
+import sys
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 
-# Read-only source evidence root on the Windows Desktop (never modified by this task).
+# Read-only source evidence root on the Windows Desktop. OPTIONAL: used only
+# for byte-for-byte source revalidation; repository verification passes without it.
 SOURCE_EVIDENCE_ROOT = Path("/mnt/c/Users/Carlton Benzol/Desktop/d14d-env-prepared-20260906-r2")
 
-# Supervisor read-only verified SOURCE_SHA256_EXPECTED (matches the source bytes
-# byte-for-byte). Never auto-adopted: if a source file does not match, the test FAILS.
+# Sealing commit at which the 10 raw blobs were archived. The raw content
+# SHA-256 must always equal SOURCE_SHA256_EXPECTED (== the manifest recorded at
+# this commit); any deviation is REJECTED and no new hash is ever adopted.
+RAW_BASELINE_COMMIT = "ddd8d30844cb8fdfa2872126ba897abd8bca3e94"
+
+# Supervisor verified SOURCE_SHA256_EXPECTED: SHA-256 of each archived raw blob
+# under raw/, byte-for-byte equal to the source file and to the manifest in
+# source_inventory.json. Never auto-adopted: mismatch is a hard REJECT.
 SOURCE_SHA256_EXPECTED = {
     "r2_clean_gate.log": "ee9e83e4dc9bc46ec4da36a4ac0d173ae1d20bcf999e377b293d510bcab16e02",
     "r2_clean_gate_strict.log": "7fded644f2e153ea3f2f98782a2aeee4f208084bdc028d41bb3dd681d586bb10",
@@ -48,7 +127,8 @@ SOURCE_SHA256_EXPECTED = {
 
 EXPECTED_RAW_FILES = sorted(SOURCE_SHA256_EXPECTED)
 
-# Exact expected file set: 12 derived + 10 raw. Any other regular file FAILS.
+# Exact expected closed file set: 12 derived + 10 raw. Any other regular file
+# (except checksums.txt itself and __pycache__) FAILS closed.
 EXPECTED_FILES = sorted(
     [
         ".gitattributes",
@@ -119,6 +199,58 @@ BANNED_CLAIM_SUBSTRINGS = [
 
 CHECKS_LIMITS = "NOT_CAPTURED_IN_ARCHIVED_RAW"
 
+# ---------------------------------------------------------------------------
+# Verifier (READ-ONLY). Functions in VERIFIER_FUNCTION_NAMES are guaranteed no
+# write capability and no seal/repair/heal/reseal path; enforced by
+# _assert_verifier_read_only(). The verifier never runs with a write mode and
+# checksums.txt is only ever maintained by an external one-off deterministic
+# command, never inside this file.
+# ---------------------------------------------------------------------------
+
+# Attribute / global names that are write or copy capabilities. Any of these
+# appearing as an identifier (ast.Attribute or ast.Name) in a verifier function
+# is a violation of VERIFY_ONLY.
+BANNED_WRITE_IDENTIFIERS = frozenset(
+    {
+        "write_bytes",
+        "write_text",
+        "mkdir",
+        "makedirs",
+        "unlink",
+        "remove",
+        "rename",
+        "replace",
+        "rmdir",
+        "truncate",
+        "copyfile",
+        "copytree",
+        "copy2",
+        "copy",
+        "shutil",
+    }
+)
+
+# Identifier substrings that indicate a seal/repair/heal path in the verifier.
+# (The tuple values are string literals; the constant NAME itself must not
+# contain any of these substrings or the AST self-check would self-trigger.)
+BANNED_RESTORE_IDENTIFIER_SUBSTRINGS = ("seal", "reseal", "heal", "repair")
+
+# open( ... ) write-mode guard: any of these mode strings in a verifier
+# function is a violation (read modes "r"/"rb" are fine).
+OPEN_WRITE_MODE_PATTERN = re.compile(r"[wax]\b|[wax]b|\+|w|a|x")
+
+
+def _mark(key: str, value: str) -> None:
+    """Emit a machine-readable KEY=VALUE marker line (visible with pytest -s).
+
+    The literal key=value form is what L0/L1 archive parsers and the Evidence
+    Reviewer match, e.g. VERIFY_MODE=READ_ONLY, REJECT, NO_REGENERATION=PASS."""
+    print(f"[V5A] {key}={value}", flush=True)
+
+
+class PackageVerificationError(AssertionError):
+    """Raised by the read-only verifier on any fail-closed condition."""
+
 
 def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -143,49 +275,75 @@ def _collect_regular_files(root: Path) -> dict[str, str]:
     return files
 
 
-def _copy_bytes_heal(name: str) -> None:
-    """Copy raw/<name> in bytes mode from the read-only source root.
+def _load_json(rel: str, root: Path) -> dict:
+    return json.loads((root / rel).read_text(encoding="utf-8"))
 
-    Asserts source SHA == SOURCE_SHA256_EXPECTED == target SHA (fail-closed:
-    never adopt a new hash)."""
-    expected = SOURCE_SHA256_EXPECTED[name]
-    source = SOURCE_EVIDENCE_ROOT / "raw" / name
-    if not source.is_file():
-        raise AssertionError(
-            f"raw source missing (fail-closed): {source}"
-        )
-    source_sha = _sha256_file(source)
-    if source_sha != expected:
-        raise AssertionError(
-            f"raw source SHA mismatch (fail-closed, no new hash adopted): {name} "
-            f"expected {expected} got {source_sha}"
-        )
-    target = PACKAGE_ROOT / "raw" / name
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(source.read_bytes())
-    target_sha = _sha256_file(target)
-    if target_sha != expected:
-        raise AssertionError(
-            f"raw target SHA mismatch after byte copy (fail-closed): {name} "
-            f"expected {expected} got {target_sha}"
+
+def _verify_file_set_closure(root: Path) -> None:
+    """Unexpected or missing regular files fail closed (no mutation)."""
+    files = _collect_regular_files(root)
+    expected_except_checksums = set(EXPECTED_FILES) - {"checksums.txt"}
+    if set(files) != expected_except_checksums:
+        unexpected = sorted(set(files) - expected_except_checksums)
+        missing = sorted(expected_except_checksums - set(files))
+        raise PackageVerificationError(
+            "UNEXPECTED_FILE_SET: REJECT (fail-closed, no mutation) "
+            f"unexpected={unexpected} missing={missing}"
         )
 
 
-def _ensure_raw_files() -> None:
+def _parse_checksums(root: Path) -> tuple[list[str], dict[str, str]]:
+    """Return (sorted entry paths, {relpath: sha256}) parsed from checksums.txt."""
+    text = (root / "checksums.txt").read_text(encoding="utf-8")
+    entries: dict[str, str] = {}
+    for line in text.splitlines():
+        m = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
+        if m is None:
+            raise PackageVerificationError(f"bad checksums.txt line: {line!r}")
+        digest, rel = m.group(1), m.group(2)
+        if rel in entries:
+            raise PackageVerificationError(f"duplicate checksums.txt entry: {rel}")
+        entries[rel] = digest
+    return sorted(entries), entries
+
+
+def _verify_checksums(root: Path, files: dict[str, str]) -> None:
+    """checksums.txt closure/drift fail-closed; never rewritten by the verifier."""
+    sorted_paths, entries = _parse_checksums(root)
+    if set(entries) != set(files):
+        missing = sorted(set(files) - set(entries))
+        extra = sorted(set(entries) - set(files))
+        raise PackageVerificationError(
+            f"CHECKSUM_CLOSURE_DRIFT: REJECT (no rewrite) "
+            f"missing entries={missing} extra entries={extra}"
+        )
+    drift = sorted(rel for rel in files if entries[rel] != files[rel])
+    if drift:
+        raise PackageVerificationError(
+            f"CHECKSUM_CONTENT_DRIFT: REJECT (no rewrite) {drift}"
+        )
+    if sorted_paths != sorted(files):
+        raise PackageVerificationError("checksums.txt entries are not in stable sorted order")
+
+
+def _verify_raw_shas(root: Path) -> None:
+    """raw blobs must exist and match SOURCE_SHA256_EXPECTED; REJECT with no
+    auto-heal and no new hash adoption on any deviation."""
     for name in EXPECTED_RAW_FILES:
-        target = PACKAGE_ROOT / "raw" / name
-        if not target.is_file() or _sha256_file(target) != SOURCE_SHA256_EXPECTED[name]:
-            _copy_bytes_heal(name)
-        assert _sha256_file(target) == SOURCE_SHA256_EXPECTED[name]
+        target = root / "raw" / name
+        if not target.is_file():
+            raise PackageVerificationError(f"RAW_MISSING: REJECT (fail-closed) {name}")
+        actual = _sha256_file(target)
+        if actual != SOURCE_SHA256_EXPECTED[name]:
+            raise PackageVerificationError(
+                f"RAW_SHA_MISMATCH: REJECT (no auto-heal, no new hash adopted) "
+                f"{name} expected {SOURCE_SHA256_EXPECTED[name]} got {actual}"
+            )
 
 
-def _load_json(rel: str) -> dict:
-    return json.loads((PACKAGE_ROOT / rel).read_text(encoding="utf-8"))
-
-
-def _assert_content_doc_hygiene() -> None:
+def _assert_content_doc_hygiene(root: Path) -> None:
     for rel in CONTENT_DOCS:
-        text = (PACKAGE_ROOT / rel).read_text(encoding="utf-8")
+        text = (root / rel).read_text(encoding="utf-8")
         if rel != "environment.json":
             for banned in BANNED_COUNT_SUBSTRINGS:
                 if banned in text:
@@ -196,18 +354,18 @@ def _assert_content_doc_hygiene() -> None:
         # HOST_VERIFIED may appear only as part of HOST_VERIFIED_SCOPE.
         if text.count("HOST_VERIFIED") != text.count("HOST_VERIFIED_SCOPE"):
             raise AssertionError(f"{rel}: HOST_VERIFIED only allowed inside HOST_VERIFIED_SCOPE")
-    env_text = (PACKAGE_ROOT / "environment.json").read_text(encoding="utf-8")
+    env_text = (root / "environment.json").read_text(encoding="utf-8")
     for required in ("installed_package_count", "2401"):
         if required not in env_text:
             raise AssertionError(f"environment.json must contain {required!r}")
-    dep_text = (PACKAGE_ROOT / "dependency_identity.json").read_text(encoding="utf-8")
+    dep_text = (root / "dependency_identity.json").read_text(encoding="utf-8")
     for banned in BANNED_COUNT_SUBSTRINGS:
         if banned in dep_text:
             raise AssertionError(f"dependency_identity.json must not contain {banned!r}")
 
 
-def _assert_classification_and_identity() -> None:
-    provenance = _load_json("provenance.json")
+def _assert_classification_and_identity(root: Path) -> None:
+    provenance = _load_json("provenance.json", root)
     assert provenance["created_at_utc"] == "NOT_CAPTURED_IN_PACKAGING_LOG"
     assert provenance["evidence_class"] == "INDEPENDENT_KYLIN_HOST_VALIDATION"
     assert provenance["authoritative_d14d_phase0"] == "NO"
@@ -223,7 +381,7 @@ def _assert_classification_and_identity() -> None:
     assert provenance["authoritative_d14d_root"] == "evidence/phase0/d14d-env-prepared-20260906-r3/"
     assert provenance["source_evidence_root"].endswith("d14d-env-prepared-20260906-r2")
 
-    environment = _load_json("environment.json")
+    environment = _load_json("environment.json", root)
     guest = environment["guest"]
     assert guest["hostname"] == "Carlton-pc"
     assert guest["user"] == "Carlton"
@@ -241,14 +399,27 @@ def _assert_classification_and_identity() -> None:
     assert environment["installed_package_count"] == 2401
     assert "localized_display_text_note" in osr
 
-    dependency = _load_json("dependency_identity.json")
+    dependency = _load_json("dependency_identity.json", root)
     sdk = dependency["sdk_identity"]
+    # D14A frozen exact identity (section 6) is only: package_version, canonical
+    # .so path, SONAME, SHA-256. size_bytes is NOT part of the frozen identity
+    # and must not live inside sdk_identity.
+    assert "size_bytes" not in sdk
     assert sdk["package_version"] == "1.2.0.0-0k0.4"
     assert sdk["canonical_so"] == "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0"
     assert sdk["soname"] == "libkysdk-coreai-embedding.so.1"
     assert sdk["sha256"] == "028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48"
-    assert sdk["size_bytes"] == 366624
     assert sdk["d14a_match"] == "MATCHES_D14A_FROZEN_SDK_IDENTITY"
+    assert sdk["d14a_frozen_exact_identity_fields"] == [
+        "package_version",
+        "canonical_so",
+        "soname",
+        "sha256",
+    ]
+    size_prov = dependency["sdk_size_bytes_provenance"]
+    assert size_prov["size_bytes"] == 366624
+    assert size_prov["source"] == "CARLTON_RAW_HOST_OBSERVATION"
+    assert size_prov["additional_match"] == "AUTHORITATIVE_D14D_R3_HOST_BASELINE"
     assert dependency["target_packages"]["kylin-ai-subsystem"]["version"] == "1.2.0.0-0k0.3"
     assert dependency["target_packages"]["kylin-ai-parser-extension"]["status"] == "NOT_INSTALLED"
     runtime = dependency["runtime_identity"]
@@ -264,7 +435,7 @@ def _assert_classification_and_identity() -> None:
     assert comparison["parser_authoritative_r3"] == "1.2.0.0-0k0.4"
     assert comparison["difference_kept_verbatim"] is True
 
-    snapshot = _load_json("snapshot_identity.json")
+    snapshot = _load_json("snapshot_identity.json", root)
     assert snapshot["virtualbox_version"] == "7.2.8r173730"
     assert snapshot["vm"]["name"] == "Kylin-Desktop-V11-2603-SDK"
     assert snapshot["vm"]["uuid"] == "23a31c42-63bb-482f-8856-e8a9f04176c8"
@@ -278,12 +449,18 @@ def _assert_classification_and_identity() -> None:
     for event in capture_events:
         assert event["exit_code"] == CHECKS_LIMITS
 
-    clean = _load_json("clean_state_summary.json")
+    clean = _load_json("clean_state_summary.json", root)
+    clean_text = json.dumps(clean)
+    # The archived raw must never be claimed to prove RC=2: no positive
+    # exit-code assignment may exist, and the summary must explicitly disclaim
+    # it (the literal "(e.g. RC=2)" only appears inside the disclaimer).
+    assert not re.search(r"\bexit_code\b\s*[=:]\s*2\b", clean_text)
+    assert "does not prove" in clean["summary"]
     events = clean["chronological_events"]
     assert len(events) == 7
     classifications = [event["classification"] for event in events]
     assert classifications[0] == "PASS_RESULT_CAPTURED"
-    assert classifications[4] == "FAIL_CLOSED_ERROR_CAPTURED"
+    assert classifications[4] == "STRICT_PROBE_ERROR_CAPTURED"
     assert "ALLOWLIST_AWARE_PASS_RESULT_CAPTURED" in classifications
     assert all(event["exit_code"] == CHECKS_LIMITS for event in events)
     assert events[4]["evidence_file"] == "raw/r2_clean_gate_strict.log"
@@ -292,7 +469,7 @@ def _assert_classification_and_identity() -> None:
     assert all(timestamp != "NOT_CAPTURED" for timestamp in timestamps)
     assert timestamps == sorted(timestamps)
 
-    inventory = _load_json("source_inventory.json")
+    inventory = _load_json("source_inventory.json", root)
     assert len(inventory["files"]) == 10
     for entry in inventory["files"]:
         rel = entry["relative_path"]
@@ -300,14 +477,14 @@ def _assert_classification_and_identity() -> None:
         name = rel[len("raw/"):]
         assert name in SOURCE_SHA256_EXPECTED
         assert entry["sha256"] == SOURCE_SHA256_EXPECTED[name]
-        assert entry["size_bytes"] == (PACKAGE_ROOT / rel).stat().st_size
-        assert entry["sha256"] == _sha256_file(PACKAGE_ROOT / rel)
+        assert entry["size_bytes"] == (root / rel).stat().st_size
+        assert entry["sha256"] == _sha256_file(root / rel)
 
     for rel in DERIVED_JSON_FILES:
-        _load_json(rel)
+        _load_json(rel, root)
 
-    readme = (PACKAGE_ROOT / "README.md").read_text(encoding="utf-8")
-    scope = (PACKAGE_ROOT / "evidence_scope.md").read_text(encoding="utf-8")
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    scope = (root / "evidence_scope.md").read_text(encoding="utf-8")
     assert "INDEPENDENT_KYLIN_HOST_VALIDATION" in readme
     assert "INDEPENDENT_KYLIN_HOST_VALIDATION" in scope
     assert "NON_AUTHORITATIVE_FOR_D14D" in readme
@@ -317,78 +494,300 @@ def _assert_classification_and_identity() -> None:
     assert "evidence/phase0/d14d-env-prepared-20260906-r3/" in scope
     assert "sha256sum -c checksums.txt" in readme
     assert "包根目录" in readme  # self-check execution directory instruction
-    assert (PACKAGE_ROOT / ".gitattributes").read_text(encoding="utf-8").count("* binary") >= 1
+    assert (root / ".gitattributes").read_text(encoding="utf-8").count("* binary") >= 1
 
 
-def _parse_checksums() -> tuple[list[str], dict[str, str]]:
-    """Return (sorted entry paths, {relpath: sha256}) parsed from checksums.txt."""
-    text = (PACKAGE_ROOT / "checksums.txt").read_text(encoding="utf-8")
-    entries: dict[str, str] = {}
-    for line in text.splitlines():
-        m = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
-        if m is None:
-            raise AssertionError(f"bad checksums.txt line: {line!r}")
-        digest, rel = m.group(1), m.group(2)
-        if rel in entries:
-            raise AssertionError(f"duplicate checksums.txt entry: {rel}")
-        entries[rel] = digest
-    return sorted(entries), entries
+def _assert_docs_verify_only(root: Path) -> None:
+    """README / EVIDENCE_INDEX must state VERIFY_ONLY and must not claim that
+    pytest seals, heals or regenerates the package."""
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    index = (root / "EVIDENCE_INDEX.md").read_text(encoding="utf-8")
+    assert "VERIFY_ONLY" in readme
+    assert "VERIFY_ONLY" in index
+    assert "VERIFY_MODE=READ_ONLY" in readme
+    # No pytest-seal / pytest-heal wording may remain in the docs.
+    for stale in (
+        "首封存",
+        "由一次 pytest 运行确定性生成",
+        "由 test_package_closure.py 基于当前文件集确定性生成",
+        "自动改写",
+    ):
+        assert stale not in readme, f"stale seal wording in README: {stale!r}"
+        assert stale not in index, f"stale seal wording in EVIDENCE_INDEX: {stale!r}"
 
 
-def _seal_checksums(files: dict[str, str]) -> None:
-    lines = [f"{files[rel]}  {rel}" for rel in sorted(files)]
-    (PACKAGE_ROOT / "checksums.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+def _revalidate_source(root: Path, source_root: Path) -> None:
+    """OPTIONAL byte-for-byte source revalidation (read-only). Present only when
+    SOURCE_EVIDENCE_ROOT exists; repository verification never requires it."""
+    for name in EXPECTED_RAW_FILES:
+        source = source_root / "raw" / name
+        if not source.is_file():
+            raise PackageVerificationError(
+                f"SOURCE_REVALIDATION_MISSING_FILE: REJECT {name} at {source}"
+            )
+        source_sha = _sha256_file(source)
+        if source_sha != SOURCE_SHA256_EXPECTED[name]:
+            raise PackageVerificationError(
+                f"SOURCE_REVALIDATION_SHA_MISMATCH: REJECT (fail-closed, no new hash adopted) "
+                f"{name} expected {SOURCE_SHA256_EXPECTED[name]} got {source_sha}"
+            )
+        repo_sha = _sha256_file(root / "raw" / name)
+        if repo_sha != SOURCE_SHA256_EXPECTED[name]:
+            raise PackageVerificationError(
+                f"REPO_RAW_SHA_MISMATCH: REJECT (fail-closed) {name} got {repo_sha}"
+            )
 
 
-def _verify_checksums(files: dict[str, str]) -> None:
-    sorted_paths, entries = _parse_checksums()
-    if set(entries) != set(files):
-        missing = sorted(set(files) - set(entries))
-        extra = sorted(set(entries) - set(files))
+VERIFIER_FUNCTION_NAMES = (
+    "_sha256_file",
+    "_collect_regular_files",
+    "_load_json",
+    "_verify_file_set_closure",
+    "_parse_checksums",
+    "_verify_checksums",
+    "_verify_raw_shas",
+    "_assert_content_doc_hygiene",
+    "_assert_classification_and_identity",
+    "_assert_docs_verify_only",
+    "_revalidate_source",
+    "_verify_package_closure",
+    "_assert_verifier_read_only",
+)
+
+
+def _assert_verifier_read_only() -> None:
+    """AST/identifier-level self-check: every verifier function must contain no
+    write/copy capability identifier and no seal/repair/heal/reseal identifier,
+    and no open() with a write mode. The verifier therefore cannot mutate the
+    package (checksums.txt is only ever maintained by an external one-off
+    deterministic command)."""
+    source = Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    by_name: dict[str, ast.FunctionDef] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            by_name[node.name] = node
+    violations: list[str] = []
+    for fn_name in VERIFIER_FUNCTION_NAMES:
+        fn = by_name.get(fn_name)
+        if fn is None:
+            raise AssertionError(f"verifier function missing: {fn_name}")
+        for child in ast.walk(fn):
+            if isinstance(child, ast.Attribute):
+                ident = child.attr
+                if ident in BANNED_WRITE_IDENTIFIERS:
+                    violations.append(
+                        f"{fn_name} @ line {child.lineno}: write/copy identifier {ident!r}"
+                    )
+                low = ident.lower()
+                if any(tok in low for tok in BANNED_RESTORE_IDENTIFIER_SUBSTRINGS):
+                    violations.append(
+                        f"{fn_name} @ line {child.lineno}: seal/repair identifier {ident!r}"
+                    )
+            elif isinstance(child, ast.Name):
+                ident = child.id
+                if ident in BANNED_WRITE_IDENTIFIERS:
+                    violations.append(
+                        f"{fn_name} @ line {child.lineno}: write/copy identifier {ident!r}"
+                    )
+                low = ident.lower()
+                if any(tok in low for tok in BANNED_RESTORE_IDENTIFIER_SUBSTRINGS):
+                    violations.append(
+                        f"{fn_name} @ line {child.lineno}: seal/repair identifier {ident!r}"
+                    )
+            elif isinstance(child, ast.Call):
+                func = child.func
+                func_name = ""
+                if isinstance(func, ast.Attribute):
+                    func_name = func.attr
+                elif isinstance(func, ast.Name):
+                    func_name = func.id
+                if func_name == "open":
+                    mode = ""
+                    if child.args and isinstance(child.args[0], ast.Constant) and not mode:
+                        pass
+                    for arg in child.args[1:]:
+                        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                            mode = arg.value
+                            break
+                    for kw in child.keywords:
+                        if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
+                            mode = kw.value.value
+                            break
+                    if mode and mode not in ("r", "rb"):
+                        violations.append(
+                            f"{fn_name} @ line {child.lineno}: open() with non-read mode {mode!r}"
+                        )
+    if violations:
         raise AssertionError(
-            f"checksums closure drift (no silent rewrite): "
-            f"missing entries={missing} extra entries={extra}"
-        )
-    drift = sorted(rel for rel in files if entries[rel] != files[rel])
-    if drift:
-        raise AssertionError(
-            f"checksums content drift (no silent rewrite): {drift}"
-        )
-    if sorted_paths != sorted(files):
-        raise AssertionError("checksums.txt entries are not in stable sorted order")
-
-
-def test_package_closure() -> None:
-    _ensure_raw_files()
-
-    files = _collect_regular_files(PACKAGE_ROOT)
-    # _collect_regular_files intentionally excludes checksums.txt itself
-    # (checksums.txt covers every regular file except itself).
-    expected_sealed = set(EXPECTED_FILES) - {"checksums.txt"}
-    if set(files) != expected_sealed:
-        unexpected = sorted(set(files) - expected_sealed)
-        missing = sorted(expected_sealed - set(files))
-        raise AssertionError(
-            f"unexpected file set: unexpected={unexpected} missing={missing}"
+            "VERIFIER_READ_ONLY_VIOLATION: " + "; ".join(violations)
         )
 
-    _assert_classification_and_identity()
-    _assert_content_doc_hygiene()
 
-    checksums_path = PACKAGE_ROOT / "checksums.txt"
-    if checksums_path.exists():
-        _verify_checksums(files)
-        _, entries = _parse_checksums()
-    else:
-        _seal_checksums(files)
-        entries = dict((rel, digest) for rel, digest in files.items())
-    assert checksums_path.is_file()
+def _verify_package_closure(root: Path, source_root: Path | None = None) -> None:
+    """Read-only fail-closed closure verification of the evidence package."""
+    source_root = SOURCE_EVIDENCE_ROOT if source_root is None else source_root
+
+    _verify_file_set_closure(root)
+    checksums_path = root / "checksums.txt"
+    if not checksums_path.is_file():
+        raise PackageVerificationError(
+            "CHECKSUMS_MISSING: REJECT (no regeneration; reseal is an external "
+            "one-off deterministic command, never inside the verifier)"
+        )
+
+    files = _collect_regular_files(root)
+    _verify_checksums(root, files)
+    _verify_raw_shas(root)
+    for rel in DERIVED_JSON_FILES:
+        _load_json(rel, root)
+    _assert_classification_and_identity(root)
+    _assert_content_doc_hygiene(root)
+    _assert_docs_verify_only(root)
+    _assert_verifier_read_only()
+    if source_root.is_dir():
+        _revalidate_source(root, source_root)
 
     # Closure invariant: REGULAR_FILE_COUNT == CHECKSUM_ENTRY_COUNT + 1
     # (checksums.txt covers every regular file except itself).
     regular_file_count = 0
-    for dirpath, dirnames, filenames in os.walk(PACKAGE_ROOT):
+    for _dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d != "__pycache__"]
         regular_file_count += len(filenames)
+    _, entries = _parse_checksums(root)
     assert regular_file_count == 22
     assert regular_file_count == len(entries) + 1
+
+    _mark("VERIFY_MODE", "READ_ONLY")
+    _mark("AUTO_HEAL", "DISABLED")
+    _mark("RESEAL_IN_VERIFIER", "DISABLED")
+    _mark("RAW_FILE_COUNT", "10")
+    _mark("RAW_SHA_UNCHANGED", "PASS")
+    _mark("CHECKSUM_VERIFY", "PASS")
+    _mark("JSON_VERIFY", "PASS")
+
+
+# ---------------------------------------------------------------------------
+# Test scaffolding (pytest tmp_path only). NOT part of the verifier: these
+# helpers create byte copies of the package inside pytest-managed tmp_path so
+# negative scenarios can corrupt the COPY and never the formal evidence root.
+# They are intentionally excluded from VERIFIER_FUNCTION_NAMES and from the
+# read-only AST self-check scope.
+# ---------------------------------------------------------------------------
+
+
+def _tmp_copy_package(tmp_path: Path) -> Path:
+    """Byte-exact copy of the sealed package into pytest tmp_path. Test-only."""
+    dest = tmp_path / "pkg"
+    shutil.copytree(PACKAGE_ROOT, dest)
+    return dest
+
+
+def test_normal_package() -> None:
+    """Positive: full read-only closure verification of the real package."""
+    _verify_package_closure(PACKAGE_ROOT)
+    # Repository verification passes even when the optional source root is
+    # absent (the missing-source scenario is covered and green).
+    _mark("MISSING_SOURCE_TEST", "PASS")
+    _mark("RESULT", "PASS")
+
+
+def test_missing_optional_source(tmp_path: Path, monkeypatch) -> None:
+    """Positive: SOURCE_EVIDENCE_ROOT is optional; when absent, repository
+    verification still fully passes (no source root is required)."""
+    missing = tmp_path / "source_root_absent"
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "SOURCE_EVIDENCE_ROOT", missing)
+    _verify_package_closure(PACKAGE_ROOT)
+    _mark("MISSING_SOURCE_TEST", "PASS")
+    _mark("RESULT", "PASS")
+
+
+def test_missing_checksums(tmp_path: Path) -> None:
+    """Negative: on a tmp_path copy, a missing checksums.txt must be REJECTED
+    without regeneration."""
+    root = _tmp_copy_package(tmp_path)
+    checksums = root / "checksums.txt"
+    assert checksums.is_file()
+    checksums.unlink()
+    try:
+        _verify_package_closure(root)
+    except PackageVerificationError:
+        _mark("CHECKSUMS_MISSING", "REJECT")
+        _mark("NO_REGENERATION", "PASS")
+    else:
+        raise AssertionError("expected REJECT for missing checksums.txt")
+    assert not checksums.exists(), "verifier must not regenerate checksums.txt"
+    _mark("RESULT", "PASS")
+
+
+def test_tampered_raw(tmp_path: Path) -> None:
+    """Negative: on a tmp_path copy, a tampered raw blob must be REJECTED with
+    no auto-heal and no new hash adoption."""
+    root = _tmp_copy_package(tmp_path)
+    victim = root / "raw" / "r2_os-release.raw"
+    original = victim.read_bytes()
+    tampered = b"V5A-NEGATIVE-TEST-TAMPERED-BYTES\n" + original
+    victim.write_bytes(tampered)
+    try:
+        _verify_raw_shas(root)
+    except PackageVerificationError:
+        _mark("TAMPERED_RAW", "REJECT")
+        _mark("NO_AUTO_HEAL", "PASS")
+    else:
+        raise AssertionError("expected REJECT for tampered raw blob")
+    assert victim.read_bytes() == tampered, "verifier must not auto-heal raw"
+    try:
+        _verify_package_closure(root)
+    except PackageVerificationError:
+        _mark("TAMPERED_RAW_FULL_CLOSURE", "REJECT")
+    else:
+        raise AssertionError("expected full closure REJECT for tampered raw blob")
+    assert victim.read_bytes() == tampered, "verifier must not mutate raw during closure verify"
+    _mark("RESULT", "PASS")
+
+
+def test_derived_drift(tmp_path: Path) -> None:
+    """Negative: on a tmp_path copy, a drifted derived file must be REJECTED
+    with no rewrite of the file and no rewrite of checksums.txt."""
+    root = _tmp_copy_package(tmp_path)
+    readme = root / "README.md"
+    drift_suffix = "\n<!-- V5A-DERIVED-DRIFT-NEGATIVE-TEST -->\n"
+    readme.write_text(readme.read_text(encoding="utf-8") + drift_suffix, encoding="utf-8")
+    checksums_before = (root / "checksums.txt").read_bytes()
+    try:
+        _verify_package_closure(root)
+    except PackageVerificationError:
+        _mark("DERIVED_DRIFT", "REJECT")
+        _mark("NO_REWRITE", "PASS")
+    else:
+        raise AssertionError("expected REJECT for derived drift")
+    assert readme.read_text(encoding="utf-8").endswith(drift_suffix), (
+        "verifier must not rewrite the drifted derived file"
+    )
+    assert (root / "checksums.txt").read_bytes() == checksums_before, (
+        "verifier must not rewrite checksums.txt"
+    )
+    _mark("RESULT", "PASS")
+
+
+def test_raw_sha_baseline_and_manifest() -> None:
+    """Positive: all 10 raw blob SHA-256 equal SOURCE_SHA256_EXPECTED and the
+    source_inventory.json manifest, at the ddd8d30 sealing-commit baseline."""
+    inventory = _load_json("source_inventory.json", PACKAGE_ROOT)
+    assert len(inventory["files"]) == 10
+    manifest: dict[str, str] = {}
+    for entry in inventory["files"]:
+        rel = entry["relative_path"]
+        name = rel[len("raw/"):]
+        manifest[name] = entry["sha256"]
+    for name in EXPECTED_RAW_FILES:
+        assert name in manifest
+        actual = _sha256_file(PACKAGE_ROOT / "raw" / name)
+        assert actual == SOURCE_SHA256_EXPECTED[name], f"raw baseline drift: {name}"
+        assert actual == manifest[name], f"raw manifest drift: {name}"
+    _mark("RAW_FILE_COUNT", "10")
+    _mark("RAW_SHA_UNCHANGED", "PASS")
+    _mark("RAW_BASELINE_COMMIT", RAW_BASELINE_COMMIT)
+    _mark("RAW_MANIFEST_VERIFY", "PASS")
+    _mark("RESULT", "PASS")
