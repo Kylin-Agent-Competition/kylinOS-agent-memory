@@ -4,8 +4,8 @@
   "status": "FROZEN",
   "generated_at": "2026-09-07T15:00:00Z",
   "generated_at_note": "日期精度确定（2026-09-07 UTC，与批次 e-m1-canonical-schema-snapshot-closure-v1 会话同日）；执行环境允许的 Bash 白名单无时钟打印命令，具体分钟为该日冻结 commit（c64b6ff，2026-09-07T14:36:01Z）之后的本批次会话时间估计。",
-  "source_main_commit": "c64b6ffa58519121d15218a88009243a6d072510",
-  "source_main_commit_note": "生成本 Snapshot 所依据的当前 main 基线（chore/e-m1-schema-snapshot-closure 分支 HEAD，含 KMA Canonical v1 FROZEN 收口 commit；经本批次控制器合并后进入 main）。绝不引用本文件自身未来的合并提交 SHA。",
+  "source_main_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "source_main_commit_note": "生成本 Snapshot 所依据并核验的 origin/main 基线（origin/main HEAD=ba3b50e1；本分支未改动 memory-service 业务代码 SSOT，业务值集与代码基线均与 origin/main 一致；KMA Canonical v1 文档冻结提交 c64b6ff 另见 provenance.governance_freeze_commit）。绝不引用本文件自身未来的合并提交 SHA。",
   "authority": {
     "canonical_document": {
       "path": "docs/architecture/KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md",
