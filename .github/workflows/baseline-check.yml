@@ -71,3 +71,21 @@ jobs:
             packaging/release/test_d14a_transactional_rollback.py \
             packaging/release/test_d14a_verify_smoke.py \
             docs/day14/test_d14a_release_provenance.py
+
+  carlton-independent-host-evidence:
+    name: Carlton independent host evidence closure
+    runs-on: ubuntu-latest
+    # 2026-09-06 Carlton 独立宿主证据包（ddd8d30 封存）已冻结；
+    # test_package_closure.py 为 VERIFY_ONLY 只读校验，任何篡改/漂移在
+    # 合并前自动失败。SOURCE_EVIDENCE_ROOT 为可选 /mnt/c/... 源路径，
+    # ubuntu runner 上不存在时走 MISSING_SOURCE_TEST=PASS，无需 workaround。
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pytest
+        run: python3 -m pip install --quiet pytest
+
+      - name: Carlton independent host evidence closure verify
+        run: |
+          python3 -m pytest evidence/host-validation/kylin-v11-sdk-identity-carlton-20260906/test_package_closure.py -q
