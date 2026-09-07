@@ -245,6 +245,17 @@ def test_g3_all_delete_returns_aligned_versions_for_kind_and_preference(state):
     """G3：full_reset（all）删除返回与目标等长的 version ids（knowledge+preference）。"""
     engine, target, _control, _foreign = state
     with engine.begin() as conn:
+        repo.save_preference_version(
+            conn,
+            user_id=USER,
+            preference_key="g3_theme_other",
+            preference_scope="global",
+            preference_value="light",
+            memory_status="active",
+            evidence_fingerprint="g3-pref-other-evidence",
+            idempotency_key=None,
+            request_fingerprint="g3-pref-other-request",
+        )
         pref = repo.save_preference_version(
             conn,
             user_id=USER,
@@ -266,3 +277,6 @@ def test_g3_all_delete_returns_aligned_versions_for_kind_and_preference(state):
         )
     assert count == 2
     assert len(versions) == len(target_ids)
+    # memory_versions.id 是 row-id；Outbox 必须携带与 FTS/Vector 一致的
+    # 稳定 version identity（v<memory_versions.version>）。
+    assert versions == ["v1", "v2"]
