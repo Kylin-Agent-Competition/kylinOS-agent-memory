@@ -12,7 +12,7 @@
 | 编号 | 缺口 | 代码事实 |
 |---|---|---|
 | G1 | `forget.executed` 生产者**已存在**（核对更正） | `uow.execute_forget_plan` 终态事务已 enqueue `EVENT_FORGET_EXECUTED`（priority=FORGET_PRIORITY），payload 含 user_id/forget_plan_id/target_type/forget_mode/resolved_target_ids/version_ids/selection_hash/confirmation_ref/trace_id；无需再实现生产者 |
-| G2 | 统一 router 未接入 deletion consumer（P1-1） | `outbox/router.build_outbox_router` 需 vector_provider/embedding_service；`app.py` production default 未接线；adapter validation runtime 未挂 router |
+| G2 | validation runtime router 未接入 deletion consumer（P1-1 仅限 production default） | `outbox/router.build_outbox_router` 需 vector_provider/embedding_service；`app.py` production default 仍未接线；adapter validation runtime 已在 2026-09-07 接入正式 worker/router/consumer |
 | G3 | payload version/kind mapping 缺口（P0-1） | `deletion_consumer._build_delete_request` 接受 `resolved_target_ids`/`version_ids`，无 `knowledge:`/`preference:` kind 映射；preference（memory_items）无 version_ids 真源 |
 | G4 | SnapshotReader 重建真源缺 preference（P0-2） | `retrieval/sqlite_vector_snapshot.py` 重建真源仅覆盖 memory_entries（knowledge），未覆盖 memory_items/memory_versions |
 | G5 | seeded 状态无 vector 索引/embedding 链 | 预置仅写 memory 行；`memory.upserted → index consumer` 生产者/embedding 未对 D13D runtime DB 运行 → pre-delete probe 无法命中（违反 E 规则 2） |
@@ -30,7 +30,7 @@
 
 ## 3. 本 PR 立场
 
-- 代码侧已完成：V2 binding、sealed→per-sample clones、dispatch 重接线、profile allowlist（空）、receipt provenance、负向矩阵（F6–F14/F18/F19）；
+- 代码侧已完成：V2 binding、sealed→per-sample clones、dispatch 重接线、approved FTS profile、receipt provenance、负向矩阵（F6–F14/F18/F19）；validation runtime 内 `forget.executed` 已接正式 `OutboxWorker/OutboxRouter/build_forget_consumer`，成功后由 Worker ACK；
 - 未闭合前不宣称：Forget 5/5 real preview/execute/realtime/rebuild PASS、residual=0 正式证明；
 - 上表 G1–G6 由责任轨提交代码与证据后，由非作者 Reviewer 独立复审。
 
@@ -46,9 +46,9 @@
 |---|---|---|
 | G1 | ✅ 已核对（生产者已存在） | `uow.execute_forget_plan` 已 enqueue `EVENT_FORGET_EXECUTED`；无需新增 |
 | G3 | ✅ 已闭合 + L1 | `repositories.soft_delete_resolved_targets` knowledge 返回稳定 `v<version>`、`all` 汇聚 versions；`deletion_consumer._build_delete_request` 规范化 tagged ids 并强制 version_ids 对齐；提交 `2e3fa45` |
-| G2 | ⏳ 待 D/E 决策 | adapter validation runtime 是否挂 `build_forget_consumer` + `SqliteVectorProvider`（涉及 production routing 边界：默认 route 是否放开） |
+| G2 | ✅ validation runtime 已闭合 + L1 | execute 后运行正式 `OutboxWorker → OutboxRouter → build_forget_consumer`；approved FTS deletion port 消费签名 `VectorDeleteRequest`，失败/未 ACK 时 dispatch fail-closed；production `app.py` 默认接线仍保持 P1-1 |
 | G4 | ⏳ 待 D/E 决策 | preference 是否进入 Vector 重建真源（feature：memory_items/memory_versions 索引文本=key+value）；或保持 key-value 非 Vector 语义并**显式 fail-closed 排除**（防止静默漏清理） |
 | G5 | ⏳ 环境/实现 | seeded state 的 embedding + `memory.upserted` index producer（pre-delete probe 需先命中） |
 | G6 | ⏳ 环境 | 0k1.1 `Database.h` headers 获取 + `vector_bridge_cli` 编译/smoke |
 
-请在 G2/G4 二选一裁决后，B 立即继续；G5/G6 依环境/头文件就绪后执行。
+G4/G5/G6 仍按本文件阻塞；未完成前不宣称 Forget 5/5 或 production realtime cleanup 完成。

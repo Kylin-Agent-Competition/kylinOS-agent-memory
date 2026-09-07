@@ -38,6 +38,9 @@ from evaluation.d13d_execution_adapter import (
     dispatch_stateless_sample,
     validate_execution_request,
 )
+from evaluation.d13d_forget_fts_observer import build_forget_fts_consumer
+from outbox.router import OutboxRouter
+from outbox.worker import OutboxWorker
 
 # Serializer-level aliases to the private construction seam / writer.  These are
 # NOT provenance authority: only the formal orchestrator
@@ -1505,17 +1508,45 @@ def test_fts_observer_probe_realtime_rebuild(tmp_path):
     assert report_no_ack.residual_target_count > 0, (
         "deletion consumer 未 ACK 时不得自证已清理（HIGH-01）"
     )
-    # 真实 forget.executed payload 经 FTS deletion-consumer 消费后再 realtime
-    observer.apply_deletion_payload(
-        {
-            "event_id": "evt-fts-plan",
-            "user_id": "user_d13e_alpha",
-            "forget_plan_id": "fts-plan",
-            "resolved_target_ids": [str(target)],
-            "version_ids": ["v1"],
-            "selection_hash": "sel",
-        }
+    # 真实 forget.executed payload 先入 outbox，再经正式 Router/Worker/Consumer
+    # 消费并 ACK；observer 只作为本 profile 的 FTS deletion port，不再自删索引。
+    payload = {
+        "event_id": "evt-fts-plan",
+        "user_id": "user_d13e_alpha",
+        "forget_plan_id": "fts-plan",
+        "target_type": "knowledge",
+        "forget_mode": "single_item",
+        "resolved_target_ids": [f"knowledge:{target}"],
+        "version_ids": ["v1"],
+        "selection_hash": "hmac-sha256:d9d-internal:" + "a" * 64,
+        "confirmation_ref": "fts-plan",
+        "trace_id": "trace-fts-plan",
+    }
+    with engine.begin() as conn:
+        outbox_id = repo.enqueue_outbox(
+            conn,
+            aggregate_type="forget",
+            aggregate_id="fts-plan",
+            event_type=repo.EVENT_FORGET_EXECUTED,
+            payload=payload,
+            priority=repo.FORGET_PRIORITY,
+        )
+    consumer, embedding_service = build_forget_fts_consumer(observer)
+    router = OutboxRouter()
+    router.register(repo.EVENT_FORGET_EXECUTED, consumer)
+    worker = OutboxWorker(
+        engine, poll_interval_s=1, max_retries=0, consumer=router.route
     )
+    try:
+        worker._poll_once()
+    finally:
+        worker.stop()
+        embedding_service.close()
+    with engine.connect() as conn:
+        acked_row = conn.execute(
+            repo.outbox.select().where(repo.outbox.c.id == outbox_id)
+        ).mappings().first()
+    assert acked_row is None, "consumer 成功后 Worker 必须删除 outbox 行（ACK）"
     rt = observer.realtime(confirmed)
     assert all(tid not in rt.sample.ranked_ids for tid in confirmed)
     rb = observer.rebuild(confirmed)
@@ -1528,7 +1559,76 @@ def test_fts_observer_probe_realtime_rebuild(tmp_path):
             source_snapshot_id=obs.source_snapshot_id,
             source_watermark=obs.source_watermark,
         )
-        assert report.residual_target_count == 0
+    assert report.residual_target_count == 0
+    engine.dispose()
+
+
+def test_forget_fts_worker_no_ack_fails_closed(tmp_path):
+    """Consumer 失败时 Worker 不得 ACK，realtime 必须保留真实 residual。"""
+    from evaluation.d13d_forget_fts_observer import D13DForgetFtsObserver
+    from db.engine import create_db_engine, init_schema
+    from db import repositories as repo
+
+    db_path = tmp_path / "no-ack.db"
+    engine = create_db_engine(str(db_path))
+    init_schema(engine)
+    with engine.begin() as conn:
+        target = repo.insert_memory_entry(
+            conn, user_id="user_d13e_alpha", entry_type="knowledge",
+            content={"value": "prepared-target-alpha-001"}, confidence=0.9,
+        )
+    observer = D13DForgetFtsObserver(
+        engine, user_id="user_d13e_alpha", fts_db=str(tmp_path / "fts.db")
+    )
+    observer.initialize()
+    confirmed = (f"knowledge:{target}",)
+    observer.probe_pre_delete(confirmed)
+    with engine.begin() as conn:
+        repo.soft_delete_resolved_targets(
+            conn, user_id="user_d13e_alpha", target_type="knowledge",
+            resolved_target_ids=[str(target)], forget_plan_id="fts-plan",
+        )
+        payload = {
+            "event_id": "evt-no-ack",
+            "user_id": "user_d13e_alpha",
+            "forget_plan_id": "fts-plan",
+            "target_type": "knowledge",
+            "forget_mode": "single_item",
+            "resolved_target_ids": [f"knowledge:{target}"],
+            # 与 selector 长度不一致，正式 consumer 必须构造失败并拒绝 ACK。
+            "version_ids": [],
+            "selection_hash": "hmac-sha256:d9d-internal:" + "a" * 64,
+            "confirmation_ref": "fts-plan",
+            "trace_id": "trace-no-ack",
+        }
+        outbox_id = repo.enqueue_outbox(
+            conn,
+            aggregate_type="forget",
+            aggregate_id="fts-plan",
+            event_type=repo.EVENT_FORGET_EXECUTED,
+            payload=payload,
+            priority=repo.FORGET_PRIORITY,
+        )
+    consumer, embedding_service = build_forget_fts_consumer(observer)
+    router = OutboxRouter()
+    router.register(repo.EVENT_FORGET_EXECUTED, consumer)
+    worker = OutboxWorker(
+        engine, poll_interval_s=1, max_retries=0, consumer=router.route
+    )
+    try:
+        worker._poll_once()
+    finally:
+        worker.stop()
+        embedding_service.close()
+    with engine.connect() as conn:
+        row = conn.execute(
+            repo.outbox.select().where(repo.outbox.c.id == outbox_id)
+        ).mappings().first()
+    assert row is not None
+    assert row["next_retry_at"] is None
+    assert "version_ids" in row["last_error"]
+    rt = observer.realtime(confirmed)
+    assert all(tid in rt.sample.ranked_ids for tid in confirmed)
     engine.dispose()
 
 

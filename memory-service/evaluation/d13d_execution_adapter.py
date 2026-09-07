@@ -29,7 +29,7 @@ from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping
 
 from sqlalchemy import and_, select, text
-from db.schema import source_events
+from db.schema import outbox, source_events
 
 from db.engine import create_db_engine, init_schema
 from db.uow import UnitOfWork
@@ -37,9 +37,11 @@ from gateway.forget_handlers import register_forget_handlers
 from gateway.handlers import register_default_handlers, register_event_ingest_handler
 from gateway.preference_handlers import register_preference_handlers
 from gateway.registry import HandlerRegistry, RequestContext
+from outbox.router import OutboxRouter
+from outbox.worker import OutboxWorker
 from providers.extraction_provider import ExtractionProvider, TurnFinalizedEvent
+from evaluation.d13d_forget_fts_observer import build_forget_fts_consumer, build_fts_observer
 from service.conflict_resolution_policy import ConflictResolutionPolicy, ConflictSide
-from evaluation.d13d_forget_fts_observer import build_fts_observer
 from evaluation.d13d_forget_state_binding import (
     BINDING_VERSION_V2,
     FORGET_SAMPLE_MODES,
@@ -1295,19 +1297,64 @@ def _tagged_confirmed(mode: str, resolved: list[str]) -> list[str]:
 
 
 def _load_forget_executed_payload(engine: Any, forget_plan_id: str) -> Optional[Dict[str, Any]]:
-    """读取 execute 同事务写入的真实 forget.executed outbox payload（路由真源）。"""
+    """Read the real forget.executed outbox row and payload produced by execute."""
     with engine.connect() as conn:
         row = conn.execute(
-            text(
-                "SELECT payload FROM outbox "
-                "WHERE aggregate_type = 'forget' AND aggregate_id = :plan "
-                "AND event_type = 'forget.executed' ORDER BY id DESC LIMIT 1"
-            ),
-            {"plan": forget_plan_id},
+            select(outbox.c.id, outbox.c.payload)
+            .where(
+                and_(
+                    outbox.c.aggregate_type == "forget",
+                    outbox.c.aggregate_id == forget_plan_id,
+                    outbox.c.event_type == "forget.executed",
+                )
+            )
+            .order_by(outbox.c.id.desc())
+            .limit(1)
         ).mappings().first()
     if row is None:
         return None
-    return json.loads(row["payload"])
+    return {
+        "id": int(row["id"]),
+        "payload": json.loads(row["payload"]),
+    }
+
+
+def _forget_outbox_row(engine: Any, outbox_id: int) -> Optional[Dict[str, Any]]:
+    """Return ACK state for one outbox event (None means the worker deleted it)."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            select(outbox.c.id, outbox.c.last_error)
+            .where(outbox.c.id == outbox_id)
+        ).mappings().first()
+    return dict(row) if row is not None else None
+
+
+def _consume_forget_executed(engine: Any, *, forget_plan_id: str, observer: Any) -> None:
+    """Consume forget.executed through the formal worker/router and require ACK."""
+    event = _load_forget_executed_payload(engine, forget_plan_id)
+    if event is None:
+        raise ExecutionPreflightError(
+            "forget.executed outbox missing - deletion consumer cannot ACK"
+        )
+    consumer, embedding_service = build_forget_fts_consumer(observer)
+    router = OutboxRouter()
+    router.register("forget.executed", consumer)
+    worker = OutboxWorker(
+        engine,
+        poll_interval_s=1,
+        max_retries=0,
+        consumer=router.route,
+    )
+    try:
+        worker._poll_once()
+    finally:
+        worker.stop()
+        embedding_service.close()
+    remaining = _forget_outbox_row(engine, event["id"])
+    if remaining is not None:
+        raise ExecutionPreflightError(
+            "forget.executed was not ACKed by the formal deletion consumer"
+        )
 
 def dispatch_forget_sample(
     validated: ValidatedExecution,
@@ -1427,14 +1474,13 @@ def dispatch_forget_sample(
                 },
                 _ctx("forget.execute", f"d13d-execute-{sample_id}"),
             )
-        # HIGH-01：realtime 前必须先消费真实 forget.executed outbox（FTS deletion-consumer）。
-        # 缺 outbox / 消费失败 → fail-closed，realtime 不得自证已清理。
-        executed_payload = _load_forget_executed_payload(binding.engine, forget_plan_id)
-        if executed_payload is None:
-            raise ExecutionPreflightError(
-                "forget.executed outbox missing - deletion consumer cannot ACK"
-            )
-        observer.apply_deletion_payload(executed_payload)
+        # HIGH-01：realtime 前必须经正式 OutboxWorker/Router/deletion-consumer ACK。
+        # FTS5 是本 approved profile 的真实删除通道；worker 成功后会删除 outbox 行。
+        _consume_forget_executed(
+            binding.engine,
+            forget_plan_id=forget_plan_id,
+            observer=observer,
+        )
         realtime_observation = observer.realtime(confirmed)
         rebuild_observation = observer.rebuild(confirmed)
         with binding.engine.connect() as conn:
@@ -1467,6 +1513,8 @@ def dispatch_forget_sample(
             "forget_runtime_db_initial_sha256": binding.runtime_db_initial_sha256,
             "forget_restore_id": binding.restore_id,
             "forget_sample_id": binding.sample_id,
+            "forget_deletion_consumer_path": "OutboxWorker/OutboxRouter/build_forget_consumer",
+            "forget_outbox_ack": "outbox_row_deleted_by_worker",
             "forget_realtime_snapshot_id": realtime_observation.source_snapshot_id,
             "forget_realtime_watermark": realtime_observation.source_watermark.model_dump(mode="json"),
             "forget_rebuild_snapshot_id": rebuild_observation.source_snapshot_id,

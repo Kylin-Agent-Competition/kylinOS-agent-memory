@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Optional
@@ -47,6 +48,19 @@ EventConsumer = Callable[[str, Dict[str, Any]], None]
 _DEFAULT_INDEX_GENERATION = "d9d-skeleton"
 _DEFAULT_DEADLINE_MS = 5000
 _DEFAULT_KEY_ID = "d9d-internal"
+_RAW_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _payload_digest(value: str, *, key_id: str, event_id: str) -> Digest:
+    """Normalize a producer payload digest to the frozen Digest format."""
+    if value.startswith("hmac-sha256:"):
+        return Digest(value)
+    if _RAW_SHA256.fullmatch(value):
+        return Digest(f"hmac-sha256:{key_id}:{value}")
+    raise ValueError(
+        f"forget.executed selection_hash is not a valid digest "
+        f"(event_id={event_id})"
+    )
 
 
 def _derive_watermark(payload: Dict[str, Any]) -> Watermark:
@@ -132,7 +146,9 @@ def _build_delete_request(
         )
 
     preview_ref = str(payload.get("forget_plan_id") or payload.get("preview_ref") or event_id)
-    preview_hash = Digest(selection_hash)
+    preview_hash = _payload_digest(
+        str(selection_hash), key_id=digest_key_id, event_id=event_id
+    )
     request_id = str(payload.get("request_id") or uuid.uuid4().hex)
     idempotency_key = str(
         payload.get("idempotency_key")
@@ -148,7 +164,7 @@ def _build_delete_request(
             if len(memory_ids) == 1
             else SelectionMode.RESOLVED_BATCH
         ),
-        selection_hash=Digest(selection_hash),
+        selection_hash=preview_hash,
         resolved_by=ResolvedBy.DETERMINISTIC_RULE_ENGINE,
         preview_ref=preview_ref,
         preview_hash=preview_hash,

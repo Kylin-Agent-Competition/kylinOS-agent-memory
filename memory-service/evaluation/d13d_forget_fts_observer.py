@@ -14,13 +14,28 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from sqlalchemy import and_, select
 from sqlalchemy.engine import Connection, Engine
 
 from db.schema import memory_entries, memory_items, memory_versions
-from retrieval.contracts import ObjectType, Watermark, WatermarkDomain, WatermarkKind
+from embedding.embedding_service import EmbeddingService
+from outbox.deletion_consumer import build_forget_consumer
+from providers import ProviderError, ProviderErrorCode
+from retrieval.contracts import (
+    Outcome,
+    ObjectType,
+    ProviderResult,
+    RetrievalError,
+    RetrievalErrorCode,
+    VectorDeleteRequest,
+    VectorDeleteResult,
+    Watermark,
+    WatermarkDomain,
+    WatermarkKind,
+)
 from retrieval.evaluation import ForgetResidualSample, ForgetResidualPhase
 from retrieval.fts5 import Fts5Index
 from service.d13d_forget_observability import ForgetRetrievalObservation
@@ -128,6 +143,7 @@ class D13DForgetFtsObserver:
         self._initialized = False
         self._realtime_generation = 0
         self._rebuild_generation = 0
+        self._deleted_keys: set[tuple[str, str]] = set()
 
     # ── 构建/同步 ──
 
@@ -189,36 +205,6 @@ class D13DForgetFtsObserver:
             if not any(hit.memory_id == tagged_id for hit in found):
                 raise ValueError(f"pre-delete probe miss: {tagged_id}")
 
-    def apply_deletion_payload(self, payload: Dict[str, Any]) -> None:
-        """真实 deletion-consumer（FTS 通道）：只消费真实 forget.executed payload。
-
-        解析 payload 的 resolved_target_ids（与 deletion_consumer 同口径）删除索引文档，
-        删除成功即该事件 ACK；绝不用 preview 的 confirmed 列表自行删索引。
-        """
-        if payload.get("user_id") != self._user_id:
-            raise ValueError("forget.executed user_id 与 observer user 不一致")
-        resolved = payload.get("resolved_target_ids") or []
-        version_ids = payload.get("version_ids")
-        if version_ids is not None and len(version_ids) != len(resolved):
-            raise ValueError("forget.executed version_ids 与 resolved_target_ids 长度不一致")
-        if not self._initialized or self._fts is None:
-            raise ValueError("observer 必须先 initialize()")
-        normalized: List[str] = []
-        for raw in resolved:
-            token = str(raw)
-            if ":" in token:
-                kind, _, num = token.partition(":")
-                if kind not in ("knowledge", "preference") or not num.isdecimal():
-                    raise ValueError(f"forget.executed 目标含未知 kind/非数字 id: {token!r}")
-                normalized.append(f"{kind}:{num}")
-            else:
-                normalized.append(f"knowledge:{token}")
-        for tagged_id in normalized:
-            doc = self._docs.get(tagged_id)
-            if doc is not None:
-                self._fts.delete(doc.tagged_id, doc.version_id, self._user_id)
-        self._realtime_generation += 1
-
     def realtime(self, confirmed: tuple[str, ...]) -> ForgetRetrievalObservation:
         """真实 deletion-consumer ACK 之后的真实检索（observer 不自行删索引）。"""
         if not self._initialized:
@@ -260,6 +246,211 @@ class D13DForgetFtsObserver:
     def _phrase(text: str) -> str:
         """FTS5 短语查询，避免连字符/空格被当成查询操作符。"""
         return '"' + text.replace('"', '""') + '"'
+
+    def _observation(
+        self,
+        phase: ForgetResidualPhase,
+        confirmed: tuple[str, ...],
+        ranked: tuple[str, ...],
+        snapshot_id: str,
+    ) -> ForgetRetrievalObservation:
+        sample = ForgetResidualSample(
+            query_id=f"{phase.value}-{self._user_id}",
+            confirmed_target_ids=confirmed,
+            ranked_ids=ranked,
+        )
+        generation = (
+            self._realtime_generation if phase == ForgetResidualPhase.REALTIME_DELETE
+            else self._rebuild_generation
+        )
+        return ForgetRetrievalObservation(
+            sample=sample,
+            dataset_version="d13d-forget-v2",
+            source_snapshot_id=snapshot_id,
+            source_watermark=Watermark(
+                domain=WatermarkDomain(
+                    scope_id=f"user:{self._user_id}",
+                    stream="forget_fts5",
+                    partition="default",
+                    source_generation=snapshot_id,
+                ),
+                kind=WatermarkKind.MONOTONIC_INT,
+                value=generation,
+            ),
+        )
+
+
+class D13DForgetFtsDeletionProvider:
+    """Validation profile 的 FTS5 deletion port（只开放 delete）。
+
+    它消费正式 ``build_forget_consumer`` 构造并签名的
+    :class:`VectorDeleteRequest`，把 selector 精确映射回 observer 当前 FTS 索引。
+    目标缺失/映射歧义/deadline 过期均返回真实失败；不提供 upsert/search/rebuild
+    等未在本 profile 授权的能力。
+    """
+
+    provider = "d13d-fts5-deletion"
+
+    def __init__(self, observer: D13DForgetFtsObserver, *, digest_key_id: str, digest_key: bytes) -> None:
+        self._observer = observer
+        self._digest_key_id = digest_key_id
+        self._digest_key = digest_key
+        self._deleted_keys: set[tuple[str, str]] = set()
+
+    def _result(
+        self,
+        request: VectorDeleteRequest,
+        *,
+        ok: bool,
+        value: Optional[VectorDeleteResult] = None,
+        message: Optional[str] = None,
+    ) -> ProviderResult[VectorDeleteResult]:
+        completed_at = datetime.now(timezone.utc)
+        if ok:
+            return ProviderResult(
+                ok=True,
+                value=value,
+                provider=self.provider,
+                request_id=request.request_id,
+                elapsed_ms=0,
+                completed_at=completed_at,
+            )
+        assert message is not None
+        return ProviderResult(
+            ok=False,
+            error=RetrievalError(
+                code=RetrievalErrorCode.PROVIDER_PROTOCOL_ERROR,
+                message=message,
+                retryable=False,
+                stage="delete",
+                provider=self.provider,
+            ),
+            provider=self.provider,
+            request_id=request.request_id,
+            elapsed_ms=0,
+            completed_at=completed_at,
+        )
+
+    def delete(self, request: VectorDeleteRequest) -> ProviderResult[VectorDeleteResult]:
+        observer = self._observer
+        if request.user_id != observer._user_id or not observer._initialized or observer._fts is None:
+            return self._result(request, ok=False, message="FTS deletion provider is not bound to the observer")
+
+        canonical = request.model_dump(
+            mode="json",
+            exclude={"request_id", "trace_id", "deadline_at", "payload_hash"},
+        )
+        from retrieval.contracts import digest_from_canonical
+
+        if digest_from_canonical(
+            self._digest_key_id, self._digest_key, canonical
+        ) != request.payload_hash:
+            return self._result(request, ok=False, message="FTS deletion payload hash mismatch")
+        if datetime.now(timezone.utc) > request.deadline_at:
+            return self._result(request, ok=False, message="FTS deletion deadline exceeded")
+
+        memory_ids = request.selector.memory_ids
+        version_ids = request.selector.version_ids or []
+        if len(version_ids) != len(memory_ids):
+            return self._result(request, ok=False, message="FTS deletion version_ids are not aligned")
+
+        matched = 0
+        deleted = 0
+        try:
+            for memory_id, version_id in zip(memory_ids, version_ids):
+                candidates = [
+                    (tagged_id, doc)
+                    for tagged_id, doc in observer._docs.items()
+                    if tagged_id.rpartition(":")[2] == str(memory_id)
+                    and doc.version_id == str(version_id)
+                ]
+                deletion_key = (str(memory_id), str(version_id))
+                if not candidates and deletion_key in self._deleted_keys:
+                    continue
+                if len(candidates) != 1:
+                    return self._result(
+                        request,
+                        ok=False,
+                        message=(
+                            f"FTS deletion target is missing or ambiguous: {memory_id}:{version_id}"
+                        ),
+                    )
+                tagged_id, doc = candidates[0]
+                observer._fts.delete(doc.tagged_id, doc.version_id, request.user_id)
+                self._deleted_keys.add(deletion_key)
+                observer._realtime_generation += 1
+                matched += 1
+                deleted += 1
+        except Exception as exc:
+            return self._result(request, ok=False, message=f"FTS deletion failed: {type(exc).__name__}")
+
+        outcome = Outcome.APPLIED if deleted else Outcome.NO_OP
+        return self._result(
+            request,
+            ok=True,
+            value=VectorDeleteResult(
+                matched_count=matched,
+                deleted_count=deleted,
+                index_generation=request.index_generation,
+                applied_watermark=request.source_watermark,
+                outcome=outcome,
+            ),
+        )
+
+
+class _ValidationNoEmbeddingProvider:
+    """No-embed lifecycle provider for the validation deletion consumer.
+
+    forget deletion does not call embed; any accidental call fails closed.
+    """
+
+    def start(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+    def get_dimension(self) -> int:
+        return 0
+
+    def embed(self, text: str, *, timeout_ms: int = 5000):
+        raise ProviderError(
+            ProviderErrorCode.ERR_SDK_NOT_LOADED,
+            "D13D FTS deletion consumer must not call embedding",
+        )
+
+
+class _ValidationNoExtractionCache:
+    """Empty extraction-cache adapter; D13D executed payloads carry no fingerprints."""
+
+    def clear(self) -> None:
+        return None
+
+    def invalidate_by_content(self, fingerprint: str) -> int:
+        return 0
+
+    def invalidate_by_event(self, event_id: str) -> int:
+        return 0
+
+
+def build_forget_fts_consumer(observer: D13DForgetFtsObserver) -> tuple:
+    """Build the formal forget consumer wired to this FTS deletion port."""
+    digest_key_id = "d9d-internal"
+    digest_key = b"kylin-memory-d9d-internal"
+    provider = D13DForgetFtsDeletionProvider(
+        observer,
+        digest_key_id=digest_key_id,
+        digest_key=digest_key,
+    )
+    embedding_service = EmbeddingService(provider=_ValidationNoEmbeddingProvider())
+    embedding_service.set_cache_invalidator(_ValidationNoExtractionCache())
+    consumer = build_forget_consumer(
+        embedding_service,
+        vector_provider=provider,
+        digest_key_id=digest_key_id,
+        digest_key=digest_key,
+    )
+    return consumer, embedding_service
     def _observation(
         self,
         phase: ForgetResidualPhase,

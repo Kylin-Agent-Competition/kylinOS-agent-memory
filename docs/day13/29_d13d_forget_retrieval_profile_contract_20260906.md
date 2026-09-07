@@ -54,7 +54,7 @@ source_watermark       ← 运行时证据实际产生
 
 1. **collection/scope**（ACCEPTED_WITH_CONSTRAINTS）：业务隔离真值 = user scope（`IndexScope(kind=USER)`，`scope_id="user:<user_id>"`）；sample 隔离 = fresh runtime clone + **唯一 generation/collection namespace**（禁止 sample 复用 serving collection）；collection 命名沿用 `SqliteVectorProvider` 派生（`scope_id + generation`），artifact 不注入 collection 名；logical ID 必须 `knowledge:<id>` / `preference:<id>` tagged；F5 preference 的**真实检索/重建映射**必须代码事实闭合后才能宣称支持。
 2. **query→ranked_ids**（ACCEPTED）：pre-delete probe + exact logical-ID residual；同一 probe 用于 pre/realtime/rebuild；**pre-delete 必须先命中目标**，否则删除后 miss 无证明力 → fail-closed；residual 判定 = confirmed target logical ID **真实出现在返回中**（相似但不同 ID 不算）；FTS5/Vector 分通道留 provenance，残留判定取**并集**防掩盖。
-3. **deletion-consumer / realtime 起点**（SEMANTIC_ACCEPTED / CURRENT_HEAD_BLOCKED）：realtime = 业务事务完成 + 对应 `forget.executed` 经真实组合 consumer 成功 ACK 之后的真实检索；当前 HEAD 存在 router wiring 与 `version_ids/kind` mapping 缺口（P0-1/P1-1），修复前不得宣称 realtime cleanup 完成。
+3. **deletion-consumer / realtime 起点**（SEMANTIC_ACCEPTED / VALIDATION_L1_CLOSED）：realtime = 业务事务完成 + 对应 `forget.executed` 经真实组合 consumer 成功 ACK 之后的真实检索。2026-09-07 起，validation profile 使用正式 `OutboxWorker → OutboxRouter → build_forget_consumer`；本 profile 的 FTS5 deletion port 只消费正式 `VectorDeleteRequest`，worker 删除 outbox 行后才进入 realtime。这不关闭 production `app.py` 默认接线（P1-1），也不宣称 5/5 E2E。
 4. **full-rebuild**（ACCEPTED_WITH_BLOCKER）：Vector 正式 rebuild = `SqliteVectorProvider.rebuild(VectorRebuildRequest)`，新 generation 激活后再查询；FTS 只做真实重查；当前 `SqliteVectorSnapshotReader` 未覆盖 memory_items/memory_versions（F5 preference）→ 先闭合（P0-2）。
 5. **执行载体**（CONDITIONALLY_ACCEPTED）：允许在本 VM 编译当前 HEAD `vector_bridge_cli` 并连真实 engine；前提 = 匹配当前 `0k1.1` SDK 的 headers，完成 compile/link/smoke 并记录完整 provenance；**禁止**复用旧 `0k0.7` binary/header 冒充当前 HOST_VERIFIED（P1-2）。
 
@@ -72,7 +72,6 @@ source_watermark       ← 运行时证据实际产生
 ## 8. 登记阻塞（未关闭前不宣称 5/5 PASS）
 
 ```text
-P0-1  forget.executed payload ↔ VectorDeleteRequest 的 version/kind mapping 不闭合（router wiring）
 P0-2  full_reset preference 不在 SqliteVectorSnapshotReader 重建真源范围内
 P1-1  app.py production default 未把 embedding_service 接入统一 router（forget.executed 默认 route 未注册）
 P1-2  当前 VM client SDK=0k1.1；旧 0k0.7 L2 仅作构建方法参考，不替代 ABI/Host 证据
