@@ -316,3 +316,11 @@ P2-C = COMPLETE（#161 production fix 已 merge 并被 #160 真实 Provider/adap
   Phase 3 才负责：final tested_commit、正式 Kylin VM 17 raw、Final Manifest、Review Seal、Execution Seal、attestation、Runner Gate 0–10、`D13D_FROZEN`。
 - V1 artifact（`915c6ae4…`）＝ `HISTORICAL / SUPERSEDED`（仅 state-preparation evidence，27_ 已标记）；执行规范以 **V2** 为准（`docs/day13/28_d13d_forget_state_binding_v2_contract_20260906.md`）。
 - 待 D/E Review：#160 本批（binding+dispatch 集成）连同 #161/#162 依各自独立 Review 门推进。
+
+### 9.6 Phase-2 复审与后续实现状态（2026-09-07）
+
+- PR #160 exact HEAD `74747b26c7385cf96eb9b2f5a3d1c3bc520901b0` 已获得 Reviewer E 本轮 COMMENT：上一轮 HIGH-01 正式 OutboxWorker/Router/consumer ACK 路径确认闭合，当前增量无新增阻塞 finding；PR reviewDecision 仍保留历史 `CHANGES_REQUESTED`，最终 APPROVE 以 exact final HEAD 为准。
+- 基线定向回归（本次改动前）：`memory-service` 5 文件定向 pytest `143 passed`；CI `Repository Baseline Check` 与 `D14A packaging + provenance L1` 均绿。
+- 新增工程收口：移除 FTS observer 文件中粘贴残留的重复 `_observation` 定义；`SqliteVectorSnapshotReader` 采用 G4 保守裁定——active preference 不进入 Vector 重建语义，且会让快照 fail-closed；新增 `d13d_forget_index_producer` 作为 G5 的真实 `memory.upserted` → OutboxWorker/Router/index-consumer 生产者 seam。
+- 当前新增 L1：`tests/retrieval/test_sqlite_vector_snapshot.py` + `tests/test_d13d_execution_adapter.py` 合计 `89 passed`。G5 测试仅验证 seam 与 formal outbox 消费链，测试中的 FakeVectorProvider/deterministic embedding 只代表 L1，不代表麒麟 VM 或正式 Vector 证据。
+- Forget runtime seam 仍公开阻塞：G5 需要 VM 上真实 Embedding/Vector provider 接入；G6 需要 SDK `0k1.1` headers、`vector_bridge_cli` compile/link/smoke。在 G5 VM 接入与 G6 闭合前，profile 的 Vector 双通道和 Forget 5/5 正式 E2E不得宣称完成。

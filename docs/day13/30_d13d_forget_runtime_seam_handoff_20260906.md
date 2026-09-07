@@ -52,3 +52,13 @@
 | G6 | ⏳ 环境 | 0k1.1 `Database.h` headers 获取 + `vector_bridge_cli` 编译/smoke |
 
 G4/G5/G6 仍按本文件阻塞；未完成前不宣称 Forget 5/5 或 production realtime cleanup 完成。
+
+## 6. 闭合状态更新（2026-09-07）
+
+| 缺口 | 状态 | 说明 |
+|---|---|---|
+| G4 | ✅ 保守排除已闭合 + L1 | D/E 未裁定进入 Vector 真源前采用保守方案：`SqliteVectorSnapshotReader` 只读 knowledge；若该用户仍有 active preference（`memory_versions.memory_status != "removed"`），整个 Vector rebuild snapshot fail-closed，防止 full_reset 后残留 preference 被 rebuild 静默排除。已补 active/removed 两条 L1。 |
+| G5 | 🟡 L1 seam ready，VM BLOCKED | 新增 `evaluation/d13d_forget_index_producer.index_knowledge_docs`：active knowledge 经真实 `memory.upserted` outbox → 正式 `OutboxWorker/OutboxRouter/build_index_consumer` 消费；preference 不入该 seam。L1 只用 FakeVectorProvider/deterministic embedding 验证接线，不得冒充 VM 证据。正式接入仍需真实 Embedding + Vector provider，并受 G6 环境约束。 |
+| G6 | ⏳ BLOCKED | 仍缺 SDK `0k1.1` headers、`vector_bridge_cli` compile/link/smoke；禁止复用 `0k0.7`。 |
+
+G5 正式关闭标准：在麒麟 VM 的 isolated runtime binding 中注入真实 Embedding/Vector provider，pre-delete probe 在 FTS 与 Vector 双通道都命中，且 vector delete/rebuild 证据可复核。在此之前，FTS-only L1 不得写成 Forget 5/5 或 Vector 双通道完成。

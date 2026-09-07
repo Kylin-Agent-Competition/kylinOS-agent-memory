@@ -451,37 +451,6 @@ def build_forget_fts_consumer(observer: D13DForgetFtsObserver) -> tuple:
         digest_key=digest_key,
     )
     return consumer, embedding_service
-    def _observation(
-        self,
-        phase: ForgetResidualPhase,
-        confirmed: tuple[str, ...],
-        ranked: tuple[str, ...],
-        snapshot_id: str,
-    ) -> ForgetRetrievalObservation:
-        sample = ForgetResidualSample(
-            query_id=f"{phase.value}-{self._user_id}",
-            confirmed_target_ids=confirmed,
-            ranked_ids=ranked,
-        )
-        generation = (
-            self._realtime_generation if phase == ForgetResidualPhase.REALTIME_DELETE
-            else self._rebuild_generation
-        )
-        return ForgetRetrievalObservation(
-            sample=sample,
-            dataset_version="d13d-forget-v2",
-            source_snapshot_id=snapshot_id,
-            source_watermark=Watermark(
-                domain=WatermarkDomain(
-                    scope_id=f"user:{self._user_id}",
-                    stream="forget_fts5",
-                    partition="default",
-                    source_generation=snapshot_id,
-                ),
-                kind=WatermarkKind.MONOTONIC_INT,
-                value=generation,
-            ),
-        )
 
 
 def build_fts_observer(

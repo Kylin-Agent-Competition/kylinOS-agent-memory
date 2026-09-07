@@ -76,3 +76,10 @@ P0-2  full_reset preference 不在 SqliteVectorSnapshotReader 重建真源范围
 P1-1  app.py production default 未把 embedding_service 接入统一 router（forget.executed 默认 route 未注册）
 P1-2  当前 VM client SDK=0k1.1；旧 0k0.7 L2 仅作构建方法参考，不替代 ABI/Host 证据
 ```
+
+## 9. 实现状态更新（2026-09-07）
+
+- 当前 `d13d-validation-profile-v2` 的可运行 deletion/realtime/rebuild 观测路径仍以 **FTS5 deletion port** 为准；正式 outbox ACK 语义已按 §6.3 接入。Vector 双通道尚未闭合，不得把本 profile 描述为 FTS+Vector 完整实现。
+- G4 采用保守排除：`SqliteVectorSnapshotReader` 不把 preference 当作 Vector 重建语义；若 full_reset 后仍有 active preference，Vector rebuild snapshot fail-closed。
+- G5 已有真实 outbox producer seam（`memory.upserted → OutboxWorker/Router/index-consumer`），但只完成 L1；正式运行必须注入麒麟 VM 上的真实 Embedding 与 Vector provider，并等待 G6 headers/bridge smoke。
+- pre-delete positive probe、realtime、rebuild 的 FTS 负向/正向 L1 保持有效；任何 Vector 通道 provenance 必须由真实 provider 在冻结 VM 上产生后才可进入 formal evidence。

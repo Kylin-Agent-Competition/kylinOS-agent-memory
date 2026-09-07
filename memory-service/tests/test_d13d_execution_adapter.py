@@ -1563,6 +1563,83 @@ def test_fts_observer_probe_realtime_rebuild(tmp_path):
     engine.dispose()
 
 
+def test_forget_index_producer_bootstraps_knowledge_vectors_through_outbox(tmp_path):
+    """G5 L1: seeded knowledge is published as real memory.upserted and consumed."""
+    from db.engine import create_db_engine, init_schema
+    from db import repositories as repo
+    from dataclasses import asdict
+    from evaluation.d13d_forget_index_producer import (
+        D13D_INDEX_DIGEST_KEY_ID,
+        index_knowledge_docs,
+    )
+    from evaluation.d13d_forget_fts_observer import _active_docs
+    from embedding.embedding_service import EmbeddingService
+    from providers import EmbeddingResult
+    from tests.retrieval.fakes import FakeVectorProvider
+
+    class DeterministicEmbeddingProvider:
+        def start(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+        def get_dimension(self) -> int:
+            return 2
+
+        def embed(self, text: str, *, timeout_ms: int = 5000):
+            return EmbeddingResult(vector=[0.6, 0.8], dimension=2, l2_norm=1.0)
+
+    engine = create_db_engine(str(tmp_path / "producer.db"))
+    init_schema(engine)
+    with engine.begin() as conn:
+        target = repo.insert_memory_entry(
+            conn,
+            user_id="user_d13e_alpha",
+            entry_type="knowledge",
+            content={"value": "prepared-target-alpha-001"},
+            confidence=0.9,
+        )
+        repo.insert_memory_entry(
+            conn,
+            user_id="user_d13e_alpha",
+            entry_type="knowledge",
+            content={"value": "prepared-control-alpha-002"},
+            confidence=0.9,
+        )
+
+    with engine.connect() as conn:
+        docs = [
+            asdict(doc) for doc in _active_docs(conn, user_id="user_d13e_alpha")
+        ]
+    vector_provider = FakeVectorProvider(
+        dimension=2,
+        digest_keys={D13D_INDEX_DIGEST_KEY_ID: b"kylin-memory-d13d-internal"},
+    )
+    embedding_service = EmbeddingService(provider=DeterministicEmbeddingProvider())
+    indexed, skipped = index_knowledge_docs(
+        engine,
+        user_id="user_d13e_alpha",
+        docs=docs,
+        embedding_service=embedding_service,
+        vector_provider=vector_provider,
+        index_generation="d13d-g5-l1",
+    )
+    embedding_service.close()
+
+    assert (indexed, skipped) == (2, 0)
+    assert len(vector_provider.index) == 2
+    assert (f"user_d13e_alpha", f"{target}") in vector_provider.index
+    with engine.connect() as conn:
+        remaining = conn.execute(
+            repo.outbox.select().where(
+                repo.outbox.c.event_type == repo.EVENT_MEMORY_UPSERTED
+            )
+        ).mappings().all()
+    assert remaining == []
+    engine.dispose()
+
+
 def test_forget_fts_worker_no_ack_fails_closed(tmp_path):
     """Consumer 失败时 Worker 不得 ACK，realtime 必须保留真实 residual。"""
     from evaluation.d13d_forget_fts_observer import D13DForgetFtsObserver

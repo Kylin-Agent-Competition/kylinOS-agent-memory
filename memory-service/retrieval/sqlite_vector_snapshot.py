@@ -2,6 +2,9 @@
 
 本模块只在调用方已开启的 SQLite 读事务中读取 ``memory_entries``。它不创建
 Vector Collection、不调用 Embedding、不激活代次，也不推断遗忘授权或水位语义。
+
+Preference 的检索语义尚未批准进入 Vector 重建真源。为避免 full_reset 后残留
+preference 被静默排除，重建快照在读取时显式 fail-closed。
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from db.schema import memory_entries
+from db.schema import memory_entries, memory_items, memory_versions
 from retrieval.contracts import Watermark
 
 IndexTextResolver = Callable[[Mapping[str, object]], str | None]
@@ -49,7 +52,12 @@ class SqliteVectorSnapshot:
 
 
 class SqliteVectorSnapshotReader:
-    """读取已提交且未软删除的 ``memory_entries``，并维持用户边界。"""
+    """读取已提交且未软删除的 knowledge，并维持用户边界。
+
+    ``memory_items``/``memory_versions`` 不是当前 Vector 重建语义的一部分。
+    若该用户仍有 active preference，说明目标未清理或调用方要求了未授权的
+    重建语义；此处选择拒绝整个快照，而不是生成一个看似成功的部分索引。
+    """
 
     def __init__(self, index_text_resolver: IndexTextResolver) -> None:
         if not callable(index_text_resolver):
@@ -73,6 +81,22 @@ class SqliteVectorSnapshotReader:
             raise ValueError("快照标识必须非空")
         if not isinstance(source_watermark, Watermark):
             raise TypeError("快照水位必须是 Watermark")
+
+        active_preference_ids = conn.execute(
+            select(memory_items.c.id)
+            .join(memory_versions, memory_versions.c.id == memory_items.c.current_version_id)
+            .where(
+                memory_items.c.user_id == user_id,
+                memory_versions.c.is_current == 1,
+                memory_versions.c.memory_status != "removed",
+            )
+            .order_by(memory_items.c.id.asc())
+        ).scalars().all()
+        if active_preference_ids:
+            raise ValueError(
+                "active preference records are excluded from the vector rebuild "
+                f"snapshot; fail-closed item_ids={active_preference_ids!r}"
+            )
 
         rows = conn.execute(
             select(
