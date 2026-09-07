@@ -351,18 +351,23 @@ class D13DForgetFtsDeletionProvider:
 
         memory_ids = request.selector.memory_ids
         version_ids = request.selector.version_ids or []
+        memory_kinds = request.selector.memory_kinds
         if len(version_ids) != len(memory_ids):
             return self._result(request, ok=False, message="FTS deletion version_ids are not aligned")
+        if memory_kinds is not None and len(memory_kinds) != len(memory_ids):
+            return self._result(request, ok=False, message="FTS deletion memory_kinds are not aligned")
 
         matched = 0
         deleted = 0
         try:
-            for memory_id, version_id in zip(memory_ids, version_ids):
+            for index, (memory_id, version_id) in enumerate(zip(memory_ids, version_ids, strict=True)):
+                expected_kind = memory_kinds[index] if memory_kinds is not None else None
                 candidates = [
                     (tagged_id, doc)
                     for tagged_id, doc in observer._docs.items()
                     if tagged_id.rpartition(":")[2] == str(memory_id)
                     and doc.version_id == str(version_id)
+                    and (expected_kind is None or tagged_id.startswith(f"{expected_kind}:"))
                 ]
                 deletion_key = (str(memory_id), str(version_id))
                 if not candidates and deletion_key in self._deleted_keys:

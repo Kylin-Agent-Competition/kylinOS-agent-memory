@@ -121,6 +121,7 @@ def _build_delete_request(
     # G3（E 授权 #160）：接受 knowledge:/preference: tagged 目标，规范化成数字 memory id；
     # 未知 tag / 非数字 fail-closed。
     memory_ids = []
+    memory_kinds = []
     for raw in resolved_target_ids:
         token = str(raw)
         if ":" in token:
@@ -129,9 +130,15 @@ def _build_delete_request(
                 raise ValueError(
                     f"forget.executed 目标含未知 kind/非数字 id: {token!r} (event_id={event_id})"
                 )
+            memory_kinds.append(kind)
             memory_ids.append(num)
         else:
             memory_ids.append(token)
+    aligned_kinds = (
+        memory_kinds
+        if len(memory_kinds) == len(memory_ids)
+        else None
+    )
     if not memory_ids:
         raise ValueError(f"forget.executed resolved_target_ids 为空 (event_id={event_id})")
     if version_ids is None:
@@ -159,6 +166,7 @@ def _build_delete_request(
         user_id=str(user_id),
         memory_ids=memory_ids,
         version_ids=version_ids,
+        memory_kinds=aligned_kinds,
         selection_mode=(
             SelectionMode.SINGLE_ITEM
             if len(memory_ids) == 1

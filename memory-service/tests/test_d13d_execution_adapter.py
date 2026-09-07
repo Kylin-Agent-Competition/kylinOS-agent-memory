@@ -1483,6 +1483,19 @@ def test_fts_observer_probe_realtime_rebuild(tmp_path):
             conn, user_id="user_d13e_beta", entry_type="knowledge",
             content={"value": "prepared-foreign-alpha-003"}, confidence=0.9,
         )
+        # memory_entries.id 和 memory_items.id 是独立自增命名空间。真实状态下
+        # 两者可以同为 1；deletion provider 必须保留 kind，禁止裸数字 ID 歧义。
+        repo.save_preference_version(
+            conn,
+            user_id="user_d13e_alpha",
+            preference_key="d13e-pref-same-numeric-id",
+            preference_scope="global",
+            preference_value="prepared-preference-alpha-001",
+            memory_status="active",
+            evidence_fingerprint="fts-same-numeric-id-v1",
+            idempotency_key="fts-same-numeric-id-1",
+            request_fingerprint="fts-same-numeric-id-request-1",
+        )
     observer = D13DForgetFtsObserver(
         engine, user_id="user_d13e_alpha", fts_db=str(tmp_path / "fts.db")
     )
