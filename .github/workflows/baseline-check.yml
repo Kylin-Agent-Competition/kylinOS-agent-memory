@@ -39,6 +39,7 @@ jobs:
         run: |
           python3 -m pytest \
             memory-service/tests/test_d13d_execution_adapter.py \
+            memory-service/tests/test_d13d_phase3_prep.py \
             memory-service/tests/test_d13d_safety_observability.py \
             memory-service/tests/test_d13d_forget_observability.py \
             memory-service/tests/test_event_ingest_d6d.py \
