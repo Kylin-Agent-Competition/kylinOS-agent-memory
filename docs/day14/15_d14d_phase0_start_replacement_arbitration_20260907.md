@@ -1,12 +1,13 @@
 # D14D Phase0 Formal Start Replacement Arbitration
 
-> **Status: `DRAFT_PENDING_NON_AUTHOR_CONFIRMATION`**
+> **Status: `CONFIRMED`（2026-09-07，PR #165 Reviewer E ACCEPT）**
 > 本记录响应 PR #165 Review HIGH-02（2026-09-07T14:37Z）：Formal 起点从
 > authoritative Phase0 r3/r2 lineage 切换为 r1→r4，缺少 replacement arbitration。
-> 本记录由 D14D 执行方起草；在非作者（Reviewer E 或 D 主审）确认前不得视为
-> authoritative Phase0 replacement 生效。确认后本记录状态改为
-> `CONFIRMED`，`evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e` 消费的
-> r4 起点随之成为正式 Formal start。
+> 非作者 Reviewer E（lovezy0730-create）已于 2026-09-07T15:15:05Z 在 PR #165
+> 继续复审评论中对本记录给出 **ACCEPT**：`d14d-clean-base-20260907-r4` 正式
+> 接纳为原 r3/r2 起点不可消费情况下的 D14D Formal start replacement；
+> 上一轮 HIGH-02 **CLOSED**。`evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e`
+> 消费的 r4 起点自本确认起为正式 Formal start。
 
 ## 1. 原 authoritative Phase0 起点（PR #159 合并后）
 
@@ -73,7 +74,14 @@ NOT_PRESENT_IN_CURRENT_VIRTUALBOX_REGISTRY`。
 
 ## 6. 请求的裁定
 
-请非作者确认以下两项之一：
+**裁定记录（2026-09-07T15:15:05Z）**：非作者 Reviewer E 裁定为 **ACCEPT**，
+依据包括：原 r3/r2 VM/snapshot 不可恢复原因明确未冒充；r4 从已知 r1 起点
+恢复并清除已登记的唯一 build residue；clean-state Gate 正向 8/8 全零 exit 0
+且负向受控注入 FAIL；Kylin V11 / `KYLIN_RELEASE_ID=2603` 一致；三个冻结依赖
+SHA-256 与 r3/r2 逐位一致；kernel / 包数量 / VM/snapshot 血缘差异显式披露
+且 Formal run 重新采集了 G0 host/package inventory，差异未被隐藏。
+
+原始请求文本（保留）：原请非作者确认以下两项之一：
 
 1. **ACCEPT**：接纳 `d14d-clean-base-20260907-r4` 为 D14D Formal start
    replacement；本记录转 `CONFIRMED`；
