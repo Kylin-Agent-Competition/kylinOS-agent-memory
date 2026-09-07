@@ -55,12 +55,17 @@
 - **正式交付物身份以发布包内 `kylin_embedding*.so` 为准**：该 so 为 CMake/pybind11
   构建产物并装入 `runtime/bridge/`；wheel 一律不作为本 A 轨交付物出现。
 
-### 2.2 “so/wheel”历史措辞澄清
+### 2.2 “so/wheel”外部施工台账措辞澄清
 
-- 台账 D15-A 中的“so/wheel”措辞**仅**出现于 `docs/project/15_DAY_PLAN.md:1021`
-  （“锁定 Bridge so/wheel、依赖清单和构建说明”），属于历史泛称；
+- `docs/project/15_DAY_PLAN.md:1021`（“锁定 Bridge so/wheel、依赖清单和构建说明”）
+  为**外部施工台账**中的历史泛称，**不属于本仓库版本化的权威发布契约来源**——
+  本仓 trees 与全量 git 历史均**无**该路径；
+- 仓库权威发布契约以 `docs/day14/00_d14a_release_package_contract.md`
+  （FROZEN、唯一真源）与 `packaging/release/**` 为准；
 - **语义裁量**：正式交付物身份以 **§2.1 为准**——`kylin_embedding*.so`（pybind11
-  模块）是正式交付物；wheel 与 `packaging/kaiming` **均不在 A15 交付范围**。
+  模块）是正式交付物；外部台账“so/wheel”泛称**不新增** wheel、不构成 A15 交付物
+  语义；wheel 与 `packaging/kaiming` **均不在 A15 交付范围**；本 Task 亦不因外部
+  措辞新增 wheel 构建体系。
 
 ---
 
@@ -101,10 +106,21 @@ A 轨发布候选锁定沿如下程序推进，**任何一步未完成前不得�
 ### 4.1 Git 事实
 
 - 当前分支：`release/D15A-lock-preparation`；
-- `HEAD = 3138e942770ec1f9863e86c03da4df9dd1ad8703`（`origin/main` 同点）；
+- `preparation_base_commit`（历史固定 SHA）：
+  `3138e942770ec1f9863e86c03da4df9dd1ad8703`（`origin/main` 同点）——仅作为锁准备
+  基线的历史记录，随 preparation HEAD 前移不更新；
+- `current_head`（动态）：正式复核时以 `git rev-parse HEAD` 输出（40 位完整 SHA）
+  为唯一真源，本文件**不在任何绑定窗口硬编码 40 位 SHA**；命令失败 / 非 clean
+  tree 一律 fail-closed，**不得 Mock、不得默认 / 伪造 HEAD**；语义等价 D14A 契约
+  §1.1 `current_pr_head`;
 - `git status --porcelain` 为空（worktree clean）——在创建本文档与配套测试之前
   的工作区事实；
-- 历史 runtime 被测基线 `tested_runtime_commit = e3d4b9d565e2c3c153973125b3c071225e1b9e4d`。
+- `historical_tested_runtime_commit = e3d4b9d565e2c3c153973125b3c071225e1b9e4d`
+  （历史固定记录：历史 runtime 包在真实 VM **实际执行**的提交；D14A 契约 §1.1
+  现行值）；
+- `current_tested_runtime_commit`：正式 evidence/contract 当前声明的**实际被测提交**；
+  当前 as-of 为**未选择**（final tested_commit 仍 `PENDING_P0_I3_RESELECTION`，
+  `evidence/index.yaml` 无 D13A/D14A 正式条目）。
 
 ### 4.2 事实快照
 
@@ -118,7 +134,7 @@ A 轨发布候选锁定沿如下程序推进，**任何一步未完成前不得�
 | D14A final package | `NOT_FROZEN`（`PACKAGE_IMPLEMENTATION_CANDIDATE`，未到 formal candidate） |
 | D14A formal package hash | `NOT_FROZEN`（未重算；正式 hash 未回填） |
 | D14A BLOCKER C | `HANDOFF_REQUIRED`（runtime/model 冻结身份无 D Reviewer 接受的可信外部输入，契约 §6bis） |
-| runtime evidence 相对 main | `RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED`（`git diff --name-only e3d4b9d565e2c3c153973125b3c071225e1b9e4d..HEAD` 含 `packaging/`、`memory-service/`、`migrations/` 等 runtime/生产前缀；须重新打包 → 重算 hash → 真实 VM 重测后回填） |
+| runtime evidence 相对 main | `RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED`（快照时刻对历史已知被测提交 `e3d4b9d…`（`historical_tested_runtime_commit`）的 diff 观测到 `packaging/`、`memory-service/`、`migrations/` 等 runtime/生产前缀；须重新打包 → 重算 hash → 真实 VM 重测后回填） |
 | D13A perf（`perf/day13a` 三轮 run_01~03 + summary） | `INVALIDATED`（`perf/day13a/INVALIDATED.md`；不作为正式性能基线） |
 | D13A `formal_baseline_complete` | `formal_baseline_complete=false` |
 | G8 package-only runner/阈值 | 未批准（D14D B5） |
@@ -131,7 +147,8 @@ A 轨发布候选锁定沿如下程序推进，**任何一步未完成前不得�
 
 1. `git rev-parse HEAD` —— 取得执行时 HEAD（40 位完整 SHA）；
 2. `git status --porcelain` —— 必须为空（dirty tree 一律不得进入正式锁判定）；
-3. `git diff --name-only e3d4b9d565e2c3c153973125b3c071225e1b9e4d..HEAD` ——
+3. `git diff --name-only current_tested_runtime_commit..HEAD` —— 基线取正式
+   evidence/contract 当前声明的**实际被测提交**，**不永久绑定历史基线 e3d4…**；
    对结果做三分类：
 
    - `EVIDENCE_CURRENT`：diff 为空；
@@ -143,6 +160,12 @@ A 轨发布候选锁定沿如下程序推进，**任何一步未完成前不得�
 
 随后按结果**复核本节快照**；任一事实与 §4.2 不符时，本文件的状态表与结论
 **一律作废**，不得引用。
+
+- **当前事实（as-of）**：`current_tested_runtime_commit` **未选择**，不得以
+  `historical_tested_runtime_commit`（e3d4b9d…）充当现行刷新基线；runtime evidence
+  结论保持 `RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED`。三分类
+  （`EVIDENCE_CURRENT` / `DOCS_EVIDENCE_ONLY` / `RUNTIME_EVIDENCE_STALE`）与
+  fail-closed 处理原样保留。
 
 ---
 
@@ -164,7 +187,10 @@ A 轨发布候选锁定沿如下程序推进，**任何一步未完成前不得�
   且等于 `manifest.source_commit`（`build_release_package.sh` Phase 0
   `--source-commit` 必填且与 HEAD 一致，dirty-tree Gate fail-closed）；
 - 不得超过任意字段互相伪造相等（契约 §1.1 四身份语义：`source_commit` /
-  `tested_runtime_commit` / `evidence_commit` / `current_pr_head` 独立）。
+  `tested_runtime_commit` / `evidence_commit` / `current_pr_head` 独立）；
+  动态 `current_head` / `current_pr_head`（执行时 `git rev-parse HEAD`）与
+  `source_commit` / `tested_runtime_commit` / `evidence_commit` 独立，不得互相
+  伪造相等。
 
 ### 5.2 正式锁验收门禁（步骤序列）
 
@@ -219,7 +245,10 @@ A 轨发布候选锁定沿如下程序推进，**任何一步未完成前不得�
 
 ### 7.2 禁止的越级结论（全文不得出现）
 
-以下**语义**在本文件全文中一律不得以任何中英文等价表述出现：
+以下**语义**在本文件全文中一律不得以任何中英文等价表述出现，属必须遵守的**文档
+纪律**（中文 / 自然语言同义越级同样受约束，不只是受控英文 sentinel）；其中机器
+守卫（确定性测试）只覆盖受控英文 sentinel、结构化状态行与已定义 provenance/state
+token（覆盖边界见 7.2bis），语义级越级与语义归因由独立 Reviewer 人工审查：
 
 - **正式终锁类**：以“最终锁定 / final 锁定”语义表述的状态结论（final 前缀加
   lock 后缀的英文组合即属此类）；
@@ -239,6 +268,26 @@ A 轨发布候选锁定沿如下程序推进，**任何一步未完成前不得�
 > 在本文件全文中**均以中文语义描述代替，不书写其英文原词组合**；配套测试以
 > 机器可读方式断言其缺席（fail-closed）。任何新提交若引入上述越级结论，测试
 > 立即变红。
+
+### 7.2bis 机器守卫覆盖边界
+
+配套确定性守卫测试（`docs/day15/test_d15a_rc_lock_matrix.py`，纯 stdlib 静态断言）
+**仅**声明覆盖：
+
+1. **受控英文 sentinel 缺席**：§7.2 所列越级词族对应的受控英文 sentinel 词边界
+   token（final 前缀加 lock 后缀组合、独立 lock 词族终态、L3 加 ready、host 加
+   verified、runtime 加 verified 组合，以及 D14A 完成 / 生产就绪 / 发布就绪的
+   英文固定短语）一律缺席；
+2. **结构化状态行**：A15-1/A15-2/A15-3 表格行与 `WAITING_PREREQ` 的行级绑定、
+   本矩阵线独立状态行；
+3. **已定义 provenance/state token 在场**：受控状态词、`preparation_base_commit`、
+   `historical_tested_runtime_commit` / `current_tested_runtime_commit`、三分类
+   （`EVIDENCE_CURRENT` / `DOCS_EVIDENCE_ONLY` / `RUNTIME_EVIDENCE_STALE`）、
+   `current_head` 与关键仓库事实。
+
+**不覆盖**中文 / 自然语言同义越级、语义归因、evidence 真实性——由独立 Reviewer
+（D 主审，涉性能 / 安全由 E 补审）人工审查；本守卫**不引入** NLP / LLM / 机器
+学习检测（纯 stdlib 静态断言，无模型、无语义推理、无网络、无 Runtime 依赖）。
 
 ### 7.3 责任与 Reviewer
 
