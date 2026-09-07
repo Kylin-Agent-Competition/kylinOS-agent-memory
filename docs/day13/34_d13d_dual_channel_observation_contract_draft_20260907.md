@@ -2,18 +2,19 @@
 
 | 字段 | 内容 |
 | --- | --- |
-| 文档状态 | `STAGE0_DRAFT / NON-FORMAL / PENDING_E_REBUILD_RULING` |
+| 文档状态 | `DRAFT_EXECUTED / NON-FORMAL / E_REBUILD_RULING_RECORDED` |
 | 任务 | `P2-T0.3` 契约草案 + `P2-T0.4` 负路径测试清单 |
 | 目标 profile | `d13d-validation-profile-v2-dual-channel` |
 | 关联契约 | `29_d13d_forget_retrieval_profile_contract_20260906.md`、`30_d13d_forget_runtime_seam_handoff_20260906.md`、`33_d13d_phase2_remaining_task_plan_20260907.md` |
 | 硬边界 | 不修改冻结 IPC / Schema / DB / 错误码 / Dataset / Gold / Threshold / Runner；不改现有 FTS-only profile 语义 |
-| 主要阻塞 | 非 full_reset 删除后目标用户仍有 active preference 时，`SqliteVectorSnapshotReader.rebuild` 的语义必须先由 E 裁定 |
+| 当前阻塞 | 无；E rebuild ruling 已记录，Stage 2/3 已按裁定完成 |
 
 ## 1. 范围与状态
 
-本文件是 Stage 2 实现前的 **draft**，不是已批准契约，也不表示
-`OBSERVATION_PROFILES` 已更新。它的作用是把 P2-T0.3 / P2-T0.4 的准备产出
-固定下来，避免在 E 裁定后临时发明字段或绕过 fail-closed 语义。
+本文件最初是 Stage 2 实现前的 **draft**，用于固定 P2-T0.3 / P2-T0.4 的准备产出。
+后续实现使用独立 profile `d13d-validation-profile-v2-dual-channel`，并按下方
+已记录的 E ruling 完成 5/5 dual-channel E2E；本文件不改写历史，也不作为正式
+Runner/raw schema 冻结依据。
 
 现有 `d13d-validation-profile-v2` 继续保持 FTS-only 语义不变。dual-channel
 实现必须使用独立 profile，避免把 FTS-only 历史证据重新解释成 Vector 已闭合。
@@ -173,13 +174,19 @@ Stage 2.6 实现时至少覆盖以下 L1 测试：
 |Scope mismatch|user_id / collection / generation / foreign control 不匹配时，dispatch fail-closed|
 |Profile allowlist|未知 profile、空 profile、重复注册尝试均 fail-closed；production 默认路径不自动启用 dual-channel|
 
-## 6. 等待 E 裁定的唯一开放项
+## 6. E rebuild ruling（recorded）
 
-Stage 2 编码前必须先获得以下之一的 E 裁定：
+Reviewer E 已在 PR #160 comment `5568565138` 记录：
+`APPROVE_KNOWLEDGE_ONLY_PARTIAL_REBUILD`。
 
-1. `APPROVE_KNOWLEDGE_ONLY_PARTIAL_REBUILD`
-2. `APPROVE_PREFERENCE_FULL_SNAPSHOT`
-3. `BLOCK_REQUEST_ALTERNATIVE`
+约束执行如下：
 
-在收到裁定前，本草案不授权实现 `SqliteVectorSnapshotReader` 行为变更，
-也不授权运行 5/5 dual-channel E2E。
+1. 001-004 允许 Knowledge-only rebuild；snapshot 必须是该 `request.user_id`
+   删除后的全部 active / non-deleted Knowledge 真源。
+2. 不全局删除 active-Preference fail-closed 语义；Knowledge-only rebuild 与
+   full user reset rebuild 显式区分。
+3. 005/full_reset 保持严格 fail-closed；若仍有 active Preference 必须失败。
+4. 双通道 E2E 证明 pre-delete FTS/Vector 命中、consumer ACK、realtime miss、
+   rebuild 后不复活，并保留同用户 Knowledge control 与 foreign-user 数据。
+5. 本裁定不授权 Preference embedding/indexing、Preference index-text 规则或
+   Preference Vector retrieval contract。

@@ -5,10 +5,10 @@
 | 项 | 值 |
 | --- | --- |
 | 文档状态 | `PLANNING / NON-FORMAL` |
-| 计划基线 | PR #160 @ `57466ccb9504da75b5da03bbbef1f563a14b4ad4` |
-| 当前主要阻塞 | P2-B `BLOCKED_PENDING_VECTOR_DUAL_CHANNEL` |
-| 已有 Forget 证据 | FTS-channel `5/5 / PARTIAL NON-FORMAL` |
-| 目标 | 闭合 Phase 2 剩余 Gate，推进到 `READY_FOR_REVIEW` |
+| 计划基线 | PR #160 @ `f674c199c7ffc4f07d6f7f8114063fc28b48cb75` |
+| 当前主要阻塞 | 无工程阻塞；等待非作者独立终审 |
+| 已有 Forget 证据 | FTS + Vector dual-channel `5/5 / NON-FORMAL CANDIDATE` |
+| 目标 | final review；APPROVE 后 merge 并记录 `I3B_COMPLETION_MERGE_SHA` |
 | 禁止升级 | 不宣称 formal raw / Seal / Runner Gate / `D13D_FROZEN` |
 
 本计划只覆盖 PR #160 的 Phase 2 剩余收口。Phase 3 preparation 可以并行推进，
@@ -16,6 +16,11 @@
 `I3B_COMPLETION_MERGE_SHA` 之后才开始。
 
 ## 当前事实
+
+2026-09-07 执行更新：Stage 1 preparation、Stage 2 dual-channel implementation、
+Stage 3 的 5/5 FTS + Vector E2E 以及 Stage 4 的最终回归、状态同步与 CI 已完成。
+当前执行记录与最小证据索引见 `26_` §9.10 和 PR #160 comment `5570965897`。
+本文件剩余表格保留为历史执行计划，不再新增状态层。
 
 1. Reviewer E 已在 `57466cc` 确认上一轮 HIGH/MEDIUM 闭合，且无新增阻塞 finding。
 2. `29_` / `30_` 冻结口径要求完整 Forget 5/5 必须有真实 Vector 双通道证据；

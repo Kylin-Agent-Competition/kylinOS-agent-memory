@@ -13,7 +13,7 @@
 | opened_at_utc | `2026-09-06T11:55:55Z` |
 | opened_by | B（高翌哲，Codex 代执行） |
 | formal_tested_commit | `PENDING_P0_I3_RESELECTION`（本阶段不选择） |
-| 状态 | `BLOCKED_PENDING_CROSS_TRACK_COMPLETION`（Draft 载体；P2-A/B/C 外部依赖闭合后逐项推进） |
+| 状态 | `READY_FOR_REVIEW`（等待非作者独立终审；merge 前不宣称 COMPLETE） |
 | 初始 PR 状态 | Draft（转 Ready for review 由用户手动执行） |
 | 编制日期 | 2026-09-06 |
 | 权威执行清单（SSOT） | `docs/day13/26_d13d_i3b_completion_worklist_20260906.md`（本文件，仓库内唯一权威） |
@@ -71,7 +71,7 @@ D14D G0–G9
 | --- | --- | --- |
 | P0-I3a | Versioned preflight / Dataset SHA anchor / isolation-shape checks / L1 | `MERGED`（经 PR #150 入 main） |
 | P0-I3b-infra | Preference/Conflict real dispatch、Safety binding + provenance、execution receipts、Forget schema、canonical package | `MERGED`（经 PR #150 入 main） |
-| P0-I3b-completion | Safety Gate-9 projection（D13E Gold-independent 裁定）+ Forget real dispatch（外部 binding + realtime/rebuild 观测）+ pref-003 正式处理 | `IN_PROGRESS`（本 PR 载体；P2-A/B/C 闭合前保持 `BLOCKED_PENDING_CROSS_TRACK_COMPLETION`） |
+| P0-I3b-completion | Safety Gate-9 projection（D13E Gold-independent 裁定）+ Forget real dispatch（外部 binding + realtime/rebuild 观测）+ pref-003 正式处理 | `READY_FOR_REVIEW`（本 PR 载体；等待非作者独立终审，APPROVE + merge 后才为 COMPLETE） |
 | P0-I3c | 非作者独立 review + merge（partial infra 已由 PR #150 完成；completion review 待 I3b-completion） | `PARTIAL-INFRA COMPLETE / COMPLETION REVIEW PENDING` |
 | P0-I3d | I3b-completion 闭合后重新选择正式 tested_commit 并复验隔离 VM | `BLOCKED`（依赖 I3b-completion） |
 
@@ -406,3 +406,41 @@ provenance，因此不宣称完整 Forget 5/5 closure。
 
 它也不是 formal raw，不选择正式 `tested_commit`，不执行 Runner Gate，不生成
 Seal，也不标 `D13D_FROZEN`。
+
+### 9.10 FTS + Vector dual-channel Forget 5/5 record（2026-09-07，READY_FOR_REVIEW）
+
+Reviewer E 已按 comment `5568565138` 批准 001-004 的
+`KNOWLEDGE_ONLY_PARTIAL_REBUILD`，同时保留 005/full_reset 的 active-Preference
+fail-closed 语义。执行 commit `f674c199c7ffc4f07d6f7f8114063fc28b48cb75` 上，
+五个 Forget sample 已在隔离麒麟 VM runtime 完成真实 FTS + Vector 双通道：
+
+```text
+pre-delete FTS/Vector 正向命中
+→ forget.preview / forget.execute
+→ OutboxWorker / OutboxRouter / build_forget_consumer
+→ outbox_row_deleted_by_worker ACK
+→ realtime FTS/Vector residual=0
+→ full rebuild 后 FTS/Vector residual=0
+```
+
+五条 receipt 的 missed target / wrongly deleted / cross-user violation 均为 0；
+001-004 的同用户剩余 Knowledge control 在 post-rebuild Vector 查询中可见，
+005/full_reset 不复活 Preference 或 Knowledge target。remote evidence root 为
+`/home/kylin-agent/d13d-p2b-dual-channel-20260907-r4/evidence`，本地镜像为
+`evidence/phase3-prep/d13d_stage3_dual_channel_20260907_r6/evidence`。
+`SHA256SUMS` 7/7 verified；binding、source/runtime DB、embedding module 和
+vector bridge CLI SHA 已写入 receipts。
+
+最终回归与 CI：Phase 2 targeted regression + formal eval suite `264 passed`，
+`git diff --check` PASS，CI @ `f674c199` 3/3 SUCCESS。Reviewer 最小证据索引见
+PR #160 comment `5570965897`。
+
+当前状态推进为：
+
+```text
+P2-B = CLOSED_AS_NON_FORMAL_DUAL_CHANNEL_CANDIDATE
+P0-I3b-completion = READY_FOR_REVIEW
+```
+
+这仍不是 formal raw，不选择 final `tested_commit`，不生成 Seal / attestation，
+不执行 Runner Gate，不标 `D13D_FROZEN`，也不宣称 Preference Vector 支持。
