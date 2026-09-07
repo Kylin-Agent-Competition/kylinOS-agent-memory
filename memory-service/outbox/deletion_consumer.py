@@ -139,6 +139,10 @@ def _build_delete_request(
         if len(memory_kinds) == len(memory_ids)
         else None
     )
+    if not memory_kinds:
+        target_type = payload.get("target_type")
+        if target_type in ("knowledge", "preference"):
+            aligned_kinds = [target_type] * len(memory_ids)
     if not memory_ids:
         raise ValueError(f"forget.executed resolved_target_ids 为空 (event_id={event_id})")
     if version_ids is None:

@@ -1764,3 +1764,91 @@ def test_forget_single_item_e2e_dispatch_fts(tmp_path):
     assert data["forget_binding_artifact_sha256"] == bindings["d13e-forget-001"].binding_artifact_sha256
     assert data.get("forget_realtime_snapshot_id")
     assert data.get("forget_rebuild_snapshot_id")
+
+
+def test_fts_deletion_consumer_disambiguates_bare_id_with_target_type(tmp_path):
+    """真实 forget.executed 的非 full_reset 目标是裸 ID，consumer 必须用 target_type 分流。"""
+    from db.engine import create_db_engine, init_schema
+    from db import repositories as repo
+    from evaluation.d13d_forget_fts_observer import D13DForgetFtsObserver
+    from outbox.router import OutboxRouter
+    from outbox.worker import OutboxWorker
+
+    engine = create_db_engine(str(tmp_path / "run.db"))
+    init_schema(engine)
+    with engine.begin() as conn:
+        target = repo.insert_memory_entry(
+            conn,
+            user_id="user_d13e_alpha",
+            entry_type="knowledge",
+            content={"value": "bare-id-target-alpha-001"},
+            confidence=0.9,
+        )
+        repo.save_preference_version(
+            conn,
+            user_id="user_d13e_alpha",
+            preference_key="bare-id-pref-same-numeric-id",
+            preference_scope="global",
+            preference_value="bare-id-preference-alpha-001",
+            memory_status="active",
+            evidence_fingerprint="bare-id-same-numeric-id-v1",
+            idempotency_key="bare-id-same-numeric-id-1",
+            request_fingerprint="bare-id-same-numeric-id-request-1",
+        )
+    observer = D13DForgetFtsObserver(
+        engine, user_id="user_d13e_alpha", fts_db=str(tmp_path / "fts.db")
+    )
+    observer.initialize()
+    confirmed = (f"knowledge:{target}",)
+    observer.probe_pre_delete(confirmed)
+
+    with engine.begin() as conn:
+        count, _ = repo.soft_delete_resolved_targets(
+            conn,
+            user_id="user_d13e_alpha",
+            target_type="knowledge",
+            resolved_target_ids=[str(target)],
+            forget_plan_id="bare-id-plan",
+        )
+    assert count == 1
+    payload = {
+        "event_id": "evt-bare-id-plan",
+        "user_id": "user_d13e_alpha",
+        "forget_plan_id": "bare-id-plan",
+        "target_type": "knowledge",
+        "forget_mode": "single_item",
+        "resolved_target_ids": [str(target)],
+        "version_ids": ["v1"],
+        "selection_hash": "hmac-sha256:d9d-internal:" + "a" * 64,
+        "confirmation_ref": "bare-id-plan",
+        "trace_id": "trace-bare-id-plan",
+    }
+    with engine.begin() as conn:
+        outbox_id = repo.enqueue_outbox(
+            conn,
+            aggregate_type="forget",
+            aggregate_id="bare-id-plan",
+            event_type=repo.EVENT_FORGET_EXECUTED,
+            payload=payload,
+            priority=repo.FORGET_PRIORITY,
+        )
+    consumer, embedding_service = build_forget_fts_consumer(observer)
+    router = OutboxRouter()
+    router.register(repo.EVENT_FORGET_EXECUTED, consumer)
+    worker = OutboxWorker(
+        engine, poll_interval_s=1, max_retries=0, consumer=router.route
+    )
+    try:
+        worker._poll_once()
+    finally:
+        worker.stop()
+        embedding_service.close()
+
+    with engine.connect() as conn:
+        acked_row = conn.execute(
+            repo.outbox.select().where(repo.outbox.c.id == outbox_id)
+        ).mappings().first()
+    assert acked_row is None
+    rt = observer.realtime(confirmed)
+    assert all(tid not in rt.sample.ranked_ids for tid in confirmed)
+    engine.dispose()
