@@ -6,7 +6,7 @@
 | --- | --- |
 | D14B 分支 | `test/D14B-l3-vm-release-regression` |
 | 历史准备基线 | `8cc4a89e34ca7ec73563c798a46339721f291139`（仅历史） |
-| 当前开发基线 | `b03cabb`（合并 `origin/main@f978dff` 后的本地 D14B HEAD） |
+| 当前开发基线 | `3430a1f`（合并 `origin/main@ba3b50e` 后的本地 D14B HEAD） |
 | formal tested_commit | `PENDING_D13D_D14D_HANDOFF` |
 | D13D_FROZEN | `NO` |
 | D14D_ENV_PREPARED | `READY`（Phase0 r3，不能等同于 L3） |
@@ -16,6 +16,10 @@
 
 本批只提供 B 轨的只读 harness、比较口径及证据布局；不创建正式 evidence root，
 不运行 VM、不操作 D14D/D13D 环境，也不把本地 L0/L1 结论描述为 L3 PASS。
+
+2026-09-07 主线已合入 D13D I3b-completion（#160），包括双通道 Forget 观测及
+SQLite→Vector 重建输入快照；其状态仍为 Phase 3 `PREPARATION / NON-FORMAL`，不产生
+`D13D_FROZEN`。D14B 只消费正式 handoff，不把该准备证据提升为 formal input。
 
 ## 2. Formal preflight
 
@@ -127,7 +131,7 @@ evidence/l3-kylin-vm/d14b_<UTC_RUN_ID>_<sha7>/
 
 | 项 | 状态 | 验证 |
 | --- | --- | --- |
-| 分支同步与旧 baseline 降级 | 完成 | D14B merge `b03cabb` |
+| 分支同步与旧 baseline 降级 | 完成 | D14B merge `3430a1f`（含 #160） |
 | preflight | 完成 | commit/FROZEN/L3_READY/root fail-closed tests |
 | snapshot compare | 完成 | missing/duplicate/cross-user/stale/exact tests |
 | evidence closure | 完成 | SHA256SUMS valid/extra-file tests |

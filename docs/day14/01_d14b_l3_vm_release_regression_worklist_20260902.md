@@ -7,10 +7,11 @@
 - 工作分支：`test/D14B-l3-vm-release-regression`（按提交分支要求命名：`<类型>/<用途>`，不含 `codex`）。
 - 本次范围：仅 B 轨检索与索引链路。在 D14D 提供的 L3 干净快照与发布包上，验证 Vector/FTS5/RRF 检索与索引的持久化、重建一致性、删除无残留与性能，覆盖服务/OS 重启后索引一致，并保存正式回归结果；不代行 A、C、D、E 轨实现或审查。
 - 历史准备基线：`origin/main@8cc4a89`（只保留为 2026-09-02 开工记录，不得作为正式 tested_commit）。
-- 当前开发基线：`b03cabb`（2026-09-07 将 `origin/main@f978dff` 合并至本 D14B 分支，用于对齐现行生产接口）。
+- 当前开发基线：`3430a1f`（2026-09-07 将 `origin/main@ba3b50e` 合并至本 D14B 分支，用于对齐 D13D 双通道检索观测接口）。
 - 正式 tested_commit：`PENDING_D13D_D14D_HANDOFF`；必须由 D13D `FROZEN` 与 D14D `L3_READY` 共同交接，不能用当前开发基线替代。
 - 开始时间：2026-09-02（准备阶段）。最晚停止时间：尚未由负责人指定；进入实现前须确认。
 - 当前进度：D14B 准备进行中：已同步开发基线、固定 formal preflight / 快照比较 / evidence SHA256SUMS 校验 harness，并以 L0/L1 契约测试验证。正式 VM 工作 0/8；在 D13D `FROZEN`、D14D `L3_READY`、final package/hash 与同一 tested_commit 均交接前，结果仍为 `UNVERIFIED`。
+- 上游状态更新（2026-09-07）：D13D I3b-completion（#160）已合入主线，但其 Phase 3 仍仅为准备阶段；`D13D_FROZEN=NO`、final tested_commit 仍待重选，故不解除 D14B formal gate。
 
 ## 完成定义
 
