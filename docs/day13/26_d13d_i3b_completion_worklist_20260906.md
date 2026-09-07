@@ -268,6 +268,33 @@ P2-B = IN_PROGRESS / BLOCKED_UNTIL_5_OF_5_E2E（R4–R9 已落地：V2 binding�
 P2-C = COMPLETE（#161 production fix 已 merge 并被 #160 真实 Provider/adapter contract 消费：pref 4/4 True；事实/描述负例通过）
 ```
 
+### 8.6 Safety-001 状态统一（2026-09-07）
+
+自本节起，Safety-001 的当前执行口径统一为：
+
+```text
+P2-A = CONTRACT_MERGED / ADAPTER_CONSUMER_CLOSED
+Safety-001 detector gap = CLOSED_AT_L1（hyphenated cloud-key rule；E 授权 P2-A）
+Safety formal raw / Runner Gate = NOT_EXECUTED（Phase 3）
+```
+
+该结论只覆盖 PR #160 当前 HEAD 的 L1 契约闭环：
+
+- `pipeline/sensitive.py` 与 `schemas.py` 已按 D13E contract 消费连字符云 Key 的
+  critical/reject 语义，未修改 Dataset / Gold / Threshold / Runner；
+- `dispatch_safety_sample` 的 actual 仍来自 persisted `source_events` 观测；
+- 本 PR 的 adapter→Runner contract 回归把 `d13e-safety-001` 归入
+  `MUST_MATCH_TRUE`，且 `KNOWN_OBSERVATION_GAP_FALSE` 为空；
+- `docs/day13/26_d13e_safety_raw_projection_contract_20260906.md` §10 与本节为
+  同一权威状态。
+
+在此结论之上，不得外推为：
+
+- Safety formal VM raw 已执行；
+- Safety 4/4 formal PASS；
+- PR #160 final APPROVE 或 Phase 2 整体完成；
+- Phase 3 Seal / attestation / Runner Gate / `D13D_FROZEN`。
+
 ## 9. P2-B 承接与执行记录（2026-09-06）
 
 ### 9.1 授权与状态
