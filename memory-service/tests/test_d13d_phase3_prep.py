@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import sys
 
 
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "run_d13d_phase3_prep.py"
@@ -104,6 +105,31 @@ def test_preflight_blocks_failed_nonsemantic_collection_command():
     reasons = MODULE.evaluate_preflight(results)
 
     assert "command failed: service_active" in reasons
+
+
+def test_runtime_import_constructs_ssh_client(monkeypatch):
+    calls = []
+
+    class FakeClient:
+        def set_missing_host_key_policy(self, policy):
+            calls.append(("set_policy", policy))
+
+        def connect(self, *args, **kwargs):
+            calls.append(("connect", args, kwargs))
+
+        def close(self):
+            calls.append(("close",))
+
+    class FakeParamiko:
+        SSHClient = FakeClient
+        AutoAddPolicy = object
+
+    monkeypatch.setitem(sys.modules, "paramiko", FakeParamiko)
+
+    client = MODULE._ssh_client()
+
+    assert isinstance(client, FakeClient)
+    assert calls[0][0] == "set_policy"
 
 
 def test_preflight_compares_sha256_anchor_fail_closed(tmp_path):

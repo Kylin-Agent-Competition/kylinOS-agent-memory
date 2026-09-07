@@ -285,6 +285,16 @@ def write_checksums(root: pathlib.Path, files: list[pathlib.Path]) -> None:
             fh.write(f"{digest}  {path.relative_to(root).as_posix()}\n")
 
 
+def _ssh_client():
+    # Keep the SSH dependency runtime-only so --list-commands remains testable
+    # in environments that do not install paramiko.
+    import paramiko
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    return client
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output_root", type=pathlib.Path, nargs="?")
@@ -334,8 +344,7 @@ def main() -> int:
         return 2
 
     args.output_root.mkdir(parents=False, exist_ok=False)
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client = _ssh_client()
     try:
         client.connect(args.host, port=args.port, username=USER, password=password, timeout=20)
         results = run_remote(client, entries, timeout_s=args.timeout_s)
