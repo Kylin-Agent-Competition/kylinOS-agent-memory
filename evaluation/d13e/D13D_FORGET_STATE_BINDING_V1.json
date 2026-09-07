@@ -1,0 +1,232 @@
+{
+  "applicable_source_commit": "dc58e83479d718c8e3fbbbbb5d3b3f046f651973",
+  "approval_reference": "D/E 2026-09-06 B-2 ACCEPTED / BLOCKED_PENDING_VM_BINDING_ARTIFACT + B 完整授权",
+  "approved_by": "D/E",
+  "artifact_sha256": "915c6ae434a7695340aa189a98ff2d79119ac74435587f2149dc85d9a7e4d91f",
+  "binding_version": "d13d-forget-state-binding/v1",
+  "created_at_utc": "2026-09-06T13:11:02.906604+00:00",
+  "created_by": "B（高翌哲）",
+  "db_identity": {
+    "path": "/home/yanmouren778/p2b-prep-20260906/state/p2b-forget-state.db",
+    "sha256": "9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f"
+  },
+  "environment_id": "d13d-p2b-env@d14d-clean-base-20260906-r2",
+  "owner": "B（高翌哲）",
+  "retrieval_profile": "d13d-validation-profile-v1",
+  "samples": [
+    {
+      "foreign_user_controls": [
+        {
+          "id": 3,
+          "kind": "knowledge"
+        }
+      ],
+      "forget_mode": "single_item",
+      "prerequisite_facts": {
+        "active": true
+      },
+      "realtime_retrieval": {
+        "entrypoint": "observe_forget_execution:realtime",
+        "snapshot": "sqlite:9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f:realtime",
+        "trace_reference": "dispatch/d13e-forget-001.json",
+        "watermark": "p2b-realtime-1"
+      },
+      "rebuild_retrieval": {
+        "entrypoint": "observe_forget_execution:rebuild",
+        "snapshot": "sqlite:9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f:rebuild",
+        "trace_reference": "dispatch/d13e-forget-001.json",
+        "watermark": "p2b-rebuild-1"
+      },
+      "same_user_controls": [
+        {
+          "id": 2,
+          "kind": "knowledge"
+        }
+      ],
+      "sample_id": "d13e-forget-001",
+      "target_identity": {
+        "db_id": 1,
+        "knowledge_id": "d13e-memory-001",
+        "stable_identity": "memory_entries/1"
+      },
+      "target_selector": {
+        "memory_id": "d13e-memory-001"
+      },
+      "user_id": "user_d13e_alpha"
+    },
+    {
+      "foreign_user_controls": [
+        {
+          "id": 7,
+          "kind": "knowledge"
+        }
+      ],
+      "forget_mode": "session",
+      "prerequisite_facts": {
+        "session_entry_count": 2
+      },
+      "realtime_retrieval": {
+        "entrypoint": "observe_forget_execution:realtime",
+        "snapshot": "sqlite:9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f:realtime",
+        "trace_reference": "dispatch/d13e-forget-002.json",
+        "watermark": "p2b-realtime-2"
+      },
+      "rebuild_retrieval": {
+        "entrypoint": "observe_forget_execution:rebuild",
+        "snapshot": "sqlite:9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f:rebuild",
+        "trace_reference": "dispatch/d13e-forget-002.json",
+        "watermark": "p2b-rebuild-2"
+      },
+      "same_user_controls": [
+        {
+          "id": 6,
+          "kind": "knowledge"
+        }
+      ],
+      "sample_id": "d13e-forget-002",
+      "target_identity": {
+        "db_ids": [
+          4,
+          5
+        ],
+        "session_id": "d13e-session-001"
+      },
+      "target_selector": {
+        "session_id": "d13e-session-001"
+      },
+      "user_id": "user_d13e_alpha"
+    },
+    {
+      "foreign_user_controls": [
+        {
+          "id": 10,
+          "kind": "knowledge"
+        }
+      ],
+      "forget_mode": "topic",
+      "prerequisite_facts": {
+        "topic_entry_count": 1
+      },
+      "realtime_retrieval": {
+        "entrypoint": "observe_forget_execution:realtime",
+        "snapshot": "sqlite:9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f:realtime",
+        "trace_reference": "dispatch/d13e-forget-003.json",
+        "watermark": "p2b-realtime-3"
+      },
+      "rebuild_retrieval": {
+        "entrypoint": "observe_forget_execution:rebuild",
+        "snapshot": "sqlite:9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f:rebuild",
+        "trace_reference": "dispatch/d13e-forget-003.json",
+        "watermark": "p2b-rebuild-3"
+      },
+      "same_user_controls": [
+        {
+          "id": 9,
+          "kind": "knowledge"
+        }
+      ],
+      "sample_id": "d13e-forget-003",
+      "target_identity": {
+        "db_ids": [
+          8
+        ],
+        "topic_key": "d13e-topic"
+      },
+      "target_selector": {
+        "topic": "d13e-topic"
+      },
+      "user_id": "user_d13e_alpha"
+    },
+    {
+      "foreign_user_controls": [
+        {
+          "id": 13,
+          "kind": "knowledge"
+        }
+      ],
+      "forget_mode": "time_window",
+      "prerequisite_facts": {
+        "events_in_window": 1,
+        "events_outside_window": 1
+      },
+      "realtime_retrieval": {
+        "entrypoint": "observe_forget_execution:realtime",
+        "snapshot": "sqlite:9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f:realtime",
+        "trace_reference": "dispatch/d13e-forget-004.json",
+        "watermark": "p2b-realtime-4"
+      },
+      "rebuild_retrieval": {
+        "entrypoint": "observe_forget_execution:rebuild",
+        "snapshot": "sqlite:9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f:rebuild",
+        "trace_reference": "dispatch/d13e-forget-004.json",
+        "watermark": "p2b-rebuild-4"
+      },
+      "same_user_controls": [
+        {
+          "id": 12,
+          "kind": "knowledge"
+        }
+      ],
+      "sample_id": "d13e-forget-004",
+      "target_identity": {
+        "db_ids": [
+          11
+        ]
+      },
+      "target_selector": {
+        "from": "2026-08-31T16:00:00+00:00",
+        "to": "2026-09-01T16:00:00+00:00"
+      },
+      "user_id": "user_d13e_alpha"
+    },
+    {
+      "foreign_user_controls": [
+        {
+          "id": 15,
+          "kind": "knowledge"
+        },
+        {
+          "id": 2,
+          "kind": "preference"
+        }
+      ],
+      "forget_mode": "full_reset",
+      "prerequisite_facts": {
+        "knowledge_count": 1,
+        "preference_count": 1
+      },
+      "realtime_retrieval": {
+        "entrypoint": "observe_forget_execution:realtime",
+        "snapshot": "sqlite:9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f:realtime",
+        "trace_reference": "dispatch/d13e-forget-005.json",
+        "watermark": "p2b-realtime-5"
+      },
+      "rebuild_retrieval": {
+        "entrypoint": "observe_forget_execution:rebuild",
+        "snapshot": "sqlite:9e8dc27455984bc66369f87deaee3ce22945b2ee3060bed5515c45fdae6e593f:rebuild",
+        "trace_reference": "dispatch/d13e-forget-005.json",
+        "watermark": "p2b-rebuild-5"
+      },
+      "same_user_controls": [],
+      "sample_id": "d13e-forget-005",
+      "target_identity": {
+        "knowledge_ids": [
+          14
+        ],
+        "preference_ids": [
+          1
+        ],
+        "user_scope": "user_d13e_alpha"
+      },
+      "target_selector": {},
+      "user_id": "user_d13e_alpha"
+    }
+  ],
+  "state_root": "/home/yanmouren778/p2b-prep-20260906/state",
+  "vm_snapshot": {
+    "snapshot": "d14d-clean-base-20260906-r2",
+    "snapshot_uuid": "c5e3c3de-1c70-4f58-b22a-ab07b2d2d56d",
+    "vm": "Kylin-V11-2603-BTrack-Base",
+    "vm_uuid": "103fb8a8-cc85-4897-836a-70b68edb5745"
+  }
+}

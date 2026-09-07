@@ -69,6 +69,19 @@ class Fts5Index:
         )
         self.conn.commit()
 
+    def delete(
+        self,
+        memory_id: str,
+        version_id: str,
+        user_id: str,
+    ) -> None:
+        """删除某文档（Forget deletion-consumer 对 FTS 通道的清理入口）。"""
+        self.conn.execute(
+            "DELETE FROM memory_fts WHERE memory_id=? AND version_id=? AND user_id=?",
+            (memory_id, version_id, user_id),
+        )
+        self.conn.commit()
+
     def search(
         self,
         query: str,

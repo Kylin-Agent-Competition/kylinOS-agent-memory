@@ -1,0 +1,78 @@
+===== prepare_db =====
+command=/home/kylin-agent/d13d-g6-prep/d1_vector_baseline --phase prepare --db-file /home/kylin-agent/d13d-g6-prep/d13d_g6_smoke_20260907_r3.db --app-id vector-bridge
+exit_code=0
+--- stdout ---
+D1_VECTOR_BASELINE step=probe_start result=INFO detail="phase=prepare, collection=d1_vector_baseline"
+D1_VECTOR_BASELINE step=client_create result=PASS detail="official Vector Engine client created"
+D1_VECTOR_BASELINE step=service_connect result=PASS detail="SDK data-plane connection established"
+D1_VECTOR_BASELINE step=database_load result=PASS detail="database file loaded: /home/kylin-agent/d13d-g6-prep/d13d_g6_smoke_20260907_r3.db"
+D1_VECTOR_BASELINE step=service_ready result=PASS detail="ShowCollections succeeded; collection_count=0"
+D1_VECTOR_BASELINE step=collection_drop_preexisting result=PASS detail="no pre-existing collection"
+D1_VECTOR_BASELINE step=collection_create result=PASS detail="collection and FLAT/COSINE index created"
+D1_VECTOR_BASELINE step=crud_insert result=PASS detail="inserted 3 deterministic rows"
+D1_VECTOR_BASELINE step=filter_query result=PASS detail="scalar filter returned ids {2,3}"
+D1_VECTOR_BASELINE step=score_semantics result=PASS detail="metric=COSINE; semantics=cosine_similarity; direction=higher_is_closer; range=[-1,1]; query=unit-x; identical=1; orthogonal=0; opposite=-1; repeats=5; tolerance=9.99999997e-07"
+D1_VECTOR_BASELINE step=vector_search result=PASS detail="vector search returned id 1 as the nearest filtered match"
+D1_VECTOR_BASELINE step=crud_upsert result=PASS detail="id 2 updated to category=25, content=beta-updated"
+D1_VECTOR_BASELINE step=crud_delete result=PASS detail="id 3 deleted; ids {1,2} remain"
+D1_VECTOR_BASELINE step=prepare_complete result=PASS detail="state retained; restart Vector Engine, then run --phase verify with identical options"
+D1_VECTOR_BASELINE step=disconnect result=PASS detail="client disconnected cleanly"
+D1_VECTOR_BASELINE step=probe_complete result=PASS detail="all checks for phase prepare passed"
+--- stderr ---
+
+===== create_collection =====
+command=/home/kylin-agent/d13d-g6-prep/vector_bridge_cli create_collection d13d_g6_smoke_20260907_r3 2
+exit_code=0
+--- stdout ---
+{"code":0,"message":"OK","ok":true}
+--- stderr ---
+
+===== insert =====
+command=printf '%s' '{"ids":[1],"vectors":[[1.0,0.0]],"user_ids":["d13d-g6-smoke"],"version_ids":["v1"],"scene_ids":[""],"memory_statuses":["active"],"deleted_flags":[false],"object_types":["knowledge"],"knowledge_types":[""],"primary_categories":[""],"source_event_ids":[""]}' | /home/kylin-agent/d13d-g6-prep/vector_bridge_cli insert d13d_g6_smoke_20260907_r3
+exit_code=0
+--- stdout ---
+{"code":0,"inserted_ids":[1],"message":"","ok":true}
+--- stderr ---
+
+===== search_hit =====
+command=printf '%s' '{"vector":[1.0,0.0],"filter":{"user_id":"d13d-g6-smoke","include_unscoped":true}}' | /home/kylin-agent/d13d-g6-prep/vector_bridge_cli search d13d_g6_smoke_20260907_r3 1
+exit_code=0
+--- stdout ---
+{"code":0,"hits":[{"id":1,"score":1.0,"user_id":"d13d-g6-smoke","version_id":"v1"}],"message":"","ok":true}
+--- stderr ---
+
+===== delete =====
+command=printf '%s' '{"user_id":"d13d-g6-smoke","ids":[1],"version_ids":["v1"]}' | /home/kylin-agent/d13d-g6-prep/vector_bridge_cli delete d13d_g6_smoke_20260907_r3
+exit_code=0
+--- stdout ---
+{"code":0,"message":"","ok":true,"requested_count":1}
+--- stderr ---
+
+===== search_miss =====
+command=printf '%s' '{"vector":[1.0,0.0],"filter":{"user_id":"d13d-g6-smoke","include_unscoped":true}}' | /home/kylin-agent/d13d-g6-prep/vector_bridge_cli search d13d_g6_smoke_20260907_r3 1
+exit_code=0
+--- stdout ---
+{"code":0,"hits":[],"message":"search result is empty: ","ok":true}
+--- stderr ---
+
+===== drop_collection =====
+command=/home/kylin-agent/d13d-g6-prep/vector_bridge_cli drop_collection d13d_g6_smoke_20260907_r3
+exit_code=0
+--- stdout ---
+{"code":0,"message":"","ok":true}
+--- stderr ---
+
+===== cleanup_db =====
+command=/home/kylin-agent/d13d-g6-prep/d1_vector_baseline --phase cleanup --db-file /home/kylin-agent/d13d-g6-prep/d13d_g6_smoke_20260907_r3.db --app-id vector-bridge
+exit_code=0
+--- stdout ---
+D1_VECTOR_BASELINE step=probe_start result=INFO detail="phase=cleanup, collection=d1_vector_baseline"
+D1_VECTOR_BASELINE step=client_create result=PASS detail="official Vector Engine client created"
+D1_VECTOR_BASELINE step=service_connect result=PASS detail="SDK data-plane connection established"
+D1_VECTOR_BASELINE step=database_load result=PASS detail="database file loaded: /home/kylin-agent/d13d-g6-prep/d13d_g6_smoke_20260907_r3.db"
+D1_VECTOR_BASELINE step=service_ready result=PASS detail="ShowCollections succeeded; collection_count=1"
+D1_VECTOR_BASELINE step=cleanup result=PASS detail="test collection removed"
+D1_VECTOR_BASELINE step=disconnect result=PASS detail="client disconnected cleanly"
+D1_VECTOR_BASELINE step=probe_complete result=PASS detail="all checks for phase cleanup passed"
+--- stderr ---
+

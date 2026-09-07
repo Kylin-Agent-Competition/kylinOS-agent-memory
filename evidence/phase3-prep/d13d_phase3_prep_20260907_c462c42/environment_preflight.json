@@ -1,0 +1,155 @@
+{
+  "commands": [
+    {
+      "command": "date -u +%FT%TZ",
+      "exit_code": 0,
+      "name": "guest_utc",
+      "stderr": "",
+      "stdout": "2026-09-07T04:43:58Z\n"
+    },
+    {
+      "command": "hostname",
+      "exit_code": 0,
+      "name": "hostname",
+      "stderr": "",
+      "stdout": "kylin-agent-pc\n"
+    },
+    {
+      "command": "id -un; id -u",
+      "exit_code": 0,
+      "name": "identity",
+      "stderr": "",
+      "stdout": "kylin-agent\n1000\n"
+    },
+    {
+      "command": "uname -a",
+      "exit_code": 0,
+      "name": "kernel",
+      "stderr": "",
+      "stdout": "Linux kylin-agent-pc 6.6.0-76-generic #86r2-KYLINOS SMP PREEMPT_DYNAMIC Tue Aug  4 06:44:37 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux\n"
+    },
+    {
+      "command": "cat /etc/kylin-release 2>/dev/null || cat /etc/os-release",
+      "exit_code": 0,
+      "name": "os_release",
+      "stderr": "",
+      "stdout": "NAME=\"Kylin\"\nFULL_NAME=\"kylin\"\nVERSION=\"银河麒麟桌面操作系统V11\"\nVERSION_US=\"Kylin Linux Desktop V11\"\nID=kylin\nPRETTY_NAME=\"Kylin V11\"\nVERSION_ID=\"v11\"\nHOME_URL=\"http://www.kylinos.cn/\"\nVERSION_CODENAME=kylin\nKYLIN_RELEASE_ID=\"2603\"\nID_LIKE=openKylin\n"
+    },
+    {
+      "command": "git -C /home/kylin-agent/kylinOS-agent-memory rev-parse HEAD",
+      "exit_code": 128,
+      "name": "guest_repo_head",
+      "stderr": "致命错误：cannot change to '/home/kylin-agent/kylinOS-agent-memory': 没有那个文件或目录\n",
+      "stdout": ""
+    },
+    {
+      "command": "git -C /home/kylin-agent/kylinOS-agent-memory branch --show-current",
+      "exit_code": 128,
+      "name": "guest_repo_branch",
+      "stderr": "致命错误：cannot change to '/home/kylin-agent/kylinOS-agent-memory': 没有那个文件或目录\n",
+      "stdout": ""
+    },
+    {
+      "command": "git -C /home/kylin-agent/kylinOS-agent-memory status --porcelain",
+      "exit_code": 128,
+      "name": "guest_repo_status",
+      "stderr": "致命错误：cannot change to '/home/kylin-agent/kylinOS-agent-memory': 没有那个文件或目录\n",
+      "stdout": ""
+    },
+    {
+      "command": "systemctl --user is-active kylin-memory.service",
+      "exit_code": 4,
+      "name": "service_active",
+      "stderr": "",
+      "stdout": "inactive\n"
+    },
+    {
+      "command": "systemctl --user cat kylin-memory.service",
+      "exit_code": 1,
+      "name": "service_unit",
+      "stderr": "No files found for kylin-memory.service.\n",
+      "stdout": ""
+    },
+    {
+      "command": "stat -c \"%a %U:%G %n\" \"$XDG_RUNTIME_DIR/kylin-memory/memory.sock\"",
+      "exit_code": 1,
+      "name": "service_socket_stat",
+      "stderr": "stat: 对 '/run/user/1000/kylin-memory/memory.sock' 调用 statx 失败: 没有那个文件或目录\n",
+      "stdout": ""
+    },
+    {
+      "command": "python3 --version",
+      "exit_code": 0,
+      "name": "python_version",
+      "stderr": "",
+      "stdout": "Python 3.12.3\n"
+    },
+    {
+      "command": "sqlite3 --version",
+      "exit_code": 0,
+      "name": "sqlite_version",
+      "stderr": "",
+      "stdout": "3.42.0 2023-05-16 12:36:15 831d0fb2836b71c9bc51067c49fee4b8f18047814f2ff22d817d25195cf3alt1\n"
+    },
+    {
+      "command": "dpkg-query -W -f='${Package} ${Version}\\n' libkysdk-vector-engine-client",
+      "exit_code": 0,
+      "name": "vector_client_package",
+      "stderr": "",
+      "stdout": "libkysdk-vector-engine-client 1.2.0.0-0k1.1\n"
+    },
+    {
+      "command": "dpkg-query -L libkysdk-vector-engine-client | grep -E '(Database\\.h|include)'",
+      "exit_code": 1,
+      "name": "vector_client_header_candidates",
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "command": "nm -D /usr/lib/x86_64-linux-gnu/libkysdk-vector-engine-client.so.1 | grep -E '(Database|open|close|upsert|search|delete)'",
+      "exit_code": 0,
+      "name": "vector_client_dynamic_symbols",
+      "stderr": "",
+      "stdout": "                 U sqlite3_close\n                 U sqlite3_open_v2\n000000000026aff0 T _ZN6google8protobuf5Arena18CreateMaybeMessageIN6milvus5proto6milvus19DropDatabaseRequestEJEEEPT_PS1_DpOT0_\n000000000026b140 T _ZN6google8protobuf5Arena18CreateMaybeMessageIN6milvus5proto6milvus20AlterDatabaseRequestEJEEEPT_PS1_DpOT0_\n000000000026b060 T _ZN6google8protobuf5Arena18CreateMaybeMessageIN6milvus5proto6milvus20ListDatabasesRequestEJEEEPT_PS1_DpOT0_\n000000000026af80 T _ZN6google8protobuf5Arena18CreateMaybeMessageIN6milvus5proto6milvus21CreateDatabaseRequestEJEEEPT_PS1_DpOT0_\n000000000026b0d0 T _ZN6google8protobuf5Arena18CreateMaybeMessageIN6milvus5proto6milvus21ListDatabasesResponseEJEEEPT_PS1_DpOT0_\n00000000001a74c0 T _ZN6google8protobuf8internal19arena_delete_objectINS0_11MessageLiteEEEvPv\n00000000002976e0 T _ZN6milvus5proto6milvus13MilvusService4Stub12DropDatabaseEPN4grpc13ClientContextERKNS1_19DropDatabaseRequestEPNS0_6common6StatusE\n00000000002977a0 T _ZN6milvus5proto6milvus13MilvusService4Stub13AlterDatabaseEPN4grpc13ClientContextERKNS1_20AlterDatabaseRequestEPNS0_6common6StatusE\n0000000000297740 T _ZN6milvus5proto6milvus13MilvusService4Stub13ListDatabasesEPN4grpc13ClientContextERKNS1_20ListDatabasesRequestEPNS1_21ListDatabasesResponseE\n0000000000297680 T _ZN6milvus5proto6milvus13MilvusService4Stub14CreateDatabaseEPN4grpc13ClientContextERKNS1_21CreateDatabaseRequestEPNS0_6common6StatusE\n00000000002993a0 T _ZN6milvus5proto6milvus13MilvusService4Stub20AsyncDropDatabaseRawEPN4grpc13ClientContextERKNS1_19DropDatabaseRequestEPNS4_15CompletionQueueE\n0000000000299440 T _ZN6milvus5proto6milvus13MilvusService4Stub21AsyncAlterDatabaseRawEPN4grpc13ClientContextERKNS1_20AlterDatabaseRequestEPNS4_15CompletionQueueE\n0000000000296540 T _ZN6milvus5proto6milvus13MilvusService4Stub21AsyncListDatabasesRawEPN4grpc13ClientContextERKNS1_20ListDatabasesRequestEPNS4_15CompletionQueueE\n0000000000299300 T _ZN6milvus5proto6milvus13MilvusService4Stub22AsyncCreateDatabaseRawEPN4grpc13ClientContextERKNS1_21CreateDatabaseRequestEPNS4_15CompletionQueueE\n0000000000299380 T _ZN6milvus5proto6milvus13MilvusService4Stub27PrepareAsyncDropDatabaseRawEPN4grpc13ClientContextERKNS1_19DropDatabaseRequestEPNS4_15CompletionQueueE\n0000000000299420 T _ZN6milvus5proto6milvus13MilvusService4Stub28PrepareAsyncAlterDatabaseRawEPN4grpc13ClientContextERKNS1_20AlterDatabaseRequestEPNS4_15CompletionQueueE\n0000000000295c20 T _ZN6milvus5proto6milvus13MilvusService4Stub28PrepareAsyncListDatabasesRawEPN4grpc13ClientContextERKNS1_20ListDatabasesRequestEPNS4_15CompletionQueueE\n00000000002992e0 T _ZN6milvus5proto6milvus13MilvusService4Stub29PrepareAsyncCreateDatabaseRawEPN4grpc13ClientContextERKNS1_21CreateDatabaseRequestEPNS4_15CompletionQueueE\n00000000002948a0 T _ZN6milvus5proto6milvus13MilvusService4Stub5async12DropDatabaseEPN4grpc13ClientContextEPKNS1_19DropDatabaseRequestEPNS0_6common6StatusEPNS5_18ClientUnaryReactorE\n00000000002989a0 T _ZN6milvus5proto6milvus13MilvusService4Stub5async12DropDatabaseEPN4grpc13ClientContextEPKNS1_19DropDatabaseRequestEPNS0_6common6StatusESt8functionIFvNS5_6StatusEEE\n0000000000294900 T _ZN6milvus5proto6milvus13MilvusService4Stub5async13AlterDatabaseEPN4grpc13ClientContextEPKNS1_20AlterDatabaseRequestEPNS0_6common6StatusEPNS5_18ClientUnaryReactorE\n0000000000298b20 T _ZN6milvus5proto6milvus13MilvusService4Stub5async13AlterDatabaseEPN4grpc13ClientContextEPKNS1_20AlterDatabaseRequestEPNS0_6common6StatusESt8functionIFvNS5_6StatusEEE\n00000000002948d0 T _ZN6milvus5proto6milvus13MilvusService4Stub5async13ListDatabasesEPN4grpc13ClientContextEPKNS1_20ListDatabasesRequestEPNS1_21ListDatabasesResponseEPNS5_18ClientUnaryReactorE\n0000000000298a60 T _ZN6milvus5proto6milvus13MilvusService4Stub5async13ListDatabasesEPN4grpc13ClientContextEPKNS1_20ListDatabasesRequestEPNS1_21ListDatabasesResponseESt8functionIFvNS5_6StatusEEE\n0000000000294870 T _ZN6milvus5proto6milvus13MilvusService4Stub5async14CreateDatabaseEPN4grpc13ClientContextEPKNS1_21CreateDatabaseRequestEPNS0_6common6StatusEPNS5_18ClientUnaryReactorE\n00000000002988e0 T _ZN6milvus5proto6milvus13MilvusService4Stub5async14CreateDatabaseEPN4grpc13ClientContextEPKNS1_21CreateDatabaseRequestEPNS0_6common6StatusESt8functionIFvNS5_6StatusEEE\n00000000002a0cf0 T _ZN6milvus5proto6milvus13MilvusService7Service12DropDatabaseEPN4grpc13ServerContextEPKNS1_19DropDatabaseRequestEPNS0_6common6StatusE\n00000000002a0e30 T _ZN6milvus5proto6milvus13MilvusService7Service13AlterDatabaseEPN4grpc13ServerContextEPKNS1_20AlterDatabaseRequestEPNS0_6common6StatusE\n00000000002a0d90 T _ZN6milvus5proto6milvus13MilvusService7Service13ListDatabasesEPN4grpc13ServerContextEPKNS1_20ListDatabasesRequestEPNS1_21ListDatabasesResponseE\n00000000002a0c50 T _ZN6milvus5proto6milvus13MilvusService7Service14CreateDatabaseEPN4grpc13ServerContextEPKNS1_21CreateDatabaseRequestEPNS0_6common6StatusE\n00000000001f7a90 T _ZN6milvus5proto6milvus13SearchRequest19clear_search_paramsEv\n00000000001f6ea0 T _ZN6milvus5proto6milvus16SubSearchRequest19clear_search_paramsEv\n0000000000259040 T _ZN6milvus5proto6milvus19DropDatabaseRequest10clear_baseEv\n00000000003b2730 D _ZN6milvus5proto6milvus19DropDatabaseRequest12_class_data_E\n00000000002592d0 T _ZN6milvus5proto6milvus19DropDatabaseRequest12InternalSwapEPS2_\n000000000025d190 T _ZN6milvus5proto6milvus19DropDatabaseRequest14_InternalParseEPKcPN6google8protobuf8internal12ParseContextE\n0000000000257290 T _ZN6milvus5proto6milvus19DropDatabaseRequest5ClearEv\n000000000025d150 T _ZN6milvus5proto6milvus19DropDatabaseRequest8CopyFromERKS2_\n0000000000258f50 T _ZN6milvus5proto6milvus19DropDatabaseRequest9_Internal4baseEPKS2_\n000000000025cfb0 T _ZN6milvus5proto6milvus19DropDatabaseRequest9MergeImplERN6google8protobuf7MessageERKS5_\n0000000000259090 T _ZN6milvus5proto6milvus19DropDatabaseRequestC1EPN6google8protobuf5ArenaEb\n000000000025e960 T _ZN6milvus5proto6milvus19DropDatabaseRequestC1ERKS2_\n0000000000259090 T _ZN6milvus5proto6milvus19DropDatabaseRequestC2EPN6google8protobuf5ArenaEb\n000000000025e960 T _ZN6milvus5proto6milvus19DropDatabaseRequestC2ERKS2_\n00000000002592b0 T _ZN6milvus5proto6milvus19DropDatabaseRequestD0Ev\n0000000000259170 T _ZN6milvus5proto6milvus19DropDatabaseRequestD1Ev\n0000000000259170 T _ZN6milvus5proto6milvus19DropDatabaseRequestD2Ev\n000000000025a050 T _ZN6milvus5proto6milvus20AlterDatabaseRequest10clear_baseEv\n00000000003b2700 D _ZN6milvus5proto6milvus20AlterDatabaseRequest12_class_data_E\n000000000025a270 T _ZN6milvus5proto6milvus20AlterDatabaseRequest12InternalSwapEPS2_\n000000000025ded0 T _ZN6milvus5proto6milvus20AlterDatabaseRequest14_InternalParseEPKcPN6google8protobuf8internal12ParseContextE\n000000000025a0a0 T _ZN6milvus5proto6milvus20AlterDatabaseRequest16clear_propertiesEv\n0000000000258550 T _ZN6milvus5proto6milvus20AlterDatabaseRequest5ClearEv\n000000000025db60 T _ZN6milvus5proto6milvus20AlterDatabaseRequest8CopyFromERKS2_\n0000000000259dd0 T _ZN6milvus5proto6milvus20AlterDatabaseRequest9_Internal4baseEPKS2_\n000000000025d970 T _ZN6milvus5proto6milvus20AlterDatabaseRequest9MergeImplERN6google8protobuf7MessageERKS5_\n000000000025a170 T _ZN6milvus5proto6milvus20AlterDatabaseRequestC1EPN6google8protobuf5ArenaEb\n000000000025eb00 T _ZN6milvus5proto6milvus20AlterDatabaseRequestC1ERKS2_\n000000000025a170 T _ZN6milvus5proto6milvus20AlterDatabaseRequestC2EPN6google8protobuf5ArenaEb\n000000000025eb00 T _ZN6milvus5proto6milvus20AlterDatabaseRequestC2ERKS2_\n000000000025f510 T _ZN6milvus5proto6milvus20AlterDatabaseRequestD0Ev\n000000000025f3b0 T _ZN6milvus5proto6milvus20AlterDatabaseRequestD1Ev\n000000000025f3b0 T _ZN6milvus5proto6milvus20AlterDatabaseRequestD2Ev\n00000000002593b0 T _ZN6milvus5proto6milvus20ListDatabasesRequest10clear_baseEv\n00000000003b2720 D _ZN6milvus5proto6milvus20ListDatabasesRequest12_class_data_E\n0000000000259640 T _ZN6milvus5proto6milvus20ListDatabasesRequest12InternalSwapEPS2_\n000000000025d6b0 T _ZN6milvus5proto6milvus20ListDatabasesRequest14_InternalParseEPKcPN6google8protobuf8internal12ParseContextE\n00000000002571d0 T _ZN6milvus5proto6milvus20ListDatabasesRequest5ClearEv\n000000000025d670 T _ZN6milvus5proto6milvus20ListDatabasesRequest8CopyFromERKS2_\n0000000000259310 T _ZN6milvus5proto6milvus20ListDatabasesRequest9_Internal4baseEPKS2_\n000000000025d500 T _ZN6milvus5proto6milvus20ListDatabasesRequest9MergeImplERN6google8protobuf7MessageERKS5_\n0000000000259400 T _ZN6milvus5proto6milvus20ListDatabasesRequestC1EPN6google8protobuf5ArenaEb\n000000000025ea50 T _ZN6milvus5proto6milvus20ListDatabasesRequestC1ERKS2_\n0000000000259400 T _ZN6milvus5proto6milvus20ListDatabasesRequestC2EPN6google8protobuf5ArenaEb\n000000000025ea50 T _ZN6milvus5proto6milvus20ListDatabasesRequestC2ERKS2_\n0000000000259620 T _ZN6milvus5proto6milvus20ListDatabasesRequestD0Ev\n00000000002594e0 T _ZN6milvus5proto6milvus20ListDatabasesRequestD1Ev\n00000000002594e0 T _ZN6milvus5proto6milvus20ListDatabasesRequestD2Ev\n0000000000258c80 T _ZN6milvus5proto6milvus21CreateDatabaseRequest10clear_baseEv\n00000000003b2740 D _ZN6milvus5proto6milvus21CreateDatabaseRequest12_class_data_E\n0000000000258f10 T _ZN6milvus5proto6milvus21CreateDatabaseRequest12InternalSwapEPS2_\n000000000025cc40 T _ZN6milvus5proto6milvus21CreateDatabaseRequest14_InternalParseEPKcPN6google8protobuf8internal12ParseContextE\n0000000000257230 T _ZN6milvus5proto6milvus21CreateDatabaseRequest5ClearEv\n000000000025cc00 T _ZN6milvus5proto6milvus21CreateDatabaseRequest8CopyFromERKS2_\n0000000000258b90 T _ZN6milvus5proto6milvus21CreateDatabaseRequest9_Internal4baseEPKS2_\n000000000025ca60 T _ZN6milvus5proto6milvus21CreateDatabaseRequest9MergeImplERN6google8protobuf7MessageERKS5_\n0000000000258cd0 T _ZN6milvus5proto6milvus21CreateDatabaseRequestC1EPN6google8protobuf5ArenaEb\n000000000025e870 T _ZN6milvus5proto6milvus21CreateDatabaseRequestC1ERKS2_\n0000000000258cd0 T _ZN6milvus5proto6milvus21CreateDatabaseRequestC2EPN6google8protobuf5ArenaEb\n000000000025e870 T _ZN6milvus5proto6milvus21CreateDatabaseRequestC2ERKS2_\n0000000000258ef0 T _ZN6milvus5proto6milvus21CreateDatabaseRequestD0Ev\n0000000000258db0 T _ZN6milvus5proto6milvus21CreateDatabaseRequestD1Ev\n0000000000258db0 T _ZN6milvus5proto6milvus21CreateDatabaseRequestD2Ev\n00000000003b2710 D _ZN6milvus5proto6milvus21ListDatabasesResponse12_class_data_E\n0000000000259980 T _ZN6milvus5proto6milvus21ListDatabasesResponse12clear_statusEv\n0000000000259c50 T _ZN6milvus5proto6milvus21ListDatabasesResponse12InternalSwapEPS2_\n000000000025c120 T _ZN6milvus5proto6milvus21ListDatabasesResponse14_InternalParseEPKcPN6google8protobuf8internal12ParseContextE\n0000000000258390 T _ZN6milvus5proto6milvus21ListDatabasesResponse5ClearEv\n000000000025c0e0 T _ZN6milvus5proto6milvus21ListDatabasesResponse8CopyFromERKS2_\n0000000000259670 T _ZN6milvus5proto6milvus21ListDatabasesResponse9_Internal6statusEPKS2_\n000000000025bf60 T _ZN6milvus5proto6milvus21ListDatabasesResponse9MergeImplERN6google8protobuf7MessageERKS5_\n00000000002599d0 T _ZN6milvus5proto6milvus21ListDatabasesResponseC1EPN6google8protobuf5ArenaEb\n000000000025ef30 T _ZN6milvus5proto6milvus21ListDatabasesResponseC1ERKS2_\n00000000002599d0 T _ZN6milvus5proto6milvus21ListDatabasesResponseC2EPN6google8protobuf5ArenaEb\n000000000025ef30 T _ZN6milvus5proto6milvus21ListDatabasesResponseC2ERKS2_\n0000000000259c30 T _ZN6milvus5proto6milvus21ListDatabasesResponseD0Ev\n0000000000259ae0 T _ZN6milvus5proto6milvus21ListDatabasesResponseD1Ev\n0000000000259ae0 T _ZN6milvus5proto6milvus21ListDatabasesResponseD2Ev\n00000000003b8700 D _ZN6milvus5proto6milvus38_DropDatabaseRequest_default_instance_E\n00000000003b8620 D _ZN6milvus5proto6milvus39_AlterDatabaseRequest_default_instance_E\n00000000003b86e0 D _ZN6milvus5proto6milvus39_ListDatabasesRequest_default_instance_E\n00000000003b8740 D _ZN6milvus5proto6milvus40_CreateDatabaseRequest_default_instance_E\n00000000003b8680 D _ZN6milvus5proto6milvus40_ListDatabasesResponse_default_instance_E\n00000000002da370 T _ZN6SQLite6BackupC1ERNS_8DatabaseEPKcS2_S4_\n00000000002da3c0 T _ZN6SQLite6BackupC1ERNS_8DatabaseERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES2_SA_\n00000000002da3d0 T _ZN6SQLite6BackupC1ERNS_8DatabaseES2_\n00000000002da370 T _ZN6SQLite6BackupC2ERNS_8DatabaseEPKcS2_S4_\n00000000002da3c0 T _ZN6SQLite6BackupC2ERNS_8DatabaseERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES2_SA_\n00000000002da3d0 T _ZN6SQLite6BackupC2ERNS_8DatabaseES2_\n00000000002d7bc0 T _ZN6SQLite8Database10execAndGetEPKc\n00000000002d81a0 T _ZN6SQLite8Database13getHeaderInfoERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE\n00000000002d8590 T _ZN6SQLite8Database13isUnencryptedERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE\n00000000002d7b50 T _ZN6SQLite8Database13loadExtensionEPKcS2_\n00000000002d7b00 T _ZN6SQLite8Database14createFunctionEPKcibPvPFvP15sqlite3_contextiPP13sqlite3_valueESA_PFvS5_EPFvS3_E\n00000000002d79e0 T _ZN6SQLite8Database14setBusyTimeoutEi\n00000000002d7a20 T _ZN6SQLite8Database4execEPKc\n00000000002d80d0 T _ZN6SQLite8Database6backupEPKcNS0_10BackupTypeE\n00000000002d79a0 T _ZN6SQLite8Database7DeleterclEP7sqlite3\n00000000002d7a00 T _ZN6SQLite8Database7tryExecEPKc\n00000000002d7f80 T _ZN6SQLite8DatabaseC1EPKciiS2_\n00000000002d7f80 T _ZN6SQLite8DatabaseC2EPKciiS2_\n00000000002d9790 T _ZN6SQLite9StatementC1ERKNS_8DatabaseEPKc\n00000000002d9790 T _ZN6SQLite9StatementC2ERKNS_8DatabaseEPKc\n00000000001379e0 T _ZN8VectorDB8Database6CreateEv\n0000000000256be0 T _ZNK6milvus5proto6milvus19DropDatabaseRequest11GetMetadataEv\n0000000000258270 T _ZNK6milvus5proto6milvus19DropDatabaseRequest12ByteSizeLongEv\n0000000000256a80 T _ZNK6milvus5proto6milvus19DropDatabaseRequest12GetClassDataEv\n0000000000256a90 T _ZNK6milvus5proto6milvus19DropDatabaseRequest13IsInitializedEv\n0000000000257140 T _ZNK6milvus5proto6milvus19DropDatabaseRequest13SetCachedSizeEi\n0000000000258f60 T _ZNK6milvus5proto6milvus19DropDatabaseRequest18_InternalSerializeEPhPN6google8protobuf2io19EpsCopyOutputStreamE\n0000000000256c40 T _ZNK6milvus5proto6milvus20AlterDatabaseRequest11GetMetadataEv\n00000000002586c0 T _ZNK6milvus5proto6milvus20AlterDatabaseRequest12ByteSizeLongEv\n0000000000256ae0 T _ZNK6milvus5proto6milvus20AlterDatabaseRequest12GetClassDataEv\n0000000000256af0 T _ZNK6milvus5proto6milvus20AlterDatabaseRequest13IsInitializedEv\n0000000000257170 T _ZNK6milvus5proto6milvus20AlterDatabaseRequest13SetCachedSizeEi\n0000000000259de0 T _ZNK6milvus5proto6milvus20AlterDatabaseRequest18_InternalSerializeEPhPN6google8protobuf2io19EpsCopyOutputStreamE\n0000000000256c00 T _ZNK6milvus5proto6milvus20ListDatabasesRequest11GetMetadataEv\n00000000002582f0 T _ZNK6milvus5proto6milvus20ListDatabasesRequest12ByteSizeLongEv\n0000000000256aa0 T _ZNK6milvus5proto6milvus20ListDatabasesRequest12GetClassDataEv\n0000000000256ab0 T _ZNK6milvus5proto6milvus20ListDatabasesRequest13IsInitializedEv\n0000000000257150 T _ZNK6milvus5proto6milvus20ListDatabasesRequest13SetCachedSizeEi\n0000000000259320 T _ZNK6milvus5proto6milvus20ListDatabasesRequest18_InternalSerializeEPhPN6google8protobuf2io19EpsCopyOutputStreamE\n0000000000256bc0 T _ZNK6milvus5proto6milvus21CreateDatabaseRequest11GetMetadataEv\n00000000002581f0 T _ZNK6milvus5proto6milvus21CreateDatabaseRequest12ByteSizeLongEv\n0000000000256a60 T _ZNK6milvus5proto6milvus21CreateDatabaseRequest12GetClassDataEv\n0000000000256a70 T _ZNK6milvus5proto6milvus21CreateDatabaseRequest13IsInitializedEv\n0000000000257130 T _ZNK6milvus5proto6milvus21CreateDatabaseRequest13SetCachedSizeEi\n0000000000258ba0 T _ZNK6milvus5proto6milvus21CreateDatabaseRequest18_InternalSerializeEPhPN6google8protobuf2io19EpsCopyOutputStreamE\n0000000000256c20 T _ZNK6milvus5proto6milvus21ListDatabasesResponse11GetMetadataEv\n0000000000258400 T _ZNK6milvus5proto6milvus21ListDatabasesResponse12ByteSizeLongEv\n0000000000256ac0 T _ZNK6milvus5proto6milvus21ListDatabasesResponse12GetClassDataEv\n0000000000256ad0 T _ZNK6milvus5proto6milvus21ListDatabasesResponse13IsInitializedEv\n0000000000257160 T _ZNK6milvus5proto6milvus21ListDatabasesResponse13SetCachedSizeEi\n0000000000259680 T _ZNK6milvus5proto6milvus21ListDatabasesResponse18_InternalSerializeEPhPN6google8protobuf2io19EpsCopyOutputStreamE\n00000000002d7a60 T _ZNK6SQLite8Database10getChangesEv\n00000000002d7ae0 T _ZNK6SQLite8Database11getErrorMsgEv\n00000000002d7d20 T _ZNK6SQLite8Database11tableExistsEPKc\n00000000002d7aa0 T _ZNK6SQLite8Database12getErrorCodeEv\n00000000002d7a80 T _ZNK6SQLite8Database15getTotalChangesEv\n00000000002d7a40 T _ZNK6SQLite8Database18getLastInsertRowidEv\n00000000002d7ac0 T _ZNK6SQLite8Database20getExtendedErrorCodeEv\n00000000002d7bb0 T _ZNK6SQLite8Database3keyERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE\n00000000001353b2 T _ZNK6SQLite8Database5rekeyERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE\n                 U _ZNKSt12__basic_fileIcE7is_openEv@GLIBCXX_3.4\n000000000015e9a0 T _ZNSt10unique_ptrI7sqlite3N6SQLite8Database7DeleterEED1Ev\n000000000015e9a0 T _ZNSt10unique_ptrI7sqlite3N6SQLite8Database7DeleterEED2Ev\n                 U _ZNSt13basic_filebufIcSt11char_traitsIcEE4openEPKcSt13_Ios_Openmode@GLIBCXX_3.4\n                 U _ZNSt13basic_filebufIcSt11char_traitsIcEE5closeEv@GLIBCXX_3.4\n00000000003b4688 D _ZTIN4grpc34ClientAsyncResponseReaderInterfaceIN6milvus5proto6milvus21ListDatabasesResponseEEE\n00000000003a66b8 D _ZTIN6milvus5proto6milvus19DropDatabaseRequestE\n00000000003a6490 D _ZTIN6milvus5proto6milvus20AlterDatabaseRequestE\n00000000003a6600 D _ZTIN6milvus5proto6milvus20ListDatabasesRequestE\n00000000003a6770 D _ZTIN6milvus5proto6milvus21CreateDatabaseRequestE\n00000000003a6548 D _ZTIN6milvus5proto6milvus21ListDatabasesResponseE\n00000000003a2e20 D _ZTIN8VectorDB8DatabaseE\n00000000002ece40 R _ZTSN4grpc25ClientAsyncResponseReaderIN6milvus5proto6milvus21ListDatabasesResponseEEE\n00000000002ecde0 R _ZTSN4grpc34ClientAsyncResponseReaderInterfaceIN6milvus5proto6milvus21ListDatabasesResponseEEE\n00000000002e9100 R _ZTSN4grpc8internal16RpcMethodHandlerIN6milvus5proto6milvus13MilvusService7ServiceENS4_19DropDatabaseRequestENS3_6common6StatusEN6google8protobuf11MessageLiteESC_EE\n00000000002e8f80 R _ZTSN4grpc8internal16RpcMethodHandlerIN6milvus5proto6milvus13MilvusService7ServiceENS4_20AlterDatabaseRequestENS3_6common6StatusEN6google8protobuf11MessageLiteESC_EE\n00000000002e9040 R _ZTSN4grpc8internal16RpcMethodHandlerIN6milvus5proto6milvus13MilvusService7ServiceENS4_20ListDatabasesRequestENS4_21ListDatabasesResponseEN6google8protobuf11MessageLiteESB_EE\n00000000002e91c0 R _ZTSN4grpc8internal16RpcMethodHandlerIN6milvus5proto6milvus13MilvusService7ServiceENS4_21CreateDatabaseRequestENS3_6common6StatusEN6google8protobuf11MessageLiteESC_EE\n00000000002e3000 R _ZTSN6milvus5proto6milvus19DropDatabaseRequestE\n00000000002e2f40 R _ZTSN6milvus5proto6milvus20AlterDatabaseRequestE\n00000000002e2fc0 R _ZTSN6milvus5proto6milvus20ListDatabasesRequestE\n00000000002e3040 R _ZTSN6milvus5proto6milvus21CreateDatabaseRequestE\n00000000002e2f80 R _ZTSN6milvus5proto6milvus21ListDatabasesResponseE\n00000000002db670 R _ZTSN8VectorDB8DatabaseE\n00000000003a66d0 D _ZTVN6milvus5proto6milvus19DropDatabaseRequestE\n00000000003a64a8 D _ZTVN6milvus5proto6milvus20AlterDatabaseRequestE\n00000000003a6618 D _ZTVN6milvus5proto6milvus20ListDatabasesRequestE\n00000000003a6788 D _ZTVN6milvus5proto6milvus21CreateDatabaseRequestE\n00000000003a6560 D _ZTVN6milvus5proto6milvus21ListDatabasesResponseE\n"
+    },
+    {
+      "command": "sha256sum /home/kylin-agent/kylinOS-agent-memory/evaluation/d13e/D13E_FORMAL_TESTSET_V1.jsonl /home/kylin-agent/kylinOS-agent-memory/evaluation/d13e/D13E_GOLD_V1.jsonl /home/kylin-agent/kylinOS-agent-memory/evaluation/d13e/D13E_FORMAL_THRESHOLDS_V1.json /home/kylin-agent/kylinOS-agent-memory/evaluation/d13e/D13E_FORMAL_MANIFEST_V1.json /home/kylin-agent/kylinOS-agent-memory/scripts/run_d13e_formal_eval.py",
+      "exit_code": 1,
+      "name": "d13e_artifact_hashes",
+      "stderr": "sha256sum: /home/kylin-agent/kylinOS-agent-memory/evaluation/d13e/D13E_FORMAL_TESTSET_V1.jsonl: 没有那个文件或目录\nsha256sum: /home/kylin-agent/kylinOS-agent-memory/evaluation/d13e/D13E_GOLD_V1.jsonl: 没有那个文件或目录\nsha256sum: /home/kylin-agent/kylinOS-agent-memory/evaluation/d13e/D13E_FORMAL_THRESHOLDS_V1.json: 没有那个文件或目录\nsha256sum: /home/kylin-agent/kylinOS-agent-memory/evaluation/d13e/D13E_FORMAL_MANIFEST_V1.json: 没有那个文件或目录\nsha256sum: /home/kylin-agent/kylinOS-agent-memory/scripts/run_d13e_formal_eval.py: 没有那个文件或目录\n",
+      "stdout": ""
+    },
+    {
+      "command": "sudo -n stat -c '%U %G %a %n' /etc/kylin-memory/trust /etc/kylin-memory/trust/D13E_TRUST_ROOTS_V1.json /etc/kylin-memory/trust/d13e-review-public.pem /etc/kylin-memory/trust/d13d-execution-public.pem",
+      "exit_code": 1,
+      "name": "trust_root_stat",
+      "stderr": "sudo: 需要密码\n",
+      "stdout": ""
+    },
+    {
+      "command": "sudo -n find /etc/kylin-memory/trust -maxdepth 1 -type l -print",
+      "exit_code": 1,
+      "name": "trust_root_symlinks",
+      "stderr": "sudo: 需要密码\n",
+      "stdout": ""
+    },
+    {
+      "command": "sudo -n sha256sum /etc/kylin-memory/trust/D13E_TRUST_ROOTS_V1.json /etc/kylin-memory/trust/d13e-review-public.pem /etc/kylin-memory/trust/d13d-execution-public.pem",
+      "exit_code": 1,
+      "name": "trust_root_hashes",
+      "stderr": "sudo: 需要密码\n",
+      "stdout": ""
+    }
+  ],
+  "created_at_utc": "2026-09-07T04:43:58.475151+00:00",
+  "formal_execution_performed": false,
+  "guest_repo": "/home/kylin-agent/kylinOS-agent-memory",
+  "limitations": [
+    "This preflight is not formal evidence.",
+    "It does not select tested_commit, create raw, sign a seal, run Runner, or freeze D13D.",
+    "A failed or unavailable command leaves the whole preflight BLOCKED."
+  ],
+  "schema_version": "d13d-phase3-prep/v1",
+  "scope": "PREPARATION / NON-FORMAL",
+  "status": "BLOCKED"
+}
