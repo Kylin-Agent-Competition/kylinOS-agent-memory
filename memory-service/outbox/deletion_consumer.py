@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Optional
@@ -47,6 +48,19 @@ EventConsumer = Callable[[str, Dict[str, Any]], None]
 _DEFAULT_INDEX_GENERATION = "d9d-skeleton"
 _DEFAULT_DEADLINE_MS = 5000
 _DEFAULT_KEY_ID = "d9d-internal"
+_RAW_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _payload_digest(value: str, *, key_id: str, event_id: str) -> Digest:
+    """Normalize a producer payload digest to the frozen Digest format."""
+    if value.startswith("hmac-sha256:"):
+        return Digest(value)
+    if _RAW_SHA256.fullmatch(value):
+        return Digest(f"hmac-sha256:{key_id}:{value}")
+    raise ValueError(
+        f"forget.executed selection_hash is not a valid digest "
+        f"(event_id={event_id})"
+    )
 
 
 def _derive_watermark(payload: Dict[str, Any]) -> Watermark:
@@ -104,19 +118,48 @@ def _build_delete_request(
         raise ValueError(
             f"forget.executed payload 缺字段: {', '.join(missing)} (event_id={event_id})"
         )
-    memory_ids = [str(x) for x in resolved_target_ids]
+    # G3（E 授权 #160）：接受 knowledge:/preference: tagged 目标，规范化成数字 memory id；
+    # 未知 tag / 非数字 fail-closed。
+    memory_ids = []
+    memory_kinds = []
+    for raw in resolved_target_ids:
+        token = str(raw)
+        if ":" in token:
+            kind, _, num = token.partition(":")
+            if kind not in ("knowledge", "preference") or not num.isdecimal():
+                raise ValueError(
+                    f"forget.executed 目标含未知 kind/非数字 id: {token!r} (event_id={event_id})"
+                )
+            memory_kinds.append(kind)
+            memory_ids.append(num)
+        else:
+            memory_ids.append(token)
+    aligned_kinds = (
+        memory_kinds
+        if len(memory_kinds) == len(memory_ids)
+        else None
+    )
+    if not memory_kinds:
+        target_type = payload.get("target_type")
+        if target_type in ("knowledge", "preference"):
+            aligned_kinds = [target_type] * len(memory_ids)
     if not memory_ids:
         raise ValueError(f"forget.executed resolved_target_ids 为空 (event_id={event_id})")
-    if version_ids is not None:
-        version_ids = [str(x) for x in version_ids]
-        if len(version_ids) != len(memory_ids):
-            raise ValueError(
-                f"forget.executed version_ids 与 resolved_target_ids 长度不一致 "
-                f"(event_id={event_id})"
-            )
+    if version_ids is None:
+        raise ValueError(
+            f"forget.executed version_ids 缺失（Vector 需按版本精确删除）(event_id={event_id})"
+        )
+    version_ids = [str(x) for x in version_ids]
+    if len(version_ids) != len(memory_ids):
+        raise ValueError(
+            f"forget.executed version_ids 与 resolved_target_ids 长度不一致 "
+            f"(event_id={event_id})"
+        )
 
     preview_ref = str(payload.get("forget_plan_id") or payload.get("preview_ref") or event_id)
-    preview_hash = Digest(selection_hash)
+    preview_hash = _payload_digest(
+        str(selection_hash), key_id=digest_key_id, event_id=event_id
+    )
     request_id = str(payload.get("request_id") or uuid.uuid4().hex)
     idempotency_key = str(
         payload.get("idempotency_key")
@@ -127,12 +170,13 @@ def _build_delete_request(
         user_id=str(user_id),
         memory_ids=memory_ids,
         version_ids=version_ids,
+        memory_kinds=aligned_kinds,
         selection_mode=(
             SelectionMode.SINGLE_ITEM
             if len(memory_ids) == 1
             else SelectionMode.RESOLVED_BATCH
         ),
-        selection_hash=Digest(selection_hash),
+        selection_hash=preview_hash,
         resolved_by=ResolvedBy.DETERMINISTIC_RULE_ENGINE,
         preview_ref=preview_ref,
         preview_hash=preview_hash,

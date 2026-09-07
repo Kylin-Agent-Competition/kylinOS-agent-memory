@@ -713,6 +713,7 @@ class ResolvedDeleteSelector(UTCBaseModel):
     user_id: str = Field(min_length=1)
     memory_ids: List[str] = Field(min_length=1)
     version_ids: Optional[List[str]] = None
+    memory_kinds: Optional[List[Literal["knowledge", "preference"]]] = None
     selection_mode: SelectionMode
     selection_hash: Digest
     resolved_by: ResolvedBy
@@ -734,6 +735,8 @@ class ResolvedDeleteSelector(UTCBaseModel):
                 raise ValueError("policy_exempt 仅允许 single_item")
         if self.selection_mode is SelectionMode.SINGLE_ITEM and (len(self.memory_ids) != 1 or not self.version_ids or len(self.version_ids) != 1):
             raise ValueError("single_item 必须恰好一个 memory_id 和一个 version_id")
+        if self.memory_kinds is not None and len(self.memory_kinds) != len(self.memory_ids):
+            raise ValueError("memory_kinds must align with memory_ids")
         return self
 
 

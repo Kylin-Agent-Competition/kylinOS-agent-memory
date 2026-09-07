@@ -118,7 +118,8 @@ _SENSITIVE_PATTERNS: List[re.Pattern] = [
     re.compile(r"\b\d{17}[\dXx]\b"),  # 身份证
     re.compile(r"(?i)(/etc/passwd|/etc/shadow|\.ssh/|id_rsa|id_ed25519)"),  # 敏感路径（无 \b：/ 为非单词字符）
     re.compile(r"\b[A-Za-z0-9]{32,}\b"),  # 疑似长密钥（32+ 位）
-    re.compile(r"\b(?:sk|pk|ak|rk)_[A-Za-z0-9_\-]{16,}\b"),  # 云厂商 API Key 前缀（sk-live- 等）
+    re.compile(r"\b(?:sk|pk|ak|rk)_[A-Za-z0-9_\-]{16,}\b"),  # 云厂商 API Key 前缀（sk_live_ 等）
+    re.compile(r"(?i)\b(?:sk|pk|ak|rk)-[A-Za-z0-9_\-]{12,}\b"),  # 连字符云厂商 Key（sk-demo-…；P2-A safety-001 裁定：Dataset 语义=critical）
     re.compile(r"(?i)\b(?:p[a@]ssw[o0]rd|p[a@]ss|p[a@]ssw0rd)[^\s]{0,12}\b"),  # 密码 leetspeak 变体
 ]
 

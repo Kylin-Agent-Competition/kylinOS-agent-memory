@@ -127,6 +127,22 @@ adapter/projection 层只投影真实观测，不判定 PASS/FAIL；由正式 Ru
 P2-A 状态：`DECISION_READY / WAITING_INDEPENDENT_D13E_PR_AND_REVIEW` → 本 PR 交 D/E
 独立 Review 后推进。
 
+## 10. 状态更新（2026-09-07）
+
+自本节起，P2-A 当前状态统一为：
+
+```text
+CONTRACT_MERGED / ADAPTER_CONSUMER_CLOSED
+Safety-001 detector gap = CLOSED_AT_L1（hyphenated cloud-key rule；E 授权 P2-A）
+Safety formal raw / Runner Gate = NOT_EXECUTED（Phase 3）
+```
+
+该状态由 PR #160 当前 HEAD 的 adapter→Runner contract L1 回归支撑：
+`d13e-safety-001..004` 都在 `MUST_MATCH_TRUE`，且不再登记 Safety observation gap。
+actual 仍只来自真实 persisted observation；Gold / expected / threshold 仍不进入
+projection 输入。这不宣称 formal VM raw、Safety 4/4 formal PASS、Phase 2 整体
+完成、Seal / attestation / Runner Gate / `D13D_FROZEN`。
+
 ## 9. Reviewer 检查重点
 
 - 契约是否逐字落实 D/E 裁定（第 1 节），无扩大/缩小；
