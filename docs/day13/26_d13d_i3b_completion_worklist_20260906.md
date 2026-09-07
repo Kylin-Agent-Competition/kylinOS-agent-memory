@@ -387,3 +387,15 @@ Phase 3 准备清单见
   tested_commit 的冻结 evidence root 重放后才能作为 formal evidence。
 - 正式状态不变：`formal_tested_commit` 仍 `PENDING_P0_I3_RESELECTION`，PR #160 仍未 merge，
   Forget 5/5 与 17 raw / Seal / Runner / `D13D_FROZEN` 均未开始。
+
+### 9.9 Forget 5/5 real E2E record（2026-09-07，仍 NON-FORMAL）
+
+执行 commit `d60dbe6e5d4e4c9583fb1eca250f811a8d10f75c` 上，V2 sealed source
+binding 的五个 Forget sample 已通过真实 preview → execute → Outbox Worker /
+Router / deletion-consumer ACK → FTS realtime → full rebuild → receipt 链路。
+五条记录的 missed / wrongly deleted / cross-user violation / realtime residual /
+rebuild residual 均为 0。详细身份、SHA、回归与 CI 证据见
+[32_d13d_phase2_forget_e2e_20260907.md](32_d13d_phase2_forget_e2e_20260907.md)。
+
+该结果仍限于 Phase 2 能力闭环，不是 formal raw，不选择正式
+`tested_commit`，不执行 Runner Gate，不生成 Seal，也不标 `D13D_FROZEN`。
