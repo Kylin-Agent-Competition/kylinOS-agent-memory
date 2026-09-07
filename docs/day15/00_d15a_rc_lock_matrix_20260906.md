@@ -26,15 +26,23 @@
 
 ### 1.2 范围边界
 
-- 本文件与配套确定性守卫测试 `docs/day15/test_d15a_rc_lock_matrix.py` 为**仅有的**
-  新增文件（module=docs）。
+- 本 Task（PR #164 对应的 D15A 锁定矩阵与确定性守卫）涉及**三个实际文件**：
+  - `docs/day15/00_d15a_rc_lock_matrix_20260906.md`（本文件）；
+  - `docs/day15/test_d15a_rc_lock_matrix.py`（配套确定性守卫测试）；
+  - `.github/workflows/baseline-check.yml`（既有 CI workflow，见下）。
+- 三文件中的 code 变更仅限上述守卫测试与本矩阵文档（module=docs）；`.github/workflows/
+  baseline-check.yml` **不改动其结构**——仅把 `docs/day15/test_d15a_rc_lock_matrix.py`
+  守卫接入既有 `d14a-packaging-provenance` job 的 pytest 命令（在 `docs/day14/
+  test_d14a_release_provenance.py` 之后追加一行），在此 job 上**不新增 job / 不新增
+  runner，保持 `fetch-depth: 0`**；既有 D15A / D14A CI integration 语义保持不变。
 - **不**新增 wheel / pyproject / setup / 任何发布构建体系；
+- 本 Task 不整体排除 `.github/**`；除 `baseline-check.yml` 单文件的有限接入
+  声明外，**不**修改 / 不新增任何其他 `.github/workflows/*` 的 job / runner / 语义。
 - **不**修改 `packaging/**`、`cpp-bridge/**`、`memory-service/**`、`migrations/**`、
-  `config/**`、`scripts/**`、`tests/**`、`.github/**`、`evidence/**`、
-  `evidence/index.yaml`；
-- **不**修改 `docs/day14/00_d14a_release_package_contract.md`、
+  `config/**`、`scripts/**`、`tests/**`、`evidence/**`、`evidence/index.yaml`；
+- **不**额外修改 `docs/day14/**`：`docs/day14/00_d14a_release_package_contract.md`、
   `docs/day14/01_d14a_implementation_report_20260905.md` 或任何 D14A 冻结契约/报告
-  （如需改动身份字段须由 D 主审会签并升版，本 Task 不代做）；
+  需保持原样（如需改动身份字段须由 D 主审会签并升版，本 Task 不代做）；
 - **不**执行 / 不宣称任何正式 `FINAL` 锁、不做 L2/L3、不访问银河麒麟虚拟机。
 
 ---
@@ -57,9 +65,11 @@
 
 ### 2.2 “so/wheel”外部施工台账措辞澄清
 
-- `docs/project/15_DAY_PLAN.md:1021`（“锁定 Bridge so/wheel、依赖清单和构建说明”）
-  为**外部施工台账**中的历史泛称，**不属于本仓库版本化的权威发布契约来源**——
-  本仓 trees 与全量 git 历史均**无**该路径；
+- “锁定 Bridge so/wheel、依赖清单和构建说明”为**外部 D15-A project / construction
+  ledger（外部施工台账）**中的历史泛称（该台账不在本仓库的仓库树 / 全量 git 历史内），
+  **不属于本仓库版本化的权威发布契约来源**；
+- 本仓库**不追踪、不含任何此类 pseudo-repo 施工台账路径**；上文历史措辞仅引用其
+  语义，不代表仓库内存在该外部台账对应的已追踪文件。
 - 仓库权威发布契约以 `docs/day14/00_d14a_release_package_contract.md`
   （FROZEN、唯一真源）与 `packaging/release/**` 为准；
 - **语义裁量**：正式交付物身份以 **§2.1 为准**——`kylin_embedding*.so`（pybind11
@@ -97,7 +107,11 @@ A 轨发布候选锁定沿如下程序推进，**任何一步未完成前不得�
 
 - 上表前三行（A15-1/A15-2/A15-3）当前均只能为 **`WAITING_PREREQ`**；
 - 第四行为**独立行**，仅表示本文档作为准备基线处于文档评审状态，**不得**与前三行
-  混标、不得被解读为任何正式锁。
+  混标、不得被解读为任何正式锁；
+- **机器守卫语义（M-2）**：每个 A15-x 锁点在**表格中仅允许恰好一行**，且该唯一行的
+  状态 cell 必须**精确等于 `WAITING_PREREQ`**；任何重复 / 歧义 / 混合 / 额外状态一律
+  fail-closed，**不使用** `any(WAITING_PREREQ)` 接受重复或冲突行（实际强制由配套
+  确定性测试承担，见 test 的第 2 条断言与 §7.2bis 结构化状态行覆盖）。
 
 ---
 

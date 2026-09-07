@@ -7,9 +7,12 @@
 改写状态来让测试通过。
 
 覆盖断言（与已批准 plan / Task 约束对应）：
-1. 两允许文件存在且文档含全部 7 个必需章节标题；
-2. A15-1/A15-2/A15-3 表格状态行均绑定 `WAITING_PREREQ`（以多行正则整行定位
-   `| A15-x | ... |` 表格行，再断言行内包含 WAITING_PREREQ，属行级绑定断言）；
+1. 两个允许文件（本测试与其守卫文档）存在且文档含全部 7 个必需章节标题；
+2. A15-1/A15-2/A15-3 每个锁点**恰好一个**表格状态行，且该唯一行的状态 cell
+   **精确等于** `WAITING_PREREQ`（以多行正则整行定位 `| A15-x | ... |` 表格行，
+   要求恰好命中一行，再取末格 `| ... |` 状态 cell 精确等于 WAITING_PREREQ；
+   重复 / 歧义 / 混合 / 额外状态一律 fail-closed，不使用 `any(WAITING_PREREQ)`
+   接受重复或冲突行）；
 3. 全文不出现越级词（FINAL_LOCK / LOCKED / L3_READY / HOST_VERIFIED /
    RUNTIME_VERIFIED / D14A complete / production ready / release ready 等），
    其中 LOCKED 等以独立 token（词边界）判定，BLOCKED / NOT_FROZEN /
@@ -30,7 +33,10 @@
    未选择；
 8. M2-A 机器守卫边界：仅覆盖受控英文 sentinel、结构化状态行与已定义
    provenance/state token，不覆盖中文/自然语言同义越级与 evidence 真实性；
-9. M2-A 外部施工台账非仓库权威发布契约来源。
+9. M3-A 外部施工台账非仓库权威发布契约来源，且 15_DAY_PLAN.md / pseudo-repo 路径
+   在文档与测试中均被负向守卫去除；
+10. M4-A 实际 PR 文件范围为三个（本守卫文档、本测试、.github/workflows/
+    baseline-check.yml），且文档不含过时的 blanket `.github/**` 排除。
 """
 
 import re
@@ -158,25 +164,35 @@ def test_required_sections_present():
     assert not missing, f"文档缺少必需章节标题: {missing}"
 
 
-# ---------- 2. A15 表格状态行均绑定 WAITING_PREREQ ----------
+# ---------- 2. A15 表格唯一状态行精确绑定 WAITING_PREREQ ----------
 
 def test_a15_rows_waiting_prereq():
     text = _doc_text()
     for lock in ("A15-1", "A15-2", "A15-3"):
-        # M-1 修复：A15-x 状态行与 WAITING_PREREQ 的行级绑定断言。
-        # 用多行正则定位 A15-x 的表格状态行（形如 | A15-x | ... | 的整行，
-        # re.MULTILINE），要求每个锁点至少命中一行，且命中行文本内必须
-        # 包含 WAITING_PREREQ；不再以与行无关的全文存在性检查充当绑定断言。
+        # M-1 保留：A15-x 状态行与 WAITING_PREREQ 的行级绑定断言。
+        # M-2 收紧：每个锁点在表格中必须**恰好一行**，且该唯一行的状态 cell
+        # **精确等于** WAITING_PREREQ。用多行正则整行定位形如 | A15-x | ... |
+        # 的表格行；要求 len(rows) == 1，否则 fail-closed 报重复/歧义；
+        # 再取该唯一行最后一个 | ... | 状态 cell（去空格、去反引号边框后
+        # strip），断言其精确等于 WAITING_PREREQ。不使用任何(WAITING_PREREQ)
+        # 接受重复/冲突行。
         pattern = re.compile(
             rf"^\|\s*{re.escape(lock)}\s*\|.*\|\s*$", re.MULTILINE
         )
         rows = pattern.findall(text)
-        assert rows, f"锁点 {lock} 未定位到表格状态行（应形如 | {lock} | ... |）"
-        assert any("WAITING_PREREQ" in row for row in rows), (
-            f"锁点 {lock} 状态行未绑定 WAITING_PREREQ；实际定位行: {rows!r}"
+        assert len(rows) == 1, (
+            f"锁点 {lock} 表格必须恰好一行（现状 {len(rows)}，重复/歧义应 fail-closed）"
+            f": {rows!r}"
         )
-        # 既有断言保留（不删除、不弱化）：全局存在检查被行级绑定严格蕴含，
-        # 显式保留以满足既有断言不变量。
+        row = rows[0]
+        cells = [c.strip() for c in row.strip("|").split("|")]
+        assert cells and cells[-1] is not None, f"锁点 {lock} 状态行无状态 cell"
+        status = cells[-1].strip().strip("`").strip()
+        assert status == "WAITING_PREREQ", (
+            f"锁点 {lock} 唯一行状态 cell 必须精确等于 WAITING_PREREQ；"
+            f"实际 {status!r}"
+        )
+        # 既有断言保留（不删除、不弱化）。
         assert lock in text, f"缺少锁点行 {lock}"
         assert "WAITING_PREREQ" in text, f"锁点 {lock} 状态行缺少 WAITING_PREREQ"
     # 本矩阵线独立状态（DOCUMENTATION_PREPARATION / READY_FOR_REVIEW），
@@ -335,15 +351,16 @@ def test_machine_guard_boundary_declared():
 
 
 def test_external_ledger_not_repo_contract():
-    """M2-A：外部施工台账（docs/project/15_DAY_PLAN.md:1021）不是仓库权威发布契约来源；
-    仓库权威发布契约以 docs/day14/00_d14a_release_package_contract.md 与
-    packaging/release/** 为准。"""
+    """M-3：外部 D15-A project / construction ledger（外部施工台账）不是仓库权威发布
+    契约来源；文档不得再出现 `docs/project/15_DAY_PLAN.md:1021` 这类 pseudo-repo 施工
+    台账路径。负向守卫：15_DAY_PLAN / docs/project 伪仓库路径不得重新出现。"""
     text = _doc_text()
     _assert_all_present(
         text,
         (
             "外部施工台账",
-            "docs/project/15_DAY_PLAN.md:1021",
+            "D15-A project / construction",
+            "锁定 Bridge so/wheel、依赖清单和构建说明",
             "仓库权威发布契约",
             "docs/day14/00_d14a_release_package_contract.md",
             "packaging/release",
@@ -352,6 +369,59 @@ def test_external_ledger_not_repo_contract():
     )
     assert "不属于本仓库版本化的权威发布契约来源" in text, (
         "文档必须明确外部施工台账不属于本仓库版本化的权威发布契约来源"
+    )
+    # 负向守卫：pseudo-repo 施工台账路径 token 不得重新出现（fail-closed）。
+    assert "15_DAY_PLAN" not in text, (
+        "文档不得再出现 15_DAY_PLAN.md 或类似 pseudo-repo 施工台账 token"
+    )
+    assert "docs/project" not in text, (
+        "文档不得再出现 docs/project/ 伪仓库路径"
+    )
+    assert r"15_DAY_PLAN.md" not in text
+    assert "15_DAY_PLAN.md:1021" not in text
+
+
+# ---------- 10. M4-A 三文件 PR 范围与无 stale .github/** 排除 ----------
+
+# 实际 PR #164 涉及的文件（三个）。
+_PR_SCOPE_FILES = [
+    "00_d15a_rc_lock_matrix_20260906.md",
+    "test_d15a_rc_lock_matrix.py",
+    ".github/workflows/baseline-check.yml",
+]
+
+
+def test_pr_scope_three_files():
+    """M-4：§1.2 必须准确列出三个实际 PR 文件；workflow 仅把守卫接入既有
+    d14a-packaging-provenance job（保持 fetch-depth: 0、不新增 job/runner）；
+    且不得再存在过时的 blanket `.github/**` 排除。"""
+    text = _doc_text()
+    for f in _PR_SCOPE_FILES:
+        assert f in text, f"§1.2 必须列出实际 PR 文件 {f!r}"
+    # workflow 接入语义：既有 d14a-packaging-provenance job、fetch-depth: 0、
+    # 不新增 job、不新增 runner。
+    _assert_all_present(
+        text,
+        (
+            "d14a-packaging-provenance",
+            "fetch-depth: 0",
+            "不新增 job",
+            "不新增",
+        ),
+        "workflow 接入语义",
+    )
+    assert "runner" in text, "文档应声明不新增 runner"
+    # 负向守卫：不得再存在独立 blanket 排除 `.github/**`（排除列表语境）。
+    # 文档中 `.github` 仅以 workflow 文件路径 / 有限接入声明形式出现；若某个
+    # 「不修改 …」排除列表项仍包含 `.github`，即为过时 blanket 排除，fail-closed。
+    for line in text.splitlines():
+        stripped = line.strip()
+        if "不修改" in stripped and stripped.startswith("-"):
+            assert ".github" not in stripped, (
+                f"排除列表不得再含 blanket `.github/**` 项: {line!r}"
+            )
+    assert "不整体排除 `.github/**`" in text, (
+        "文档应明确不再整体排除 .github/**"
     )
 
 
