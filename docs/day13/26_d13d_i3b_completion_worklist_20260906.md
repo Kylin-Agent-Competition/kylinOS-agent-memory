@@ -348,3 +348,15 @@ Reviewer E 已在 PR #160 comment `5564455955` 更正阶段授权为
 
 Phase 3 准备清单见
 [31_d13d_phase3_preparation_handoff_20260907.md](31_d13d_phase3_preparation_handoff_20260907.md)。
+
+### 9.8 preparation 现场进展（2026-09-07，仍 NON-FORMAL）
+
+- VM 候选部署：`kylin-memory.service` active，IPC socket `0600`，Alembic 迁移通过，
+  SQLite DB `0600`；候选 HEAD `c462c4205dc79f6931954abe601de7e7fa883dbf`，worktree clean。
+- G5 preparation：已在 VM 从当前源码编译 `kylin_embedding` 并完成真实 SDK embed smoke
+  （默认模型 `ensemble-embd_gte-base_uint8-text`，768 维，norm≈1.0）；这不等于 formal G5 closure。
+- G6 preparation：`0k1.1` headers + `vector_bridge_cli` compile/link/smoke 已在 VM 上完成，
+  准备证据在 `evidence/phase3-prep/d13d_g6_bridge_smoke_20260907/`；仍需在 final
+  tested_commit 的冻结 evidence root 重放后才能作为 formal evidence。
+- 正式状态不变：`formal_tested_commit` 仍 `PENDING_P0_I3_RESELECTION`，PR #160 仍未 merge，
+  Forget 5/5 与 17 raw / Seal / Runner / `D13D_FROZEN` 均未开始。

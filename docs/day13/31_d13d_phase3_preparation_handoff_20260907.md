@@ -174,3 +174,29 @@ sudo -n sha256sum /etc/kylin-memory/trust/D13E_TRUST_ROOTS_V1.json \
 8. 再由 D 主审从最新干净 main 选择完整 40 位 `tested_commit`。
 
 在上述事项完成前，本 checklist 不得升级为 formal execution / freeze Gate。
+
+## 8. 2026-09-07 preparation 现场结果
+
+VM 环境已在候选 `feat/d13d-i3b-completion @ c462c4205dc79f6931954abe601de7e7fa883dbf`
+上部署并复核：
+
+- `kylin-memory.service` = `active`；
+- IPC socket 权限 = `0600 kylin-agent:kylin-agent`；
+- Alembic schema 迁移通过，SQLite DB 文件权限为 `0600`；
+- Vector client 包 = `libkysdk-vector-engine-client 1.2.0.0-0k1.1`。
+
+G5 preparation：当前源码的 `kylin_embedding` pybind11 模块已在 VM 上从源码编译，并连
+接真实 SDK 完成一次 embed smoke。默认模型为
+`ensemble-embd_gte-base_uint8-text`，输出 768 维，L2 norm≈1.0。准备证据位于
+`evidence/phase3-prep/d13d_g5_embedding_smoke_20260907/`，仍为
+`PREPARATION / NON-FORMAL`。这不等于 G5 formal closure，也不等于 Vector 双通道 5/5 完成。
+
+G6 preparation：`0k1.1` headers 已从本地 dev 包解包；`vector_bridge_cli` 已用这些 headers
+在 VM 上编译/链接，并完成真实 engine smoke（create → insert → search hit → delete →
+search miss → drop）。准备证据位于
+`evidence/phase3-prep/d13d_g6_bridge_smoke_20260907/`，仍为
+`PREPARATION / NON-FORMAL`。正式执行前必须在 final tested_commit 的冻结 evidence root 上重放并独立复核。
+
+Preflight：`evidence/phase3-prep/d13d_phase3_prep_20260907_c462c42_g5smoke/`
+如实保持 `BLOCKED`。阻塞点是 Trust Root 目录尚未安装，以及运行时包本身不含 headers；
+后者由本地 dev 包解包的准备路径解决，但正式 preflight 仍应独立记录这一差异。

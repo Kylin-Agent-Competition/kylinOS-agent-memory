@@ -1,0 +1,10 @@
+[1788757924382] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1788757924382] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
+[1788757924518] [32minfo [0m Proxy init success,sessionId is: 561696305 
+[1788757924519] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
+[1788757924519] [32minfo [0m Try to get default model 
+[1788757924565] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
+[1788757924565] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
+[1788757924566] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 561696305 
+[1788757924566] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
+{'dimension': 768, 'norm': 1.0000000565254372, 'vector_head': [-0.04501199349761009, 0.07019061595201492, -0.00891079381108284, 0.052298638969659805]}

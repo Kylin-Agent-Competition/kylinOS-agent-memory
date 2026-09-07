@@ -58,8 +58,8 @@ G4/G5/G6 仍按本文件阻塞；未完成前不宣称 Forget 5/5 或 production
 | 缺口 | 状态 | 说明 |
 |---|---|---|
 | G4 | ✅ 保守排除已闭合 + L1 | D/E 未裁定进入 Vector 真源前采用保守方案：`SqliteVectorSnapshotReader` 只读 knowledge；若该用户仍有 active preference（`memory_versions.memory_status != "removed"`），整个 Vector rebuild snapshot fail-closed，防止 full_reset 后残留 preference 被 rebuild 静默排除。已补 active/removed 两条 L1。 |
-| G5 | 🟡 L1 seam ready，VM BLOCKED | 新增 `evaluation/d13d_forget_index_producer.index_knowledge_docs`：active knowledge 经真实 `memory.upserted` outbox → 正式 `OutboxWorker/OutboxRouter/build_index_consumer` 消费；preference 不入该 seam。L1 只用 FakeVectorProvider/deterministic embedding 验证接线，不得冒充 VM 证据。正式接入仍需真实 Embedding + Vector provider，并受 G6 环境约束。 |
-| G6 | ⏳ BLOCKED | 仍缺 SDK `0k1.1` headers、`vector_bridge_cli` compile/link/smoke；禁止复用 `0k0.7`。 |
+| G5 | 🟡 preparation READY / formal BLOCKED | L1 seam + VM preparation 均可用：`evaluation/d13d_forget_index_producer.index_knowledge_docs` 已接真实 outbox/index-consumer 语义；2026-09-07 在麒麟 VM 从当前源码编译 `kylin_embedding` 并完成真实 SDK embed smoke（默认模型 `ensemble-embd_gte-base_uint8-text`，768 维，norm≈1.0）。准备证据见 `evidence/phase3-prep/d13d_g5_embedding_smoke_20260907/`。正式仍 BLOCKED：必须把真实 Embedding 与 Vector provider 注入 isolated runtime binding，且 pre-delete probe 在 FTS/Vector 双通道命中并留 provenance。 |
+| G6 | 🟡 preparation READY / formal BLOCKED | SDK client 包为 `1.2.0.0-0k1.1`；本地 dev 包 `libkysdk-vector-engine-client-dev_1.2.0.0-0k1.1_amd64.deb` 已解包出 `0k1.1` headers，`vector_bridge_cli` 已用这些 headers 在 VM 上编译/链接并完成真实 engine smoke（create → insert → search hit → delete → search empty → drop）。准备证据见 `evidence/phase3-prep/d13d_g6_bridge_smoke_20260907/`。准备阶段不做 formal raw/Seal/Runner。正式执行仍需在 final tested_commit 的冻结 evidence root 上重放并独立复核。禁止复用旧 `0k0.7` binary/header。 |
 
 G5 正式关闭标准：在麒麟 VM 的 isolated runtime binding 中注入真实 Embedding/Vector provider，pre-delete probe 在 FTS 与 Vector 双通道都命中，且 vector delete/rebuild 证据可复核。在此之前，FTS-only L1 不得写成 Forget 5/5 或 Vector 双通道完成。
 
