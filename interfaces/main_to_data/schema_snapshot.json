@@ -1,0 +1,201 @@
+{
+  "schema": "main_to_data_canonical_business_schema_snapshot",
+  "schema_version": "1",
+  "status": "FROZEN",
+  "generated_at": "2026-09-07T15:00:00Z",
+  "generated_at_note": "日期精度确定（2026-09-07 UTC，与批次 e-m1-canonical-schema-snapshot-closure-v1 会话同日）；执行环境允许的 Bash 白名单无时钟打印命令，具体分钟为该日冻结 commit（c64b6ff，2026-09-07T14:36:01Z）之后的本批次会话时间估计。",
+  "source_main_commit": "c64b6ffa58519121d15218a88009243a6d072510",
+  "source_main_commit_note": "生成本 Snapshot 所依据的当前 main 基线（chore/e-m1-schema-snapshot-closure 分支 HEAD，含 KMA Canonical v1 FROZEN 收口 commit；经本批次控制器合并后进入 main）。绝不引用本文件自身未来的合并提交 SHA。",
+  "authority": {
+    "canonical_document": {
+      "path": "docs/architecture/KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md",
+      "version": "v1",
+      "status": "FROZEN",
+      "note": "团队级最高业务语义权威（L1），承载字段语义裁定 R-1..R-6、字段别名与映射边界表、物理结构边界。"
+    },
+    "supporting_documents": [
+      {
+        "path": "docs/architecture/D3_MEMORY_BUSINESS_CONTRACT_V1.md",
+        "status": "CANDIDATE_FOR_FREEZE",
+        "scope": "详细业务语义契约（L2），Canonical 未覆盖的业务语义参照（含 §5.6 值集）。不与 Canonical 竞争最高权威。"
+      },
+      {
+        "path": "docs/architecture/MEMORY_BUSINESS_SCHEMA_V0.1.md",
+        "status": "DRAFT",
+        "scope": "历史初稿（L3），来源与兼容性参照；业务语义权威由 Canonical v1 承接。"
+      }
+    ],
+    "source_identity": [
+      "memory-service/domain/enums.py",
+      "memory-service/pipeline/schemas.py"
+    ],
+    "provenance": {
+      "pr": "#137 (Fix/e d12 business schema drift remediation)",
+      "merge_commit": "f263d5b",
+      "merge_commit_verified": "git merge-base --is-ancestor f263d5b HEAD 返回 0（HEAD 祖先）",
+      "approved_review": ".agent-runs/batches/day12-e-business-schema-drift-remediation-v3/tasks/day12-e-01-canonical-schema-governance-v3/review.md (FINAL_STATUS: APPROVE)",
+      "evidence_review": ".agent-runs/batches/day12-e-business-schema-drift-remediation-v3/tasks/day12-e-01-canonical-schema-governance-v3/evidence-review.md (FINAL_STATUS: EVIDENCE_APPROVED)",
+      "governance_freeze_commit": "c64b6ff (docs: 冻结Canonical业务Schema v1, 2026-09-07, 仅改 KMA 文档)",
+      "reviewer_identity": "NOT_VERIFIED_IN_REPO",
+      "note": "仓库内无可独立核验的命名 reviewer 身份；不编造 reviewer 登录/身份。冻结基于 PR 合并事实与内容治理 APPROVE/EVIDENCE_APPROVED。"
+    },
+    "freeze_boundaries": {
+      "frozen": "Main 到 Data 方向业务语义值集、稳定别名/映射、unknown fail-closed 策略",
+      "not_frozen": [
+        "Host DTO 字段（os-agent-integration）",
+        "IPC wire schema 与 protocol_version",
+        "SQLite 物理 schema、迁移与存储形态",
+        "C++ 结构体（cpp-bridge/ memory-client/ os-agent-integration/contracts/）",
+        "业务事件 schema_version（\"0.1\"）"
+      ],
+      "kept_open": [
+        "TD-060（collected_at legacy transport alias 双名保留，C/D 书面冻结前不得删除）",
+        "TD-016（is_active/is_outdated/should_decay compatibility 过渡字段）",
+        "未书面冻结的 Host execution_status 一致性元组（见 aliases_and_mappings.pending_mapping）"
+      ],
+      "no_runtime_claims": "本 Snapshot 不新增任何 Runtime / HOST_VERIFIED / L2 / L3 结论；不执行 L2/L3、SSH、push、PR、merge。"
+    }
+  },
+  "canonical": {
+    "core_value_sets": {
+      "memory_status": {
+        "values": ["active", "superseded", "deprecated", "expired", "removed", "candidate"],
+        "source": "memory-service/domain/enums.py :: MemoryStatus",
+        "document": "KMA R-3 / D3 §5.6 / Schema §2.8",
+        "note": "生命周期唯一业务真值；is_active/is_outdated/should_decay 仅 compatibility 过渡字段（TD-016 Open）。"
+      },
+      "preference_scope": {
+        "values": ["global", "topic", "tool", "session", "time_window"],
+        "source": "memory-service/domain/enums.py :: PreferenceScope",
+        "document": "D3 §5.6 preference_scope 五值冻结",
+        "note": "与 A Provider 前向草稿 scope 取值差异不在此固化（D3 C-05）。"
+      },
+      "expression_type": {
+        "values": ["explicit", "implicit"],
+        "source": "memory-service/domain/enums.py :: ExpressionType",
+        "document": "KMA R-2 / D3 §5.6",
+        "note": "inferred 旧称已归一为 implicit，不作为独立值；candidate 由 memory_status=candidate 承载。"
+      },
+      "sensitivity": {
+        "values": ["none", "low", "medium", "high", "critical"],
+        "source": "memory-service/pipeline/schemas.py :: SensitivityLevel",
+        "document": "KMA R-5 / Schema §2.10 / D3 §5.1 §7.7",
+        "note": "Canonical 业务字段名为 sensitivity；sensitivity_level 仅注解层 1:1 alias。"
+      }
+    },
+    "additional_stable_value_sets": {
+      "knowledge_type": {
+        "values": ["workflow", "case", "template", "fact", "constraint", "failure_experience"],
+        "source": "memory-service/domain/enums.py :: KnowledgeType",
+        "document": "D3 §5.6 knowledge_type 六值冻结",
+        "note": "primary_category 为开放业务分类标签，不得替代 knowledge_type。"
+      },
+      "forget_mode": {
+        "values": ["single_item", "session", "topic", "time_window", "full_reset"],
+        "source": "memory-service/domain/enums.py :: ForgetMode",
+        "document": "D3 §5.6 forget_mode 五值冻结",
+        "note": "full_reset 安全边界待 E/D 确认（HD-SCHEMA-06）。"
+      },
+      "source_type": {
+        "values": ["chat", "tool_result", "manual_config", "recollect", "file", "meeting", "voice"],
+        "source": "memory-service/pipeline/schemas.py :: SourceType",
+        "document": "Schema §2.1 七值规范集合",
+        "note": "与 event_type（用户消息/代理回复/系统消息）不同层级。"
+      },
+      "source_business_status": {
+        "values": ["raw", "completed", "success", "partial", "failed", "cancelled", "timeout", "ignored"],
+        "source": "memory-service/pipeline/schemas.py :: SourceBusinessStatus",
+        "document": "KMA R-4 / D3 §5.6 八值业务结果状态",
+        "note": "业务结果状态，与 processing_status 正交；raw/completed/ignored 为 canonical-only（无 Host DTO projection）。"
+      }
+    },
+    "explicit_non_canonical": {
+      "processing_status": {
+        "values": ["pending", "extracting", "extracted", "embedded", "stored"],
+        "source": "memory-service/pipeline/schemas.py :: ProcessingStatus",
+        "document": "KMA R-4 / Schema §2.4 / D3 §5.1 §5.6 §8.2",
+        "note": "仅 Memory Service 内部处理流水线 Runtime technical state，不是 Canonical 业务 enum；与 source_business_status 正交（事件可能业务 success 但流水线仍 extracting）。不写入 Canonical core/additional 值集。"
+      }
+    },
+    "value_set_constraints": {
+      "no_pending_members": "任何 Canonical enum 值集不得加入 PENDING_* 成员",
+      "no_unknown_members": "不得新增宽泛 unknown 作为 Canonical enum 成员；unknown 一律由 unknown_policy=fail_closed 在边界拒绝",
+      "values_are_ssot_exports": "值直接取自 domain/enums.py 与 pipeline/schemas.py 当前 SSOT，除已书面冻结归一（inferred→implicit）外不做任何转换"
+    }
+  },
+  "aliases_and_mappings": {
+    "frozen_stable": [
+      {
+        "canonical_field": "captured_at",
+        "source_alias": "collected_at",
+        "kind": "legacy_transport_alias",
+        "mapping_status": "frozen_stable",
+        "document": "KMA R-1 / ADR-010 / TD-039 / TD-060",
+        "note": "transport→business 必经 Adapter/Mapping；业务层统一 captured_at；不删除 alias，TD-060 保持 Open，采纳/更名方案待 C/D 书面冻结。"
+      },
+      {
+        "canonical_field": "sensitivity",
+        "source_alias": "sensitivity_level",
+        "kind": "annotation_layer_1to1_alias",
+        "mapping_status": "frozen_stable",
+        "document": "KMA R-5",
+        "note": "仅注解层（标注规范）允许 1:1 alias；业务 Canonical 层统一 sensitivity；不得出现第三种命名或语义分叉。"
+      },
+      {
+        "canonical_field": "source_business_status",
+        "source_alias": "Host DTO execution_status=failure",
+        "kind": "host_dto_alias_normalization",
+        "mapping_status": "frozen_stable",
+        "document": "DRIFT-002/003；pr-d12c-body.md；os-agent-integration/contracts/memory_event_contract_v1.cpp（memory_event_contract_v1.h 亦记录 legacy failure 非 canonical）",
+        "note": "Host DTO execution_status=failure 归一为 Canonical source_business_status=failed；序列化侧仅输出 canonical 名称 failed。"
+      }
+    ],
+    "deprecated_or_compatibility": [
+      {
+        "canonical_field": "expression_type",
+        "source_value": "inferred",
+        "kind": "deprecated_legacy_term",
+        "mapping_status": "deprecated",
+        "document": "KMA R-2",
+        "note": "inferred 归一为 implicit，不作为独立枚举值。"
+      },
+      {
+        "canonical_field": "memory_status",
+        "source_fields": ["is_active", "is_outdated", "should_decay"],
+        "kind": "compatibility_transitional_fields",
+        "mapping_status": "deprecated_compatibility",
+        "document": "KMA R-3 / TD-016",
+        "note": "compatibility/deprecated 过渡字段，冲突时以 memory_status 为准；移除按 TD-016 既有条件由 D Reviewer 验收，TD-016 保持 Open。"
+      }
+    ],
+    "pending_mapping": [
+      {
+        "canonical_field": "source_business_status",
+        "source_values": ["Host DTO execution_status=success/partial/cancelled/timeout"],
+        "kind": "compatibility_boundary_pending_governance",
+        "mapping_status": "pending",
+        "document": "代码级一致性约束（os-agent-integration/contracts/memory_event_contract_v1.cpp businessStatusConsistentWithExecution 一致性元组）已存在，但书面治理冻结未完成",
+        "note": "不编造 Canonical 值；success/partial/failed/cancelled/timeout 与源 DTO 的一致性元组待 C/D 书面冻结后再升格为 frozen_stable。"
+      },
+      {
+        "canonical_field": "source_business_status",
+        "source_values": ["raw", "completed", "ignored"],
+        "kind": "canonical_only_no_host_projection",
+        "mapping_status": "pending",
+        "document": "os-agent-integration/contracts/memory_event_contract_v1.cpp（raw/completed/ignored 无直接 Host DTO execution_status 映射）",
+        "note": "canonical-only 状态，可与任何 execution_status 共存；仅记录事实，不构造 Host 映射。"
+      }
+    ]
+  },
+  "unknown_policy": {
+    "policy": "fail_closed",
+    "note": "任何未知输入在边界拒绝：对齐 MemorySourceEvent/NormalizedEvent ConfigDict(extra=\"forbid\") 与 Canonical 值白名单；不产生默认兜底值，不把未知值映射进任何 Canonical enum。"
+  },
+  "runtime_boundary": {
+    "runtime_required": false,
+    "notes": [
+      "本 Snapshot 为纯业务接口数据交付，不声明任何 Host/Runtime 能力。",
+      "不包含 L2/L3 结论，不构成 HOST_VERIFIED，不替代任何 Runtime Test。"
+    ]
+  }
+}
