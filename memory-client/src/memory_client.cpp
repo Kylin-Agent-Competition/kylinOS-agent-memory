@@ -1,5 +1,6 @@
-#include "memory_client.h"
+﻿#include "memory_client.h"
 
+#include <QDateTime>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUuid>
@@ -12,10 +13,13 @@ constexpr const char* kErrNotConnected = "ERR_NOT_CONNECTED";
 constexpr const char* kErrEncodeFailed = "ERR_ENCODE_FAILED";
 constexpr const char* kErrConnectionClosing = "ERR_CONNECTION_CLOSING";
 constexpr const char* kErrProtocol = "ERR_PROTOCOL";
+constexpr const char* kErrClientTimeout = "TIMEOUT";  // TD-022：与服务端冻结错误码 TIMEOUT 对齐
+constexpr const char* kErrReconnectMax = "ERR_RECONNECT_MAX";
 
-// FRZ-IPC-006 §6.1: 请求中 request_id/trace_id/deadline_ms 为必填字段。
-// sendRequest 始终填充这三个字段；默认超时 5000ms（延迟预算参考值）。
-constexpr int kDefaultDeadlineMs = 5000;
+// FRZ-IPC-006 §6.1: deadline_ms 必填；默认 5000ms（客户端侧）。
+constexpr int deadlineMs_ = 5000;
+// TD-022：客户端 deadline 追加 100ms 容差（网络/调度抖动）。
+constexpr int kClientDeadlineGraceMs = 100;
 
 QString connectionStateToString(MemoryClient::ConnectionState state)
 {
@@ -28,6 +32,8 @@ QString connectionStateToString(MemoryClient::ConnectionState state)
         return QStringLiteral("connected");
     case MemoryClient::ConnectionState::Closing:
         return QStringLiteral("closing");
+    case MemoryClient::ConnectionState::Reconnecting:
+        return QStringLiteral("reconnecting");
     }
     return QStringLiteral("unknown");
 }
@@ -85,10 +91,10 @@ QString protocolErrorKindToString(ProtocolErrorKind kind)
 
 }  // namespace
 
+// ────────────────────────────────────────────────────────────────────────────
 MemoryClient::MemoryClient(QObject* parent)
     : QObject(parent)
 {
-    // FRZ-IPC-005 / ALIGN-005: 默认 UDS 路径 $XDG_RUNTIME_DIR/kylin-memory/memory.sock
     const QByteArray xdgRuntime = qgetenv("XDG_RUNTIME_DIR");
     if (!xdgRuntime.isEmpty()) {
         socketPath_ = QString::fromUtf8(xdgRuntime)
@@ -96,10 +102,20 @@ MemoryClient::MemoryClient(QObject* parent)
     }
 
     socket_ = new QLocalSocket(this);
+    reconnectTimer_ = new QTimer(this);
+    reconnectTimer_->setSingleShot(true);
+    connect(reconnectTimer_, &QTimer::timeout, this, [this]() {
+        // TD-IPC-004：退避窗口结束，执行下一次重连尝试。
+        if (connectionState_ != ConnectionState::Reconnecting) {
+            return;
+        }
+        setConnectionState(ConnectionState::Connecting);
+        receiveBuffer_.clear();
+        socket_->connectToServer(socketPath_);
+    });
+
     connect(socket_, &QLocalSocket::connected, this, &MemoryClient::handleSocketConnected);
     connect(socket_, &QLocalSocket::disconnected, this, &MemoryClient::handleSocketDisconnected);
-    // 使用字符串 SIGNAL/SLOT 语法避免 Qt 5.15 中 QIODevice::errorOccurred 与
-    // QLocalSocket::errorOccurred 的重载解析歧义（两者参数枚举类型不同）。
     connect(socket_, SIGNAL(errorOccurred(QLocalSocket::LocalSocketError)),
             this, SLOT(handleSocketErrorOccurred(QLocalSocket::LocalSocketError)));
     connect(socket_, &QLocalSocket::readyRead, this, &MemoryClient::handleSocketReadyRead);
@@ -107,6 +123,17 @@ MemoryClient::MemoryClient(QObject* parent)
 
 MemoryClient::~MemoryClient()
 {
+    cancelReconnectTimer();
+    // 析构：清除所有客户端 deadline 计时器与 pending。
+    for (auto& [id, timer] : clientDeadlineTimers_) {
+        if (timer) {
+            timer->stop();
+            timer->deleteLater();
+        }
+    }
+    clientDeadlineTimers_.clear();
+    pendingRequests_.clear();
+
     if (socket_) {
         socket_->disconnect(this);
         socket_->abort();
@@ -122,10 +149,28 @@ void MemoryClient::setSocketPath(const QString& path)
     emit socketPathChanged();
 }
 
+void MemoryClient::setAutoReconnectEnabled(bool enabled)
+{
+    if (autoReconnectEnabled_ == enabled) return;
+    autoReconnectEnabled_ = enabled;
+    emit autoReconnectEnabledChanged();
+    if (!enabled) {
+        cancelReconnectTimer();
+    }
+}
+
+void MemoryClient::setDeadlineMs(int ms)
+{
+    if (ms > 0) {
+        deadlineMs_ = ms;
+    }
+}
+
 void MemoryClient::connectToService()
 {
     if (connectionState_ == ConnectionState::Connected
-        || connectionState_ == ConnectionState::Connecting) {
+        || connectionState_ == ConnectionState::Connecting
+        || connectionState_ == ConnectionState::Reconnecting) {
         return;
     }
     if (socketPath_.isEmpty()) {
@@ -133,6 +178,9 @@ void MemoryClient::connectToService()
         emit connectionError(QStringLiteral("Socket path is empty."));
         return;
     }
+    cancelReconnectTimer();
+    manualDisconnectInProgress_ = false;
+    reconnectAttempts_ = 0;  // 全新连接，重置重连计数
     receiveBuffer_.clear();
     setConnectionState(ConnectionState::Connecting);
     socket_->connectToServer(socketPath_);
@@ -143,9 +191,45 @@ void MemoryClient::disconnectFromService()
     if (connectionState_ == ConnectionState::Disconnected) {
         return;
     }
+    // TD-IPC-004：显式 Stop → 取消重连、不触发自动重连。
+    cancelReconnectTimer();
+    manualDisconnectInProgress_ = true;
     setConnectionState(ConnectionState::Closing);
     failInFlightRequests(kErrConnectionClosing, QStringLiteral("Connection is closing."));
+    // D12-C FAIL-4 修复：若 socket 仍在 Connecting / Connected / Closing
+    // 中的任一非 Unconnected 状态，disconnectFromServer 可能不会立即 emit
+    // disconnected。统一使用 abort() 兜底（无论当前状态都会同步关闭 fd，
+    // 且异步地在事件循环下一轮触发 disconnected），保证测试与 UI 的 Stop
+    // 语义是"立即断开"。
+    if (socket_ && socket_->state() != QLocalSocket::UnconnectedState) {
+        socket_->abort();
+    }
     socket_->disconnectFromServer();
+    // 兜底：若 socket 本来就断开（例如连接失败 → 退避窗口中 Stop：此时
+    // socket->state() == UnconnectedState），abort/disconnectFromServer 都
+    // 不会再触发 handleSocketDisconnected。这里手动落回 Disconnected，使
+    // Stop 的外部语义在任何上下文下都同步可观察（+3 秒 QTRY 断言可过）。
+    if (socket_ && socket_->state() == QLocalSocket::UnconnectedState) {
+        manualDisconnectInProgress_ = false;
+        setConnectionState(ConnectionState::Disconnected);
+    }
+}
+
+void MemoryClient::retryConnect()
+{
+    // D12-C：显式 Retry。先 clean disconnect（不触发 auto-reconnect），再 connect。
+    const bool oldAuto = autoReconnectEnabled_;
+    autoReconnectEnabled_ = false;  // 临时禁用避免 disconnect 触发重连
+    cancelReconnectTimer();
+    manualDisconnectInProgress_ = true;
+    if (socket_->state() != QLocalSocket::UnconnectedState) {
+        socket_->abort();
+    }
+    failInFlightRequests(kErrConnectionClosing, QStringLiteral("Retry connect; in-flight requests cancelled."));
+    setConnectionState(ConnectionState::Disconnected);
+    autoReconnectEnabled_ = oldAuto;  // 恢复原值
+    manualDisconnectInProgress_ = false;
+    connectToService();
 }
 
 QString MemoryClient::sendRequest(const QString& method, const QJsonObject& payload)
@@ -160,10 +244,8 @@ QString MemoryClient::sendRequest(const QString& method, const QJsonObject& payl
     }
 
     const QString requestId = generateRequestId();
-    // FRZ-IPC-006 §6.1: request_id/trace_id/deadline_ms 为必填字段。
-    // trace_id 复用 request_id（单客户端场景下两者相同不影响链路追踪）。
     const QJsonObject envelope = buildEnvelope(
-        method, payload, requestId, requestId, kDefaultDeadlineMs);
+        method, payload, requestId, requestId, deadlineMs_);
     const auto packet = encodeEnvelope(envelope);
     if (!packet.has_value()) {
         emit requestFailed(requestId, kErrEncodeFailed,
@@ -179,8 +261,14 @@ QString MemoryClient::sendRequest(const QString& method, const QJsonObject& payl
     }
     socket_->flush();
 
-    pendingRequests_.emplace(requestId.toStdString(),
-                              PendingRequest{method, requestId});
+    // TD-022：注册 pending 并启动客户端 deadline 计时器（deadline_ms + grace）。
+    PendingRequest pr;
+    pr.method = method;
+    pr.traceId = requestId;
+    pr.deadlineEpochMs = QDateTime::currentMSecsSinceEpoch()
+                         + static_cast<qint64>(deadlineMs_) + kClientDeadlineGraceMs;
+    pendingRequests_.emplace(requestId.toStdString(), pr);
+    startClientDeadlineTimer(requestId, deadlineMs_ + kClientDeadlineGraceMs);
     return requestId;
 }
 
@@ -196,12 +284,6 @@ QString MemoryClient::sendMemoryStoreRequest(const QJsonObject& payload)
 
 QString MemoryClient::sendTurnFinalizedEvent(const QJsonObject& eventJson)
 {
-    // D5-C Demo / Route B：按 ADR-010 路由 turn.finalized；payload 直接复用
-    // TurnFinalizedEvent JSON（metadata + event 字段），不再包装
-    // {event_type, event_body} wrapper（该旧形状与 ADR-010 冲突）。
-    //
-    // ADR-010 trace_id 唯一真源：envelope.trace_id 必须取
-    // payload.metadata.trace_id（若提供），否则回退到 request_id。
     if (connectionState_ != ConnectionState::Connected) {
         emit requestFailed({}, kErrNotConnected, QStringLiteral("Client is not connected."));
         return {};
@@ -209,7 +291,6 @@ QString MemoryClient::sendTurnFinalizedEvent(const QJsonObject& eventJson)
 
     const QString requestId = generateRequestId();
 
-    // 从 payload.metadata.trace_id 提取唯一真源 trace_id。
     QString traceId = requestId;
     const QJsonValue metadataValue = eventJson.value(QStringLiteral("metadata"));
     if (metadataValue.isObject()) {
@@ -221,7 +302,7 @@ QString MemoryClient::sendTurnFinalizedEvent(const QJsonObject& eventJson)
     }
 
     const QJsonObject envelope = buildEnvelope(
-        methods::kTurnFinalized, eventJson, requestId, traceId, kDefaultDeadlineMs);
+        methods::kTurnFinalized, eventJson, requestId, traceId, deadlineMs_);
     const auto packet = encodeEnvelope(envelope);
     if (!packet.has_value()) {
         emit requestFailed(requestId, kErrEncodeFailed,
@@ -237,8 +318,13 @@ QString MemoryClient::sendTurnFinalizedEvent(const QJsonObject& eventJson)
     }
     socket_->flush();
 
-    pendingRequests_.emplace(requestId.toStdString(),
-                              PendingRequest{methods::kTurnFinalized, traceId});
+    PendingRequest pr;
+    pr.method = methods::kTurnFinalized;
+    pr.traceId = traceId;
+    pr.deadlineEpochMs = QDateTime::currentMSecsSinceEpoch()
+                         + static_cast<qint64>(deadlineMs_) + kClientDeadlineGraceMs;
+    pendingRequests_.emplace(requestId.toStdString(), pr);
+    startClientDeadlineTimer(requestId, deadlineMs_ + kClientDeadlineGraceMs);
     return requestId;
 }
 
@@ -246,22 +332,18 @@ QString MemoryClient::sendPreferenceListRequest(const QJsonObject& payload)
 {
     return sendRequest(methods::kPreferenceList, payload);
 }
-
 QString MemoryClient::sendPreferenceCreateRequest(const QJsonObject& payload)
 {
     return sendRequest(methods::kPreferenceCreate, payload);
 }
-
 QString MemoryClient::sendPreferenceUpdateRequest(const QJsonObject& payload)
 {
     return sendRequest(methods::kPreferenceUpdate, payload);
 }
-
 QString MemoryClient::sendPreferenceRollbackRequest(const QJsonObject& payload)
 {
     return sendRequest(methods::kPreferenceRollback, payload);
 }
-
 QString MemoryClient::sendPreferenceHistoryRequest(const QJsonObject& payload)
 {
     return sendRequest(methods::kPreferenceHistory, payload);
@@ -269,35 +351,25 @@ QString MemoryClient::sendPreferenceHistoryRequest(const QJsonObject& payload)
 
 QString MemoryClient::sendToolExecutionEvent(const QJsonObject& eventJson)
 {
-    // tool.execution：对齐 ToolExecutionEvent v1（D3 已冻结）。
-    // 生产 Gateway 默认不注册 → UNSUPPORTED_METHOD（符合预期）。
     return sendEventEnvelope(methods::kToolExecution, eventJson);
 }
-
 QString MemoryClient::sendManualConfigEvent(const QJsonObject& eventJson)
 {
-    // manual.config.ingest：候选 schema（manual_config_event.v1.json）。
     return sendEventEnvelope(methods::kManualConfigIngest, eventJson);
 }
-
 QString MemoryClient::sendBehaviorEvent(const QJsonObject& eventJson)
 {
-    // behavior.observe：候选 schema（behavior_event.v1.json）。
-    // mapping_status=PENDING_C_CONFIRMATION 由 ViewModel 在事件 JSON 中注入。
     return sendEventEnvelope(methods::kBehaviorObserve, eventJson);
 }
 
 QString MemoryClient::sendEventEnvelope(const QString& method, const QJsonObject& eventJson)
 {
-    // 共享写链路：trace_id 唯一真源 = payload.metadata.trace_id（若提供），
-    // 否则回退到 request_id。与 ADR-010 §trace_id 唯一真源一致。
     if (connectionState_ != ConnectionState::Connected) {
         emit requestFailed({}, kErrNotConnected, QStringLiteral("Client is not connected."));
         return {};
     }
 
     const QString requestId = generateRequestId();
-
     QString traceId = requestId;
     const QJsonValue metadataValue = eventJson.value(QStringLiteral("metadata"));
     if (metadataValue.isObject()) {
@@ -309,7 +381,7 @@ QString MemoryClient::sendEventEnvelope(const QString& method, const QJsonObject
     }
 
     const QJsonObject envelope = buildEnvelope(
-        method, eventJson, requestId, traceId, kDefaultDeadlineMs);
+        method, eventJson, requestId, traceId, deadlineMs_);
     const auto packet = encodeEnvelope(envelope);
     if (!packet.has_value()) {
         emit requestFailed(requestId, kErrEncodeFailed,
@@ -325,8 +397,13 @@ QString MemoryClient::sendEventEnvelope(const QString& method, const QJsonObject
     }
     socket_->flush();
 
-    pendingRequests_.emplace(requestId.toStdString(),
-                              PendingRequest{method, traceId});
+    PendingRequest pr;
+    pr.method = method;
+    pr.traceId = traceId;
+    pr.deadlineEpochMs = QDateTime::currentMSecsSinceEpoch()
+                         + static_cast<qint64>(deadlineMs_) + kClientDeadlineGraceMs;
+    pendingRequests_.emplace(requestId.toStdString(), pr);
+    startClientDeadlineTimer(requestId, deadlineMs_ + kClientDeadlineGraceMs);
     return requestId;
 }
 
@@ -334,59 +411,107 @@ QString MemoryClient::sendKnowledgeDetailRequest(const QJsonObject& payload)
 {
     return sendRequest(methods::kKnowledgeDetail, payload);
 }
-
 QString MemoryClient::sendConflictCompareRequest(const QJsonObject& payload)
 {
     return sendRequest(methods::kConflictCompare, payload);
 }
-
 QString MemoryClient::sendLifecycleStatusRequest(const QJsonObject& payload)
 {
     return sendRequest(methods::kLifecycleStatus, payload);
 }
-
 QString MemoryClient::sendContextAssembleRequest(const QJsonObject& payload)
 {
     return sendRequest(methods::kContextAssemble, payload);
 }
-
 QString MemoryClient::sendForgetPreviewRequest(const QJsonObject& payload)
 {
-    // D10C / ADR-016 候选：forget.preview
-    // CANDIDATE / pending ADR；Demo Mock Gateway 注册 handler；
-    // 生产 Gateway 默认不注册 → UNSUPPORTED_METHOD（fail-closed 符合预期）。
     return sendRequest(methods::kForgetPreview, payload);
 }
-
 QString MemoryClient::sendForgetExecuteRequest(const QJsonObject& payload)
 {
-    // D10C / ADR-016 候选：forget.execute
-    // 注意：Hard Delete / Cascade / Full Reset Runtime 在跨轨闭环与
-    // ADR-016 可信 delete_mode 输入来源冻结与接线前保持 fail-closed；
-    // 软删（delete_mode=soft）主路径可先行 Demo。
     return sendRequest(methods::kForgetExecute, payload);
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// 槽实现
+// ────────────────────────────────────────────────────────────────────────────
 
 void MemoryClient::handleSocketConnected()
 {
     setConnectionState(ConnectionState::Connected);
     setLastError({});
+    const int attemptsBeforeReset = reconnectAttempts_;
+    reconnectAttempts_ = 0;       // 连接成功，重连计数清零
+    emit reconnectAttemptsChanged();
+    // D12-C：仅在"真经历过至少一次重连"时发射 reconnectFinished。
+    //        首次 connectToService()（attempts==0）不应触发"重连成功"事件，
+    //        否则 ViewModel/QML 的 reconnectFinished toast 会在非重连场景误弹。
+    if (attemptsBeforeReset >= 1) {
+        emit reconnectFinished(true, attemptsBeforeReset);
+    }
 }
 
 void MemoryClient::handleSocketDisconnected()
 {
-    setConnectionState(ConnectionState::Disconnected);
+    // TD-IPC-004：区分"显式 Stop"和"意外断开"。
+    cancelReconnectTimer();
+    // 先取消所有客户端 deadline（连接已断，pending 全部失败）
+    for (auto& [id, timer] : clientDeadlineTimers_) {
+        if (timer) { timer->stop(); timer->deleteLater(); }
+    }
+    clientDeadlineTimers_.clear();
+
     failInFlightRequests(kErrConnectionClosing, QStringLiteral("Connection closed by peer."));
+
+    if (manualDisconnectInProgress_) {
+        // Stop：不触发重连，进入 Disconnected。
+        manualDisconnectInProgress_ = false;
+        setConnectionState(ConnectionState::Disconnected);
+        return;
+    }
+
+    // D12-C MEDIUM-01：协议错误导致的 abort→disconnected 不得触发 auto-reconnect。
+    // 对端不兼容或被攻击时重连无意义，直接 Disconnected。
+    if (protocolFatalDisconnect_) {
+        protocolFatalDisconnect_ = false;
+        setConnectionState(ConnectionState::Disconnected);
+        return;
+    }
+
+    // 意外断开：autoReconnectEnabled → 尝试 3 次指数退避。
+    if (autoReconnectEnabled_ && reconnectAttempts_ < maxReconnectAttempts_) {
+        startReconnectBackoff();
+    } else {
+        // 达到最大重连次数或已禁用 auto reconnect
+        if (reconnectAttempts_ >= maxReconnectAttempts_) {
+            setLastError(QStringLiteral("Maximum reconnect attempts reached."));
+            emit connectionError(QStringLiteral("Maximum reconnect attempts reached."));
+            emit reconnectFinished(false, reconnectAttempts_);
+        }
+        setConnectionState(ConnectionState::Disconnected);
+    }
 }
 
 void MemoryClient::handleSocketErrorOccurred(QLocalSocket::LocalSocketError error)
 {
-    // QLocalSocket::UnknownSocketError 是通用错误；使用 tr() 风格的固定安全消息，
-    // 不暴露文件路径或凭据。
     Q_UNUSED(error)
     const QString safeMessage = QStringLiteral("Local socket error occurred.");
     setLastError(safeMessage);
     if (connectionState_ == ConnectionState::Connecting) {
+        // 连接失败 → 触发重连逻辑（走 disconnected 路径可能不来，直接处理）
+        cancelReconnectTimer();
+        if (!manualDisconnectInProgress_
+            && !protocolFatalDisconnect_
+            && autoReconnectEnabled_
+            && reconnectAttempts_ < maxReconnectAttempts_) {
+            startReconnectBackoff();
+            emit connectionError(safeMessage);
+            return;
+        }
+        if (reconnectAttempts_ >= maxReconnectAttempts_) {
+            setLastError(QStringLiteral("Maximum reconnect attempts reached."));
+            emit reconnectFinished(false, reconnectAttempts_);
+        }
         setConnectionState(ConnectionState::Disconnected);
     }
     emit connectionError(safeMessage);
@@ -399,14 +524,15 @@ void MemoryClient::handleSocketReadyRead()
     while (true) {
         DecodeResult decoded = decodePacket(receiveBuffer_);
         if (decoded.error.kind == ProtocolErrorKind::IncompletePacket) {
-            // 等待更多数据。
             return;
         }
         if (!decoded.error.ok()) {
             setLastError(decoded.error.safeMessage);
             emit connectionError(decoded.error.safeMessage);
-            // 不可恢复的协议错误：关闭连接以避免半包污染后续请求。
             receiveBuffer_.clear();
+            // D12-C MEDIUM-01：协议错误不触发重连（对端不兼容或被攻击）。
+            // 先设置 flag 再 abort()，因为 abort() 可能同步触发 disconnected() 信号。
+            protocolFatalDisconnect_ = true;
             socket_->abort();
             setConnectionState(ConnectionState::Disconnected);
             failInFlightRequests(kErrProtocol, decoded.error.safeMessage);
@@ -416,13 +542,14 @@ void MemoryClient::handleSocketReadyRead()
         receiveBuffer_ = receiveBuffer_.mid(decoded.consumed);
 
         if (decoded.envelope.has_value()) {
-            // FRZ-IPC-006 §6.2: 使用 parseResponse 严格校验响应结构。
             const auto [responseParts, parseError] = parseResponse(*decoded.envelope);
             if (!parseError.ok() || !responseParts.has_value()) {
-                // 非法响应：不上抛给上层，报 connectionError 并断连。
                 setLastError(parseError.safeMessage);
                 emit connectionError(parseError.safeMessage);
                 receiveBuffer_.clear();
+                // D12-C MEDIUM-01：parseResponse 协议错误同样禁止 auto-reconnect。
+                // 先设置 flag 再 abort()，因为 abort() 可能同步触发 disconnected() 信号。
+                protocolFatalDisconnect_ = true;
                 socket_->abort();
                 setConnectionState(ConnectionState::Disconnected);
                 failInFlightRequests(kErrProtocol, parseError.safeMessage);
@@ -430,30 +557,41 @@ void MemoryClient::handleSocketReadyRead()
             }
 
             const QString& requestId = responseParts->requestId;
+            const std::string ridStd = requestId.toStdString();
 
-            // pending request 门禁：未知 request_id 不作为正常响应上抛。
-            auto it = pendingRequests_.find(requestId.toStdString());
+            // TD-022：先检查 deadline 是否已过期（绝对时间戳）。
+            //   过期 → 视为迟到响应（late response），丢弃并清理。
+            auto it = pendingRequests_.find(ridStd);
             if (it == pendingRequests_.end()) {
-                // 未知/重复/迟到响应：丢弃，不转发。
+                continue;  // 未知/重复/已过期（TIMEOUT 已触发）响应：丢弃。
+            }
+
+            // deadline 过期保护（兜底）。
+            const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+            if (it->second.deadlineEpochMs > 0 && nowMs > it->second.deadlineEpochMs) {
+                expirePendingRequest(requestId, kErrClientTimeout,
+                    QStringLiteral("Late response received after deadline; dropped."));
                 continue;
             }
 
-            // trace_id 关联校验：响应应回显发送时的 trace_id。
-            // ADR-010: turn.finalized 的 envelope.trace_id 可能 == metadata.trace_id
-            //         （不一定 == request_id），因此用 pendingRequests_ 存储的值。
+            // trace_id 关联校验
             if (responseParts->traceId != it->second.traceId) {
-                // trace_id 不匹配：可能是伪造响应，丢弃。
-                pendingRequests_.erase(it);
-                emit requestFailed(requestId, kErrProtocol,
+                expirePendingRequest(requestId, kErrProtocol,
                     QStringLiteral("Response trace_id mismatch."));
                 continue;
             }
 
+            // 成功路径：取消 deadline timer、擦除 pending、上抛响应。
+            cancelClientDeadlineFor(requestId);
             pendingRequests_.erase(it);
             emit responseReceived(requestId, *decoded.envelope);
         }
     }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// 私有辅助
+// ────────────────────────────────────────────────────────────────────────────
 
 void MemoryClient::setConnectionState(ConnectionState state)
 {
@@ -473,21 +611,102 @@ void MemoryClient::setLastError(const QString& message)
     emit lastErrorChanged();
 }
 
+void MemoryClient::setReconnectAttempts(int n)
+{
+    if (reconnectAttempts_ == n) return;
+    reconnectAttempts_ = n;
+    emit reconnectAttemptsChanged();
+}
+
 void MemoryClient::failInFlightRequests(const QString& errorCode, const QString& safeMessage)
 {
     if (pendingRequests_.empty()) {
         return;
     }
-    for (const auto& [id, req] : pendingRequests_) {
-        emit requestFailed(QString::fromStdString(id), errorCode, safeMessage);
+    // 拷贝 keys 后遍历，避免 erase 迭代器失效。
+    std::vector<std::string> ids;
+    ids.reserve(pendingRequests_.size());
+    for (const auto& [id, _] : pendingRequests_) {
+        ids.push_back(id);
     }
-    pendingRequests_.clear();
+    for (const auto& id : ids) {
+        expirePendingRequest(QString::fromStdString(id), errorCode, safeMessage);
+    }
+    pendingRequests_.clear();  // 兜底：保证全部清空
 }
 
 QString MemoryClient::generateRequestId() const
 {
     return QStringLiteral("req_%1").arg(
         QUuid::createUuid().toString(QUuid::WithoutBraces));
+}
+
+// ── TD-IPC-004 重连辅助 ──────────────────────────────────────────────────────
+
+void MemoryClient::startReconnectBackoff()
+{
+    cancelReconnectTimer();
+    reconnectAttempts_++;
+    emit reconnectAttemptsChanged();
+
+    // 指数退避：500ms × 2^(attempt-1)。attempt 1 → 500ms, 2 → 1000ms, 3 → 2000ms。
+    const int attempt = reconnectAttempts_;
+    const int delayMs = static_cast<int>(reconnectBaseDelay_.count()) * (1 << (attempt - 1));
+    setConnectionState(ConnectionState::Reconnecting);
+
+    reconnectTimer_->setInterval(delayMs);
+    reconnectTimer_->start();
+}
+
+void MemoryClient::cancelReconnectTimer()
+{
+    if (reconnectTimer_ && reconnectTimer_->isActive()) {
+        reconnectTimer_->stop();
+    }
+}
+
+// ── TD-022 客户端 deadline 超时辅助 ──────────────────────────────────────────
+
+void MemoryClient::startClientDeadlineTimer(const QString& requestId, int deadlineMs)
+{
+    if (requestId.isEmpty() || deadlineMs <= 0) return;
+    cancelClientDeadlineFor(requestId);
+
+    auto* timer = new QTimer(this);
+    timer->setSingleShot(true);
+    timer->setInterval(deadlineMs);
+    const std::string ridStd = requestId.toStdString();
+    connect(timer, &QTimer::timeout, this, [this, requestId, ridStd]() {
+        clientDeadlineTimers_.erase(ridStd);
+        // TD-022：超时后 pendingRequests_ 同步 expire/cancel。
+        expirePendingRequest(requestId, kErrClientTimeout,
+            QStringLiteral("Client-side deadline exceeded; request aborted."));
+    });
+    clientDeadlineTimers_.emplace(ridStd, timer);
+    timer->start();
+}
+
+void MemoryClient::cancelClientDeadlineFor(const QString& requestId)
+{
+    const std::string ridStd = requestId.toStdString();
+    const auto it = clientDeadlineTimers_.find(ridStd);
+    if (it == clientDeadlineTimers_.end()) return;
+    if (it->second) {
+        it->second->stop();
+        it->second->deleteLater();
+    }
+    clientDeadlineTimers_.erase(it);
+}
+
+void MemoryClient::expirePendingRequest(
+    const QString& requestId,
+    const QString& errorCode,
+    const QString& safeMessage)
+{
+    const std::string ridStd = requestId.toStdString();
+    cancelClientDeadlineFor(requestId);
+    pendingRequests_.erase(ridStd);
+    emit requestFailed(requestId, errorCode, safeMessage);
 }
 
 }  // namespace kylin::memory::client::v1

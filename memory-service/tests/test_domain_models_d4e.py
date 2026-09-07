@@ -13,6 +13,11 @@ test_domain_models_d4e.py — Day4 E 轨业务 Domain Schema 骨架单元测试
   - Conflict 自冲突拒绝、已消解状态缺 resolved_at/resolved_by 拒绝
   - ForgetPlan 缺模式条件字段拒绝、终态缺 executed_at 拒绝
   - extra="forbid" 拒绝未声明字段
+  - 共享 NonEmptyStr 约束（TD-013）：空串与纯空白（空格/Tab/换行/混合）拒绝，
+    含有效字符的原值逐字保留（不 strip）；NonEmptyIdList 元素级同规则。
+  - Optional ID/Reference/Selector（TD-014）：previous_version_id / content_ref /
+    superseded_by_id / rollback_plan_id / resolved_by 存在时拒绝空串与纯空白；
+    involved_knowledge_ids 元素级同规则；字段缺失（None）Optional 语义不变。
 - 导入契约：domain 不导出/不定义 MemorySourceEvent、NormalizedEvent、
   PreferenceCandidate、KnowledgeCandidate；MemoryType 复用自 pipeline.schemas。
 
@@ -26,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -45,6 +50,7 @@ from domain import (  # noqa: E402
     ResolutionStatus,
     TargetType,
 )
+from domain.common import NonEmptyIdList, NonEmptyStr  # noqa: E402
 from pipeline.schemas import MemoryType  # noqa: E402
 
 # ── 合成数据基座（不含任何真实用户数据/密钥） ──
@@ -653,6 +659,186 @@ def test_forget_plan_executed_before_created_rejected():
 def test_forget_plan_extra_field_rejected():
     with pytest.raises(ValidationError):
         ForgetPlan(**base_forget_plan(unexpected_field="x"))
+
+
+# ── 共享 NonEmptyStr 约束（TD-013）：空串与纯空白拒绝，原值不 strip ──
+
+
+@pytest.mark.parametrize(
+    "blank_value",
+    [
+        "",
+        " ",
+        "\t",
+        "\n",
+        "\r",
+        " \t\n\r ",
+        "\u3000",  # 全角空格（str.strip 口径）
+        " \u3000\t ",
+    ],
+)
+def test_non_empty_str_rejects_empty_and_whitespace_only(blank_value):
+    """TD-013：空串与纯空白（空格/Tab/换行/混合/全角空格）一律拒绝。"""
+    with pytest.raises(ValidationError):
+        TypeAdapter(NonEmptyStr).validate_python(blank_value)
+
+
+@pytest.mark.parametrize(
+    "valid_value",
+    [
+        "pref_d4e_01",
+        "  padded  ",  # 带首尾空格但含有效字符：必须原值保留，不得 strip
+        "\tleading-tab",
+        "trailing-newline\n",
+        " 中 文 空 格 内 部 ",
+    ],
+)
+def test_non_empty_str_preserves_original_value(valid_value):
+    """TD-013：含有效字符的输入通过，且返回值与输入逐字相等（不 strip）。"""
+    assert TypeAdapter(NonEmptyStr).validate_python(valid_value) == valid_value
+
+
+def test_non_empty_id_list_rejects_whitespace_only_element():
+    """TD-013：NonEmptyIdList 元素级继承收紧——纯空白元素拒绝。"""
+    with pytest.raises(ValidationError):
+        TypeAdapter(NonEmptyIdList).validate_python(["pref_d4e_01", "  "])
+    with pytest.raises(ValidationError):
+        TypeAdapter(NonEmptyIdList).validate_python(["\t"])
+
+
+def test_non_empty_id_list_preserves_padded_element():
+    """TD-013：NonEmptyIdList 含有效字符的元素原值保留。"""
+    result = TypeAdapter(NonEmptyIdList).validate_python(["  pref_d4e_01  "])
+    assert result == ["  pref_d4e_01  "]
+
+
+@pytest.mark.parametrize(
+    "model_factory, field, base_data",
+    [
+        (Preference, "preference_id", base_preference()),
+        (Knowledge, "knowledge_id", base_knowledge()),
+        (Conflict, "conflict_id", base_conflict()),
+        (ForgetPlan, "forget_plan_id", base_forget_plan()),
+    ],
+)
+def test_domain_rejects_whitespace_only_non_empty_str_field(
+    model_factory, field, base_data
+):
+    """TD-013：四模型 NonEmptyStr 字段传纯空白 → ValidationError。"""
+    for blank in (" ", "\t", "\n", " \t\n "):
+        with pytest.raises(ValidationError):
+            model_factory(**{**base_data, field: blank})
+
+
+@pytest.mark.parametrize(
+    "model_factory, field, base_data",
+    [
+        (Preference, "preference_key", base_preference()),
+        (Knowledge, "content_summary", base_knowledge()),
+        (Conflict, "conflict_summary", base_conflict()),
+        (ForgetPlan, "target_selector", base_forget_plan()),
+    ],
+)
+def test_domain_preserves_padded_non_empty_str_field(
+    model_factory, field, base_data
+):
+    """TD-013：含首尾空格但含有效字符的字段值构造成功且逐字保留。"""
+    padded = "  padded-value  "
+    obj = model_factory(**{**base_data, field: padded})
+    assert getattr(obj, field) == padded
+
+
+# ── TD-014：Optional ID / Reference / Selector 存在时须非空非纯空白 ──
+
+
+@pytest.mark.parametrize(
+    "blank_value",
+    [
+        "",
+        " \t ",
+    ],
+)
+def test_preference_optional_previous_version_id_rejects_blank(blank_value):
+    """TD-014：前版 ID 存在时不得为空串或纯空白（version 链必填不变量不变）。"""
+    with pytest.raises(ValidationError):
+        Preference(**base_preference(version=2, previous_version_id=blank_value))
+
+
+@pytest.mark.parametrize(
+    "field, blank_value",
+    [
+        ("content_ref", ""),
+        ("superseded_by_id", " "),
+    ],
+)
+def test_knowledge_optional_reference_rejects_blank(field, blank_value):
+    """TD-014：content_ref / superseded_by_id 存在时不得为空串或纯空白。"""
+    with pytest.raises(ValidationError):
+        Knowledge(**base_knowledge(**{field: blank_value}))
+
+
+@pytest.mark.parametrize(
+    "involved_ids",
+    [
+        ["", "kn_d4e_03"],
+        ["  "],
+        ["\t"],
+        [" \u3000"],
+    ],
+)
+def test_conflict_involved_knowledge_ids_reject_blank_element(involved_ids):
+    """TD-014：involved_knowledge_ids 元素必须非空且非纯空白。"""
+    with pytest.raises(ValidationError):
+        Conflict(**base_conflict(involved_knowledge_ids=involved_ids))
+
+
+def test_conflict_resolved_by_rejects_whitespace_only():
+    """TD-014：resolved_by 存在时不得为纯空白（resolved 状态仍须携带执行方）。"""
+    with pytest.raises(ValidationError):
+        Conflict(
+            **base_conflict(
+                resolution_status=ResolutionStatus.RESOLVED_MANUAL,
+                resolved_at=T1,
+                resolved_by=" ",
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "blank_value",
+    [
+        "",
+        "\n",
+    ],
+)
+def test_forget_plan_rollback_plan_id_rejects_blank(blank_value):
+    """TD-014：rollback_plan_id 存在时不得为空串或纯空白。"""
+    with pytest.raises(ValidationError):
+        ForgetPlan(**base_forget_plan(rollback_plan_id=blank_value))
+
+
+def test_optional_id_reference_fields_missing_still_default_to_none():
+    """TD-014：Optional ID/Reference 缺失（None）语义保持不变。"""
+    pref = Preference(**base_preference())
+    assert pref.previous_version_id is None
+    assert pref.extracted_entities is None
+
+    kn = Knowledge(**base_knowledge())
+    assert kn.content_ref is None
+    assert kn.superseded_by_id is None
+
+    cfl = Conflict(**base_conflict())
+    assert cfl.involved_knowledge_ids is None
+    assert cfl.resolved_by is None
+
+    fgp = ForgetPlan(**base_forget_plan())
+    assert fgp.rollback_plan_id is None
+
+
+def test_conflict_involved_knowledge_ids_accepts_non_blank_elements():
+    """TD-014：involved_knowledge_ids 携带合法非空元素构造成功。"""
+    cfl = Conflict(**base_conflict(involved_knowledge_ids=["kn_d4e_03"]))
+    assert cfl.involved_knowledge_ids == ["kn_d4e_03"]
 
 
 # ── 导入契约：domain 不承载第二套共享类型 ──

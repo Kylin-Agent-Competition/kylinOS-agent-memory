@@ -10,9 +10,8 @@
   4. 每轮顺带清理过期幂等缓存（DELETE ... LIMIT 100，借 idx_idempotency_expires）
   5. 写串行化：所有写经进程内单写锁（业务线程与 Worker 共用）
 
-Vector/Embedding 消费（附录 C）待 D4-D 技术确认（R-9）：本任务以注入点表达——
-  process_event(payload) 回调未注册时按失败处理（真实结果：无法消费 → 退避/进 DL），
-  不假装成功；接线后替换为真实 Embedding → Vector INSERT。
+    Vector/Embedding 消费（附录 C）通过 consumer 注入；未注册时按失败处理，
+    不假装成功。真实索引接线由 app.py 注入 Vector provider，provider 负责 Vector INSERT。
 """
 
 from __future__ import annotations
@@ -174,10 +173,14 @@ class OutboxWorker:
                 pending = repo.claim_pending_outbox(
                     conn, now_iso=now_iso, max_retries=self._max_retries
                 )
-                for event in pending:
-                    self._process_event(conn, event, now_iso)
+        # 不能在上面的 SQLite 事务中调用 consumer：真实索引 provider 还要写
+        # Vector 账本并调用外部 Vector CLI。先提交 pending 读取事务，再逐条在
+        # 短事务中 ACK/重试，避免读事务与 provider 写事务互相锁死。
+        for event in pending:
+            with self._lock:
+                self._process_event(event, now_iso)
 
-    def _process_event(self, conn, event: Dict[str, Any], now_iso: str) -> None:
+    def _process_event(self, event: Dict[str, Any], now_iso: str) -> None:
         event_id = int(event["id"])
         aggregate_id = event["aggregate_id"]
         event_type = event["event_type"]
@@ -190,13 +193,14 @@ class OutboxWorker:
             try:
                 payload = json.loads(payload)
             except Exception as exc:  # noqa: BLE001 payload 损坏按失败处理
-                self._fail(
-                    conn,
-                    event_id=event_id,
-                    attempts=attempts,
-                    now_iso=now_iso,
-                    last_error=f"invalid payload json: {exc}"[:500],
-                )
+                with self._engine.begin() as conn:
+                    self._fail(
+                        conn,
+                        event_id=event_id,
+                        attempts=attempts,
+                        now_iso=now_iso,
+                        last_error=f"invalid payload json: {exc}"[:500],
+                    )
                 return
         payload_trace_id = ""
         payload_event_id = ""
@@ -213,19 +217,21 @@ class OutboxWorker:
         try:
             if self._consumer is None:
                 # Vector 接入未确认（R-9）：无法消费 → 按失败处理（真实结果，不假装成功）
-                self._fail(
-                    conn,
-                    event_id=event_id,
-                    attempts=attempts,
-                    now_iso=now_iso,
-                    last_error="no consumer registered (vector integration pending, R-9)",
-                )
+                with self._engine.begin() as conn:
+                    self._fail(
+                        conn,
+                        event_id=event_id,
+                        attempts=attempts,
+                        now_iso=now_iso,
+                        last_error="no consumer registered (vector integration pending, R-9)",
+                    )
                 return
             # HIGH-01：路由真源 = outbox.event_type 独立列，显式传给 consumer
             self._consumer(event_type, payload)
 
             # 成功（附录 B 4a）
-            repo.mark_outbox_success(conn, outbox_id=event_id)
+            with self._engine.begin() as conn:
+                repo.mark_outbox_success(conn, outbox_id=event_id)
             self._processed += 1
             # D9D D-REQ-06：index_sync_lag 水位只允许索引事件（memory.upserted）推进
             # （MEDIUM-02：非索引事件如 forget.executed 成功后不得前移水位，避免假健康指标）
@@ -235,14 +241,15 @@ class OutboxWorker:
                 "Outbox 事件完成 id=%d type=%s agg=%s", event_id, event_type, aggregate_id
             )
         except Exception as exc:  # noqa: BLE001
-            self._fail(
-                conn,
-                event_id=event_id,
-                attempts=attempts,
-                now_iso=now_iso,
-                last_error=f"{type(exc).__name__}: {exc}"[:500],  # 错误摘要，不含 PII
-            )
-            return
+            with self._engine.begin() as conn:
+                self._fail(
+                    conn,
+                    event_id=event_id,
+                    attempts=attempts,
+                    now_iso=now_iso,
+                    last_error=f"{type(exc).__name__}: {exc}"[:500],  # 错误摘要，不含 PII
+                )
+                return
         finally:
             # M4：无论成功/失败/早退都清理线程上下文（防泄漏/串号）
             clear_request_context()

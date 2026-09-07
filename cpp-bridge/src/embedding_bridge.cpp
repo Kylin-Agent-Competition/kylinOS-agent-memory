@@ -100,9 +100,12 @@ BridgeStatus EmbeddingBridge::load_impl() {
     tmp.model_info_get_model_dim =
         (int (*)(EmbeddingModelInfo*))dlsym(h, "embedding_model_info_get_model_dim");
 
+    // 新版麒麟 SDK 由 runtime 统一管理事件循环，不再导出
+    // enable_event_loop；旧版 SDK 仍可通过该可选符号显式开启。
+    // 其余符号继续作为硬性要求，避免把 ABI 不完整误报为可用。
     // 必需符号检查
     if (!tmp.create_session || !tmp.destroy_session || !tmp.init_session ||
-        !tmp.enable_event_loop || !tmp.embed ||
+        !tmp.embed ||
         !tmp.result_vector_data || !tmp.result_vector_length ||
         !tmp.result_error_code || !tmp.result_error_message ||
         !tmp.result_destroy) {
@@ -175,7 +178,9 @@ BridgeStatus EmbeddingBridge::create_session_impl() {
     // 可能释放 get_model_list 内部缓冲区，必须在任何后续 SDK 调用前缓存。
     session_ = s;
     refresh_model_name_cache_locked();
-    syms_.enable_event_loop(s, true);
+    if (syms_.enable_event_loop) {
+        syms_.enable_event_loop(s, true);
+    }
     return BridgeStatus::ok(std::monostate{});
 }
 

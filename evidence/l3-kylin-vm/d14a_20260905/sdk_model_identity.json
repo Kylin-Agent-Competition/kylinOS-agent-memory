@@ -1,0 +1,8 @@
+{
+  "sdk_actual_load": "verified via embedding server /proc/<pid>/maps",
+  "sdk_so": "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0",
+  "sdk_sha256": "028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48",
+  "model": "ensemble-embd_gte-base_uint8-text",
+  "model_dimension": 768,
+  "verified_via": "systemd_verify.sh --embed-pid"
+}

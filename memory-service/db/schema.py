@@ -76,8 +76,100 @@ memory_entries = Table(
     Column("updated_at", String, nullable=False),
     # ADR-011：nullable 追踪列（trace_id 来自 IPC envelope，非正文）
     Column("trace_id", String, nullable=True),
+    # ADR-017：业务 knowledge identity 与检索 identity 分离。version 仍是内容/
+    # 索引版本，row_revision 才是所有写入的 optimistic CAS token。
+    Column("knowledge_id", String, nullable=True),
+    Column("row_revision", Integer, nullable=True),
+    Column("knowledge_type", String, nullable=True),
+    Column("conditions", Text, nullable=True),
+    Column("topic_key", String, nullable=True),
+    Column("lifecycle_eligibility", String, nullable=True),
+    Column("memory_status", String, nullable=True),
+    Column("memory_type", String, nullable=True),
+    Column("evidence_tier", String, nullable=True),
+    Column("last_accessed_at", String, nullable=True),
+    Column("access_count", Integer, nullable=True),
     CheckConstraint("entry_type IN ('preference','knowledge','tool_result','behavior')", name="ck_memory_entries_entry_type"),
     CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_memory_entries_confidence"),
+    CheckConstraint("row_revision IS NULL OR row_revision >= 1", name="ck_memory_entries_row_revision"),
+    CheckConstraint("access_count IS NULL OR access_count >= 0", name="ck_memory_entries_access_count"),
+    CheckConstraint("memory_status IS NULL OR memory_status IN ('active','superseded','deprecated','expired','removed','candidate')", name="ck_memory_entries_memory_status"),
+    CheckConstraint("memory_type IS NULL OR memory_type IN ('short_term','medium_term','long_term','ephemeral')", name="ck_memory_entries_memory_type"),
+    CheckConstraint("evidence_tier IS NULL OR evidence_tier IN ('user_explicit_config_latest','user_confirmed','tool_execution_result','consistent_behavior_multiple','behavior_inference_single','model_inference')", name="ck_memory_entries_evidence_tier"),
+    CheckConstraint("knowledge_type IS NULL OR knowledge_type IN ('workflow','case','template','fact','constraint','failure_experience')", name="ck_memory_entries_knowledge_type"),
+    CheckConstraint("lifecycle_eligibility IS NULL OR lifecycle_eligibility IN ('eligible','legacy_unmapped','evidence_unmapped')", name="ck_memory_entries_lifecycle_eligibility"),
+)
+
+# ADR-017：关系、冲突与生命周期的 SQLite 真源。关系端点显式带类型，禁止把
+# source_event 和 knowledge 的 opaque ID 混为一谈；证据只用结构化 relation 表达。
+memory_relation = Table(
+    "memory_relation", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", String, nullable=False),
+    Column("relation_id", String, nullable=False),
+    Column("relation_type", String, nullable=False),
+    Column("left_endpoint_type", String, nullable=False),
+    Column("left_endpoint_id", String, nullable=False),
+    Column("right_endpoint_type", String, nullable=False),
+    Column("right_endpoint_id", String, nullable=False),
+    Column("is_primary", Integer, nullable=False, server_default="0"),
+    Column("created_at", String, nullable=False),
+    CheckConstraint("relation_type IN ('version','evidence','derived')", name="ck_memory_relation_type"),
+    CheckConstraint("left_endpoint_type IN ('knowledge','source_event')", name="ck_memory_relation_left_type"),
+    CheckConstraint("right_endpoint_type IN ('knowledge','source_event')", name="ck_memory_relation_right_type"),
+    CheckConstraint("is_primary IN (0,1)", name="ck_memory_relation_primary"),
+    CheckConstraint("relation_type = 'evidence' OR is_primary = 0", name="ck_memory_relation_primary_kind"),
+    CheckConstraint("left_endpoint_id <> right_endpoint_id OR left_endpoint_type <> right_endpoint_type", name="ck_memory_relation_not_self"),
+    sqlite_autoincrement=True,
+)
+
+memory_conflict = Table(
+    "memory_conflict", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", String, nullable=False), Column("conflict_id", String, nullable=False),
+    Column("conflict_type", String, nullable=False),
+    Column("left_knowledge_id", String, nullable=False), Column("right_knowledge_id", String, nullable=False),
+    Column("conflict_summary", Text, nullable=False), Column("involved_present", Integer, nullable=False),
+    Column("resolution_status", String, nullable=False), Column("is_auto_resolvable", Integer, nullable=False, server_default="0"),
+    Column("detected_at", String, nullable=False), Column("resolution_strategy", String, nullable=True),
+    Column("resolution_confidence", Float, nullable=True), Column("resolved_at", String, nullable=True),
+    Column("resolved_by", String, nullable=True), Column("winner_id", String, nullable=True),
+    Column("decision_action", String, nullable=True), Column("reason_code", String, nullable=True),
+    Column("created_at", String, nullable=False), Column("updated_at", String, nullable=False),
+    CheckConstraint("left_knowledge_id <> right_knowledge_id", name="ck_memory_conflict_not_self"),
+    CheckConstraint("conflict_type IN ('contradiction','temporal_inconsistency','source_conflict','preference_conflict','scope_ambiguity')", name="ck_memory_conflict_type"),
+    CheckConstraint("resolution_status IN ('detected','analyzing','resolved_auto','resolved_manual','deferred','unresolvable')", name="ck_memory_conflict_status"),
+    CheckConstraint("decision_action IS NULL OR decision_action IN ('keep_left','keep_right','coexist','defer','reject')", name="ck_memory_conflict_action"),
+    CheckConstraint("is_auto_resolvable IN (0,1)", name="ck_memory_conflict_auto"),
+    CheckConstraint("involved_present IN (0,1)", name="ck_memory_conflict_involved"),
+    CheckConstraint("resolution_confidence IS NULL OR (resolution_confidence >= 0 AND resolution_confidence <= 1)", name="ck_memory_conflict_confidence"),
+    sqlite_autoincrement=True,
+)
+
+memory_conflict_member = Table(
+    "memory_conflict_member", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True), Column("user_id", String, nullable=False),
+    Column("conflict_id", String, nullable=False), Column("knowledge_id", String, nullable=False),
+    Column("ordinal", Integer, nullable=False), Column("role", String, nullable=False), Column("created_at", String, nullable=False),
+    CheckConstraint("ordinal >= 0", name="ck_memory_conflict_member_ordinal"),
+    CheckConstraint("role IN ('left','right','involved')", name="ck_memory_conflict_member_role"),
+    sqlite_autoincrement=True,
+)
+
+memory_lifecycle_receipt = Table(
+    "memory_lifecycle_receipt", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True), Column("user_id", String, nullable=False),
+    Column("evaluation_id", String, nullable=False), Column("evaluation_fingerprint", String, nullable=False),
+    Column("knowledge_id", String, nullable=False), Column("memory_entry_id", Integer, nullable=False),
+    Column("evaluated_revision", Integer, nullable=False), Column("version_id", String, nullable=False),
+    Column("policy_config_hash", String, nullable=False), Column("evaluated_at", String, nullable=False),
+    Column("action", String, nullable=False), Column("reason_code", String, nullable=False),
+    Column("target_memory_type", String, nullable=True), Column("target_memory_status", String, nullable=True),
+    Column("applied", Integer, nullable=False), Column("created_at", String, nullable=False),
+    CheckConstraint("evaluated_revision >= 1", name="ck_lifecycle_receipt_revision"),
+    CheckConstraint("action IN ('promote','demote','expire','archive_request','hold','reject')", name="ck_lifecycle_receipt_action"),
+    CheckConstraint("applied IN (0,1)", name="ck_lifecycle_receipt_applied"),
+    sqlite_autoincrement=True,
 )
 
 # D10-B：Vector 代次与索引项账本。SQLite 是删除结果、重建激活和幂等回执的
@@ -185,6 +277,9 @@ memory_version_receipts = Table(
     Column("evidence_fingerprint", String, nullable=False),
     Column("idempotency_key", String, nullable=True),
     Column("request_fingerprint", String, nullable=False),
+    # D13D：IPC envelope trace 的可审计归属。用于 Safety observation，不参与
+    # 幂等、版本选择或业务写入语义；历史 receipt 保持 NULL。
+    Column("trace_id", String, nullable=True),
     Column("created_at", String, nullable=False),
     CheckConstraint(
         "operation_kind IN ('write', 'no_op', 'rollback')",
@@ -209,7 +304,11 @@ outbox = Table(
     Column("next_retry_at", String, nullable=True),  # ISO8601 UTC
     Column("last_error", Text, nullable=True),
     Column("created_at", String, nullable=False),
-    CheckConstraint("aggregate_type IN ('turn','memory')", name="ck_outbox_aggregate_type"),
+    # ADR-015（D 已决策 + Reviewer E 已签署 2026-09-02）：nullable priority 列，
+    # DEFAULT 0（普通索引任务）；forget.* 删除类事件 = 1；预留 2 = urgent。
+    # 历史行 NULL 与 0 语义统一为 0（迁移重建时显式回填 0）。
+    Column("priority", Integer, nullable=True, server_default="0"),
+    CheckConstraint("aggregate_type IN ('turn','memory','forget')", name="ck_outbox_aggregate_type"),
 )
 
 idempotency_cache = Table(
@@ -288,6 +387,90 @@ source_events = Table(
     sqlite_autoincrement=True,
 )
 
+# ADR-015（v1，D 已决策 + Reviewer E 已签署 2026-09-02）：精准遗忘持久化（FRZ-DB-001 扩展）。
+# forget_plan = 遗忘计划持久化行（D 轨实体）；forget_audit = 最小审计（零正文）。
+# selector 明文生命周期（HIGH-01）：Preview 完成后 target_selector/target_topic 清除或置
+# 安全占位（<CLEARED>）；selection_hash 由结构化 resolved_target_ids 派生（非正文）。
+forget_plan = Table(
+    "forget_plan",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", String, nullable=False),          # 隔离键，禁止模型生成
+    Column("forget_plan_id", String, nullable=False),   # 计划唯一 ID（宿主生成）
+    Column("forget_mode", String, nullable=False),      # 五值枚举（冻结）
+    Column("target_selector", String, nullable=True),   # 明文生命周期，Preview 后清除/占位
+    Column("target_type", String, nullable=False),      # 四值枚举
+    Column("target_id", String, nullable=True),         # 模式条件字段（互斥）
+    Column("target_session_id", String, nullable=True),
+    Column("target_topic", String, nullable=True),      # 可能承载自然语言正文（HIGH-01）
+    Column("target_time_range", String, nullable=True),
+    Column("resolved_target_ids", String, nullable=True),  # JSON 数组（preview 产物，禁止模型生成）
+    Column("selection_hash", String, nullable=True),    # Preview/Selection 稳定 Hash（非正文）
+    Column("status", String, nullable=False),           # v0.2 冻结状态机
+    Column("requires_confirmation", Integer, nullable=False, server_default="1"),
+    Column("is_cascade", Integer, nullable=False, server_default="0"),
+    Column("delete_mode", String, nullable=False, server_default="soft"),
+    Column("has_vector_cleanup", Integer, nullable=False, server_default="0"),
+    Column("confirmation_token", String, nullable=True),  # 确认凭据 SHA-256 哈希（明文不落库）
+    Column("token_expires_at", String, nullable=True),    # 凭据 TTL（默认 300s）
+    Column("affected_count", Integer, nullable=True),     # = len(resolved_target_ids)
+    Column("executed_count", Integer, nullable=True),     # 实际执行成功数量
+    Column("executed_at", String, nullable=True),
+    Column("rollback_plan_id", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    CheckConstraint(
+        "forget_mode IN ('single_item','session','topic','time_window','full_reset')",
+        name="ck_forget_plan_forget_mode",
+    ),
+    CheckConstraint(
+        "target_type IN ('knowledge','preference','event','all')",
+        name="ck_forget_plan_target_type",
+    ),
+    CheckConstraint(
+        "status IN ('pending','previewing','awaiting_confirmation','executing','completed','failed','rolled_back')",
+        name="ck_forget_plan_status",
+    ),
+    CheckConstraint("delete_mode IN ('soft','hard')", name="ck_forget_plan_delete_mode"),
+    sqlite_autoincrement=True,
+)
+
+forget_audit = Table(
+    "forget_audit",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("audit_id", String, nullable=False),          # 审计唯一 ID
+    Column("forget_plan_id", String, nullable=False),
+    Column("user_id", String, nullable=False),
+    Column("forget_mode", String, nullable=False),       # 五值
+    Column("target_type", String, nullable=True),        # 四值
+    Column("delete_mode", String, nullable=False),       # soft / hard
+    Column("is_cascade", Integer, nullable=False, server_default="0"),
+    Column("affected_count", Integer, nullable=True),
+    Column("selection_hash", String, nullable=True),     # 非正文
+    Column("confirmation_ref", String, nullable=True),   # 凭据非敏感引用/Hash（不得存原 Token）
+    Column("status", String, nullable=False),
+    Column("result_code", String, nullable=True),
+    Column("trace_id", String, nullable=True),           # 追踪链（非正文）
+    Column("sensitivity_max", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("executed_at", String, nullable=True),        # 遗忘动作实际执行时间（终态必填）
+    CheckConstraint(
+        "forget_mode IN ('single_item','session','topic','time_window','full_reset')",
+        name="ck_forget_audit_forget_mode",
+    ),
+    CheckConstraint(
+        "target_type IN ('knowledge','preference','event','all')",
+        name="ck_forget_audit_target_type",
+    ),
+    CheckConstraint(
+        "status IN ('pending','previewing','awaiting_confirmation','executing','completed','failed','rolled_back')",
+        name="ck_forget_audit_status",
+    ),
+    CheckConstraint("delete_mode IN ('soft','hard')", name="ck_forget_audit_delete_mode"),
+    sqlite_autoincrement=True,
+)
+
 # ── 索引（4 冻结 + 1 辅助 + 1 ADR-011，冻结文档 §2.3） ──
 idx_turns_session = Index("idx_turns_session", turns.c.session_id, turns.c.turn_index)
 # ADR-011：部分唯一索引（ADR-010 Upsert 匹配键；SQLite 多 NULL 允许，非空才唯一）
@@ -300,6 +483,47 @@ idx_turns_host_turn_id = Index(
 )
 idx_memory_user_type = Index("idx_memory_user_type", memory_entries.c.user_id, memory_entries.c.entry_type)
 idx_memory_deleted = Index("idx_memory_deleted", memory_entries.c.is_deleted)
+uq_memory_entries_user_knowledge = Index(
+    "uq_memory_entries_user_knowledge", memory_entries.c.user_id, memory_entries.c.knowledge_id,
+    unique=True, sqlite_where=(memory_entries.c.entry_type == "knowledge") & memory_entries.c.knowledge_id.isnot(None),
+)
+idx_memory_entries_user_status = Index("idx_memory_entries_user_status", memory_entries.c.user_id, memory_entries.c.memory_status)
+idx_memory_entries_user_lifecycle_type = Index("idx_memory_entries_user_lifecycle_type", memory_entries.c.user_id, memory_entries.c.memory_type)
+idx_memory_entries_user_topic_active = Index(
+    "idx_memory_entries_user_topic_active",
+    memory_entries.c.user_id,
+    memory_entries.c.topic_key,
+    sqlite_where=(memory_entries.c.entry_type == "knowledge")
+    & (memory_entries.c.is_deleted == 0)
+    & memory_entries.c.topic_key.isnot(None),
+)
+uq_memory_relation_user_relation = Index("uq_memory_relation_user_relation", memory_relation.c.user_id, memory_relation.c.relation_id, unique=True)
+idx_memory_relation_left = Index("idx_memory_relation_left", memory_relation.c.user_id, memory_relation.c.left_endpoint_type, memory_relation.c.left_endpoint_id)
+idx_memory_relation_right = Index("idx_memory_relation_right", memory_relation.c.user_id, memory_relation.c.right_endpoint_type, memory_relation.c.right_endpoint_id)
+uq_memory_relation_canonical_evidence = Index(
+    "uq_memory_relation_canonical_evidence", memory_relation.c.user_id, memory_relation.c.left_endpoint_id, memory_relation.c.right_endpoint_id,
+    unique=True, sqlite_where=(memory_relation.c.relation_type == "evidence") & (memory_relation.c.left_endpoint_type == "knowledge") & (memory_relation.c.right_endpoint_type == "source_event"),
+)
+uq_memory_relation_primary_evidence = Index(
+    "uq_memory_relation_primary_evidence", memory_relation.c.user_id, memory_relation.c.left_endpoint_id,
+    unique=True, sqlite_where=(memory_relation.c.relation_type == "evidence") & (memory_relation.c.left_endpoint_type == "knowledge") & (memory_relation.c.right_endpoint_type == "source_event") & (memory_relation.c.is_primary == 1),
+)
+uq_memory_relation_version_successor = Index(
+    "uq_memory_relation_version_successor", memory_relation.c.user_id, memory_relation.c.left_endpoint_id,
+    unique=True, sqlite_where=(memory_relation.c.relation_type == "version") & (memory_relation.c.left_endpoint_type == "knowledge"),
+)
+uq_memory_conflict_user_conflict = Index("uq_memory_conflict_user_conflict", memory_conflict.c.user_id, memory_conflict.c.conflict_id, unique=True)
+idx_memory_conflict_left = Index("idx_memory_conflict_left", memory_conflict.c.user_id, memory_conflict.c.left_knowledge_id)
+idx_memory_conflict_right = Index("idx_memory_conflict_right", memory_conflict.c.user_id, memory_conflict.c.right_knowledge_id)
+idx_memory_conflict_status = Index("idx_memory_conflict_status", memory_conflict.c.user_id, memory_conflict.c.resolution_status)
+uq_memory_conflict_member_ordinal = Index("uq_memory_conflict_member_ordinal", memory_conflict_member.c.user_id, memory_conflict_member.c.conflict_id, memory_conflict_member.c.ordinal, unique=True)
+idx_memory_conflict_member_knowledge = Index("idx_memory_conflict_member_knowledge", memory_conflict_member.c.user_id, memory_conflict_member.c.knowledge_id)
+uq_lifecycle_receipt_evaluation = Index("uq_lifecycle_receipt_evaluation", memory_lifecycle_receipt.c.user_id, memory_lifecycle_receipt.c.evaluation_id, unique=True)
+uq_lifecycle_archive_once = Index(
+    "uq_lifecycle_archive_once", memory_lifecycle_receipt.c.user_id, memory_lifecycle_receipt.c.knowledge_id,
+    memory_lifecycle_receipt.c.version_id, memory_lifecycle_receipt.c.action, memory_lifecycle_receipt.c.reason_code,
+    unique=True, sqlite_where=memory_lifecycle_receipt.c.action == "archive_request",
+)
 uq_vector_generation_serving_scope = Index(
     "uq_vector_generation_serving_scope",
     vector_index_generations.c.scope_id,
@@ -367,6 +591,13 @@ idx_outbox_pending = Index(
     outbox.c.next_retry_at,
     sqlite_where=outbox.c.attempts <= 3,  # 与 outbox.max_retries=3 配套（需求 §2.2）
 )
+# ADR-015：删除类事件优先级部分索引（forget.* priority=1 优先于普通索引任务）
+idx_outbox_priority = Index(
+    "idx_outbox_priority",
+    outbox.c.priority,
+    outbox.c.next_retry_at,
+    sqlite_where=outbox.c.priority == 1,
+)
 idx_idempotency_expires = Index("idx_idempotency_expires", idempotency_cache.c.expires_at)
 
 # ADR-013：source_events 5 索引（全局唯一 event_id + 时间线 + 指纹 + 去重组 + 状态）
@@ -394,6 +625,24 @@ idx_source_events_status = Index(
     "idx_source_events_status",
     source_events.c.user_id,
     source_events.c.processing_status,
+)
+
+# ADR-015：forget 两表索引（计划级唯一 + 时间线审计）
+uq_forget_plan_user_plan = Index(
+    "uq_forget_plan_user_plan",
+    forget_plan.c.user_id,
+    forget_plan.c.forget_plan_id,
+    unique=True,
+)
+idx_forget_plan_user_created = Index(
+    "idx_forget_plan_user_created",
+    forget_plan.c.user_id,
+    forget_plan.c.created_at,
+)
+idx_forget_audit_user_created = Index(
+    "idx_forget_audit_user_created",
+    forget_audit.c.user_id,
+    forget_audit.c.created_at,
 )
 
 # ── FTS5（冻结文档 §2.4） ──

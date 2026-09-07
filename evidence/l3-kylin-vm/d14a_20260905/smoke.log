@@ -1,0 +1,35 @@
+[d14a-smoke] package: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a
+[d14a-smoke] 执行 install…
+manifest core files verified
+[d14a-install] 执行 Alembic 迁移（upgrade head）…
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+alembic_version: 20260902_add_memory_relation_conflict
+Created symlink /home/Lyf/.config/systemd/user/default.target.wants/kylin-memory.service → /home/Lyf/.config/systemd/user/kylin-memory.service.
+[d14a-install] restart 验证…
+[d14a-install] 安装完成: prefix=/home/Lyf/.local/share/kylin-memory-d14a-smoke unit=/home/Lyf/.config/systemd/user/kylin-memory.service symlink=/home/Lyf/.local/bin/kylin-memory-server
+[d14a-install] socket: /run/user/1000/kylin-memory/memory.sock
+[d14a-smoke] 执行 verify…
+[d14a-verify] PASS: service active
+[d14a-verify] PASS: socket holder = MainPID=112536
+[d14a-verify] PASS: cmdline 指向发布包 venv（无开发目录依赖）
+[d14a-verify] memory.embed: {"status": "ok", "dim": 768, "len": 768, "latency_ms": 205.5, "degraded": false}
+[d14a-verify] PASS: 真实 SDK memory.embed dim=768
+[d14a-verify] PASS: embedding server SDK 实际加载 SHA 校验通过
+[d14a-verify] ALL PASS
+[d14a-smoke] restart 后再次 verify…
+[d14a-verify] PASS: service active
+[d14a-verify] PASS: socket holder = MainPID=112629
+[d14a-verify] PASS: cmdline 指向发布包 venv（无开发目录依赖）
+[d14a-verify] memory.embed: {"status": "ok", "dim": 768, "len": 768, "latency_ms": 2.1, "degraded": false}
+[d14a-verify] PASS: 真实 SDK memory.embed dim=768
+[d14a-verify] PASS: embedding server SDK 实际加载 SHA 校验通过
+[d14a-verify] ALL PASS
+[d14a-smoke] 执行 rollback…
+[d14a-rollback] 已移除 symlink: /home/Lyf/.local/bin/kylin-memory-server
+[d14a-rollback] 已删除 unit: /home/Lyf/.config/systemd/user/kylin-memory.service
+[d14a-rollback] 已移除 install_prefix: /home/Lyf/.local/share/kylin-memory-d14a-smoke
+[d14a-rollback] 回退完成：服务已停止/禁用，symlink 已移除，prefix 处理完成
+[d14a-smoke] ALL PASS: install → migration → start → verify(real SDK) → restart → rollback
+[d14a-smoke] ALL PASS
+EXIT=0

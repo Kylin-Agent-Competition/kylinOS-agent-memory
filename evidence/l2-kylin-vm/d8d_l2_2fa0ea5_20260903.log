@@ -1,0 +1,38 @@
+D8-D L2 Kylin V11 validation
+tested_commit=2fa0ea5a2e4a431b2995d0da614d63b19bfb0301
+archive_sha256=caff153c64f7a57755c42f7e5d780d150921c2afcff10f3d7be4ea62abfb5014
+NAME="Kylin"
+FULL_NAME="kylin"
+VERSION="银河麒麟桌面操作系统V11"
+VERSION_US="Kylin Linux Desktop V11"
+ID=kylin
+PRETTY_NAME="Kylin V11"
+VERSION_ID="v11"
+HOME_URL="http://www.kylinos.cn/"
+VERSION_CODENAME=kylin
+KYLIN_RELEASE_ID="2603"
+ID_LIKE=openKylin
+Python 3.12.3
+alembic 1.19.1
+pytest 9.1.1
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 001_initial_schema, 001_initial_schema — D4D 基线迁移（ADR-007 命名：001_initial_schema.py）
+INFO  [alembic.runtime.migration] Running upgrade 001_initial_schema -> 20260826_add_trace_id, 20260826_add_trace_id — ADR-011：turns/memory_entries 新增 nullable trace_id/host_turn_id 列
+INFO  [alembic.runtime.migration] Running upgrade 20260826_add_trace_id -> 20260831_preference_versions, 20260831_preference_versions — D7D 偏好版本真源与不可变历史。
+INFO  [alembic.runtime.migration] Running upgrade 20260831_preference_versions -> 20260831_add_source_events, 20260831_add_source_events — ADR-013：多源事件持久化表 source_events（FRZ-DB-001 扩展）
+INFO  [alembic.runtime.migration] Running upgrade 20260831_add_source_events -> 20260901_d10b_vector_ledger, D10-B：Vector 代次、索引项与幂等回执账本。
+INFO  [alembic.runtime.migration] Running upgrade 20260901_d10b_vector_ledger -> 20260901_add_forget_plan, 20260901_add_forget_plan — ADR-015：精准遗忘持久化（FRZ-DB-001 扩展）
+INFO  [alembic.runtime.migration] Running upgrade 20260901_add_forget_plan -> 20260902_add_memory_relation_conflict, ADR-017: relation/conflict/lifecycle persistence and trusted knowledge mapping.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+20260902_add_memory_relation_conflict (head)
+...                                                                      [100%]
+3 passed in 9.52s
+.........                                                                [100%]
+9 passed in 11.27s
+WRITE_PROCESS_OK
+RESTART_READ_PROCESS_OK
+...........................................                              [100%]
+43 passed in 49.34s
+D8D_L2_RESULT=PASS

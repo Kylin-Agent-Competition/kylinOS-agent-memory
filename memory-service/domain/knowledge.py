@@ -66,10 +66,10 @@ class Knowledge(BaseModel):
     updated_at: AwareDatetime
 
     # ── D3 §5.3 DEFERRED / FROZEN 可选字段 ──
-    content_ref: Optional[str] = None  # DEFERRED：存储形态待 D
+    content_ref: Optional[NonEmptyStr] = None  # DEFERRED：存储形态待 D；存在时须非空非纯空白
     primary_category: Optional[str] = None  # 开放分类标签，不得替代 knowledge_type
     language_tag: Optional[str] = None  # BCP 47
-    superseded_by_id: Optional[str] = None  # 替代回溯（D3 §7.2）
+    superseded_by_id: Optional[NonEmptyStr] = None  # 替代回溯（D3 §7.2）；存在时须非空非纯空白
     access_count: Optional[int] = Field(default=None, ge=0)  # DEFERRED：统计窗口待 D
     last_accessed_at: Optional[AwareDatetime] = None  # DEFERRED：统计窗口待 D
     extracted_entities: Optional[List[str]] = None

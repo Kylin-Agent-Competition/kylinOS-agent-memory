@@ -27,11 +27,6 @@ logger = logging.getLogger(__name__)
 # Outbox 消费回调类型：(event_type, payload) → 成功返回 None，失败抛异常
 EventConsumer = Callable[[str, Dict[str, Any]], None]
 
-# 摘要签名密钥默认（注入参数默认值，仅用于 L1 测试；真实接线由调用方注入受控 key）
-_DEFAULT_KEY_ID = "d9d-internal"
-_DEFAULT_DIGEST_KEY = b"kylin-memory-d9d-internal"
-
-
 class UnknownEventTypeError(Exception):
     """路由未注册的 event_type（Worker 按失败/重试/DL 处理）。
 
@@ -95,8 +90,8 @@ def build_outbox_router(
     *,
     vector_provider: Optional[Any] = None,
     embedding_service: Optional[Any] = None,
-    digest_key_id: str = _DEFAULT_KEY_ID,
-    digest_key: bytes = _DEFAULT_DIGEST_KEY,
+    digest_key_id: Optional[str] = None,
+    digest_key: Optional[bytes] = None,
 ) -> OutboxRouter:
     """构造生产 Outbox 路由（app.py 注入点）。
 
@@ -107,9 +102,10 @@ def build_outbox_router(
         vector_provider: VectorProvider 实现（memory.upserted → index consumer；
             forget.executed → deletion consumer 组合消费中的 Vector delete）。
         embedding_service: EmbeddingService 实例（forget.executed → cache invalidation）。
-        digest_key_id / digest_key: 请求摘要签名密钥（注入参数，默认值仅用于 L1 测试；
-            真实接线时必须由调用方注入受控 key，与 provider 的 digest_keys 对齐，
-            否则真实 SqliteVectorProvider 将稳定返回 DIGEST_KEY_UNAVAILABLE）。
+        digest_key_id / digest_key: 请求摘要签名密钥。真实 Vector provider 模式
+            必须由调用方注入受控 key，并与 provider 的 digest_keys 对齐；未配置或
+            失配时 fail-fast。L1 fake consumer 可继续使用 build_index_consumer 的
+            测试默认值。
     """
     from db import repositories as repo
     from outbox.deletion_consumer import build_forget_consumer
@@ -117,6 +113,13 @@ def build_outbox_router(
 
     router = OutboxRouter()
     if vector_provider is not None:
+        if not isinstance(digest_key_id, str) or not digest_key_id.strip():
+            raise ValueError("真实 Vector router 必须配置非空 digest_key_id")
+        if not isinstance(digest_key, bytes) or not digest_key:
+            raise ValueError("真实 Vector router 必须配置非空 digest_key")
+        validator = getattr(vector_provider, "has_digest_key", None)
+        if callable(validator) and not validator(digest_key_id, digest_key):
+            raise ValueError("Router 与 Vector provider 的 digest key 不一致")
         router.register(
             repo.EVENT_MEMORY_UPSERTED,
             build_index_consumer(

@@ -76,7 +76,7 @@ preflight() {
 
 wait_socket() {
   local sock="$1" i
-  for i in $(seq 1 20); do
+  for i in $(seq 1 120); do
     [ -S "$sock" ] && return 0
     sleep 0.5
   done
@@ -91,7 +91,7 @@ status_check() {
   systemctl --user status "$UNIT_NAME" --no-pager | head -6
   # 日志就绪断言（允许短暂延迟后重试）
   local i
-  for i in $(seq 1 10); do
+  for i in $(seq 1 60); do
     if journalctl --user -u "$UNIT_NAME" -n 100 --no-pager 2>/dev/null | grep -q "Memory Service 就绪"; then
       log "journal: Memory Service 就绪 已出现"
       return 0

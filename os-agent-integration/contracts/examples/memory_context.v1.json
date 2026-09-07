@@ -6,7 +6,7 @@
   "session_id": "session-001",
   "turn_id": "turn-002",
   "occurred_at": "2026-08-14T04:59:59.900Z",
-  "collected_at": "2026-08-14T05:00:00.000Z",
+  "captured_at": "2026-08-14T05:00:00.000Z",
   "source_reference": "ref:context-build:001",
   "idempotency_key": "memory-context:query-001",
   "query_id": "query-001",

@@ -1,0 +1,20 @@
+[kylin-memory-install] 已备份既有 wrapper: /home/kylin-agent/.local/bin/kylin-memory-server.bak.*
+[kylin-memory-install] 已备份既有 unit: /home/kylin-agent/.config/systemd/user/kylin-memory.service.bak.*
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/kylin-agent/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-09-03 18:30:45 CST; 2min 7s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 37859 (python)
+      Tasks: 3 (limit: 9405)
+[kylin-memory-install] WARN: 日志中未匹配到 'Memory Service 就绪'（请人工核对 journalctl --user -u kylin-memory）
+[kylin-memory-install] 重启验证…
+[kylin-memory-install] socket OK: /run/user/1000/kylin-memory/memory.sock
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/kylin-agent/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-09-03 18:33:25 CST; 2s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 40260 (python)
+      Tasks: 3 (limit: 9405)
+[kylin-memory-install] WARN: 日志中未匹配到 'Memory Service 就绪'（请人工核对 journalctl --user -u kylin-memory）
+[kylin-memory-install] 安装完成：wrapper=/home/kylin-agent/.local/bin/kylin-memory-server unit=/home/kylin-agent/.config/systemd/user/kylin-memory.service

@@ -13,11 +13,56 @@ namespace kylin::memory::contract::v1 {
 
 namespace {
 
+// Reads a KMA R-1 time alias: accepts both the canonical `captured_at` name and the
+// legacy transport alias `collected_at` (TD-060). If both are present the canonical
+// name wins (fail-closed: we don't silently merge two different timestamps). Returns
+// the parsed timestamp, or an invalid QDateTime if neither key is present / parseable.
+std::pair<QDateTime, QString /*effective_key*/> readCanonicalCapturedAt(
+    const QJsonObject& object)
+{
+    const QString canonicalKey = QStringLiteral("captured_at");
+    const QString legacyKey = QStringLiteral("collected_at");
+    if (object.contains(canonicalKey)) {
+        const QString raw = object.value(canonicalKey).toString();
+        return {QDateTime::fromString(raw, Qt::ISODateWithMs), canonicalKey};
+    }
+    if (object.contains(legacyKey)) {
+        const QString raw = object.value(legacyKey).toString();
+        return {QDateTime::fromString(raw, Qt::ISODateWithMs), legacyKey};
+    }
+    return {{}, canonicalKey};
+}
+
+// Returns true if any of the provided keys is a JSON string member of `object`.
+bool containsAnyOf(
+    const QJsonObject& object, std::initializer_list<QString> keys)
+{
+    for (const QString& k : keys) {
+        if (object.contains(k)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::optional<ContractError> firstMissingRequiredField(
     const QJsonObject& object,
     std::initializer_list<QString> requiredFields)
 {
     for (const QString& field : requiredFields) {
+        // KMA R-1 alias: `captured_at` / `collected_at` either satisfies the
+        // required field; the error reports the canonical name.
+        if (field == QStringLiteral("captured_at")) {
+            if (!containsAnyOf(object,
+                    {QStringLiteral("captured_at"), QStringLiteral("collected_at")})) {
+                return ContractError{
+                    QStringLiteral("required"),
+                    field,
+                    QStringLiteral("Required field is missing."),
+                };
+            }
+            continue;
+        }
         if (!object.contains(field)) {
             return ContractError{
                 QStringLiteral("required"),
@@ -97,13 +142,52 @@ std::optional<ContractError> firstMissingRequiredEventMetadataField(
             QStringLiteral("user_id"),
             QStringLiteral("session_id"),
             QStringLiteral("occurred_at"),
-            QStringLiteral("collected_at"),
+            // KMA R-1 (TD-060): `captured_at` is the canonical name; legacy
+            // transport alias `collected_at` is still accepted.
+            QStringLiteral("captured_at"),
             QStringLiteral("idempotency_key"),
         });
 }
 
 std::optional<ContractError> firstInvalidEventMetadataJsonType(const QJsonObject& object)
 {
+    // KMA R-1 (TD-060, review MEDIUM-01): the event-metadata time key has a
+    // transport alias pair — Canonical `captured_at` and legacy
+    // `collected_at`. The semantic rule is "Canonical wins on INPUT", meaning:
+    //   - If the payload carries BOTH keys, we only validate the Canonical
+    //     one. A malformed legacy alias must NOT cause a rejection when the
+    //     Canonical key is already well-formed. This matches the behaviour of
+    //     `readCanonicalCapturedAt()` which ignores the legacy key in the
+    //     "both present" path.
+    //   - If ONLY the legacy key is present, we validate its type and surface
+    //     the error under the **Canonical** field name so callers do not start
+    //     depending on the legacy transport name in error surfaces.
+    //   - If NEITHER is present, we skip the type check — the
+    //     "firstMissingRequiredEventMetadataField" check handles the
+    //     required-field gate separately.
+    const bool hasCanonical = object.contains(QStringLiteral("captured_at"));
+    const bool hasLegacy = object.contains(QStringLiteral("collected_at"));
+    if (hasCanonical) {
+        if (object.value(QStringLiteral("captured_at")).type() != QJsonValue::String) {
+            return ContractError{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("captured_at"),
+                QStringLiteral("Field has an invalid JSON type."),
+            };
+        }
+    } else if (hasLegacy) {
+        // Legacy-only ingress — type-check it but report the Canonical name
+        // (keeps the adapter-window "inputs are normalised to canonical names"
+        // contract that downstream error handlers already depend on).
+        if (object.value(QStringLiteral("collected_at")).type() != QJsonValue::String) {
+            return ContractError{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("captured_at"),
+                QStringLiteral("Field has an invalid JSON type."),
+            };
+        }
+    }
+    // All other metadata fields — single canonical key, no aliases.
     return firstInvalidJsonType(
         object,
         {
@@ -114,7 +198,7 @@ std::optional<ContractError> firstInvalidEventMetadataJsonType(const QJsonObject
             {QStringLiteral("session_id"), QJsonValue::String},
             {QStringLiteral("turn_id"), QJsonValue::String},
             {QStringLiteral("occurred_at"), QJsonValue::String},
-            {QStringLiteral("collected_at"), QJsonValue::String},
+            // `captured_at` / `collected_at` — handled above (aliased pair).
             {QStringLiteral("source_reference"), QJsonValue::String},
             {QStringLiteral("idempotency_key"), QJsonValue::String},
         });
@@ -131,8 +215,13 @@ EventMetadata eventMetadataFromJson(const QJsonObject& object)
     metadata.turnId = object.value(QStringLiteral("turn_id")).toString();
     metadata.occurredAt = QDateTime::fromString(
         object.value(QStringLiteral("occurred_at")).toString(), Qt::ISODateWithMs);
-    metadata.collectedAt = QDateTime::fromString(
-        object.value(QStringLiteral("collected_at")).toString(), Qt::ISODateWithMs);
+    // KMA R-1: prefer canonical `captured_at`, fall back to legacy alias
+    // `collected_at` (TD-060).
+    const auto [captured, effectiveKey] = readCanonicalCapturedAt(object);
+    metadata.collectedAt = captured;
+    // (void) to mark "used" for the uncommon case that compilers warn on C++17
+    // structured bindings with the same variable scope.
+    Q_UNUSED(effectiveKey);
     metadata.sourceReference = object.value(QStringLiteral("source_reference")).toString();
     metadata.idempotencyKey = object.value(QStringLiteral("idempotency_key")).toString();
     return metadata;
@@ -146,7 +235,10 @@ QJsonObject eventMetadataToJson(const EventMetadata& metadata)
         {QStringLiteral("user_id"), metadata.userId},
         {QStringLiteral("session_id"), metadata.sessionId},
         {QStringLiteral("occurred_at"), metadata.occurredAt.toUTC().toString(Qt::ISODateWithMs)},
-        {QStringLiteral("collected_at"), metadata.collectedAt.toUTC().toString(Qt::ISODateWithMs)},
+        // KMA R-1: always output canonical `captured_at`. Hosts still writing the
+        // legacy `collected_at` transport alias can still parse via alias support
+        // in `eventMetadataFromJson` (TD-060 adapter window).
+        {QStringLiteral("captured_at"), metadata.collectedAt.toUTC().toString(Qt::ISODateWithMs)},
         {QStringLiteral("idempotency_key"), metadata.idempotencyKey},
     };
 
@@ -238,9 +330,11 @@ ValidationResult validateEventMetadata(const EventMetadata& metadata)
         });
     }
     if (!metadata.collectedAt.isValid()) {
+        // KMA R-1: report the canonical field name; legacy alias is accepted only
+        // as a transport input.
         result.errors.append({
             QStringLiteral("invalid_timestamp"),
-            QStringLiteral("collected_at"),
+            QStringLiteral("captured_at"),
             QStringLiteral("Timestamp must be valid ISO 8601."),
         });
     }
@@ -344,7 +438,29 @@ ParseResult<MemoryQuery> memoryQueryFromJson(const QJsonObject& object)
     query.sessionId = object.value(QStringLiteral("session_id")).toString();
     query.queryText = object.value(QStringLiteral("query_text")).toString();
     query.scene = object.value(QStringLiteral("scene")).toString();
-    query.maxContextTokens = object.value(QStringLiteral("max_context_tokens")).toInt();
+    const auto maxTokensValue = object.value(QStringLiteral("max_context_tokens"));
+    if (!maxTokensValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("max_context_tokens"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    const double maxTokensDouble = maxTokensValue.toDouble();
+    if (maxTokensDouble != static_cast<double>(static_cast<qlonglong>(maxTokensDouble))) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_value"),
+                QStringLiteral("max_context_tokens"),
+                QStringLiteral("Field must be an integer."),
+            }},
+        };
+    }
+    query.maxContextTokens = static_cast<int>(maxTokensDouble);
 
     const ValidationResult validation = validate(query);
     if (!validation.ok()) {
@@ -557,10 +673,31 @@ ParseResult<MemoryContext> memoryContextFromJson(const QJsonObject& object)
         return {std::nullopt, status.errors};
     }
 
+    const auto selectedIdsValue = object.value(QStringLiteral("selected_memory_ids"));
+    if (!selectedIdsValue.isArray()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("selected_memory_ids"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    const QJsonArray selectedIds = selectedIdsValue.toArray();
     QStringList selectedMemoryIds;
-    const QJsonArray selectedIds = object.value(QStringLiteral("selected_memory_ids")).toArray();
     selectedMemoryIds.reserve(selectedIds.size());
     for (const QJsonValue& selectedId : selectedIds) {
+        if (!selectedId.isString()) {
+            return {
+                std::nullopt,
+                {{
+                    QStringLiteral("invalid_type"),
+                    QStringLiteral("selected_memory_ids"),
+                    QStringLiteral("Array elements must be strings."),
+                }},
+            };
+        }
         selectedMemoryIds.append(selectedId.toString());
     }
 
@@ -569,11 +706,71 @@ ParseResult<MemoryContext> memoryContextFromJson(const QJsonObject& object)
     context.queryId = object.value(QStringLiteral("query_id")).toString();
     context.selectedMemoryIds = selectedMemoryIds;
     context.contextVersion = object.value(QStringLiteral("context_version")).toString();
-    context.tokenBudget = object.value(QStringLiteral("token_budget")).toInt();
-    context.actualTokenCount = object.value(QStringLiteral("actual_token_count")).toInt();
-    context.sensitiveExcludedCount = object.value(QStringLiteral("sensitive_excluded_count")).toInt();
-    context.forgottenExcludedCount = object.value(QStringLiteral("forgotten_excluded_count")).toInt();
-    context.conflictExcludedCount = object.value(QStringLiteral("conflict_excluded_count")).toInt();
+
+    const auto tokenBudgetValue = object.value(QStringLiteral("token_budget"));
+    if (!tokenBudgetValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("token_budget"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    context.tokenBudget = tokenBudgetValue.toInt();
+
+    const auto actualCountValue = object.value(QStringLiteral("actual_token_count"));
+    if (!actualCountValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("actual_token_count"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    context.actualTokenCount = actualCountValue.toInt();
+
+    const auto sensValue = object.value(QStringLiteral("sensitive_excluded_count"));
+    if (!sensValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("sensitive_excluded_count"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    context.sensitiveExcludedCount = sensValue.toInt();
+
+    const auto forgotValue = object.value(QStringLiteral("forgotten_excluded_count"));
+    if (!forgotValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("forgotten_excluded_count"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    context.forgottenExcludedCount = forgotValue.toInt();
+
+    const auto conflictValue = object.value(QStringLiteral("conflict_excluded_count"));
+    if (!conflictValue.isDouble()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("conflict_excluded_count"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    context.conflictExcludedCount = conflictValue.toInt();
     context.injectionStatus = *status.value;
 
     const ValidationResult validation = validate(context);
@@ -614,7 +811,9 @@ ParseResult<ToolExecutionStatus> toolExecutionStatusFromString(const QString& va
     if (value == QStringLiteral("partial")) {
         return {ToolExecutionStatus::Partial, {}};
     }
-    if (value == QStringLiteral("failure")) {
+    // KMA R-1 / DRIFT-003: Canonical event business result uses `failed`;
+    // Host DTO `execution_status` alias `failure` is still accepted.
+    if (value == QStringLiteral("failure") || value == QStringLiteral("failed")) {
         return {ToolExecutionStatus::Failure, {}};
     }
     if (value == QStringLiteral("cancelled")) {
@@ -648,7 +847,73 @@ QString toString(ToolExecutionStatus status)
     case ToolExecutionStatus::Timeout:
         return QStringLiteral("timeout");
     }
+    Q_UNREACHABLE();
     return {};
+}
+
+ParseResult<BusinessStatus> businessStatusFromString(const QString& value)
+{
+    // KMA R-6 canonical 8-value white-list. Canonical names ONLY.
+    // Aligned with memory-service/pipeline/schemas.py SourceBusinessStatus (D3 §2.3 frozen).
+    if (value == QStringLiteral("raw"))       return {BusinessStatus::Raw, {}};
+    if (value == QStringLiteral("completed")) return {BusinessStatus::Completed, {}};
+    if (value == QStringLiteral("success"))   return {BusinessStatus::Success, {}};
+    if (value == QStringLiteral("partial"))   return {BusinessStatus::Partial, {}};
+    if (value == QStringLiteral("failed"))    return {BusinessStatus::Failed, {}};
+    if (value == QStringLiteral("cancelled")) return {BusinessStatus::Cancelled, {}};
+    if (value == QStringLiteral("timeout"))   return {BusinessStatus::Timeout, {}};
+    if (value == QStringLiteral("ignored"))   return {BusinessStatus::Ignored, {}};
+
+    return {
+        std::nullopt,
+        {{
+            QStringLiteral("invalid_enum"),
+            QStringLiteral("source_business_status"),
+            QStringLiteral("Unknown canonical business status (must be one of 8 D3 §2.3 values: raw/completed/success/partial/failed/cancelled/timeout/ignored)."),
+        }},
+    };
+}
+
+QString toString(BusinessStatus status)
+{
+    switch (status) {
+    case BusinessStatus::Raw:        return QStringLiteral("raw");
+    case BusinessStatus::Completed:  return QStringLiteral("completed");
+    case BusinessStatus::Success:    return QStringLiteral("success");
+    case BusinessStatus::Partial:    return QStringLiteral("partial");
+    case BusinessStatus::Failed:     return QStringLiteral("failed");
+    case BusinessStatus::Cancelled:  return QStringLiteral("cancelled");
+    case BusinessStatus::Timeout:    return QStringLiteral("timeout");
+    case BusinessStatus::Ignored:    return QStringLiteral("ignored");
+    }
+    Q_UNREACHABLE();
+    return {};
+}
+
+// KMA R-6 / DRIFT-002: consistency check between Host DTO status and canonical business status.
+// Host DTO uses "failure" as alias but canonical business status MUST report "failed".
+// Returns true when (executionStatus, businessStatus) is an allowed tuple.
+// raw/completed/ignored have no direct Host DTO execution_status mapping — they are
+// canonical-only states that may coexist with any execution_status (non-terminal or
+// upstream states not yet projected to Host DTO).
+static bool businessStatusConsistentWithExecution(
+    ToolExecutionStatus executionStatus, BusinessStatus businessStatus)
+{
+    switch (businessStatus) {
+    case BusinessStatus::Success:   return executionStatus == ToolExecutionStatus::Success;
+    case BusinessStatus::Partial:   return executionStatus == ToolExecutionStatus::Partial;
+    case BusinessStatus::Failed:    return executionStatus == ToolExecutionStatus::Failure;
+    case BusinessStatus::Cancelled: return executionStatus == ToolExecutionStatus::Cancelled;
+    case BusinessStatus::Timeout:   return executionStatus == ToolExecutionStatus::Timeout;
+    case BusinessStatus::Raw:       // canonical-only, no Host DTO projection
+        [[fallthrough]];
+    case BusinessStatus::Completed:  // canonical-only, no Host DTO projection
+        [[fallthrough]];
+    case BusinessStatus::Ignored:   // canonical-only, no Host DTO projection
+        return true;
+    }
+    Q_UNREACHABLE();
+    return false;
 }
 
 ValidationResult validate(const ToolExecutionEvent& event)
@@ -689,6 +954,14 @@ ValidationResult validate(const ToolExecutionEvent& event)
             QStringLiteral("Required field is missing."),
         });
     }
+    // KMA R-6 / DRIFT-002: canonical business status is REQUIRED
+    if (!event.sourceBusinessStatus.has_value()) {
+        result.errors.append({
+            QStringLiteral("required"),
+            QStringLiteral("source_business_status"),
+            QStringLiteral("Required KMA R-6 canonical business status is missing."),
+        });
+    }
     if (!event.sideEffect.has_value()) {
         result.errors.append({
             QStringLiteral("required"),
@@ -711,6 +984,17 @@ ValidationResult validate(const ToolExecutionEvent& event)
             QStringLiteral("Successful tool execution requires a result reference."),
         });
     }
+    // KMA R-6 / DRIFT-002: Host DTO execution_status ↔ canonical business status consistency.
+    // Catches contradictions like execution_status="failure" but source_business_status="success".
+    if (event.executionStatus.has_value() && event.sourceBusinessStatus.has_value()) {
+        if (!businessStatusConsistentWithExecution(*event.executionStatus, *event.sourceBusinessStatus)) {
+            result.errors.append({
+                QStringLiteral("inconsistent_value"),
+                QStringLiteral("source_business_status"),
+                QStringLiteral("source_business_status contradicts execution_status (e.g. Host failure → canonical failed)."),
+            });
+        }
+    }
     return result;
 }
 
@@ -729,6 +1013,7 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
             QStringLiteral("started_at"),
             QStringLiteral("finished_at"),
             QStringLiteral("execution_status"),
+            QStringLiteral("source_business_status"),
             QStringLiteral("side_effect"),
         });
     if (missingField.has_value()) {
@@ -755,6 +1040,7 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
             {QStringLiteral("side_effect"), QJsonValue::Bool},
             {QStringLiteral("rollback_required"), QJsonValue::Bool},
             {QStringLiteral("rollback_status"), QJsonValue::String},
+            {QStringLiteral("source_business_status"), QJsonValue::String},
         });
     if (invalidType.has_value()) {
         return {std::nullopt, {*invalidType}};
@@ -771,6 +1057,14 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
         return {std::nullopt, status.errors};
     }
 
+    // KMA R-6: source_business_status MUST be a canonical 8-value enum.
+    // Unknown values (e.g. legacy "succeeded"/"failure") are REJECTED outright.
+    const auto biz = businessStatusFromString(
+        object.value(QStringLiteral("source_business_status")).toString());
+    if (!biz.ok()) {
+        return {std::nullopt, biz.errors};
+    }
+
     ToolExecutionEvent event;
     event.metadata = eventMetadataFromJson(object);
     event.toolCallId = object.value(QStringLiteral("tool_call_id")).toString();
@@ -781,11 +1075,38 @@ ParseResult<ToolExecutionEvent> toolExecutionEventFromJson(const QJsonObject& ob
     event.finishedAt = QDateTime::fromString(
         object.value(QStringLiteral("finished_at")).toString(), Qt::ISODateWithMs);
     event.executionStatus = *status.value;
+    event.sourceBusinessStatus = *biz.value;
     event.resultRef = object.value(QStringLiteral("result_ref")).toString();
     event.errorType = object.value(QStringLiteral("error_type")).toString();
     event.errorMessageSafe = object.value(QStringLiteral("error_message_safe")).toString();
-    event.sideEffect = object.value(QStringLiteral("side_effect")).toBool();
-    event.rollbackRequired = object.value(QStringLiteral("rollback_required")).toBool();
+
+    const auto sideEffectValue = object.value(QStringLiteral("side_effect"));
+    if (!sideEffectValue.isBool()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("side_effect"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    event.sideEffect = sideEffectValue.toBool();
+
+    const auto rollbackRequiredValue = object.value(QStringLiteral("rollback_required"));
+    // rollback_required is optional; when present it must be a boolean.
+    if (!rollbackRequiredValue.isUndefined() && !rollbackRequiredValue.isNull()
+        && !rollbackRequiredValue.isBool()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("rollback_required"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    event.rollbackRequired = rollbackRequiredValue.toBool();
     event.rollbackStatus = object.value(QStringLiteral("rollback_status")).toString();
 
     const ValidationResult validation = validate(event);
@@ -826,6 +1147,14 @@ QJsonObject toJson(const ToolExecutionEvent& event)
     }
     if (!event.errorMessageSafe.isEmpty()) {
         object.insert(QStringLiteral("error_message_safe"), event.errorMessageSafe);
+    }
+
+    // KMA R-6 / DRIFT-002: canonical business result field (enum → canonical name).
+    // Only emitted when has_value — serialize ALWAYS outputs canonical names via toString().
+    if (event.sourceBusinessStatus.has_value()) {
+        object.insert(
+            QStringLiteral("source_business_status"),
+            toString(*event.sourceBusinessStatus));
     }
 
     return object;
@@ -940,17 +1269,49 @@ ParseResult<TurnFinalizedEvent> turnFinalizedEventFromJson(const QJsonObject& ob
         return {std::nullopt, versionValidation.errors};
     }
 
+    const auto toolIdsValue = object.value(QStringLiteral("tool_call_ids"));
+    if (!toolIdsValue.isArray()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("tool_call_ids"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    const QJsonArray toolIds = toolIdsValue.toArray();
     QStringList toolCallIds;
-    const QJsonArray toolIds = object.value(QStringLiteral("tool_call_ids")).toArray();
     toolCallIds.reserve(toolIds.size());
     for (const QJsonValue& toolId : toolIds) {
+        if (!toolId.isString()) {
+            return {
+                std::nullopt,
+                {{
+                    QStringLiteral("invalid_type"),
+                    QStringLiteral("tool_call_ids"),
+                    QStringLiteral("Array elements must be strings."),
+                }},
+            };
+        }
         toolCallIds.append(toolId.toString());
     }
 
     TurnFinalizedEvent event;
     event.metadata = eventMetadataFromJson(object);
     event.finalMessageId = object.value(QStringLiteral("final_message_id")).toString();
-    event.isFinal = object.value(QStringLiteral("is_final")).toBool();
+    const auto isFinalValue = object.value(QStringLiteral("is_final"));
+    if (!isFinalValue.isBool()) {
+        return {
+            std::nullopt,
+            {{
+                QStringLiteral("invalid_type"),
+                QStringLiteral("is_final"),
+                QStringLiteral("Field has an invalid JSON type."),
+            }},
+        };
+    }
+    event.isFinal = isFinalValue.toBool();
     event.finalizationReason = object.value(QStringLiteral("finalization_reason")).toString();
     event.stopReason = object.value(QStringLiteral("stop_reason")).toString();
     event.retryOfTurnId = object.value(QStringLiteral("retry_of_turn_id")).toString();

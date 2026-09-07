@@ -1,0 +1,152 @@
+
+===== identity-and-commit =====
+tested_commit=b70827c5e9c9e014ae2c025eb01d0adfaabd4ef9
+branch=fix/d12d-post-merge-techdebt
+worktree_status=
+?? scripts/verify_d12d_post_merge_techdebt_vm.sh
+user=kylin-agent uid=1000 xdg_runtime_dir=/run/user/1000
+Linux kylin-agent-pc 6.6.0-76-generic #86r2-KYLINOS SMP PREEMPT_DYNAMIC Tue Aug  4 06:44:37 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+===== td-kysec-001-read-only =====
+kernel_cmdline=BOOT_IMAGE=/ostree/kylin-233d332e8a78ae96784a48754d7fc7499a8495e4ae206adfaede579176d0f4fe/vmlinuz-6.6.0-76-generic root=UUID=74453eec-70ae-4397-a8de-8b778a3c0e3a rw ostree=/ostree/boot.0/kylin/233d332e8a78ae96784a48754d7fc7499a8495e4ae206adfaede579176d0f4fe/0 quiet splash loglevel=0 systemd.unified_cgroup_hierarchy=1 psi=1 resume=UUID=0747e581-61bc-446c-b7f2-326e04218b15 security=box lsm=ksaf audit=1
+lsm=lockdown,capability,kycp,ksafkysec_modules=
+kysec_exectl           53248  0
+kysec_devctl           40960  0
+kysec2_kbox            16384  0
+ksaf_main             274432  7 kysec2_kbox,kysec_exectl,kysec_devctl
+drm_kms_helper        225280  4 vmwgfx,ksaf_main
+kysec_services=
+  ksaf-devctl-sync-daemon.service               loaded    active   running Kysec message and notify sync daemon
+  kysec-daemon.service                          loaded    active   running Kysec daemon dbus service
+● kysec-mempro.service                          not-found inactive dead    kysec-mempro.service
+  kysec-scene-init.service                      loaded    active   exited  Kysec Scene Init Security Mode
+  kysec-sync-daemon.service                     loaded    active   running Kysec message and notify sync daemon
+  kysec-sync-record.service                     loaded    active   exited  update duration after shutdown or reboot
+  kysec2-exectl-init.service                    loaded    active   exited  Init kyexectl whitelist
+  kysec2-kbox-load.service                      loaded    inactive dead    Load kbox kernel module
+  kyseclogd.service                             loaded    active   running Kysec Log Service
+kysec_processes=
+root         890       1  0 17:16 ?        00:00:00 /usr/sbin/kyseclogd
+root        2575       1  0 17:16 ?        00:00:01 /usr/sbin/kysec-sync-daemon --init
+root        2961       1  0 17:16 ?        00:00:01 /usr/bin/kysec-scene-daemon
+root        3078       1  0 17:16 ?        00:00:00 /usr/sbin/kysec-daemon
+securityfs=
+drwxr-xr-x root:root /sys/kernel/security/kysec
+-r--r----- root:root /sys/kernel/security/kysec/ascii_runtime_measurements
+kysec_tools=
+kysec_get=/usr/sbin/kysec_get
+kysec_get：未识别的选项 ‘--help’
+invalid arguments
+Usage:kysec_get [ -r ] [ -n LABEL_NAME ] PATH1 PATH2 ...
+      kysec_get -p PID
+      kysec_get --package PACKAGE_NAME
+	 -r: get kysec label recursively for directories
+	 -n: get the specified label only, label_name can be exectl, protect or userid
+	 -p: get the label for process PID
+	 --package: get the label for a installed package
+	 -h: show help information.
+kysec_set=/usr/sbin/kysec_set
+kysec_set：未识别的选项 ‘--help’
+invalid arguments
+Usage:kysec_set [ -r ] -n LABEL_NAME -v LABEL_VALUE  PATH1 PATH2 ...
+      kysec_set -n LABEL_NAME -v LABEL_VALUE  -f FILE_PATH
+      kysec_set -n LABEL_NAME -v LABEL_VALUE  --package PACKAGE_NAME
+      kysec_set -n LABEL_NAME -x PATH1 PATH2 ...
+	 -r: set kysec label recursively, work for directories only
+	 -n: set the specified label type only, it can be exectl, protect or userid
+	 -v: new label value, label_value veris depends on label_name
+	 -f: set kysec label for files listed in FILE_PATH, one file path per line
+	 --package: set all the files' kysec labels for a installed package
+	 -x: clear kysec label specified by label_name
+	 -h: show help information.
+kysec_auth=/usr/sbin/kysec_auth
+kysec_auth: unrecognized option '--help'
+kysec_policy=/usr/sbin/kysec_policy
+用法: kysec_policy <module> -h
+      kysec_policy [enable|disable|permissive]
+      kysec_policy status
+功能: 获取安全模块策略帮助信息
+参数:
+   -h, --help 显示帮助信息
+   module: 安全模块
+       exec:    执行控制
+       net:     应用程序联网控制
+       file:    文件只读保护
+       proc:    进程防杀死
+       kmod:    内核模块防卸载
+       execban: 禁止程序执行
+       priv:    用户隐私
+       dev:     设备管控
+       userid:  三员用户标识
+   enable:  开启所有麒麟安全功能
+   disable: 关闭所有麒麟安全功能
+   permissive: 宽松模式, 只记录日志
+   status: 显示所有麒麟安全功能状态
+kysec_kid=/usr/sbin/kysec_kid
+kysec_kid --set [-x] [-n] [policy] [-s] [subject] [-o] [object] [-t] [type (kernel or user)] [-u] [uid] [-p] [xrwdn]
+kysec_kid --get [-n] [policy] [-s] [subject] [-o] [object] [-t] [type (kernel or user)]
+kysec_kid --help
+tpm_bypass_log=
+9月 03 09:15:26 kylin-agent-pc kernel: ima: No TPM chip found, activating TPM-bypass!
+9月 03 09:15:29 kylin-agent-pc kernel: Modules linked in: intel_cstate(-) e1000(+) pktcdvd joydev snd_timer vboxguest(OE) i2c_piix4 pata_acpi parport_pc ppdev lp parport efi_pstore nfnetlink dmi_sysfs ip_tables x_tables ipv6 crc_ccitt autofs4 overlay kysec_exectl(OE) kysec_devctl(OE) kysec2_kbox(OE) tpm_ax99100 input_leds psmouse hid_generic usbhid atkbd vmwgfx libps2 ahci video drm_ttm_helper hid wmi vivaldi_fmap libahci ttm serio_raw mac_hid ksaf_main(OE) drm_kms_helper drm aesni_intel crypto_simd cryptd
+9月 03 17:17:19 kylin-agent-pc kernel: kysec_exectl: No TPM chip found, activating TPM-bypass!
+
+===== td-deploy-001-readiness =====
+wrapper=
+-rwxr-xr-x 1 kylin-agent kylin-agent 121  9月 3日 18:32 /home/kylin-agent/.local/bin/kylin-memory-server
+#!/bin/bash
+exec /home/kylin-agent/d4d-venv/bin/python /home/kylin-agent/kylinOS-agent-memory/memory-service/app.py "$@"
+unit=
+# /home/kylin-agent/.config/systemd/user/kylin-memory.service
+[Unit]
+Description=Kylin Memory Service
+Documentation=https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+After=network.target
+
+[Service]
+Type=simple
+# 部署冻结 §1.2：%h = $HOME，%t = $XDG_RUNTIME_DIR
+# --no-migrate：生产唯一数据库初始化/升级入口为 Alembic（alembic upgrade head），
+# 启动不再走 create_all 兜底（PR#52 Issue 6）；未先迁移时启动会 fail-fast 拒绝。
+ExecStart=%h/.local/bin/kylin-memory-server --socket %t/kylin-memory/memory.sock --no-migrate
+RuntimeDirectory=kylin-memory
+RuntimeDirectoryMode=0700
+Restart=on-failure
+RestartSec=5s
+
+# 按用户隔离，不要求 root；最小安全加固
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX
+
+# 说明：正式发行环境（麒麟生产系统）systemd 测试未执行前不得写"成品通过"；
+#       本 unit 为设计冻结骨架，需在麒麟 VM 完成 L2 验证（安装/重启/回退）。
+# 安装：cp packaging/systemd/kylin-memory.service ~/.config/systemd/user/
+#       systemctl --user daemon-reload && systemctl --user enable --now kylin-memory
+
+[Install]
+WantedBy=default.target
+python_dependencies=
+venv_dependencies=ok
+
+===== td-049-path-and-permissions =====
+legacy_socket_candidates=
+service_paths=
+700 drwx------ kylin-agent:kylin-agent /home/kylin-agent/.config/kylin-memory
+700 drwx------ kylin-agent:kylin-agent /home/kylin-agent/.local/share/kylin-memory
+600 srw------- kylin-agent:kylin-agent /run/user/1000/kylin-memory/memory.sock
+600 -rw------- kylin-agent:kylin-agent /home/kylin-agent/.local/share/kylin-memory/kylin_memory.db
+
+===== td-055-service-and-uds =====
+active
+ExecMainPID=40260
+ActiveState=active
+SubState=running
+{"context_count": 0, "degraded": false, "reason": "retrieval main chain pending", "status": "ok"}
+recent_journal_sensitive_markers=
+
+===== result-boundary =====
+PASS means only the command-level checks above passed.
+TD-KYSEC-001 remains Open until a human-approved single-binary KySec authorize/execute/revoke test is bound to this tested_commit.
+TD-DEPLOY-001 remains Open until controlled install and rollback are run on this tested_commit.
+TD-049 remains Open until a controlled different-UID fail-closed test is recorded.
+TD-055 remains Open until OS reboot and a real C-to-D-to-B request are recorded on this tested_commit.

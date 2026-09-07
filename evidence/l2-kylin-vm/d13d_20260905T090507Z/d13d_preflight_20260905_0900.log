@@ -1,0 +1,40 @@
+# Kylin VM test evidence
+run_id=d13d_preflight_20260905_0900
+collected_at_utc=2026-09-05T08:55:59.768506+00:00
+endpoint=127.0.0.1:2222
+user=kylin-agent
+mode=command
+requested_command=printf 'remote='; git remote -v; printf 'has_tested_commit='; git cat-file -e 7242935bee5f230cee0535d5e28dbe1e60a302f6^{commit} 2>/dev/null && echo yes || echo no; printf 'worktrees='; git worktree list --porcelain; printf 'service_state='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user is-active kylin-memory.service 2>&1 || true; printf 'unit_path='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show kylin-memory.service -p FragmentPath --value 2>&1 || true; printf 'socket='; stat -c '%a %U:%G %n' /run/user/1000/kylin-memory/memory.sock 2>&1 || true; printf 'db='; ls -l /home/kylin-agent/.local/share/kylin-memory/kylin_memory.db 2>&1 || true; printf 'home_repos='; find /home/kylin-agent -maxdepth 1 -mindepth 1 -type d -name 'kylinOS-agent-memory*' -printf '%p\n'
+--- guest script ---
+set -eu
+git -C /home/kylin-agent/kylinOS-agent-memory rev-parse --is-inside-work-tree >/dev/null
+cd /home/kylin-agent/kylinOS-agent-memory
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'git_head='; git rev-parse HEAD
+printf 'git_branch='; git branch --show-current
+printf 'git_dirty='; git status --porcelain | wc -l
+set +e
+bash -lc 'printf '"'"'remote='"'"'; git remote -v; printf '"'"'has_tested_commit='"'"'; git cat-file -e 7242935bee5f230cee0535d5e28dbe1e60a302f6^{commit} 2>/dev/null && echo yes || echo no; printf '"'"'worktrees='"'"'; git worktree list --porcelain; printf '"'"'service_state='"'"'; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user is-active kylin-memory.service 2>&1 || true; printf '"'"'unit_path='"'"'; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show kylin-memory.service -p FragmentPath --value 2>&1 || true; printf '"'"'socket='"'"'; stat -c '"'"'%a %U:%G %n'"'"' /run/user/1000/kylin-memory/memory.sock 2>&1 || true; printf '"'"'db='"'"'; ls -l /home/kylin-agent/.local/share/kylin-memory/kylin_memory.db 2>&1 || true; printf '"'"'home_repos='"'"'; find /home/kylin-agent -maxdepth 1 -mindepth 1 -type d -name '"'"'kylinOS-agent-memory*'"'"' -printf '"'"'%p\n'"'"''
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+guest_utc=2026-09-05T08:56:00Z
+git_head=053754d611801548fdac59b2894c6862bf85cf56
+git_branch=git_dirty=0
+remote=origin	/home/kylin-agent/b70827c.bundle (fetch)
+origin	/home/kylin-agent/b70827c.bundle (push)
+has_tested_commit=no
+worktrees=worktree /home/kylin-agent/kylinOS-agent-memory
+HEAD 053754d611801548fdac59b2894c6862bf85cf56
+detached
+
+service_state=active
+unit_path=/home/kylin-agent/.config/systemd/user/kylin-memory.service
+socket=600 kylin-agent:kylin-agent /run/user/1000/kylin-memory/memory.sock
+db=-rw------- 1 kylin-agent kylin-agent 184320  9月 1日 15:14 /home/kylin-agent/.local/share/kylin-memory/kylin_memory.db
+home_repos=/home/kylin-agent/kylinOS-agent-memory
+/home/kylin-agent/kylinOS-agent-memory.b70827c-backup
+VM_TEST_EXIT=0
+--- runner summary ---
+{"completed_at_utc": "2026-09-05T08:56:00.477508+00:00", "duration_seconds": 0.716, "endpoint": "127.0.0.1:2222", "exit_code": 0, "mode": "command", "requested_command": "printf 'remote='; git remote -v; printf 'has_tested_commit='; git cat-file -e 7242935bee5f230cee0535d5e28dbe1e60a302f6^{commit} 2>/dev/null && echo yes || echo no; printf 'worktrees='; git worktree list --porcelain; printf 'service_state='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user is-active kylin-memory.service 2>&1 || true; printf 'unit_path='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show kylin-memory.service -p FragmentPath --value 2>&1 || true; printf 'socket='; stat -c '%a %U:%G %n' /run/user/1000/kylin-memory/memory.sock 2>&1 || true; printf 'db='; ls -l /home/kylin-agent/.local/share/kylin-memory/kylin_memory.db 2>&1 || true; printf 'home_repos='; find /home/kylin-agent -maxdepth 1 -mindepth 1 -type d -name 'kylinOS-agent-memory*' -printf '%p\\n'", "run_id": "d13d_preflight_20260905_0900", "started_at_utc": "2026-09-05T08:55:59.761343+00:00", "status": "PASS", "timed_out": false, "user": "kylin-agent"}

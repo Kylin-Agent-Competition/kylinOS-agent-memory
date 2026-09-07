@@ -1,0 +1,48 @@
+● kylin-memory.service - Kylin Memory Service
+
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+
+     Active: active (running) since Thu 2026-09-03 14:41:55 CST; 38s ago
+
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+
+   Main PID: 14572 (python3)
+
+      Tasks: 3 (limit: 9463)
+
+     Memory: 38.1M (peak: 38.3M)
+
+        CPU: 4.665s
+
+     CGroup: /user.slice/user-1000.slice/user@1000.service/app.slice/kylin-memory.service
+
+             └─14572 /usr/bin/python3 /home/yanmouren778/kylinOS-agent-memory/memory-service/app.py --socket /run/user/1000/kylin-memory/memory.sock --no-migrate
+
+
+
+9月 03 14:41:55 yanmouren778-pc systemd[1716]: Started kylin-memory.service - Kylin Memory Service.
+
+9月 03 14:42:11 yanmouren778-pc kylin-memory-server[14572]: 配置文件不存在 /home/yanmouren778/.config/kylin-memory/config.toml，使用全部默认值启动
+
+9月 03 14:42:12 yanmouren778-pc kylin-memory-server[14572]: 2026-09-03T14:42:12+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+
+9月 03 14:42:13 yanmouren778-pc kylin-memory-server[14572]: 2026-09-03T14:42:13+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+
+9月 03 14:42:13 yanmouren778-pc kylin-memory-server[14572]: 2026-09-03T14:42:13+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+
+9月 03 14:42:13 yanmouren778-pc kylin-memory-server[14572]: 2026-09-03T14:42:13+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+
+== journal ==
+
+9月 03 14:41:55 yanmouren778-pc systemd[1716]: Started kylin-memory.service - Kylin Memory Service.
+
+9月 03 14:42:11 yanmouren778-pc kylin-memory-server[14572]: 配置文件不存在 /home/yanmouren778/.config/kylin-memory/config.toml，使用全部默认值启动
+
+9月 03 14:42:12 yanmouren778-pc kylin-memory-server[14572]: 2026-09-03T14:42:12+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+
+9月 03 14:42:13 yanmouren778-pc kylin-memory-server[14572]: 2026-09-03T14:42:13+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+
+9月 03 14:42:13 yanmouren778-pc kylin-memory-server[14572]: 2026-09-03T14:42:13+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+
+9月 03 14:42:13 yanmouren778-pc kylin-memory-server[14572]: 2026-09-03T14:42:13+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+

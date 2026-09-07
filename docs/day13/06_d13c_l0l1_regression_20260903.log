@@ -1,0 +1,286 @@
+﻿================================================================
+D13C L0/L1 回归日志
+日期: 2026-09-03
+分支: test/D13C-session-eval
+环境: Windows (本地) + ubuntu-22.04 CI (待验证)
+Python: 3.14.5 + pytest 9.1.1
+================================================================
+
+
+===== 1. py_compile 静态检查 =====
+
+py_compile exit: 0
+
+
+===== 2. L1 pytest 回归 (test_d13c_session_eval.py) =====
+
+============================= test session starts =============================
+platform win32 -- Python 3.14.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\15097\AppData\Local\Python\pythoncore-3.14-64\python.exe
+cachedir: .pytest_cache
+rootdir: E:\tiaozhanbei
+plugins: anyio-4.14.0, langsmith-0.8.16
+collecting ... collected 32 items
+
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_a1_happy_bundle_all_metrics_computed PASSED [  3%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_a2_step_completion_rate_full PASSED [  6%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_a2b_step_completion_rate_partial PASSED [  9%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_a3_isolation_pass_rate_full PASSED [ 12%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_a4_ipc_method_coverage_complete PASSED [ 15%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_a5_stop_retry_no_violation_on_normal_turn PASSED [ 18%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_a6_cross_session_isolation_ok PASSED [ 21%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_a6b_cross_session_isolation_distinct_same_scenario PASSED [ 25%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_a7_latency_p50_p95_known_values PASSED [ 28%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_a8_critical_zero_ok_true_when_no_violations PASSED [ 31%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_e1_invalid_commit_raises PASSED [ 34%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_e2_invalid_config_version_raises PASSED [ 37%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_e3_missing_latency_on_completed_step_raises PASSED [ 40%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_e4_invalid_statistics_method_raises PASSED [ 43%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_s1_guardrail_cross_user_critical PASSED [ 46%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_s2_guardrail_sensitive_critical PASSED [ 50%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_s3_guardrail_unresolved_conflict_non_critical PASSED [ 53%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_r1_no_sessions_returns_fail_closed_report PASSED [ 56%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_r2_duplicate_step_id_in_session_raises PASSED [ 59%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_r3_duplicate_session_id_in_bundle_raises PASSED [ 62%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_r4_invalid_stability_repeat_raises PASSED [ 65%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_n1_stability_repeat_default_when_absent PASSED [ 68%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_n2_retry_of_turn_id_equals_turn_id_violation PASSED [ 71%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_n3_stop_turn_missing_stop_reason_violation PASSED [ 75%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_n4_deadline_timeout_correct_failed_stage_no_violation PASSED [ 78%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_n5_deadline_timeout_wrong_stage_violation PASSED [ 81%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_isolation_partial_failure_lowers_pass_rate PASSED [ 84%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_latency_nan_rejected PASSED [ 87%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_latency_bool_rejected PASSED [ 90%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_iso_field_bool_string_rejected PASSED [ 93%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_invalid_response_status_rejected PASSED [ 96%]
+kylinOS-agent-memory/memory-service/tests/test_d13c_session_eval.py::test_invalid_guardrail_category_rejected PASSED [100%]
+
+============================= 32 passed in 0.19s ==============================
+
+
+===== 3. CLI 冒烟 (run_d13c_session_eval.py) =====
+
+{
+  "report_version": "d13c-session-eval-report/v1",
+  "config": {
+    "config_version": "d13c-session-eval-config/v1",
+    "dataset_version": "d13c-dataset-v1-smoke",
+    "gold_label_version": "d13c-gold-v1-smoke",
+    "implementation_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "environment": "smoke-test",
+    "evidence_reference": "smoke/d13c-session-eval",
+    "dataset_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "gold_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "statistics_method": "p50_and_p95",
+    "warmup_count": 0,
+    "repeat_count": 5,
+    "concurrency": 1,
+    "stability_repeat": 5,
+    "deadline_ms": 5000
+  },
+  "aggregate_metrics": {
+    "session_count": 2,
+    "total_step_count": 14,
+    "step_completion_rate": 1.0,
+    "isolation_pass_rate": 1.0,
+    "guardrail_critical_count": 0,
+    "critical_zero_ok": true,
+    "critical_zero_categories": [
+      "cross_user",
+      "sensitive"
+    ],
+    "ipc_method_coverage": {
+      "required": [
+        "memory.retrieve",
+        "turn.finalized",
+        "tool.execution",
+        "conflict.compare",
+        "lifecycle.status",
+        "forget.preview",
+        "forget.execute"
+      ],
+      "present": [
+        "conflict.compare",
+        "forget.execute",
+        "forget.preview",
+        "lifecycle.status",
+        "memory.retrieve",
+        "tool.execution",
+        "turn.finalized"
+      ],
+      "missing": [],
+      "coverage_complete": true
+    },
+    "stop_retry_violation_count": 0,
+    "deadline_violation_count": 0,
+    "latency": {
+      "p50_ms": 8.0,
+      "p95_ms": 13.0,
+      "mean_ms": 8.785714285714286,
+      "max_ms": 15.0,
+      "sample_count": 14
+    },
+    "cross_session_isolation_ok": true,
+    "cross_session_pair_count": 1
+  },
+  "per_session_metrics": [
+    {
+      "session_id": "session-smoke-0001",
+      "scenario": "cross_session_A",
+      "step_count": 7,
+      "step_completion_rate": 1.0,
+      "completed_step_count": 7,
+      "isolation_pass_rate": 1.0,
+      "isolation_ok_step_count": 7,
+      "guardrail_critical_count": 0,
+      "guardrail_violation_step_count": 0,
+      "guardrail_per_category": {
+        "cross_user": {
+          "violation_step_count": 0,
+          "violation_item_count": 0
+        },
+        "sensitive": {
+          "violation_step_count": 0,
+          "violation_item_count": 0
+        },
+        "unresolved_conflict": {
+          "violation_step_count": 0,
+          "violation_item_count": 0
+        }
+      },
+      "ipc_method_coverage": {
+        "required": [
+          "memory.retrieve",
+          "turn.finalized",
+          "tool.execution",
+          "conflict.compare",
+          "lifecycle.status",
+          "forget.preview",
+          "forget.execute"
+        ],
+        "present": [
+          "conflict.compare",
+          "forget.execute",
+          "forget.preview",
+          "lifecycle.status",
+          "memory.retrieve",
+          "tool.execution",
+          "turn.finalized"
+        ],
+        "missing": [],
+        "coverage_complete": true
+      },
+      "stop_retry_violation_count": 0,
+      "stop_retry_violations": [],
+      "deadline_violation_count": 0,
+      "deadline_violations": [],
+      "latency": {
+        "p50_ms": 9.0,
+        "p95_ms": 15.0,
+        "mean_ms": 9.428571428571429,
+        "max_ms": 15.0,
+        "sample_count": 7
+      }
+    },
+    {
+      "session_id": "session-smoke-0002",
+      "scenario": "cross_session_A",
+      "step_count": 7,
+      "step_completion_rate": 1.0,
+      "completed_step_count": 7,
+      "isolation_pass_rate": 1.0,
+      "isolation_ok_step_count": 7,
+      "guardrail_critical_count": 0,
+      "guardrail_violation_step_count": 0,
+      "guardrail_per_category": {
+        "cross_user": {
+          "violation_step_count": 0,
+          "violation_item_count": 0
+        },
+        "sensitive": {
+          "violation_step_count": 0,
+          "violation_item_count": 0
+        },
+        "unresolved_conflict": {
+          "violation_step_count": 0,
+          "violation_item_count": 0
+        }
+      },
+      "ipc_method_coverage": {
+        "required": [
+          "memory.retrieve",
+          "turn.finalized",
+          "tool.execution",
+          "conflict.compare",
+          "lifecycle.status",
+          "forget.preview",
+          "forget.execute"
+        ],
+        "present": [
+          "conflict.compare",
+          "forget.execute",
+          "forget.preview",
+          "lifecycle.status",
+          "memory.retrieve",
+          "tool.execution",
+          "turn.finalized"
+        ],
+        "missing": [],
+        "coverage_complete": true
+      },
+      "stop_retry_violation_count": 0,
+      "stop_retry_violations": [],
+      "deadline_violation_count": 0,
+      "deadline_violations": [],
+      "latency": {
+        "p50_ms": 8.0,
+        "p95_ms": 13.0,
+        "mean_ms": 8.142857142857142,
+        "max_ms": 13.0,
+        "sample_count": 7
+      }
+    }
+  ],
+  "cross_session_isolation": {
+    "cross_session_isolation_ok": true,
+    "pair_count": 1,
+    "pairs": [
+      {
+        "scenario": "cross_session_A",
+        "session_a": "session-smoke-0001",
+        "session_b": "session-smoke-0002",
+        "isolation_ok": true
+      }
+    ]
+  },
+  "critical_zero_ok": true,
+  "fail_closed_reasons": [],
+  "provenance": {
+    "implementation_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "environment": "smoke-test",
+    "evidence_reference": "smoke/d13c-session-eval",
+    "dataset_version": "d13c-dataset-v1-smoke",
+    "gold_label_version": "d13c-gold-v1-smoke",
+    "dataset_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "gold_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "note": "本报告为 L0/L1 评测账本计算结果；未取得麒麟 VM 实测前，Runtime / 正式达标结论必须标 UNVERIFIED。"
+  }
+}
+
+
+===== 4. C++ L0 稳定性测试 (test_d13c_stability.cpp) =====
+
+状态: 待 CI 验证 (ubuntu-22.04 + qtbase5-dev/qt5-qmake/build-essential)
+原因: CMake 不在本地 Windows 环境可用
+
+测试用例 (S1-S6 共 6 个):
+  S1 stability_replay_5rounds        - 主演示编排复跑 5 轮稳定性
+  S2 stop_reason_semantics           - PostTurn stop_reason 透传语义
+  S3 retry_semantics                 - retry_of_turn_id 透传 + 非 retry 必须为空
+  S4 deadline_timeout_client_block   - 客户端 5000ms deadline timeout fail-closed
+  S5 cross_session_isolation_replay  - 跨会话隔离复跑
+  S6 reset_clears_pending_no_writeback - Reset 清 pending 防 stale response 回写
+
+CI 构建命令:
+  cmake -S memory-client -B memory-client/build -DKYLIN_MEMORY_CLIENT_BUILD_QML_APP=OFF -DKYLIN_MEMORY_CLIENT_BUILD_TESTS=ON
+  cmake --build memory-client/build
+  cd memory-client/build && ctest --output-on-failure --verbose

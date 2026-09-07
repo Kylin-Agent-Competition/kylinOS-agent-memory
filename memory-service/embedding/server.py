@@ -141,8 +141,12 @@ class EmbeddingUDSServer:
         self._server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._server_sock.bind(self._socket_path)
         self._server_sock.listen(8)
-        self._running = True
-        self._stopped = False  # H3: restart 时重置停止标记
+        # Publish a new running lifecycle under the same lock used by connection
+        # registration and stop().  A connection accepted immediately before a
+        # concurrent stop must not be registered into the stopped lifecycle.
+        with self._conn_lock:
+            self._running = True
+            self._stopped = False  # H3: restart 时重置停止标记
         print(f"[server] listening on {self._socket_path}", flush=True)
 
         while self._running:
@@ -150,15 +154,26 @@ class EmbeddingUDSServer:
                 conn, _ = self._server_sock.accept()
             except OSError:
                 break
-            # 每连接独立线程：连接间不互相阻塞
-            t = threading.Thread(target=self._handle_conn, args=(conn,), daemon=True)
+            # 每连接独立线程：连接间不互相阻塞。accept() 返回后，stop()
+            # 可能已发布停止状态；registration/start 与状态检查必须处于同一
+            # 同步域，避免 stop() 返回后仍出现属于旧生命周期的新 worker。
             with self._conn_lock:
+                if not self._running or self._stopped:
+                    conn.close()
+                    break
+                t = threading.Thread(target=self._handle_conn, args=(conn,), daemon=True)
                 self._conn_threads.append(t)
-            t.start()
+                # Keep state check, registration, and start atomic with stop().
+                # Otherwise stop() can snapshot an unstarted thread and join()
+                # raises RuntimeError during the narrow startup window.
+                t.start()
 
     def stop(self) -> None:
-        self._running = False
-        self._stopped = True  # H3: 先置停止标记，拒绝后续业务请求
+        # Publish stopping under the connection lifecycle lock.  This orders
+        # stop() before any later accepted-connection registration.
+        with self._conn_lock:
+            self._running = False
+            self._stopped = True  # H3: 先置停止标记，拒绝后续业务请求
         if self._server_sock:
             try:
                 self._server_sock.close()

@@ -1,0 +1,40 @@
+{
+  "schema_version": "d14d-env-prepared/dependency_identity/v1",
+  "kind": "dependency-baseline",
+  "task": "D14D_ENV_PREPARED",
+  "record": "r3 ACTIVE",
+  "collected_at_utc": "2026-09-06T10:05Z",
+  "measured_on": "snapshot d14d-clean-base-20260906-r2 (VM Kylin-V11-2603-BTrack-Base), unprivileged SSH user",
+  "freeze_scope": "Host-observed canonical dependency baseline of the frozen r2 clean environment. SDK is FROZEN (identity matches the D14A contract). Runtime/model/subsystem/parser recorded as ENV_PREPARED host baseline; packaging-contract vendor-lock/sign-off stays HANDOFF_REQUIRED until formal D14D G0 / D Reviewer sign-off.",
+  "target_packages": {
+    "libkylin-coreai-embedding": { "version": "1.2.0.0-0k0.4", "arch": "amd64", "gate_status": "FROZEN" },
+    "kylin-ai-runtime": { "version": "1.2.0.4-0k0.1", "arch": "amd64", "gate_status": "ENV_PREPARED_HOST_BASELINE" },
+    "kylin-gte-base-model": { "version": "1.0.0.1-0k0.9", "arch": "all", "gate_status": "ENV_PREPARED_HOST_BASELINE" },
+    "kylin-ai-subsystem": { "version": "1.3.0.1-0k0.1", "arch": "amd64", "gate_status": "ENV_PREPARED_HOST_BASELINE" },
+    "kylin-ai-parser-extension": { "version": "1.2.0.0-0k0.4", "arch": "amd64", "gate_status": "ENV_PREPARED_HOST_BASELINE" }
+  },
+  "sdk_identity": {
+    "package_version": "1.2.0.0-0k0.4",
+    "canonical_so": "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0",
+    "soname_link": "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1",
+    "soname": "libkysdk-coreai-embedding.so.1",
+    "sha256": "028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48",
+    "size_bytes": 366624,
+    "matches_contract": true
+  },
+  "runtime_identity": {
+    "binary": "/usr/bin/kylin-ai-runtime",
+    "package_version": "1.2.0.4-0k0.1",
+    "sha256": "b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225",
+    "size_bytes": 3174000
+  },
+  "model_identity": {
+    "package_version": "kylin-gte-base-model 1.0.0.1-0k0.9",
+    "gte_base_onnx": "/usr/share/kylin-ai/model-repository/embd_gte-base_uint8-text/1/gte-base-multilingual-model_QUInt8.onnx",
+    "gte_base_onnx_sha256": "cef0fc76165ee5bb4f3da5ab6b9b6e6fdfdd278d3077f2db2d4a6cde4d4c32b1",
+    "canonical_artifact_sha256_full_list": "raw/envprep_deps_20260906_r3.log (gte-base canonical artifacts section)"
+  },
+  "installed_package_count": 2030,
+  "raw_evidence": [ "raw/envprep_deps_20260906_r3.log" ],
+  "limitations": "Values from dpkg metadata and readable filesystem hashes. Full 2030-package inventory in the same raw log; count re-captured without the earlier grep error."
+}

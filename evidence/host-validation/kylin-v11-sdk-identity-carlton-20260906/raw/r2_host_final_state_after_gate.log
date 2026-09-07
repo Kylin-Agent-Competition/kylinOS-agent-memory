@@ -1,0 +1,12 @@
+=== D14D R2 FINAL STATE AFTER FINAL CLEAN GATE ===
+COLLECTED_AT_UTC=2026-09-06T09:47:30Z
+=== VBOX VERSION ===
+7.2.8r173730
+=== VM IDENTITY ===
+name="Kylin-Desktop-V11-2603-SDK"
+UUID="23a31c42-63bb-482f-8856-e8a9f04176c8"
+VMState="poweroff"
+CurrentSnapshotName="d14d-clean-base-20260906-r2"
+CurrentSnapshotUUID="b2af169e-8bfc-46a8-9120-6348095eccf3"
+=== R2 SNAPSHOT ===
+                           Name: d14d-clean-base-20260906-r2 (UUID: b2af169e-8bfc-46a8-9120-6348095eccf3) *

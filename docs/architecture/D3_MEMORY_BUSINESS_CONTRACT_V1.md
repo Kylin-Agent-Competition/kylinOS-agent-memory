@@ -6,6 +6,7 @@
 - **作者轨道**：E（记忆业务、安全、数据集与业务指标）
 - **Reviewer 轨道**：D（IPC、SQLite、Outbox、虚拟机成品化与发布）
 - **冻结为团队基线条件**：**只有非作者 D Reviewer 批准且 PR 合并后，本文档方可视为团队冻结基线**。本文件的 `CANDIDATE_FOR_FREEZE` 状态仅表示 E 轨道单方面提出的 v1 候选语义集合，不代表已被团队批准、不代表 D3 Gate 通过、不代表任何宿主行为或实现能力已被验证。
+- **Canonical 候选关系声明（2026-09-03 增补）**：本文件继续保持 `CANDIDATE_FOR_FREEZE`；`KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` 当前同样保持 `CANDIDATE_FOR_FREEZE`，承载本轮 R-1..R-6 统一业务语义裁定候选。在非作者 D Reviewer 批准且对应 PR 合并、Canonical 完成后续团队冻结治理之前，不建立“Canonical 候选自动覆盖本文件”的团队级权威关系。本文件继续承载七类业务概念、对象关系、字段处置和业务规则。本声明**不改变**「十二、12.2 升级为团队冻结基线」的 8 项条件。
 - **用途**：集中承载 E 轨道在 Day3 可单方面冻结的记忆业务语义（七类业务概念、对象关系、字段含义、版本与生命周期规则），并对依赖 C/D/B/A 真实证据的宿主或实现事实保持 `DEFERRED`/`UNVERIFIED`/`PENDING_*`，不替其他轨道虚构实现契约。
 - **本文件不是**：SQLite 物理 Schema、Migration、Vector Collection Schema、C++ 结构体、IPC Payload、错误码或 Provider 接口。上述技术实现层事项见「九、不可冻结项清单」，全部 `DEFERRED` 或 `待对应轨道确认`。
 
@@ -171,7 +172,7 @@
 | `processing_status` | REVISED | 明确定位为**技术候选**，不视为已冻结业务枚举；状态机条件待 A/B/D |
 | `memory_type` | DEFERRED | 短/中/长分层边界与流转条件待 D（HD-SCHEMA-07）；`ephemeral` 业务必要性待 E |
 | `occurred_at` | FROZEN_BUSINESS_SEMANTIC | 宿主侧实际发生时间，`*禁止模型生成`；宿主时间字段`PENDING_C_CONFIRMATION` |
-| `captured_at` | FROZEN_BUSINESS_SEMANTIC | 捕获入库时间语义冻结；与 D2 `collected_at` 语义差异待 D/E 确认（HD-D2E-06 关联） |
+| `captured_at` | FROZEN_BUSINESS_SEMANTIC | 捕获入库时间语义属于 E 轨内部 `FROZEN_BUSINESS_SEMANTIC`；本轮 Canonical v1 R-1 **候选裁定**提出 `captured_at` 为 Canonical 事件捕获时间字段、`collected_at` 为 legacy transport alias，transport→business 必经 Adapter/Mapping；该统一裁定待 D Reviewer 确认并完成团队冻结，transport 层采纳/更名仍属 C/D 实现 handoff（TD-060） |
 | `session_id` | FROZEN_BUSINESS_SEMANTIC | 所属会话语义冻结；宿主会话结构`PENDING_C_CONFIRMATION` |
 | `raw_payload_ref` | FROZEN_BUSINESS_SEMANTIC | 原始载荷引用语义 + 敏感红线冻结；存储形态`PENDING_D_CONFIRMATION` |
 | `content_summary` | FROZEN_BUSINESS_SEMANTIC | 内容摘要 + 敏感过滤语义冻结 |
@@ -297,7 +298,7 @@
 
 | 派生对象 | 处置 | 理由 / 说明 |
 |----------|------|-------------|
-| 公共事件字段 14 项 | DEFERRED（语义候选沿用） | 与 Day1 Schema 语义一致者沿用为候选；`collected_at` vs `captured_at` 待 D/E；宿主/协议证据 `PENDING_C_CONFIRMATION`/`PENDING_D_CONFIRMATION` |
+| 公共事件字段 14 项 | DEFERRED（语义候选沿用） | 与 Day1 Schema 语义一致者沿用为候选；本轮 Canonical v1 R-1 **候选裁定**提出 `captured_at` canonical / `collected_at` legacy transport alias，该统一关系待 D Reviewer 确认并完成团队冻结；transport 层采纳仍为 `PENDING_D_CONFIRMATION`；宿主/协议证据保持 `PENDING_C_CONFIRMATION`/`PENDING_D_CONFIRMATION` |
 | `MemoryContext` 9 字段 | DEFERRED | `PENDING_C_CONFIRMATION` + `PENDING_D_CONFIRMATION`；`injection_status` 枚举、`context_version` 跨 Turn 复用待 C/D 决策 |
 | `ToolExecutionEvent` 12 字段 | DEFERRED | `PENDING_C_CONFIRMATION`；`cancelled`/`partial` 是否入正式候选待 E/B/D 复核（HD-D2E-05） |
 | `TurnFinalizedEvent` 7 字段 | DEFERRED | `PENDING_C_CONFIRMATION`；`stop_reason`/`finalization_reason` 枚举待 E 审 |
@@ -409,7 +410,7 @@
 
 ## 八、可冻结与不可冻结清单
 
-### 8.1 E 轨道可冻结（本文件已冻结，见第三、五、七章）
+### 8.1 E 轨内部业务语义状态（`FROZEN_BUSINESS_SEMANTIC`，不等于团队 `FROZEN`）
 
 - 七类业务概念的定义与边界；
 - 五原始业务对象全部字段的业务语义、来源规则与必填性候选；
@@ -447,9 +448,9 @@
 
 | 编号 | 冲突/差异描述 | 来源双方 | 当前选择（本契约立场） | 待决责任轨道 |
 |------|---------------|----------|------------------------|--------------|
-| C-01 | `expression_type` 取值：标注规范修订2（2026-07-31）已将 `expression_type` 归一为 `explicit`/`implicit` 二值，`candidate` 不作表达类型值；但 Schema §2.5 备注（约第 136 行）仍写「标注规范当前使用 explicit/implicit/candidate 三值」——**此描述已过时** | `datasets/ANNOTATION_GUIDELINE_V0.1.md`（修订2，§2.1）vs `docs/architecture/MEMORY_BUSINESS_SCHEMA_V0.1.md`（§2.5 备注） | 以标注规范修订2 为准：二值冻结；`candidate` 由 `memory_status=candidate` 表达 | E（Schema §2.5 过时描述修正属 Schema 文件维护任务，需独立任务卡，本任务不修改 Schema） |
+| C-01 | `expression_type` 取值：标注规范修订2（2026-07-31）已将 `expression_type` 归一为 `explicit`/`implicit` 二值，`candidate` 不作表达类型值；但 Schema §2.5 备注（约第 136 行）仍写「标注规范当前使用 explicit/implicit/candidate 三值」——**此描述已过时** | `datasets/ANNOTATION_GUIDELINE_V0.1.md`（修订2，§2.1）vs `docs/architecture/MEMORY_BUSINESS_SCHEMA_V0.1.md`（§2.5 备注） | 以标注规范修订2 为准：二值冻结；`candidate` 由 `memory_status=candidate` 表达。**处置（2026-09-03，day12-e-01）**：Schema §2.5 过时三值描述已由 day12-e-01 修正（见 `KMA_UNIFIED_DATA_FORMAT_FREEZE_V1.md` R-2）；HD-SCHEMA-14 的 SOP v1.1 导入后终审仍保留 | E（Schema §2.5 过时描述修正属 Schema 文件维护任务，需独立任务卡，本任务不修改 Schema） |
 | C-02 | HD-SCHEMA-14 归属：是 `MEMORY_BUSINESS_SCHEMA_V0.1.md` 第六章「未确认能力与人工决策待办」条目，**不是** `TECHNICAL_DEBT_REGISTER.md` 中的 TD 条目（后者仅 TD-001..004） | Schema 第六章 vs 技术债登记表 | 引用时区分「Schema 待办」与「正式技术债登记」；本文件仅在 FREEZE_BLOCKERS 引用 HD-SCHEMA-14 为 Schema 待办 | E（文档维护） |
-| C-03 | `captured_at` vs `collected_at`：Day1 Schema 用 `captured_at`（事件捕获入库时间），D2 检查表公共字段用 `collected_at`（事件捕获入库时间），两词语义是否等价未定 | Schema §3.1 vs D2 检查表第十一章字段差异记录区 | 语义差异标记待 D/E 确认；本文件不冻结等价结论 | D/E（HD-D2E-06 关联） |
+| C-03 | `captured_at` vs `collected_at`：Day1 Schema 用 `captured_at`（事件捕获入库时间），D2 检查表公共字段用 `collected_at`（事件捕获入库时间），两词语义是否等价未定 | Schema §3.1 vs D2 检查表第十一章字段差异记录区 | **业务裁决候选（2026-09-03，Canonical v1 R-1）**：本轮 E 轨提出 `captured_at` 为 Canonical 事件捕获时间字段、`collected_at` 为 legacy transport alias，业务语义一一对应，transport→business 必经 Adapter/Mapping；该裁决候选待 D Reviewer 确认并完成团队冻结。**C/D 实现 handoff 显式保留**：ADR-010 IPC metadata、D2 检查表候选公共字段、A Provider 草稿的 transport 层 `collected_at` 采纳/更名方案须书面冻结（不修改 `protocol_version`），登记 TD-060 | C/D（实现 handoff）+ E（语义候选已提出，待 D Reviewer 确认） |
 | C-04 | `execution_status` 取值集合：标注规范 §2.3 为 `success`/`partial`/`failure`/`timeout` 四值；D2 检查表第五章新增 `cancelled` 候选；G0-E-07 验证 `cancelled`；`partial` 与 `failure` 业务边界见检查表第八节 | 标注规范 §2.3 vs D2 检查表第五/八章 vs 案例集 G0-E-07/09 | `cancelled`/`partial` 是否入 D3 正式候选待 E/B/D 复核（HD-D2E-05）；本文件按候选规则描述，不冻结取值集合 | E/B/D（HD-D2E-05） |
 | C-05 | A Provider 契约草稿字段简化：`TurnFinalizedEvent` dataclass 字段（session_id/user_text/assistant_text/tool_results/source 三值/occurred_at/collected_at）较 Schema 分层显著简化；`PreferenceCandidate.scope` 用 `global`/`session`/`project` 与 Schema `preference_scope`（global/topic/tool/session/time_window）不一致 | `docs/day3/06_provider_contract_v1.md` vs Schema §3.2/§2.9 | 该草稿为**前向草稿、非冻结契约**；本文件以 Schema 业务语义为冻结基准，不引用草稿字段作为已确认结构 | A（实现字段对齐）；C/D/E（待架构文档补齐后复核） |
 | C-06 | D3-B 检索契约（08/09）状态：08 标注「D3-B 冻结候选，PR #20 Review 返工中」，09 状态 `REWORK`；`DEFERRED_CROSS_TRACK` 项（memory_status 检索集合、sensitivity 可见范围、full reset 授权等）属 E 待决 | `docs/day3/08_vector_retrieval_contract_v1.md` + `09_retrieval_contract_review_matrix.md` | 本文件不把 08/09 当作已冻结事实引用，仅登记 E 待决输入与阻断状态 | B（PR #20 返工）；D/E（跨轨待决） |
@@ -493,7 +494,7 @@
 
 ### 10.3 小结：可冻结 vs 不可冻结
 
-- **可冻结（本文件已冻结）**：E 轨道负责的业务语义、对象关系、字段含义、版本与生命周期规则、Tool 结果可信度业务原则、禁止模型生成清单、敏感载荷红线——这些不依赖宿主/实现证据，属 E 单方面可冻结范围。
+- **E 轨内部已收口语义（`FROZEN_BUSINESS_SEMANTIC`）**：E 轨道负责的业务语义、对象关系、字段含义、版本与生命周期规则、Tool 结果可信度业务原则、禁止模型生成清单、敏感载荷红线可在 E 轨内部标记为 `FROZEN_BUSINESS_SEMANTIC`；该标记仅表示 E 轨内部语义已收口，**不等于团队级 `FROZEN`，也不绕过 §12.2 的 Reviewer + merge 冻结门槛**。
 - **不可冻结（保持 DEFERRED/UNVERIFIED/PENDING_*）**：C 宿主真实事件结构、D IPC 协议/持久化/KYSEC/回退、B 检索阈值/Vector 布局、A Embedding 实现细节、基线 DOCX 导入——上述实现事实必须由对应轨道取证/决策后才能冻结，本文件不代为闭合。
 
 ---
@@ -520,6 +521,7 @@
 | 版本 | 日期 | 变更说明 | 作者 |
 |------|------|----------|------|
 | v1 | 2026-08-09 | 候选初稿：基于 Day1 Schema（修订2）、Day1 标注规范（修订2）、Day2 冻结前检查表、Day2 业务验收案例集、Day2 E Gate0 业务预审报告与当前 main 可核验 A/B/C/D 材料，冻结 E 轨道业务语义 v1 候选（七类业务概念、对象关系、字段处置、业务规则）；登记 FREEZE_BLOCKERS 与跨文档冲突；性能指标保持 `UNVERIFIED`。状态 `CANDIDATE_FOR_FREEZE`。 | E 轨道 |
+| v1（修订1） | 2026-09-03 | Canonical 业务语义候选收口（day12-e-01）：头部增补 Canonical 候选关系声明；§5.1 `captured_at`、§5.7 公共事件字段与 C-03 同步 R-1 候选裁定（`captured_at` canonical / `collected_at` legacy transport alias），并显式保留 C/D 实现 handoff TD-060；C-01 追加 Schema §2.5 过时描述处置。Canonical v1 与本文件当前均保持 `CANDIDATE_FOR_FREEZE`，不在 Reviewer+merge Gate 前建立未审核候选覆盖关系。 | E 轨道 |
 
 ### 12.2 升级为团队冻结基线（v1.0 冻结基线）的条件
 

@@ -198,7 +198,9 @@ def test_memory_entry_soft_delete_fts_sync(engine):
             memory_entries.select().where(memory_entries.c.id == eid)
         ).mappings().first()
         assert row["is_deleted"] == 1
-        assert row["version"] == 2
+        # ADR-017：内容/索引版本保持不变；业务写入的 CAS token 是 row_revision。
+        assert row["version"] == 1
+        assert row["row_revision"] == 2
 
 
 def test_memory_entry_optimistic_lock_conflict(engine):
@@ -345,6 +347,32 @@ def test_cleanup_expired_idempotency(engine):
             repo.idempotency_cache.select().where(repo.idempotency_cache.c.idempotency_key == "fresh")
         ).first()
         assert remaining is not None
+
+
+def test_cleanup_expired_idempotency_respects_limit_and_keeps_fresh_rows(engine):
+    """清理 DAO 只删除最早到期的限定行，不依赖 SQLite DELETE...LIMIT 扩展。"""
+    now = datetime.now(timezone.utc)
+    with engine.begin() as conn:
+        for key, offset_minutes in (("expired-3", -3), ("expired-2", -2), ("expired-1", -1)):
+            repo.write_idempotency_cache(
+                conn, user_id="u1", session_id="s1", idempotency_key=key, response={}
+            )
+            conn.execute(
+                repo.idempotency_cache.update()
+                .where(repo.idempotency_cache.c.idempotency_key == key)
+                .values(expires_at=(now + timedelta(minutes=offset_minutes)).isoformat())
+            )
+        repo.write_idempotency_cache(
+            conn, user_id="u1", session_id="s1", idempotency_key="fresh", response={}
+        )
+
+    with engine.begin() as conn:
+        assert repo.cleanup_expired_idempotency(conn, now_iso=now.isoformat(), limit=2) == 2
+    with engine.connect() as conn:
+        keys = set(conn.execute(
+            repo.idempotency_cache.select().with_only_columns(repo.idempotency_cache.c.idempotency_key)
+        ).scalars())
+    assert keys == {"expired-1", "fresh"}
 
 
 # ── 用户隔离 ──

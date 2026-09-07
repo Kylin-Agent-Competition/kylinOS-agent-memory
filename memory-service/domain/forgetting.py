@@ -69,7 +69,7 @@ class ForgetPlan(BaseModel):
     target_time_range: Optional[NonEmptyStr] = None  # conditional: forget_mode=time_window 必填
     executed_at: Optional[AwareDatetime] = None
     affected_count: Optional[int] = Field(default=None, ge=0)  # *禁止模型生成
-    rollback_plan_id: Optional[str] = None  # 回滚计划引用（事务可行性待 D）
+    rollback_plan_id: Optional[NonEmptyStr] = None  # 回滚计划引用（事务可行性待 D），存在时须非空非纯空白
 
     @field_validator(
         "target_selector",

@@ -1,0 +1,15 @@
+{
+  "completed_at_utc": "2026-09-05T09:02:32.337619+00:00",
+  "duration_seconds": 2.841,
+  "endpoint": "127.0.0.1:2222",
+  "exit_code": 0,
+  "log_file": "d13d_candidate_worktree_20260905_0910.log",
+  "log_sha256": "52dbedc30757873302f2829f080ec053e998630adebcb81002f490a39403e15f",
+  "mode": "command",
+  "requested_command": "set -eu; test ! -e /home/kylin-agent/kylinOS-agent-memory-d13d-7242935; sha256sum /home/kylin-agent/d13d-artifacts/kylin-memory-d13d-prep.bundle; git clone /home/kylin-agent/d13d-artifacts/kylin-memory-d13d-prep.bundle /home/kylin-agent/kylinOS-agent-memory-d13d-7242935; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 checkout --detach 7242935bee5f230cee0535d5e28dbe1e60a302f6; printf \"candidate_head=\"; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 rev-parse HEAD; printf \"candidate_dirty=\"; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 status --porcelain | wc -l; /home/kylin-agent/d4d-venv/bin/python -c \"import alembic,pydantic,sqlalchemy; print(alembic.__version__, pydantic.__version__, sqlalchemy.__version__)\"",
+  "run_id": "d13d_candidate_worktree_20260905_0910",
+  "started_at_utc": "2026-09-05T09:02:29.496128+00:00",
+  "status": "PASS",
+  "timed_out": false,
+  "user": "kylin-agent"
+}

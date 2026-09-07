@@ -12,14 +12,16 @@
 
 namespace kylin::memory::client::v1 {
 
+// FRZ-IPC-006 §6.1：客户端发送 envelope 默认死线（与 MemoryClient 内部默认一致）。
+// 定义移到命名空间级，头文件 extern 声明供 L0 测试做配置断言（R5）。
+const int kDefaultDeadlineMs = 5000;
+
 namespace {
 
 // D5-C MemoryContext 标记前缀 — 用于 UI/DB 污染检测。
 constexpr const char* kContextMarkerPrefix = "[MEMORY-CONTEXT]";
 constexpr const char* kContextSeparator = "\n\n---\n\n";
 
-// FRZ-IPC-006 §6.1：客户端发送 envelope 默认死线（与 MemoryClient 内部常量保持一致）。
-constexpr int kDefaultDeadlineMs = 5000;
 constexpr const char* kErrClientTimeout = "ERR_CLIENT_TIMEOUT";
 
 }  // namespace
@@ -38,6 +40,14 @@ MemoryViewModel::MemoryViewModel(QObject* parent)
             this, &MemoryViewModel::onRequestFailed);
     connect(&client_, &MemoryClient::connectionError,
             this, &MemoryViewModel::onConnectionError);
+    // D12-C：重连相关外推信号
+    connect(&client_, &MemoryClient::reconnectAttemptsChanged,
+            this, &MemoryViewModel::reconnectAttemptsChanged);
+    connect(&client_, &MemoryClient::autoReconnectEnabledChanged,
+            this, &MemoryViewModel::autoReconnectEnabledChanged);
+    // D12-C MEDIUM-02：转发 reconnectFinished（一次事件驱动 UI toast）
+    connect(&client_, &MemoryClient::reconnectFinished,
+            this, &MemoryViewModel::reconnectFinished);
 }
 
 MemoryViewModel::~MemoryViewModel()
@@ -70,14 +80,35 @@ QString MemoryViewModel::connectionState() const
     case MemoryClient::ConnectionState::Connecting:   return QStringLiteral("connecting");
     case MemoryClient::ConnectionState::Connected:    return QStringLiteral("connected");
     case MemoryClient::ConnectionState::Closing:      return QStringLiteral("closing");
+    case MemoryClient::ConnectionState::Reconnecting: return QStringLiteral("reconnecting");
     }
     return QStringLiteral("unknown");
 }
 
 QString MemoryViewModel::lastError() const { return client_.lastError(); }
+int MemoryViewModel::reconnectAttempts() const { return client_.reconnectAttempts(); }
+bool MemoryViewModel::autoReconnectEnabled() const { return client_.autoReconnectEnabled(); }
+void MemoryViewModel::setAutoReconnectEnabled(bool v)
+{
+    if (v != client_.autoReconnectEnabled()) {
+        client_.setAutoReconnectEnabled(v);
+        emit autoReconnectEnabledChanged();
+    }
+}
 
 void MemoryViewModel::connectToService() { client_.connectToService(); }
-void MemoryViewModel::disconnectFromService() { client_.disconnectFromService(); }
+void MemoryViewModel::disconnectFromService()
+{
+    // D12-C：Stop 语义 —— 断开前重置所有 pipeline stage/busy
+    resetAllPipelines();
+    client_.disconnectFromService();
+}
+// D12-C：Stop + Cleanup + Connect（UI "Retry" 按钮入口）。
+void MemoryViewModel::retryConnectService()
+{
+    resetAllPipelines();
+    client_.retryConnect();
+}
 
 void MemoryViewModel::sendHealth()
 {
@@ -392,7 +423,9 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
 
     // ADR-010 IPC 映射契约：payload 分为 metadata（嵌套对象）+ 事件字段（顶层）。
     // metadata 包含 schema_version / event_id / user_id / session_id / turn_id /
-    // idempotency_key / trace_id? / occurred_at / collected_at / source_reference。
+    // idempotency_key / trace_id? / occurred_at / captured_at / source_reference。
+    // KMA R-1 (TD-060)：业务层统一使用 captured_at；collected_at 作为 transport
+    // legacy alias 仅在需要时由 Adapter 层接受读取。
     // 事件层包含 is_final / finalized_at / final_message_id? /
     // finalization_reason? / stop_reason? / tool_call_ids?。
     QJsonObject metadata{
@@ -403,14 +436,22 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
         {QStringLiteral("turn_id"), turnId},
         {QStringLiteral("idempotency_key"), idempotencyKey},
         {QStringLiteral("occurred_at"), now},
+        // KMA v1 status: CANDIDATE_FOR_FREEZE (see KMA_UNIFIED_DATA_FORMAT_FREEZE_V1 §0 / §R-1
+        // handoff TD-060). R-1 explicitly says the transport-side `collected_at`
+        // alias SHALL stay in place until C/D write-freeze TD-060. This PR only
+        // introduces an **Adapter-Window candidate**: it emits BOTH names so
+        //   - existing ADR-010 IPC transport consumers continue reading
+        //     `collected_at` without change, and
+        //   - downstream E Canonical Adapter can start consuming candidate
+        //     `captured_at` in production-fail-closed mode.
+        // Legacy `collected_at` MUST be removed ONLY after TD-060 is write-frozen
+        // by C/D track owners AND KMA_UNIFIED_DATA_FORMAT_FREEZE_V1 is upgraded
+        // to FROZEN via the mandated governance PR (see §0 / §R-1 handoff / §end).
         {QStringLiteral("collected_at"), now},
+        {QStringLiteral("captured_at"), now},
         {QStringLiteral("source_reference"), srcRef},
     };
     if (!traceId.isEmpty()) metadata.insert(QStringLiteral("trace_id"), traceId);
-    // TB-D6C-04：finalization_reason=retry 时必须携带 retry_of_turn_id，
-    // 且 retry_of_turn_id != turn_id（调用方保证）。
-    if (!retryOfTurnId.isEmpty())
-        metadata.insert(QStringLiteral("retry_of_turn_id"), retryOfTurnId);
 
     QJsonObject event;
     event.insert(QStringLiteral("metadata"), metadata);
@@ -419,6 +460,10 @@ QJsonObject MemoryViewModel::buildTurnFinalizedEventJson(
     if (!finalMessageId.isEmpty()) event.insert(QStringLiteral("final_message_id"), finalMessageId);
     if (!finalizationReason.isEmpty()) event.insert(QStringLiteral("finalization_reason"), finalizationReason);
     if (!stopReason.isEmpty())     event.insert(QStringLiteral("stop_reason"), stopReason);
+    // DRIFT-B fix: retry_of_turn_id is a TurnFinalizedEvent field (top-level),
+    // NOT an EventMetadata field. Moved from metadata to event per contract parser.
+    if (!retryOfTurnId.isEmpty())
+        event.insert(QStringLiteral("retry_of_turn_id"), retryOfTurnId);
     event.insert(QStringLiteral("tool_call_ids"), QJsonArray{});
 
     cachedTurnEventKey_ = key;
@@ -437,7 +482,16 @@ QJsonObject MemoryViewModel::buildEventMetadata(
     const QString& sourceReference) const
 {
     // 共享 metadata 构造：对齐 ADR-010 IPC 映射契约的 metadata 嵌套对象。
-    // trace_id 若提供则写入；occurred_at / collected_at 取同一 UTC 毫秒时间戳。
+    // trace_id 若提供则写入；occurred_at 与时间戳字段取同一 UTC 毫秒时间戳。
+    // KMA R-1 (TD-060) — 当前 KMA_UNIFIED_DATA_FORMAT_FREEZE_V1 status ==
+    // CANDIDATE_FOR_FREEZE → transport 仍须保留 legacy `collected_at`
+    // （见 R-1 handoff + §责任分工 TD-060）。
+    // 本 PR 作为 Adapter Window candidate 双名出站：
+    //   - `collected_at`：ADR-010 / TD-039 既有 IPC transport 契约不变；
+    //   - `captured_at`   ：E Canonical Adapter candidate 消费名；
+    // 等 C/D 书面冻结 TD-060 + 文档升级到 FROZEN 后，再删除 legacy alias。
+    // contracts 解析层已对 captured_at/collected_at 做双名接受（INPUT），
+    // 并 canonical wins 的类型校验逻辑；OUTPUT 侧这里双写。
     const QString now = nowIso8601UtcMs();
     QJsonObject metadata{
         {QStringLiteral("schema_version"), QStringLiteral("1.0")},
@@ -449,6 +503,7 @@ QJsonObject MemoryViewModel::buildEventMetadata(
         {QStringLiteral("idempotency_key"), idempotencyKey},
         {QStringLiteral("occurred_at"), now},
         {QStringLiteral("collected_at"), now},
+        {QStringLiteral("captured_at"), now},
         {QStringLiteral("source_reference"), sourceReference},
     };
     if (!traceId.isEmpty()) metadata.insert(QStringLiteral("trace_id"), traceId);
@@ -471,6 +526,12 @@ QJsonObject MemoryViewModel::buildToolExecutionEventJson(
 {
     // 对齐 contracts/examples/tool_execution_event.v1.json（D3 已冻结）。
     // rollback_status 默认 not_applicable；rollbackRequired=true 时为 required。
+    // DRIFT-002（E 冻结 v1 R-6 / 漂移方案 §4 DRIFT-002/003）：
+    //   Host DTO 层保留 execution_status（success/partial/failure/...），
+    //   同时在事件内显式附带 Canonical 字段 source_business_status，
+    //   并将 Host 词形 failure 映射为 Canonical failed。
+    //   其余词形 success→success、partial→partial、cancelled→cancelled、
+    //   timeout→timeout 保持一致。
     const QString idempotencyKey = QStringLiteral("tool-execution:%1:%2")
                                        .arg(sessionId, toolCallId);
     const QString srcRef = QStringLiteral("ref:tool-event:%1").arg(toolCallId);
@@ -478,6 +539,12 @@ QJsonObject MemoryViewModel::buildToolExecutionEventJson(
     QJsonObject metadata = buildEventMetadata(
         userId, sessionId, turnId, /*traceId=*/QStringLiteral(""),
         idempotencyKey, srcRef);
+
+    // KMA R-6 / DRIFT-003: Host status `failure` → Canonical business `failed`.
+    QString canonicalBusinessStatus = executionStatus;
+    if (canonicalBusinessStatus == QStringLiteral("failure")) {
+        canonicalBusinessStatus = QStringLiteral("failed");
+    }
 
     const QString now = nowIso8601UtcMs();
     QJsonObject event;
@@ -488,6 +555,8 @@ QJsonObject MemoryViewModel::buildToolExecutionEventJson(
     event.insert(QStringLiteral("started_at"), now);
     event.insert(QStringLiteral("finished_at"), now);
     event.insert(QStringLiteral("execution_status"), executionStatus);
+    // Canonical business result field (per KMA drift freeze R-6).
+    event.insert(QStringLiteral("source_business_status"), canonicalBusinessStatus);
     if (!resultRef.isEmpty()) event.insert(QStringLiteral("result_ref"), resultRef);
     if (!errorType.isEmpty()) event.insert(QStringLiteral("error_type"), errorType);
     if (!errorMessageSafe.isEmpty())
@@ -569,13 +638,45 @@ void MemoryViewModel::runManualConfigPipeline(
         /*traceId=*/QStringLiteral(""), idempotencyKey, srcRef);
 
     QJsonObject config;
+    // KMA DRIFT-007 dual-write contract (review HIGH-01):
+    // Legacy host-DTO consumers read `config.scope` (D3 manual_config_event.v1.json
+    // frozen short name). The same payload also carries two Canonical fields:
+    //   - `config_kind`        = raw host `scope` value (Semantic layer = what
+    //                            kind of config this is, e.g. "preference").
+    //   - `preference_scope`   = Canonical Preference scope (global/topic/tool/
+    //                            session/time_window per KMA R-3 §2.9) — emitted
+    //                            only when `config_kind == "preference"`.
+    // Keeping the legacy short name `scope` alive lets the existing host DTO
+    // consumer (Adapter legacy reader + server handlers.py `scope` accessor)
+    // continue working without code changes during the TD-060 adapter window.
     config.insert(QStringLiteral("scope"), scope);
+    // DRIFT-007: legacy `scope` is "kind of config" (e.g. "preference"), not the
+    // Canonical Preference `preference_scope` (作用域五值 global/topic/tool/
+    // session/time_window — 见 KMA 冻结 R-3，MEMORY_BUSINESS_SCHEMA_V0.1 §2.9）。
+    // 拆分为 config_kind + 当 config_kind==preference 时设置 preference_scope
+    // （当前 Client Demo 默认作用域 global；真实宿主若提供具体作用域则填入）。
+    config.insert(QStringLiteral("config_kind"), scope);
+    if (scope == QStringLiteral("preference")) {
+        // Demo/Prototype 默认作用域 global（待真实宿主接入后回填）。
+        config.insert(QStringLiteral("preference_scope"), QStringLiteral("global"));
+    }
+    // DRIFT-008: Canonical preference_key / preference_value 命名。
+    config.insert(QStringLiteral("preference_key"), key);
+    config.insert(QStringLiteral("preference_value"), value);
+    // 同时保留 host DTO 层 key/value 短名（下游 Adapter 通过双名做 legacy_read）。
     config.insert(QStringLiteral("key"), key);
     config.insert(QStringLiteral("value"), value);
     config.insert(QStringLiteral("is_temporary"), isTemporary);
     config.insert(QStringLiteral("should_persist"), shouldPersist);
+    // DRIFT-009: Canonical confidence_score（strict [0,1]）；同时保留候选层
+    // confidence 别名。
     config.insert(QStringLiteral("confidence"), confidence);
+    config.insert(QStringLiteral("confidence_score"), confidence);
+    // KMA R-5: Canonical 使用 sensitivity（none/low/medium/high/critical）；
+    // sensitivity_level 仅为注解层 1:1 alias。两者并行输出保证 legacy
+    // reader 仍可读；Canonical 层以 sensitivity 为真源。
     config.insert(QStringLiteral("sensitivity_level"), sensitivityLevel);
+    config.insert(QStringLiteral("sensitivity"), sensitivityLevel.trimmed().toLower());
     // TB-D6C-08：与 Behavior 对称，候选手动配置事件也标记 PENDING_C_CONFIRMATION
     // （C 轨未冻结 manual.config.ingest → 正式 schema / SourceType）。
     config.insert(QStringLiteral("mapping_status"),
@@ -630,7 +731,30 @@ void MemoryViewModel::runBehaviorPipeline(
     behavior.insert(QStringLiteral("behavior_kind"), behaviorKind);
     behavior.insert(QStringLiteral("observed_action"), observedAction);
     behavior.insert(QStringLiteral("context_ref"), contextRef);
+    // DRIFT-011: Behavior 的 `actor` 是角色标签（user/agent/system），
+    // 不得冒充 Canonical actor_id（可信实体 ID）。拆分：
+    //   actor_role = user/agent/system（辅助标签）；
+    //   actor_id  = 可信宿主实体 ID（当前 Demo 缺真实注入，显式标注缺失，
+    //              下游 Adapter 在 production 模式下 fail-closed）。
+    // Adapter Window 策略：legacy `actor` 字段保留（零破坏既有 consumer），
+    // 等 TD-060 C/D 书面冻结后才在 follow-on PR 删除。
     behavior.insert(QStringLiteral("actor"), actor);
+    behavior.insert(QStringLiteral("actor_role"), actor);
+    behavior.insert(QStringLiteral("actor_id"), QStringLiteral("PENDING_HOST_IDENTITY"));
+    // DRIFT-004: 能确定的 source_type 显式投影，其余保持
+    // PENDING_C_CONFIRMATION（E 冻结提案 v0.2 §三.3 已提请 E 裁决）：
+    //   user_message / agent_response / system_message → chat；
+    //   user_action（DRIFT-011-EXT / 提案 v0.2 §三.2）→ 待定，默认
+    //     建议归入 manual_config（待 E 裁决，先标 PENDING_E_DECISION）。
+    QString sourceType = QStringLiteral("PENDING_C_CONFIRMATION");
+    if (behaviorKind == QStringLiteral("user_message")
+        || behaviorKind == QStringLiteral("agent_response")
+        || behaviorKind == QStringLiteral("system_message")) {
+        sourceType = QStringLiteral("chat");
+    } else if (behaviorKind == QStringLiteral("user_action")) {
+        sourceType = QStringLiteral("PENDING_E_DECISION_D021_user_action");
+    }
+    behavior.insert(QStringLiteral("source_type_projected"), sourceType);
     behavior.insert(QStringLiteral("occurred_at"), metaOccurredAt);
     // C 轨未冻结 behavior → MemorySourceEvent.source_type 映射；
     // 显式注入 PENDING_C_CONFIRMATION 字段，不擅自新增 SourceType 枚举。
@@ -661,6 +785,17 @@ void MemoryViewModel::runBehaviorPipeline(
 void MemoryViewModel::onConnectionStateChanged()
 {
     emit connectionStateChanged();
+    emit reconnectAttemptsChanged();
+    // D12-C：连接中断 → 所有 pipeline 立即显式 busy=false / stage=idle，
+    //        保证空状态下 UI 不挂起在 "querying/sending" 的假 busy 状态。
+    const QString s = connectionState();
+    if (s == QStringLiteral("disconnected") || s == QStringLiteral("closing")) {
+        if (preChatBusy())    setPreChatStage(QStringLiteral("idle"));
+        if (postTurnBusy())   setPostTurnStage(QStringLiteral("idle"));
+        // busy flags fail-closed
+        setPreChatBusy(false);
+        setPostTurnBusy(false);
+    }
 }
 
 void MemoryViewModel::onLastErrorChanged()
@@ -2067,6 +2202,37 @@ void MemoryViewModel::runForgetExecutePipeline(
         setForgetStage(QStringLiteral("failed"));
         return;
     }
+    // D10 v0.3 凭据链校验：Execute 传入的 confirmationToken 必须与 Preview 返回
+    // 的 forgetConfirmationCredential_ 完全一致；不匹配 / 缺失 = fail-closed。
+    // 该校验是客户端侧第一道门禁（真实后端会二次校验），确保 Step 5 Preview→Execute
+    // 形成闭环，杜绝硬编码 token 绕过。
+    if (forgetConfirmationCredential_.isEmpty()) {
+        setForgetExecuteError(QStringLiteral(
+            "forget.execute: prior forget.preview did not return confirmation_credential."));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+    if (confirmationToken != forgetConfirmationCredential_) {
+        setForgetExecuteError(QStringLiteral(
+            "forget.execute: confirmation_token does not match the preview credential."
+            " (Credential replay / mismatch is fail-closed.)"));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
+    // HIGH-01: TTL 过期 fail-closed（客户端侧门禁 + 服务端权威校验）。
+    // deadline=0 代表未签发有效 credential（理论上已被前面 credential 非空检查挡住）。
+    // 当前时刻 >= deadline 视为过期：不发送 forget.execute，直接 failed，
+    // 并清空过期的 credential（不可重用于后续请求）。
+    if (forgetCredentialDeadlineMs_ > 0
+        && QDateTime::currentMSecsSinceEpoch() >= forgetCredentialDeadlineMs_) {
+        setForgetConfirmationCredential({});
+        forgetCredentialDeadlineMs_ = 0;
+        setForgetExecuteError(QStringLiteral(
+            "forget.execute: confirmation_credential has expired (TTL exceeded)."
+            " Client-side TTL gate: fail-closed, forget.execute NOT sent."));
+        setForgetStage(QStringLiteral("failed"));
+        return;
+    }
 
     QJsonObject payload;
     payload.insert(QStringLiteral("schema_version"), QStringLiteral("1.0"));
@@ -2223,6 +2389,9 @@ void MemoryViewModel::handleForgetExecuteResponse(
     // 正常完成：executing → completed（§三.3 v0.2 冻结状态机）
     setForgetExecuteBusy(false);
     setForgetStage(QStringLiteral("completed"));
+    // 消费一次性凭据：成功 Execute 后立即清空，杜绝重放攻击（D10 v0.3 §F-2）。
+    setForgetConfirmationCredential({});
+    forgetCredentialDeadlineMs_ = 0;  // HIGH-01: 消费后 deadline 同步清零
     emit forgetHasMissingDeletesChanged();
 }
 
@@ -2244,6 +2413,24 @@ void MemoryViewModel::projectForgetPreview(const QJsonObject& data)
     // credential_ttl_s：确认凭据 TTL（默认 300s = 5 分钟，可调参数 TD-D）。
     const int ttl = data.value(QStringLiteral("credential_ttl_s")).toInt(300);
     setForgetCredentialTtlSeconds(ttl < 0 ? 300 : ttl);
+
+    // confirmation_credential：Preview 生成的一次性确认凭据（D10 v0.3 冻结）。
+    // 绑定 user_id + forget_plan_id + selection_hash，具备 TTL；Execute 必须
+    // 传入完全匹配值，错误/过期/重放必须 fail-closed。
+    // HIGH-01: 记录 wall-clock deadline (ms since epoch)。
+    // TD-058: 此处使用 wall-clock（QDateTime::currentMSecsSinceEpoch）而非
+    // monotonic clock；系统时钟被恶意或误操作回拨时，过期凭据可能被误判为仍
+    // 有效。缓解/关闭路径见 docs/technical-debt/TECHNICAL_DEBT_REGISTER.md TD-058。
+    const QString cred = data.value(QStringLiteral("confirmation_credential")).toString();
+    if (!cred.isEmpty()) {
+        setForgetConfirmationCredential(cred);
+        const qint64 ttlMs = static_cast<qint64>(forgetCredentialTtlSeconds_ > 0
+                                 ? forgetCredentialTtlSeconds_ : 0)
+                            * 1000;
+        forgetCredentialDeadlineMs_ = QDateTime::currentMSecsSinceEpoch() + ttlMs;
+    } else {
+        forgetCredentialDeadlineMs_ = 0;
+    }
 
     // resolved_target_ids：预览命中目标 ID 切片（仅 ID；不含正文；含 cascade 扩展目标）。
     const QJsonArray ids = data.value(
@@ -2296,6 +2483,8 @@ void MemoryViewModel::resetForgetProjection()
     setForgetSelectionHash({});
     setForgetAffectedCount(0);
     setForgetCredentialTtlSeconds(0);
+    setForgetConfirmationCredential({});  // 预览投影的一部分：新 Preview 会重置
+    forgetCredentialDeadlineMs_ = 0;      // HIGH-01: 重置 credential deadline
     setForgetResolvedTargets({});
     setForgetMode({});
     setForgetTargetType({});
@@ -2308,6 +2497,85 @@ void MemoryViewModel::resetForgetProjection()
     setForgetSelectorCleared(false);
     // crossUserBlocked：新请求前清零（防止上一次拒绝残留影响验收）。
     setForgetCrossUserBlocked(false);
+}
+
+// ── D11 编排器：单项 reset × 5 + 全量 reset ─────────────────────────────
+
+void MemoryViewModel::resetPostTurnPipeline()
+{
+    if (!pendingPostTurnRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingPostTurnRequestId_);
+        pendingPostTurnRequestId_.clear();
+    }
+    setPostTurnBusy(false);
+    setPostTurnStage(QStringLiteral("idle"));
+    setLastTurnFinalizedEvent({});
+}
+
+void MemoryViewModel::resetToolPipeline()
+{
+    // MEDIUM-01 修复：与 resetPreChatPipeline/resetPostTurnPipeline 一致，
+    // 先取消 in-flight 请求的 deadline timer + 清除 pending request id，
+    // 再清 busy/stage/projection。否则 late response 仍命中 pendingToolRequestId_
+    // 并通过 onResponseReceived 路由回写 stage=sent，导致"重置"不稳定。
+    if (!pendingToolRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingToolRequestId_);
+        pendingToolRequestId_.clear();
+    }
+    setToolBusy(false);
+    setToolStage(QStringLiteral("idle"));
+    setLastToolEvent({});
+}
+
+void MemoryViewModel::resetConflictComparePipeline()
+{
+    // MEDIUM-01 修复：同 resetToolPipeline，取消 in-flight + 清 pending 防回写。
+    if (!pendingConflictCompareRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingConflictCompareRequestId_);
+        pendingConflictCompareRequestId_.clear();
+    }
+    setConflictCompareBusy(false);
+    setConflictCompareStage(QStringLiteral("idle"));
+    setConflictCandidates({});
+    setConflictCompareError({});
+}
+
+void MemoryViewModel::resetLifecycleStatusPipeline()
+{
+    // MEDIUM-01 修复：同 resetToolPipeline，取消 in-flight + 清 pending 防回写。
+    if (!pendingLifecycleStatusRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingLifecycleStatusRequestId_);
+        pendingLifecycleStatusRequestId_.clear();
+    }
+    setLifecycleStatusBusy(false);
+    setLifecycleStatusStage(QStringLiteral("idle"));
+    setLifecycleItems({});
+    setLifecycleStatusError({});
+}
+
+void MemoryViewModel::resetAllPipelines()
+{
+    // D5 两路
+    resetPreChatPipeline();
+    resetPostTurnPipeline();
+    // D6 Tool
+    resetToolPipeline();
+    // D8 两路
+    resetConflictComparePipeline();
+    resetLifecycleStatusPipeline();
+    // D10 遗忘：forgetStage → idle（注意：forget*Error 故意保留，与契约一致）
+    resetForgetProjection();
+    if (!pendingForgetPreviewRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingForgetPreviewRequestId_);
+        pendingForgetPreviewRequestId_.clear();
+    }
+    if (!pendingForgetExecuteRequestId_.isEmpty()) {
+        cancelDeadlineTimerFor(pendingForgetExecuteRequestId_);
+        pendingForgetExecuteRequestId_.clear();
+    }
+    setForgetPreviewBusy(false);
+    setForgetExecuteBusy(false);
+    setForgetStage(QStringLiteral("idle"));
 }
 
 // ── D10C 私有 setters ────────────────────────────────────────────────────────
@@ -2360,6 +2628,13 @@ void MemoryViewModel::setForgetCredentialTtlSeconds(int value)
     if (forgetCredentialTtlSeconds_ == v) return;
     forgetCredentialTtlSeconds_ = v;
     emit forgetCredentialTtlSecondsChanged();
+}
+
+void MemoryViewModel::setForgetConfirmationCredential(const QString& value)
+{
+    if (forgetConfirmationCredential_ == value) return;
+    forgetConfirmationCredential_ = value;
+    emit forgetConfirmationCredentialChanged();
 }
 
 void MemoryViewModel::setForgetResolvedTargets(const QVariantList& value)

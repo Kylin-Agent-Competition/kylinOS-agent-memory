@@ -48,9 +48,49 @@ void MockGatewayServer::close()
         }
     }
     connections_.clear();
+    // D12-C FAIL-2 修复（TD-IPC-001 同型漏洞）：server_.close() 不会删除
+    //   socket 文件 / abstract name，导致客户端重连时 "connectToServer(path)"
+    //   可能因残留文件返回成功（Linux domain socket 的 path-exists 行为）。
+    //   这里显式 removeServer(serverName) 让客户端重连必定失败，验证完整
+    //   3 次指数退避上限路径。
+    QString name;
+    if (server_.isListening()) {
+        name = server_.serverName();
+    }
     if (server_.isListening()) {
         server_.close();
     }
+    if (!name.isEmpty()) {
+        QLocalServer::removeServer(name);
+    }
+}
+
+bool MockGatewayServer::sendRawEnvelope(const QJsonObject& envelope)
+{
+    for (auto& conn : connections_) {
+        if (conn->socket && conn->socket->state() == QLocalSocket::ConnectedState) {
+            const auto packet = encodeEnvelope(envelope);
+            if (packet.has_value()) {
+                conn->socket->write(*packet);
+                conn->socket->flush();
+                return true;
+            }
+            return false;
+        }
+    }
+    return false;
+}
+
+bool MockGatewayServer::sendRawBytes(const QByteArray& raw)
+{
+    for (auto& conn : connections_) {
+        if (conn->socket && conn->socket->state() == QLocalSocket::ConnectedState) {
+            conn->socket->write(raw);
+            conn->socket->flush();
+            return true;
+        }
+    }
+    return false;
 }
 
 void MockGatewayServer::handleNewConnection()
@@ -111,6 +151,14 @@ void MockGatewayServer::handleNewConnection()
                         bad[3] = static_cast<char>(oversized & 0xFF);
                         raw->write(bad, 4);
                         raw->flush();
+                        continue;
+                    }
+                    // 测试后门：若 handler 返回 "__hold__": true，则不回包
+                    // （不 encodeEnvelope、不 write），用于 L0 制造"请求 in-flight
+                    // → reset → 延迟响应"竞态。requestId/traceId 已经 push 到
+                    // received_，外层稍后可通过 sendRawEnvelope 单独注入。
+                    static const QString kHoldKey = QStringLiteral("__hold__");
+                    if (response.value(kHoldKey).toBool()) {
                         continue;
                     }
 

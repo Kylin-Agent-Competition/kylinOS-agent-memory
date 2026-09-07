@@ -1,0 +1,8 @@
+srw------- 1 yanmouren778 yanmouren778 0  9月 3日 14:42 /run/user/1000/kylin-memory/memory.sock
+
+memory.health -> {"protocol_version": "1.0", "request_id": "d12d_memory.health", "trace_id": "trc_d12d_memory.health", "status": "error", "data": {}, "server_ts": "2026-09-03T06:43:04.131888+00:00", "error_code": "UNSUPPORTED_METHOD", "message": "unsupported method: memory.health"}
+
+memory.ping -> {"protocol_version": "1.0", "request_id": "d12d_memory.ping", "trace_id": "trc_d12d_memory.ping", "status": "error", "data": {}, "server_ts": "2026-09-03T06:43:04.135836+00:00", "error_code": "UNSUPPORTED_METHOD", "message": "unsupported method: memory.ping"}
+
+
+ERR:

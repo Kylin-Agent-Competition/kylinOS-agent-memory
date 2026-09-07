@@ -12,6 +12,10 @@
 
 namespace kylin::memory::client::v1 {
 
+// FRZ-IPC-006 §6.1：客户端发送 envelope 默认死线 5000ms。
+// 对外暴露（供 L0 稳定性测试做配置断言；实现定义在 memory_view_model.cpp）。
+extern const int kDefaultDeadlineMs;
+
 // ============================================================================
 // MemoryViewModel — QML 公共 ViewModel（D5-C 垂直链路 Demo / Prototype 版）
 // ============================================================================
@@ -60,6 +64,11 @@ class MemoryViewModel : public QObject {
     Q_PROPERTY(QString connectionState READ connectionState
                    NOTIFY connectionStateChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    // D12-C：重连统计 + Retry 按钮支持
+    Q_PROPERTY(int reconnectAttempts READ reconnectAttempts
+                   NOTIFY reconnectAttemptsChanged)
+    Q_PROPERTY(bool autoReconnectEnabled READ autoReconnectEnabled
+                   WRITE setAutoReconnectEnabled NOTIFY autoReconnectEnabledChanged)
     Q_PROPERTY(QString lastRequestId READ lastRequestId NOTIFY lastRequestIdChanged)
     Q_PROPERTY(QJsonObject lastResponse READ lastResponse NOTIFY lastResponseChanged)
     Q_PROPERTY(bool preChatBusy READ preChatBusy NOTIFY preChatBusyChanged)
@@ -224,6 +233,10 @@ class MemoryViewModel : public QObject {
                    NOTIFY forgetAffectedCountChanged)
     Q_PROPERTY(int forgetCredentialTtlSeconds READ forgetCredentialTtlSeconds
                    NOTIFY forgetCredentialTtlSecondsChanged)
+    // Preview 返回的一次性确认凭据（绑定 userId+forgetPlanId+selection_hash，具备TTL）。
+    // Execute 必须传入与该值完全匹配的 confirmation_token，否则 fail-closed。
+    Q_PROPERTY(QString forgetConfirmationCredential READ forgetConfirmationCredential
+                   NOTIFY forgetConfirmationCredentialChanged)
     // 预览命中目标 ID 列表（Demo 展示影响范围；仅 ID 切片，不含正文）
     Q_PROPERTY(QVariantList forgetResolvedTargets READ forgetResolvedTargets
                    NOTIFY forgetResolvedTargetsChanged)
@@ -271,6 +284,10 @@ public:
 
     [[nodiscard]] QString connectionState() const;
     [[nodiscard]] QString lastError() const;
+    // D12-C：重连相关
+    [[nodiscard]] int reconnectAttempts() const;
+    [[nodiscard]] bool autoReconnectEnabled() const;
+    void setAutoReconnectEnabled(bool v);
     [[nodiscard]] QString lastRequestId() const { return lastRequestId_; }
     [[nodiscard]] QJsonObject lastResponse() const { return lastResponse_; }
     [[nodiscard]] bool preChatBusy() const { return preChatBusy_; }
@@ -343,6 +360,7 @@ public:
     [[nodiscard]] QString forgetSelectionHash() const { return forgetSelectionHash_; }
     [[nodiscard]] int forgetAffectedCount() const { return forgetAffectedCount_; }
     [[nodiscard]] int forgetCredentialTtlSeconds() const { return forgetCredentialTtlSeconds_; }
+    [[nodiscard]] QString forgetConfirmationCredential() const { return forgetConfirmationCredential_; }
     [[nodiscard]] QVariantList forgetResolvedTargets() const { return forgetResolvedTargets_; }
     [[nodiscard]] QString forgetMode() const { return forgetMode_; }
     [[nodiscard]] QString forgetTargetType() const { return forgetTargetType_; }
@@ -374,6 +392,8 @@ public:
     // QML 可调用动作。
     Q_INVOKABLE void connectToService();
     Q_INVOKABLE void disconnectFromService();
+    // D12-C：显式 Retry（Stop+Cleanup+Connect），供 UI "Retry" 按钮使用
+    Q_INVOKABLE void retryConnectService();
     Q_INVOKABLE void sendHealth();
     // 发送 memory.retrieve 请求。payload 由调用方构造，本骨架不做业务校验。
     Q_INVOKABLE void sendMemoryQuery(const QJsonObject& payload);
@@ -388,6 +408,18 @@ public:
 
     // 手动重置 Pre-Chat（取消 in-flight 请求 + 清零三路口径）。
     Q_INVOKABLE void resetPreChatPipeline();
+    // 手动重置 Post-Turn 阶段与 busy 标志。
+    Q_INVOKABLE void resetPostTurnPipeline();
+    // 手动重置 Tool Adapter 阶段与 busy 标志。
+    Q_INVOKABLE void resetToolPipeline();
+    // 手动重置 Conflict Compare 阶段与 busy 标志。
+    Q_INVOKABLE void resetConflictComparePipeline();
+    // 手动重置 Lifecycle Status 阶段与 busy 标志。
+    Q_INVOKABLE void resetLifecycleStatusPipeline();
+    // D11 编排器：一键重置全部 5 条 Pipeline（Pre/Post/Tool/Conflict/Lifecycle/Forget）。
+    // 语义：取消所有 in-flight 请求，全部 stage 回到 idle，三路口径清零；
+    // 明确不清除 forget*Error 文案（与 resetForgetProjection 契约一致）。
+    Q_INVOKABLE void resetAllPipelines();
 
     // ── D5-C Post-Turn Pipeline ────────────────────────────────────────
     Q_INVOKABLE void runPostTurnPipeline(
@@ -401,7 +433,8 @@ public:
         const QString& stopReason);
 
     // 构造 TurnFinalizedEvent JSON（可预览可发送复用；Preview→Send 走缓存）。
-    // retryOfTurnId：finalization_reason=retry 时必须提供，显式注入 metadata.retry_of_turn_id。
+    // retryOfTurnId：finalization_reason=retry 时必须提供，显式注入 event.top-level retry_of_turn_id。
+    //   （DRIFT-B 修复：retry_of_turn_id 是 TurnFinalizedEvent 字段，不是 EventMetadata 字段。）
     Q_INVOKABLE QJsonObject buildTurnFinalizedEventJson(
         const QString& userId,
         const QString& sessionId,
@@ -590,6 +623,11 @@ signals:
     void socketPathChanged();
     void connectionStateChanged();
     void lastErrorChanged();
+    // D12-C：重连相关信号
+    void reconnectAttemptsChanged();
+    void autoReconnectEnabledChanged();
+    // D12-C MEDIUM-02：转发 reconnectFinished 事件（成功 or 达到上限），便于 QML 弹 toast / 结束动画
+    void reconnectFinished(bool success, int attempts);
     void lastRequestIdChanged();
     void lastResponseChanged();
     void preChatBusyChanged();
@@ -660,6 +698,7 @@ signals:
     void forgetSelectionHashChanged();
     void forgetAffectedCountChanged();
     void forgetCredentialTtlSecondsChanged();
+    void forgetConfirmationCredentialChanged();
     void forgetResolvedTargetsChanged();
     void forgetModeChanged();
     void forgetTargetTypeChanged();
@@ -749,6 +788,7 @@ private:
     void setForgetSelectionHash(const QString& value);
     void setForgetAffectedCount(int value);
     void setForgetCredentialTtlSeconds(int value);
+    void setForgetConfirmationCredential(const QString& value);
     void setForgetResolvedTargets(const QVariantList& value);
     void setForgetMode(const QString& value);
     void setForgetTargetType(const QString& value);
@@ -918,6 +958,13 @@ private:
     QString forgetSelectionHash_;
     int forgetAffectedCount_ = 0;
     int forgetCredentialTtlSeconds_ = 0;
+    QString forgetConfirmationCredential_;
+    // HIGH-01: Preview 成功时记录 credential 的 wall-clock deadline
+    // （ms since epoch）= current + forgetCredentialTtlSeconds_ * 1000。
+    // Execute 前校验：非空 + 匹配 + 当前时刻 < deadline。
+    // 过期 credential = fail-closed（不发送 forget.execute）。
+    // TD-058: 非 monotonic 时钟，不抗系统时间回拨。关闭前防回拨不作为正式安全承诺。
+    qint64 forgetCredentialDeadlineMs_ = 0;  // HIGH-01: credential wall-clock 过期时间戳 (ms since epoch)。TD-058: 非 monotonic，不抗系统时间回拨。
     QVariantList forgetResolvedTargets_;
     QString forgetMode_;
     QString forgetTargetType_;

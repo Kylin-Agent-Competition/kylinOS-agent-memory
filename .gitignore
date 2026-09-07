@@ -10,6 +10,7 @@ htmlcov/
 .vscode/
 
 build/
+build-*/
 cmake-build-*/
 CMakeFiles/
 CMakeCache.txt

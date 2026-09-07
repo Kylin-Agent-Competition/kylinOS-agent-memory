@@ -1,0 +1,4 @@
+# D14D ENV_PREPARED evidence is an immutable raw package (SHA256SUMS in
+# checksums.txt must stay byte-for-byte stable across hosts). Treat the whole
+# root as binary: no line-ending conversion and no text normalization.
+* binary

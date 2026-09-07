@@ -1,0 +1,56 @@
+== perms ==
+
+drwx------ 2 yanmouren778 yanmouren778 4096  9月 3日 14:41 /home/yanmouren778/.config/kylin-memory
+
+drwx------ 2 yanmouren778 yanmouren778 4096  9月 3日 14:42 /home/yanmouren778/.local/share/kylin-memory
+
+drwx------ 2 yanmouren778 yanmouren778   60  9月 3日 14:43 /run/user/1000/kylin-memory
+
+srw------- 1 yanmouren778 yanmouren778 0  9月 3日 14:43 /run/user/1000/kylin-memory/memory.sock
+
+-rw------- 1 yanmouren778 yanmouren778 253952  9月 3日 14:41 /home/yanmouren778/.local/share/kylin-memory/kylin_memory.db
+
+== runner exists? ==
+
+-rw-rw-r-- 1 yanmouren778 yanmouren778 7759  9月 3日 11:09 /home/yanmouren778/kylinOS-agent-memory/tests/vector-engine/run_d10b_vector_delete_l2.sh
+
+#!/usr/bin/env bash
+
+# SPDX-License-Identifier: Apache-2.0
+
+#
+
+# D10-B Vector 精确删除宿主验证。调用方提供已连接麒麟 Vector Engine 的
+
+# 经 KySec 信任的 vector_bridge_cli 二进制；本脚本只创建并清理 d10b_ 前缀的
+
+# 临时集合。
+
+
+
+set -euo pipefail
+
+
+
+binary=""
+
+collection="d10b_delete_l2_${RANDOM}_$$"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+repo_root="$(cd "$script_dir/../.." && pwd)"
+
+collection_created=0
+
+
+
+fail() {
+
+    printf 'D10B_L2 结果=失败 原因=%s\n' "$1" >&2
+
+    exit 1
+
+}
+
+
+

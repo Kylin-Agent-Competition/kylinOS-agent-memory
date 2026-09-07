@@ -41,11 +41,18 @@ constexpr const char* kDemoPlanId = "fp-20260901-001";
 constexpr const char* kDemoSelectionHash = "sha256:abcd1234ef56";
 constexpr const int kDemoAffectedCount = 3;
 constexpr const int kDemoTtl = 300;
+// v0.3 HIGH-02 凭据链：Mock preview 返回的 confirmation_credential
+// 与后续 Execute 调用传入 token 必须完全一致，否则 runForgetExecutePipeline
+// 在客户端侧直接 fail-closed，根本走不到 Mock Execute handler。
+constexpr const char* kDemoConfirmationCredential = "credential-demo-32b";
+constexpr const char* kDemoHardDeleteCredential = "cred-demo-hard";
 
 // 构造 forget.preview 成功 data（含 selection_hash / affected_count /
 // credential_ttl_s / resolved_target_ids_preview_snippet / selector_cleared /
-// forget_mode / target_type / is_cascade）。
-QJsonObject buildPreviewSuccessData(const QString& userId = QLatin1String(kDemoUserId))
+// forget_mode / target_type / is_cascade / confirmation_credential）。
+QJsonObject buildPreviewSuccessData(
+    const QString& userId = QLatin1String(kDemoUserId),
+    const QString& cred = QLatin1String(kDemoConfirmationCredential))
 {
     QJsonArray ids;
     ids.append(QStringLiteral("km-1"));
@@ -60,6 +67,10 @@ QJsonObject buildPreviewSuccessData(const QString& userId = QLatin1String(kDemoU
         {QStringLiteral("target_type"), QStringLiteral("knowledge")},
         {QStringLiteral("is_cascade"), false},
         {QStringLiteral("selector_cleared"), true},
+        // HIGH-02 凭据链必填：v0.3 要求 Preview 返回一次性 confirmation_credential
+        // 供 Execute 再次校验；缺值会被 ViewModel runForgetExecutePipeline
+        // 门禁 fail-closed。
+        {QStringLiteral("confirmation_credential"), cred},
         {QStringLiteral("resolved_target_ids_preview_snippet"), ids},
     };
 }
@@ -667,8 +678,14 @@ void TestD10CForgetting::hardDeleteFailClosed_noAutoDowngrade()
     test_support::MockGatewayServer mock;
     mock.setHandler([](const client::EnvelopeParts& parts) -> QJsonObject {
         if (parts.method == client::methods::kForgetPreview) {
+            // 返回 hard delete 专用凭据：确保后续 Execute 先过客户端凭据链门禁
+            // 再到 Mock Execute handler，验证 Hard Delete Runtime fail-closed
+            // 是服务端返回错误而非客户端凭据校验失败。
             return client::buildSuccessResponse(
-                parts.requestId, parts.traceId, buildPreviewSuccessData());
+                parts.requestId, parts.traceId,
+                buildPreviewSuccessData(
+                    QString::fromUtf8(kDemoUserId),
+                    QString::fromUtf8(kDemoHardDeleteCredential)));
         }
         if (parts.method == client::methods::kForgetExecute) {
             // ADR-016 可信输入来源未接线 → Runtime fail-closed，返回错误

@@ -332,3 +332,17 @@ def test_handle_request_typed_id_converged(field, bad):
     assert isinstance(resp["trace_id"], str)
     assert resp[field] == ""
     svc.close()
+@pytest.fixture(autouse=True)
+def _d12a_executor_state_isolation():
+    """D12A R3：executor 冻结语义（stop-with-active → restart-required）按用例隔离，
+    避免同进程测试间共享模块 executor 状态造成串扰。"""
+    import embedding.embedding_service as _es
+    from embedding.embedding_service import shutdown_executor, _executor_lock, _in_flight
+    yield
+    shutdown_executor()
+    with _executor_lock:
+        _in_flight.clear()
+        _es._embed_hang_recovered = 0
+        _es._embed_hang_threshold_ms = 60000.0
+        _es._embed_restart_required = False
+        _es._embed_max_hang_rebuilds = 3

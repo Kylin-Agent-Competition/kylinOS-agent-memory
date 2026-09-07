@@ -37,7 +37,7 @@
 
 - 随机 32B 一次性凭据；服务端只存 SHA-256 哈希（`forget_plan.confirmation_token`）；审计仅存 `confirmation_ref`。
 - 绑定 `user_id + forget_plan_id + selection_hash`；TTL 默认 300s（可调，登记 TD-D）；防重放 = 成功事务内置 NULL。
-- 幂等 = 复用 FRZ-IPC-005 三元组 + `idempotency_cache`（TTL 24h，ADR-006）；request_fingerprint 对敏感 selector 用固定安全占位 `<SENSITIVE-OMITTED>`（对齐 ADR-014 v5 HIGH-01）。
+- 幂等 = 复用 FRZ-IPC-005 三元组 + `idempotency_cache`（TTL 24h，ADR-006）；**forget.preview 为一次性凭据受控例外（R2 收口）**：cache 只存剔除 token 的脱敏响应（`credential_replayable=false`），同键+同指纹重放 fail-closed → `INVALID_REQUEST`，不重发/不生成第二枚凭据；execute 通用 cache replay 不受影响。request_fingerprint 对敏感 selector 用固定安全占位 `<SENSITIVE-OMITTED>`（对齐 ADR-014 v5 HIGH-01）。
 
 ### 1.6 delete_mode 门禁（契约 §四.9 / F-12 / MEDIUM-04）
 
@@ -194,6 +194,7 @@ $ alembic -c migrations/alembic.ini history
 | 18 | Hard Delete / Cascade / Full Reset 未闭环前执行 → fail-closed（不得自动降级软删后报成功） | 红线 | S5 |
 | 19 | **request_fingerprint 敏感占位**：preview 携带敏感 selector 时 idempotency_cache 不落敏感派生 hash（`<SENSITIVE-OMITTED>`） | 安全（ADR-014 v5 对齐） | S4 |
 | 20 | **trusted identity cache-bypass**：身份不匹配不得被 cache replay 绕过（ADR-019 seam 场景） | 隔离（ADR-014 v5 对齐） | S7 |
+| 21 | **forget.preview 幂等重放（R2 一次性凭据受控例外）**：同键+同指纹重放 → fail-closed `INVALID_REQUEST`，不重发/不生成第二枚凭据；cache 仅存脱敏响应 | 幂等（受控例外，ADR-019 v2） | S4 |
 
 ### L0（契约 §九 L0）
 
@@ -226,7 +227,7 @@ $ alembic -c migrations/alembic.ini history
 
 ## 九、验收标准
 
-- L0 全绿 + L1（§六 20 项）全通过（含失败路径/幂等/并发/边界，禁止删测试换取通过）。
+- L0 全绿 + L1（§六 21 项）全通过（含失败路径/幂等/并发/边界，禁止删测试换取通过）。
 - 迁移单 head；`.schema` 与 ADR-015 DDL 逐列一致；upgrade/downgrade 往返通过。
 - 契约零偏离：FRZ-IPC/FRZ-DB 既有条目不动；forget 表走 ADR-015，forget IPC 走 ADR-019。
 - 无假实现：preview resolver 真实 scoped 解析；fail-closed 不降级报成功；TODO/FIXME 引用 TD 编号。

@@ -1,0 +1,15 @@
+{
+  "completed_at_utc": "2026-09-05T09:04:12.403312+00:00",
+  "duration_seconds": 4.166,
+  "endpoint": "127.0.0.1:2222",
+  "exit_code": 0,
+  "log_file": "d13d_isolated_candidate_start_20260905_0915.log",
+  "log_sha256": "d4d8377ce3bd677990eb4271b7a68ad7346e1aca924a54084d260262a185e506",
+  "mode": "command",
+  "requested_command": "set -eu; repo=/home/kylin-agent/kylinOS-agent-memory-d13d-7242935; state=/home/kylin-agent/.local/state/kylin-memory/d13d-7242935; db=/home/kylin-agent/.local/share/kylin-memory/d13d-7242935/kylin_memory.db; sock=/run/user/1000/kylin-memory/d13d-7242935.sock; mkdir -p \"$state\" \"$(dirname \"$db\")\"; chmod 700 \"$state\" \"$(dirname \"$db\")\"; test ! -e \"$sock\"; test ! -e \"$db\"; cd \"$repo\"; KYLIN_MEMORY_DB=\"$db\" PYTHONPATH=memory-service /home/kylin-agent/d4d-venv/bin/python -m alembic -c migrations/alembic.ini upgrade head; nohup env PYTHONPATH=memory-service XDG_RUNTIME_DIR=/run/user/1000 /home/kylin-agent/d4d-venv/bin/python memory-service/app.py --socket \"$sock\" --db \"$db\" --no-migrate --no-outbox > \"$state/service.log\" 2>&1 < /dev/null & echo $! > \"$state/service.pid\"; for i in $(seq 1 20); do test -S \"$sock\" && break; sleep 1; done; test -S \"$sock\"; printf \"candidate_pid=\"; cat \"$state/service.pid\"; printf \"candidate_socket=\"; stat -c \"%a %U:%G %n\" \"$sock\"; printf \"candidate_db=\"; ls -l \"$db\"; printf \"candidate_alembic=\"; KYLIN_MEMORY_DB=\"$db\" PYTHONPATH=memory-service /home/kylin-agent/d4d-venv/bin/python -m alembic -c migrations/alembic.ini current; printf \"candidate_log_tail=\"; tail -20 \"$state/service.log\"",
+  "run_id": "d13d_isolated_candidate_start_20260905_0915",
+  "started_at_utc": "2026-09-05T09:04:08.236941+00:00",
+  "status": "PASS",
+  "timed_out": false,
+  "user": "kylin-agent"
+}

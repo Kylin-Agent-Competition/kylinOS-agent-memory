@@ -258,14 +258,19 @@ std::pair<std::optional<EnvelopeParts>, ProtocolError> parseEnvelope(
     }
     parts.method = methodValue.toString();
 
+    // TD-023：严格边界。payload 缺失 / null 一律拒绝，不回退为空对象。
+    // FRZ-IPC-006 §6.1 明确声明 payload 为必填 JSON 对象。
     const QJsonValue payloadValue = envelope.value(kPayloadKey);
-    if (payloadValue.isUndefined() || payloadValue.isNull()) {
-        parts.payload = QJsonObject{};
-    } else if (!payloadValue.isObject()) {
+    if (payloadValue.isUndefined()) {
         return {std::nullopt, errorFromKind(ProtocolErrorKind::PayloadNotObject)};
-    } else {
-        parts.payload = payloadValue.toObject();
     }
+    if (payloadValue.isNull()) {
+        return {std::nullopt, errorFromKind(ProtocolErrorKind::PayloadNotObject)};
+    }
+    if (!payloadValue.isObject()) {
+        return {std::nullopt, errorFromKind(ProtocolErrorKind::PayloadNotObject)};
+    }
+    parts.payload = payloadValue.toObject();
 
     // request_id（FRZ-IPC-006 §6.1 必填，非空字符串）
     const QJsonValue requestIdValue = envelope.value(kRequestIdKey);
@@ -374,10 +379,16 @@ std::pair<std::optional<ResponseParts>, ProtocolError> parseResponse(
         parts.errorCode = errorCode;
 
         const QJsonValue messageValue = envelope.value(kMessageKey);
-        if (!messageValue.isString()) {
+        // TD-023：错误 envelope 的 message 必须为非空字符串。
+        //   空串 / null / undefined / 非字符串类型一律拒绝（MissingErrorMessage）。
+        if (messageValue.isUndefined() || messageValue.isNull() || !messageValue.isString()) {
             return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingErrorMessage)};
         }
-        parts.message = messageValue.toString();
+        const QString message = messageValue.toString();
+        if (message.trimmed().isEmpty()) {
+            return {std::nullopt, errorFromKind(ProtocolErrorKind::MissingErrorMessage)};
+        }
+        parts.message = message;
     }
 
     return {parts, {}};

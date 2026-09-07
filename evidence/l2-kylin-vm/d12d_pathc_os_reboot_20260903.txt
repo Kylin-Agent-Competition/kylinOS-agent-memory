@@ -1,0 +1,45 @@
+RC=0
+uptime: up 2 minutes  since: 2026-09-03 14:53:08
+
+== kylin-memory ==
+
+active
+
+● kylin-memory.service - Kylin Memory Service
+
+     Loaded: loaded (/home/yanmouren778/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+
+     Active: active (running) since Thu 2026-09-03 14:54:37 CST; 46s ago
+
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+
+   Main PID: 1877 (python3)
+
+      Tasks: 1 (limit: 9463)
+
+ls: 没有那个文件或目录
+
+== vector ==
+
+active
+
+没有那个文件或目录
+
+== journal since boot (ready lines) ==
+
+9月 03 14:55:26 yanmouren778-pc kylin-memory-server[1877]: 2026-09-03T14:55:26+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+
+9月 03 14:55:28 yanmouren778-pc kylin-memory-server[1877]: 2026-09-03T14:55:28+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+
+9月 03 14:55:28 yanmouren778-pc kylin-memory-server[1877]: 2026-09-03T14:55:28+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+
+9月 03 14:55:28 yanmouren778-pc kylin-memory-server[1877]: 2026-09-03T14:55:28+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+
+== IPC roundtrip ==
+
+{"protocol_version": "1.0", "request_id": "d12d_reboot", "trace_id": "trc_reboot", "status": "ok", "data": {"context": [], "degraded": false, "reason": "retrieval main chain pending"}, "server_ts": "2026-09-03T06:55:47.491581+00:00"}
+
+{"protocol_version": "1.0", "request_id": "d12d_reboot", "trace_id": "trc_reboot", "status": "error", "data": {}, "server_ts": "2026-09-03T06:55:47.579594+00:00", "error_code": "UNSUPPORTED_METHOD", "
+
+
+ERR:

@@ -81,6 +81,7 @@ from providers.knowledge_rules import (
 )
 from providers.preference_rules import (
     PREFERENCE_EXPLICIT_PATTERN,
+    match_explicit_tool_selection,
     PREFERENCE_INSTRUCTION_PATTERN,
     classify_preference_category,
     classify_temporality,
@@ -102,7 +103,7 @@ class ToolResult:
     error: Optional[str] = None
 
 
-@dataclass
+@dataclass(init=False)
 class TurnFinalizedEvent:
     session_id: str
     user_text: str
@@ -113,7 +114,67 @@ class TurnFinalizedEvent:
     # 禁止由 LLM 生成/覆盖；None 时由 Provider 用 session_id 派生并提示。
     source_event_id: Optional[str] = None
     occurred_at: datetime = field(default_factory=lambda: datetime.now().astimezone())
-    collected_at: datetime = field(default_factory=lambda: datetime.now().astimezone())
+    # DRIFT-001（Schema 漂移治理，2026-09-03）：统一采集时间 Canonical 字段为
+    # captured_at；collected_at 仅为 legacy transport/read alias（见下方 __init__
+    # 与只读 property），禁止 Provider 内继续产生新 collected_at 写字段。
+    captured_at: datetime = field(default_factory=lambda: datetime.now().astimezone())
+
+    def __init__(
+        self,
+        session_id: str,
+        user_text: str,
+        assistant_text: str,
+        tool_results: Optional[List[ToolResult]] = None,
+        source: Literal["chat", "tool_result", "manual_config"] = "chat",
+        source_event_id: Optional[str] = None,
+        occurred_at: Optional[datetime] = None,
+        captured_at: Optional[datetime] = None,
+        collected_at: Optional[datetime] = None,
+    ) -> None:
+        """DRIFT-001：Canonical 写字段 captured_at；collected_at 仅 legacy 输入/读别名。
+
+        兼容边界（REWORK R1）：
+        - 新 Canonical 写路径：显式传 captured_at（唯一真源）。
+        - legacy 构造/传输 payload（含 collected_at）兼容：collected_at 归一为
+          captured_at；两字段同给且不一致时按冻结纪律拒绝（fail-closed），
+          不允许静默覆盖或另立第二套采集时间字段。
+        """
+        if (
+            captured_at is not None
+            and collected_at is not None
+            and collected_at != captured_at
+        ):
+            raise ValueError(
+                "DRIFT-001 conflict: collected_at 与 captured_at 同时提供且不一致，"
+                "拒绝写入（captured_at 为 Canonical 唯一真值；collected_at 仅 legacy alias）"
+            )
+        self.session_id = session_id
+        self.user_text = user_text
+        self.assistant_text = assistant_text
+        self.tool_results = tool_results
+        self.source = source
+        self.source_event_id = source_event_id
+        self.occurred_at = (
+            occurred_at if occurred_at is not None else datetime.now().astimezone()
+        )
+        # legacy 仅提供 collected_at 时归一为 captured_at（保持 Canonical 唯一写字段）
+        self.captured_at = (
+            captured_at
+            if captured_at is not None
+            else (
+                collected_at
+                if collected_at is not None
+                else datetime.now().astimezone()
+            )
+        )
+
+    @property
+    def collected_at(self) -> datetime:
+        """DRIFT-001：legacy 只读 alias → captured_at（Canonical 采集时间唯一真值）。
+
+        读路径归一；写路径禁止（无 setter）。新 Canonical 写一律使用 captured_at。
+        """
+        return self.captured_at
 
     @property
     def trusted_source_event_id(self) -> str:
@@ -301,11 +362,15 @@ def _extract_preferences_rules(event: TurnFinalizedEvent,
     D7：类别识别（TABLE 19）、临时/长期（TABLE 20）、scope 推导（E 轨 §2.9）、
     类别键派生、显式置信度基线——全部来自 providers/preference_rules.py。
 
-    两阶段规则入口（PR #36 HIGH-01 修复）：
-    1. 显式偏好词（PREFERENCE_EXPLICIT_PATTERN，如 我喜欢/以后/希望…）
-    2. 显式词未命中时，尝试指令式表达（PREFERENCE_INSTRUCTION_PATTERN，
-       如 TABLE 20 原句 "这次只用三句话回答"——时态限定词 + 指令动词）
-    两阶段均非硬编码特判；阶段 1 命中时不再执行阶段 2（避免重复候选）。
+    阶段化规则入口：
+    1. 通用显式偏好词（PREFERENCE_EXPLICIT_PATTERN：我喜欢/以后/希望…）；
+    2. 显式工具选择偏好（match_explicit_tool_selection：句首 marker + 真实工具
+       语境，如 "优先使用 git 命令行工具"；marker 单独命中不构成 admission，
+       事实/描述句不会进入——D13D Phase 2 pref-003 Review MEDIUM-01）；
+    3. 通用显式词与工具选择均未命中时，尝试指令式表达
+       （PREFERENCE_INSTRUCTION_PATTERN：时态限定词 + 指令动词，
+        TABLE 20 原句 "这次只用三句话回答"）。
+    各阶段均非硬编码特判；前一阶段命中即返回（避免重复候选）。
 
     R5 安全：候选 value/evidence 若命中 high/critical 敏感原文 → 拒绝
     （不进入正常候选；由调用方决定审计）。
@@ -320,7 +385,14 @@ def _extract_preferences_rules(event: TurnFinalizedEvent,
             if cand is not None:
                 candidates.append(cand)
         return candidates
-    # TABLE 20 临时指令式表达：显式偏好词未命中时启用指令模式
+    # 显式工具选择偏好（句首 marker + 工具语境；marker 单独不构成 admission）
+    tool_value = match_explicit_tool_selection(text)
+    if tool_value is not None:
+        cand = _build_preference_rule_candidate(tool_value, text, source_event_id)
+        if cand is not None:
+            candidates.append(cand)
+        return candidates
+    # TABLE 20 临时指令式表达：显式偏好词/工具选择均未命中时启用指令模式
     for m in PREFERENCE_INSTRUCTION_PATTERN.finditer(text):
         cand = _build_preference_rule_candidate(
             m.group(1), text, source_event_id)

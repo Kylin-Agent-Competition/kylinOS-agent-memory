@@ -415,3 +415,12 @@ class EmbeddingProvider:
     def lifecycle(self) -> str:
         """返回当前 Provider 生命周期状态名（health 可观测性用）。"""
         return self._lifecycle.name
+
+    @property
+    def sdk_so_path(self) -> str:
+        """返回本实例 Bridge 实际绑定的动态库路径。
+
+        D13A 证据使用该值而不是仅复述环境变量，确保摘要中的 SDK 身份
+        来自已经构造并加载 Bridge 的 Provider。
+        """
+        return EmbeddingProvider._shared_so_path or EmbeddingProvider._DEFAULT_SO_PATH

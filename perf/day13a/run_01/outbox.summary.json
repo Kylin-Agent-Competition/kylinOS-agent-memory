@@ -1,0 +1,20 @@
+{
+  "benchmark": "outbox",
+  "consumer_throughput": 258.202,
+  "cpu_avg_percent": 42.691,
+  "cpu_peak_percent": 174.458,
+  "db": "/home/yanmouren778/kylinOS-agent-memory-d11e-20260904/perf/day13a/run_01/outbox.sqlite3",
+  "dead_letters": 0,
+  "drain_time_seconds": 19.365,
+  "errors": 0,
+  "events_processed": 5000,
+  "events_submitted": 5000,
+  "formal_run": true,
+  "max_backlog": 5000,
+  "producer_throughput": 966.567,
+  "rss_end_mb": 48.781,
+  "rss_peak_mb": 48.977,
+  "rss_start_mb": 44.945,
+  "time_to_max_backlog": 5.161,
+  "time_to_max_backlog_seconds": 5.161
+}

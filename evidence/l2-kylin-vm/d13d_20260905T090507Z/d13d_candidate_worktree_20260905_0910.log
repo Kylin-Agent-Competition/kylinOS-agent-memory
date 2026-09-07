@@ -1,0 +1,34 @@
+# Kylin VM test evidence
+run_id=d13d_candidate_worktree_20260905_0910
+collected_at_utc=2026-09-05T09:02:29.496537+00:00
+endpoint=127.0.0.1:2222
+user=kylin-agent
+mode=command
+requested_command=set -eu; test ! -e /home/kylin-agent/kylinOS-agent-memory-d13d-7242935; sha256sum /home/kylin-agent/d13d-artifacts/kylin-memory-d13d-prep.bundle; git clone /home/kylin-agent/d13d-artifacts/kylin-memory-d13d-prep.bundle /home/kylin-agent/kylinOS-agent-memory-d13d-7242935; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 checkout --detach 7242935bee5f230cee0535d5e28dbe1e60a302f6; printf "candidate_head="; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 rev-parse HEAD; printf "candidate_dirty="; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 status --porcelain | wc -l; /home/kylin-agent/d4d-venv/bin/python -c "import alembic,pydantic,sqlalchemy; print(alembic.__version__, pydantic.__version__, sqlalchemy.__version__)"
+--- guest script ---
+set -eu
+git -C /home/kylin-agent/kylinOS-agent-memory rev-parse --is-inside-work-tree >/dev/null
+cd /home/kylin-agent/kylinOS-agent-memory
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'git_head='; git rev-parse HEAD
+printf 'git_branch='; git branch --show-current
+printf 'git_dirty='; git status --porcelain | wc -l
+set +e
+bash -lc 'set -eu; test ! -e /home/kylin-agent/kylinOS-agent-memory-d13d-7242935; sha256sum /home/kylin-agent/d13d-artifacts/kylin-memory-d13d-prep.bundle; git clone /home/kylin-agent/d13d-artifacts/kylin-memory-d13d-prep.bundle /home/kylin-agent/kylinOS-agent-memory-d13d-7242935; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 checkout --detach 7242935bee5f230cee0535d5e28dbe1e60a302f6; printf "candidate_head="; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 rev-parse HEAD; printf "candidate_dirty="; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 status --porcelain | wc -l; /home/kylin-agent/d4d-venv/bin/python -c "import alembic,pydantic,sqlalchemy; print(alembic.__version__, pydantic.__version__, sqlalchemy.__version__)"'
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+guest_utc=2026-09-05T09:01:53Z
+git_head=053754d611801548fdac59b2894c6862bf85cf56
+git_branch=git_dirty=0
+fc68fb7a651bbb81edc4bc7d895e6afce810d5a8247c5b540c9599f63b352d4d  /home/kylin-agent/d13d-artifacts/kylin-memory-d13d-prep.bundle
+[stderr] 正克隆到 '/home/kylin-agent/kylinOS-agent-memory-d13d-7242935'...
+[stderr] 警告：远程 HEAD 指向一个不存在的引用，无法检出
+candidate_head=7242935bee5f230cee0535d5e28dbe1e60a302f6
+candidate_dirty=[stderr] HEAD 目前位于 7242935 fix(D12D): 防护 event.ingest 字段漂移 (#143)
+0
+1.19.1 2.13.4 2.0.52
+VM_TEST_EXIT=0
+--- runner summary ---
+{"completed_at_utc": "2026-09-05T09:02:32.337619+00:00", "duration_seconds": 2.841, "endpoint": "127.0.0.1:2222", "exit_code": 0, "mode": "command", "requested_command": "set -eu; test ! -e /home/kylin-agent/kylinOS-agent-memory-d13d-7242935; sha256sum /home/kylin-agent/d13d-artifacts/kylin-memory-d13d-prep.bundle; git clone /home/kylin-agent/d13d-artifacts/kylin-memory-d13d-prep.bundle /home/kylin-agent/kylinOS-agent-memory-d13d-7242935; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 checkout --detach 7242935bee5f230cee0535d5e28dbe1e60a302f6; printf \"candidate_head=\"; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 rev-parse HEAD; printf \"candidate_dirty=\"; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 status --porcelain | wc -l; /home/kylin-agent/d4d-venv/bin/python -c \"import alembic,pydantic,sqlalchemy; print(alembic.__version__, pydantic.__version__, sqlalchemy.__version__)\"", "run_id": "d13d_candidate_worktree_20260905_0910", "started_at_utc": "2026-09-05T09:02:29.496128+00:00", "status": "PASS", "timed_out": false, "user": "kylin-agent"}

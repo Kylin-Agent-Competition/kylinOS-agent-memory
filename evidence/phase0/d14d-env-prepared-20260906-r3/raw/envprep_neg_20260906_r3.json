@@ -1,0 +1,18 @@
+{
+  "schema_version": "d14d-env-prepared/raw-summary/v1",
+  "run_id": "envprep_neg_20260906_r3",
+  "mode": "probe-negative-controlled",
+  "status": "FAIL_EXPECTED",
+  "exit_code": 1,
+  "endpoint": "127.0.0.1:2222",
+  "guest_utc": "2026-09-06T10:05:02Z",
+  "hostname": "yanmouren778-pc",
+  "gate_script": "clean_state_gate.sh",
+  "gate_script_sha256": "f90939d1b19c74ea06c182516ab21f7b0efc8791657a1945c7830345e8adc9cf",
+  "scan_root": "/tmp/d14d_neg_* (controlled build residue; removed after test)",
+  "command": "sh /home/yanmouren778/d14d_r3/clean_state_gate.sh <tmp-negative-root>",
+  "log_file": "envprep_neg_20260906_r3.log",
+  "note": "Controlled negative verification: a build dir was injected under a temp root (not under /home/yanmouren778) and the gate returned CLEAN_STATE_FAIL with exit 1, proving fail-closed semantics; temp root removed after test.",
+  "counts": { "build_dir_count": 1 },
+  "clean_state": "FAIL"
+}

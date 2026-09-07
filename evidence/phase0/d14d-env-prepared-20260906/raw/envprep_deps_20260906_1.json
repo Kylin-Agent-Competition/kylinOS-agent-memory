@@ -1,0 +1,17 @@
+{
+  "allow_missing_repo": true,
+  "completed_at_utc": "2026-09-06T04:59:09.691529+00:00",
+  "duration_seconds": 8.401,
+  "endpoint": "127.0.0.1:2223",
+  "exit_code": 0,
+  "log_file": "envprep_deps_20260906_1.log",
+  "log_sha256": "85f6d8d1df2e722f3077a4e8a283238ab3a0a53399fbc3a7835cd3d6fb49238a",
+  "mode": "command",
+  "requested_command": "set -eu\nprintf 'guest_utc='; date -u +%FT%TZ\nprintf '%s\\n' '--- target packages (dpkg-query) ---'\ndpkg-query -W -f='${Package}|${Version}|${Architecture}\\n' libkylin-coreai-embedding kylin-ai-runtime kylin-gte-base-model kylin-ai-subsystem kylin-ai-parser-extension 2>&1 || true\nprintf '%s\\n' '--- SDK dpkg -L .so files ---'\ndpkg -L libkylin-coreai-embedding 2>/dev/null | grep '\\.so' || true\nprintf '%s\\n' '--- SDK .so identity ---'\nls -l /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so* 2>/dev/null || true\nsha256sum /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0 2>/dev/null || true\nreadelf -d /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0 2>/dev/null | grep -E 'SONAME|NEEDED' | head -25 || echo NO_READELF\nprintf '%s\\n' '--- runtime package files ---'\ndpkg -L kylin-ai-runtime 2>/dev/null | grep -E '/(bin|libexec)/' | head -40 || true\nprintf '%s\\n' '--- runtime binary identity ---'\nls -l /usr/bin/kylin-ai-runtime 2>/dev/null || true\nsha256sum /usr/bin/kylin-ai-runtime 2>/dev/null || true\nprintf '%s\\n' '--- model repository dirs ---'\nfind /usr/share/kylin-ai/model-repository -maxdepth 2 -type d 2>/dev/null | sort || echo MODEL_REPO_MISSING\nprintf '%s\\n' '--- model canonical artifact sha256 ---'\nfind /usr/share/kylin-ai/model-repository/embd_gte-base_uint8-text /usr/share/kylin-ai/model-repository/ensemble-embd_gte-base_uint8-text /usr/share/kylin-ai/model-repository/tokenizer_gte-base_uint8-text -maxdepth 2 -type f \\( -name '*.onnx' -o -name '*.yaml' -o -name '*.json' -o -name '*.py' \\) -exec sha256sum {} + 2>/dev/null | sort -k2 || echo NO_MODEL_ARTIFACTS\nprintf '%s\\n' '--- installed package count ---'\necho total_installed=$(dpkg-query -W -f='${Status}\\n' 2>/dev/null | grep -c '^install ok installed')\nprintf '%s\\n' '--- full dpkg-query -W package baseline (sorted) ---'\ndpkg-query -W -f='${Package}\\t${Version}\\t${Architecture}\\n' 2>/dev/null | sort",
+  "run_id": "envprep_deps_20260906_1",
+  "started_at_utc": "2026-09-06T04:59:01.290474+00:00",
+  "status": "PASS",
+  "sudo": false,
+  "timed_out": false,
+  "user": "kylin-agent"
+}

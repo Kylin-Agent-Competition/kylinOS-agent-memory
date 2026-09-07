@@ -46,6 +46,11 @@ _PHONE = re.compile(r"\b1[3-9]\d{9}\b")
 _ID_CARD = re.compile(r"\b\d{17}[\dXx]\b")
 # 敏感路径 → high
 _SENSITIVE_PATH = re.compile(r"(?i)(/etc/passwd|/etc/shadow|\.ssh/|id_rsa|id_ed25519)")
+# 明确的越权指令属于关键安全事件；只做确定性标记，由既有安全 Gate 拒绝。
+_PROMPT_INJECTION = re.compile(
+    r"(?i)(ignore\s+(?:all\s+)?(?:previous|prior).*?(?:rule|instruction)|"
+    r"忽略之前.*?(?:安全规则|规则|指令))"
+)
 
 
 def detect_sensitivity(text: Optional[str]) -> tuple[SensitivityLevel, bool]:
@@ -59,7 +64,8 @@ def detect_sensitivity(text: Optional[str]) -> tuple[SensitivityLevel, bool]:
 
     matched = False
     # 凭据类 → critical
-    if (_CRITICAL_KEYWORDS.search(text) or _PASSWORD_LEET.search(text)
+    if (_CRITICAL_KEYWORDS.search(text) or _PROMPT_INJECTION.search(text)
+            or _PASSWORD_LEET.search(text)
             or _API_KEY_PREFIX.search(text) or _JWT_PATTERN.search(text)
             or _LONG_SECRET.search(text)):
         return SensitivityLevel.CRITICAL, True

@@ -312,13 +312,42 @@ void D6cMultiSourceAdaptersTest::manualConfigLongTermPersisted()  // B1
             const QJsonValue cfgVal = parts.payload.value(QStringLiteral("config"));
             const bool hasCfg = cfgVal.isObject();
             const QJsonObject cfg = hasCfg ? cfgVal.toObject() : QJsonObject{};
+            // KMA DRIFT-007 / DRIFT-008 / DRIFT-009 / KMA R-5 dual-write contract
+            // (review HIGH-01): Client Demo MUST emit both legacy (host-DTO short
+            // names) AND Canonical names so existing host consumers AND the new
+            // KMA canonical pipeline read the same payload. Any missing side is
+            // an invalid payload.
+            //   - scope                (legacy, host DTO "kind of config")
+            //   - config_kind          (canonical = same raw semantic)
+            //   - preference_scope     (canonical; emitted only when config_kind
+            //                          == "preference", Client Demo defaults global)
+            //   - key / value          (legacy host-DTO short names)
+            //   - preference_key / preference_value  (canonical)
+            //   - sensitivity_level    (legacy alias)
+            //   - sensitivity          (canonical, normalized lowercase)
+            const bool hasLegacyScope = cfg.contains(QStringLiteral("scope"));
+            const bool hasConfigKind = cfg.contains(QStringLiteral("config_kind"));
+            const bool preferenceScopeOk =
+                (cfg.value(QStringLiteral("config_kind")).toString()
+                 == QStringLiteral("preference"))
+                    ? cfg.contains(QStringLiteral("preference_scope"))
+                    : true;  // not required for non-preference kinds
+            const bool hasScopeSideOk =
+                hasLegacyScope && hasConfigKind && preferenceScopeOk;
+            const bool hasKeySideOk =
+                cfg.contains(QStringLiteral("key"))
+                && cfg.contains(QStringLiteral("preference_key"));
+            const bool hasValueSideOk =
+                cfg.contains(QStringLiteral("value"))
+                && cfg.contains(QStringLiteral("preference_value"));
+            const bool hasSensitivitySideOk =
+                cfg.contains(QStringLiteral("sensitivity_level"))
+                && cfg.contains(QStringLiteral("sensitivity"));
             const bool missingRequired =
-                !cfg.contains(QStringLiteral("scope"))
-                || !cfg.contains(QStringLiteral("key"))
-                || !cfg.contains(QStringLiteral("value"))
+                !hasScopeSideOk || !hasKeySideOk || !hasValueSideOk
                 || !cfg.contains(QStringLiteral("is_temporary"))
                 || !cfg.contains(QStringLiteral("should_persist"))
-                || !cfg.contains(QStringLiteral("sensitivity_level"));
+                || !hasSensitivitySideOk;
             if (!hasCfg || missingRequired) {
                 return client::buildErrorResponse(
                     parts.requestId, parts.traceId,
@@ -611,9 +640,9 @@ void D6cMultiSourceAdaptersTest::behaviorCarriesPendingMappingStatus()  // C4
 
 void D6cMultiSourceAdaptersTest::retryOfTurnIdInjectedAndNotEqualToSelfTurnId()  // D1
 {
-    // Retry 场景：retry_of_turn_id 必须注入 metadata，且不等于自身 turn_id
-    // （TB-D6C-04：buildTurnFinalizedEventJson 增加 retryOfTurnId 参数，
-    // 非空时自动写入 metadata.retry_of_turn_id）。
+    // Retry 场景：retry_of_turn_id 必须注入 event top-level，且不等于自身 turn_id
+    // （DRIFT-B fix: retry_of_turn_id 是 TurnFinalizedEvent 字段，不是 EventMetadata 字段。
+    // 对齐 contract parser 的 flat JSON 读取位置。）
     client::MemoryViewModel vm;
     const QString selfTurnId = QStringLiteral("turn-retry-002");
     const QString retryOfTurnId = QStringLiteral("turn-retry-001");
@@ -633,14 +662,14 @@ void D6cMultiSourceAdaptersTest::retryOfTurnIdInjectedAndNotEqualToSelfTurnId() 
 
     // ① turn_id == selfTurnId
     QCOMPARE(meta.value(QStringLiteral("turn_id")).toString(), selfTurnId);
-    // ② retry_of_turn_id 字段存在且非空
-    QVERIFY2(meta.contains(QStringLiteral("retry_of_turn_id")),
-             "retry 场景 metadata 必须含 retry_of_turn_id");
-    QVERIFY(!meta.value(QStringLiteral("retry_of_turn_id")).toString().isEmpty());
+    // ② retry_of_turn_id 字段在 event top-level 存在且非空（DRIFT-B: 从 metadata 移到 event）
+    QVERIFY2(event.contains(QStringLiteral("retry_of_turn_id")),
+             "retry 场景 event top-level 必须含 retry_of_turn_id");
+    QVERIFY(!event.value(QStringLiteral("retry_of_turn_id")).toString().isEmpty());
     // ③ retry_of_turn_id != turn_id
-    QVERIFY2(meta.value(QStringLiteral("retry_of_turn_id")).toString() != selfTurnId,
+    QVERIFY2(event.value(QStringLiteral("retry_of_turn_id")).toString() != selfTurnId,
              "retry_of_turn_id 必须不等于 turn_id 本身");
-    QCOMPARE(meta.value(QStringLiteral("retry_of_turn_id")).toString(), retryOfTurnId);
+    QCOMPARE(event.value(QStringLiteral("retry_of_turn_id")).toString(), retryOfTurnId);
 }
 
 void D6cMultiSourceAdaptersTest::stopReasonExplicitlySet()  // D2

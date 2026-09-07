@@ -117,8 +117,8 @@ def test_downgrade_preserves_data_and_fts(db_path):
         "VALUES ('s1', 1, '银河麒麟', 0, '2026-08-27T00:00:00+00:00', 't1', 'H-1')"
     )
     conn.execute(
-        "INSERT INTO memory_entries (user_id, entry_type, content, confidence, version, is_deleted, created_at, updated_at, trace_id) "
-        "VALUES ('u1', 'knowledge', '{\"text\":\"麒麟桌面系统\"}', 0.9, 1, 0, '2026-08-27T00:00:00+00:00', '2026-08-27T00:00:00+00:00', 't1')"
+        "INSERT INTO memory_entries (user_id, entry_type, content, confidence, version, row_revision, is_deleted, created_at, updated_at, trace_id) "
+        "VALUES ('u1', 'preference', '{\"text\":\"麒麟桌面系统\"}', 0.9, 1, 1, 0, '2026-08-27T00:00:00+00:00', '2026-08-27T00:00:00+00:00', 't1')"
     )
     conn.commit()
     conn.close()
@@ -152,12 +152,12 @@ def test_downgrade_upgrade_roundtrip_fts_matchers(db_path):
         "VALUES ('s1', 1, '基座', 0, '2026-08-27T00:00:00+00:00', 't1', 'H-1')"
     )
     conn.execute(
-        "INSERT INTO memory_entries (user_id, entry_type, content, confidence, version, is_deleted, created_at, updated_at, trace_id) "
-        "VALUES ('u1', 'knowledge', '{\"text\":\"麒麟桌面系统\"}', 0.9, 1, 0, '2026-08-27T00:00:00+00:00', '2026-08-27T00:00:00+00:00', 't1')"
+        "INSERT INTO memory_entries (user_id, entry_type, content, confidence, version, row_revision, is_deleted, created_at, updated_at, trace_id) "
+        "VALUES ('u1', 'preference', '{\"text\":\"麒麟桌面系统\"}', 0.9, 1, 1, 0, '2026-08-27T00:00:00+00:00', '2026-08-27T00:00:00+00:00', 't1')"
     )
     conn.execute(
-        "INSERT INTO memory_entries (user_id, entry_type, content, confidence, version, is_deleted, created_at, updated_at, trace_id) "
-        "VALUES ('u1', 'knowledge', '{\"text\":\"机密软删内容ABC\"}', 0.9, 1, 1, '2026-08-27T00:00:00+00:00', '2026-08-27T00:00:00+00:00', 't1')"
+        "INSERT INTO memory_entries (user_id, entry_type, content, confidence, version, row_revision, is_deleted, created_at, updated_at, trace_id) "
+        "VALUES ('u1', 'preference', '{\"text\":\"机密软删内容ABC\"}', 0.9, 1, 1, 1, '2026-08-27T00:00:00+00:00', '2026-08-27T00:00:00+00:00', 't1')"
     )
     conn.commit()
     conn.close()
@@ -213,13 +213,13 @@ def test_downgrade_excludes_soft_deleted_from_fts(db_path):
     )
     # 正常记录（is_deleted=0）
     conn.execute(
-        "INSERT INTO memory_entries (user_id, entry_type, content, confidence, version, is_deleted, created_at, updated_at, trace_id) "
-        "VALUES ('u1', 'knowledge', '{\"text\":\"麒麟桌面系统\"}', 0.9, 1, 0, '2026-08-27T00:00:00+00:00', '2026-08-27T00:00:00+00:00', 't1')"
+        "INSERT INTO memory_entries (user_id, entry_type, content, confidence, version, row_revision, is_deleted, created_at, updated_at, trace_id) "
+        "VALUES ('u1', 'preference', '{\"text\":\"麒麟桌面系统\"}', 0.9, 1, 1, 0, '2026-08-27T00:00:00+00:00', '2026-08-27T00:00:00+00:00', 't1')"
     )
     # 软删除记录（is_deleted=1）
     conn.execute(
-        "INSERT INTO memory_entries (user_id, entry_type, content, confidence, version, is_deleted, created_at, updated_at, trace_id) "
-        "VALUES ('u1', 'knowledge', '{\"text\":\"软删机密内容XYZ\"}', 0.9, 1, 1, '2026-08-27T00:00:00+00:00', '2026-08-27T00:00:00+00:00', 't1')"
+        "INSERT INTO memory_entries (user_id, entry_type, content, confidence, version, row_revision, is_deleted, created_at, updated_at, trace_id) "
+        "VALUES ('u1', 'preference', '{\"text\":\"软删机密内容XYZ\"}', 0.9, 1, 1, 1, '2026-08-27T00:00:00+00:00', '2026-08-27T00:00:00+00:00', 't1')"
     )
     conn.commit()
     conn.close()

@@ -1,0 +1,24 @@
+=== D14D R2 FINAL ALLOWLIST-AWARE CLEAN GATE ===
+UTC=2026-09-06T08:30:11Z
+Carlton-pc
+Carlton
+=== ALLOWLIST IDENTITY ===
+PATH=/home/Carlton/.box MODE=700 OWNER=Carlton GROUP=Carlton DEV=2052 INODE=1441808
+ALLOWLIST_PATH=/home/Carlton/.box
+ALLOWLIST_SCOPE=EXACT_PATH_ONLY
+ALLOWLIST_REASON=OPAQUE_HOME_DIR_OUTSIDE_D14A_FROZEN_RUNTIME_PATH_SET
+=== ENVIRONMENT REACHABILITY ===
+ALLOWLIST_PATH_REACHABILITY=PASS
+=== EXPLICIT D14A RUNTIME PATH GATE ===
+ABSENT=/home/Carlton/.local/share/kylin-memory-d14a
+ABSENT=/home/Carlton/.local/share/kylin-memory
+ABSENT=/home/Carlton/.config/kylin-memory
+ABSENT=/home/Carlton/.local/state/kylin-memory
+ABSENT=/home/Carlton/.local/bin/kylin-memory-server
+ABSENT=/home/Carlton/.config/systemd/user/kylin-memory.service
+ABSENT=/run/user/1000/kylin-memory/memory.sock
+D14D_R2_RUNTIME_PATH_STATE=PASS
+=== HOME RESIDUE SCAN WITH EXACT PRUNE ===
+D14D_R2_HOME_FIND=PASS
+D14D_R2_ALLOWLIST_VALIDATED=PASS
+D14D_R2_CLEAN_STATE=PASS

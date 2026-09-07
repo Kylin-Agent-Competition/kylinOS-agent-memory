@@ -1,0 +1,12 @@
+{
+  "fake": false,
+  "method": "memory.embed",
+  "status": "ok",
+  "dimension": 768,
+  "vector_len": 768,
+  "degraded": false,
+  "model": "ensemble-embd_gte-base_uint8-text",
+  "health": {"service": "ok", "bridge_loaded": true, "sdk_missing": false},
+  "latency_ms_first": 205.5,
+  "latency_ms_after_restart": 2.1
+}

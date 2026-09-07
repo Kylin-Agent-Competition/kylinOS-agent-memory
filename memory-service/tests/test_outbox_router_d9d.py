@@ -215,7 +215,9 @@ def test_build_outbox_router_no_providers_has_no_routes():
 
 
 def test_build_outbox_router_registers_with_provider_and_service():
-    router = build_outbox_router(vector_provider=FakeVectorProvider())
+    router = build_outbox_router(
+        vector_provider=FakeVectorProvider(), digest_key_id="k1", digest_key=b"test-key"
+    )
     assert router.has_route(repo.EVENT_MEMORY_UPSERTED)
 
 

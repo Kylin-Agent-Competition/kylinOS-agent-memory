@@ -48,12 +48,12 @@ $ alembic -c migrations/alembic.ini history
 | §四.9 | delete_mode 门禁：ADR-019 冻结可信来源；Repository 不推导；LLM 不终判；hard 接线前 fail-closed | ADR-019 §4.2 + S5 fail-closed | 落地（D3 已决策） |
 | §五.1 | preview：规则引擎生成 resolved/affected/selection_hash → 凭据（32B，只存 SHA-256）→ 返回 {preview_result, selection_hash, credential_ttl}；Preview 后清 selector | S3/S4 + S9（resolver seam，D6） | 落地（D6 已决策） |
 | §五.2 | execute：校验绑定+未过期+未使用 → 只消费已确认 ID 软删 → 标记凭据已消费 → executed_count → 审计；`executed_count != affected_count` 不进 completed | S4/S5 | 落地 |
-| §五.3 | 幂等重放返回首次结果 | S4（execute_idempotent 复用） | 落地 |
+| §五.3 | execute 幂等重放返回首次结果；**forget.preview 为一次性凭据受控例外（R2 收口）**：同键+同指纹重放 fail-closed → `INVALID_REQUEST`，不重发/不生成第二枚凭据 | S4（execute_idempotent 复用 + preview cache 脱敏） | 落地（R2 收口） |
 | §五.4 | 凭据失败 → INVALID_REQUEST；事务失败整体回滚凭据保留 | S3/S4 错误映射 | 落地 |
 | §六 | Outbox 高优先级：方案 A（nullable priority + 部分索引 + worker ORDER BY priority DESC, next_retry_at ASC + CHECK 扩展 'forget'） | S1/S6 | 落地（D1 已决策） |
 | §七 | 关键决策 F-1~F-14 全部采纳 | 任务卡 §一.1~§一.7 + ADR-015/019 | 落地（F-11 DEFERRED 不实现） |
 | §八 | 错误语义复用冻结域，不新增错误码 | S4 映射表（任务卡 §一.3） | 落地 |
-| §九 | L0/L1/L2 测试规划（逐项） | 任务卡 §六（20 项 L1 + L0 + L2 清单） | 落地 |
+| §九 | L0/L1/L2 测试规划（逐项） | 任务卡 §六（21 项 L1 + L0 + L2 清单） | 落地 |
 
 ---
 
@@ -81,6 +81,8 @@ $ alembic -c migrations/alembic.ini history
 | D4 | Preview 凭据明文回传信道 | **响应回传一次明文**（服务端只存哈希；已冻结 `confirmation_token` 字段） | ADR-019 + handler |
 | D5 | selection_hash 派生域 | **仅由结构化 `resolved_target_ids` 派生** | S3 + 安全用例 |
 | D6 | Preview 规则引擎 seam 归属与范围 | **D 轨新增 `service/forgetting.py`**；single_item/session 确定性；topic/time_window/full_reset fail-closed | S9 新增文件 + 测试 |
+
+> **R2 收口说明（PR #120 第二轮 REWORK）**：`forget.preview` 幂等重放受控例外与 Preview 响应字段真源统一由 ADR-019 v2 记录（§五.3 / 任务卡 §一.5 / 用例 21），属契约文档治理收口，未新增 D 决策项，待 Reviewer E 复审确认。
 
 ---
 

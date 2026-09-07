@@ -1,15 +1,17 @@
-name: Memory Client L0 ctest
+name: Memory Client L0 ctest + Contract L0 ctest
 
 on:
   pull_request:
     branches: [main, integration]
     paths:
       - 'memory-client/**'
+      - 'os-agent-integration/**'
       - '.github/workflows/memory-client-ctest.yml'
   push:
     branches: [main, integration, 'feat/**']
     paths:
       - 'memory-client/**'
+      - 'os-agent-integration/**'
       - '.github/workflows/memory-client-ctest.yml'
   workflow_dispatch:
 
@@ -29,7 +31,33 @@ jobs:
             build-essential \
             cmake \
             qtbase5-dev \
-            qt5-qmake
+            qt5-qmake \
+            qtdeclarative5-dev \
+            qtquickcontrols2-5-dev \
+            qml-module-qtquick2 \
+            qml-module-qtquick-controls2 \
+            qml-module-qtquick-layouts \
+            qml-module-qtquick-window2 \
+            qml-module-qtquick-dialogs \
+            libqt5quick5 \
+            libqt5gui5 \
+            libqt5qml5 \
+            libgl1-mesa-dev \
+            libqt5sql5-sqlite
+        # d11c_qml_load (Reviewer E HIGH-01) 需要 QQuickView
+        # 真实加载 D11DemoOrchestratorPage.qml，因此 L0 ctest Job 需安装
+        # Qt Quick 头文件 + 运行时 QML 模块；原仅 qtbase5-dev 会在
+        # target_link_libraries(Qt5::Qml/Quick/Gui) 阶段报 IMPORTED target
+        # 未找到，CMake Configure 失败，后续 build/ctest 全部跳过。
+        # libqt5quick5/libqt5gui5 + libgl1-mesa-dev：确保 offscreen runner
+        # 里 Qt Quick SceneGraph software backend plugin 及其 GL fallback
+        # 能被找到（原裸 QQmlComponent::create() 在 headless CI 触发
+        # SIGSEGV signal 11；已改用 QQuickView + QT_QUICK_BACKEND=software
+        # 稳定完成 QQuickItem 实例化 + Step Card implicitHeight>0 验证）。
+        # libqt5sql5-sqlite：Host mapping S2 test_production_source_resolver
+        # 需要 Qt5 Sql QSQLITE 运行时驱动插件（qtbase5-dev Depends 的
+        # libqt5sql5 仅提供链接库；--no-install-recommends 不会带上
+        # Recommends 的 sqlite 驱动插件）。
 
       - name: Configure CMake (QML app OFF, tests ON)
         run: |
@@ -44,6 +72,9 @@ jobs:
       - name: Run ctest
         working-directory: memory-client/build
         run: ctest --output-on-failure --verbose
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
 
   qml-build-smoke:
     name: memory-client QML app smoke build
@@ -84,3 +115,48 @@ jobs:
 
       - name: Confirm binary exists
         run: test -x memory-client/build-qml/kylin-memory-client
+
+  contract-ctest:
+    name: os-agent-integration contract ctest (standalone)
+    runs-on: ubuntu-22.04
+    # 独立 standalone：直接针对 os-agent-integration/CMakeLists.txt（不依赖
+    # memory-client 顶层 CMake 项目）。这是 Reviewer D HIGH-02 / HIGH-03
+    # 的核心修复：之前 contract 目录的修改不会触发任何 build/test，
+    # "测试代码不编译但 PR 全绿"。现在把 configure/build/ctest 作为独立
+    # job 合入同一份 workflow，并在 paths 里包含 os-agent-integration/**
+    # 保证 contract / examples / tests / standalone CMake 任一处改动都
+    # 会触发。
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt5 (Core + Test) & cmake
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            qtbase5-dev \
+            qt5-qmake
+
+      - name: Configure os-agent-integration standalone (tests ON)
+        run: |
+          cmake -S os-agent-integration \
+                -B os-agent-integration/build \
+                -DBUILD_TESTING=ON \
+                -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build test_memory_event_contract_v1
+        run: |
+          cmake --build os-agent-integration/build \
+                --target test_memory_event_contract_v1 \
+                -j"$(nproc)"
+
+      - name: ctest os-agent-integration standalone
+        run: |
+          ctest --test-dir os-agent-integration/build \
+                --output-on-failure \
+                --verbose
+        env:
+          QT_QPA_PLATFORM: offscreen
+

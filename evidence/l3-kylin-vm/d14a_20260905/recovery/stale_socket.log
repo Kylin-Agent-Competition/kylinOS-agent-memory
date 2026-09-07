@@ -1,0 +1,1 @@
+stale socket: install recreates via systemd RuntimeDirectory; verify confirms holder PID==MainPID
