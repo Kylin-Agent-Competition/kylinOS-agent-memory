@@ -25,12 +25,15 @@ from retrieval.contracts import (
     Availability,
     EvidenceLevel,
     IndexState,
+    IndexStateSummary,
     IndexStateRequest,
     IndexStatus,
     VectorDeleteRequest,
     VectorDeleteResult,
     VectorRebuildRequest,
     VectorRebuildResult,
+    VectorSearchRequest,
+    VectorSearchResult,
     VectorUpsertRequest,
     VectorUpsertRejection,
     VectorUpsertResult,
@@ -39,6 +42,17 @@ from retrieval.contracts import (
     digest_from_canonical,
 )
 from retrieval.sqlite_vector_snapshot import SqliteVectorSnapshotReader
+
+_SEARCH_FILTER_DIGEST_KEY_ID = "d10b-search-filter"
+_SEARCH_FILTER_DIGEST_KEY = b"kylin-memory-d10b-search-filter"
+
+
+def _search_filter_fingerprint(filter: Any) -> str:
+    return digest_from_canonical(
+        _SEARCH_FILTER_DIGEST_KEY_ID,
+        _SEARCH_FILTER_DIGEST_KEY,
+        filter.model_dump(mode="json"),
+    )
 
 
 class SqliteVectorProvider:
@@ -53,6 +67,7 @@ class SqliteVectorProvider:
         embedding_service: Any | None = None,
         index_text_resolver: Any | None = None,
         dimension: int | None = None,
+        allow_knowledge_only_rebuild: bool = False,
     ) -> None:
         self._engine = engine
         self._vector_client = vector_client
@@ -60,6 +75,7 @@ class SqliteVectorProvider:
         self._embedding_service = embedding_service
         self._index_text_resolver = index_text_resolver or (lambda payload: payload.get("index_text"))
         self._dimension = dimension
+        self._allow_knowledge_only_rebuild = allow_knowledge_only_rebuild
 
     def has_digest_key(self, key_id: str, key: bytes) -> bool:
         """判断 Router 注入的受控摘要密钥是否与 Provider 完全一致。"""
@@ -610,6 +626,111 @@ class SqliteVectorProvider:
             )
         return self._result(request_id=request.request_id, started=started, value=value)
 
+    def search(self, request: VectorSearchRequest) -> ProviderResult[VectorSearchResult]:
+        """Search the SQLite-routed serving generation through the real CLI."""
+        started = time.monotonic()
+        if datetime.now(timezone.utc) >= request.deadline_at:
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                error=self._error(RetrievalErrorCode.DEADLINE_EXCEEDED, "检索截止时间已过"),
+            )
+        if self._dimension is None or self._dimension <= 0:
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                error=self._error(RetrievalErrorCode.PROVIDER_NOT_READY, "Vector 检索维度未配置"),
+            )
+        if len(request.query_vector) != self._dimension:
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                error=self._error(RetrievalErrorCode.DIMENSION_MISMATCH, "检索向量维度不匹配"),
+            )
+        if request.filter.user_id != request.user_id:
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                error=self._error(RetrievalErrorCode.USER_SCOPE_VIOLATION, "检索过滤范围不匹配"),
+            )
+
+        scope_id = f"user:{request.user_id}"
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                select(
+                    vector_index_generations.c.generation,
+                    vector_index_generations.c.collection_name,
+                    vector_index_generations.c.status,
+                    vector_index_generations.c.schema_version,
+                    vector_index_generations.c.record_count,
+                ).where(
+                    vector_index_generations.c.scope_id == scope_id,
+                    vector_index_generations.c.is_serving == 1,
+                )
+            ).mappings().one_or_none()
+        if row is None:
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                value=VectorSearchResult(
+                    hits=[],
+                    raw_hit_count=0,
+                    valid_hit_count=0,
+                    dropped_hit_count=0,
+                    index_state=IndexStateSummary(
+                        provider="sqlite_vector",
+                        scope_id=scope_id,
+                        status=IndexStatus.EMPTY,
+                        is_queryable=False,
+                    ),
+                    filter_fingerprint=_search_filter_fingerprint(request.filter),
+                ),
+            )
+        if row["status"] != "ready":
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                error=self._error(RetrievalErrorCode.PROVIDER_NOT_READY, "serving Vector 代次不可检索"),
+            )
+        if request.required_generation and request.required_generation != row["generation"]:
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                error=self._error(RetrievalErrorCode.STALE_INDEX, "请求代次不是当前 serving 代次"),
+            )
+
+        try:
+            hits = self._vector_client.search(
+                str(row["collection_name"]),
+                request.query_vector,
+                request.top_n,
+                user_id=request.user_id,
+                filter=request.filter,
+                deadline_at=request.deadline_at,
+            )
+        except Exception:
+            return self._result(
+                request_id=request.request_id,
+                started=started,
+                error=self._error(RetrievalErrorCode.PROVIDER_UNAVAILABLE, "Vector 检索失败"),
+            )
+
+        value = VectorSearchResult(
+            hits=hits,
+            raw_hit_count=len(hits),
+            valid_hit_count=len(hits),
+            dropped_hit_count=0,
+            index_state=IndexStateSummary(
+                provider="sqlite_vector",
+                scope_id=scope_id,
+                status=IndexStatus(row["status"]),
+                is_queryable=True,
+                serving_generation=str(row["generation"]),
+            ),
+            filter_fingerprint=_search_filter_fingerprint(request.filter),
+        )
+        return self._result(request_id=request.request_id, started=started, value=value)
+
     @staticmethod
     def _collection_name(scope_id: str, generation: str) -> str:
         safe_scope = re.sub(r"[^A-Za-z0-9]+", "_", scope_id).strip("_")
@@ -701,7 +822,10 @@ class SqliteVectorProvider:
                     vector_index_generations.c.is_serving == 1,
                 )
             ).scalar_one_or_none()
-            snapshot = SqliteVectorSnapshotReader(self._index_text_resolver).read(
+            snapshot = SqliteVectorSnapshotReader(
+                self._index_text_resolver,
+                allow_knowledge_only=self._allow_knowledge_only_rebuild,
+            ).read(
                 conn,
                 user_id=request.user_id,
                 source_snapshot_id=request.source_snapshot_id,

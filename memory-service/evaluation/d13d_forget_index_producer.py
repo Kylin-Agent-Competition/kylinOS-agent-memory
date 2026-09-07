@@ -25,6 +25,7 @@ from retrieval.contracts import ObjectType, digest_from_canonical
 
 D13D_INDEX_DIGEST_KEY_ID = "d13d-internal"
 _DIGEST_KEY = b"kylin-memory-d13d-internal"
+D13D_INDEX_DIGEST_KEY = _DIGEST_KEY
 
 
 def index_knowledge_docs(

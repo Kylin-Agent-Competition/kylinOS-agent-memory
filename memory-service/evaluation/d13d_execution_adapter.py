@@ -26,7 +26,7 @@ import sqlite3
 import shutil
 import subprocess
 from types import MappingProxyType
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional
 
 from sqlalchemy import and_, select, text
 from db.schema import outbox, source_events
@@ -41,6 +41,11 @@ from outbox.router import OutboxRouter
 from outbox.worker import OutboxWorker
 from providers.extraction_provider import ExtractionProvider, TurnFinalizedEvent
 from evaluation.d13d_forget_fts_observer import build_forget_fts_consumer, build_fts_observer
+from evaluation.d13d_forget_dual_channel_observer import (
+    PROFILE_ID as DUAL_CHANNEL_PROFILE_ID,
+    build_dual_channel_forget_consumer,
+    build_dual_channel_observer,
+)
 from service.conflict_resolution_policy import ConflictResolutionPolicy, ConflictSide
 from evaluation.d13d_forget_state_binding import (
     BINDING_VERSION_V2,
@@ -168,13 +173,14 @@ _FORBIDDEN_EVALUATION_TOKENS = frozenset(
 _ENGINE_BINDING_TOKENS: dict[int, str] = {}
 
 # R8/B1：Forget realtime/rebuild observation closed allowlist。
-# 唯一 approved profile = d13d-validation-profile-v2（FTS5 真实通道，E 裁定 2026-09-07）。
-# value = builder(binding, artifact, sample_id) -> D13DForgetFtsObserver（initialize 已完成）。
+# FTS5 是既有 approved profile；dual-channel 仅在 E 裁定的 knowledge-only
+# rebuild 边界内显式启用，且 production app.py 默认路径不引用它。
 # artifact 只能引用 allowlist 内 profile；未知/缺失一律 fail-closed。
 OBSERVATION_PROFILES: dict[str, Any] = {
     # canonical（E 裁定）；v1 名保留兼容既有 V1-based artifact 引用，同一 FTS 实现
     "d13d-validation-profile-v2": build_fts_observer,
     "d13d-validation-profile-v1": build_fts_observer,
+    DUAL_CHANNEL_PROFILE_ID: build_dual_channel_observer,
 }
 
 
@@ -1329,14 +1335,23 @@ def _forget_outbox_row(engine: Any, outbox_id: int) -> Optional[Dict[str, Any]]:
     return dict(row) if row is not None else None
 
 
-def _consume_forget_executed(engine: Any, *, forget_plan_id: str, observer: Any) -> None:
+def _consume_forget_executed(
+    engine: Any,
+    *,
+    forget_plan_id: str,
+    observer: Any,
+    retrieval_profile: str,
+) -> None:
     """Consume forget.executed through the formal worker/router and require ACK."""
     event = _load_forget_executed_payload(engine, forget_plan_id)
     if event is None:
         raise ExecutionPreflightError(
             "forget.executed outbox missing - deletion consumer cannot ACK"
         )
-    consumer, embedding_service = build_forget_fts_consumer(observer)
+    if retrieval_profile == DUAL_CHANNEL_PROFILE_ID:
+        consumer, embedding_service = build_dual_channel_forget_consumer(observer)
+    else:
+        consumer, embedding_service = build_forget_fts_consumer(observer)
     router = OutboxRouter()
     router.register("forget.executed", consumer)
     worker = OutboxWorker(
@@ -1480,6 +1495,7 @@ def dispatch_forget_sample(
             binding.engine,
             forget_plan_id=forget_plan_id,
             observer=observer,
+            retrieval_profile=str(artifact.get("retrieval_profile")),
         )
         realtime_observation = observer.realtime(confirmed)
         rebuild_observation = observer.rebuild(confirmed)
@@ -1519,6 +1535,8 @@ def dispatch_forget_sample(
             "forget_realtime_watermark": realtime_observation.source_watermark.model_dump(mode="json"),
             "forget_rebuild_snapshot_id": rebuild_observation.source_snapshot_id,
             "forget_rebuild_watermark": rebuild_observation.source_watermark.model_dump(mode="json"),
+            "forget_observation_profile": artifact.get("retrieval_profile"),
+            "forget_channel_results": getattr(observer, "channel_results", {}),
         },
     )
     return _raw_record(

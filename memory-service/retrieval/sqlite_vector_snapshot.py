@@ -55,14 +55,27 @@ class SqliteVectorSnapshotReader:
     """读取已提交且未软删除的 knowledge，并维持用户边界。
 
     ``memory_items``/``memory_versions`` 不是当前 Vector 重建语义的一部分。
-    若该用户仍有 active preference，说明目标未清理或调用方要求了未授权的
-    重建语义；此处选择拒绝整个快照，而不是生成一个看似成功的部分索引。
+    默认情况下，若该用户仍有 active preference，说明目标未清理或调用方要求
+    了未授权的重建语义；此处拒绝整个快照，而不是生成看似成功的部分索引。
+
+    E 裁定 ``APPROVE_KNOWLEDGE_ONLY_PARTIAL_REBUILD``（2026-09-07）后，只有
+    显式授权的 D13D 非 ``full_reset`` knowledge-only rebuild 可把
+    ``allow_knowledge_only`` 置为 true；snapshot 仍包含该用户当前全部 active
+    Knowledge，且不会把 preference 加入 Vector 真源。
     """
 
-    def __init__(self, index_text_resolver: IndexTextResolver) -> None:
+    def __init__(
+        self,
+        index_text_resolver: IndexTextResolver,
+        *,
+        allow_knowledge_only: bool = False,
+    ) -> None:
         if not callable(index_text_resolver):
             raise TypeError("索引文本解析器必须可调用")
         self._index_text_resolver = index_text_resolver
+        if not isinstance(allow_knowledge_only, bool):
+            raise TypeError("allow_knowledge_only 必须是布尔值")
+        self._allow_knowledge_only = allow_knowledge_only
 
     def read(
         self,
@@ -93,10 +106,16 @@ class SqliteVectorSnapshotReader:
             .order_by(memory_items.c.id.asc())
         ).scalars().all()
         if active_preference_ids:
-            raise ValueError(
-                "active preference records are excluded from the vector rebuild "
-                f"snapshot; fail-closed item_ids={active_preference_ids!r}"
-            )
+            if self._allow_knowledge_only:
+                # E ruling authorizes only knowledge exclusion here. The
+                # dual-channel profile keeps this flag false for full_reset so
+                # any surviving active preference still fails closed.
+                pass
+            else:
+                raise ValueError(
+                    "active preference records are excluded from the vector rebuild "
+                    f"snapshot; fail-closed item_ids={active_preference_ids!r}"
+                )
 
         rows = conn.execute(
             select(
