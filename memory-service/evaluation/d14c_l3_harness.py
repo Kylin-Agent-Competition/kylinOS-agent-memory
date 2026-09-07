@@ -1,0 +1,204 @@
+"""D14C L3 formal-run preparation helpers.
+
+This module does not launch a service, create an evidence directory, or judge a
+runtime result.  It only rejects an attempted formal run when its external
+handoff is incomplete.  The evaluator remains ``d13c_session_eval``; the
+converter below merely preserves a real VM capture's D13C-compatible payload.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+from pathlib import Path
+import re
+import subprocess
+from typing import Any, Callable, Mapping
+
+
+_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_EVIDENCE_ROOT = re.compile(r"^evidence/l3-kylin-vm/d14c_[A-Za-z0-9][A-Za-z0-9_.-]*$")
+REQUIRED_ROUTES = (
+    "turn.finalized",
+    "event.ingest",
+    "forget.preview",
+    "forget.execute",
+)
+HANDOFF_SCHEMA_VERSION = "d14c-formal-handoff/v1"
+CAPTURE_SCHEMA_VERSION = "d14c-runtime-capture/v1"
+
+
+class D14CPreflightError(ValueError):
+    """The requested formal run is not safe to start."""
+
+
+class D14CBundleError(ValueError):
+    """A runtime capture cannot be passed to the existing D13C evaluator."""
+
+
+def _git(repository_root: Path, *args: str) -> str:
+    completed = subprocess.run(
+        ["git", "-C", str(repository_root), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if completed.returncode:
+        raise D14CPreflightError("Git identity check failed")
+    return completed.stdout.strip()
+
+
+def _object(value: Any, label: str) -> Mapping[str, Any]:
+    if not isinstance(value, dict):
+        raise D14CPreflightError(f"{label} must be an object")
+    return value
+
+
+def _required_text(data: Mapping[str, Any], key: str, label: str) -> str:
+    value = data.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise D14CPreflightError(f"{label}.{key} must be a non-empty string")
+    return value.strip()
+
+
+def _sha256(data: Mapping[str, Any], key: str, label: str) -> None:
+    value = _required_text(data, key, label)
+    if not _SHA256.fullmatch(value):
+        raise D14CPreflightError(f"{label}.{key} must be a lowercase SHA-256")
+
+
+def validate_formal_handoff(
+    handoff: Mapping[str, Any],
+    *,
+    repository_root: Path,
+    git_runner: Callable[..., str] = _git,
+) -> dict[str, str]:
+    """Validate every D14C formal gate without creating any runtime state.
+
+    A caller must provide a D13D/D14D/host-identity/MemoryContext handoff.  The
+    output is deliberately just identity metadata; it cannot be mistaken for
+    a formal result.
+    """
+
+    if handoff.get("schema_version") != HANDOFF_SCHEMA_VERSION:
+        raise D14CPreflightError("schema_version is not d14c-formal-handoff/v1")
+    root = repository_root.resolve()
+    if not (root / ".git").exists():
+        raise D14CPreflightError("repository_root is not a Git worktree")
+    if git_runner(root, "status", "--porcelain"):
+        raise D14CPreflightError("worktree must be clean")
+
+    tested_commit = _required_text(handoff, "formal_tested_commit", "handoff")
+    if not _GIT_SHA.fullmatch(tested_commit):
+        raise D14CPreflightError("formal_tested_commit must be a full lowercase Git SHA")
+    if git_runner(root, "rev-parse", "HEAD") != tested_commit:
+        raise D14CPreflightError("formal_tested_commit must equal HEAD")
+
+    for gate_name, expected_status in (("d13d", "FROZEN"), ("d14d", "L3_READY")):
+        gate = _object(handoff.get(gate_name), gate_name)
+        if gate.get("status") != expected_status:
+            raise D14CPreflightError(f"{gate_name}.status must be {expected_status}")
+        _required_text(gate, "evidence_reference", gate_name)
+
+    release = _object(handoff.get("release_package"), "release_package")
+    for key in ("path", "version"):
+        _required_text(release, key, "release_package")
+    _sha256(release, "sha256", "release_package")
+    _sha256(release, "manifest_sha256", "release_package")
+
+    artifacts = _object(handoff.get("artifacts"), "artifacts")
+    for name in ("ai_assistant", "memory_client", "memory_service"):
+        artifact = _object(artifacts.get(name), f"artifacts.{name}")
+        for key in ("path", "version"):
+            _required_text(artifact, key, f"artifacts.{name}")
+        _sha256(artifact, "sha256", f"artifacts.{name}")
+
+    vm = _object(handoff.get("vm"), "vm")
+    for key in ("environment_id", "name", "uuid", "snapshot", "snapshot_uuid"):
+        _required_text(vm, key, "vm")
+
+    identity = _object(handoff.get("trusted_host_identity"), "trusted_host_identity")
+    if identity.get("status") != "APPROVED":
+        raise D14CPreflightError("trusted_host_identity.status must be APPROVED")
+    for key in ("approval_reference", "process_identity", "db_identity"):
+        _required_text(identity, key, "trusted_host_identity")
+    _sha256(identity, "identity_sha256", "trusted_host_identity")
+
+    routes = _object(handoff.get("production_routes"), "production_routes")
+    for method in REQUIRED_ROUTES:
+        if routes.get(method) != "ACTIVE":
+            raise D14CPreflightError(f"production_routes.{method} must be ACTIVE")
+
+    context = _object(handoff.get("memory_context"), "memory_context")
+    if context.get("status") != "FROZEN":
+        raise D14CPreflightError("memory_context.status must be FROZEN")
+    for key in ("schema_version", "freeze_reference", "no_match_semantics", "failure_semantics"):
+        _required_text(context, key, "memory_context")
+    _sha256(context, "schema_sha256", "memory_context")
+
+    relative_evidence_root = _required_text(handoff, "evidence_root", "handoff")
+    if not _EVIDENCE_ROOT.fullmatch(relative_evidence_root):
+        raise D14CPreflightError("evidence_root must be a new evidence/l3-kylin-vm/d14c_* path")
+    evidence_root = (root / relative_evidence_root).resolve()
+    if root not in evidence_root.parents or evidence_root.exists():
+        raise D14CPreflightError("evidence_root must be a new path inside the repository")
+
+    return {
+        "status": "PREFLIGHT_ONLY",
+        "tested_commit": tested_commit,
+        "environment_id": _required_text(vm, "environment_id", "vm"),
+        "evidence_root": relative_evidence_root,
+        "formal_dispatch": "NOT_STARTED",
+    }
+
+
+def load_and_validate_handoff(path: Path, *, repository_root: Path) -> dict[str, str]:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise D14CPreflightError("handoff must be readable UTF-8 JSON") from exc
+    return validate_formal_handoff(_object(raw, "handoff"), repository_root=repository_root)
+
+
+def convert_runtime_capture(capture: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the exact existing D13C evaluator input from a real VM capture.
+
+    It intentionally accepts no pass/fail field and rejects a capture until the
+    VM collector has marked it as raw evidence.  The D13C evaluator remains the
+    sole owner of all session metrics.
+    """
+
+    if capture.get("schema_version") != CAPTURE_SCHEMA_VERSION:
+        raise D14CBundleError("schema_version is not d14c-runtime-capture/v1")
+    if capture.get("capture_status") != "VM_RAW_CAPTURED":
+        raise D14CBundleError("capture_status must be VM_RAW_CAPTURED")
+    provenance = capture.get("provenance")
+    if not isinstance(provenance, dict):
+        raise D14CBundleError("provenance must be an object")
+    for key in ("tested_commit", "environment_id", "evidence_root"):
+        if not isinstance(provenance.get(key), str) or not provenance[key]:
+            raise D14CBundleError(f"provenance.{key} must be a non-empty string")
+    if not _GIT_SHA.fullmatch(provenance["tested_commit"]):
+        raise D14CBundleError("provenance.tested_commit must be a full lowercase Git SHA")
+    config = capture.get("d13c_config")
+    sessions = capture.get("sessions")
+    if not isinstance(config, dict) or not isinstance(sessions, list):
+        raise D14CBundleError("d13c_config must be an object and sessions must be an array")
+    if config.get("implementation_commit") != provenance["tested_commit"]:
+        raise D14CBundleError("d13c_config.implementation_commit must equal provenance.tested_commit")
+    if config.get("environment") != provenance["environment_id"]:
+        raise D14CBundleError("d13c_config.environment must equal provenance.environment_id")
+    if config.get("evidence_reference") != provenance["evidence_root"]:
+        raise D14CBundleError("d13c_config.evidence_reference must equal provenance.evidence_root")
+    raw_references = capture.get("raw_evidence_references")
+    if not isinstance(raw_references, list) or not raw_references:
+        raise D14CBundleError("raw_evidence_references must be a non-empty array")
+    for reference in raw_references:
+        if not isinstance(reference, str) or not reference.strip():
+            raise D14CBundleError("raw_evidence_references entries must be non-empty strings")
+        relative = Path(reference)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise D14CBundleError("raw_evidence_references entries must be safe relative paths")
+    return {"config": config, "sessions": sessions}
