@@ -139,6 +139,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output_root", type=pathlib.Path, nargs="?")
     parser.add_argument("--guest-repo", default="/home/kylin-agent/kylinOS-agent-memory")
+    parser.add_argument("--host", default=HOST)
+    parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--password-env", default="KYLIN_VM_PASSWORD")
     parser.add_argument("--timeout-s", type=int, default=30)
     parser.add_argument(
@@ -176,7 +178,7 @@ def main() -> int:
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
-        client.connect(HOST, port=PORT, username=USER, password=password, timeout=20)
+        client.connect(args.host, port=args.port, username=USER, password=password, timeout=20)
         results = run_remote(client, entries, timeout_s=args.timeout_s)
     finally:
         client.close()
