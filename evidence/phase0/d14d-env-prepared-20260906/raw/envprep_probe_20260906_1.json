@@ -1,0 +1,18 @@
+{
+  "allow_missing_repo": false,
+  "completed_at_utc": "2026-09-06T04:57:49.989285+00:00",
+  "duration_seconds": 25.041,
+  "endpoint": "127.0.0.1:2223",
+  "error": "No existing session",
+  "exit_code": 2,
+  "log_file": "envprep_probe_20260906_1.log",
+  "log_sha256": "3403586813b0278677e2ea6b7e9ed00d177fe28a2431f04444ac48bde4e8f016",
+  "mode": "probe",
+  "requested_command": null,
+  "run_id": "envprep_probe_20260906_1",
+  "started_at_utc": "2026-09-06T04:57:24.948654+00:00",
+  "status": "BLOCKED",
+  "sudo": false,
+  "timed_out": false,
+  "user": "kylin-agent"
+}

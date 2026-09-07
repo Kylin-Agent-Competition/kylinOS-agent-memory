@@ -1,0 +1,59 @@
+{
+  "schema_version": "host-validation/kylin-v11-sdk-identity-carlton/source_inventory/v1",
+  "kind": "INDEPENDENT_KYLIN_HOST_VALIDATION_SOURCE_INVENTORY",
+  "record": "r2 (Carlton independent host, non-authoritative for D14D)",
+  "source_evidence_root": "/mnt/c/Users/Carlton Benzol/Desktop/d14d-env-prepared-20260906-r2",
+  "note": "relative_path values are relative to this package root. Each raw file is byte-for-byte identical to the read-only source file and to the supervisor-recorded SOURCE_SHA256_EXPECTED; equality is asserted by test_package_closure.py.",
+  "files": [
+    {
+      "relative_path": "raw/r2_clean_gate.log",
+      "size_bytes": 109,
+      "sha256": "ee9e83e4dc9bc46ec4da36a4ac0d173ae1d20bcf999e377b293d510bcab16e02"
+    },
+    {
+      "relative_path": "raw/r2_clean_gate_strict.log",
+      "size_bytes": 173,
+      "sha256": "7fded644f2e153ea3f2f98782a2aeee4f208084bdc028d41bb3dd681d586bb10"
+    },
+    {
+      "relative_path": "raw/r2_dependencies.log",
+      "size_bytes": 92397,
+      "sha256": "0f1cfd1db598e306f814b2c87842632bc996f5bfcc8e26a6f1fbe0ea5a7424a6"
+    },
+    {
+      "relative_path": "raw/r2_environment.log",
+      "size_bytes": 959,
+      "sha256": "8e5e898428c3ebaa775833c7bcd927295cc774f53dfcf16020af40d63e64893b"
+    },
+    {
+      "relative_path": "raw/r2_final_clean_gate.log",
+      "size_bytes": 952,
+      "sha256": "dbbd708d7d2400cf871ef812d699b9913031022f2bee13c017c75b19915703da"
+    },
+    {
+      "relative_path": "raw/r2_host_final_state.log",
+      "size_bytes": 456,
+      "sha256": "a9a43892c03f8d248d776f8d8b10ebbc53bd106c188e02fed4ec90add41a6098"
+    },
+    {
+      "relative_path": "raw/r2_host_final_state_after_gate.log",
+      "size_bytes": 477,
+      "sha256": "45d5ccb00a704d1b40b22c34e3f05ac71e548fb1d71b6ca8d629d9fc297ce3a0"
+    },
+    {
+      "relative_path": "raw/r2_host_snapshot_identity.log",
+      "size_bytes": 6880,
+      "sha256": "27ab15d918345437c884db676567ef0b825a16448c37f4e6b353608d830c5720"
+    },
+    {
+      "relative_path": "raw/r2_os-release.raw",
+      "size_bytes": 261,
+      "sha256": "e5952e5be208da49268b7ff5e85176f82e0f8b45d2eadafbc83ab79f222617cc"
+    },
+    {
+      "relative_path": "raw/r2_runtime_residue_gate.log",
+      "size_bytes": 110,
+      "sha256": "fbaaaf8e67a2c8e97cf7058c066382baee38bf2c69945a8f8e8338c30fdeac2b"
+    }
+  ]
+}

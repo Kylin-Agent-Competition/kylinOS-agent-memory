@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 
 from db import repositories as repo
 from db.engine import create_db_engine, init_schema
-from db.schema import outbox
+from db.schema import memory_entries, outbox
 from service.conflict_resolution_policy import EvidenceTier
 from service.lifecycle_policy import PolicyConfig
 from service.lifecycle_worker import evaluate_lifecycle
@@ -39,11 +39,12 @@ def conn(tmp_path):
         yield connection
 
 
-def _knowledge(conn, *, user_id: str = "u1", knowledge_id: str = "k1", event_id: str = "e1"):
+def _knowledge(conn, *, user_id: str = "u1", knowledge_id: str = "k1", event_id: str = "e1", topic_key: str | None = None):
     _event(conn, user_id=user_id, event_id=event_id)
     return repo.insert_knowledge_entry(
         conn, user_id=user_id, knowledge_id=knowledge_id, knowledge_type="fact",
         source_event_id=event_id, content={"safe": "metadata"}, confidence=0.9,
+        topic_key=topic_key,
     )
 
 
@@ -142,6 +143,37 @@ def test_knowledge_ingress_replay_immutable_conflict_fails_closed(conn):
         select(func.count()).select_from(outbox).where(outbox.c.aggregate_id == "k1")
     ).scalar_one()
     assert outbox_count == 1
+
+
+def test_generic_memory_insert_cannot_establish_topic_membership(conn):
+    with pytest.raises(TypeError):
+        repo.insert_memory_entry(
+            conn, user_id="u1", entry_type="knowledge", content={"safe": "metadata"}, topic_key="travel"
+        )
+    created = _knowledge(conn, topic_key="travel")
+    row = conn.execute(
+        select(memory_entries.c.topic_key).where(memory_entries.c.id == created["memory_entry_id"])
+    ).scalar_one()
+    assert row == "travel"
+
+
+@pytest.mark.parametrize("original, replay", [("travel", "travel"), ("travel", "finance"), (None, "travel"), ("travel", None)])
+def test_knowledge_replay_topic_key_is_immutable(conn, original, replay):
+    _knowledge(conn, topic_key=original)
+    if original == replay:
+        result = repo.insert_knowledge_entry(
+            conn, user_id="u1", knowledge_id="k1", knowledge_type="fact",
+            source_event_id="e1", content={"safe": "metadata"}, confidence=0.9,
+            topic_key=replay,
+        )
+        assert result["replayed"] is True
+    else:
+        with pytest.raises(ValueError, match="immutable input"):
+            repo.insert_knowledge_entry(
+                conn, user_id="u1", knowledge_id="k1", knowledge_type="fact",
+                source_event_id="e1", content={"safe": "metadata"}, confidence=0.9,
+                topic_key=replay,
+            )
 
 
 def test_lifecycle_expire_keeps_index_version_and_replay_is_idempotent(conn):

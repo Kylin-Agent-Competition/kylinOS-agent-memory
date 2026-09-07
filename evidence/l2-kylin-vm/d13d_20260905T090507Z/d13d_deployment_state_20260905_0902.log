@@ -1,0 +1,60 @@
+# Kylin VM test evidence
+run_id=d13d_deployment_state_20260905_0902
+collected_at_utc=2026-09-05T08:56:42.164019+00:00
+endpoint=127.0.0.1:2222
+user=kylin-agent
+mode=command
+requested_command=printf 'unit='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user cat kylin-memory.service; printf 'execstart='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show kylin-memory.service -p ExecStart --value; printf 'alembic='; PYTHONPATH=memory-service python3 -m alembic -c migrations/alembic.ini current 2>&1 || true; printf 'venvs='; find /home/kylin-agent -maxdepth 2 -type f -path '*/bin/python*' -printf '%p\n' 2>/dev/null; printf 'service_wrapper='; sed -n '1,10p' /home/kylin-agent/.local/bin/kylin-memory-server 2>&1 || true; printf 'backup='; ls -ld /home/kylin-agent/kylinOS-agent-memory.b70827c-backup 2>&1 || true
+--- guest script ---
+set -eu
+git -C /home/kylin-agent/kylinOS-agent-memory rev-parse --is-inside-work-tree >/dev/null
+cd /home/kylin-agent/kylinOS-agent-memory
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'git_head='; git rev-parse HEAD
+printf 'git_branch='; git branch --show-current
+printf 'git_dirty='; git status --porcelain | wc -l
+set +e
+bash -lc 'printf '"'"'unit='"'"'; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user cat kylin-memory.service; printf '"'"'execstart='"'"'; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show kylin-memory.service -p ExecStart --value; printf '"'"'alembic='"'"'; PYTHONPATH=memory-service python3 -m alembic -c migrations/alembic.ini current 2>&1 || true; printf '"'"'venvs='"'"'; find /home/kylin-agent -maxdepth 2 -type f -path '"'"'*/bin/python*'"'"' -printf '"'"'%p\n'"'"' 2>/dev/null; printf '"'"'service_wrapper='"'"'; sed -n '"'"'1,10p'"'"' /home/kylin-agent/.local/bin/kylin-memory-server 2>&1 || true; printf '"'"'backup='"'"'; ls -ld /home/kylin-agent/kylinOS-agent-memory.b70827c-backup 2>&1 || true'
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+guest_utc=2026-09-05T08:56:42Z
+git_head=053754d611801548fdac59b2894c6862bf85cf56
+git_branch=git_dirty=0
+unit=# /home/kylin-agent/.config/systemd/user/kylin-memory.service
+[Unit]
+Description=Kylin Memory Service
+Documentation=https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+After=network.target
+
+[Service]
+Type=simple
+# 部署冻结 §1.2：%h = $HOME，%t = $XDG_RUNTIME_DIR
+# --no-migrate：生产唯一数据库初始化/升级入口为 Alembic（alembic upgrade head），
+# 启动不再走 create_all 兜底（PR#52 Issue 6）；未先迁移时启动会 fail-fast 拒绝。
+ExecStart=%h/.local/bin/kylin-memory-server --socket %t/kylin-memory/memory.sock --no-migrate
+RuntimeDirectory=kylin-memory
+RuntimeDirectoryMode=0700
+Restart=on-failure
+RestartSec=5s
+
+# 按用户隔离，不要求 root；最小安全加固
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX
+
+# 说明：正式发行环境（麒麟生产系统）systemd 测试未执行前不得写"成品通过"；
+#       本 unit 为设计冻结骨架，需在麒麟 VM 完成 L2 验证（安装/重启/回退）。
+# 安装：cp packaging/systemd/kylin-memory.service ~/.config/systemd/user/
+#       systemctl --user daemon-reload && systemctl --user enable --now kylin-memory
+
+[Install]
+WantedBy=default.target
+execstart={ path=/home/kylin-agent/.local/bin/kylin-memory-server ; argv[]=/home/kylin-agent/.local/bin/kylin-memory-server --socket /run/user/1000/kylin-memory/memory.sock --no-migrate ; ignore_errors=no ; start_time=[Sat 2026-09-05 14:40:10 CST] ; stop_time=[n/a] ; pid=2988 ; code=(null) ; status=0/0 }
+alembic=/usr/bin/python3: No module named alembic
+venvs=service_wrapper=#!/bin/bash
+exec /home/kylin-agent/d4d-venv/bin/python /home/kylin-agent/kylinOS-agent-memory/memory-service/app.py "$@"
+backup=drwxrwxr-x 23 kylin-agent kylin-agent 4096  9月 3日 09:09 /home/kylin-agent/kylinOS-agent-memory.b70827c-backup
+VM_TEST_EXIT=0
+--- runner summary ---
+{"completed_at_utc": "2026-09-05T08:56:43.015834+00:00", "duration_seconds": 0.852, "endpoint": "127.0.0.1:2222", "exit_code": 0, "mode": "command", "requested_command": "printf 'unit='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user cat kylin-memory.service; printf 'execstart='; XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show kylin-memory.service -p ExecStart --value; printf 'alembic='; PYTHONPATH=memory-service python3 -m alembic -c migrations/alembic.ini current 2>&1 || true; printf 'venvs='; find /home/kylin-agent -maxdepth 2 -type f -path '*/bin/python*' -printf '%p\\n' 2>/dev/null; printf 'service_wrapper='; sed -n '1,10p' /home/kylin-agent/.local/bin/kylin-memory-server 2>&1 || true; printf 'backup='; ls -ld /home/kylin-agent/kylinOS-agent-memory.b70827c-backup 2>&1 || true", "run_id": "d13d_deployment_state_20260905_0902", "started_at_utc": "2026-09-05T08:56:42.163559+00:00", "status": "PASS", "timed_out": false, "user": "kylin-agent"}

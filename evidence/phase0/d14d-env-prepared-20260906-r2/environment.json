@@ -1,0 +1,48 @@
+{
+  "schema_version": "d14d-env-prepared/environment_identity/v1",
+  "kind": "W5b-environment-identity",
+  "task": "D14D_ENV_PREPARED",
+  "record": "r2 (ACTIVE)",
+  "collected_at_utc": "2026-09-06T09:38Z (raw runs)",
+  "guest": {
+    "hostname": "yanmouren778-pc",
+    "user": "yanmouren778",
+    "uid": 1000,
+    "kernel_full": "Linux yanmouren778-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 GNU/Linux",
+    "kernel": "6.6.0-63-generic",
+    "arch": "x86_64",
+    "python": "Python 3.12.3",
+    "systemd": "systemd 255 (255.2-ok1.9k1.39)",
+    "disk_root": "/dev/sda5 53G total, 33G used, 18G available (66% used)"
+  },
+  "os_release": {
+    "name": "Kylin",
+    "pretty_name": "Kylin V11",
+    "version": "银河麒麟桌面操作系统V11",
+    "version_id": "v11",
+    "kylin_release_id": "2603",
+    "id_like": "openKylin"
+  },
+  "clean_state_probe": {
+    "project_checkout_count": 0,
+    "memory_install_prefix_count": 0,
+    "stale_launcher_count": 0,
+    "active_memory_unit_count": 0,
+    "memory_socket_count": 0,
+    "venv_count": 0,
+    "build_dir_count": 0,
+    "d14a_workdir_count": 0,
+    "status": "PASS",
+    "gate": "fail-closed (any residue => non-zero exit); values derived from raw/envprep_probe_20260906_r2.log"
+  },
+  "system_package_baseline": {
+    "installed_package_count": 2030,
+    "full_inventory_source": "raw/envprep_deps_20260906_r2.log (full sorted dpkg-query -W listing)"
+  },
+  "raw_evidence": [
+    "raw/envprep_probe_20260906_r2.log",
+    "raw/envprep_env_20260906_r2.log",
+    "raw/envprep_deps_20260906_r2.log"
+  ],
+  "limitations": "Collected as unprivileged user over SSH after cold boot from r2; read-only. .kyinfo dist_id/servicekey block not captured (avoid key material). KYLIN_RELEASE_ID=2603 sourced from /etc/os-release in the raw log."
+}

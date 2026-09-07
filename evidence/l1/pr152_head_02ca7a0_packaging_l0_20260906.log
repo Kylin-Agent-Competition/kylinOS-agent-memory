@@ -1,0 +1,7 @@
+head=02ca7a0a6370034f0918ea45809c7fcd2c1cd0f2
+collected_at_utc=2026-09-06T03:09:44Z
+python=Python 3.10.12 pytest=pytest 9.1.1 host=WSL-Linux
+command=python3 -m pytest -q packaging/release/test_d14a_package_integrity.py packaging/release/test_d14a_relocatable_runtime.py packaging/release/test_d14a_transactional_rollback.py packaging/release/test_d14a_verify_smoke.py docs/day14/test_d14a_release_provenance.py
+........................................................................ [ 93%]
+.....                                                                    [100%]
+77 passed in 31.87s

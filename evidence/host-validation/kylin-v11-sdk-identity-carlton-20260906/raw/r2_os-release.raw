@@ -1,0 +1,11 @@
+NAME="Kylin"
+FULL_NAME="kylin"
+VERSION="银河麒麟桌面操作系统V11"
+VERSION_US="Kylin Linux Desktop V11"
+ID=kylin
+PRETTY_NAME="Kylin V11"
+VERSION_ID="v11"
+HOME_URL="http://www.kylinos.cn/"
+VERSION_CODENAME=kylin
+KYLIN_RELEASE_ID="2603"
+ID_LIKE=openKylin

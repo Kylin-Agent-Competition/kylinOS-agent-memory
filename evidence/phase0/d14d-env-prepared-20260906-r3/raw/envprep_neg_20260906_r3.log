@@ -1,0 +1,17 @@
+guest_utc=2026-09-06T10:05:02Z
+hostname=yanmouren778-pc
+gate_script=/home/yanmouren778/d14d_r3/clean_state_gate.sh
+gate_script_sha256=f90939d1b19c74ea06c182516ab21f7b0efc8791657a1945c7830345e8adc9cf
+negative_root=/tmp/d14d_neg_1788689102 (contains controlled build residue; removed after test)
+command: sh /home/yanmouren778/d14d_r3/clean_state_gate.sh /tmp/d14d_neg_1788689102
+--- gate stdout/stderr ---
+project_checkout_count=0
+memory_install_prefix_count=0
+stale_launcher_count=0
+active_memory_unit_count=0
+memory_socket_count=0
+venv_count=0
+build_dir_count=1
+d14a_workdir_count=0
+CLEAN_STATE_FAIL
+gate_exit=1

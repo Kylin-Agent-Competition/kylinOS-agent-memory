@@ -1,0 +1,15 @@
+{
+  "completed_at_utc": "2026-09-05T08:55:13.883524+00:00",
+  "duration_seconds": 0.572,
+  "endpoint": "127.0.0.1:2222",
+  "exit_code": 0,
+  "log_file": "vm_probe_20260905_165513.log",
+  "log_sha256": "263a0448853d8c23f85c98b800e5d9074b856bb45fc7b976430470363ab6501d",
+  "mode": "probe",
+  "requested_command": null,
+  "run_id": "vm_probe_20260905_165513",
+  "started_at_utc": "2026-09-05T08:55:13.311267+00:00",
+  "status": "PASS",
+  "timed_out": false,
+  "user": "kylin-agent"
+}

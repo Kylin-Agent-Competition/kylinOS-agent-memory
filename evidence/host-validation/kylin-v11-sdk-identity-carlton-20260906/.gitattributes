@@ -1,0 +1,4 @@
+# INDEPENDENT_KYLIN_HOST_VALIDATION evidence is an immutable raw package:
+# checksums.txt must stay byte-for-byte stable across hosts. Treat the whole
+# root as binary: no line-ending conversion and no text normalization.
+* binary

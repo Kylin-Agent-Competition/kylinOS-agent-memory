@@ -1,0 +1,50 @@
+# Kylin VM test evidence
+run_id=d13d_isolated_candidate_probe_20260905_0920
+collected_at_utc=2026-09-05T09:05:44.040816+00:00
+endpoint=127.0.0.1:2222
+user=kylin-agent
+mode=command
+requested_command=set -eu
+sock=/run/user/1000/kylin-memory/d13d-7242935.sock
+state=/home/kylin-agent/.local/state/kylin-memory/d13d-7242935
+test -S "$sock"
+kill -0 "$(cat "$state/service.pid")"
+python3 -c "import json,socket,struct; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect('/run/user/1000/kylin-memory/d13d-7242935.sock'); body=json.dumps({'protocol_version':'1.0','request_id':'d13d-health','trace_id':'d13d-health','method':'health','deadline_ms':5000,'payload':{}}).encode(); s.sendall(struct.pack('>I',len(body))+body); size=struct.unpack('>I',s.recv(4))[0]; print(s.recv(size).decode()); s.close()"
+python3 -c "import json,socket,struct; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect('/run/user/1000/kylin-memory/d13d-7242935.sock'); body=json.dumps({'protocol_version':'1.0','request_id':'d13d-echo','trace_id':'d13d-echo','method':'echo','deadline_ms':5000,'payload':{'probe':'d13d-isolated'}}).encode(); s.sendall(struct.pack('>I',len(body))+body); size=struct.unpack('>I',s.recv(4))[0]; print(s.recv(size).decode()); s.close()"
+printf 'candidate_head='; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 rev-parse HEAD
+printf 'candidate_dirty='; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 status --porcelain | wc -l
+printf 'active_service_wrapper='; grep -F 'exec ' /home/kylin-agent/.local/bin/kylin-memory-server
+--- guest script ---
+set -eu
+git -C /home/kylin-agent/kylinOS-agent-memory rev-parse --is-inside-work-tree >/dev/null
+cd /home/kylin-agent/kylinOS-agent-memory
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'git_head='; git rev-parse HEAD
+printf 'git_branch='; git branch --show-current
+printf 'git_dirty='; git status --porcelain | wc -l
+set +e
+bash -lc 'set -eu
+sock=/run/user/1000/kylin-memory/d13d-7242935.sock
+state=/home/kylin-agent/.local/state/kylin-memory/d13d-7242935
+test -S "$sock"
+kill -0 "$(cat "$state/service.pid")"
+python3 -c "import json,socket,struct; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect('"'"'/run/user/1000/kylin-memory/d13d-7242935.sock'"'"'); body=json.dumps({'"'"'protocol_version'"'"':'"'"'1.0'"'"','"'"'request_id'"'"':'"'"'d13d-health'"'"','"'"'trace_id'"'"':'"'"'d13d-health'"'"','"'"'method'"'"':'"'"'health'"'"','"'"'deadline_ms'"'"':5000,'"'"'payload'"'"':{}}).encode(); s.sendall(struct.pack('"'"'>I'"'"',len(body))+body); size=struct.unpack('"'"'>I'"'"',s.recv(4))[0]; print(s.recv(size).decode()); s.close()"
+python3 -c "import json,socket,struct; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect('"'"'/run/user/1000/kylin-memory/d13d-7242935.sock'"'"'); body=json.dumps({'"'"'protocol_version'"'"':'"'"'1.0'"'"','"'"'request_id'"'"':'"'"'d13d-echo'"'"','"'"'trace_id'"'"':'"'"'d13d-echo'"'"','"'"'method'"'"':'"'"'echo'"'"','"'"'deadline_ms'"'"':5000,'"'"'payload'"'"':{'"'"'probe'"'"':'"'"'d13d-isolated'"'"'}}).encode(); s.sendall(struct.pack('"'"'>I'"'"',len(body))+body); size=struct.unpack('"'"'>I'"'"',s.recv(4))[0]; print(s.recv(size).decode()); s.close()"
+printf '"'"'candidate_head='"'"'; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 rev-parse HEAD
+printf '"'"'candidate_dirty='"'"'; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 status --porcelain | wc -l
+printf '"'"'active_service_wrapper='"'"'; grep -F '"'"'exec '"'"' /home/kylin-agent/.local/bin/kylin-memory-server'
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+guest_utc=2026-09-05T09:05:07Z
+git_head=053754d611801548fdac59b2894c6862bf85cf56
+git_branch=git_dirty=0
+{"protocol_version": "1.0", "request_id": "d13d-health", "trace_id": "d13d-health", "status": "ok", "data": {"status": "degraded", "db": "ok", "methods": ["echo", "health", "memory.retrieve", "memory.store"]}, "server_ts": "2026-09-05T09:05:07.829417+00:00"}
+{"protocol_version": "1.0", "request_id": "d13d-echo", "trace_id": "d13d-echo", "status": "ok", "data": {"echo": {"probe": "d13d-isolated"}}, "server_ts": "2026-09-05T09:05:07.876814+00:00"}
+candidate_head=7242935bee5f230cee0535d5e28dbe1e60a302f6
+candidate_dirty=0
+active_service_wrapper=exec /home/kylin-agent/d4d-venv/bin/python /home/kylin-agent/kylinOS-agent-memory/memory-service/app.py "$@"
+VM_TEST_EXIT=0
+--- runner summary ---
+{"completed_at_utc": "2026-09-05T09:05:44.589296+00:00", "duration_seconds": 0.549, "endpoint": "127.0.0.1:2222", "exit_code": 0, "mode": "command", "requested_command": "set -eu\nsock=/run/user/1000/kylin-memory/d13d-7242935.sock\nstate=/home/kylin-agent/.local/state/kylin-memory/d13d-7242935\ntest -S \"$sock\"\nkill -0 \"$(cat \"$state/service.pid\")\"\npython3 -c \"import json,socket,struct; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect('/run/user/1000/kylin-memory/d13d-7242935.sock'); body=json.dumps({'protocol_version':'1.0','request_id':'d13d-health','trace_id':'d13d-health','method':'health','deadline_ms':5000,'payload':{}}).encode(); s.sendall(struct.pack('>I',len(body))+body); size=struct.unpack('>I',s.recv(4))[0]; print(s.recv(size).decode()); s.close()\"\npython3 -c \"import json,socket,struct; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect('/run/user/1000/kylin-memory/d13d-7242935.sock'); body=json.dumps({'protocol_version':'1.0','request_id':'d13d-echo','trace_id':'d13d-echo','method':'echo','deadline_ms':5000,'payload':{'probe':'d13d-isolated'}}).encode(); s.sendall(struct.pack('>I',len(body))+body); size=struct.unpack('>I',s.recv(4))[0]; print(s.recv(size).decode()); s.close()\"\nprintf 'candidate_head='; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 rev-parse HEAD\nprintf 'candidate_dirty='; git -C /home/kylin-agent/kylinOS-agent-memory-d13d-7242935 status --porcelain | wc -l\nprintf 'active_service_wrapper='; grep -F 'exec ' /home/kylin-agent/.local/bin/kylin-memory-server", "run_id": "d13d_isolated_candidate_probe_20260905_0920", "started_at_utc": "2026-09-05T09:05:44.040405+00:00", "status": "PASS", "timed_out": false, "user": "kylin-agent"}

@@ -1,0 +1,50 @@
+{
+  "schema_version": "host-validation/kylin-v11-sdk-identity-carlton/environment/v1",
+  "kind": "INDEPENDENT_KYLIN_HOST_VALIDATION_ENVIRONMENT",
+  "record": "r2 (Carlton independent host, non-authoritative for D14D)",
+  "collected_at_utc": "2026-09-06T07:54:20Z",
+  "raw_evidence": [
+    "raw/r2_environment.log",
+    "raw/r2_os-release.raw"
+  ],
+  "guest": {
+    "hostname": "Carlton-pc",
+    "user": "Carlton",
+    "uid": 1000,
+    "gid": 1000,
+    "groups": "1000(Carlton),0(root),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),100(users),114(lpadmin),989(sambashare)",
+    "groups_note": "ASCII summary only; the localized leading label in raw/r2_environment.log was mojibake and is not used as an identity gate fact",
+    "home": "/home/Carlton",
+    "kernel_full": "Linux Carlton-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
+    "kernel": "6.6.0-63-generic",
+    "arch": "x86_64",
+    "python": "Python 3.12.3",
+    "systemd": "systemd 255 (255.2-ok1.9k1.39)",
+    "root_disk": {
+      "device": "/dev/sda3",
+      "size": "38G",
+      "used": "33G",
+      "available": "3.9G",
+      "used_percent": "90%",
+      "mount": "/",
+      "note": "ASCII/English fields only from the raw line; localized column headers in raw were mojibake and are not used as identity gate facts"
+    }
+  },
+  "os_release": {
+    "name": "Kylin",
+    "full_name": "kylin",
+    "version_us": "Kylin Linux Desktop V11",
+    "id": "kylin",
+    "pretty_name": "Kylin V11",
+    "version_id": "v11",
+    "home_url": "http://www.kylinos.cn/",
+    "version_codename": "kylin",
+    "kylin_release_id": "2603",
+    "id_like": "openKylin",
+    "localized_version_text_mojibake_in_raw": true,
+    "localized_display_text_note": "Windows SSH capture may contain mojibake; localized display strings are not used as identity gate facts"
+  },
+  "installed_package_count": 2401,
+  "installed_package_count_source": "raw/r2_environment.log (INSTALLED PACKAGE COUNT section)",
+  "limitations": "Values captured via Windows SSH into the Carlton Kylin V11 host. The localized VERSION line in raw/r2_environment.log contains mojibake bytes; the bytes are preserved verbatim in raw/ and only ASCII identity fields are used as gate facts. The environment-level installed package count (2401) is recorded only in this file and sourced only from raw/r2_environment.log; it is not part of the dependency identity file."
+}

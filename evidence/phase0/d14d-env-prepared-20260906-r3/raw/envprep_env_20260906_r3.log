@@ -1,0 +1,31 @@
+guest_utc=2026-09-06T10:05:03Z
+hostname=yanmouren778-pc
+kernel_full=Linux yanmouren778-pc 6.6.0-63-generic #63-KYLINOS SMP PREEMPT_DYNAMIC Sat Feb  7 12:39:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+arch=x86_64
+--- /etc/os-release ---
+NAME="Kylin"
+FULL_NAME="kylin"
+VERSION="银河麒麟桌面操作系统V11"
+VERSION_US="Kylin Linux Desktop V11"
+ID=kylin
+PRETTY_NAME="Kylin V11"
+VERSION_ID="v11"
+HOME_URL="http://www.kylinos.cn/"
+VERSION_CODENAME=kylin
+KYLIN_RELEASE_ID="2603"
+ID_LIKE=openKylin
+--- python ---
+Python 3.12.3
+--- systemd ---
+systemd 255 (255.2-ok1.9k1.39)
+--- disk_root ---
+/dev/sda5        53G   33G   18G   66% /
+--- user ---
+uid=1000(yanmouren778) gid=1000(yanmouren778) 组=1000(yanmouren778),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),100(users),114(lpadmin),989(sambashare)
+--- no-project-residue (home) ---
+NO_CHECKOUT
+NO_MEMORY_PREFIX
+NO_STALE_LAUNCHER
+inactive
+UNIT_INACTIVE
+NO_MEMORY_SOCK

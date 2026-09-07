@@ -1,0 +1,27 @@
+{
+  "schema_version": "d14d-env-prepared/raw-summary/v1",
+  "run_id": "envprep_probe_20260906_r3",
+  "mode": "probe-positive",
+  "status": "PASS",
+  "exit_code": 0,
+  "endpoint": "127.0.0.1:2222",
+  "guest_utc": "2026-09-06T10:05:00Z",
+  "hostname": "yanmouren778-pc",
+  "user": "yanmouren778",
+  "gate_script": "clean_state_gate.sh",
+  "gate_script_sha256": "f90939d1b19c74ea06c182516ab21f7b0efc8791657a1945c7830345e8adc9cf",
+  "scan_root": "/home/yanmouren778",
+  "command": "sh /home/yanmouren778/d14d_r3/clean_state_gate.sh /home/yanmouren778",
+  "log_file": "envprep_probe_20260906_r3.log",
+  "counts": {
+    "project_checkout_count": 0,
+    "memory_install_prefix_count": 0,
+    "stale_launcher_count": 0,
+    "active_memory_unit_count": 0,
+    "memory_socket_count": 0,
+    "venv_count": 0,
+    "build_dir_count": 0,
+    "d14a_workdir_count": 0
+  },
+  "clean_state": "PASS"
+}
