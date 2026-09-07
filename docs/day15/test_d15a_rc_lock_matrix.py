@@ -8,11 +8,13 @@
 
 覆盖断言（与已批准 plan / Task 约束对应）：
 1. 两个允许文件（本测试与其守卫文档）存在且文档含全部 7 个必需章节标题；
-2. A15-1/A15-2/A15-3 每个锁点**恰好一个**表格状态行，且该唯一行的状态 cell
-   **精确等于** `WAITING_PREREQ`（以多行正则整行定位 `| A15-x | ... |` 表格行，
-   要求恰好命中一行，再取末格 `| ... |` 状态 cell 精确等于 WAITING_PREREQ；
-   重复 / 歧义 / 混合 / 额外状态一律 fail-closed，不使用 `any(WAITING_PREREQ)`
-   接受重复或冲突行）；
+2. A15-1/A15-2/A15-3 每个锁点**恰好一个**完整表格行（M-2b：该行必须**严格三列**
+   lock-id | 锁定内容 | 状态）：以多行正则整行定位 `| A15-x | ... |`，要求恰好
+   命中一行；解析该行全部 cells 后先断言 `len(cells) == 3`（第四列 / 额外
+   status cell / 混合状态一律 fail-closed），再断言首列 `cells[0]` 精确等于锁点
+   id，最后在受控 markdown-backtick normalization 后断言第三状态列 `cells[2]`
+   精确等于 `WAITING_PREREQ`；不使用 `any(WAITING_PREREQ)` 接受重复/冲突行，
+   也**不**在断言列数前用 `cells[-1]` 验证状态；
 3. 全文不出现越级词（FINAL_LOCK / LOCKED / L3_READY / HOST_VERIFIED /
    RUNTIME_VERIFIED / D14A complete / production ready / release ready 等），
    其中 LOCKED 等以独立 token（词边界）判定，BLOCKED / NOT_FROZEN /
@@ -35,8 +37,10 @@
    provenance/state token，不覆盖中文/自然语言同义越级与 evidence 真实性；
 9. M3-A 外部施工台账非仓库权威发布契约来源，且 15_DAY_PLAN.md / pseudo-repo 路径
    在文档与测试中均被负向守卫去除；
-10. M4-A 实际 PR 文件范围为三个（本守卫文档、本测试、.github/workflows/
-    baseline-check.yml），且文档不含过时的 blanket `.github/**` 排除。
+10. M4-A 实际 PR #164 文件范围为两个**新增 docs 文件**（本守卫文档、本测试）
+    加一个**既有 workflow 修改**（.github/workflows/baseline-check.yml，仅把守卫
+    接入既有 d14a-packaging-provenance job、保持 fetch-depth: 0、不新增
+    job/runner），且文档不含过时的 blanket `.github/**` 排除。
 """
 
 import re
@@ -164,18 +168,20 @@ def test_required_sections_present():
     assert not missing, f"文档缺少必需章节标题: {missing}"
 
 
-# ---------- 2. A15 表格唯一状态行精确绑定 WAITING_PREREQ ----------
+# ---------- 2. A15 表格严格三列唯一状态行精确绑定 WAITING_PREREQ ----------
 
 def test_a15_rows_waiting_prereq():
     text = _doc_text()
     for lock in ("A15-1", "A15-2", "A15-3"):
         # M-1 保留：A15-x 状态行与 WAITING_PREREQ 的行级绑定断言。
-        # M-2 收紧：每个锁点在表格中必须**恰好一行**，且该唯一行的状态 cell
-        # **精确等于** WAITING_PREREQ。用多行正则整行定位形如 | A15-x | ... |
-        # 的表格行；要求 len(rows) == 1，否则 fail-closed 报重复/歧义；
-        # 再取该唯一行最后一个 | ... | 状态 cell（去空格、去反引号边框后
-        # strip），断言其精确等于 WAITING_PREREQ。不使用任何(WAITING_PREREQ)
-        # 接受重复/冲突行。
+        # M-2 收紧：每个锁点在表格中必须**恰好一行**，且该唯一行必须**严格三列**。
+        # M-2b：列结构守卫——用多行正则整行定位形如 | A15-x | ... | 的表格行；
+        # 要求 len(rows) == 1，否则 fail-closed 报重复/歧义；解析该行全部 cells
+        # 后**先**断言恰好三列（lock-id | 锁定内容 | 状态），任何第四列 / 额外
+        # status cell / 行内多余分隔一律 fail-closed；随后断言首列 cells[0]
+        # 精确等于锁点 id；最后在受控 markdown-backtick normalization 后精确校验
+        # 第三状态列 cells[2] 等于 WAITING_PREREQ。**禁止**在断言列数前用 cells[-1]
+        # 取状态，也**不**使用 any(WAITING_PREREQ) 接受重复/冲突行。
         pattern = re.compile(
             rf"^\|\s*{re.escape(lock)}\s*\|.*\|\s*$", re.MULTILINE
         )
@@ -186,11 +192,22 @@ def test_a15_rows_waiting_prereq():
         )
         row = rows[0]
         cells = [c.strip() for c in row.strip("|").split("|")]
-        assert cells and cells[-1] is not None, f"锁点 {lock} 状态行无状态 cell"
-        status = cells[-1].strip().strip("`").strip()
+        # M-2b：列结构守卫——先解析全部 cells 并断言恰好三列
+        # （lock-id | 锁定内容 | 状态）；任何第四列 / 额外 status cell /
+        # 行内多余分隔一律 fail-closed；禁止在列数断言前用 cells[-1] 取状态。
+        assert len(cells) == 3, (
+            f"锁点 {lock} 唯一表格行必须严格三列；现状 {len(cells)} 列，"
+            f"额外状态列应 fail-closed: {row!r}"
+        )
+        assert cells[0] == lock, (
+            f"锁点 {lock} 唯一行首列 cells[0] 必须精确等于锁点 id；"
+            f"实际 {cells[0]!r}"
+        )
+        # 受控 markdown-backtick normalization 后精确校验第三状态列（cells[2]）。
+        status = cells[2].strip().strip("`").strip()
         assert status == "WAITING_PREREQ", (
-            f"锁点 {lock} 唯一行状态 cell 必须精确等于 WAITING_PREREQ；"
-            f"实际 {status!r}"
+            f"锁点 {lock} 唯一行第三状态列 cells[2] 必须精确等于 "
+            f"WAITING_PREREQ；实际 {status!r}"
         )
         # 既有断言保留（不删除、不弱化）。
         assert lock in text, f"缺少锁点行 {lock}"
