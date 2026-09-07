@@ -62,3 +62,13 @@ G4/G5/G6 仍按本文件阻塞；未完成前不宣称 Forget 5/5 或 production
 | G6 | ⏳ BLOCKED | 仍缺 SDK `0k1.1` headers、`vector_bridge_cli` compile/link/smoke；禁止复用 `0k0.7`。 |
 
 G5 正式关闭标准：在麒麟 VM 的 isolated runtime binding 中注入真实 Embedding/Vector provider，pre-delete probe 在 FTS 与 Vector 双通道都命中，且 vector delete/rebuild 证据可复核。在此之前，FTS-only L1 不得写成 Forget 5/5 或 Vector 双通道完成。
+
+## 7. Phase 3 preparation scope（2026-09-07）
+
+Reviewer E 已在 PR #160 comment `5564455955` 将阶段授权更正为
+`APPROVE_PHASE3_START`，但只覆盖 `PREPARATION / NON-FORMAL` scope。
+
+因此本文件允许 G5/G6 的真实 provider、SDK headers、bridge compile/link/smoke
+前置准备；但不允许把准备结果写成 Forget 5/5、Vector 双通道完成或正式 evidence。
+Phase 3 准备阶段的统一口径与证据结构见
+[31_d13d_phase3_preparation_handoff_20260907.md](31_d13d_phase3_preparation_handoff_20260907.md)。

@@ -324,3 +324,27 @@ P2-C = COMPLETE（#161 production fix 已 merge 并被 #160 真实 Provider/adap
 - 新增工程收口：移除 FTS observer 文件中粘贴残留的重复 `_observation` 定义；`SqliteVectorSnapshotReader` 采用 G4 保守裁定——active preference 不进入 Vector 重建语义，且会让快照 fail-closed；新增 `d13d_forget_index_producer` 作为 G5 的真实 `memory.upserted` → OutboxWorker/Router/index-consumer 生产者 seam。
 - 当前新增 L1：`tests/retrieval/test_sqlite_vector_snapshot.py` + `tests/test_d13d_execution_adapter.py` 合计 `89 passed`。G5 测试仅验证 seam 与 formal outbox 消费链，测试中的 FakeVectorProvider/deterministic embedding 只代表 L1，不代表麒麟 VM 或正式 Vector 证据。
 - Forget runtime seam 仍公开阻塞：G5 需要 VM 上真实 Embedding/Vector provider 接入；G6 需要 SDK `0k1.1` headers、`vector_bridge_cli` compile/link/smoke。在 G5 VM 接入与 G6 闭合前，profile 的 Vector 双通道和 Forget 5/5 正式 E2E不得宣称完成。
+
+### 9.7 Phase 3 preparation scope（2026-09-07）
+
+Reviewer E 已在 PR #160 comment `5564455955` 更正阶段授权为
+`APPROVE_PHASE3_START`，但范围限定为 `PREPARATION / NON-FORMAL`。
+
+因此本文件允许：
+
+- Phase 3 freeze / execution checklist 与 handoff 计划；
+- `PREPARATION / NON-FORMAL` evidence root 结构准备；
+- 隔离 VM 的候选部署、preflight、环境 / Trust Root / 服务 / 数据库只读复核；
+- G5/G6 真实 provider、SDK headers、bridge compile/link/smoke 等前置闭合。
+
+本文件仍禁止：
+
+- 选择或宣称 final/formal `tested_commit`；
+- 执行正式 VM 17 raw；
+- 生成 Review Seal / Execution Seal / attestation；
+- 运行正式 Runner Gate 0-10；
+- 标记 `D13D_FROZEN` / `HOST_VERIFIED` / `FORMAL PASS`；
+- 把 `P0-I3b-completion` 写成 `COMPLETE`，或把 `P0-I3d` 写成 `READY_TO_START`。
+
+Phase 3 准备清单见
+[31_d13d_phase3_preparation_handoff_20260907.md](31_d13d_phase3_preparation_handoff_20260907.md)。
