@@ -1,10 +1,13 @@
-# D13D Phase 2 Forget E2E Record (2026-09-07)
+# D13D Phase 2 Forget FTS-Channel E2E Record (2026-09-07)
 
 ## Status
 
-`PHASE2_NON_FORMAL`. This record closes the Phase 2 Forget real-dispatch
-capability check only. It is not formal Kylin runtime evidence, not a canonical
-17-sample raw package, and not a Runner Gate, Seal, or `D13D_FROZEN` result.
+`FTS_CHANNEL_5_5 / PARTIAL_NON_FORMAL`. This record covers only the FTS
+realtime and rebuild channel. It does not close the Phase 2 Forget real-dispatch
+capability Gate because `29_` and `30_` still require real Vector dual-channel
+coverage before a complete Forget 5/5 claim. It is not formal Kylin runtime
+evidence, not a canonical 17-sample raw package, and not a Runner Gate, Seal, or
+`D13D_FROZEN` result.
 
 ## Identity
 
@@ -27,6 +30,11 @@ through the real production preview, execute, `forget.executed` Outbox event,
 `OutboxWorker` / `OutboxRouter` / deletion-consumer ACK, FTS realtime query, and
 full FTS rebuild observation. The adapter did not synthesize counters.
 
+No Vector provider was injected for this run. Vector pre-delete positive probe,
+Vector deletion, Vector realtime residual, Vector full rebuild/requery, and
+per-channel Vector provenance were not exercised. Accordingly, the counters
+below are FTS-channel observation counters only.
+
 Five fresh execution receipts were written to the evidence root:
 
 | Sample | Mode | Receipt SHA-256 |
@@ -40,7 +48,7 @@ Five fresh execution receipts were written to the evidence root:
 Summary: `phase2_forget_summary.json`
 SHA-256 `9d62c9b9e4f705f54229d9f1f5da7f2d878c824dc10fcf67bb22382b05437bdf`.
 
-All five records observed:
+All five FTS-channel records observed:
 
 ```text
 missed_target_items = 0
@@ -57,7 +65,7 @@ residual_after_full_rebuild = 0
 - `6ca816d`: derive target kind from `target_type` for real bare-ID
   `forget.executed` payloads used by non-`full_reset` modes.
 - `5efbf7f` / `d60dbe6`: align preference deletion provenance with the pre-delete
-  stable FTS/Vector version identity, avoiding both version-row-id and
+  stable version identity, avoiding both version-row-id and
   post-delete-version mismatches.
 
 ## Verification
@@ -80,7 +88,12 @@ Carlton independent host evidence closure   SUCCESS
 
 ## Boundary
 
-`dispatch_and_write_canonical()` remains fail-closed for Forget. Phase 3 must
-still replay the final frozen `tested_commit` evidence root, execute all 17 real
-samples, produce formal provenance, obtain both seals, and run Runner Gate 0-10
-before any formal result is claimed.
+`dispatch_and_write_canonical()` remains fail-closed for Forget. P2-B remains
+`BLOCKED_PENDING_VECTOR_DUAL_CHANNEL`. Closing it still requires isolated Kylin
+VM injection of the real Embedding/Vector provider, per-sample pre-delete hits
+on both FTS and Vector, real dual-channel consumer cleanup, Vector rebuild
+evidence, and per-channel provenance.
+
+Phase 3 must still replay the final frozen `tested_commit` evidence root,
+execute all 17 real samples, produce formal provenance, obtain both seals, and
+run Runner Gate 0-10 before any formal result is claimed.
