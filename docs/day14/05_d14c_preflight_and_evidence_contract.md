@@ -37,3 +37,7 @@ evidence_root = evidence/l3-kylin-vm/d14c_<new-run-id>
 ```
 
 随后使用既有 `scripts/run_d13c_session_eval.py` 计算指标。任何 raw 缺失、状态非 VM capture 或 provenance 不一致均拒绝转换，不能用手写成功 bundle 代替。
+
+## Evidence package 闭环
+
+正式运行结束后用 `scripts/verify_d14c_evidence_package.py <d14c_root>` 做离线完整性检查。根目录必须含 `manifest.json`、`SHA256SUMS`、run identity、commands 与 exit-codes；`VERIFIED` runtime package 还必须有 runtime capture 与 D13C evaluator report。`FAILED` / `BLOCKED` package 同样允许做完整性校验，但必须保留 `failure_summary`，输出只会是 `PACKAGE_INTEGRITY_VERIFIED`，绝不升级为 Runtime PASS。`SHA256SUMS` 必须恰好覆盖根目录中除自身外的每个 regular file。

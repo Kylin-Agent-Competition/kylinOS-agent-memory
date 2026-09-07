@@ -166,7 +166,7 @@ G1-G8 全 PASS → FORMAL RUN GO
 
 | # | 工作项 | 依赖 | 验证方式 | 状态 |
 |---|---|---|---|---|
-| D14C-17 | Evidence Package：`evidence/l3-kylin-vm/d14c_<UTC_RUN_ID>/`（environment/runtime identity/raw logs/DB checkpoints/SHA256SUMS） | 阶段 C-F | 包完整、可复核 | 待开始 |
+| D14C-17 | Evidence Package：`evidence/l3-kylin-vm/d14c_<UTC_RUN_ID>/`（environment/runtime identity/raw logs/DB checkpoints/SHA256SUMS） | 阶段 C-F | 包完整、可复核 | integrity verifier 已就绪；formal package 待开始，见 `05_d14c_preflight_and_evidence_contract.md` |
 | D14C-18 | Evidence Index：登记 `evidence/index.yaml`（path/SHA-256/tested commit/environment/status） | D14C-17 | 每项字段齐全；状态限 VERIFIED/FAILED/BLOCKED/UNVERIFIED | 待开始 |
 
 ### 阶段 H — 回退与收口
