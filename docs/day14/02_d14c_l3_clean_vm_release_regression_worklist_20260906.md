@@ -7,9 +7,11 @@
 | 任务编号 | D14C（承接 D13C #134 合并后主仓状态；正式结论依赖 D 轨 ACTIVE 与冻结环境） |
 | 工作类型 | `test`（真实发布环境集成 + L3 Runtime Evidence Upgrade） |
 | 工作分支 | `test/D14C-l3-clean-vm-release-regression`（按提交分支要求命名：`<类型>/<用途>`，不含 `codex`） |
-| 唯一被测基线 | `origin/main@6a1218441feeb7b1d96411e60f993061767f3aba`（= PR #134 D13C 合并提交；已含 PR #151 Host Mapping） |
+| historical preparation base | `origin/main@6a1218441feeb7b1d96411e60f993061767f3aba`（= PR #134 D13C 合并提交；保留为历史准备基线） |
+| current development base | `f266172e942cb44315a24e0628de8e2aec96a60a`（2026-09-07 合并 `origin/main@f978dff` 后的 D14C 开发 HEAD；**不是** formal tested commit） |
+| formal tested commit | `PENDING_D13D_D14D_FINAL_HANDOFF` |
 | 关键上游 | PR #151 Host Mapping（TurnExtractionAdapter / ProductionSourceResolver 已入 main）；PR #134 D13C 会话评测与稳定性（已入 main） |
-| 初始状态 | `PREPARED` |
+| 当前状态 | `PREPARATION_IN_PROGRESS`（formal L3 仍 `BLOCKED`） |
 | 禁止提前表述 | `L3 PASS` / `HOST_VERIFIED` / `production ready` / `D14C complete` |
 | 审查责任 | D 主审；涉及安全/评测影响时 E 补审（人工 Review，不在本批范围内） |
 | 编制日期 | 2026-09-06 |
@@ -23,7 +25,7 @@
 ```text
 D14C preparation: GO
 D14C implementation / harness preparation: GO
-D14C formal clean-VM L3 execution: CONDITIONAL GO
+D14C formal clean-VM L3 execution: NO-GO / BLOCKED
 D14C formal PASS: NO-GO
 until runtime activation / frozen environment / evidence gates close
 ```
@@ -46,7 +48,7 @@ D14C 是：把 D13C/C-HM 已实现功能与测试，在干净麒麟 VM 真实发
 
 | 冻结字段 | 要求 | 当前值 |
 |---|---|---|
-| tested_commit | 正式运行前重跑 `git rev-parse HEAD` / `git status --porcelain` / `git log -1 --oneline` 并记录 | 候选 `main@6a121844…`（运行时以实际冻结为准） |
+| tested_commit | 正式运行前重跑 `git rev-parse HEAD` / `git status --porcelain` / `git log -1 --oneline` 并记录 | `PENDING_D13D_D14D_FINAL_HANDOFF`；`6a121844` 仅为历史准备基线，`f266172` 仅为当前开发基线 |
 | release artifact | 发布包（SHA-256、版本） | 待 D14D/D14A 交付 |
 | AI Assistant artifact | binary 路径、SHA-256、版本 | 待定 |
 | MemoryClient artifact | build hash、版本 | 待定 |
@@ -116,16 +118,16 @@ G1-G8 全 PASS → FORMAL RUN GO
 
 | # | 工作项 | 依赖 | 验证方式 | 状态 |
 |---|---|---|---|---|
-| D14C-00 | 建立正式任务卡（本文件），冻结 scope / tested_commit / formal prerequisites / out-of-scope / evidence requirements | 用户授权（B 代 C 轨执行） | 任务卡字段齐全、初始状态 `PREPARED`、无禁止表述 | 进行中（本批） |
+| D14C-00 | 建立正式任务卡（本文件），冻结 scope / tested_commit / formal prerequisites / out-of-scope / evidence requirements | 用户授权（B 代 C 轨执行） | 任务卡字段齐全、无禁止表述 | 已完成（2026-09-07；formal tested commit 保持 pending） |
 | D14C-01 | 冻结唯一被测基线：Git SHA、release artifact、AI Assistant/MemoryClient/Memory Service artifact、VM snapshot、runtime 身份 | `origin/main` | 身份链可复核（SHA→构建物→安装物→进程） | 待开始 |
-| D14C-02 | 核对 Host Mapping 是否可进入 production：确认 #151/#134 已入 tested commit；检查 `turn.finalized` / `event.ingest` / `forget.preview` / `forget.execute` 当前处于 ACTIVE/CANDIDATE/BLOCKED_BY_HOST_MAPPING/UNSUPPORTED_METHOD 的哪一种；只记录，不改状态 | #151 已入 main | 状态核查记录；无 C 轨改状态常量行为 | 已完成（静态状态记录，见 docs/day14/03_d14c_host_mapping_route_status_20260906.md） |
+| D14C-02 | 核对 Host Mapping 是否可进入 production：确认 #151/#134 已入 tested commit；检查 `turn.finalized` / `event.ingest` / `forget.preview` / `forget.execute` 当前处于 ACTIVE/CANDIDATE/BLOCKED_BY_HOST_MAPPING/UNSUPPORTED_METHOD 的哪一种；只记录，不改状态 | #151 已入 main | 状态核查记录；无 C 轨改状态常量行为 | 历史核查已完成（`03_`）；current development HEAD 重审完成，见 `04_d14c_current_head_static_audit_20260907.md` |
 
 ### 阶段 B — 先清 Production Blocker
 
 | # | 工作项 | 依赖 | 验证方式 | 状态 |
 |---|---|---|---|---|
-| D14C-02b | trusted host identity 状态核对并形成 blocker matrix | D 轨审核结论 | 信任边界结论记录 | 待开始（D 轨） |
-| D14C-06 | PreChat / MemoryContext 真链路：冻结完整 empty MemoryContext mapping（payload identity / context_version / timestamp / token budget / safe skipped-status）后，验证有记忆（retrieve→assemble→inject）与无记忆（返回冻结 empty MemoryContext，非裸 `[]`） | C/D/E 联合冻结 empty MemoryContext | AI Assistant 实际请求观察到正式 MemoryContext 注入 | 待开始（跨轨冻结） |
+| D14C-02b | trusted host identity 状态核对并形成 blocker matrix | D 轨审核结论 | 信任边界结论记录 | 已建立 request / BLOCKED，见 `06_d14c_trusted_host_identity_request.md` |
+| D14C-06 | PreChat / MemoryContext 真链路：冻结完整 empty MemoryContext mapping（payload identity / context_version / timestamp / token budget / safe skipped-status）后，验证有记忆（retrieve→assemble→inject）与无记忆（返回冻结 empty MemoryContext，非裸 `[]`） | C/D/E 联合冻结 empty MemoryContext | AI Assistant 实际请求观察到正式 MemoryContext 注入 | freeze request 已建立 / BLOCKED，见 `08_d14c_memory_context_freeze_request.md` |
 
 ### 阶段 C — 单链路 L3
 
@@ -157,7 +159,7 @@ G1-G8 全 PASS → FORMAL RUN GO
 
 | # | 工作项 | 依赖 | 验证方式 | 状态 |
 |---|---|---|---|---|
-| D14C-15 | 复用 #134 Evaluator（真实 raw→D13C session bundle→`scripts/run_d13c_session_eval.py`→report）；不写新评测器；只消费真实 VM evidence | #134 已入 main | 正式指标：step_completion_rate / isolation_pass_rate / guardrail_critical_count / ipc_method_coverage / stop_retry_violation_count / cross_session_isolation_pass_rate / latency p50/p95 | 待开始 |
+| D14C-15 | 复用 #134 Evaluator（真实 raw→D13C session bundle→`scripts/run_d13c_session_eval.py`→report）；不写新评测器；只消费真实 VM evidence | #134 已入 main | 正式指标：step_completion_rate / isolation_pass_rate / guardrail_critical_count / ipc_method_coverage / stop_retry_violation_count / cross_session_isolation_pass_rate / latency p50/p95 | converter / reuse entry 已就绪；formal raw 仍待开始，见 `05_d14c_preflight_and_evidence_contract.md` |
 | D14C-16 | 性能 sanity：PreChat retrieval / PostTurn / Tool event / Forget 延迟 | D14C-11 | 记录 P50/P95/mean/max（按通道）；`echo`/`context=[]`/纯 IPC 不冒充 ≤500ms 正式知识检索 | 待开始 |
 
 ### 阶段 G — 封存
@@ -197,13 +199,17 @@ G1-G8 全 PASS → FORMAL RUN GO
 | D13D 未正式冻结 | 不能形成最终发布冻结证据 | D 轨 |
 | main 测试期间移动 | evidence 脱钩 | freeze tested_commit |
 
+当前 current-development 静态重审新增确认：`D13D_FROZEN=NO`、`D14D_L3_READY=NO`、
+`trusted host identity=NOT_APPROVED`、四条 production routes 均非 `ACTIVE`、
+`MemoryContext mapping=NOT_FROZEN`。因此不得创建 formal evidence root，也不得运行半正式主演示。
+
 本批只记录，不代行其他轨道处置；需其他轨道处置的事项列为跨轨依赖。
 
 ---
 
 ## 9. PR 状态与提交
 
-- 本批性质：D14C-00 开工准备（任务卡 + scope 冻结），纯文档，无生产代码改动。
+- 本批性质：D14C preparation（状态同步、静态重审、fail-closed preflight、D13C evaluator reuse entry、跨轨 handoff）；无 production handler 或 route 状态改动。
 - PR 状态：Draft（VM 实测结果将在后续批次回填；Draft→Ready 与合并由用户手动决定）。
 - 标题（建议）：`test(D14C)：L3 干净虚拟机发布回归（开工任务卡 + 准备）`。
 - 分支名不含 `codex`；PR 正文、评论、提交信息均使用中文。
