@@ -10,6 +10,7 @@ observation and is never claimed as Vector-supported.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import math
 import secrets
@@ -20,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from embedding.embedding_service import EmbeddingService
@@ -38,6 +40,7 @@ from evaluation.d13d_forget_index_producer import (
     D13D_INDEX_DIGEST_KEY_ID as _DIGEST_KEY_ID,
 )
 from evaluation.d13d_forget_index_producer import index_knowledge_docs
+from db.schema import vector_index_generations
 from outbox.deletion_consumer import build_forget_consumer
 from retrieval.contracts import (
     IndexScope,
@@ -125,12 +128,14 @@ class D13DForgetVectorDeletionProvider:
                         ),
                     }
                 ),
-                "source_watermark": request.source_watermark.model_copy(
-                    update={
-                        "domain": request.source_watermark.domain.model_copy(
-                            update={"stream": "memory_upserted"}
-                        )
-                    }
+                "source_watermark": observer.delete_watermark(
+                    request.source_watermark.model_copy(
+                        update={
+                            "domain": request.source_watermark.domain.model_copy(
+                                update={"stream": "memory_upserted"}
+                            )
+                        }
+                    )
                 ),
             }
         )
@@ -243,6 +248,7 @@ class D13DForgetDualChannelObserver:
         self.vector_metadata = dict(vector_metadata)
         self._docs: dict[str, dict[str, str]] = {}
         self._initialized = False
+        self._initialization_watermark: Watermark | None = None
         self._realtime_generation = 0
         self._rebuild_generation = 0
         self._rebuild_result: Any | None = None
@@ -276,6 +282,7 @@ class D13DForgetDualChannelObserver:
             vector_provider=self.vector_provider,
             index_generation=self.vector_index_generation,
         )
+        self._initialization_watermark = self._read_serving_watermark() if ok_count else None
         self._docs = {doc["tagged_id"]: dict(doc) for doc in docs if doc["tagged_id"].startswith("knowledge:")}
         self._initialized = True
         self.channel_results["initialization"] = {
@@ -283,10 +290,47 @@ class D13DForgetDualChannelObserver:
             "knowledge_skipped": skipped_count,
             "preference_vector_indexed": 0,
             "index_generation": self.vector_index_generation,
+            "source_watermark": (
+                self._initialization_watermark.model_dump(mode="json")
+                if self._initialization_watermark is not None
+                else None
+            ),
         }
 
     def close(self) -> None:
         self._embedding_service.close()
+
+    def _read_serving_watermark(self) -> Watermark:
+        """Read the generation watermark written by the real upsert consumer."""
+        with self._engine.connect() as conn:
+            raw_watermark = conn.execute(
+                select(vector_index_generations.c.source_watermark).where(
+                    vector_index_generations.c.scope_id == f"user:{self.user_id}",
+                    vector_index_generations.c.generation == self.vector_index_generation,
+                    vector_index_generations.c.status == "ready",
+                    vector_index_generations.c.is_serving == 1,
+                )
+            ).scalar_one_or_none()
+        if raw_watermark is None:
+            raise ValueError("initialized Vector generation is missing a serving watermark")
+        try:
+            watermark = Watermark.model_validate(json.loads(raw_watermark))
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError("initialized Vector generation watermark is invalid") from exc
+        if watermark.domain.scope_id != f"user:{self.user_id}":
+            raise ValueError("initialized Vector generation watermark is out of user scope")
+        if watermark.domain.stream != "memory_upserted":
+            raise ValueError("initialized Vector generation watermark is not from memory_upserted")
+        return watermark
+
+    def delete_watermark(self, source_watermark: Watermark) -> Watermark:
+        """Reconcile an older forget watermark with the pre-delete generation."""
+        if self._initialization_watermark is None:
+            raise ValueError("dual-channel observer has no initialized Vector watermark")
+        candidate = source_watermark.model_copy(
+            update={"domain": self._initialization_watermark.domain}
+        )
+        return candidate if candidate.compare(self._initialization_watermark) >= 0 else self._initialization_watermark
 
     def probe_pre_delete(self, confirmed: tuple[str, ...]) -> None:
         """Require every confirmed target to hit FTS and Knowledge to hit Vector."""

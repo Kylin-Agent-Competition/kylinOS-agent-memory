@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from db import repositories as repo
+from db.schema import vector_index_generations, vector_index_receipts
 from db.engine import create_db_engine, init_schema
 from embedding.embedding_service import EmbeddingService
 from evaluation.d13d_execution_adapter import OBSERVATION_PROFILES
@@ -284,6 +286,39 @@ def test_preference_only_delete_is_fts_only_and_leaves_vector_state(tmp_path):
     preference_realtime = observer.realtime(("preference:1",))
     assert preference_realtime.sample.ranked_ids == ("knowledge:1",)
     assert len(set(preference_realtime.sample.confirmed_target_ids) & set(preference_realtime.sample.ranked_ids)) == 0
+
+
+def test_stale_forget_watermark_is_reconciled_from_generation_ledger(tmp_path):
+    observer, _vector_client, _embedding_provider = _make_observer(tmp_path)
+    consumer, _embedding_service = build_dual_channel_forget_consumer(observer)
+
+    consumer(repo.EVENT_FORGET_EXECUTED, {
+        "event_id": "d13d-event-stale-watermark",
+        "user_id": USER_ID,
+        "resolved_target_ids": ["knowledge:1"],
+        "version_ids": ["v1"],
+        "selection_hash": hashlib.sha256(b"stale-watermark").hexdigest(),
+        "forget_plan_id": "d13d-plan-stale-watermark",
+        "target_type": "knowledge",
+        "forget_mode": "single_item",
+    })
+
+    with observer._engine.begin() as conn:
+        generation = conn.execute(
+            vector_index_generations.select().where(
+                vector_index_generations.c.generation == observer.vector_index_generation,
+            )
+        ).mappings().one()
+        receipt = conn.execute(
+            vector_index_receipts.select().where(
+                vector_index_receipts.c.operation == "delete",
+                vector_index_receipts.c.generation == observer.vector_index_generation,
+            )
+        ).mappings().one()
+    result = json.loads(receipt["result_json"])
+    assert result["matched_count"] == 1
+    assert result["deleted_count"] == 1
+    assert result["applied_watermark"] == json.loads(generation["source_watermark"])
 
 
 def test_pre_delete_fails_closed_when_vector_probe_misses(tmp_path):
