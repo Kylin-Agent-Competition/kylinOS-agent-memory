@@ -1,0 +1,113 @@
+=== BRIDGE LDD ===
+	linux-vdso.so.1 (0x00007fff67ae4000)
+	libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x0000771f4206a000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x0000771f41f81000)
+	libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x0000771f41f5d000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x0000771f41d58000)
+	/lib64/ld-linux-x86-64.so.2 (0x0000771f42326000)
+=== BRIDGE RPATH/RUNPATH ===
+=== HARDCODED PATH SCAN ===
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/Activate.ps1:19:surrounded by parentheses and followed by a single space (ie. '(.venv) ').
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/Activate.ps1:31:Activate.ps1 -VenvDir C:\Users\MyUser\Common\.venv
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/Activate.ps1:45:PS C:\> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/greenlet/platform/setup_switch_x64_masm.cmd:1:call "C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\vcvarsall.bat" amd64
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/greenlet/platform/switch_x86_msvc.h:277:            "GOT VECTORED EXCEPTION:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/testing/assertsql.py:472:            assert False, "Additional SQL statements remain:\n%s" % observed
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/testing/assertions.py:666:        print(("\nSQL String:\n" + str(c) + param_str).encode("utf-8"))
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/testing/fixtures/mypy.py:279:                if re.match(r".+\.py:\d+: error: .*", e):
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/testing/fixtures/mypy.py:282:                    r".+\.py:\d+: note: +(?:Possible overload|def ).*", e
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/testing/fixtures/mypy.py:286:                        if not re.match(r".+\.py:\d+: note: +def .*", ol):
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/testing/fixtures/mypy.py:290:                    r".+\.py:\d+: note: .*(?:perhaps|suggestion)", e, re.I
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/testing/fixtures/mypy.py:293:                elif re.match(r".+\.py:\d+: note: .*", e):
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/testing/util.py:87:        if os.environ.get("PYTHONPATH"):
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/testing/util.py:88:            parts.append(os.environ["PYTHONPATH"])
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/testing/util.py:94:            env={**os.environ, "PYTHONPATH": os.pathsep.join(parts)},
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/pool/impl.py:576:                suffix = " at:\n%s" % "".join(
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/dialects/mysql/mysqldb.py:47:                "ca": "/home/gord/client-ssl/ca.pem",
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/dialects/mysql/mysqldb.py:48:                "cert": "/home/gord/client-ssl/client-cert.pem",
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/dialects/mysql/mysqldb.py:49:                "key": "/home/gord/client-ssl/client-key.pem",
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/dialects/mysql/mysqldb.py:61:        "?ssl_ca=/home/gord/client-ssl/ca.pem"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/dialects/mysql/mysqldb.py:62:        "&ssl_cert=/home/gord/client-ssl/client-cert.pem"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/dialects/mysql/mysqldb.py:63:        "&ssl_key=/home/gord/client-ssl/client-key.pem"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/dialects/mysql/pymysql.py:36:        "?ssl_ca=/home/gord/client-ssl/ca.pem"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/dialects/mysql/pymysql.py:37:        "&ssl_cert=/home/gord/client-ssl/client-cert.pem"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/dialects/mysql/pymysql.py:38:        "&ssl_key=/home/gord/client-ssl/client-key.pem"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/dialects/sqlite/pysqlite.py:53:    e = create_engine("sqlite:///C:\\path\\to\\database.db")
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/sqlalchemy/dialects/sqlite/pysqlite.py:646:                "Valid SQLite URL forms are:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pybind11/share/cmake/pybind11/FindPythonLibsNew.cmake:163:    message(FATAL_ERROR "Python config failure:\n${_PYTHON_ERROR_VALUE}")
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pybind11/share/cmake/pybind11/pybind11NewTools.cmake:148:          "package is not installed. Full error message:\n${_PYTHON_MODULE_EXT_SUFFIX_ERR}")
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pybind11/commands.py:19:    # See https://github.com/mesonbuild/meson/blob/db22551ed9d2dd7889abea01cc1c7bba02bf1c75/mesonbuild/utils/universal.py#L1092-L1121
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pybind11/include/pybind11/pytypes.h:671:            result += "\n\nAt:\n";
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pybind11/include/pybind11/pybind11.h:1311:                              + " arguments. The following argument types are supported:\n";
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pybind11/include/pybind11/pybind11.h:3878:                       "if frame is not None:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pybind11/include/pybind11/pybind11.h:3883:                       "        if self_caller == self:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pydantic_core-2.46.5.dist-info/sboms/pydantic-core.cyclonedx.json:17:      "bom-ref": "path+file:///home/runner/work/pydantic/pydantic/pydantic-core#2.46.5",
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pydantic_core-2.46.5.dist-info/sboms/pydantic-core.cyclonedx.json:40:          "bom-ref": "path+file:///home/runner/work/pydantic/pydantic/pydantic-core#2.46.5 bin-target-0",
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pydantic_core-2.46.5.dist-info/sboms/pydantic-core.cyclonedx.json:3292:      "ref": "path+file:///home/runner/work/pydantic/pydantic/pydantic-core#2.46.5",
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/python.py:150:        "You need to install a suitable plugin for your async framework, for example:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/python.py:520:            "import file mismatch:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/python.py:521:            "imported module {!r} has this __file__ attribute:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/python.py:523:            "which is not the same as the test file we want to collect:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/python.py:541:            "Traceback:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/terminal.py:192:        "--report-chars",
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/pytester.py:1288:        assert 0, f"{funcname!r} item not found in module:\n{source}\nitems: {items}"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/pytester.py:1360:        directory is in ``PYTHONPATH``.
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/pytester.py:1365:        env["PYTHONPATH"] = os.pathsep.join(
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/pytester.py:1366:            filter(None, [os.getcwd(), env.get("PYTHONPATH", "")])
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/_py/path.py:1354:                # https://ci.appveyor.com/project/pytestbot/py/build/1.0.21/job/ffi85j4c0lqwsfwa
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/assertion/rewrite.py:1187:        #   path = '/home/user/proj/test_app.py'
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/assertion/rewrite.py:1189:        #   '/tmp/pycs/home/user/proj'
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/pathlib.py:773:        # for the first part ("d:\\" or "/" depending on the platform, for example).
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/unittest.py:282:                        "displaying natively:\n\n",
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/unittest.py:290:                        f"representation:\n{rawexcinfo!r}",
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/fixtures.py:755:                "The requested fixture has no parameter defined for test:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/fixtures.py:757:                f"Requested fixture '{fixturedef.argname}' defined in:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/fixtures.py:759:                f"Requested here:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/fixtures.py:882:                f"Requesting fixture stack:\n{fixture_stack}\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/fixtures.py:883:                f"Requested fixture:\n{requested_fixture}",
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/fixtures.py:1043:            f"Expected {scope_callable} to return a 'str' while defining fixture '{fixture_name}', but it returned:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/fixtures.py:1378:                f"'request' is a reserved word for fixtures, use another name:\n  {location}",
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/_code/code.py:1176:                "  The following exception happened when comparing locals in the stack frame:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/tracemalloc.py:18:        return f"\nObject allocated at:\n{formatted_tb}"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/main.py:276:        "'root_dir/another_dir/'; absolute path: '/home/user/root_dir'; path with variables: "
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/main.py:1119:            path=Path("/home/u/myvenv/lib/site-packages/pkg/tests/test_foo.py"),
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/config/findpaths.py:348:    file system ("/" on Unix and "C:\\" on Windows for example).
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/config/__init__.py:797:                "Defining 'pytest_plugins' in a non-top-level conftest is no longer supported:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/config/__init__.py:800:                "Please move it to a top level conftest file at the rootdir:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/_pytest/config/__init__.py:802:                "For more information, visit:\n"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/util.py:159:        >>> shebang_matches('#!C:\\Python2.4\\Python.exe', r'python(2\.\d)?')
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/cmdline.py:322:                        # C:\lexer.py -- return to normal load path in that case
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/automation.py:211:    # c:\Program Files (x86)\AutoIt3\SciTE\au3.keywords.properties
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/python.py:755:             r'exception occurred:\n\n', Generic.Traceback),
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/python.py:757:             r'following exception:\n\n', Generic.Traceback),
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/theorem.py:101:        r'\[\|', ']', '_', '`', r'\{', r'\{<', r'lp:\{\{', r'\|', r'\|]', r'\}', '~', '=>',
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/markup.py:423:    url = 'https://firefox-source-docs.mozilla.org/build/buildsystem/preprocessor.html'
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/markup.py:464:    url = 'https://firefox-source-docs.mozilla.org/build/buildsystem/preprocessor.html'
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/markup.py:484:    url = 'https://firefox-source-docs.mozilla.org/build/buildsystem/preprocessor.html'
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/markup.py:500:    url = 'https://firefox-source-docs.mozilla.org/build/buildsystem/preprocessor.html'
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/markup.py:516:    url = 'https://firefox-source-docs.mozilla.org/build/buildsystem/preprocessor.html'
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/markup.py:716:            (r'^\s*CLOSED:\s+', Generic.Deleted, 'dateline'),
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/markup.py:752:            (r'\s*CLOSED:\s+', Generic.Deleted),
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/ul4.py:169:            (r"@\(\d\d\d\d-\d\d-\d\d(T(\d\d:\d\d(:\d\d(\.\d{6})?)?)?)?\)", Literal.Date),
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/textfmts.py:342:            (r'(\s*id:\s*)(\S+)', bygroups(Name.Attribute, String)),
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/textfmts.py:345:            (r'(\s*filename:\s*)(.+\n)',
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/textfmts.py:367:            (r'(ID:\s*)(\d+)', bygroups(Name.Attribute, Number.Integer)),
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/textfmts.py:370:            (r'(,\s*)(Content-type:\s*)(.+\n)',
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/configs.py:287:    url = 'https://www.kernel.org/doc/html/latest/kbuild/kconfig-language.html'
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/configs.py:1131:    _time = r"\d\d:\d\d(:\d\d(\.\d+)?)?"
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/configs.py:1137:                    [Zz]|[+-]\d\d:\d\d # optional time offset
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/factor.py:305:            (r'NAN:\s+[a-fA-F\d](?:[a-fA-F\d,]*[a-fA-F\d])?(?:p\d([\d,]*\d)?)?\s', Number),
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/perl.py:623:            (r'(?:q|qq|Q)[a-zA-Z]?\s*(?P<adverbs>:[\w\s:]+)?\s*(?P<delimiter>(?P<first_char>[^0-9a-zA-Z:\s])'
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pygments/lexers/perl.py:636:            (r'(?:m|ms|rx)\s*(?P<adverbs>:[\w\s:]+)?\s*(?P<delimiter>(?P<first_char>[^\w:\s])'
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pip-24.0.dist-info/RECORD:181:pip/_internal/operations/build/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pip-24.0.dist-info/RECORD:182:pip/_internal/operations/build/__pycache__/__init__.cpython-312.pyc,,
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pip-24.0.dist-info/RECORD:183:pip/_internal/operations/build/__pycache__/build_tracker.cpython-312.pyc,,
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pip-24.0.dist-info/RECORD:184:pip/_internal/operations/build/__pycache__/metadata.cpython-312.pyc,,
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pip-24.0.dist-info/RECORD:185:pip/_internal/operations/build/__pycache__/metadata_editable.cpython-312.pyc,,
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pip-24.0.dist-info/RECORD:186:pip/_internal/operations/build/__pycache__/metadata_legacy.cpython-312.pyc,,
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pip-24.0.dist-info/RECORD:187:pip/_internal/operations/build/__pycache__/wheel.cpython-312.pyc,,
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/lib64/python3.12/site-packages/pip-24.0.dist-info/RECORD:188:pip/_internal/operations/build/__pycache__/wheel_editable.cpython-312.pyc,,
+=== SDK IDENTITY ===
+028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48  /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0
+ 0x000000000000000e (SONAME)             Library soname: [libkysdk-coreai-embedding.so.1]
+libkylin-coreai-embedding 1.2.0.0-0k0.4 amd64
