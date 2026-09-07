@@ -1,0 +1,200 @@
+=== COLLECTED AT UTC ===
+2026-09-06T07:54:07Z
+=== VBOX VERSION ===
+7.2.8r173730
+=== RUNNING VMS ===
+"Kylin-Desktop-V11-2603-SDK" {23a31c42-63bb-482f-8856-e8a9f04176c8}
+=== VM INFO ===
+name="Kylin-Desktop-V11-2603-SDK"
+encryption="disabled"
+groups="/"
+platformArchitecture="x86"
+ostype="Ubuntu (64-bit)"
+UUID="23a31c42-63bb-482f-8856-e8a9f04176c8"
+CfgFile="D:\\VirtualBox VMs\\Kylin-Desktop-V11-2603-SDK\\Kylin-Desktop-V11-2603-SDK.vbox"
+SnapFldr="D:\\VirtualBox VMs\\Kylin-Desktop-V11-2603-SDK\\Snapshots"
+LogFldr="D:\\VirtualBox VMs\\Kylin-Desktop-V11-2603-SDK\\Logs"
+hardwareuuid="23a31c42-63bb-482f-8856-e8a9f04176c8"
+memory=11264
+pagefusion="off"
+vram=16
+cpuexecutioncap=100
+cpu-profile="host"
+chipset="piix3"
+firmware="EFI"
+cpus=4
+hpet="off"
+pae="off"
+longmode="on"
+triplefaultreset="off"
+apic="on"
+x2apic="on"
+nested-hw-virt="off"
+hwvirtex="on"
+nestedpaging="on"
+largepages="on"
+vtxvpid="on"
+vtxux="on"
+virtvmsavevmload="on"
+cpuid-portability-level=0
+bootmenu="messageandmenu"
+boot1="floppy"
+boot2="dvd"
+boot3="disk"
+boot4="none"
+acpi="on"
+ioapic="on"
+biosapic="apic"
+biossystemtimeoffset=0
+NvramFile="D:\\VirtualBox VMs\\Kylin-Desktop-V11-2603-SDK\\Kylin-Desktop-V11-2603-SDK.nvram"
+SecureBoot="off"
+rtcuseutc="on"
+iommu="none"
+paravirtprovider="default"
+effparavirtprovider="kvm"
+VMState="running"
+VMStateChangeTime="2026-09-06T07:26:22.019000000"
+graphicscontroller="vmsvga"
+monitorcount=1
+accelerate3d="off"
+teleporterenabled="off"
+teleporterport=0
+teleporteraddress=""
+teleporterpassword=""
+tracing-enabled="off"
+tracing-allow-vm-access="off"
+tracing-config=""
+autostart-enabled="off"
+autostart-delay=0
+defaultfrontend=""
+vmprocpriority="default"
+storagecontrollername0="IDE"
+storagecontrollertype0="PIIX4"
+storagecontrollerinstance0="0"
+storagecontrollermaxportcount0="2"
+storagecontrollerportcount0="2"
+storagecontrollerbootable0="on"
+storagecontrollername1="SATA"
+storagecontrollertype1="IntelAhci"
+storagecontrollerinstance1="0"
+storagecontrollermaxportcount1="30"
+storagecontrollerportcount1="1"
+storagecontrollerbootable1="on"
+"IDE-0-0"="D:\\Oracle\\VirtualBox\\VBoxGuestAdditions.iso"
+"IDE-ImageUUID-0-0"="0c4102e4-2f24-4017-bc86-70d2ca4e83a9"
+"IDE-tempeject-0-0"="off"
+"IDE-IsEjected-0-0"="off"
+"IDE-nonrotational-0-0"="off"
+"IDE-discard-0-0"="off"
+"IDE-0-1"="none"
+"IDE-1-0"="none"
+"IDE-1-1"="none"
+"SATA-0-0"="D:\\VirtualBox VMs\\Kylin-Desktop-V11-2603-SDK\\Snapshots\\{cd4c45f2-3308-4256-a2d5-0cc476ff78db}.vdi"
+"SATA-ImageUUID-0-0"="cd4c45f2-3308-4256-a2d5-0cc476ff78db"
+"SATA-hot-pluggable-0-0"="off"
+"SATA-nonrotational-0-0"="off"
+"SATA-discard-0-0"="off"
+natnet1="nat"
+macaddress1="080027B47C64"
+cableconnected1="on"
+nic1="nat"
+nictype1="82540EM"
+nicspeed1="0"
+mtu="0"
+sockSnd="64"
+sockRcv="64"
+tcpWndSnd="64"
+tcpWndRcv="64"
+localhostReachable="1"
+forwardBroadcast="0"
+enableTFTP="0"
+Forwarding(0)="SSH,tcp,127.0.0.1,2222,,22"
+hostonlyadapter2="VirtualBox Host-Only Ethernet Adapter"
+macaddress2="0800276A78F1"
+cableconnected2="on"
+nic2="hostonly"
+nictype2="82540EM"
+nicspeed2="0"
+nic3="none"
+nic4="none"
+nic5="none"
+nic6="none"
+nic7="none"
+nic8="none"
+hidpointing="usbtablet"
+hidkeyboard="ps2kbd"
+uart1="off"
+uart2="off"
+uart3="off"
+uart4="off"
+lpt1="off"
+lpt2="off"
+audio="default"
+audio_out="on"
+audio_in="off"
+clipboard="bidirectional"
+clipboard_file_transfers="off"
+draganddrop="disabled"
+SessionName="GUI/Qt"
+VideoMode="1920,1440,32"@0,0 1
+vrde="off"
+usb="on"
+ehci="on"
+xhci="off"
+VRDEActiveConnection="off"
+VRDEClients==0
+recording_started="off"
+recording_enabled="off"
+recording_screens=1
+ rec_screen0
+rec_screen_enabled="on"
+rec_screen_id=0
+rec_screen_video_enabled="on"
+rec_screen_audio_enabled="off"
+rec_screen_dest="File"
+rec_screen_dest_filename="D:\\VirtualBox VMs\\Kylin-Desktop-V11-2603-SDK\\Kylin-Desktop-V11-2603-SDK-screen0.webm"
+rec_screen_opts="ac_profile=med"
+rec_screen_video_res_xy="1024x768"
+rec_screen_video_rate_kbps=512
+rec_screen_video_fps=25
+SnapshotName="Kylin V11 2603锝淪DK闈欐€佸璁″畬鎴愶綔鐪熷疄娴嬭瘯鍓?
+SnapshotUUID="8e3d740d-68d6-436e-ab50-43cf904e84ca"
+SnapshotName-1="Kylin V11 2603锝淓mbedding鍗囩骇鍓嶆渶缁堝熀绾匡綔2026-07-23"
+SnapshotUUID-1="60124cc8-3272-420f-9cac-6e4763373123"
+SnapshotName-1-1="Kylin V11 2603锝淩untime宸插崌绾э綔Kytensor涓嶸ectorClient鍗囩骇鍓嶏綔2026-07-23"
+SnapshotUUID-1-1="2ca442ac-a1a3-41f4-afcc-b09dab7d9de2"
+SnapshotName-1-1-1="Kylin V11 2603锝淥NNX Backend瀹夎鍓嶏綔2026-07-23"
+SnapshotUUID-1-1-1="02bcd7ce-a315-4956-a39d-12130ebdad2c"
+SnapshotName-1-1-1-1="Kylin V11 2603锝淓mbedding鎻掍欢ABI淇鍓嶏綔2026-07-23"
+SnapshotUUID-1-1-1-1="be7a9b5f-6289-4285-bf3e-45ef3db5e8e6"
+SnapshotName-1-1-1-1-1="Kylin-V11-2603-Embedding-SDK-Passed"
+SnapshotUUID-1-1-1-1-1="f62afba9-5ad8-4b37-87e3-cfa264c0a19e"
+SnapshotName-1-1-1-1-1-1="Kylin-v11-2603"
+SnapshotUUID-1-1-1-1-1-1="27ce0447-1132-47ac-8fda-2029be98e1d9"
+SnapshotDescription-1-1-1-1-1-1="鍏ㄩ儴渚濊禆瀹夎瀹屾垚"
+SnapshotName-1-1-1-1-1-1-1="pre-d14d-r2-clean-20260906"
+SnapshotUUID-1-1-1-1-1-1-1="d5fc17af-a790-4bb2-80f3-71737c6a1938"
+SnapshotName-1-1-1-1-1-1-1-1="d14d-clean-base-20260906-r2"
+SnapshotUUID-1-1-1-1-1-1-1-1="b2af169e-8bfc-46a8-9120-6348095eccf3"
+CurrentSnapshotName="d14d-clean-base-20260906-r2"
+CurrentSnapshotUUID="b2af169e-8bfc-46a8-9120-6348095eccf3"
+CurrentSnapshotNode="SnapshotName-1-1-1-1-1-1-1-1"
+GuestMemoryBalloon=0
+GuestOSType="Linux26_64"
+GuestAdditionsRunLevel=2
+GuestAdditionsVersion="6.0.0 r127566"
+GuestAdditionsFacility_VirtualBox Base Driver=50,1788679592103
+GuestAdditionsFacility_VirtualBox System Service=50,1788679593898
+GuestAdditionsFacility_Seamless Mode=0,1788679592102
+GuestAdditionsFacility_Graphics Mode=0,1788679592102
+=== SNAPSHOT DETAILS ===
+   Name: Kylin V11 2603锝淪DK闈欐€佸璁″畬鎴愶綔鐪熷疄娴嬭瘯鍓?(UUID: 8e3d740d-68d6-436e-ab50-43cf904e84ca)
+      Name: Kylin V11 2603锝淓mbedding鍗囩骇鍓嶆渶缁堝熀绾匡綔2026-07-23 (UUID: 60124cc8-3272-420f-9cac-6e4763373123)
+         Name: Kylin V11 2603锝淩untime宸插崌绾э綔Kytensor涓嶸ectorClient鍗囩骇鍓嶏綔2026-07-23 (UUID: 2ca442ac-a1a3-41f4-afcc-b09dab7d9de2)
+            Name: Kylin V11 2603锝淥NNX Backend瀹夎鍓嶏綔2026-07-23 (UUID: 02bcd7ce-a315-4956-a39d-12130ebdad2c)
+               Name: Kylin V11 2603锝淓mbedding鎻掍欢ABI淇鍓嶏綔2026-07-23 (UUID: be7a9b5f-6289-4285-bf3e-45ef3db5e8e6)
+                  Name: Kylin-V11-2603-Embedding-SDK-Passed (UUID: f62afba9-5ad8-4b37-87e3-cfa264c0a19e)
+                     Name: Kylin-v11-2603 (UUID: 27ce0447-1132-47ac-8fda-2029be98e1d9)
+                     Description: 鍏ㄩ儴渚濊禆瀹夎瀹屾垚
+                        Name: pre-d14d-r2-clean-20260906 (UUID: d5fc17af-a790-4bb2-80f3-71737c6a1938)
+                           Name: d14d-clean-base-20260906-r2 (UUID: b2af169e-8bfc-46a8-9120-6348095eccf3) *
