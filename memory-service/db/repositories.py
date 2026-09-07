@@ -1873,6 +1873,7 @@ def soft_delete_resolved_targets(
                 item_id = int(raw)
             except (TypeError, ValueError):
                 continue
+            current = _current_version_for_item(conn, memory_item_id=item_id)
             version_row_id = soft_delete_preference_item(
                 conn,
                 user_id=user_id,
@@ -1880,11 +1881,9 @@ def soft_delete_resolved_targets(
                 forget_plan_id=forget_plan_id,
             )
             if version_row_id is not None:
-                version_row = _version_row(conn, version_id=version_row_id, user_id=user_id)
-                if version_row is None:
-                    continue
                 executed += 1
-                version_ids.append(f"v{int(version_row['version'])}")
+            if current is not None:
+                version_ids.append(f"v{int(current['version'])}")
         return executed, version_ids
     if target_type == "all":
         executed = 0

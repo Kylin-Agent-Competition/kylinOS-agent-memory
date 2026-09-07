@@ -278,5 +278,5 @@ def test_g3_all_delete_returns_aligned_versions_for_kind_and_preference(state):
     assert count == 2
     assert len(versions) == len(target_ids)
     # memory_versions.id 是 row-id；Outbox 必须携带与 FTS/Vector 一致的
-    # 稳定 version identity（v<memory_versions.version>）。
-    assert versions == ["v1", "v2"]
+    # pre-delete active version identity（v<memory_versions.version>）。
+    assert versions == ["v1", "v1"]
