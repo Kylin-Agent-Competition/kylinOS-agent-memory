@@ -9,11 +9,17 @@ fail-closed 的一致性校验。
 设计要点：
 - 纯离线、确定性、无网络与 Runtime 依赖；以仓库根目录为稳定定位基准
   （默认由本文件位置推导 ``parents[1]``）。
-- 判定数据全部来自真实输入（Snapshot 文件 + 动态导入的当前代码 SSOT +
-  Canonical 文档文本），不硬编码任何成功取值。
+- 判定数据主要来自真实输入（Snapshot 文件 + 动态导入的当前代码 SSOT +
+  Canonical 文档文本 + 源码级 AST 核验）。除下述显式冻结基线常量外，
+  取值判定一律来自真实输入：
+  - ``EXPECTED_SCHEMA_NAME``、``SSOT_ENUM_LOCATORS``/``PROCESSING_STATUS_LOCATOR``
+    （仅用于定位 SSOT 枚举类，取值仍来自动态导入的当前代码）；
+  - ``EXPECTED_SOURCE_MAIN_COMMIT``（冻结允许的 main 基线 SHA，见 BLOCKER-01）；
+  - ``EXPECTED_FROZEN_MAPPINGS``（冻结稳定映射语义基线，见 BLOCKER-02）。
 - fail-closed：Snapshot JSON 不可解析、漂移、缺字段、非法 provenance、
-  无法导入或解析代码 SSOT、Canonical 文档缺失/非 FROZEN 均返回 exit 1。
-  任何内部异常都会以 ``[FAIL]`` 形式输出并返回 1，绝不吞掉或静默降级。
+  无法导入或解析代码 SSOT、Canonical 文档缺失/非 FROZEN、冻结基线与代码侧
+  fail-closed 声明漂移，均返回 exit 1。任何内部异常都会以 ``[FAIL]`` 形式
+  输出并返回 1，绝不吞掉或静默降级。
 
 仅服务 E-M1 Snapshot closure，不构成全仓 Schema Drift Framework。
 
@@ -29,6 +35,7 @@ fail-closed 的一致性校验。
 from __future__ import annotations
 
 import argparse
+import ast
 import importlib
 import json
 import re
@@ -71,6 +78,7 @@ TOP_LEVEL_REQUIRED_KEYS = (
     "schema",
     "schema_version",
     "status",
+    "source_main_commit",
     "authority",
     "canonical",
     "aliases_and_mappings",
@@ -78,7 +86,44 @@ TOP_LEVEL_REQUIRED_KEYS = (
 )
 ALIAS_SECTIONS = ("frozen_stable", "deprecated_or_compatibility", "pending_mapping")
 
-_FROZEN_DECL_RE = re.compile(r"状态\s*[：:]\s*FROZEN")
+# 冻结允许的 main 基线 SHA（BLOCKER-01）。
+# 权威性由治理冻结流程背书；更新须经书面治理流程，且必须与真实 origin/main
+# 冻结提交一致。禁止为通用化做 Git 网络/ancestry 查询——本校验保持离线 deterministic。
+EXPECTED_SOURCE_MAIN_COMMIT = "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
+
+# 冻结稳定映射语义基线（BLOCKER-02）：frozen_stable 每条须与下列期望条目
+# 做精确语义投影比较（canonical_field / alias 身份 / kind / mapping_status）。
+# 任一漂移、删除、重复或新增未冻结映射均须 FAIL，直到治理流程显式升版本常量。
+EXPECTED_FROZEN_MAPPINGS = (
+    {
+        "canonical_field": "captured_at",
+        "source_alias": "collected_at",
+        "kind": "legacy_transport_alias",
+        "mapping_status": "frozen_stable",
+    },
+    {
+        "canonical_field": "sensitivity",
+        "source_alias": "sensitivity_level",
+        "kind": "annotation_layer_1to1_alias",
+        "mapping_status": "frozen_stable",
+    },
+    {
+        "canonical_field": "source_business_status",
+        "source_alias": "Host DTO execution_status=failure",
+        "kind": "host_dto_alias_normalization",
+        "mapping_status": "frozen_stable",
+    },
+)
+
+# 需要 AST 核验 `ConfigDict(extra="forbid")` 的代码侧 fail-closed 类（REVIEW-03）。
+EXTRA_FORBID_CLASS_NAMES = ("MemorySourceEvent", "NormalizedEvent")
+EXTRA_FORBID_SCHEMAS_REL = Path("memory-service/pipeline/schemas.py")
+
+# Canonical 文档首部 FROZEN 状态声明（REVIEW-04）：仅解析文档首部状态 metadata。
+_FROZEN_DECL_RE = re.compile(r"状态\s*[：:]\s*FROZEN(?![A-Za-z0-9_])")
+# FROZEN 判定域：首个 `##`/`###` 标题行之前的首部前置区；无标题时取前 N 行。
+_FROZEN_PREAMBLE_HEADING_RE = re.compile(r"^#{2,}\s+.+$", re.MULTILINE)
+_FROZEN_PREAMBLE_FALLBACK_LINES = 30
 
 
 def _resolve_root(root: Optional[Path]) -> Path:
@@ -135,9 +180,21 @@ def _load_ssot_value_set(memory_service_dir: Path, rel_module_file: str, class_n
 
 
 def _doc_text_declares_frozen(text: str) -> bool:
-    """按文档首部状态声明判断 FROZEN（容忍 **加粗** 与 `反引号` 标记）。"""
+    """按文档首部状态 metadata 判断 FROZEN（REVIEW-04）。
+
+    仅解析标题（^## 或 ^###）之前的首部前置区（无标题时取前
+    ``_FROZEN_PREAMBLE_FALLBACK_LINES`` 行）；对首部做既有标记归一
+    （去 `` ` ``、``*``、``_``）后，命中 ``状态：FROZEN`` 才为 True。
+    历史段落/正文残留 ``状态：FROZEN`` 不参与判定，避免假阳性。
+    """
     normalized = re.sub(r"[`*_]", "", text)
-    return bool(_FROZEN_DECL_RE.search(normalized))
+    heading = _FROZEN_PREAMBLE_HEADING_RE.search(normalized)
+    if heading is not None:
+        preamble = normalized[: heading.start()]
+    else:
+        lines = normalized.splitlines(keepends=True)
+        preamble = "".join(lines[:_FROZEN_PREAMBLE_FALLBACK_LINES])
+    return bool(_FROZEN_DECL_RE.search(preamble))
 
 
 # ── 分组检查 ──────────────────────────────────────────────────────────────
@@ -160,6 +217,32 @@ def _check_basics(results, data: Dict[str, Any]) -> None:
             "snapshot_schema_name",
             f"schema={data.get('schema')!r}",
         )
+    _check_source_main_commit(results, data)
+
+
+def _check_source_main_commit(results, data: Dict[str, Any]) -> None:
+    """BLOCKER-01：顶层 provenance 基线的 presence/类型/SHA 格式/精确相等门禁。"""
+    commit = data.get("source_main_commit")
+    if not isinstance(commit, str):
+        _fail(
+            results,
+            "source_main_commit_type",
+            f"type={type(commit).__name__} value={commit!r}",
+        )
+        return
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        _fail(
+            results,
+            "source_main_commit_sha_format",
+            f"invalid git SHA (expect 40 lowercase hex): {commit!r}",
+        )
+        return
+    _add(
+        results,
+        commit == EXPECTED_SOURCE_MAIN_COMMIT,
+        "source_main_commit_matches_frozen_baseline",
+        f"commit={commit!r} expected={EXPECTED_SOURCE_MAIN_COMMIT!r}",
+    )
 
 
 def _check_authority(results, root: Path, data: Dict[str, Any]) -> None:
@@ -454,9 +537,136 @@ def _check_aliases(results, data: Dict[str, Any]) -> None:
                 "frozen_stable_alias_present",
                 f"index={idx} canonical_field={entry.get('canonical_field')!r}",
             )
+    # BLOCKER-02：frozen_stable 与冻结期望映射做精确语义比较（绝不只查存在性）
+    if isinstance(frozen_stable, list):
+        _check_frozen_mappings_semantics(results, frozen_stable)
 
 
-def _check_unknown_policy(results, data: Dict[str, Any]) -> None:
+def _frozen_semantic_projection(entry: Dict[str, Any]) -> Optional[Tuple[Any, ...]]:
+    """把 frozen_stable 条目投影为 (canonical_field, alias_identity, kind, mapping_status)。
+
+    alias_identity：
+    - ``source_alias`` 为 str → 直接用该字符串；
+    - 否则 ``source_fields`` 为 list → ``tuple(sorted(source_fields))``；
+    - 否则 ``source_value`` → 该字符串。
+    投影无法确定（缺少任何别名身份）返回 None，由调用方判 FAIL。
+    """
+    canonical_field = entry.get("canonical_field")
+    kind = entry.get("kind")
+    mapping_status = entry.get("mapping_status")
+    source_alias = entry.get("source_alias")
+    source_fields = entry.get("source_fields")
+    source_value = entry.get("source_value")
+    if isinstance(source_alias, str):
+        alias_identity = source_alias
+    elif isinstance(source_fields, list):
+        alias_identity = tuple(sorted(source_fields))
+    elif isinstance(source_value, str):
+        alias_identity = source_value
+    else:
+        return None
+    return (canonical_field, alias_identity, kind, mapping_status)
+
+
+def _check_frozen_mappings_semantics(results, frozen_stable: List[Any]) -> None:
+    """BLOCKER-02：frozen_stable 与冻结期望映射做精确语义比较。
+
+    要求：真实条目数 == 期望条数，且每个期望条目被“恰好一个”真实条目精确
+    匹配（canonical_field / alias 身份 / kind / mapping_status 全等）。删除、
+    多余重复、alias/kind/canonical_field/status 漂移均被覆盖。``failed`` 作为
+    Canonical 值成员资格继续由 ``value_set_matches_ssot`` 门禁守护。
+    """
+    expected_projs = [_frozen_semantic_projection(e) for e in EXPECTED_FROZEN_MAPPINGS]
+    if any(p is None for p in expected_projs):
+        _fail(results, "frozen_mappings_expected_projection", "expected baseline malformed")
+        return
+    actual_projs = []
+    for idx, entry in enumerate(frozen_stable):
+        proj = _frozen_semantic_projection(entry) if isinstance(entry, dict) else None
+        actual_projs.append((idx, proj))
+
+    # 数量精确相等
+    _add(
+        results,
+        len(frozen_stable) == len(EXPECTED_FROZEN_MAPPINGS),
+        "frozen_mappings_count_exact",
+        f"actual={len(frozen_stable)} expected={len(EXPECTED_FROZEN_MAPPINGS)}",
+    )
+
+    # 每个期望条目必须被恰好一个实际条目精确匹配，且无重复匹配
+    matched_actual = set()
+    mismatches = []
+    for exp in expected_projs:
+        hit_indices = [
+            idx
+            for (idx, proj) in actual_projs
+            if proj is not None and proj == exp and idx not in matched_actual
+        ]
+        if len(hit_indices) == 1:
+            matched_actual.add(hit_indices[0])
+        else:
+            mismatches.append(f"expected={exp!r} matches={len(hit_indices)}")
+    for idx, proj in actual_projs:
+        if proj is not None and idx not in matched_actual:
+            mismatches.append(f"unmatched_actual_idx={idx} proj={proj!r}")
+    _add(
+        results,
+        not mismatches,
+        "frozen_mappings_semantics_exact",
+        ";".join(mismatches),
+    )
+
+
+def _source_declares_extra_forbid(schemas_path: Path) -> Optional[str]:
+    """源码级核验两个模型类仍声明 ``model_config = ConfigDict(extra="forbid")``。
+
+    返回违规描述字符串，或 None（核验通过）。使用确定性 AST 解析，不导入、
+    无副作用；不做全仓扫描、不解析 Pydantic 元类。
+    """
+    if not schemas_path.is_file():
+        return f"missing file: {schemas_path}"
+    try:
+        source = schemas_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return f"unreadable file: {exc!r}"
+    try:
+        tree = ast.parse(source, filename=str(schemas_path))
+    except SyntaxError as exc:
+        return f"SyntaxError: {exc!r}"
+    found = {}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if node.name not in EXTRA_FORBID_CLASS_NAMES:
+            continue
+        forbid = False
+        for stmt in node.body:
+            if not isinstance(stmt, (ast.Assign, ast.AnnAssign)):
+                continue
+            target = getattr(stmt, "targets", None)
+            if target is not None and len(target) == 1 and isinstance(target[0], ast.Name):
+                name = target[0].id
+            else:
+                ann_target = getattr(stmt, "target", None)
+                name = ann_target.id if isinstance(ann_target, ast.Name) else None
+            if name != "model_config":
+                continue
+            value = getattr(stmt, "value", None)
+            if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "ConfigDict":
+                for kw in value.keywords:
+                    if kw.arg == "extra" and isinstance(kw.value, ast.Constant) and kw.value.value == "forbid":
+                        forbid = True
+        found[node.name] = forbid
+    missing_violations = []
+    for name in EXTRA_FORBID_CLASS_NAMES:
+        if name not in found:
+            missing_violations.append(f"{name}: class missing")
+        elif not found[name]:
+            missing_violations.append(f"{name}: extra != 'forbid'")
+    return ";".join(missing_violations) if missing_violations else None
+
+
+def _check_unknown_policy(results, root: Path, data: Dict[str, Any]) -> None:
     unknown_policy = data.get("unknown_policy")
     if not isinstance(unknown_policy, dict):
         _fail(results, "unknown_policy_object", f"type={type(unknown_policy).__name__}")
@@ -468,6 +678,17 @@ def _check_unknown_policy(results, data: Dict[str, Any]) -> None:
         "unknown_policy_fail_closed",
         f"policy={policy!r}",
     )
+    # REVIEW-03：fail_closed 声明必须与代码侧 MemorySourceEvent/NormalizedEvent
+    # 仍声明 ConfigDict(extra="forbid") 绑定（fail-closed：读/解析失败即 FAIL）。
+    if policy == "fail_closed":
+        schemas_path = (root / EXTRA_FORBID_SCHEMAS_REL).resolve()
+        violation = _source_declares_extra_forbid(schemas_path)
+        _add(
+            results,
+            violation is None,
+            "unknown_policy_code_side_extra_forbid",
+            f"violation={violation!r}" if violation else f"schemas={schemas_path}",
+        )
 
 
 # ── 校验入口 ──────────────────────────────────────────────────────────────
@@ -496,7 +717,7 @@ def _verify_all(root: Path, snapshot_path: Path) -> List[Tuple[bool, str, str]]:
     _check_authority(results, root, data)
     _check_canonical(results, root, data)
     _check_aliases(results, data)
-    _check_unknown_policy(results, data)
+    _check_unknown_policy(results, root, data)
     return results
 
 
