@@ -24,6 +24,8 @@
 | 7 | retrieval L0/L1 回归（#8 部分：harness + formal_eval + 完整 `memory-service/tests/retrieval/`） | 365 passed | VM 会话 |
 | 8 | FTS 通道性能采样（#6 部分：500 语料，P50/P95/mean/max；无冻结阈值 → 仅记录 delta） | 记录 | `~/d14b-validation-20260908/svc_perf` |
 | 9 | OS 整机重启一致性（#5 部分：真实 guest reboot，boot_id 变化，kylin-memory/vector-engine 自启 active，SQLite/FTS 数据与重启前一致） | PASS | `~/d14b-validation-20260908/os_reboot/result.json` |
+| 10 | 重建一致性（#3 部分·FTS 侧：soft-delete 后 FTS5 `rebuild`，target 未复活、其余可检索） | PASS(5/5) | `~/d14b-validation-20260908/svc_rebuild/result.json` |
+| 11 | **Vector 持久化（#2 部分，自配置 durable binding）**：真实 embed(768)×5 → `SqliteVectorProvider` upsert → engine 重启 → loader 重绑定 → ledger=5、top_hits 与重启前一致 | PASS | `~/d14b-validation-20260908/vector_persist/{baseline,after,meta}.json` |
 
 ## 3. Deviation（明示）
 
@@ -31,21 +33,22 @@
 2. 受控数据写入采用 validation-profile / 真实 provider 驱动；`main` 上 production IPC 写路径被
    ADR-010/014 门禁（`memory.store`/`memory.retrieve` 未实现；`turn.finalized`/`event.ingest`
    默认未注册）。
+3. D14D clean VM 不可得 → B 自配置 vector 持久化：app `vector-bridge` 绑定持久 db-file
+   （`~/…/kylin-ai-vector-engine/vector-bridge.db`），loader `vector_db_load` 于开机/engine 重启后重注册，
+   数据跨 engine/OS 重启保留（deviation 记录）。
 
 ## 4. 阻塞（如实）
 
-- Vector/RRF 通道（#2/#3/#4/#6 的 Vector 部分）：vector engine 的 app 存储绑定
-  （db-file → `vector-bridge`）为进程内态，engine 重启需客户端以同 db-file 重建；
-  `VectorCliClient`/`vector_bridge_cli` 无此步骤，本 VM 服务未接 vector wiring →
-  需 D14D clean VM 或 engine 配置侧支持。
-- #3 重建（服务层全通道）、#6 vector/RRF 性能、#7 正式报告与 evidence、
-  #8 最终独立 Review 收口待做。
+- Vector 持久化已由自配置 durable binding 解除（本 VM，见 Deviation 3 与行 11）；
+  服务级全通道与 RRF 相关正式切片、#7 正式 evidence、#8 独立 Review 仍待 D 轨流程/正式输入。
 
 ## 5. 环境持久化（2026-09-08，重启自愈）
 - vector engine 后端目录改至 `~/kytensor-backends`（home 持久；drop-in `--backend-directory` 已更新）。
 - kylin-ai-runtime 依赖库改至 `~/kytensor-libs`（home 持久）；autostart Exec 已更新。
 - 实测 guest OS 重启后：kytensor/kylin-memory/vector-engine 自启，真实 SDK `memory.embed` dim=768
   可用（D14A verify ALL PASS）。
+- vector 持久 db-file 绑定：`~/d14b-tools/vector_db_load` + autostart `d14b-vector-load.desktop`
+  （ensure_vector_db.sh 带重试），engine/OS 重启后自动重注册，collection 落于 vector-bridge.db。
 ## 6. 合并资格
 
 本批不改生产代码、不创建 formal evidence root；`D14B_FORMAL_L3=UNVERIFIED`；PR #124 不具
