@@ -1870,3 +1870,27 @@ entries:
       package_manifest_sha256: 76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0.
       package_sha256sums_sha256: 8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67.
       Formal evidence root: evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e.
+
+  - id: "D13D-FORMAL-CLOSURE-BA3B50E-20260908"
+    task_id: "D13D"
+    description: "D13D Phase 3 formal closure: 17 raw, dual seals, frozen trust root, Runner Gate 0-10, and D13D_FROZEN registration"
+    status: "FROZEN"
+    evidence_level: "E4"
+    source: "evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/D13D_FREEZE_RECORD_20260908.md"
+    source_commit: "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
+    tested_commit: "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
+    evidence_commit: "40a9c392882237c61bf33fb1234523ca0aec3d30"
+    manifest_sha256: "2dc0b9557fe7927756acd77218c3a1b7cc33c46218a14c9f831d2bb01f2b05b5"
+    runtime_result: "Runner Gate 0-10 PASS; Preference/Conflict accuracy=1.0; Safety/Forget violations=0"
+    review_status: "APPROVED"
+    merge_qualified: false
+    date: "2026-09-08"
+    reviewer: "lovezy0730-create (execution review APPROVED); Ducknesses (D13E Review Seal)"
+    limitations: "This entry registers the D13D evidence and D13D_FROZEN state. PR #165 final approval is outstanding; L3_READY/release_ready/production_ready remain false."
+    checksum_sha256: "8a43fd824003bc38649dfffb811238a87ec0842a714b7c76838bb0d728ea7010"
+    details: |
+      Evidence root: evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence.
+      Formal report SHA-256: dee80d5044c2194b79f13e7185b39f0162c63468f7a47b86799a1abb23c489ee.
+      Trust root: /etc/kylin-memory/trust; store JSON SHA-256 cdd22c5c62e3de592bddca62f018a8c7e293b0144c9bda44c7c10573bad99d6e.
+      Trust-root installation audit: evidence/phase3-prep/d13d_trust_root_install_20260908/D13D_TRUST_ROOT_INSTALL_AUDIT_20260908.md.
+      The raw-time evidence root SHA256SUMS and evidence_index.yaml remain unchanged.

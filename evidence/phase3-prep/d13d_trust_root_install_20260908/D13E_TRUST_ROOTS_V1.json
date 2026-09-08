@@ -1,0 +1,14 @@
+{
+  "trust_store_version": "d13e-trust-roots/v1",
+  "signature_scheme": "ed25519",
+  "review": {
+    "key_id": "d13e-review-rd-20260908-v1",
+    "public_key_file": "d13e-review-public.pem",
+    "public_key_sha256": "a107ee92d7acb4f8fac7fe0b4cf393a68631d5a85d6aa45d99f24eb86eeb6286"
+  },
+  "d13d_execution": {
+    "key_id": "d13d-execution-lovezy0730-20260908-v1",
+    "public_key_file": "d13d-execution-public.pem",
+    "public_key_sha256": "bbba93c041746231e203237995ae7e763ef584e912d4ad2467e8500edbf2b406"
+  }
+}
