@@ -7,7 +7,7 @@
   "gold_file": "D13E_GOLD_V1.jsonl",
   "threshold_config_file": "D13E_FORMAL_THRESHOLDS_V1.json",
   "execution_attestation_file": "D13D_EXECUTION_ATTESTATION_V1.json",
-  "execution_attestation_sha256": "b50199ae841f49371c1fde097502804de9ecc9da8d841576673ab646767f793e",
+  "execution_attestation_sha256": "2407d92e7b4ea4b237fdf7ba10960b57c943efe2b5df70e49295b43ade316c8d",
   "raw_result_files": {
     "preference": {
       "file": "raw/preference_raw.jsonl",

@@ -4,7 +4,7 @@
   "implementation_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
   "environment_id": "d13d-phase3-formal@Kylin-D14D-clean-vdi-20260906:d14d-clean-base-20260907-r4",
   "dependency_version_reference": "package_tar_sha256=2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401;D14A_final_package=NOT_FROZEN_at_raw_time",
-  "data_version_reference": "dataset_sha256=0369543dfd3f9b9adae555f3dba041289c5a3c3c34826d13ee29f49878b64637;gold_sha256=2e8ed9dca79c4ca9908cfdbeae6c3bbb07bb0c62f46a45219310ebaa84bed225",
+  "data_version_reference": "dataset_sha256=9740c00f4a9d91471bec8e6fa8aeeeb52f890f8680d83f740a84db2b1701a44b;gold_sha256=aeea9beab5d25461083bb693424014a813cd91bae6b0d7b60443f817f33c6be0",
   "evidence_root": "evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence",
   "evidence_directory": ".",
   "evidence_reference": "evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence",

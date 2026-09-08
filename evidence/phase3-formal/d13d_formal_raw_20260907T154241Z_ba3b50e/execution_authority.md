@@ -45,3 +45,15 @@ identities use the defaults in the host-side source and match
 The public `dispatch_and_write_canonical()` remains fail-closed. This run used
 the controlled remote orchestration path around that gate while retaining the
 frozen adapter validation, real dispatchers, and private canonical writer.
+
+## Dataset identity correction
+
+The executed Dataset is the LF-byte blob at tested commit `ba3b50e...` and
+hashes to `9740c00f...`. The VM preflight independently recorded
+`sha256sum` output `9740c00f...` for the cloned Dataset. The initial evidence
+commit `44f98bd...` copied Windows-checkout CRLF mirrors (Dataset `036954...`,
+Gold `2e8ed9...`, Thresholds `9d70a7...`) because `core.autocrlf=true`. On
+2026-09-08 the committed manifest/attestation registrations and evidence-root
+mirror bytes were corrected to the exact `ba3b50e` blobs. Canonical raw files,
+dispatch receipts, execution logs, and execution summary hashes were not
+modified.
