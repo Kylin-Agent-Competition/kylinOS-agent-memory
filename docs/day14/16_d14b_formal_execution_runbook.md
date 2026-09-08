@@ -5,8 +5,13 @@
 本文件固定 D14B 正式 handoff 后的命令顺序、输入文件和停止条件。它不是正式证据，
 不创建 evidence root，也不授予 VM、重启、删除、重建或 OS reboot 权限。
 
-当前状态：`D14B_PREPARATION = IN_PROGRESS`，`D14B_FORMAL_L3 = BLOCKED`，
-`D14B_FORMAL_RESULT = UNVERIFIED`。
+当前状态：`D14B_PREPARATION = IN_PROGRESS`，`D14B_FORMAL_L3 = PENDING_LOCAL_INTAKE`，
+`D14B_FORMAL_RESULT = UNVERIFIED`。已只读核验远端主线 SSOT 的上游共同身份：
+`tested_commit=ba3b50e1bdeea185bca9daee9d1d45958f62a636`、D13D `FROZEN`、D14D
+`L3_READY`、D14A frozen package `kylin-memory-a-d14a 0.1.0-d14a`（tar
+`2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401`，manifest
+`76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0`）。该核验不等同于
+本地 intake 或任何 VM 执行。
 
 ## 1. 固定 preparation 输入
 
@@ -31,6 +36,11 @@ D14A final package version/tar SHA/manifest SHA 已冻结
 VM UUID / snapshot UUID / environment_id 与 D14D handoff 相同
 checkout 的 HEAD == tested_commit，且 git status --porcelain 为空
 ```
+
+当前仍缺少 D14B 可消费的标准化 `d13d-handoff.json` / `d14d-handoff.json`、四类
+production capture command 与 runner identity；这些必须由正式交接提供，D14B 不得从
+上游 evidence 自行拼装为 handoff。当前开发分支 HEAD 也不是 `tested_commit`，必须在
+精确 commit 的干净 checkout 中重验。
 
 在未存在的新路径上运行：
 

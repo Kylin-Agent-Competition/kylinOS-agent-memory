@@ -9,11 +9,11 @@
 - 历史准备基线：`origin/main@8cc4a89`（只保留为 2026-09-02 开工记录，不得作为正式 tested_commit）。
 - 历史开发基线：`3430a1f`（2026-09-07 合并 `origin/main@ba3b50e`；仅保留为 D13D 双通道检索观测接口对齐记录）。
 - 当前开发基线：`c1443aaecc82a79b9b9f835664ba5e4fee5edfc2`（2026-09-08 将 `origin/main@632b24b` 合并至本 D14B 分支；仅用于当前开发对齐）。
-- 正式 tested_commit：`PENDING_D13D_D14D_HANDOFF`；必须由 D13D `FROZEN` 与 D14D `L3_READY` 共同交接，不能用当前开发基线替代。
+- 已核验的正式 tested_commit：`ba3b50e1bdeea185bca9daee9d1d45958f62a636`（2026-09-08 远端主线 SSOT 记录的 D13D/D14D 共同身份）；正式执行前仍须在该精确 commit 的干净 checkout 中消费结构化交接，不能用当前开发基线替代。
 - 开始时间：2026-09-02（准备阶段）。最晚停止时间：尚未由负责人指定；进入实现前须确认。
-- 当前进度：D14B 准备进行中：已同步开发基线、固定 formal preflight / 快照比较 / evidence SHA256SUMS 校验 harness，并以 L0/L1 契约测试验证。正式 VM 工作 0/8；在 D13D `FROZEN`、D14D `L3_READY`、final package/hash 与同一 tested_commit 均交接前，结果仍为 `UNVERIFIED`。
-- 上游状态更新（2026-09-07）：D13D I3b-completion（#160）已合入主线，但其 Phase 3 仍仅为准备阶段；`D13D_FROZEN=NO`、final tested_commit 仍待重选，故不解除 D14B formal gate。
-- 上游状态更新（2026-09-08）：`origin/main@632b24b` 已包含 E 轨 M1 schema snapshot 闭合（#166）；本分支仅将其作为开发对齐基线，不将其提升为 D14B formal input，formal gate 不变。
+- 当前进度：D14B intake 准备进行中：formal preflight / 快照比较 / evidence SHA256SUMS 校验 harness 已以 L0/L1 契约测试验证，正式 VM 工作仍为 0/8。上游身份已核验，但本分支尚未合并含该 SSOT 的主线，且标准化 D14B handoff JSON、四类 production capture command 与 runner identity 尚未作为 D14B 输入交接；结果保持 `UNVERIFIED`。
+- 历史上游状态（2026-09-07）：D13D I3b-completion（#160）初始合入时仅为准备阶段，`D13D_FROZEN=NO`；该历史状态已由下列 2026-09-08 SSOT 更新替代，不得再作为当前 gate 判断。
+- 上游状态更新（2026-09-08，经 `origin/main@77826122a8aa1eaeed60ec9295a4bb8f979b3fe7` 的 `docs/D_TRACK_STATUS.md` 核验）：`D13D_FROZEN=YES`、D14D `L3_READY=true`、`A_FINAL_PACKAGE_READY=YES`；三方身份均绑定 `ba3b50e1bdeea185bca9daee9d1d45958f62a636`，包为 `kylin-memory-a-d14a 0.1.0-d14a`，tar SHA-256 `2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401`，manifest SHA-256 `76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0`。这解除上游身份等待，不替代 D14B 的本地 intake、正式 VM 执行或独立审查。
 
 ## 完成定义
 
@@ -23,7 +23,7 @@
 
 | # | 工作项 | 依赖 | 验证方式 | 状态 |
 |---|---|---|---|---|
-| 1 | 记录 L3 干净快照发布回归基线与环境口径：Commit（`origin/main@8cc4a89`）、D14D 干净快照版本与 L3 安装/回退产物、D13D 冻结环境（VM 资源/依赖/数据版本/统一日志与报告目录）、A 发布包（Bridge/动态库/模型依赖）、D13B 正式评测账本口径（Recall@K/MRR/nDCG@K、按通道 P50/P95）作为回归对照基线。 | D13D/D14D 冻结交付；`origin/main` | commit/环境清单、哈希核对、schema 校验 | 待开始（基线口径已记录；D13D/D14D 冻结输入待提供） |
+| 1 | 记录 L3 干净快照发布回归基线与环境口径：Commit（`origin/main@8cc4a89`）、D14D 干净快照版本与 L3 安装/回退产物、D13D 冻结环境（VM 资源/依赖/数据版本/统一日志与报告目录）、A 发布包（Bridge/动态库/模型依赖）、D13B 正式评测账本口径（Recall@K/MRR/nDCG@K、按通道 P50/P95）作为回归对照基线。 | D13D/D14D 冻结交付；`origin/main` | commit/环境清单、哈希核对、schema 校验 | 进行中（上游 SSOT 身份已核验；待合并主线并取得标准化 D14B intake 输入） |
 | 2 | Vector/FTS5 持久化验证：写入后经服务重启（`systemctl --user restart kylin-memory` 与 Vector Engine 重启）数据完整，同一查询结果一致；Vector Collection 与 SQLite 真源计数一致。 | 干净快照 VM；D14D L3 安装与 systemd 可用 | 真实 VM 日志、重启前后检索结果一致、计数一致 | 待开始（无 VM 证据前为 `UNVERIFIED`） |
 | 3 | 重建一致性验证：按既有重建路径重建索引/Collection 后，与重建前检索结果一致（同用户、同版本口径），无残留、无重复、无幽灵命中（FTS5/Vector/RRF 通道交叉核对）。 | D10-B 重建路径；D13D 数据版本 | 重建前后检索对比、残留率 0 | 待开始 |
 | 4 | 删除残留验证：版本化精确删除后 Vector/FTS5/真源检索与索引均不再命中；跨用户不受影响；重复删除可重放；空/未知/未配对/超长选择器 fail-closed（在干净快照重跑 `tests/vector-engine/run_d10b_vector_delete_l2.sh`）。 | D10-B/D11B 删除运行器与证据基线 | L2 运行器 15/15、删除后查询残留 0、退出码 0 | 待开始 |

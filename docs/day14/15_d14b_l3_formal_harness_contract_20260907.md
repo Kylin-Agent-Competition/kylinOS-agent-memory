@@ -8,23 +8,27 @@
 | 历史准备基线 | `8cc4a89e34ca7ec73563c798a46339721f291139`（仅历史） |
 | 历史开发基线 | `3430a1f`（合并 `origin/main@ba3b50e` 后的历史 D14B 开发基线） |
 | 当前开发基线 | `c1443aaecc82a79b9b9f835664ba5e4fee5edfc2`（合并 `origin/main@632b24b` 后的本地 D14B HEAD） |
-| formal tested_commit | `PENDING_D13D_D14D_HANDOFF` |
-| D13D_FROZEN | `NO` |
-| D14D_ENV_PREPARED | `READY`（Phase0 r3，不能等同于 L3） |
-| D14D_L3_READY | `NO` |
-| final package/hash | `NOT_FROZEN` |
-| D14B_FORMAL_L3 / RESULT | `BLOCKED / UNVERIFIED` |
+| 上游 SSOT（尚未合并至本分支） | `origin/main@77826122a8aa1eaeed60ec9295a4bb8f979b3fe7` 的 `docs/D_TRACK_STATUS.md` |
+| formal tested_commit | `ba3b50e1bdeea185bca9daee9d1d45958f62a636`（已核验；待在精确干净 checkout 消费） |
+| D13D_FROZEN | `YES`（D13D freeze record，2026-09-08） |
+| D14D_L3_READY | `YES`（D14D final review / `docs/D_TRACK_STATUS.md`） |
+| final package/hash | `FROZEN`（`kylin-memory-a-d14a 0.1.0-d14a`；tar `2222c904…b401`；manifest `76a839…fc0`） |
+| D14B_FORMAL_L3 / RESULT | `PENDING_LOCAL_INTAKE / UNVERIFIED` |
 
 本批只提供 B 轨的只读 harness、比较口径及证据布局；不创建正式 evidence root，
 不运行 VM、不操作 D14D/D13D 环境，也不把本地 L0/L1 结论描述为 L3 PASS。
 
-2026-09-07 主线已合入 D13D I3b-completion（#160），包括双通道 Forget 观测及
-SQLite→Vector 重建输入快照；其状态仍为 Phase 3 `PREPARATION / NON-FORMAL`，不产生
-`D13D_FROZEN`。D14B 只消费正式 handoff，不把该准备证据提升为 formal input。
+2026-09-08 远端主线 SSOT 已登记 D13D Phase 3 formal closure、D14D final review 和
+D14A package/hash freeze。D14B 已只读核验以下上游记录：
 
-2026-09-08 主线已合入 E 轨 M1 schema snapshot 闭合（#166）。本分支将
-`origin/main@632b24b` 合并为当前开发基线，仅用于接口与依赖对齐；它不提供
-`D13D_FROZEN`、`D14D_L3_READY` 或 final package/hash，故不改变 formal 状态。
+- `docs/D_TRACK_STATUS.md`（状态与共同 `tested_commit`）；
+- `evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/D13D_FREEZE_RECORD_20260908.md`；
+- `evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e/{snapshot_identity.json,package_build_identity.json}`；
+- `evidence/l3-kylin-vm/d14a_final_package_20260908/D14A_FINAL_PACKAGE_FREEZE_RECORD_20260908.md`。
+
+这些记录证明上游身份一致，但当前分支尚未合并该主线，且没有可直接交给本工具的
+标准化 `d13d-handoff.json` / `d14d-handoff.json`；更不能由 D14B 自行编造它们。正式
+操作者仍须交接结构化输入，以及四类 production capture command 和 runner identity。
 
 ## 2. Formal preflight
 
@@ -163,7 +167,8 @@ evidence/l3-kylin-vm/d14b_<UTC_RUN_ID>_<sha7>/
 | snapshot compare | 完成 | missing/duplicate/cross-user/stale/exact tests |
 | checkpoint capture | 完成（只读汇编） | input SHA256 + schema + no-overwrite tests；production source command 待 formal handoff |
 | evidence closure | 完成 | SHA256SUMS valid/extra-file tests |
-| D13D/D14D formal handoff | 阻塞 | 等 `FROZEN` + `L3_READY` + final identity |
+| D13D/D14D formal identity | 已核验（上游） | 同一 `ba3b50e…`、D13D `FROZEN`、D14D `L3_READY`、冻结包 hash |
+| 标准化 D14B intake | 待交接 | `d13d-handoff.json`、`d14d-handoff.json`、production capture command 与 runner identity |
 | 正式 VM 生命周期、性能和报告 | 未开始 | 唯一 formal root 上机械执行 |
 
 本文件更新原因：原 D14B 任务卡的开发基线仍指向 2026-09-02 的历史 SHA，且缺少
