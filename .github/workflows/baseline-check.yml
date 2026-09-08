@@ -39,6 +39,7 @@ jobs:
         run: |
           python3 -m pytest \
             memory-service/tests/test_d13d_execution_adapter.py \
+            memory-service/tests/test_d13d_phase3_prep.py \
             memory-service/tests/test_d13d_safety_observability.py \
             memory-service/tests/test_d13d_forget_observability.py \
             memory-service/tests/test_event_ingest_d6d.py \
@@ -52,6 +53,8 @@ jobs:
     # 2026-09-06 D14D 人工裁决 D-14：把 packaging 4 个 Python 测试与
     # docs/day14/test_d14a_release_provenance.py 加入 CI，使 head 漂移/包完整性
     # 问题在合并前自动失败（本地 WSL 实测 77 passed）。
+    # 2026-09-07 M2-B：接入 docs/day15/test_d15a_rc_lock_matrix.py 发布锁矩阵守卫，
+    # 不新增 job/runner，复用本 job，保持 fetch-depth: 0。
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,7 +73,8 @@ jobs:
             packaging/release/test_d14a_relocatable_runtime.py \
             packaging/release/test_d14a_transactional_rollback.py \
             packaging/release/test_d14a_verify_smoke.py \
-            docs/day14/test_d14a_release_provenance.py
+            docs/day14/test_d14a_release_provenance.py \
+            docs/day15/test_d15a_rc_lock_matrix.py
 
   carlton-independent-host-evidence:
     name: Carlton independent host evidence closure

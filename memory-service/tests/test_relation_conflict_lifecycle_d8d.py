@@ -216,7 +216,7 @@ def test_forget_uses_row_revision_after_lifecycle_mutation(conn):
         resolved_target_ids=[created["memory_id"]],
         forget_plan_id="plan-d8d-row-revision",
     )
-    assert (executed, version_ids) == (1, [])
+    assert (executed, version_ids) == (1, ["v1"])
     deleted = repo._get_memory_entry(conn, entry_id=int(created["memory_id"]), user_id="u1")
     assert deleted is not None and deleted["is_deleted"] == 1
 

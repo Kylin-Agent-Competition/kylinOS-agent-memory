@@ -2,6 +2,9 @@
 
 本模块只在调用方已开启的 SQLite 读事务中读取 ``memory_entries``。它不创建
 Vector Collection、不调用 Embedding、不激活代次，也不推断遗忘授权或水位语义。
+
+Preference 的检索语义尚未批准进入 Vector 重建真源。为避免 full_reset 后残留
+preference 被静默排除，重建快照在读取时显式 fail-closed。
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from db.schema import memory_entries
+from db.schema import memory_entries, memory_items, memory_versions
 from retrieval.contracts import Watermark
 
 IndexTextResolver = Callable[[Mapping[str, object]], str | None]
@@ -49,12 +52,30 @@ class SqliteVectorSnapshot:
 
 
 class SqliteVectorSnapshotReader:
-    """读取已提交且未软删除的 ``memory_entries``，并维持用户边界。"""
+    """读取已提交且未软删除的 knowledge，并维持用户边界。
 
-    def __init__(self, index_text_resolver: IndexTextResolver) -> None:
+    ``memory_items``/``memory_versions`` 不是当前 Vector 重建语义的一部分。
+    默认情况下，若该用户仍有 active preference，说明目标未清理或调用方要求
+    了未授权的重建语义；此处拒绝整个快照，而不是生成看似成功的部分索引。
+
+    E 裁定 ``APPROVE_KNOWLEDGE_ONLY_PARTIAL_REBUILD``（2026-09-07）后，只有
+    显式授权的 D13D 非 ``full_reset`` knowledge-only rebuild 可把
+    ``allow_knowledge_only`` 置为 true；snapshot 仍包含该用户当前全部 active
+    Knowledge，且不会把 preference 加入 Vector 真源。
+    """
+
+    def __init__(
+        self,
+        index_text_resolver: IndexTextResolver,
+        *,
+        allow_knowledge_only: bool = False,
+    ) -> None:
         if not callable(index_text_resolver):
             raise TypeError("索引文本解析器必须可调用")
         self._index_text_resolver = index_text_resolver
+        if not isinstance(allow_knowledge_only, bool):
+            raise TypeError("allow_knowledge_only 必须是布尔值")
+        self._allow_knowledge_only = allow_knowledge_only
 
     def read(
         self,
@@ -73,6 +94,28 @@ class SqliteVectorSnapshotReader:
             raise ValueError("快照标识必须非空")
         if not isinstance(source_watermark, Watermark):
             raise TypeError("快照水位必须是 Watermark")
+
+        active_preference_ids = conn.execute(
+            select(memory_items.c.id)
+            .join(memory_versions, memory_versions.c.id == memory_items.c.current_version_id)
+            .where(
+                memory_items.c.user_id == user_id,
+                memory_versions.c.is_current == 1,
+                memory_versions.c.memory_status != "removed",
+            )
+            .order_by(memory_items.c.id.asc())
+        ).scalars().all()
+        if active_preference_ids:
+            if self._allow_knowledge_only:
+                # E ruling authorizes only knowledge exclusion here. The
+                # dual-channel profile keeps this flag false for full_reset so
+                # any surviving active preference still fails closed.
+                pass
+            else:
+                raise ValueError(
+                    "active preference records are excluded from the vector rebuild "
+                    f"snapshot; fail-closed item_ids={active_preference_ids!r}"
+                )
 
         rows = conn.execute(
             select(

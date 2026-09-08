@@ -6,6 +6,7 @@ import pytest
 
 from db.engine import create_db_engine, init_schema
 from db.schema import memory_entries
+from db import repositories as repo
 from retrieval.contracts import Watermark, WatermarkDomain, WatermarkKind
 from retrieval.sqlite_vector_snapshot import SqliteVectorSnapshotReader
 
@@ -139,6 +140,67 @@ def test_rejects_nonpositive_source_version(engine):
     assert [(item.memory_entry_id, item.reason) for item in snapshot.rejections] == [
         (1, "source_version_invalid"),
     ]
+
+
+def test_fails_closed_while_active_preference_is_outside_vector_truth(engine):
+    with engine.begin() as conn:
+        _insert(conn, entry_id=1, user_id="alice", content='{"index_text":"知识"}')
+        repo.save_preference_version(
+            conn,
+            user_id="alice",
+            preference_key="theme",
+            preference_scope="global",
+            preference_value="dark",
+            memory_status="active",
+            evidence_fingerprint="evidence-alice",
+            idempotency_key="idem-alice",
+            request_fingerprint="request-alice",
+        )
+
+    with engine.begin() as conn:
+        with pytest.raises(ValueError, match="active preference records"):
+            SqliteVectorSnapshotReader(_index_text).read(
+                conn,
+                user_id="alice",
+                source_snapshot_id="snapshot-preference",
+                source_watermark=_watermark(),
+            )
+
+
+def test_removed_preference_does_not_create_a_hidden_vector_snapshot_rejection(engine):
+    with engine.begin() as conn:
+        _insert(conn, entry_id=1, user_id="alice", content='{"index_text":"知识"}')
+        saved = repo.save_preference_version(
+            conn,
+            user_id="alice",
+            preference_key="theme",
+            preference_scope="global",
+            preference_value="dark",
+            memory_status="active",
+            evidence_fingerprint="evidence-alice",
+            idempotency_key="idem-alice",
+            request_fingerprint="request-alice",
+        )
+        removed_version_id = repo.soft_delete_preference_item(
+            conn,
+            user_id="alice",
+            memory_item_id=int(saved["memory_item_id"]),
+            forget_plan_id="snapshot-plan",
+        )
+
+    assert removed_version_id is not None
+    with engine.begin() as conn:
+        snapshot = SqliteVectorSnapshotReader(_index_text).read(
+            conn,
+            user_id="alice",
+            source_snapshot_id="snapshot-after-forget",
+            source_watermark=_watermark(),
+        )
+
+    assert [(record.memory_entry_id, record.index_text) for record in snapshot.records] == [
+        (1, "知识")
+    ]
+    assert snapshot.rejections == []
 
 
 def test_requires_preopened_transaction_and_nonempty_snapshot_identity(engine):

@@ -14,16 +14,22 @@
 
 | Stage | Scope | Current state |
 | --- | --- | --- |
-| P0-I3a | Versioned preflight, approved Dataset SHA anchor, isolation/shape checks and L1 regressions | `IMPLEMENTED_PENDING_INDEPENDENT_REVIEW` |
-| P0-I3b-infra | Preference/Conflict real dispatch, Safety ValidatedRuntimeBinding + provenance, uniform execution receipts, Forget schema contract (`forget_mode`), canonical package layout under execution evidence root | `CANDIDATE_PENDING_INDEPENDENT_REVIEW`（PR #150 合并范围） |
-| P0-I3b-completion | Safety Gate-9 projection（需 D13E 独立裁定 Gold-independent projection 规则）与 Forget 真实 dispatch（需外部 state-binding + realtime/rebuild 观测） | `BLOCKED`（独立 follow-up，**不是** PR #150 的 merge gate） |
-| P0-I3c | 非作者独立 review 并 merge **partial candidate infrastructure（PR #150）** | `PENDING` |
-| P0-I3d | 在 I3b-completion 闭合后重新选择正式 tested_commit 并复验隔离 VM | `PENDING`（依赖 I3b-completion） |
+| P0-I3a | Versioned preflight, approved Dataset SHA anchor, isolation/shape checks and L1 regressions | `MERGED`（PR #150） |
+| P0-I3b-infra | Preference/Conflict real dispatch, Safety ValidatedRuntimeBinding + provenance, uniform execution receipts, Forget schema contract (`forget_mode`), canonical package layout under execution evidence root | `MERGED`（PR #150） |
+| P0-I3b-completion | Safety Gate-9 projection（需 D13E 独立裁定 Gold-independent projection 规则）与 Forget 真实 dispatch（需外部 state-binding + realtime/rebuild 观测） | `IN_PROGRESS / BLOCKED_PENDING_CROSS_TRACK_COMPLETION`（PR #160 Phase 2 载体） |
+| P0-I3c | 非作者独立 review 并 merge **partial candidate infrastructure（PR #150）** | `PARTIAL-INFRA COMPLETE / COMPLETION REVIEW PENDING` |
+| P0-I3d | 在 I3b-completion 闭合后重新选择正式 tested_commit 并复验隔离 VM | `BLOCKED`（依赖 I3b-completion） |
 
 PR #150 只推进 I3a + I3b-infra 的候选基础设施合并，不产生 formal raw、Seal、attestation、
 Runner 结论或 `D13D_FROZEN`；Safety Gate-9 投影与 Forget 真实 dispatch 的闭合在独立
 follow-up（I3b-completion）完成后，才进入正式 I3d 与冻结流程。tested commit 保持
 `PENDING_P0_I3_RESELECTION`。
+
+### 2026-09-06 Phase 2 kick-off（PR #159 merge 后）
+
+- PR #159（D14D Phase 0）已 merge，main HEAD = `dc58e83479d718c8e3fbbbbb5d3b3f046f651973`；I3b-completion 独立 follow-up 开工：分支 `feat/d13d-i3b-completion`，任务卡 `docs/day13/26_d13d_i3b_completion_worklist_20260906.md`，PR 初始 Draft / `BLOCKED_PENDING_CROSS_TRACK_COMPLETION`。
+- 本卡 staging 中 P0-I3b-completion 已更新为 `IN_PROGRESS`；formal tested_commit 仍 `PENDING_P0_I3_RESELECTION`，不产生 formal raw / Seal / attestation / Runner / `D13D_FROZEN`。
+- 既有 infra 历史（I3a/I3b-infra 经 PR #150 合并）与 `CANDIDATE_NOT_FROZEN` 边界不因本次 kick-off 改写。
 
 ### 2026-09-06 PR #150 review round（codex 批次）
 
