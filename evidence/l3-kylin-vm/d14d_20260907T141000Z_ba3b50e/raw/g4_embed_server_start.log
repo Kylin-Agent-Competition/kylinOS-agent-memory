@@ -1,0 +1,16 @@
+=== EMBED SERVER START ===
+2026Äê 09ÔÂ 07ÈÕ ÐÇÆÚÒ» 14:14:46 UTC
+EMBED_PID=27293
+SOCKET_READY
+  27293   27291 Sl   /home/kylin-agent/.local/share/kylin-memory-d14a/runtime/python/bin/python -m embedding.server --socket /tmp/kylin-d14a-embed.sock
+--- server log ---
+[1788790487020] [32minfo [0m Connection established successfully to  unix:path=/tmp/.kylin-ai-runtime-unix/1000/core-textembedding.sock 
+[1788790487021] [32minfo [0m Runtime version is  1.3.0 InitEngine call new init_v2 
+[1788790487271] [32minfo [0m Proxy init success,sessionId is: 904794648 
+[1788790487272] [33mwarn [0m Model was not initialized explicitly; SDK is loading the default model. Consider calling text_embedding_init_model() to load a specific model,otherwise default model changes may make vector data incompatible. 
+[1788790487272] [32minfo [0m Try to get default model 
+[1788790487293] [32minfo [0m Get default model success, model: ensemble-embd_gte-base_uint8-text 
+[1788790487293] [32minfo [0m Try to init default model: ensemble-embd_gte-base_uint8-text 
+[1788790487295] [32minfo [0m Proxy init model success,model: ensemble-embd_gte-base_uint8-text sessionId: 904794648 
+[1788790487295] [32minfo [0m Init default model success, model: ensemble-embd_gte-base_uint8-text 
+[server] listening on /tmp/kylin-d14a-embed.sock

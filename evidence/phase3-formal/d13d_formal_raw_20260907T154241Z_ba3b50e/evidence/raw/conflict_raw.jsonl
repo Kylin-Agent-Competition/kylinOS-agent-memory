@@ -1,0 +1,4 @@
+{"actual":{"action":"keep_left","reason_code":"evidence_tier_priority","winner_id":"d13e-c-001-left"},"metric":"conflict","sample_id":"d13e-conflict-001","trace_reference":"dispatch/d13e-conflict-001.json"}
+{"actual":{"action":"coexist","reason_code":"scope_distinguishable","winner_id":null},"metric":"conflict","sample_id":"d13e-conflict-002","trace_reference":"dispatch/d13e-conflict-002.json"}
+{"actual":{"action":"reject","reason_code":"cross_user_blocked","winner_id":null},"metric":"conflict","sample_id":"d13e-conflict-003","trace_reference":"dispatch/d13e-conflict-003.json"}
+{"actual":{"action":"defer","reason_code":"same_tier_undecidable","winner_id":null},"metric":"conflict","sample_id":"d13e-conflict-004","trace_reference":"dispatch/d13e-conflict-004.json"}

@@ -1,0 +1,20 @@
+{
+  "seal_version": "d13e-review-seal/v1",
+  "signature_scheme": "ed25519",
+  "source_repo": "Kylin-Agent-Competition/kylinOS-agent-memory",
+  "source_pr": 148,
+  "actual_pr_author": "gaoyizhe934",
+  "reviewer_identity": "Ducknesses",
+  "reviewer_track": "D",
+  "review_state": "APPROVED",
+  "review_reference": "https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/148#pullrequestreview-5121766539",
+  "reviewed_commit": "aa6564a3fa544ab01302adf0b1598436c97f88c0",
+  "approved_artifacts": {
+    "dataset_sha256": "9740c00f4a9d91471bec8e6fa8aeeeb52f890f8680d83f740a84db2b1701a44b",
+    "gold_sha256": "aeea9beab5d25461083bb693424014a813cd91bae6b0d7b60443f817f33c6be0",
+    "threshold_sha256": "561034df97ee5c73675784a40b18726c51f3ff1120022ad04f2c66b0366c7ff9",
+    "manifest_sha256": "2dc0b9557fe7927756acd77218c3a1b7cc33c46218a14c9f831d2bb01f2b05b5",
+    "runner_sha256": "297d534a4c1a4a3009942cc90a7614dc17eaec5843656d9b50ba601028a3036f"
+  },
+  "key_id": "d13e-review-rd-20260908-v1"
+}

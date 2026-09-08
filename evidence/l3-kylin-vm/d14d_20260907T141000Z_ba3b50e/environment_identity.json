@@ -1,0 +1,34 @@
+{
+  "schema_version": "d14d-formal-l3/environment_identity/v1",
+  "evidence_root": "d14d_20260907T141000Z_ba3b50e",
+  "collected_at_utc": "2026-09-07T14:10:51Z",
+  "guest": {
+    "hostname": "kylin-agent-pc",
+    "user": "kylin-agent",
+    "uid": 1000,
+    "kernel": "6.6.0-76-generic",
+    "arch": "x86_64",
+    "os_release": {
+      "name": "Kylin",
+      "pretty_name": "Kylin V11",
+      "version_id": "v11",
+      "kylin_release_id": "2603",
+      "id_like": "openKylin"
+    }
+  },
+  "clean_state_probe": {
+    "root": "/home/kylin-agent",
+    "project_checkout_count": 0,
+    "memory_install_prefix_count": 0,
+    "stale_launcher_count": 0,
+    "active_memory_unit_count": 0,
+    "memory_socket_count": 0,
+    "venv_count": 0,
+    "build_dir_count": 0,
+    "d14a_workdir_count": 0,
+    "status": "CLEAN_STATE_PASS",
+    "exit_code": 0
+  },
+  "installed_package_count": 2036,
+  "raw_evidence": ["raw/g0_baseline.log", "raw/g0_packages.log"]
+}
