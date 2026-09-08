@@ -23,6 +23,7 @@
 | 6 | 服务层删除残留（#4 部分，`repo.soft_delete_memory_entry`，6/6） | PASS | `~/d14b-validation-20260908/svc_delete` |
 | 7 | retrieval L0/L1 回归（#8 部分：harness + formal_eval + 完整 `memory-service/tests/retrieval/`） | 365 passed | VM 会话 |
 | 8 | FTS 通道性能采样（#6 部分：500 语料，P50/P95/mean/max；无冻结阈值 → 仅记录 delta） | 记录 | `~/d14b-validation-20260908/svc_perf` |
+| 9 | OS 整机重启一致性（#5 部分：真实 guest reboot，boot_id 变化，kylin-memory/vector-engine 自启 active，SQLite/FTS 数据与重启前一致） | PASS | `~/d14b-validation-20260908/os_reboot/result.json` |
 
 ## 3. Deviation（明示）
 
@@ -40,7 +41,12 @@
 - #3 重建（服务层全通道）、#6 vector/RRF 性能、#7 正式报告与 evidence、
   #8 最终独立 Review 收口待做。
 
-## 5. 合并资格
+## 5. 环境持久化（2026-09-08，重启自愈）
+- vector engine 后端目录改至 `~/kytensor-backends`（home 持久；drop-in `--backend-directory` 已更新）。
+- kylin-ai-runtime 依赖库改至 `~/kytensor-libs`（home 持久）；autostart Exec 已更新。
+- 实测 guest OS 重启后：kytensor/kylin-memory/vector-engine 自启，真实 SDK `memory.embed` dim=768
+  可用（D14A verify ALL PASS）。
+## 6. 合并资格
 
 本批不改生产代码、不创建 formal evidence root；`D14B_FORMAL_L3=UNVERIFIED`；PR #124 不具
 formal merge 资格。Draft/Ready 与合并由负责人手动操作。
