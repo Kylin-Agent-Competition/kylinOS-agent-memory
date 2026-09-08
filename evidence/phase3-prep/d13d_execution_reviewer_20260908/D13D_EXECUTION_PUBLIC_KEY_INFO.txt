@@ -1,0 +1,10 @@
+reviewer_identity=lovezy0730-create
+approval_reference=https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/165#pullrequestreview-5137833119
+key_id=d13d-execution-lovezy0730-20260908-v1
+public_key_file=/etc/kylin-memory/trust/d13d-execution-public.pem (VM frozen trust-root installation evidence reference; repository PEM intentionally not committed)
+public_key_sha256=bbba93c041746231e203237995ae7e763ef584e912d4ad2467e8500edbf2b406
+seal_json_sha256=34117a2e414109e9f0d20e27c5fd6b7ac9df5c1b7b4aca5b7d8e76be07752f08
+seal_canonical_sha256=ad84ad3a748d1b883b69cb89bf5dad46d5a508062894b948c85668b2ac9b02e0
+signature_sha256=7ff05d6fe304a55cf1844ad028b56ad82b5a0c3bcc52b9901c6245790cf8717c
+signature_size_bytes=64
+verification=Signature Verified Successfully

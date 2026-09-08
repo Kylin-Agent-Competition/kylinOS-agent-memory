@@ -1,0 +1,3 @@
+* text=auto
+raw/* -text
+package_SHA256SUMS.txt text eol=lf

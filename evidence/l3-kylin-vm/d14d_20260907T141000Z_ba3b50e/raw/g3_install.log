@@ -1,0 +1,14 @@
+=== G3 INSTALL BEGIN ===
+2026年 09月 07日 星期一 14:13:24 UTC
+包完整性 Gate: PASS（3360 文件，三向闭合，identity 绑定）
+[d14a-install] 事务就绪: /home/kylin-agent/.local/state/kylin-memory/d14a-install-txn（old_prefix=absent old_unit=absent old_launcher=none）
+[d14a-install] 执行 Alembic 迁移（upgrade head）…
+alembic_version: 20260906_add_preference_receipt_trace
+[d14a-install] restart 验证…
+[d14a-install] 安装完成: prefix=/home/kylin-agent/.local/share/kylin-memory-d14a unit=/home/kylin-agent/.config/systemd/user/kylin-memory.service symlink=/home/kylin-agent/.local/bin/kylin-memory-server
+[d14a-install] socket: /run/user/1000/kylin-memory/memory.sock
+INSTALL_RC=0
+=== POST INSTALL STATUS ===
+active
+600 kylin-agent:kylin-agent /run/user/1000/kylin-memory/memory.sock
+=== G3 INSTALL END ===

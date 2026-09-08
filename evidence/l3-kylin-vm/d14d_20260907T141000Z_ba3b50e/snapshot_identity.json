@@ -1,0 +1,31 @@
+{
+  "schema_version": "d14d-formal-l3/snapshot_identity/v1",
+  "evidence_root": "d14d_20260907T141000Z_ba3b50e",
+  "collected_at_utc": "2026-09-07T14:10:51Z",
+  "vm": {
+    "name": "Kylin-D14D-clean-vdi-20260906",
+    "uuid": "70ca1ea3-c27e-483d-aaba-0cac7dc5c77c",
+    "nic1_port_forward": "host 127.0.0.1:2223 -> guest 22"
+  },
+  "formal_start_snapshot": {
+    "name": "d14d-clean-base-20260907-r4",
+    "uuid": "6dc9468e-36a8-41b3-b7c9-6115c7b8fc56",
+    "created_after_clean_state_gate": true
+  },
+  "parent_snapshot": {
+    "name": "d14d-clean-base-20260906-r1",
+    "uuid": "4eeade26-5cd3-4467-a31b-c7440c5b04e0"
+  },
+  "deviation": {
+    "previously_authoritative_snapshot": {
+      "vm_name": "Kylin-V11-2603-BTrack-Base",
+      "vm_uuid": "103fb8a8-cc85-4897-836a-70b68edb5745",
+      "snapshot_name": "d14d-clean-base-20260906-r2",
+      "snapshot_uuid": "c5e3c3de-1c70-4f58-b22a-ab07b2d2d56d"
+    },
+    "status": "NOT_PRESENT_IN_CURRENT_VIRTUALBOX_REGISTRY",
+    "handling": "Rebuilt a new formal clean base on the available D14D VM after restoring r1, removing the sole build residue, and obtaining CLEAN_STATE_PASS 8/8. The r4 snapshot was then created and used as the formal start."
+  },
+  "state_at_formal_start": "CLEAN_STATE_PASS 8/8",
+  "state_after_run": "running with install prefix, service, and OS reboot evidence retained"
+}
