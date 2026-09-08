@@ -1,0 +1,54 @@
+{
+  "evidence_id": "EV-005",
+  "status": "VERIFIED",
+  "capture_date": "2026-09-08",
+  "vm": {
+    "host": "bacon-pc",
+    "os": "银河麒麟 V11 (Kylin OS V11)",
+    "arch": "x86_64",
+    "kernel": "Linux bacon-pc 4.19.0",
+    "ssh": "ssh -p 2222 bacon@127.0.0.1",
+    "user": "bacon",
+    "display": "offscreen (QT_QPA_PLATFORM=offscreen)"
+  },
+  "build_environment": {
+    "source_commit": "5a89601",
+    "source_repo": "gitee kylin-aiassistant",
+    "tag": "3.0.67",
+    "qt_version": "5.15.19",
+    "build_system": "qmake + make",
+    "devroot": "~/d15c/devroot (Qt5/KF5 headers + libs closure)",
+    "cpath_entries": "dynamic (Qt5 + KF5 include dirs mapped)"
+  },
+  "runtime": {
+    "model_server": "/usr/bin/kytensor",
+    "model_server_args": "--model-repository=/opt/appdata/kylin-ai/model-repository --model-repository=/usr/share/kylin-ai/model-repository --model-control-mode=explicit --http-address=127.0.0.1 --grpc-address=127.0.0.1",
+    "model_server_pid": 1629,
+    "chatsdk": "kylin-aiassistant built-in (m_osassistant->chatAsync)",
+    "container": "Kaiming (overlay filesystem)",
+    "binary_deploy_path": "/var/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-aiassistant/binary/3.0.67/files/bin/kylin-aiassistant"
+  },
+  "installed_models": [
+    "kylin-ai-abstract-models (1.2.0.1-0k1.0)",
+    "kylin-ai-subsystem-modelconfig (1.0.0.0-0k2.20)",
+    "kylin-cn-clip-model (1.0.0.1-0k0.9)",
+    "kylin-gte-base-model (1.0.0.1-0k0.9)",
+    "kylin-paddle-ocr-model (1.0.0.1-0k0.8)",
+    "kylin-portrait-matting-model (1.0.0.0-0k0.7)",
+    "kylin-sam-model (1.2.0.0-0k1.0)",
+    "kylin-sam-model-onnx (1.0.0.0-0k0.2)",
+    "kylin-speech-asr-model (1.0.0.0-0k1.0)",
+    "kylin-speech-asr-model-onnx (1.0.0.0-0k0.3)",
+    "kylin-speech-tts-model (1.0.0.0-0k1.0)",
+    "kylin-speech-tts-model-onnx (1.0.0.0-0k0.1)",
+    "kylin-universal-matting-model (1.0.0.0-0k0.2)"
+  ],
+  "missing_models": [
+    "kylin-qwen2.5-3b-gguf-model (2.67GB, download impractical)",
+    "ai-kylin-qwen-plus-cloud-model (4KB, cloud API not accessible)"
+  ],
+  "model_repository_opt": "/opt/appdata/kylin-ai/model-repository/ (empty)",
+  "model_repository_usr": "/usr/share/kylin-ai/model-repository/ (ASR/embedding/OCR/SAM/TTS only, NO LLM)",
+  "ai_engines": ["ondevice", "qwen", "deepseek", "baichuan", "baidu", "sensetime", "xunfei", "freetrial", "custom"],
+  "model_lifecycle": "/etc/kylin-ai/runtime/model_lifecycle.json (LLM: loadTrigger=OnInitialization, unloadPolicy=UnloadWhenIdleAndDisable)"
+}
