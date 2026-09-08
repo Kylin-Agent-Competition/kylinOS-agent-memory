@@ -1,0 +1,40 @@
+{
+  "attestation_version": "d13d-execution-attestation/v1",
+  "execution_status": "EXECUTED_ON_FROZEN_D13D",
+  "implementation_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "environment_id": "d13d-phase3-formal@Kylin-D14D-clean-vdi-20260906:d14d-clean-base-20260907-r4",
+  "dependency_version_reference": "package_tar_sha256=2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401;D14A_final_package=NOT_FROZEN_at_raw_time",
+  "data_version_reference": "dataset_sha256=0369543dfd3f9b9adae555f3dba041289c5a3c3c34826d13ee29f49878b64637;gold_sha256=2e8ed9dca79c4ca9908cfdbeae6c3bbb07bb0c62f46a45219310ebaa84bed225",
+  "evidence_root": "evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence",
+  "evidence_directory": ".",
+  "evidence_reference": "evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence",
+  "vm_snapshot": "d14d-clean-base-20260907-r4",
+  "sample_count": 17,
+  "state_preparation_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "binding_artifact_sha256": "9d2f0beb2c258d25058245bd1a01d51135021891cc388817e12825cce5391379",
+  "source_db_sha256": "091dd3ced610bd343d9530208947e01ee5cfca13b53a150ebc13dc1a46565aca",
+  "raw_result_files": {
+    "preference": {
+      "file": "raw/preference_raw.jsonl",
+      "sha256": "eb3b052e01ef2db2cdfa98e75c4bc029349320720c44e893d929e5a71b46ee60"
+    },
+    "conflict": {
+      "file": "raw/conflict_raw.jsonl",
+      "sha256": "37c7b2f9d7bf3eb526c7ac2dc458e2d3e6af20a7856420abeb5283bea15ae01b"
+    },
+    "safety": {
+      "file": "raw/safety_raw.jsonl",
+      "sha256": "84c3fe4f69086d8faaa0175bcce367f84b8bad49719558115d3545b9d5dcc5c1"
+    },
+    "forget": {
+      "file": "raw/forget_raw.jsonl",
+      "sha256": "715caaf7272c3f9d15af5e3b8f7c37af3cea989ef5a98fb97c5703f57a39ef54"
+    }
+  },
+  "execution_log_file": "execution.log",
+  "execution_log_sha256": "42ada616e80327414c95f69c09ed067b0369fb712ba7edcd66b80f9efdce0388",
+  "sha256sums_file": "SHA256SUMS",
+  "sha256sums_sha256": "1f7d717b2e6decd8d7e77c707a65dd0fe88fcf2ed3f6b689835e93e57883ffdf",
+  "evidence_index_file": "evidence_index.yaml",
+  "evidence_index_sha256": "4a5c5a54f0a71bc71dfc34189791b17ea061e160d10ca554daa92b09f562d1f2"
+}

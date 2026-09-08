@@ -1,0 +1,249 @@
+{
+  "approval_reference": "D/E 2026-09-06 B-2 ACCEPTED + Reviewer E 2026-09-07 phase block lifted",
+  "approved_by": "D/E",
+  "artifact_sha256": "9d2f0beb2c258d25058245bd1a01d51135021891cc388817e12825cce5391379",
+  "binding_version": "d13d-forget-state-binding/v2",
+  "created_at_utc": "2026-09-07T15:54:04.551466+00:00",
+  "created_by": "B（高翌哲） VM state preparation",
+  "environment_id": "d13d-phase3-formal@Kylin-D14D-clean-vdi-20260906:d14d-clean-base-20260907-r4",
+  "execution_compatibility": {
+    "minimum_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+    "policy": "descendant-and-contract-compatible"
+  },
+  "owner": "B（高翌哲）",
+  "retrieval_profile": "d13d-validation-profile-v2",
+  "samples": [
+    {
+      "foreign_user_controls": [
+        {
+          "id": 3,
+          "kind": "knowledge"
+        }
+      ],
+      "forget_mode": "single_item",
+      "prerequisite_facts": {
+        "active": true
+      },
+      "realtime_retrieval": {
+        "entrypoint": "observe_forget_execution:realtime",
+        "snapshot": "prepared_state_snapshot",
+        "trace_reference": "dispatch/d13e-forget-001.json",
+        "watermark": "prepared_state_watermark"
+      },
+      "rebuild_retrieval": {
+        "entrypoint": "observe_forget_execution:rebuild",
+        "snapshot": "prepared_state_snapshot",
+        "trace_reference": "dispatch/d13e-forget-001.json",
+        "watermark": "prepared_state_watermark"
+      },
+      "same_user_controls": [
+        {
+          "id": 2,
+          "kind": "knowledge"
+        }
+      ],
+      "sample_id": "d13e-forget-001",
+      "target_identity": {
+        "db_id": 1,
+        "knowledge_id": "d13e-memory-001",
+        "stable_identity": "memory_entries/1"
+      },
+      "target_selector": {
+        "memory_id": "d13e-memory-001"
+      },
+      "user_id": "user_d13e_alpha"
+    },
+    {
+      "foreign_user_controls": [
+        {
+          "id": 7,
+          "kind": "knowledge"
+        }
+      ],
+      "forget_mode": "session",
+      "prerequisite_facts": {
+        "session_entry_count": 2
+      },
+      "realtime_retrieval": {
+        "entrypoint": "observe_forget_execution:realtime",
+        "snapshot": "prepared_state_snapshot",
+        "trace_reference": "dispatch/d13e-forget-002.json",
+        "watermark": "prepared_state_watermark"
+      },
+      "rebuild_retrieval": {
+        "entrypoint": "observe_forget_execution:rebuild",
+        "snapshot": "prepared_state_snapshot",
+        "trace_reference": "dispatch/d13e-forget-002.json",
+        "watermark": "prepared_state_watermark"
+      },
+      "same_user_controls": [
+        {
+          "id": 6,
+          "kind": "knowledge"
+        }
+      ],
+      "sample_id": "d13e-forget-002",
+      "target_identity": {
+        "db_ids": [
+          4,
+          5
+        ],
+        "session_id": "d13e-session-001"
+      },
+      "target_selector": {
+        "session_id": "d13e-session-001"
+      },
+      "user_id": "user_d13e_alpha"
+    },
+    {
+      "foreign_user_controls": [
+        {
+          "id": 10,
+          "kind": "knowledge"
+        }
+      ],
+      "forget_mode": "topic",
+      "prerequisite_facts": {
+        "topic_entry_count": 1
+      },
+      "realtime_retrieval": {
+        "entrypoint": "observe_forget_execution:realtime",
+        "snapshot": "prepared_state_snapshot",
+        "trace_reference": "dispatch/d13e-forget-003.json",
+        "watermark": "prepared_state_watermark"
+      },
+      "rebuild_retrieval": {
+        "entrypoint": "observe_forget_execution:rebuild",
+        "snapshot": "prepared_state_snapshot",
+        "trace_reference": "dispatch/d13e-forget-003.json",
+        "watermark": "prepared_state_watermark"
+      },
+      "same_user_controls": [
+        {
+          "id": 9,
+          "kind": "knowledge"
+        }
+      ],
+      "sample_id": "d13e-forget-003",
+      "target_identity": {
+        "db_ids": [
+          8
+        ],
+        "topic_key": "d13e-topic"
+      },
+      "target_selector": {
+        "topic": "d13e-topic"
+      },
+      "user_id": "user_d13e_alpha"
+    },
+    {
+      "foreign_user_controls": [
+        {
+          "id": 13,
+          "kind": "knowledge"
+        }
+      ],
+      "forget_mode": "time_window",
+      "prerequisite_facts": {
+        "events_in_window": 1,
+        "events_outside_window": 1
+      },
+      "realtime_retrieval": {
+        "entrypoint": "observe_forget_execution:realtime",
+        "snapshot": "prepared_state_snapshot",
+        "trace_reference": "dispatch/d13e-forget-004.json",
+        "watermark": "prepared_state_watermark"
+      },
+      "rebuild_retrieval": {
+        "entrypoint": "observe_forget_execution:rebuild",
+        "snapshot": "prepared_state_snapshot",
+        "trace_reference": "dispatch/d13e-forget-004.json",
+        "watermark": "prepared_state_watermark"
+      },
+      "same_user_controls": [
+        {
+          "id": 12,
+          "kind": "knowledge"
+        }
+      ],
+      "sample_id": "d13e-forget-004",
+      "target_identity": {
+        "db_ids": [
+          11
+        ]
+      },
+      "target_selector": {
+        "from": "2026-09-01T00:00:00+08:00",
+        "to": "2026-09-02T00:00:00+08:00"
+      },
+      "user_id": "user_d13e_alpha"
+    },
+    {
+      "foreign_user_controls": [
+        {
+          "id": 15,
+          "kind": "knowledge"
+        },
+        {
+          "id": 2,
+          "kind": "preference"
+        }
+      ],
+      "forget_mode": "full_reset",
+      "prerequisite_facts": {
+        "knowledge_count": 12,
+        "preference_count": 1
+      },
+      "realtime_retrieval": {
+        "entrypoint": "observe_forget_execution:realtime",
+        "snapshot": "prepared_state_snapshot",
+        "trace_reference": "dispatch/d13e-forget-005.json",
+        "watermark": "prepared_state_watermark"
+      },
+      "rebuild_retrieval": {
+        "entrypoint": "observe_forget_execution:rebuild",
+        "snapshot": "prepared_state_snapshot",
+        "trace_reference": "dispatch/d13e-forget-005.json",
+        "watermark": "prepared_state_watermark"
+      },
+      "same_user_controls": [],
+      "sample_id": "d13e-forget-005",
+      "target_identity": {
+        "knowledge_ids": [
+          1,
+          2,
+          4,
+          5,
+          6,
+          8,
+          9,
+          11,
+          12,
+          14
+        ],
+        "preference_ids": [
+          1
+        ],
+        "user_scope": "user_d13e_alpha"
+      },
+      "target_selector": {},
+      "user_id": "user_d13e_alpha"
+    }
+  ],
+  "source_state": {
+    "db_size_bytes": 352256,
+    "prepared_at_utc": "2026-09-07T15:54:04.551434+00:00",
+    "prepared_on_vm_snapshot": "d14d-clean-base-20260907-r4",
+    "sealed_db_path": "/home/kylin-agent/d13d-phase3-formal-raw-20260907-r6/state-preparation/sealed/p2b-forget-state-v2.db",
+    "sealed_db_sha256": "091dd3ced610bd343d9530208947e01ee5cfca13b53a150ebc13dc1a46565aca",
+    "sqlite_schema_fingerprint": "314b670cfab7b2c8344cfcf33740d39b65a473e3ebe9c31cb619c7ee8df34018",
+    "state_root": "/home/kylin-agent/d13d-phase3-formal-raw-20260907-r6/state-preparation"
+  },
+  "state_preparation_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "vm_snapshot": {
+    "snapshot": "d14d-clean-base-20260907-r4",
+    "snapshot_uuid": "6dc9468e-36a8-41b3-b7c9-6115c7b8fc56",
+    "vm": "Kylin-D14D-clean-vdi-20260906",
+    "vm_uuid": "70ca1ea3-c27e-483d-aaba-0cac7dc5c77c"
+  }
+}

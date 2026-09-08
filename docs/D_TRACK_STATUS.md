@@ -13,8 +13,9 @@
 | 状态 | Phase 2 DONE；Phase 3（formal closure）IN_PROGRESS |
 | PR #160 | MERGED @ 2026-09-07T13:41:54Z |
 | `I3B_COMPLETION_MERGE_SHA` | `ba3b50e1bdeea185bca9daee9d1d45958f62a636`（= 当前 main HEAD） |
-| 已完成 | P2-A `CONTRACT_MERGED / ADAPTER_CONSUMER_CLOSED`；P2-B dual-channel 5/5 candidate closure（Reviewer E final APPROVE，2026-09-07T13:09Z）；P2-C COMPLETE |
-| 未完成（Phase 3） | 正式 VM 17 raw（17 样本 × Preference/Conflict/Safety/Forget per-sample raw）；Final Manifest（FROZEN_BY_D13D）+ SHA-256；D13E Review Seal；attestation + Execution Seal；Runner Gate 0-10；`D13D_FROZEN`；TD-061 关闭 |
+| 已完成 | P2-A `CONTRACT_MERGED / ADAPTER_CONSUMER_CLOSED`；P2-B dual-channel 5/5 candidate closure（Reviewer E final APPROVE，2026-09-07T13:09Z）；P2-C COMPLETE；Phase 3 formal VM 17 raw（`RAW_READY_PENDING_SEALS`） |
+| 未完成（Phase 3） | D13E Review Seal；Execution Seal 签名；frozen trust root 安装；Runner Gate 0-10；`D13D_FROZEN`；TD-061 关闭 |
+| Phase 3 Evidence root | `evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence`（17/17 canonical raw + 17 dispatch receipts；bundle Gate 7 独立 PASS；Seals 与 Runner 未完成） |
 | tested_commit | `ba3b50e1bdeea185bca9daee9d1d45958f62a636`（D 主审裁定，2026-09-07：选定为 Phase 3 formal execution tested_commit；与 D14D 现有 G0-G6 run 身份一致。final tested commit 身份随 `D13D_FROZEN` 生效） |
 | Trust Root / Seal 材料边界 | `D13E_TRUST_ROOTS_V1.json` + 两个 public PEM、Ed25519 私钥由 D13E/D Reviewer 侧持有；工作区不代持、不伪造 |
 | Reviewer | lovezy0730-create（E） |
@@ -42,7 +43,7 @@
 
 ## 下一步（优先级）
 
-1. D13D Phase 3 formal closure（tested_commit 已选定 `ba3b50e` → VM 17 raw → Final Manifest → Seal → Runner 0-10 → `D13D_FROZEN`）。
+1. D13D Phase 3 formal closure（tested_commit 已选定 `ba3b50e`，17 raw 已完成 → Execution Seal/Review Seal → trust root → Runner 0-10 → `D13D_FROZEN`）。
 2. D14A final package freeze + hash 回填 + `evidence/index.yaml` 登记（tested_commit 已与本次 run 一致，package identity 预期不变）。
 3. 条件分支：若最终 tested_commit / package identity 与 `ba3b50e / 2222c904…` 任一变化，须先基于新冻结身份重跑 Formal L3，再进入复审。
 4. PR #165 新 exact HEAD 复审 → APPROVE → merge → `L3_READY`。

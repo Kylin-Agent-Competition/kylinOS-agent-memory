@@ -1,0 +1,33 @@
+{
+  "bundle_version": "d13e-formal-bundle/v1",
+  "dataset_version": "d13e-formal-v1",
+  "gold_label_version": "d13e-gold-v1",
+  "manifest_file": "D13E_FORMAL_MANIFEST_V1.json",
+  "dataset_file": "D13E_FORMAL_TESTSET_V1.jsonl",
+  "gold_file": "D13E_GOLD_V1.jsonl",
+  "threshold_config_file": "D13E_FORMAL_THRESHOLDS_V1.json",
+  "execution_attestation_file": "D13D_EXECUTION_ATTESTATION_V1.json",
+  "execution_attestation_sha256": "b50199ae841f49371c1fde097502804de9ecc9da8d841576673ab646767f793e",
+  "raw_result_files": {
+    "preference": {
+      "file": "raw/preference_raw.jsonl",
+      "sha256": "eb3b052e01ef2db2cdfa98e75c4bc029349320720c44e893d929e5a71b46ee60"
+    },
+    "conflict": {
+      "file": "raw/conflict_raw.jsonl",
+      "sha256": "37c7b2f9d7bf3eb526c7ac2dc458e2d3e6af20a7856420abeb5283bea15ae01b"
+    },
+    "safety": {
+      "file": "raw/safety_raw.jsonl",
+      "sha256": "84c3fe4f69086d8faaa0175bcce367f84b8bad49719558115d3545b9d5dcc5c1"
+    },
+    "forget": {
+      "file": "raw/forget_raw.jsonl",
+      "sha256": "715caaf7272c3f9d15af5e3b8f7c37af3cea989ef5a98fb97c5703f57a39ef54"
+    }
+  },
+  "execution_status": "EXECUTED_ON_FROZEN_D13D",
+  "formal_result_status": "READY_FOR_FORMAL_EVALUATION",
+  "evidence_reference": "evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence",
+  "rule": "The formal runner must reject until execution attestation, signed execution/review seals, and the frozen trust root are installed and independently verified."
+}
