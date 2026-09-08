@@ -15,7 +15,12 @@ fail-closed 的一致性校验。
   - ``EXPECTED_SCHEMA_NAME``、``SSOT_ENUM_LOCATORS``/``PROCESSING_STATUS_LOCATOR``
     （仅用于定位 SSOT 枚举类，取值仍来自动态导入的当前代码）；
   - ``EXPECTED_SOURCE_MAIN_COMMIT``（冻结允许的 main 基线 SHA，见 BLOCKER-01）；
-  - ``EXPECTED_FROZEN_MAPPINGS``（冻结稳定映射语义基线，见 BLOCKER-02）。
+  - ``EXPECTED_FROZEN_MAPPINGS``（冻结稳定映射语义基线，见 BLOCKER-02）；
+  - ``EXPECTED_AUTHORITY_PROVENANCE``（``authority.provenance`` 声明字段精确冻结
+    门禁：legacy pr/approved_review/evidence_review 字符串与两个 review_status、
+    两个 head SHA、pr_number、merge_commit、controller_evidence_repository_tracked
+    必须与冻结常量全等；含 ``.agent-runs`` 的 legacy 字符串只做文本精确比较，
+    不要求 clean clone 中存在对应文件，也不做任何文件系统访问）。
 - fail-closed：Snapshot JSON 不可解析、漂移、缺字段、非法 provenance、
   无法导入或解析代码 SSOT、Canonical 文档缺失/非 FROZEN、冻结基线与代码侧
   fail-closed 声明漂移，均返回 exit 1。任何内部异常都会以 ``[FAIL]`` 形式
@@ -91,8 +96,37 @@ ALIAS_SECTIONS = ("frozen_stable", "deprecated_or_compatibility", "pending_mappi
 # 冻结提交一致。禁止为通用化做 Git 网络/ancestry 查询——本校验保持离线 deterministic。
 EXPECTED_SOURCE_MAIN_COMMIT = "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
 
+# authority.provenance 声明字段精确冻结基线（E-M1 final review-fix Task 2）。
+# 冻结常量写死在源码中，禁止运行时从 Snapshot 反推（否则会与篡改值同漂移）。
+# 仅冻结下列声明字段：pr / pr_number / pr_head_commit / merge_commit /
+# approved_review / approved_review_status / approved_reviewed_head /
+# evidence_review / evidence_review_status / controller_evidence_repository_tracked。
+# 说明字段（merge_commit_verified / governance_freeze_commit / reviewer_identity /
+# note 等）不参与本精确门禁。含 ``.agent-runs`` 的 legacy 字符串（pr /
+# approved_review / evidence_review）是 external/controller evidence reference，
+# 只做与冻结常量的文本精确比较，不要求对应文件存在于 clean clone，不做任何
+# 文件系统访问（纯离线 deterministic）。
+EXPECTED_AUTHORITY_PROVENANCE = {
+    "pr": "#137 (Fix/e d12 business schema drift remediation)",
+    "pr_number": 137,
+    "pr_head_commit": "468c591192769b8e5a4e69190db3bc279ed52e8a",
+    "merge_commit": "f263d5b7beefa4d380fd94d34ef0fa83ffc622c3",
+    "approved_review": ".agent-runs/batches/day12-e-business-schema-drift-remediation-v3/tasks/day12-e-01-canonical-schema-governance-v3/review.md (FINAL_STATUS: APPROVE)",
+    "approved_review_status": "APPROVED",
+    "approved_reviewed_head": "468c591192769b8e5a4e69190db3bc279ed52e8a",
+    "evidence_review": ".agent-runs/batches/day12-e-business-schema-drift-remediation-v3/tasks/day12-e-01-canonical-schema-governance-v3/evidence-review.md (FINAL_STATUS: EVIDENCE_APPROVED)",
+    "evidence_review_status": "EVIDENCE_APPROVED",
+    "controller_evidence_repository_tracked": False,
+}
+# 必须与冻结常量全等的 legacy 字符串字段（garbage 替换即 FAIL，禁止只查非空）。
+PROVENANCE_LEGACY_EXACT_STRINGS = ("pr", "approved_review", "evidence_review")
+
 # 冻结稳定映射语义基线（BLOCKER-02）：frozen_stable 每条须与下列期望条目
-# 做精确语义投影比较（canonical_field / alias 身份 / kind / mapping_status）。
+# 做精确语义投影比较（canonical_field / alias 身份 / kind / mapping_status /
+# target_value）。target_value 仅对声明 frozen_stable 的 Host failure→failed
+# 条目构成结构化约束（其期望为 "failed"）；captured_at/sensitivity 条目不含
+# target_value，投影第 5 元素为 None；Host success/partial/cancelled/timeout
+# 不做结构化冻结（TD-060/TD-016 保持 Open）。
 # 任一漂移、删除、重复或新增未冻结映射均须 FAIL，直到治理流程显式升版本常量。
 EXPECTED_FROZEN_MAPPINGS = (
     {
@@ -110,6 +144,7 @@ EXPECTED_FROZEN_MAPPINGS = (
     {
         "canonical_field": "source_business_status",
         "source_alias": "Host DTO execution_status=failure",
+        "target_value": "failed",
         "kind": "host_dto_alias_normalization",
         "mapping_status": "frozen_stable",
     },
@@ -322,7 +357,7 @@ def _check_authority(results, root: Path, data: Dict[str, Any]) -> None:
                         f"index={idx} missing/empty field: {key}",
                     )
 
-    # provenance：结构完整（必需键为非空字符串）
+    # provenance：结构完整（必需键为非空字符串）+ 声明字段精确冻结门禁
     provenance = authority.get("provenance")
     if not isinstance(provenance, dict):
         _fail(results, "provenance_object", f"type={type(provenance).__name__}")
@@ -331,6 +366,128 @@ def _check_authority(results, root: Path, data: Dict[str, Any]) -> None:
             value = provenance.get(key)
             if not isinstance(value, str) or not value:
                 _fail(results, "provenance_field", f"missing/empty field: {key}")
+        _check_provenance_frozen_exact(results, provenance)
+
+
+def _check_provenance_frozen_exact(results, provenance: Dict[str, Any]) -> None:
+    """authority.provenance 声明字段的类型严格 + 精确相等的结构化门禁。
+
+    纯离线、fail-closed、无任何文件系统访问（``.agent-runs`` legacy 字符串只做
+    文本全等比较，不要求对应文件存在于 clean clone，也不校验文件存在性）。
+    任一字段 FAIL 即记入 results（由 verify_snapshot 汇总返回 1）。
+
+    字段级语义：
+    - pr / approved_review / evidence_review：必须为 str 且与冻结常量全等
+      （禁止只做非空检查，任意 garbage 替换均 FAIL）。
+    - pr_number：``type(x) is int`` 且等于冻结值 137（bool/str 视为失败）。
+    - pr_head_commit / approved_reviewed_head：必须为 str 且与冻结 SHA 全等。
+    - merge_commit：三层独立判定——str → 40 位 lowercase hex → 等于冻结值。
+    - approved_review_status / evidence_review_status：必须为 str 且等于冻结值。
+    - controller_evidence_repository_tracked：``type(x) is bool`` 且为 False。
+    未冻结字段（merge_commit_verified / governance_freeze_commit /
+    reviewer_identity / note 等）不参与本精确门禁。
+    """
+    for key in PROVENANCE_LEGACY_EXACT_STRINGS:
+        expected = EXPECTED_AUTHORITY_PROVENANCE[key]
+        value = provenance.get(key)
+        if not isinstance(value, str):
+            _fail(
+                results,
+                f"provenance_legacy_exact.{key}",
+                f"type={type(value).__name__} value={value!r}",
+            )
+            continue
+        _add(
+            results,
+            value == expected,
+            f"provenance_legacy_exact.{key}",
+            f"value={value!r} expected={expected!r}",
+        )
+
+    pr_number = provenance.get("pr_number")
+    if type(pr_number) is not int:
+        _fail(
+            results,
+            "provenance_pr_number_exact",
+            f"type={type(pr_number).__name__} value={pr_number!r} (expect int 137)",
+        )
+    else:
+        _add(
+            results,
+            pr_number == EXPECTED_AUTHORITY_PROVENANCE["pr_number"],
+            "provenance_pr_number_exact",
+            f"value={pr_number!r} expected={EXPECTED_AUTHORITY_PROVENANCE['pr_number']!r}",
+        )
+
+    merge_commit = provenance.get("merge_commit")
+    if not isinstance(merge_commit, str):
+        _fail(
+            results,
+            "provenance_merge_commit_type",
+            f"type={type(merge_commit).__name__} value={merge_commit!r}",
+        )
+    elif not re.fullmatch(r"[0-9a-f]{40}", merge_commit):
+        _fail(
+            results,
+            "provenance_merge_commit_sha_format",
+            f"invalid git SHA (expect 40 lowercase hex): {merge_commit!r}",
+        )
+    else:
+        _add(
+            results,
+            merge_commit == EXPECTED_AUTHORITY_PROVENANCE["merge_commit"],
+            "provenance_merge_commit_matches_frozen",
+            f"value={merge_commit!r} expected={EXPECTED_AUTHORITY_PROVENANCE['merge_commit']!r}",
+        )
+
+    for key in ("pr_head_commit", "approved_reviewed_head"):
+        expected = EXPECTED_AUTHORITY_PROVENANCE[key]
+        value = provenance.get(key)
+        if not isinstance(value, str):
+            _fail(
+                results,
+                f"provenance_head_sha_exact.{key}",
+                f"type={type(value).__name__} value={value!r}",
+            )
+            continue
+        _add(
+            results,
+            value == expected,
+            f"provenance_head_sha_exact.{key}",
+            f"value={value!r} expected={expected!r}",
+        )
+
+    for key in ("approved_review_status", "evidence_review_status"):
+        expected = EXPECTED_AUTHORITY_PROVENANCE[key]
+        value = provenance.get(key)
+        if not isinstance(value, str):
+            _fail(
+                results,
+                f"provenance_status_exact.{key}",
+                f"type={type(value).__name__} value={value!r}",
+            )
+            continue
+        _add(
+            results,
+            value == expected,
+            f"provenance_status_exact.{key}",
+            f"value={value!r} expected={expected!r}",
+        )
+
+    tracked = provenance.get("controller_evidence_repository_tracked")
+    if type(tracked) is not bool:
+        _fail(
+            results,
+            "provenance_controller_evidence_tracked_exact",
+            f"type={type(tracked).__name__} value={tracked!r} (expect False)",
+        )
+    else:
+        _add(
+            results,
+            tracked is False,
+            "provenance_controller_evidence_tracked_exact",
+            f"value={tracked!r} expected=False",
+        )
 
 
 def _check_enum_entry(results, memory_service_dir, group: str, key: str, entry: Any) -> None:
@@ -543,13 +700,22 @@ def _check_aliases(results, data: Dict[str, Any]) -> None:
 
 
 def _frozen_semantic_projection(entry: Dict[str, Any]) -> Optional[Tuple[Any, ...]]:
-    """把 frozen_stable 条目投影为 (canonical_field, alias_identity, kind, mapping_status)。
+    """把 frozen_stable 条目投影为
+    (canonical_field, alias_identity, kind, mapping_status, target_value)。
 
     alias_identity：
     - ``source_alias`` 为 str → 直接用该字符串；
     - 否则 ``source_fields`` 为 list → ``tuple(sorted(source_fields))``；
     - 否则 ``source_value`` → 该字符串。
     投影无法确定（缺少任何别名身份）返回 None，由调用方判 FAIL。
+
+    target_value：取 ``entry.get("target_value")``——期望映射无该键时投影为 None，
+    与真实 Snapshot 两条非 Host 条目（captured_at/sensitivity 键缺失→None）一致；
+    Host failure→failed 期望条目的第 5 元素为 "failed"。删除或篡改 target_value
+    均造成投影失配，由 ``_check_frozen_mappings_semantics`` 的精确匹配判 FAIL。
+    target_value 仅对声明 frozen_stable 的 failure→failed 条目构成结构化冻结；
+    Host success/partial/cancelled/timeout 不做结构化冻结（TD-060/TD-016 保持 Open）。
+    不从 note/document 文本解析 target value。
     """
     canonical_field = entry.get("canonical_field")
     kind = entry.get("kind")
@@ -565,16 +731,19 @@ def _frozen_semantic_projection(entry: Dict[str, Any]) -> Optional[Tuple[Any, ..
         alias_identity = source_value
     else:
         return None
-    return (canonical_field, alias_identity, kind, mapping_status)
+    return (canonical_field, alias_identity, kind, mapping_status, entry.get("target_value"))
 
 
 def _check_frozen_mappings_semantics(results, frozen_stable: List[Any]) -> None:
     """BLOCKER-02：frozen_stable 与冻结期望映射做精确语义比较。
 
     要求：真实条目数 == 期望条数，且每个期望条目被“恰好一个”真实条目精确
-    匹配（canonical_field / alias 身份 / kind / mapping_status 全等）。删除、
-    多余重复、alias/kind/canonical_field/status 漂移均被覆盖。``failed`` 作为
-    Canonical 值成员资格继续由 ``value_set_matches_ssot`` 门禁守护。
+    匹配（canonical_field / alias 身份 / kind / mapping_status / target_value
+    全等）。删除、多余重复、alias/kind/canonical_field/status 漂移与
+    target_value 被删除或篡改均被覆盖。target_value 仅对声明 frozen_stable 的
+    failure→failed 条目构成结构化约束；``failed`` 作为 Canonical 值成员资格
+    继续由 ``value_set_matches_ssot`` 门禁守护。不从 note/document 文本解析
+    target value。
     """
     expected_projs = [_frozen_semantic_projection(e) for e in EXPECTED_FROZEN_MAPPINGS]
     if any(p is None for p in expected_projs):

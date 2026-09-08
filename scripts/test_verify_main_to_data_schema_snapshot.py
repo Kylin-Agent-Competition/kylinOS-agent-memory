@@ -13,6 +13,19 @@
   - frozen_stable alias/kind/canonical_field 语义漂移（BLOCKER-02）→ non-zero
   - 代码侧 MemorySourceEvent/NormalizedEvent 失去 extra="forbid"（REVIEW-03）→ non-zero
   - Canonical 文档首部改回 CANDIDATE_FOR_FREEZE 而历史段落残留 FROZEN（REVIEW-04）→ non-zero
+  - (E-M1 final review-fix Task 2) authority.provenance 声明字段精确冻结负例
+    （每个独立、基于真实 Snapshot 的临时 JSON 扰动副本，均须返回 1）：
+    - pr_number 137→999
+    - pr_head_commit 改为另一合法 40 位 SHA
+    - merge_commit 非 40 位 lowercase hex（malformed）
+    - merge_commit 改为另一合法 40 位 SHA
+    - approved_review_status APPROVED→COMMENTED
+    - approved_reviewed_head 改为另一合法 40 位 SHA
+    - evidence_review_status EVIDENCE_APPROVED→REJECTED
+    - legacy pr/approved_review/evidence_review 任一替换为 garbage
+  - (E-M1 final review-fix Task 2) Host failure→failed frozen target_value 负例：
+    - target_value failed→success
+    - 删除 target_value
 
 纪律：
 - 负例全部在真实的临时副本上构造（不改动原 Snapshot 的字典，避免对被导入
@@ -232,3 +245,92 @@ def test_doc_header_reverted_candidate_still_fails(tmp_path):
         encoding="utf-8",
     )
     assert verify_snapshot(root=target) == 1
+
+
+# ── E-M1 final review-fix Task 2：provenance 声明字段精确冻结负例 ─────────
+
+def test_provenance_pr_number_changed_fails(tmp_path):
+    """authority.provenance.pr_number 137→999 必须 FAIL（类型 int 精确相等）。"""
+    data = _load_snapshot()
+    data["authority"]["provenance"]["pr_number"] = 999
+    variant = _write_variant(data, tmp_path)
+    assert verify_snapshot(snapshot_path=variant, root=REPO_ROOT) == 1
+
+
+def test_provenance_pr_head_commit_sha_changed_fails(tmp_path):
+    """pr_head_commit 改为另一合法 40 位 SHA 必须 FAIL。"""
+    data = _load_snapshot()
+    data["authority"]["provenance"]["pr_head_commit"] = "a" * 40
+    variant = _write_variant(data, tmp_path)
+    assert verify_snapshot(snapshot_path=variant, root=REPO_ROOT) == 1
+
+
+def test_provenance_merge_commit_malformed_fails(tmp_path):
+    """merge_commit 非 40 位 lowercase hex 必须 FAIL。"""
+    data = _load_snapshot()
+    data["authority"]["provenance"]["merge_commit"] = (
+        "F263D5B7BEEFA4D380FD94D34EF0FA83FFC622C3"
+    )
+    variant = _write_variant(data, tmp_path)
+    assert verify_snapshot(snapshot_path=variant, root=REPO_ROOT) == 1
+
+
+def test_provenance_merge_commit_other_valid_sha_fails(tmp_path):
+    """merge_commit 改为另一合法 40 位 SHA（≠ 冻结值）必须 FAIL。"""
+    data = _load_snapshot()
+    data["authority"]["provenance"]["merge_commit"] = "a" * 40
+    variant = _write_variant(data, tmp_path)
+    assert verify_snapshot(snapshot_path=variant, root=REPO_ROOT) == 1
+
+
+def test_provenance_approved_review_status_changed_fails(tmp_path):
+    """approved_review_status APPROVED→COMMENTED 必须 FAIL。"""
+    data = _load_snapshot()
+    data["authority"]["provenance"]["approved_review_status"] = "COMMENTED"
+    variant = _write_variant(data, tmp_path)
+    assert verify_snapshot(snapshot_path=variant, root=REPO_ROOT) == 1
+
+
+def test_provenance_approved_reviewed_head_sha_changed_fails(tmp_path):
+    """approved_reviewed_head 改为另一合法 40 位 SHA 必须 FAIL。"""
+    data = _load_snapshot()
+    data["authority"]["provenance"]["approved_reviewed_head"] = "a" * 40
+    variant = _write_variant(data, tmp_path)
+    assert verify_snapshot(snapshot_path=variant, root=REPO_ROOT) == 1
+
+
+def test_provenance_evidence_review_status_changed_fails(tmp_path):
+    """evidence_review_status EVIDENCE_APPROVED→REJECTED 必须 FAIL。"""
+    data = _load_snapshot()
+    data["authority"]["provenance"]["evidence_review_status"] = "REJECTED"
+    variant = _write_variant(data, tmp_path)
+    assert verify_snapshot(snapshot_path=variant, root=REPO_ROOT) == 1
+
+
+def test_provenance_legacy_string_garbage_fails(tmp_path):
+    """legacy pr/approved_review/evidence_review 任一替换为 garbage 必须 FAIL。"""
+    for key in ("pr", "approved_review", "evidence_review"):
+        data = _load_snapshot()
+        data["authority"]["provenance"][key] = "garbage-not-the-frozen-reference"
+        variant = _write_variant(data, tmp_path)
+        assert verify_snapshot(snapshot_path=variant, root=REPO_ROOT) == 1
+
+
+# ── E-M1 final review-fix Task 2：Host failure→failed target_value 冻结 ───
+
+def test_host_failure_target_value_changed_fails(tmp_path):
+    """Host failure 条目 target_value failed→success 必须 FAIL。"""
+    data = _load_snapshot()
+    entry = _frozen_entry(data, "source_business_status")
+    entry["target_value"] = "success"
+    variant = _write_variant(data, tmp_path)
+    assert verify_snapshot(snapshot_path=variant, root=REPO_ROOT) == 1
+
+
+def test_host_failure_target_value_removed_fails(tmp_path):
+    """Host failure 条目删除 target_value 必须 FAIL。"""
+    data = _load_snapshot()
+    entry = _frozen_entry(data, "source_business_status")
+    entry.pop("target_value", None)
+    variant = _write_variant(data, tmp_path)
+    assert verify_snapshot(snapshot_path=variant, root=REPO_ROOT) == 1
