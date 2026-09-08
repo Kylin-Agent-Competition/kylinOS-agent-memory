@@ -91,6 +91,47 @@ def preflight(
     )
 
 
+def make_clean_git_repo(path: Path) -> tuple[Path, str]:
+    repo = path / "repo"
+    repo.mkdir()
+    for arguments in (
+        ["git", "init", "-q", str(repo)],
+        ["git", "-C", str(repo), "config", "user.email", "d14b@example.invalid"],
+        ["git", "-C", str(repo), "config", "user.name", "D14B test"],
+    ):
+        subprocess.run(arguments, check=True, capture_output=True, text=True)
+    (repo / "README.md").write_text("clean\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True, capture_output=True, text=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "initial"], check=True, capture_output=True, text=True)
+    commit = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return repo, commit
+
+
+def run_preflight_with_repo(
+    *, repo: Path, commit: str, d13d: Path, d14d: Path, manifest: Path, evidence_root: Path
+) -> subprocess.CompletedProcess[str]:
+    return run_script(
+        "run_d14b_preflight.py",
+        "--expected-tested-commit",
+        commit,
+        "--d13d-handoff",
+        str(d13d),
+        "--d14d-handoff",
+        str(d14d),
+        "--package-manifest",
+        str(manifest),
+        "--repo-root",
+        str(repo),
+        "--evidence-root",
+        str(evidence_root),
+    )
+
+
 def test_preflight_rejects_commit_mismatch(tmp_path: Path) -> None:
     d13d, d14d, manifest = handoffs(tmp_path)
     payload = json.loads(d13d.read_text(encoding="utf-8"))
@@ -125,6 +166,30 @@ def test_preflight_rejects_non_l3_ready_d14d(tmp_path: Path) -> None:
 
     assert completed.returncode != 0
     assert "L3_READY" in completed.stderr
+
+
+def test_preflight_rejects_package_tar_sha_mismatch(tmp_path: Path) -> None:
+    d13d, d14d, manifest = handoffs(tmp_path)
+    payload = json.loads(d14d.read_text(encoding="utf-8"))
+    payload["package"]["package_tar_sha256"] = "d" * 64
+    write_json(d14d, payload)
+
+    completed = preflight(tmp_path, d13d, d14d, manifest)
+
+    assert completed.returncode != 0
+    assert "package identity" in completed.stderr
+
+
+def test_preflight_rejects_package_manifest_sha_mismatch(tmp_path: Path) -> None:
+    d13d, d14d, manifest = handoffs(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["package_manifest_sha256"] = "d" * 64
+    write_json(manifest, payload)
+
+    completed = preflight(tmp_path, d13d, d14d, manifest)
+
+    assert completed.returncode != 0
+    assert "package identity" in completed.stderr
 
 
 def test_preflight_rejects_an_unlocatable_freeze_reference(tmp_path: Path) -> None:
@@ -181,23 +246,7 @@ def test_preflight_rejects_existing_evidence_root(tmp_path: Path) -> None:
 
 
 def test_preflight_accepts_a_clean_matching_handoff(tmp_path: Path) -> None:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    for arguments in (
-        ["git", "init", "-q", str(repo)],
-        ["git", "-C", str(repo), "config", "user.email", "d14b@example.invalid"],
-        ["git", "-C", str(repo), "config", "user.name", "D14B test"],
-    ):
-        subprocess.run(arguments, check=True, capture_output=True, text=True)
-    (repo / "README.md").write_text("clean\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True, capture_output=True, text=True)
-    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "initial"], check=True, capture_output=True, text=True)
-    commit = subprocess.run(
-        ["git", "-C", str(repo), "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    repo, commit = make_clean_git_repo(tmp_path)
     d13d, d14d, manifest = handoffs(tmp_path, commit)
 
     completed = run_script(
@@ -218,6 +267,71 @@ def test_preflight_accepts_a_clean_matching_handoff(tmp_path: Path) -> None:
 
     assert completed.returncode == 0, completed.stderr
     assert json.loads(completed.stdout)["status"] == "PASS"
+
+
+def test_preflight_rejects_a_dirty_worktree(tmp_path: Path) -> None:
+    repo, commit = make_clean_git_repo(tmp_path)
+    d13d, d14d, manifest = handoffs(tmp_path, commit)
+    (repo / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+
+    completed = run_preflight_with_repo(
+        repo=repo,
+        commit=commit,
+        d13d=d13d,
+        d14d=d14d,
+        manifest=manifest,
+        evidence_root=tmp_path / "new-evidence",
+    )
+
+    assert completed.returncode != 0
+    assert "非干净" in completed.stderr
+
+
+def test_preflight_rejects_a_head_mismatch(tmp_path: Path) -> None:
+    repo, _ = make_clean_git_repo(tmp_path)
+    d13d, d14d, manifest = handoffs(tmp_path)
+
+    completed = run_preflight_with_repo(
+        repo=repo,
+        commit=SHA,
+        d13d=d13d,
+        d14d=d14d,
+        manifest=manifest,
+        evidence_root=tmp_path / "new-evidence",
+    )
+
+    assert completed.returncode != 0
+    assert "HEAD" in completed.stderr
+
+
+def test_preflight_rejects_a_runner_hash_mismatch(tmp_path: Path) -> None:
+    repo, _ = make_clean_git_repo(tmp_path)
+    runner = repo / "runner.sh"
+    runner.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "runner.sh"], check=True, capture_output=True, text=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "runner"], check=True, capture_output=True, text=True)
+    commit = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    d13d, d14d, manifest = handoffs(tmp_path, commit)
+    payload = json.loads(d14d.read_text(encoding="utf-8"))
+    payload["runner"] = {"path": "runner.sh", "sha256": "d" * 64}
+    write_json(d14d, payload)
+
+    completed = run_preflight_with_repo(
+        repo=repo,
+        commit=commit,
+        d13d=d13d,
+        d14d=d14d,
+        manifest=manifest,
+        evidence_root=tmp_path / "new-evidence",
+    )
+
+    assert completed.returncode != 0
+    assert "runner SHA-256" in completed.stderr
 
 
 def snapshot(results: list[dict[str, object]]) -> dict[str, object]:
@@ -291,6 +405,87 @@ def test_snapshot_comparison_exact_stable_case(tmp_path: Path) -> None:
     assert report["status"] == "PASS"
 
 
+def test_capture_assembles_read_only_channel_artifacts_into_a_checkpoint(tmp_path: Path) -> None:
+    truth = write_json(
+        tmp_path / "sqlite-truth.json",
+        {"stable_ids": ["a"], "active_version_ids": ["v1"]},
+    )
+    channel_result = {
+        "queries": [
+            {
+                "query_id": "q1",
+                "results": [
+                    {
+                        "stable_id": "a",
+                        "user_id": "d14b-controlled-user",
+                        "version_id": "v1",
+                        "rank": 1,
+                    }
+                ],
+            }
+        ]
+    }
+    fts5 = write_json(tmp_path / "fts5.json", channel_result)
+    vector = write_json(tmp_path / "vector.json", channel_result)
+    rrf = write_json(tmp_path / "rrf.json", channel_result)
+    output = tmp_path / "checkpoint.json"
+
+    completed = run_script(
+        "capture_d14b_retrieval_snapshot.py",
+        "--tested-commit",
+        SHA,
+        "--checkpoint",
+        "baseline",
+        "--user-id",
+        "d14b-controlled-user",
+        "--captured-at-utc",
+        "2026-09-08T00:00:00Z",
+        "--sqlite-truth",
+        str(truth),
+        "--fts5-results",
+        str(fts5),
+        "--vector-results",
+        str(vector),
+        "--rrf-results",
+        str(rrf),
+        "--output",
+        str(output),
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    checkpoint = json.loads(output.read_text(encoding="utf-8"))
+    assert checkpoint["tested_commit"] == SHA
+    assert checkpoint["sqlite"] == {"stable_ids": ["a"], "active_version_ids": ["v1"]}
+    assert checkpoint["fts5"] == channel_result
+    assert checkpoint["capture_sources"]["sqlite_truth"]["sha256"] == hashlib.sha256(truth.read_bytes()).hexdigest()
+
+
+def test_capture_rejects_an_existing_checkpoint_without_overwriting_it(tmp_path: Path) -> None:
+    truth = write_json(tmp_path / "sqlite-truth.json", {"stable_ids": ["a"], "active_version_ids": ["v1"]})
+    channel_result = {"queries": [{"query_id": "q1", "results": []}]}
+    fts5 = write_json(tmp_path / "fts5.json", channel_result)
+    vector = write_json(tmp_path / "vector.json", channel_result)
+    rrf = write_json(tmp_path / "rrf.json", channel_result)
+    output = tmp_path / "checkpoint.json"
+    output.write_text("preserve-existing-evidence\n", encoding="utf-8")
+
+    completed = run_script(
+        "capture_d14b_retrieval_snapshot.py",
+        "--tested-commit", SHA,
+        "--checkpoint", "baseline",
+        "--user-id", "d14b-controlled-user",
+        "--captured-at-utc", "2026-09-08T00:00:00Z",
+        "--sqlite-truth", str(truth),
+        "--fts5-results", str(fts5),
+        "--vector-results", str(vector),
+        "--rrf-results", str(rrf),
+        "--output", str(output),
+    )
+
+    assert completed.returncode != 0
+    assert output.read_text(encoding="utf-8") == "preserve-existing-evidence\n"
+
+
 def test_evidence_manifest_hash_closure(tmp_path: Path) -> None:
     root = tmp_path / "evidence"
     root.mkdir()
@@ -306,3 +501,23 @@ def test_evidence_manifest_hash_closure(tmp_path: Path) -> None:
     invalid = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
     assert invalid.returncode != 0
     assert "未登记" in invalid.stderr
+
+
+def test_evidence_manifest_rejects_missing_duplicate_unsafe_and_mismatched_entries(tmp_path: Path) -> None:
+    root = tmp_path / "evidence"
+    root.mkdir()
+    payload = root / "baseline.json"
+    payload.write_text("baseline\n", encoding="utf-8")
+    digest = hashlib.sha256(payload.read_bytes()).hexdigest()
+
+    cases = {
+        "missing": f"{digest}  missing.json\n",
+        "duplicate": f"{digest}  baseline.json\n{digest}  baseline.json\n",
+        "absolute": f"{digest}  C:/absolute.json\n",
+        "traversal": f"{digest}  ../escape.json\n",
+        "sha_mismatch": f"{'0' * 64}  baseline.json\n",
+    }
+    for name, manifest in cases.items():
+        (root / "SHA256SUMS").write_text(manifest, encoding="utf-8")
+        completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+        assert completed.returncode != 0, name

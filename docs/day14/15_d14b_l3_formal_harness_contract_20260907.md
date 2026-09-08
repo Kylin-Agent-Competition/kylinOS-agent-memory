@@ -6,7 +6,8 @@
 | --- | --- |
 | D14B 分支 | `test/D14B-l3-vm-release-regression` |
 | 历史准备基线 | `8cc4a89e34ca7ec73563c798a46339721f291139`（仅历史） |
-| 当前开发基线 | `3430a1f`（合并 `origin/main@ba3b50e` 后的本地 D14B HEAD） |
+| 历史开发基线 | `3430a1f`（合并 `origin/main@ba3b50e` 后的历史 D14B 开发基线） |
+| 当前开发基线 | `c1443aaecc82a79b9b9f835664ba5e4fee5edfc2`（合并 `origin/main@632b24b` 后的本地 D14B HEAD） |
 | formal tested_commit | `PENDING_D13D_D14D_HANDOFF` |
 | D13D_FROZEN | `NO` |
 | D14D_ENV_PREPARED | `READY`（Phase0 r3，不能等同于 L3） |
@@ -20,6 +21,10 @@
 2026-09-07 主线已合入 D13D I3b-completion（#160），包括双通道 Forget 观测及
 SQLite→Vector 重建输入快照；其状态仍为 Phase 3 `PREPARATION / NON-FORMAL`，不产生
 `D13D_FROZEN`。D14B 只消费正式 handoff，不把该准备证据提升为 formal input。
+
+2026-09-08 主线已合入 E 轨 M1 schema snapshot 闭合（#166）。本分支将
+`origin/main@632b24b` 合并为当前开发基线，仅用于接口与依赖对齐；它不提供
+`D13D_FROZEN`、`D14D_L3_READY` 或 final package/hash，故不改变 formal 状态。
 
 ## 2. Formal preflight
 
@@ -96,6 +101,28 @@ cross_user_hits / stale_version_hits / ghost_hits
 没有上述差异才返回 `PASS`。浮点 score 可作为原始采集信息保留，但并不以字节级
 score 相等代替 stable identity、用户/版本范围及 Top-K 顺序比较。
 
+### 3.1 Checkpoint capture
+
+入口：`scripts/capture_d14b_retrieval_snapshot.py`。它只读取四个由既有 production
+Repository/API/service path 产生的 JSON artifact，校验输入结构、记录每个 artifact 的
+SHA256，并写出一次性 checkpoint；它不连接服务、不写 SQLite、不建/删索引，也不允许
+覆盖已有 evidence 文件。
+
+```text
+python scripts/capture_d14b_retrieval_snapshot.py \
+  --tested-commit <40-hex> --checkpoint <name> --user-id <controlled-user> \
+  --captured-at-utc <ISO-8601-Z> \
+  --sqlite-truth <sqlite-truth.json> \
+  --fts5-results <fts5-results.json> \
+  --vector-results <vector-results.json> \
+  --rrf-results <rrf-results.json> \
+  --output <new-checkpoint.json>
+```
+
+生产 capture source command 不是 D14B 自造的业务实现：正式 handoff 必须为每个
+artifact 提供已批准的 command/path 与 runner identity。缺任意 source artifact 或其
+来源未获交接时，D14B 停止，不生成“手工补录”的 checkpoint。
+
 ## 4. 证据布局与闭合
 
 正式 root 仅在 intake 完成后创建：
@@ -131,9 +158,10 @@ evidence/l3-kylin-vm/d14b_<UTC_RUN_ID>_<sha7>/
 
 | 项 | 状态 | 验证 |
 | --- | --- | --- |
-| 分支同步与旧 baseline 降级 | 完成 | D14B merge `3430a1f`（含 #160） |
+| 分支同步与旧 baseline 降级 | 完成 | D14B merge `c1443aa`（含 main `632b24b` / #166）；`3430a1f` 仅保留为历史开发基线 |
 | preflight | 完成 | commit/FROZEN/L3_READY/root fail-closed tests |
 | snapshot compare | 完成 | missing/duplicate/cross-user/stale/exact tests |
+| checkpoint capture | 完成（只读汇编） | input SHA256 + schema + no-overwrite tests；production source command 待 formal handoff |
 | evidence closure | 完成 | SHA256SUMS valid/extra-file tests |
 | D13D/D14D formal handoff | 阻塞 | 等 `FROZEN` + `L3_READY` + final identity |
 | 正式 VM 生命周期、性能和报告 | 未开始 | 唯一 formal root 上机械执行 |
