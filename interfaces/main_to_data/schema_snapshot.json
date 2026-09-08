@@ -31,13 +31,19 @@
     ],
     "provenance": {
       "pr": "#137 (Fix/e d12 business schema drift remediation)",
-      "merge_commit": "f263d5b",
-      "merge_commit_verified": "git merge-base --is-ancestor f263d5b HEAD 返回 0（HEAD 祖先）",
+      "merge_commit": "f263d5b7beefa4d380fd94d34ef0fa83ffc622c3",
+      "merge_commit_verified": "git merge-base --is-ancestor f263d5b7beefa4d380fd94d34ef0fa83ffc622c3 HEAD 返回 0（HEAD 祖先）",
       "approved_review": ".agent-runs/batches/day12-e-business-schema-drift-remediation-v3/tasks/day12-e-01-canonical-schema-governance-v3/review.md (FINAL_STATUS: APPROVE)",
       "evidence_review": ".agent-runs/batches/day12-e-business-schema-drift-remediation-v3/tasks/day12-e-01-canonical-schema-governance-v3/evidence-review.md (FINAL_STATUS: EVIDENCE_APPROVED)",
       "governance_freeze_commit": "c64b6ff (docs: 冻结Canonical业务Schema v1, 2026-09-07, 仅改 KMA 文档)",
       "reviewer_identity": "NOT_VERIFIED_IN_REPO",
-      "note": "仓库内无可独立核验的命名 reviewer 身份；不编造 reviewer 登录/身份。冻结基于 PR 合并事实与内容治理 APPROVE/EVIDENCE_APPROVED。"
+      "pr_number": 137,
+      "pr_head_commit": "468c591192769b8e5a4e69190db3bc279ed52e8a",
+      "approved_review_status": "APPROVED",
+      "approved_reviewed_head": "468c591192769b8e5a4e69190db3bc279ed52e8a",
+      "evidence_review_status": "EVIDENCE_APPROVED",
+      "controller_evidence_repository_tracked": false,
+      "note": "仓库内无可独立核验的命名 reviewer 身份；不编造 reviewer 登录/身份。冻结基于 PR 合并事实与内容治理 APPROVE/EVIDENCE_APPROVED。四个 legacy string 字段（pr/merge_commit/approved_review/evidence_review）为 external/controller evidence reference，仅记录外部或控制器侧的 evidence 引用语义，不依赖本地 .agent-runs 文件在 clean clone 中必须存在，也不作为 repository-tracked 文件校验。"
     },
     "freeze_boundaries": {
       "frozen": "Main 到 Data 方向业务语义值集、稳定别名/映射、unknown fail-closed 策略",
@@ -144,10 +150,11 @@
       {
         "canonical_field": "source_business_status",
         "source_alias": "Host DTO execution_status=failure",
+        "target_value": "failed",
         "kind": "host_dto_alias_normalization",
         "mapping_status": "frozen_stable",
         "document": "DRIFT-002/003；pr-d12c-body.md；os-agent-integration/contracts/memory_event_contract_v1.cpp（memory_event_contract_v1.h 亦记录 legacy failure 非 canonical）",
-        "note": "Host DTO execution_status=failure 归一为 Canonical source_business_status=failed；序列化侧仅输出 canonical 名称 failed。"
+        "note": "Host DTO execution_status=failure 归一为 Canonical source_business_status=failed；target_value=failed 结构化表达映射目标值；序列化侧仅输出 canonical 名称 failed。"
       }
     ],
     "deprecated_or_compatibility": [
