@@ -12,7 +12,7 @@
 | 任务 | Versioned Execution Adapter / P0-I3b-completion |
 | 状态 | Phase 2 DONE；Phase 3 formal closure DONE；`D13D_FROZEN` |
 | PR #160 | MERGED @ 2026-09-07T13:41:54Z |
-| `I3B_COMPLETION_MERGE_SHA` | `ba3b50e1bdeea185bca9daee9d1d45958f62a636`（= 当前 main HEAD） |
+| `I3B_COMPLETION_MERGE_SHA` | `ba3b50e1bdeea185bca9daee9d1d45958f62a636`（PR #160 merge SHA / frozen tested baseline） |
 | 已完成 | P2-A `CONTRACT_MERGED / ADAPTER_CONSUMER_CLOSED`；P2-B dual-channel 5/5 candidate closure（Reviewer E final APPROVE，2026-09-07T13:09Z）；P2-C COMPLETE；Phase 3 formal VM 17 raw；E-track authority `APPROVED_FOR_PHASE3_FORMAL_RAW_EXECUTION`；D13E Review Seal + D13D Execution Seal；frozen trust root 安装；Runner Gate 0-10 PASS；TD-061 关闭；`D13D_FROZEN` |
 | 未完成（Phase 3） | 无（D13D 范围）。D14A final package / formal hash freeze 属后续独立任务 |
 | Phase 3 Evidence root | `evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence`（17/17 canonical raw + 17 dispatch receipts；双 Seal；Runner Gate 0-10 PASS；`D13E_FORMAL_REPORT_V1.json` SHA-256 `dee80d5044c2194b79f13e7185b39f0162c63468f7a47b86799a1abb23c489ee`） |

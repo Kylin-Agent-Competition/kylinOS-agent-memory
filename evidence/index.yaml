@@ -1879,7 +1879,7 @@ entries:
     source: "evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/D13D_FREEZE_RECORD_20260908.md"
     source_commit: "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
     tested_commit: "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
-    evidence_commit: "40a9c392882237c61bf33fb1234523ca0aec3d30"
+    evidence_commit: "d8dde9ffdfd10505ff17fb2971ea79968c33f810"
     manifest_sha256: "2dc0b9557fe7927756acd77218c3a1b7cc33c46218a14c9f831d2bb01f2b05b5"
     runtime_result: "Runner Gate 0-10 PASS; Preference/Conflict accuracy=1.0; Safety/Forget violations=0"
     review_status: "APPROVED"
