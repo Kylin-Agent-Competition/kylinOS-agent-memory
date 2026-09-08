@@ -1,0 +1,22 @@
+{
+  "schema_version": "d14d-formal-l3/summary/v1",
+  "evidence_root": "d14d_20260907T141000Z_ba3b50e",
+  "tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "package_tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
+  "gates": {
+    "G0": "PASS",
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "NOT_RUN_NA",
+    "G8": "NOT_RUN",
+    "G9": "READY_FOR_REVIEW"
+  },
+  "L3_READY": false,
+  "HOST_VERIFIED_SCOPE": "G0-G6 only, on the VM and package described in this root",
+  "release_ready": false,
+  "next_required_action": "Independent non-author review of this evidence root"
+}

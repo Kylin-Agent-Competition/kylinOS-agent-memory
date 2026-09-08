@@ -1,0 +1,45 @@
+{
+  "commands": {
+    "guest_utc": {
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "2026-09-07T15:54:07Z"
+    },
+    "hostname": {
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "kylin-agent-pc"
+    },
+    "kernel": {
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "Linux kylin-agent-pc 6.6.0-76-generic #86r2-KYLINOS SMP PREEMPT_DYNAMIC Tue Aug  4 06:44:37 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux"
+    },
+    "os_release": {
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "NAME=\"Kylin\"\nFULL_NAME=\"kylin\"\nVERSION=\"银河麒麟桌面操作系统V11\"\nVERSION_US=\"Kylin Linux Desktop V11\"\nID=kylin\nPRETTY_NAME=\"Kylin V11\"\nVERSION_ID=\"v11\"\nHOME_URL=\"http://www.kylinos.cn/\"\nVERSION_CODENAME=kylin\nKYLIN_RELEASE_ID=\"2603\"\nID_LIKE=openKylin"
+    },
+    "runtime_python_version": {
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "Python 3.12.3"
+    },
+    "user_service_active": {
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "active"
+    }
+  },
+  "environment_id": "d13d-phase3-formal@Kylin-D14D-clean-vdi-20260906:d14d-clean-base-20260907-r4",
+  "schema_version": "d13d-formal-raw-environment/v1",
+  "snapshot": {
+    "label": "d14d-clean-base-20260907-r4",
+    "name": "d14d-clean-base-20260907-r4",
+    "uuid": "6dc9468e-36a8-41b3-b7c9-6115c7b8fc56"
+  },
+  "vm": {
+    "name": "Kylin-D14D-clean-vdi-20260906",
+    "uuid": "70ca1ea3-c27e-483d-aaba-0cac7dc5c77c"
+  }
+}

@@ -1,0 +1,18 @@
+schema_version: "1.1"
+entries:
+  - id: "D13D-FORMAL-RAW-BA3B50E-20260907"
+    task_id: "D13D-Phase3-Formal"
+    description: "Kylin VM formal 17-sample canonical raw execution for D13D Phase 3"
+    status: "RAW_READY_PENDING_SEALS"
+    evidence_level: "E4"
+    source: "execution_summary.json"
+    tested_commit: "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
+    environment_id: "d13d-phase3-formal@Kylin-D14D-clean-vdi-20260906:d14d-clean-base-20260907-r4"
+    evidence_root: "."
+    runtime_result: "17/17 canonical raw records written; seals NOT_WRITTEN; Runner NOT_RUN"
+    review_status: "PENDING_SEALS"
+    merge_qualified: false
+    date: "2026-09-07"
+    reviewer: "pending"
+    limitations: "Raw generation is complete on the selected VM snapshot, but D13D Execution Seal, D13E Review Seal, frozen trust root installation, offline Runner Gate 0-10, and D13D_FROZEN are not complete."
+    checksum_sha256: "2c3293b549ec6bc361cfa08508e2fd50f53e0785829196363c43107d894302cc"
