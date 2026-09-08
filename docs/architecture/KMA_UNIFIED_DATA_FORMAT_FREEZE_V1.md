@@ -5,7 +5,7 @@
 - **状态**：`FROZEN`（团队级最高业务语义权威）
 - **作者轨道**：E（记忆业务、安全、数据集与业务指标）
 - **Reviewer 轨道**：D（IPC、SQLite、Outbox、虚拟机成品化与发布）
-- **冻结依据**：承载本文件的 PR #137（merge commit `f263d5b`）已合入 `main`；Canonical 内容治理审查 `APPROVE` 且证据审查 `EVIDENCE_APPROVED`（详见 §1.3 冻结 provenance）。本文件据此由治理提交收口为团队级 `FROZEN`。
+- **冻结依据**：承载本文件的 PR #137（merge commit `f263d5b`）已合入 `main`，且 PR #137 的 GitHub Review 为 `APPROVED`（A 类 GitHub/repository 可独立核验的治理前提，`GITHUB_VERIFIED`）；Canonical 内容治理审查 `APPROVE` 与证据审查 `EVIDENCE_APPROVED` 仅作为 supplementary external/controller evidence（B 类 `CONTROLLER_EVIDENCE`，非 repository-tracked evidence file，详见 §1.3 冻结 provenance）。本文件据此由治理提交收口为团队级 `FROZEN`。
 - **定位**：本文件是 KMA 记忆系统 Canonical Business Schema v1 的统一业务语义**团队级冻结基线**，用于收口 E 轨历史业务 Schema 文档中的字段语义漂移与权威层级冲突。本文件不冻结任何宿主字段、IPC 线格式、SQLite 物理结构或 C++ 结构体；业务语义冻结不隐含任何宿主/物理层已确认。
 - **KMA 前缀说明**：`KMA` 沿用仓库既有前缀用法（如 ADR-009 `KMA_SOCKET_PATH`、baseline v2 `KMA-CAPABILITY-*`），本文件不新造缩写全称定义。
 
@@ -56,15 +56,18 @@
 
 ### 1.3 冻结 provenance（基于 PR #137 收口）
 
-以下为本文件收口为团队级 `FROZEN` 的 provenance，**仅记录仓库内可核验事实，不编造仓库内无法核验的字段**：
+以下为本文件收口为团队级 `FROZEN` 的 provenance，**区分两类核验来源，避免把 controller 运行产物混同于仓库内可核验记录**：
 
-| 项目 | 记录 | 仓库内核验状态 |
-|------|------|----------------|
-| 承载本文件的 PR | PR #137（E 轨 schema-drift 修复） | ✅ 已核验：`docs/day11/16_d11e_baseline_schema_drift_followup_20260904.md`、`docs/day12/15_d12e_postmerge_residual_closure_audit_20260904.md` B-8 |
-| PR #137 merge commit | `f263d5b`（`Fix/e d12 business schema drift remediation (#137)`），已合入 `main` | ✅ 已核验：merge commit 为 GitHub PR 合并格式，`origin/main` 前进至 `f263d5b` |
-| Canonical 内容治理审查 | day12-e-01 任务审查 `APPROVE`、证据审查 `EVIDENCE_APPROVED` | ✅ 已核验：`.agent-runs/batches/day12-e-business-schema-drift-remediation-v3/tasks/day12-e-01-canonical-schema-governance-v3/review.md`、`evidence-review.md` |
-| 非作者 D Reviewer 对 PR #137 本体的 GitHub 层面批准身份 | 仓库内无可独立核验的命名记录 | `NOT_VERIFIED_IN_REPO`（不断言 reviewer 登录/身份；冻结基于 PR 合并事实与内容治理 APPROVE） |
-| 本收口 commit 的 merge SHA | — | 不预填；由外层控制器 commit 后 Git metadata 确定 |
+- **A 类 GitHub/repository independently verifiable（`GITHUB_VERIFIED`）**：可在 GitHub PR/Review/commit metadata 上独立核验的治理事实（承载 PR、approve exact HEAD、GitHub Review、merge commit）。注意 **GitHub-verifiable ≠ repository-tracked file**：该类标记表示可在 GitHub 上独立核验，不代表相关记录以文件形式存在于本仓库 clean clone 中。
+- **B 类 Controller external evidence reference（`CONTROLLER_EVIDENCE` / `NOT_REPOSITORY_TRACKED`）**：由外层 controller 运行产生的审查产物（`.agent-runs` 下 `review.md`、`evidence-review.md`）。保留引用仅供追溯，但**不声明 clean clone 中存在、不作为 repository-tracked evidence file、不以文件存在性作为 verifier Gate**。
+
+| 项目 | 记录 | 核验来源 / 状态 |
+|------|------|------------------|
+| 承载本文件的 PR | PR #137（E 轨 schema-drift 修复） | `GITHUB_VERIFIED`（可在 GitHub PR #137 上独立核验）。仓库内 repository-tracked 参照：`docs/day11/16_d11e_baseline_schema_drift_followup_20260904.md`、`docs/day12/15_d12e_postmerge_residual_closure_audit_20260904.md` B-8；该参照仅佐证 PR/merge baseline，**不证明 GitHub reviewer identity** |
+| PR #137 merge commit | `f263d5b7beefa4d380fd94d34ef0fa83ffc622c3`（`Fix/e d12 business schema drift remediation (#137)`），已合入 `main` | `GITHUB_VERIFIED`（merge commit 为 GitHub PR 合并格式，可在 GitHub PR #137 上独立核验） |
+| Canonical 内容治理审查（controller 运行） | day12-e-01 任务审查 `APPROVE`、证据审查 `EVIDENCE_APPROVED` | `CONTROLLER_EVIDENCE` / `NOT_REPOSITORY_TRACKED`：保留引用 `.agent-runs/batches/day12-e-business-schema-drift-remediation-v3/tasks/day12-e-01-canonical-schema-governance-v3/review.md`、`evidence-review.md` 仅供追溯；不声明 clean clone 中存在、不作为 repository-tracked evidence file、不以文件存在性作为 verifier Gate |
+| PR #137 GitHub Review（非作者 D Reviewer `Ducknesses`） | GitHub Review ID `5103524293`，Review state `APPROVED`，approve exact HEAD `468c591192769b8e5a4e69190db3bc279ed52e8a` | `GITHUB_VERIFIED`（可在 GitHub PR #137 Review 上独立核验；GitHub-verifiable ≠ repository-tracked file，仓库内文档不证明 reviewer identity） |
+| 本收口 commit 的 merge SHA | — | 不预填；由外层控制器 commit 后 Git metadata 确定（commit 后为 `GITHUB_VERIFIED`，可在 Git/GitHub 上独立核验） |
 
 **边界**：本文件为团队级**业务语义**冻结，不隐含任何 Runtime/Host/L2/L3 结论；冻结不关闭 TD-060、TD-016、Host mapping 或任何 `PENDING_*` 物理层边界。
 
@@ -72,7 +75,7 @@
 
 ## 2、Canonical 裁定（R-1..R-6）
 
-以下六项为 E 轨提出的 Canonical 业务语义统一裁定，**已批准并随团队冻结收口为团队级 `FROZEN` 业务语义基线**。每条含：裁定内容、在库依据、兼容性影响、责任轨道 handoff。其内容治理审查 `APPROVE` 且证据审查 `EVIDENCE_APPROVED`，承载 PR #137（`f263d5b`）已合入 `main`。
+以下六项为 E 轨提出的 Canonical 业务语义统一裁定，**已批准并随团队冻结收口为团队级 `FROZEN` 业务语义基线**。每条含：裁定内容、在库依据、兼容性影响、责任轨道 handoff。其治理前提为承载 PR #137（`f263d5b`）GitHub Review `APPROVED` 且已合入 `main`（`GITHUB_VERIFIED`，可独立核验）；Canonical 内容治理审查 `APPROVE` 与证据审查 `EVIDENCE_APPROVED` 仅为 supplementary external/controller evidence（`CONTROLLER_EVIDENCE`，见 §1.3）。
 
 ### R-1：`captured_at` 为 Canonical 事件捕获时间字段；`collected_at` 仅为 legacy transport alias
 
@@ -168,6 +171,7 @@
 |------|------|----------|------|
 | v1 | 2026-09-03 | 建立 KMA Canonical Business Schema v1 冻结候选：提出拟议三层权威层级、superseded/compatibility 候选关系与六项 Canonical 业务语义裁定候选（R-1..R-6）；附字段别名与映射边界表、物理结构边界、证据纪律与不裁定清单。状态 `CANDIDATE_FOR_FREEZE`。 | E 轨道 |
 | v1 FROZEN 收口 | 2026-09-07 | 基于已合并 PR #137（merge commit `f263d5b`）与 Canonical 内容治理 `APPROVE`/`EVIDENCE_APPROVED`，将本文件由治理提交收口为团队级 `FROZEN` 业务语义基线：收敛 §0.1/§0.2 权威关系为已生效，新增 §1.3 冻结 provenance（可核验项记录，无法核验的 reviewer 命名身份标记 `NOT_VERIFIED_IN_REPO`）。R-1..R-6 业务语义未改变；不关闭 TD-060、TD-016、Host mapping 或任何 `PENDING_*` 物理层边界。 | E 轨道 |
+| v1 FROZEN provenance 修正 | 2026-09-08 | 第三轮 Review 修正 §1.3、头部“冻结依据”与 §2 的 provenance source classification：明确区分 A 类 GitHub/repository independently verifiable（`GITHUB_VERIFIED`：PR #137、approve HEAD `468c591…`、GitHub Review ID `5103524293`、Review state `APPROVED`、Reviewer Ducknesses、merge commit `f263d5b…`）与 B 类 Controller external evidence reference（`CONTROLLER_EVIDENCE` / `NOT_REPOSITORY_TRACKED`，`.agent-runs` 产物仅保留追溯引用）；删除用 `NOT_VERIFIED_IN_REPO` 否定 GitHub reviewer identity 的表述，保留 GitHub-verifiable ≠ repository-tracked file 的区分。`FROZEN` 状态与 R-1..R-6 业务语义未改变。 | E 轨道 |
 
 ---
 
