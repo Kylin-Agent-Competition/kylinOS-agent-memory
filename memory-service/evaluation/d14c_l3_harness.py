@@ -100,6 +100,10 @@ def validate_formal_handoff(
         gate = _object(handoff.get(gate_name), gate_name)
         if gate.get("status") != expected_status:
             raise D14CPreflightError(f"{gate_name}.status must be {expected_status}")
+        if gate_name == "d13d" and gate.get("frozen") is not True:
+            raise D14CPreflightError("d13d.frozen must be true")
+        if gate_name == "d14d" and gate.get("l3_ready") is not True:
+            raise D14CPreflightError("d14d.l3_ready must be true")
         _required_text(gate, "evidence_reference", gate_name)
 
     release = _object(handoff.get("release_package"), "release_package")
@@ -107,6 +111,11 @@ def validate_formal_handoff(
         _required_text(release, key, "release_package")
     _sha256(release, "sha256", "release_package")
     _sha256(release, "manifest_sha256", "release_package")
+    source_commit = _required_text(release, "source_commit", "release_package")
+    if not _GIT_SHA.fullmatch(source_commit):
+        raise D14CPreflightError("release_package.source_commit must be a full lowercase Git SHA")
+    if source_commit != tested_commit:
+        raise D14CPreflightError("release_package.source_commit must equal formal_tested_commit")
 
     artifacts = _object(handoff.get("artifacts"), "artifacts")
     for name in ("ai_assistant", "memory_client", "memory_service"):

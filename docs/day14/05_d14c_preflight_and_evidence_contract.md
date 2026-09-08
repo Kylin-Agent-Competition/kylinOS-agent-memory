@@ -15,9 +15,9 @@
 
 ```text
 formal_tested_commit (40 位 SHA，且等于干净工作树 HEAD)
-d13d.status=FROZEN + evidence_reference
-d14d.status=L3_READY + evidence_reference
-release package: path/version/SHA-256/manifest SHA-256
+d13d.status=FROZEN + d13d.frozen=true + evidence_reference
+d14d.status=L3_READY + d14d.l3_ready=true + evidence_reference
+release package: path/version/SHA-256/manifest SHA-256/source_commit（且 source_commit=formal_tested_commit）
 AI Assistant、MemoryClient、Memory Service: path/version/SHA-256
 VM: environment_id/name/uuid/snapshot/snapshot_uuid
 trusted host identity: APPROVED + approval/process/DB reference + SHA-256
@@ -25,6 +25,9 @@ turn.finalized/event.ingest/forget.preview/forget.execute = ACTIVE
 MemoryContext: FROZEN + schema/version/hash + no-match/failure semantics
 evidence_root = evidence/l3-kylin-vm/d14c_<new-run-id>
 ```
+
+`RAW_READY_PENDING_SEALS`、仅有 D13D Execution Seal、D14D G0-G6 完成但
+`l3_ready=false`，以及包来源提交与 formal tested commit 不一致，均必须 fail-closed。
 
 目标 evidence root 必须尚不存在。通过 preflight 只意味着允许创建新 root 并开始**一次**正式运行；它不替代任何 Runtime 验收。失败时保留输入 handoff 作为诊断材料，修复后使用新 run ID。
 
@@ -37,6 +40,31 @@ evidence_root = evidence/l3-kylin-vm/d14c_<new-run-id>
 ```
 
 随后使用既有 `scripts/run_d13c_session_eval.py` 计算指标。任何 raw 缺失、状态非 VM capture 或 provenance 不一致均拒绝转换，不能用手写成功 bundle 代替。
+
+## Runtime precheck observation
+
+`scripts/collect_d14c_runtime_precheck.py <request.json> --output <observation.json>`
+是 P1-B/P1-C 的只读采集入口。它输出固定
+`d14c-runtime-precheck/v1` / `PRECHECK_OBSERVATION`，并固定
+`formal_dispatch=NOT_STARTED`；它不是 Runtime capture、formal evidence 或
+`HOST_VERIFIED` 结论。
+
+请求需标明 run/tested commit/environment、VM name/UUID/snapshot/snapshot UUID，
+以及 AI Assistant、MemoryClient、Memory Service 的路径、版本或 build ID、PID；
+socket、DB、运行记录 ID 和预检命令结果。输出记录：
+
+```text
+VM kernel / Kylin release ID
+三组件 binary/package SHA-256、PID、owner、cwd
+Memory Service systemd FragmentPath / MainPID / ActiveEnterTimestamp
+UDS 与 DB path 的 owner/mode，DB checkpoint reference 槽位
+session/trace/turn/event/execution_record ID
+采集 started_at/finished_at/latency_ms 与 command exit code
+```
+
+collector 从不读取或写入 user/assistant plaintext。进程 command line 与
+systemd `ExecStart` 只保留 SHA-256 和长度；组件缺失、unit inactive 或命令失败
+仍只记录为 observation，不能提升任何 Gate。
 
 ## Evidence package 闭环
 

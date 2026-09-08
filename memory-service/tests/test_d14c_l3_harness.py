@@ -32,9 +32,9 @@ def _handoff() -> dict:
     return {
         "schema_version": HANDOFF_SCHEMA_VERSION,
         "formal_tested_commit": HEAD,
-        "d13d": {"status": "FROZEN", "evidence_reference": "d13d/final"},
-        "d14d": {"status": "L3_READY", "evidence_reference": "d14d/final"},
-        "release_package": {"path": "/tmp/pkg.tar", "version": "1", "sha256": SHA, "manifest_sha256": SHA},
+        "d13d": {"status": "FROZEN", "frozen": True, "evidence_reference": "d13d/final"},
+        "d14d": {"status": "L3_READY", "l3_ready": True, "evidence_reference": "d14d/final"},
+        "release_package": {"path": "/tmp/pkg.tar", "version": "1", "sha256": SHA, "manifest_sha256": SHA, "source_commit": HEAD},
         "artifacts": {
             name: {"path": f"/tmp/{name}", "version": "1", "sha256": SHA}
             for name in ("ai_assistant", "memory_client", "memory_service")
@@ -81,6 +81,50 @@ def test_preflight_rejects_dirty_worktree(tmp_path):
 
     with pytest.raises(D14CPreflightError, match="worktree must be clean"):
         validate_formal_handoff(_handoff(), repository_root=tmp_path, git_runner=dirty)
+
+
+def test_preflight_rejects_d13d_raw_ready_pending_seals(tmp_path):
+    """Raw evidence is not a substitute for the D13D frozen handoff."""
+
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff()
+    handoff["d13d"]["status"] = "RAW_READY_PENDING_SEALS"
+
+    with pytest.raises(D14CPreflightError, match="d13d.status must be FROZEN"):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
+def test_preflight_rejects_issued_d13d_execution_seal_without_freeze(tmp_path):
+    """An execution seal cannot be promoted into the final freeze by D14C."""
+
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff()
+    handoff["d13d"].update({"execution_seal_status": "ISSUED", "frozen": False})
+
+    with pytest.raises(D14CPreflightError, match="d13d.frozen must be true"):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
+def test_preflight_rejects_d14d_gates_without_l3_ready(tmp_path):
+    """Completed preliminary VM gates are not the final D14D L3 handoff."""
+
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff()
+    handoff["d14d"].update({"g0_g6_status": "PASS", "l3_ready": False})
+
+    with pytest.raises(D14CPreflightError, match="d14d.l3_ready must be true"):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
+def test_preflight_rejects_release_package_from_another_commit(tmp_path):
+    """A formal package must be built from the exact tested commit."""
+
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff()
+    handoff["release_package"]["source_commit"] = "c" * 40
+
+    with pytest.raises(D14CPreflightError, match="release_package.source_commit must equal formal_tested_commit"):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
 
 
 def _capture() -> dict:
