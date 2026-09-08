@@ -16,20 +16,20 @@ index.yaml 条目）。
 
 覆盖事实（与已批准 plan / TASK_JSON 对应）：
 1. 目标文档存在；
-2. as-of=2026-09-08 快照身份、分支、main HEAD 2bd5948 与 commit 信息绑定；
+2. as-of=2026-09-08 快照身份、分支、main HEAD 7782612 与 commit 信息绑定；
 3. 独立状态行三条且取值正确（D14E_PHASE1_ACCEPTANCE_BASELINE=READY /
    D14E_FINAL_ACCEPTANCE=BLOCKED / D14E_SIGNOFF_STATUS=BLOCKED）；
 4. 全文不得出现最终签署/越级字面量：D14E=PASS、D14E=DONE、
    BUSINESS_SIGNOFF=PASS、SECURITY_SIGNOFF=PASS、HOST_VERIFIED、
    production_ready=true、release_ready=true、D14E_FINAL_ACCEPTANCE=ACCEPTED；
-5. 文档显式区分 main HEAD 2bd5948 与 frozen tested_commit ba3b50e1bd…（≠），
+5. 文档显式区分 main HEAD 7782612 与 frozen tested_commit ba3b50e1bd…（≠），
    并声明快照可失效、签署前必须 git rev-parse HEAD / git status 重新核验；
 6. A–E 五节标题齐全；
 7. Acceptance Matrix 恰有 B1..B12 十二行；D14B 相关行状态为 BLOCKED_BY_D14B、
    D14C 相关行状态为 BLOCKED_BY_D14C；
 8. D14D 边界保留：L3_READY=true 且 release_ready=false / production_ready=false；
-9. D14B / D14C upstream 受控 pending 表述与扫描 refs 齐全（含 BLOCKED /
-   UNVERIFIED / 未合入 main / 无 formal evidence root）；
+9. D14B / D14C upstream 受控 pending 表述与扫描 refs 齐全（含 PENDING_LOCAL_INTAKE /
+   BLOCKED / UNVERIFIED / 未合入 main / 无 formal evidence root）；
 10. C 节 8 类禁止 overclaim 边界标记 BOUND-1…BOUND-8 齐全；
 11. 引用 evidence 路径与 evidence/index.yaml 既有条目 id 存在且未被改写；
 12. 运行时边界：文档声明 RUNTIME_NOT_REQUIRED，不声明 HOST_VERIFIED、
@@ -47,7 +47,7 @@ _DOC = _DOC_DIR / "23_d14e_phase1_acceptance_baseline_20260908.md"
 # 已批准 TASK_JSON / plan 中核验的历史事实字面量（快照身份与冻结 identity）。
 _SNAPSHOT_DATE = "as-of=2026-09-08"
 _BRANCH = "test/D14E-business-security-final-acceptance"
-_MAIN_HEAD_SNAPSHOT = "2bd5948"
+_MAIN_HEAD_SNAPSHOT = "7782612"
 _TESTED_COMMIT = "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
 
 _STATUS_LINES = (
@@ -151,14 +151,16 @@ def test_snapshot_identity_present():
     _assert_all(
         text,
         [_SNAPSHOT_DATE, _BRANCH, _MAIN_HEAD_SNAPSHOT,
-         "mark PR165 merged and L3_READY (#168)"],
+         "mark PR165 merged and L3_READY (#168)",
+         "docs(D15A): record lock prerequisite refresh (#169)",
+         "9ff8a95", "尚未合入 origin/main", "未改变 D14E Phase 1 验收判断"],
         "快照身份",
     )
     assert _MAIN_HEAD_SNAPSHOT in text and _TESTED_COMMIT in text
 
 
 def test_main_head_vs_tested_commit_distinction():
-    """main HEAD 2bd5948 与 frozen tested_commit ba3b50e1bd… 必须显式区分（≠）。
+    """main HEAD 7782612 与 frozen tested_commit ba3b50e1bd… 必须显式区分（≠）。
 
     以「≠」为中心取窗口，确认两个身份与『main HEAD』『frozen tested_commit』
     标签在同一区分声明中出现（防止混淆身份或写成相等）。
@@ -307,10 +309,13 @@ def test_d14b_upstream_pending():
     text = _text()
     _assert_all(
         text,
-        ["test/D14B-l3-vm-release-regression", "85a35cd", "6fb057a",
+        ["test/D14B-l3-vm-release-regression", "4b78957",
          "15_d14b_l3_formal_harness_contract_20260907.md",
          "16_d14b_formal_execution_runbook.md",
-         "D14B_FORMAL_L3=BLOCKED", "D14B_FORMAL_RESULT=UNVERIFIED"],
+         "D14B_PREPARATION=IN_PROGRESS",
+         "D14B_FORMAL_L3=PENDING_LOCAL_INTAKE",
+         "D14B_FORMAL_RESULT=UNVERIFIED",
+         "d13d-handoff.json", "d14d-handoff.json"],
         "D14B upstream pending",
     )
 
@@ -319,9 +324,11 @@ def test_d14c_upstream_pending():
     text = _text()
     _assert_all(
         text,
-        ["test/D14C-l3-clean-vm-release-regression", "ac0c58b", "b2f533e",
+        ["test/D14C-l3-clean-vm-release-regression", "77319aa",
+         "10_d14c_upstream_formal_handoff_audit_20260908.md",
+         "D14C_G1_G2=READY_TO_CONSUME", "D14C_G4_G7=BLOCKED",
          "D14C_FORMAL_L3=BLOCKED", "D14C_FORMAL_RESULT=UNVERIFIED",
-         "632b24b", "02-09"],
+         "02-10"],
         "D14C upstream pending",
     )
 
@@ -394,7 +401,7 @@ def test_document_prep_not_equal_to_signoff():
 
 def test_tips_recorded_as_scan_snapshot():
     text = _text()
-    for token in ("2026-09-08 扫描快照", "刷新", "85a35cd", "ac0c58b"):
+    for token in ("2026-09-08 扫描快照", "刷新", "4b78957", "77319aa"):
         assert token in text, f"缺失扫描快照/刷新声明 token: {token}"
 
 
