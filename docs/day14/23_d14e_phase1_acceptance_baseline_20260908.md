@@ -16,7 +16,7 @@
 |------|-----|
 | as-of | as-of=2026-09-08 |
 | 扫描/当前分支 | `test/D14E-business-security-final-acceptance` |
-| 当前分支 HEAD | `87fe5ad`（merge origin/main@7782612 进入 D14E 验收分支；含基线文档提交 `9ff8a95`） |
+| 扫描输入/同步前 parent HEAD | `87fe5ad`（merge origin/main@7782612 进入 D14E 验收分支；含基线文档提交 `9ff8a95`） |
 | main HEAD | `7782612`（main 最近历史：`7782612`（docs(D15A): record lock prerequisite refresh (#169)）← `2bd5948`（docs(D14D): mark PR165 merged and L3_READY (#168)）← `ec7a66b`（D14D formal L3 evidence #165）← `632b24b` ← `ba3b50e`（feat(D13D) 正式执行闭环 #160）） |
 | D13D/D14A/D14D 冻结 tested_commit | `ba3b50e1bdeea185bca9daee9d1d45958f62a636` |
 | evidence/index.yaml 引用 | 仅按 id 与路径引用既有条目 `D14A-FINAL-PACKAGE-FREEZE` 与 `D13D-FORMAL-CLOSURE-BA3B50E-20260908`；不改写其内容与哈希；本基线不新增条目 |
@@ -30,6 +30,10 @@ main HEAD `7782612` 是 D15A #169 后的仓库顶点；frozen tested_commit
 `ba3b50e1bdeea185bca9daee9d1d45958f62a636` 是 D13D/D14A/D14D 正式执行（#160 闭环、
 #165 正式 L3）的冻结基线。两者是不同的 Git 对象，也都不等于各 package/report/evidence
 的 SHA-256（D14A tar/manifest/SHA256SUMS SHA、D13E report SHA 等均为独立哈希对象）。
+
+`87fe5ad` 不声明为当前分支 HEAD；它是本基线建立时的同步前 parent / 基线输入
+快照。当前 PR HEAD 会随后续提交自然前移，因此不得把该自引用 SHA 冒充为
+「当前分支 HEAD」。
 
 D14E Phase 1 基线提交 `9ff8a95`（建立本验收基线文档）**尚未合入 origin/main**；
 本文档按 2026-09-08 实际 fetch 的 origin/main=`7782612` 与 D14B/D14C 最新上游 tip

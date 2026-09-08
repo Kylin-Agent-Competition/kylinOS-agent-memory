@@ -36,8 +36,11 @@ index.yaml 条目）。
     不把文档准备等同于最终签署。
 """
 
+import hashlib
+import json
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 
 _DOC_DIR = Path(__file__).resolve().parent
@@ -47,6 +50,7 @@ _DOC = _DOC_DIR / "23_d14e_phase1_acceptance_baseline_20260908.md"
 # 已批准 TASK_JSON / plan 中核验的历史事实字面量（快照身份与冻结 identity）。
 _SNAPSHOT_DATE = "as-of=2026-09-08"
 _BRANCH = "test/D14E-business-security-final-acceptance"
+_SNAPSHOT_INPUT_HEAD = "87fe5ad"
 _MAIN_HEAD_SNAPSHOT = "7782612"
 _TESTED_COMMIT = "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
 
@@ -93,6 +97,10 @@ _EVIDENCE_REFERENCES = (
     "D13D-FORMAL-CLOSURE-BA3B50E-20260908",
 )
 
+_EVIDENCE_INDEX = _REPO_ROOT / "evidence/index.yaml"
+_D13E_REPORT = _REPO_ROOT / _EVIDENCE_REFERENCES[1]
+_D14A_RECORD = _REPO_ROOT / _EVIDENCE_REFERENCES[2]
+
 _SHA40 = re.compile(r"\b[0-9a-f]{40}\b")
 
 
@@ -134,6 +142,108 @@ def _matrix_rows(text: str) -> dict:
         if m:
             rows[int(m.group(1))] = line
     return rows
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def _index_entry(entry_id: str, index_text: str | None = None) -> dict:
+    """从 evidence/index.yaml 中取一个受控 YAML 条目的简单键值字段。"""
+    text = index_text if index_text is not None else _EVIDENCE_INDEX.read_text(
+        encoding="utf-8"
+    )
+    marker = f'  - id: "{entry_id}"'
+    start = text.find(marker)
+    assert start != -1, f"evidence/index.yaml 缺少条目 {entry_id}"
+    next_start = text.find("  - id:", start + len(marker))
+    block = text[start:next_start] if next_start != -1 else text[start:]
+    entry = {}
+    for line in block.splitlines()[1:]:
+        if line.startswith("    ") and ": " in line:
+            key, value = line.strip().split(":", 1)
+            entry[key] = value.strip().strip('"')
+    return entry
+
+
+def _validate_evidence(repo_root: Path | None = None,
+                       index_text: str | None = None) -> list[str]:
+    """对真实 evidence 路径、index 条目与 report 内容做确定性校验。
+
+    返回错误列表；空列表表示当前受控 evidence 一致。允许注入 broken
+    index_text / 空仓库根用于负向回归。
+    """
+    root = repo_root or _REPO_ROOT
+    errors: list[str] = []
+
+    for reference in _EVIDENCE_REFERENCES[:4]:
+        if not (root / reference).exists():
+            errors.append(f"缺失 evidence 路径: {reference}")
+
+    index_path = root / "evidence/index.yaml"
+    if index_text is None and not index_path.is_file():
+        errors.append("缺失 evidence/index.yaml")
+    else:
+        text = index_text if index_text is not None else index_path.read_text(
+            encoding="utf-8"
+        )
+        d14a = _index_entry("D14A-FINAL-PACKAGE-FREEZE", text)
+        d13d = _index_entry("D13D-FORMAL-CLOSURE-BA3B50E-20260908", text)
+
+        if d14a.get("tested_commit") != _TESTED_COMMIT:
+            errors.append("D14A-FINAL-PACKAGE-FREEZE tested_commit 不一致")
+        if d14a.get("status") != "PACKAGE_HASH_FROZEN":
+            errors.append("D14A-FINAL-PACKAGE-FREEZE status 不一致")
+        if d14a.get("source") != _EVIDENCE_REFERENCES[2]:
+            errors.append("D14A-FINAL-PACKAGE-FREEZE source 不一致")
+        if d13d.get("tested_commit") != _TESTED_COMMIT:
+            errors.append("D13D-FORMAL-CLOSURE-BA3B50E-20260908 tested_commit 不一致")
+        if d13d.get("status") != "FROZEN":
+            errors.append("D13D-FORMAL-CLOSURE-BA3B50E-20260908 status 不一致")
+        if d13d.get("source") != _EVIDENCE_REFERENCES[0]:
+            errors.append("D13D-FORMAL-CLOSURE-BA3B50E-20260908 source 不一致")
+
+    report_path = root / _EVIDENCE_REFERENCES[1]
+    record_path = root / _EVIDENCE_REFERENCES[0]
+    d14a_record_path = root / _EVIDENCE_REFERENCES[2]
+    if report_path.is_file():
+        report_sha = _sha256_file(report_path)
+        if report_sha != "dee80d5044c2194b79f13e7185b39f0162c63468f7a47b86799a1abb23c489ee":
+            errors.append("D13E formal report SHA-256 不一致")
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        if report.get("status") != "COMPUTED":
+            errors.append("D13E formal report status 不一致")
+        if report.get("provenance", {}).get("implementation_commit") != _TESTED_COMMIT:
+            errors.append("D13E formal report provenance implementation_commit 不一致")
+        if report.get("preference", {}).get("sample_count") != 4:
+            errors.append("D13E formal report preference sample_count 不一致")
+        if report.get("preference", {}).get("accuracy") != 1.0:
+            errors.append("D13E formal report preference accuracy 不一致")
+        if report.get("conflict", {}).get("sample_count") != 4:
+            errors.append("D13E formal report conflict sample_count 不一致")
+        if report.get("conflict", {}).get("accuracy") != 1.0:
+            errors.append("D13E formal report conflict accuracy 不一致")
+        if report.get("safety", {}).get("sample_count") != 4:
+            errors.append("D13E formal report safety sample_count 不一致")
+        if report.get("safety", {}).get("violation_count") != 0:
+            errors.append("D13E formal report safety violation_count 不一致")
+        if report.get("forget", {}).get("sample_count") != 5:
+            errors.append("D13E formal report forget sample_count 不一致")
+        if report.get("forget", {}).get("violation_count") != 0:
+            errors.append("D13E formal report forget violation_count 不一致")
+
+    if record_path.is_file() and _sha256_file(record_path) != d13d.get(
+        "checksum_sha256"
+    ):
+        errors.append("D13D freeze record SHA-256 不一致")
+    if d14a_record_path.is_file() and _sha256_file(d14a_record_path) != d14a.get(
+        "checksum_sha256"
+    ):
+        errors.append("D14A freeze record SHA-256 不一致")
+
+    return errors
 
 
 # ---------- 1. 目标文档存在 ----------
@@ -186,10 +296,22 @@ def test_snapshot_staleness_and_revalidation_declared():
         ["可失效", "git rev-parse HEAD", "git status", "重新核验"],
         "快照失效/重核验声明",
     )
-    # 动态 HEAD 不得与 frozen tested_commit 伪造相等。
+    # 动态 HEAD 不得与 frozen tested_commit 伪造相等；声明为扫描输入的
+    # parent HEAD 必须确实是当前 HEAD 的祖先，而不是冒充当前 HEAD。
     head = _head_sha()
     assert head != _TESTED_COMMIT, (
         f"动态 HEAD {head[:12]}… 与 frozen tested_commit 伪造相等（fail-closed）"
+    )
+    proc = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", _SNAPSHOT_INPUT_HEAD, head],
+        cwd=str(_REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, (
+        f"扫描输入 HEAD {_SNAPSHOT_INPUT_HEAD} 不是当前 HEAD 的祖先: "
+        f"{proc.stderr.strip()}"
     )
     print(f"[live] HEAD={head}")
 
@@ -377,6 +499,35 @@ def test_evidence_paths_referenced():
     text = _text()
     for path in _EVIDENCE_REFERENCES:
         assert path in text, f"文档未引用既定 evidence 路径/条目 id: {path}"
+
+
+def test_evidence_real_artifacts_and_facts():
+    """真实 evidence 路径、index 条目、report JSON 与哈希必须一致。"""
+    errors = _validate_evidence()
+    assert not errors, f"真实 evidence 校验失败: {errors}"
+
+
+def test_evidence_validation_fail_closed_on_missing_path():
+    """evidence 路径缺失时守卫必须失败，不能因字符串引用存在而 PASS。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        errors = _validate_evidence(repo_root=Path(tmp))
+        assert errors, "空 repo_root 未触发 evidence 缺失失败"
+        assert any("缺失 evidence 路径" in error for error in errors)
+
+
+def test_evidence_validation_fail_closed_on_identity_tamper():
+    """index 条目关键身份被改坏时守卫必须失败。"""
+    text = _EVIDENCE_INDEX.read_text(encoding="utf-8")
+    start = text.find('  - id: "D14A-FINAL-PACKAGE-FREEZE"')
+    end = text.find("  - id:", start + 1)
+    broken_index = (
+        text[:start]
+        + text[start:end].replace(_TESTED_COMMIT, "0" * 40)
+        + text[end:]
+    )
+    errors = _validate_evidence(index_text=broken_index)
+    assert errors, "evidence/index.yaml 身份篡改未触发失败"
+    assert any("tested_commit 不一致" in error for error in errors)
 
 
 # ---------- 11. Runtime 边界 ----------
