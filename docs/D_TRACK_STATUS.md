@@ -13,12 +13,13 @@
 | 状态 | Phase 2 DONE；Phase 3（formal closure）IN_PROGRESS |
 | PR #160 | MERGED @ 2026-09-07T13:41:54Z |
 | `I3B_COMPLETION_MERGE_SHA` | `ba3b50e1bdeea185bca9daee9d1d45958f62a636`（= 当前 main HEAD） |
-| 已完成 | P2-A `CONTRACT_MERGED / ADAPTER_CONSUMER_CLOSED`；P2-B dual-channel 5/5 candidate closure（Reviewer E final APPROVE，2026-09-07T13:09Z）；P2-C COMPLETE；Phase 3 formal VM 17 raw（`RAW_READY_PENDING_SEALS`） |
-| 未完成（Phase 3） | D13E Review Seal；Execution Seal 签名；frozen trust root 安装；Runner Gate 0-10；`D13D_FROZEN`；TD-061 关闭 |
+| 已完成 | P2-A `CONTRACT_MERGED / ADAPTER_CONSUMER_CLOSED`；P2-B dual-channel 5/5 candidate closure（Reviewer E final APPROVE，2026-09-07T13:09Z）；P2-C COMPLETE；Phase 3 formal VM 17 raw（`RAW_READY_PENDING_SEALS`）；E-track authority `APPROVED_FOR_PHASE3_FORMAL_RAW_EXECUTION`（PR #165，2026-09-08T03:25Z，exact authority HEAD `6caea82c...`） |
+| 未完成（Phase 3） | D13E Review Seal；D13D Execution Seal；frozen trust root 安装；Runner Gate 0-10；`D13D_FROZEN`；TD-061 关闭 |
 | Phase 3 Evidence root | `evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence`（17/17 canonical raw + 17 dispatch receipts；bundle Gate 7 独立 PASS；Seals 与 Runner 未完成） |
 | tested_commit | `ba3b50e1bdeea185bca9daee9d1d45958f62a636`（D 主审裁定，2026-09-07：选定为 Phase 3 formal execution tested_commit；与 D14D 现有 G0-G6 run 身份一致。final tested commit 身份随 `D13D_FROZEN` 生效） |
 | Trust Root / Seal 材料边界 | `D13E_TRUST_ROOTS_V1.json` + 两个 public PEM、Ed25519 私钥由 D13E/D Reviewer 侧持有；工作区不代持、不伪造 |
 | Reviewer | lovezy0730-create（E） |
+| Dataset identity correction | 实际执行的 Dataset 为 `ba3b50e...` 的 LF 字节，SHA-256 `9740c00f...`；`036954...` 是 Windows CRLF checkout 副本，不是正式 Dataset 身份。evidence 根内的 metadata/输入副本已在 `85d86a1...` 对齐；该修正不改变 raw/receipt/log 哈希。 |
 
 ## D14D
 
