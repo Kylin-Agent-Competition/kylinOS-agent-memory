@@ -14,30 +14,36 @@
 
 | 字段 | 值 |
 |------|-----|
-| as-of | as-of=2026-09-08 |
+| as-of | as-of=2026-09-08（final delta refresh @ 2026-09-08T15:08:42Z） |
 | 扫描/当前分支 | `test/D14E-business-security-final-acceptance` |
 | 扫描输入/同步前 parent HEAD | `87fe5ad`（merge origin/main@7782612 进入 D14E 验收分支；含基线文档提交 `9ff8a95`） |
-| main HEAD | `7782612`（main 最近历史：`7782612`（docs(D15A): record lock prerequisite refresh (#169)）← `2bd5948`（docs(D14D): mark PR165 merged and L3_READY (#168)）← `ec7a66b`（D14D formal L3 evidence #165）← `632b24b` ← `ba3b50e`（feat(D13D) 正式执行闭环 #160）） |
+| scan-time main HEAD | `e84339df9466db85f446d6f8608cb2cc5e5ed432`（main 最近历史：`e84339df`（docs(D15A): prepare A15 evidence review (#170)）← `7782612`（docs(D15A): record lock prerequisite refresh (#169)）← `2bd5948`（docs(D14D): mark PR165 merged and L3_READY (#168)）← `ec7a66b`（D14D formal L3 evidence #165）← `632b24b` ← `ba3b50e`（feat(D13D) 正式执行闭环 #160）） |
+| scan-time D14B tip | `f4ac9e611423803a71e502673e274a4f0f8b47ca`（docs(D14B)：VM validation 实测与环境修复状态（2026-09-08）） |
+| scan-time D14C tip | `77319aa4ce75d7f7fe4d7ed64f7332cffdb88441`（test(D14C)：绑定上游冻结运行时身份） |
 | D13D/D14A/D14D 冻结 tested_commit | `ba3b50e1bdeea185bca9daee9d1d45958f62a636` |
 | evidence/index.yaml 引用 | 仅按 id 与路径引用既有条目 `D14A-FINAL-PACKAGE-FREEZE` 与 `D13D-FORMAL-CLOSURE-BA3B50E-20260908`；不改写其内容与哈希；本基线不新增条目 |
 | 运行时验证状态 | RUNTIME_NOT_REQUIRED |
 
 关键区分声明（独立一行，逐字）：
 
-**主分支 main HEAD（`7782612`）≠ D13D/D14A/D14D 冻结 tested_commit（`ba3b50e1bdeea185bca9daee9d1d45958f62a636`）。**
+**scan-time main HEAD（`e84339df9466db85f446d6f8608cb2cc5e5ed432`）≠ frozen tested_commit（`ba3b50e1bdeea185bca9daee9d1d45958f62a636`）。**
 
-main HEAD `7782612` 是 D15A #169 后的仓库顶点；frozen tested_commit
+scan-time main HEAD `e84339df9466db85f446d6f8608cb2cc5e5ed432` 是 D15A #170 后的仓库顶点；frozen tested_commit
 `ba3b50e1bdeea185bca9daee9d1d45958f62a636` 是 D13D/D14A/D14D 正式执行（#160 闭环、
 #165 正式 L3）的冻结基线。两者是不同的 Git 对象，也都不等于各 package/report/evidence
 的 SHA-256（D14A tar/manifest/SHA256SUMS SHA、D13E report SHA 等均为独立哈希对象）。
+
+相对上一扫描点 `7782612`，`e84339df9466db85f446d6f8608cb2cc5e5ed432` 仅新增
+`#170` 的 D15A evidence review readiness 文档，不触碰 D13D/D14A/D14D frozen
+runtime identity，也不解除 D14E final signoff 阻塞。
 
 `87fe5ad` 不声明为当前分支 HEAD；它是本基线建立时的同步前 parent / 基线输入
 快照。当前 PR HEAD 会随后续提交自然前移，因此不得把该自引用 SHA 冒充为
 「当前分支 HEAD」。
 
 D14E Phase 1 基线提交 `9ff8a95`（建立本验收基线文档）**尚未合入 origin/main**；
-本文档按 2026-09-08 实际 fetch 的 origin/main=`7782612` 与 D14B/D14C 最新上游 tip
-同步刷新（见 D 节），快照仍可失效。
+本文档按 2026-09-08 final delta refresh 实际扫描的 origin/main=`e84339df9466db85f446d6f8608cb2cc5e5ed432`
+与 D14B/D14C 最新上游 tip（见 D 节）同步刷新，快照仍可失效。
 
 本快照按 2026-09-08 仓库状态记录，**可失效**；最终签署前必须以 `git rev-parse HEAD`
 与 `git status` 重新核验分支、HEAD 与工作区状态，任何前移或分支切换都会使本快照过期。
@@ -72,12 +78,13 @@ D14E 最终业务/安全验收仍为 BLOCKED，SIGNOFF 状态仍为 BLOCKED。�
 |------|------|
 | D14E 开工状态 | 已开工：建立第一阶段验收基线（A–E 五节聚合 + 确定性 pytest 守卫） |
 | 已闭合事实（冻结 evidence） | D13D formal 执行闭环、D13E formal metrics、D14A final package identity、D14D clean Kylin L3 evidence（带边界） |
-| 未闭合 upstream | D14B（检索/索引生命周期发布回归）、D14C（Real AI Assistant E2E）：均未合入 main；D14B formal L3=PENDING_LOCAL_INTAKE（准备 IN_PROGRESS）、D14C formal L3=BLOCKED；formal result 均 UNVERIFIED |
+| 未闭合 upstream | D14B（检索/索引生命周期发布回归）、D14C（Real AI Assistant E2E）：均未合入 main；D14B formal L3=UNVERIFIED（准备/验证 IN_PROGRESS）、D14C formal L3=BLOCKED；formal result 均 UNVERIFIED |
 | 最终业务/安全验收 | BLOCKED（未签署，本任务不签署） |
 
-D15A #169（2026-09-08 合入 origin/main，仅 docs/D_TRACK_STATUS.md 的 docs/evidence
-refresh；A15-1/A15-3=READY_FOR_REVIEW、A15-2=BLOCKED）**未改变 D14E Phase 1 验收判断**：
-未触碰 D14A/D14D 冻结 runtime identity，也不解除 D14E final signoff 阻塞。
+D15A #169→#170（2026-09-08 合入 origin/main，均为 docs/evidence refresh；
+#169 后 A15-1/A15-3=READY_FOR_REVIEW、A15-2=BLOCKED；#170 新增 A15 evidence
+review readiness 材料）**未改变 D14E Phase 1 验收判断**：未触碰 D14A/D14D
+frozen runtime identity，也不解除 D14E final signoff 阻塞。
 
 ### A.3 本基线的职责边界
 
@@ -100,8 +107,8 @@ refresh；A15-1/A15-3=READY_FOR_REVIEW、A15-2=BLOCKED）**未改变 D14E Phase 
 | B6 | D13E formal metrics 整体 | E 轨道（业务指标）+ D 轨道（Runner 执行） | D13E formal 报告 + Dataset/Gold/Threshold 身份 | evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence/D13E_FORMAL_REPORT_V1.json | ba3b50e1bdeea185bca9daee9d1d45958f62a636 | report SHA-256 dee80d5044c2194b79f13e7185b39f0162c63468f7a47b86799a1abb23c489ee；Dataset SHA 9740c00f…/Gold SHA aeea9bea…/Threshold SHA 561034df…（全量以冻结记录为准） | d13d-phase3-formal@Kylin-D14D-clean-vdi-20260906:d14d-clean-base-20260907-r4 | VERIFIED（阈值：Preference/Conflict accuracy>=0.85/0.88、Safety/Forget violations=0；实测见 B1–B4） | 无（formal 小样本：4/4/4/5，禁止无限定外推） | 非作者指定 Reviewer（按 CONTRIBUTING D/E 互审） |
 | B7 | D14A final release package identity | A 轨道（包内容）+ D 轨道（release 流程） | D14A final package freeze record | evidence/l3-kylin-vm/d14a_final_package_20260908/D14A_FINAL_PACKAGE_FREEZE_RECORD_20260908.md | ba3b50e1bdeea185bca9daee9d1d45958f62a636 | kylin-memory-a-d14a 0.1.0-d14a；tar SHA 2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401；manifest SHA 76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0；SHA256SUMS SHA 8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67；manifest files=3360 | d14a_final_package_20260908 | FROZEN | 无（已冻结；evidence/index.yaml 既有条目 D14A-FINAL-PACKAGE-FREEZE；仅指 package identity 冻结，不代表 production release） | 非作者指定 Reviewer（按 CONTRIBUTING D/E 互审） |
 | B8 | D14D clean Kylin L3 evidence | D 轨道（L3 执行与证据） | D14D L3 evidence root（gate_matrix 等） | evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e/ | ba3b50e1bdeea185bca9daee9d1d45958f62a636 | N/A（evidence root；PR #165 squash merge ec7a66b、#168 docs merge 2bd5948） | Kylin clean VM（D14D 2026-09-07 L3 run） | L3_READY=true；release_ready=false；production_ready=false | 无（G0–G6 PASS；G7 NOT_RUN/N-A；G8 NOT_RUN waiver；不构成 production ready） | 非作者指定 Reviewer（按 CONTRIBUTING D/E 互审） |
-| B9 | Retrieval lifecycle 发布回归 / D14B | B 轨道（检索/索引回归） | D14B formal L3 evidence root（缺失） | 无 formal evidence root（仅 harness/runbook/preparation：15_d14b_l3_formal_harness_contract_20260907.md、16_d14b_formal_execution_runbook.md，位于分支 test/D14B-l3-vm-release-regression） | N/A（未执行 formal L3；分支/upstream tip 同 4b78957，2026-09-08 扫描快照；上游共同身份 tested_commit=ba3b50e、D13D_FROZEN、D14D_L3_READY、D14A frozen package 已核验） | N/A | N/A（未执行；需 Kylin VM） | BLOCKED_BY_D14B | D14B_PREPARATION=IN_PROGRESS；D14B_FORMAL_L3=PENDING_LOCAL_INTAKE；D14B_FORMAL_RESULT=UNVERIFIED；未合入 main；缺 D 轨/操作者标准化 d13d-handoff.json/d14d-handoff.json、四类 production capture command 与 runner identity、HEAD=ba3b50e 精确干净 checkout、正式 VM L3/evidence root | 非作者指定 Reviewer（按 CONTRIBUTING D/E 互审） |
-| B10 | Real AI Assistant E2E / D14C | C 轨道（OS Agent Hook/MemoryClient/E2E） | D14C formal L3 evidence root（缺失） | 无 formal evidence root（仅 worklist/静态审计/preflight 02-10 文件，位于分支 test/D14C-l3-clean-vm-release-regression；最新 `10_d14c_upstream_formal_handoff_audit_20260908.md` 基于 origin/main@7782612，development HEAD=b53bdd2、frozen runtime tested_commit=ba3b50e） | N/A（未执行 formal L3；分支/upstream tip 同 77319aa，2026-09-08 扫描快照） | N/A | N/A（未执行；需 Kylin VM） | BLOCKED_BY_D14C | D14C_G1_G2=READY_TO_CONSUME、D14C_G4_G7=BLOCKED；D14C_FORMAL_L3=BLOCKED；D14C_FORMAL_RESULT=UNVERIFIED；未合入 main | 非作者指定 Reviewer（按 CONTRIBUTING D/E 互审） |
+| B9 | Retrieval lifecycle 发布回归 / D14B | B 轨道（检索/索引回归） | D14B formal L3 evidence root（缺失） | 无 formal evidence root（harness/runbook/preparation + `17_d14b_vm_validation_round_20260908.md`，位于分支 test/D14B-l3-vm-release-regression） | N/A（未执行 formal L3；分支/upstream tip 同 f4ac9e611423803a71e502673e274a4f0f8b47ca，2026-09-08 final delta refresh；上游共同身份 tested_commit=ba3b50e、D13D_FROZEN、D14D_L3_READY、D14A frozen package 已核验） | N/A | N/A（未执行 formal L3；validation round 已有真实实测但非 formal） | BLOCKED_BY_D14B | D14B_PREPARATION=IN_PROGRESS；D14B_FORMAL_L3=UNVERIFIED；D14B_FORMAL_RESULT=UNVERIFIED；未合入 main；validation round 不创建 formal evidence root；缺 D 轨/操作者标准化 d13d-handoff.json/d14d-handoff.json、四类 production capture command 与 runner identity、HEAD=ba3b50e 精确干净 checkout、正式 VM L3/evidence root | 非作者指定 Reviewer（按 CONTRIBUTING D/E 互审） |
+| B10 | Real AI Assistant E2E / D14C | C 轨道（OS Agent Hook/MemoryClient/E2E） | D14C formal L3 evidence root（缺失） | 无 formal evidence root（仅 worklist/静态审计/preflight 02-10 文件，位于分支 test/D14C-l3-clean-vm-release-regression；最新 `10_d14c_upstream_formal_handoff_audit_20260908.md` 基于 origin/main@7782612，development HEAD=b53bdd2、frozen runtime tested_commit=ba3b50e） | N/A（未执行 formal L3；分支/upstream tip 同 77319aa4ce75d7f7fe4d7ed64f7332cffdb88441，2026-09-08 final delta refresh） | N/A | N/A（未执行；需 Kylin VM） | BLOCKED_BY_D14C | D14C_G1_G2=READY_TO_CONSUME、D14C_G4_G7=BLOCKED；#167 已 D review=REQUEST_CHANGES / REWORK（2026-09-08T12:17:43Z，HEAD `404c7e1cadd188d8e64547c992a77bec28e457e2`），HIGH-01/HIGH-02/MEDIUM-01 未闭合；D14C_FORMAL_L3=BLOCKED；D14C_FORMAL_RESULT=UNVERIFIED；未合入 main | 非作者指定 Reviewer（按 CONTRIBUTING D/E 互审） |
 | B11 | Demo/video fact alignment | D14E 验收组（业务/安全） | Demo/视频素材与其声称事实的对照表 | N/A（尚无对照 artifact；须复用 C 节 claim 映射） | N/A | N/A | N/A | PENDING_UPSTREAM（等价受控：待 D14B/D14C 事实与最终材料就绪） | 依赖 D14B/D14C 闭合后的真实演示内容与最终事实基线核对 | 非作者指定 Reviewer（按 CONTRIBUTING D/E 互审） |
 | B12 | Final D14E signoff | D14E 业务/安全签署人（人工） | 最终业务/安全签署结论（本任务不产生） | N/A（后续 D14E final 流程新建） | N/A | N/A | N/A | BLOCKED | D14B/D14C 未闭合 + E 节触发条件未满足前不得签署 | 非作者指定 Reviewer（按 CONTRIBUTING D/E 互审） |
 
@@ -124,8 +131,8 @@ identity 绑定（tested_commit / package SHA / report hash）+ 环境/run ID，
 | C2 业务域 formal 指标达阈值（Preference/Conflict n=4 accuracy=1.0；Safety n=4 violations=0；Forget n=5 violations=0） | evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence/D13E_FORMAL_REPORT_V1.json | report SHA-256 dee80d5044c2194b79f13e7185b39f0162c63468f7a47b86799a1abb23c489ee；Dataset/Gold/Threshold SHA 见冻结记录 | 允许（必须带 n、阈值与 formal 环境限定） | 禁止无限定外推为全场景/整体性能（边界2） |
 | C3 D14A final release package identity 已冻结 | evidence/l3-kylin-vm/d14a_final_package_20260908/D14A_FINAL_PACKAGE_FREEZE_RECORD_20260908.md | package kylin-memory-a-d14a 0.1.0-d14a；tar/manifest/SHA256SUMS SHA 见 B7；index id D14A-FINAL-PACKAGE-FREEZE | 允许（仅指 package identity 冻结） | 不代表 production release |
 | C4 D14D clean Kylin L3 evidence READY | evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e/ | tested_commit ba3b50e…；PR #165 ec7a66b、#168 2bd5948 | 允许（必须带 L3_READY 边界） | 必须保留 release_ready=false / production_ready=false、G7 N/A、G8 waiver（边界1） |
-| C5 Day14 检索/索引生命周期发布回归最终通过 | 无正式 evidence（D14B 未闭合） | 分支 test/D14B-l3-vm-release-regression（tip/upstream 同 4b78957） | **不允许**（当前不可声明） | 上游身份已具备（tested_commit=ba3b50e、D13D_FROZEN、D14D_L3_READY、D14A frozen package），formal runtime/evidence 未完成；待 D14B handoff 输入（d13d-handoff.json/d14d-handoff.json、四类 production capture command/runner identity、HEAD=ba3b50e 精确干净 checkout）与正式 L3 完成后 merge main（边界6） |
-| C6 官方 AI Assistant production E2E 已正式通过 | 无正式 evidence（D14C 未闭合） | 分支 test/D14C-l3-clean-vm-release-regression（tip/upstream 同 77319aa） | **不允许**（当前不可声明） | 待 D14C G4-G7 闭合（#167 trusted identity/Host Mapping 经 D review、route ACTIVE、MemoryContext freeze）并完成 formal L3 后 merge main（边界5） |
+| C5 Day14 检索/索引生命周期发布回归最终通过 | 无正式 evidence（D14B 未闭合） | 分支 test/D14B-l3-vm-release-regression（tip/upstream 同 f4ac9e611423803a71e502673e274a4f0f8b47ca） | **不允许**（当前不可声明） | 上游身份已具备（tested_commit=ba3b50e、D13D_FROZEN、D14D_L3_READY、D14A frozen package），formal runtime/evidence 未完成；validation round 结果只限定为 PREPARATION/VALIDATION；待 D14B handoff 输入（d13d-handoff.json/d14d-handoff.json、四类 production capture command/runner identity、HEAD=ba3b50e 精确干净 checkout）与正式 L3 完成后 merge main（边界6） |
+| C6 官方 AI Assistant production E2E 已正式通过 | 无正式 evidence（D14C 未闭合） | 分支 test/D14C-l3-clean-vm-release-regression（tip/upstream 同 77319aa4ce75d7f7fe4d7ed64f7332cffdb88441） | **不允许**（当前不可声明） | 待 D14C G4-G7 闭合（#167 已 D review=REQUEST_CHANGES / REWORK，HIGH-01/HIGH-02/MEDIUM-01 未闭合；route ACTIVE、MemoryContext freeze）并完成 formal L3 后 merge main（边界5） |
 | C7 D14E 业务/安全最终签署 PASS | N/A（后续 final 流程产生） | N/A | **不允许**（当前不可声明） | 三条状态行保持 BLOCKED（边界见下） |
 | C8 Demo/视频素材与比赛叙事一致 | N/A（对照 artifact 待建） | N/A | **不允许**（当前不可声明） | 须在 D14B/D14C 事实与最终素材就绪后逐条核对（边界5/6 同源） |
 
@@ -146,7 +153,7 @@ identity 绑定（tested_commit / package SHA / report hash）+ 环境/run ID，
   已最终通过。
 - 【BOUND-7】不得混淆以下不同对象：frozen tested_commit（ba3b50e1bd…）、
   D14A package SHA（tar/manifest/SHA256SUMS）、evidence/report SHA-256 与
-  main HEAD（7782612）；它们互相不得冒充相等。
+  scan-time main HEAD（e84339df…）；它们互相不得冒充相等。
 - 【BOUND-8】D14E 职责止于验收基线与守卫；不得越界修改生产代码或既有
   evidence（冻结 root/raw/Seal/attestation/SHA256SUMS/evidence_index.yaml）。
 
@@ -159,15 +166,21 @@ identity 绑定（tested_commit / package SHA / report hash）+ 环境/run ID，
 
 ### D1. D14B（Retrieval lifecycle / 发布回归）
 
-- 分支 ref：`origin/test/D14B-l3-vm-release-regression` → tip `4b78957`
-  （merge(D14B)：同步正式 L3 上游输入基线；已包含 origin/main@7782612；
-  2026-09-08 刷新扫描）。
-- 现有内容：仅 harness/runbook/preparation，即
+- 分支 ref：`origin/test/D14B-l3-vm-release-regression` → tip
+  `f4ac9e611423803a71e502673e274a4f0f8b47ca`
+  （docs(D14B)：VM validation 实测与环境修复状态（2026-09-08）；
+  2026-09-08 final delta refresh）。
+- 现有内容：harness/runbook/preparation，即
   `15_d14b_l3_formal_harness_contract_20260907.md`、
-  `16_d14b_formal_execution_runbook.md`。
+  `16_d14b_formal_execution_runbook.md`，新增
+  `17_d14b_vm_validation_round_20260908.md`。
+- validation round 新事实：D14B harness L0/L1 `20 passed`；D10B 删除 L2
+  `15/15 PASS`；真实 SDK embed(768) → vector upsert/search → delete → 0 hit →
+  collection drop。该批严格限定为 **PREPARATION / VALIDATION**，不是 formal
+  L3，也不是 PASS/VERIFIED 结论。
 - 上游共同身份已核验：tested_commit=ba3b50e、D13D_FROZEN、D14D_L3_READY、
   D14A frozen package（tar/manifest/SHA256SUMS）均已具备可消费。
-- 状态：`D14B_PREPARATION=IN_PROGRESS`；`D14B_FORMAL_L3=PENDING_LOCAL_INTAKE`；
+- 状态：`D14B_PREPARATION=IN_PROGRESS`；`D14B_FORMAL_L3=UNVERIFIED`；
   `D14B_FORMAL_RESULT=UNVERIFIED`。
 - 注意：上游 identity 已具备 ≠ formal runtime/evidence 已完成；D14B 仍缺
   标准化 handoff 输入与正式执行证据、未合入 main，不得写成已完成。
@@ -181,27 +194,28 @@ identity 绑定（tested_commit / package SHA / report hash）+ 环境/run ID，
 
 ### D2. D14C（Real AI Assistant E2E / 官方助手集成）
 
-- 分支 ref：`origin/test/D14C-l3-clean-vm-release-regression` → tip `77319aa`
-  （test(D14C)：绑定上游冻结运行时身份；已包含 origin/main@7782612；
-  2026-09-08 刷新扫描）。
+- 分支 ref：`origin/test/D14C-l3-clean-vm-release-regression` → tip
+  `77319aa4ce75d7f7fe4d7ed64f7332cffdb88441`
+  （test(D14C)：绑定上游冻结运行时身份；2026-09-08 final delta refresh）。
 - 现有内容：worklist/静态审计/preflight 准备（02-10 文件），最新
   `10_d14c_upstream_formal_handoff_audit_20260908.md`：development HEAD=b53bdd2、
   合入 main=origin/main@7782612、frozen runtime tested_commit=ba3b50e。
 - Gate 判定（来自 10_ audit）：G1=READY_TO_CONSUME_FROZEN_BASELINE、
   G2=READY_TO_CONSUME_FROZEN_PACKAGE_VM、
   G3=DEVELOPMENT_READY_FORMAL_PENDING、
-  G4=BLOCKED_PENDING_D15C_HANDOFF（PR #167 CONFLICTING 未 D review）、
+  G4=BLOCKED_PENDING_D15C_HANDOFF（PR #167 已 D review=REQUEST_CHANGES / REWORK，
+  尚未获 D approval）、
   G5=BLOCKED_PENDING_D_APPROVAL、G6=BLOCKED_PENDING_D_ACTIVATION、
   G7=BLOCKED_PENDING_CDE_FREEZE、G8=NOT_CREATED_BY_DESIGN。
 - 状态：`D14C_PREPARATION=ADVANCED/IN_PROGRESS`；`D14C_G1_G2=READY_TO_CONSUME`；
   `D14C_G4_G7=BLOCKED`；`D14C_FORMAL_L3=BLOCKED`；`D14C_FORMAL_RESULT=UNVERIFIED`。
 - 注意：G1/G2 仅表示 upstream frozen baseline/package 可消费，G4-G7 的 Host
-  Mapping / production activation blockers（#167 trusted identity 未 D review、
-  route 未 ACTIVE、MemoryContext 未 freeze）仍未闭合；不得把 G1/G2 readiness
-  写成 formal 已完成。
-- 缺失 handoff 输入：G4-G7 闭合（#167 经 D review、route ACTIVE、MemoryContext
-  freeze）、正式 L3 E2E 执行与 formal evidence root、tested_commit 对齐、
-  merge 到 main 的合入记录。
+  Mapping / production activation blockers（#167 trusted identity D review=
+  REQUEST_CHANGES / REWORK，HIGH-01/HIGH-02/MEDIUM-01 未闭合、route 未 ACTIVE、
+  MemoryContext 未 freeze）仍未闭合；不得把 G1/G2 readiness 写成 formal 已完成。
+- 缺失 handoff 输入：G4-G7 闭合（#167 REWORK 闭合并获得 D approval、
+  route ACTIVE、MemoryContext freeze）、正式 L3 E2E 执行与 formal evidence root、
+  tested_commit 对齐、merge 到 main 的合入记录。
 - 刷新要求：同上（执行前重新扫描 tip，审计基线升级到 ≥ 当前 main 顶点后再执行）。
 
 ### D3. 通用约定
