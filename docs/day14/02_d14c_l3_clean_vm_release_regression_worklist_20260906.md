@@ -8,8 +8,8 @@
 | 工作类型 | `test`（真实发布环境集成 + L3 Runtime Evidence Upgrade） |
 | 工作分支 | `test/D14C-l3-clean-vm-release-regression`（按提交分支要求命名：`<类型>/<用途>`，不含 `codex`） |
 | historical preparation base | `origin/main@6a1218441feeb7b1d96411e60f993061767f3aba`（= PR #134 D13C 合并提交；保留为历史准备基线） |
-| current development base | `8b8b4ff4026c85fe222f2fdbf0d7084384e494a6`（2026-09-08 合并 `origin/main@632b24b` 后的 D14C 开发 HEAD；**不是** formal tested commit） |
-| formal tested commit | `PENDING_D13D_D14D_FINAL_HANDOFF` |
+| current development base | `b53bdd2f718d3dfa164275836bf7f72b8bc17911`（2026-09-08 合并 `origin/main@7782612` 后的 D14C 开发 HEAD；**不是** formal runtime tested commit） |
+| formal tested commit | `ba3b50e1bdeea185bca9daee9d1d45958f62a636`（D13D_FROZEN、D14A final package 与 D14D L3_READY 的共同 runtime baseline；G4-G7 未关闭，尚未形成 D14C formal handoff） |
 | 关键上游 | PR #151 Host Mapping（TurnExtractionAdapter / ProductionSourceResolver 已入 main）；PR #134 D13C 会话评测与稳定性（已入 main） |
 | 当前状态 | `PREPARATION_IN_PROGRESS`（formal L3 仍 `BLOCKED`） |
 | 禁止提前表述 | `L3 PASS` / `HOST_VERIFIED` / `production ready` / `D14C complete` |
@@ -119,8 +119,8 @@ G1-G8 全 PASS → FORMAL RUN GO
 | # | 工作项 | 依赖 | 验证方式 | 状态 |
 |---|---|---|---|---|
 | D14C-00 | 建立正式任务卡（本文件），冻结 scope / tested_commit / formal prerequisites / out-of-scope / evidence requirements | 用户授权（B 代 C 轨执行） | 任务卡字段齐全、无禁止表述 | 已完成（2026-09-07；formal tested commit 保持 pending） |
-| D14C-01 | 冻结唯一被测基线：Git SHA、release artifact、AI Assistant/MemoryClient/Memory Service artifact、VM snapshot、runtime 身份 | `origin/main` | 身份链可复核（SHA→构建物→安装物→进程） | 待开始 |
-| D14C-02 | 核对 Host Mapping 是否可进入 production：确认 #151/#134 已入 tested commit；检查 `turn.finalized` / `event.ingest` / `forget.preview` / `forget.execute` 当前处于 ACTIVE/CANDIDATE/BLOCKED_BY_HOST_MAPPING/UNSUPPORTED_METHOD 的哪一种；只记录，不改状态 | #151 已入 main | 状态核查记录；无 C 轨改状态常量行为 | 历史核查已完成（`03_`）；2026-09-08 current development HEAD 重审见 `09_d14c_current_head_static_audit_20260908.md` |
+| D14C-01 | 冻结唯一被测基线：Git SHA、release artifact、AI Assistant/MemoryClient/Memory Service artifact、VM snapshot、runtime 身份 | `origin/main` | 身份链可复核（SHA→构建物→安装物→进程） | upstream baseline/package/VM lineage 已可消费；D14C runtime identity 仍待 G4-G7，见 `10_d14c_upstream_formal_handoff_audit_20260908.md` |
+| D14C-02 | 核对 Host Mapping 是否可进入 production：确认 #151/#134 已入 tested commit；检查 `turn.finalized` / `event.ingest` / `forget.preview` / `forget.execute` 当前处于 ACTIVE/CANDIDATE/BLOCKED_BY_HOST_MAPPING/UNSUPPORTED_METHOD 的哪一种；只记录，不改状态 | #151 已入 main | 状态核查记录；无 C 轨改状态常量行为 | 历史核查已完成（`03_`）；当前 upstream handoff 与 G4-G7 状态见 `10_d14c_upstream_formal_handoff_audit_20260908.md` |
 
 ### 阶段 B — 先清 Production Blocker
 
@@ -199,8 +199,8 @@ G1-G8 全 PASS → FORMAL RUN GO
 | D13D 未正式冻结 | 不能形成最终发布冻结证据 | D 轨 |
 | main 测试期间移动 | evidence 脱钩 | freeze tested_commit |
 
-当前 current-development 静态重审统一 Gate：`G1=BLOCKED_PENDING_D13D_FREEZE`、
-`G2=PARTIAL_PENDING_D14D_L3_READY`、`G3=DEVELOPMENT_READY_FORMAL_PENDING`、
+当前 upstream formal handoff 审计统一 Gate：`G1=READY_TO_CONSUME_FROZEN_BASELINE`、
+`G2=READY_TO_CONSUME_FROZEN_PACKAGE_VM`、`G3=DEVELOPMENT_READY_FORMAL_PENDING`、
 `G4=BLOCKED_HOST_PRODUCTION_BINDING`、`G5=BLOCKED_PENDING_D_APPROVAL`、
 `G6=BLOCKED_PENDING_D_ACTIVATION`、`G7=BLOCKED_PENDING_CDE_FREEZE`、
 `G8=NOT_CREATED_BY_DESIGN`。因此不得创建 formal evidence root，也不得运行半正式主演示。

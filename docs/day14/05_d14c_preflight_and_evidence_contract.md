@@ -14,9 +14,10 @@
 `d14c-formal-handoff/v1` 必须包含：
 
 ```text
-formal_tested_commit (40 位 SHA，且等于干净工作树 HEAD)
-d13d.status=FROZEN + d13d.frozen=true + evidence_reference
-d14d.status=L3_READY + d14d.l3_ready=true + evidence_reference
+formal_tested_commit（冻结 runtime/package 的 40 位 SHA）
+preflight_runner_commit（执行预检的干净工作树 HEAD）
+d13d.status=FROZEN + d13d.frozen=true + d13d.tested_commit=formal_tested_commit + evidence_reference
+d14d.status=L3_READY + d14d.l3_ready=true + d14d.tested_commit=formal_tested_commit + evidence_reference
 release package: path/version/SHA-256/manifest SHA-256/source_commit（且 source_commit=formal_tested_commit）
 AI Assistant、MemoryClient、Memory Service: path/version/SHA-256
 VM: environment_id/name/uuid/snapshot/snapshot_uuid
@@ -25,6 +26,10 @@ turn.finalized/event.ingest/forget.preview/forget.execute = ACTIVE
 MemoryContext: FROZEN + schema/version/hash + no-match/failure semantics
 evidence_root = evidence/l3-kylin-vm/d14c_<new-run-id>
 ```
+
+`d14d.package_tar_sha256` 必须等于 `release_package.sha256`。这允许 D14C
+preflight 工具在 clean development HEAD 运行，同时保持 D13D/D14A/D14D 已冻结的
+runtime tested commit 不变；两种 SHA 均受校验，不能互相替代。
 
 `RAW_READY_PENDING_SEALS`、仅有 D13D Execution Seal、D14D G0-G6 完成但
 `l3_ready=false`，以及包来源提交与 formal tested commit 不一致，均必须 fail-closed。

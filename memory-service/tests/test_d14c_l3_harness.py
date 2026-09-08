@@ -32,8 +32,9 @@ def _handoff() -> dict:
     return {
         "schema_version": HANDOFF_SCHEMA_VERSION,
         "formal_tested_commit": HEAD,
-        "d13d": {"status": "FROZEN", "frozen": True, "evidence_reference": "d13d/final"},
-        "d14d": {"status": "L3_READY", "l3_ready": True, "evidence_reference": "d14d/final"},
+        "preflight_runner_commit": HEAD,
+        "d13d": {"status": "FROZEN", "frozen": True, "tested_commit": HEAD, "evidence_reference": "d13d/final"},
+        "d14d": {"status": "L3_READY", "l3_ready": True, "tested_commit": HEAD, "package_tar_sha256": SHA, "evidence_reference": "d14d/final"},
         "release_package": {"path": "/tmp/pkg.tar", "version": "1", "sha256": SHA, "manifest_sha256": SHA, "source_commit": HEAD},
         "artifacts": {
             name: {"path": f"/tmp/{name}", "version": "1", "sha256": SHA}
@@ -52,6 +53,43 @@ def test_preflight_accepts_complete_handoff_without_creating_root(tmp_path):
     report = validate_formal_handoff(_handoff(), repository_root=tmp_path, git_runner=_git)
     assert report["status"] == "PREFLIGHT_ONLY"
     assert not (tmp_path / "evidence").exists()
+
+
+def test_preflight_accepts_frozen_runtime_commit_with_current_preflight_runner(tmp_path):
+    """Docs/evidence-only runner changes must not rewrite the frozen package identity."""
+
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff()
+    handoff["formal_tested_commit"] = "c" * 40
+    handoff["release_package"]["source_commit"] = "c" * 40
+    handoff["d13d"]["tested_commit"] = "c" * 40
+    handoff["d14d"]["tested_commit"] = "c" * 40
+
+    report = validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+    assert report["tested_commit"] == "c" * 40
+
+
+def test_preflight_rejects_d14d_handoff_from_another_runtime_commit(tmp_path):
+    """D14D L3 readiness is consumable only for the frozen runtime commit."""
+
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff()
+    handoff["d14d"]["tested_commit"] = "c" * 40
+
+    with pytest.raises(D14CPreflightError, match="d14d.tested_commit must equal formal_tested_commit"):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
+def test_preflight_rejects_d14d_handoff_with_another_package(tmp_path):
+    """D14D L3 readiness is consumable only for the frozen release package."""
+
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff()
+    handoff["d14d"]["package_tar_sha256"] = "c" * 64
+
+    with pytest.raises(D14CPreflightError, match="d14d.package_tar_sha256 must equal release_package.sha256"):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
 
 
 @pytest.mark.parametrize(

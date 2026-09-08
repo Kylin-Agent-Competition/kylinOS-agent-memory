@@ -93,9 +93,13 @@ def validate_formal_handoff(
     tested_commit = _required_text(handoff, "formal_tested_commit", "handoff")
     if not _GIT_SHA.fullmatch(tested_commit):
         raise D14CPreflightError("formal_tested_commit must be a full lowercase Git SHA")
-    if git_runner(root, "rev-parse", "HEAD") != tested_commit:
-        raise D14CPreflightError("formal_tested_commit must equal HEAD")
+    runner_commit = _required_text(handoff, "preflight_runner_commit", "handoff")
+    if not _GIT_SHA.fullmatch(runner_commit):
+        raise D14CPreflightError("preflight_runner_commit must be a full lowercase Git SHA")
+    if git_runner(root, "rev-parse", "HEAD") != runner_commit:
+        raise D14CPreflightError("preflight_runner_commit must equal HEAD")
 
+    d14d_gate: Mapping[str, Any] | None = None
     for gate_name, expected_status in (("d13d", "FROZEN"), ("d14d", "L3_READY")):
         gate = _object(handoff.get(gate_name), gate_name)
         if gate.get("status") != expected_status:
@@ -104,6 +108,13 @@ def validate_formal_handoff(
             raise D14CPreflightError("d13d.frozen must be true")
         if gate_name == "d14d" and gate.get("l3_ready") is not True:
             raise D14CPreflightError("d14d.l3_ready must be true")
+        gate_commit = _required_text(gate, "tested_commit", gate_name)
+        if not _GIT_SHA.fullmatch(gate_commit):
+            raise D14CPreflightError(f"{gate_name}.tested_commit must be a full lowercase Git SHA")
+        if gate_commit != tested_commit:
+            raise D14CPreflightError(f"{gate_name}.tested_commit must equal formal_tested_commit")
+        if gate_name == "d14d":
+            d14d_gate = gate
         _required_text(gate, "evidence_reference", gate_name)
 
     release = _object(handoff.get("release_package"), "release_package")
@@ -116,6 +127,12 @@ def validate_formal_handoff(
         raise D14CPreflightError("release_package.source_commit must be a full lowercase Git SHA")
     if source_commit != tested_commit:
         raise D14CPreflightError("release_package.source_commit must equal formal_tested_commit")
+    assert d14d_gate is not None
+    d14d_package_sha = _required_text(d14d_gate, "package_tar_sha256", "d14d")
+    if not _SHA256.fullmatch(d14d_package_sha):
+        raise D14CPreflightError("d14d.package_tar_sha256 must be a lowercase SHA-256")
+    if d14d_package_sha != release["sha256"]:
+        raise D14CPreflightError("d14d.package_tar_sha256 must equal release_package.sha256")
 
     artifacts = _object(handoff.get("artifacts"), "artifacts")
     for name in ("ai_assistant", "memory_client", "memory_service"):
@@ -157,6 +174,7 @@ def validate_formal_handoff(
     return {
         "status": "PREFLIGHT_ONLY",
         "tested_commit": tested_commit,
+        "preflight_runner_commit": runner_commit,
         "environment_id": _required_text(vm, "environment_id", "vm"),
         "evidence_root": relative_evidence_root,
         "formal_dispatch": "NOT_STARTED",
