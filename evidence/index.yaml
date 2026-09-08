@@ -1847,3 +1847,26 @@ entries:
       C++ L0（test_d13c_stability.cpp S1-S6）: GitHub Actions "Memory Client L0 ctest + Contract L0 ctest" SUCCESS（run 178）；"Repository Baseline Check" SUCCESS（run 637）
       py_compile: PASS；git diff --check: PASS
       详见: docs/day13/13_d13c_latest_review_rework_20260906.md、docs/day13/14_d13c_p1_closure_20260906.md
+
+  - id: "D14A-FINAL-PACKAGE-FREEZE"
+    task_id: "D14A"
+    description: "D14A final package identity freeze: reuse the VM-audited ba3b50e package after the ba3b50e..HEAD delta was classified DOCS_EVIDENCE_ONLY"
+    status: "PACKAGE_HASH_FROZEN"
+    evidence_level: "E4"
+    source: "evidence/l3-kylin-vm/d14a_final_package_20260908/D14A_FINAL_PACKAGE_FREEZE_RECORD_20260908.md"
+    source_commit: "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
+    tested_commit: "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
+    manifest_sha256: "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0"
+    runtime_result: "package identity frozen; G0-G6 evidence remains final-review pending"
+    review_status: "PENDING"
+    merge_qualified: false
+    date: "2026-09-08"
+    reviewer: "pending E-track final review"
+    limitations: "Only the package identity is frozen. PR #165 final approval is outstanding; L3_READY/release_ready/production_ready remain false, and D14A BLOCKER C remains HANDOFF_REQUIRED. A future runtime/packaging change requires rebuild, new hashes, and a fresh formal VM run."
+    checksum_sha256: "0694c16628de653f2bb831a38b3a54bd634744db2e273ba1370783ec6f4e6bf0"
+    details: |
+      Package: kylin-memory-a-d14a 0.1.0-d14a; manifest files=3360.
+      package_tar_sha256: 2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401.
+      package_manifest_sha256: 76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0.
+      package_sha256sums_sha256: 8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67.
+      Formal evidence root: evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e.
