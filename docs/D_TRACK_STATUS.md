@@ -3,7 +3,7 @@
 > 依据《D轨当前状态与简化流程交接_20260907》§6.1 建立的统一状态 SSOT。
 > 历史任务卡（`24_`/`26_`/`29_`/`30_`/`31_`/`32_`/`33_`/`34_`）保留为
 > HISTORICAL / REFERENCE，从本文件生效起不再要求同步维护其"当前状态"。
-> As-of: 2026-09-08（D13D_FROZEN + D14A final package/hash freeze + PR #165 MERGED）。
+> As-of: 2026-09-08（D13D_FROZEN + D14A final package/hash freeze + D14D `L3_READY` + D15A prerequisite refresh）。
 
 ## D13D
 
@@ -46,6 +46,21 @@
 | 复用依据 | `ba3b50e…..HEAD` 的变更不含 `packaging/`、`memory-service/`、`cpp-bridge/`、`migrations/`、`config/`，按 D14A contract v4 §1.1 分类为 `DOCS_EVIDENCE_ONLY`；现有包身份免重打包 |
 | 边界 | 本登记只冻结 package identity；BLOCKER C 保持 `HANDOFF_REQUIRED`；PR #165 已按冻结 package identity 通过 final review 并合并 |
 
+## D15A
+
+| 字段 | 值 |
+| --- | --- |
+| 任务 | A 轨发布候选正式锁点（A15-1 / A15-2 / A15-3） |
+| 状态 | `IN_PROGRESS`；A15-1 / A15-3 evidence refresh 已完成并进入 D-review 前准备；A15-2 仍 `BLOCKED` |
+| 当前事实 | current main HEAD `2bd59488c4fcd73d5d7cf4f86b980fa2f96c9257`；tested_commit `ba3b50e1bdeea185bca9daee9d1d45958f62a636`；tracked worktree clean；`ba3b50e...2bd5948` 按 D15A §4 分类为 `DOCS_EVIDENCE_ONLY`；D15A + D14A 守卫 `37 passed` |
+| A15-1 | READY_FOR_REVIEW：package manifest 记录 `runtime/bridge/kylin_embedding.cpython-312-x86_64-linux-gnu.so` SHA-256 `a271891238102d0299395284d486c2e5afdaa4494e6ab0d1ff51a2d2ab9d4db6`；G2 dependency / RPATH / path audit PASS；build identity 与 builder command 已登记。待 D 主审判定，不预先宣称正式锁 |
+| A15-2 | `BLOCKED`：D14D G8 维持 `NOT_RUN` waiver；D13A perf 三轮基线为 `INVALIDATED`。需 D13A owner / D 主审给出 package-only runner + thresholds，或作出适用于 A15-2 的明确正式范围裁定；涉及性能结论须 E 补审 |
+| A15-3 | READY_FOR_REVIEW：`VERSION` / `manifest.package_version` 均为 `0.1.0-d14a`；`manifest.source_commit` = tested_commit = `ba3b50e...`；package tar / manifest / SHA256SUMS 已冻结且 G2 integrity PASS。待 D 主审判定，不预先宣称正式锁 |
+| 未完成 | A15-1/2/3 的 D 主审逐项会签；A15-2 性能证据缺口；涉及安全/性能结论时的 E 补审 |
+| 边界 | 不改变 D15A 矩阵的 `WAITING_PREREQ` 基线；不宣称 runtime/model identity closure；`release_ready=false`；`production_ready=false` |
+
 ## 下一步（优先级）
 
-1. 后续 D15A 正式锁点仍须按其矩阵独立刷新/复核，不以本表状态替代其锁点会签。
+1. 将 D15A A15-1 / A15-3 evidence refresh 提交 D 主审逐项判定。
+2. 解决 A15-2 的 package-only performance runner / threshold 或正式范围裁定，再由 E 补审。
+3. D 主审完成全部 A15 锁点会签后，才可进入后续发布 Gate。
