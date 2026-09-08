@@ -28,9 +28,11 @@ are preparation facts, not a formal lock execution.
 
 | Check | Observation |
 | --- | --- |
-| Current PR preparation base | `7ce83f7e9e382e3976b274c9a5aa8c29493634d9` (content-equivalent source of merged PR #169) |
-| Tracked worktree | Clean before this docs-only commit (`git status --porcelain --untracked-files=no` empty) |
-| `ba3b50e...HEAD` classification | `DOCS_EVIDENCE_ONLY`; no changes under the five runtime/production prefixes listed in D15A section 4.3 |
+| PR #170 merged base | `77826122a8aa1eaeed60ec9295a4bb8f979b3fe7` |
+| PR #169 pre-squash/source commit | `7ce83f7e9e382e3976b274c9a5aa8c29493634d9` (not the current PR base) |
+| PR #170 first review HEAD | `324a93d0749128fe25a97a3409a5182662a88aa6` |
+| First review HEAD classification | `ba3b50e...324a93d` is `DOCS_EVIDENCE_ONLY`; no changes under the five runtime/production prefixes listed in D15A section 4.3 |
+| Final refresh requirement | This record does not replace the final D15A section 4.3 refresh. Before formal D adjudication, `git rev-parse HEAD`, tracked-worktree cleanliness, and `current_tested_runtime_commit..HEAD` classification must be re-run against the then-current PR HEAD. |
 | D14D evidence root | `evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e` |
 | D14A package freeze record | `evidence/l3-kylin-vm/d14a_final_package_20260908/D14A_FINAL_PACKAGE_FREEZE_RECORD_20260908.md` |
 | Evidence index entry | `D14A-FINAL-PACKAGE-FREEZE`, status `PACKAGE_HASH_FROZEN` |
@@ -65,8 +67,9 @@ D14A package.
 - The targeted build/user path scan completes with `TARGET_SCAN_RC=0`.
 - G2 records SDK SHA-256
   `028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48`,
-  SONAME `libkylin-coreai-embedding.so.1`, and package version
-  `1.2.0.0-0k0.4`.
+  SONAME `libkysdk-coreai-embedding.so.1`, package version `1.2.0.0-0k0.4`,
+  and canonical SDK path
+  `/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0`.
 - The formal package freeze record classifies the current delta from the
   package source commit as `DOCS_EVIDENCE_ONLY`.
 
