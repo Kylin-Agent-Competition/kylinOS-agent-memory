@@ -46,6 +46,13 @@ jobs:
             memory-service/tests/test_forget_persistence_d10d.py \
             memory-service/tests/retrieval/test_evaluation.py \
             -q
+      - name: D14B preparation harness L1
+        env:
+          PYTHONPATH: memory-service
+        run: |
+          python3 -m pytest \
+            tests/retrieval/test_d14b_harness.py \
+            -q
 
   d14a-packaging-provenance:
     name: D14A packaging + provenance L1

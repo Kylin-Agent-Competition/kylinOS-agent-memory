@@ -42,6 +42,9 @@ python scripts/run_d14b_preflight.py \
   --package-manifest <manifest.json> \
   --repo-root <clean-worktree> \
   --evidence-root <new-absolute-root>
+  --capture-handoff <d14b-capture-handoff.json> \
+  --package-tar <actual-frozen-tar> \
+  --actual-package-manifest <actual-frozen-manifest.json>
 ```
 
 它要求的最小交接字段如下。所有 SHA 均为小写十六进制。
@@ -83,6 +86,21 @@ preflight fail-closed：任一 commit/package 不一致、D13D 非 `FROZEN`、D1
 `L3_READY`、Seal/G9 引用不是既有仓库路径或 HTTPS URL、evidence root 已存在、工作树
 非干净或 HEAD 不同、已声明 runner 的路径/哈希不可验证，都会返回非零状态。它成功时也**不**创建 evidence root；正式
 操作者在成功后才能创建一次性 root。
+
+正式 preflight 另强制两道机器门禁：
+- **P1-3 capture provenance**：`--capture-handoff` 必须声明 SQLite/FTS5/Vector/RRF
+  四类 runner（path 不越 repo、实际 SHA-256 == 声明、command_id 非空、tested_commit
+  一致），任一缺失/不一致即 `D14B_PREFLIGHT_FAIL`；每个 source artifact 还必须带
+  `.receipt.json`（channel/commit/command_id/runner SHA/artifact SHA），capture 逐项
+  校验后才汇编 checkpoint，手工 JSON 无 provenance 一律拒绝。
+- **P2-1 package bytes**：`--package-tar`/`--actual-package-manifest` 现场计算 SHA-256
+  并校验 == 冻结值，且 manifest `source_commit`/`package_version` 与 tested_commit/冻结
+  version 一致；改字节/改语义均 FAIL CLOSED。
+- **comparator（P1-1/P1-2）**：SQLite truth `stable_ids`/`active_version_ids` 在
+  before/after 两侧机械比较（非 Top-K 增删同样 FAIL）；before/after 各做
+  duplicate/cross-user/stale/ghost 合法性检查；comparison output 采用 exclusive-create，
+  已存在即拒绝覆盖。comparator 仅用于 service restart / rebuild / OS reboot 的
+  invariant 比较，不用于 delete。
 
 ## 3. 快照和比较口径
 

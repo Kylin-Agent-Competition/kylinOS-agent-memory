@@ -11,7 +11,15 @@
 - 当前开发基线：`c1443aaecc82a79b9b9f835664ba5e4fee5edfc2`（2026-09-08 将 `origin/main@632b24b` 合并至本 D14B 分支；仅用于当前开发对齐）。
 - 已核验的正式 tested_commit：`ba3b50e1bdeea185bca9daee9d1d45958f62a636`（2026-09-08 远端主线 SSOT 记录的 D13D/D14D 共同身份）；正式执行前仍须在该精确 commit 的干净 checkout 中消费结构化交接，不能用当前开发基线替代。
 - 开始时间：2026-09-02（准备阶段）。最晚停止时间：尚未由负责人指定；进入实现前须确认。
-- 当前进度：D14B intake 准备进行中：formal preflight / 快照比较 / evidence SHA256SUMS 校验 harness 已以 L0/L1 契约测试验证，正式 VM 工作仍为 0/8。上游身份已核验，但本分支尚未合并含该 SSOT 的主线，且标准化 D14B handoff JSON、四类 production capture command 与 runner identity 尚未作为 D14B 输入交接；结果保持 `UNVERIFIED`。
+- 当前进度（2026-09-09 Review 返工收敛）：Preparation Harness 可信性返工完成——
+  P1-1 SQLite truth before/after 机械比较、P1-2 comparison evidence exclusive-create、
+  P1-3 capture provenance（d14b-capture-handoff + per-channel receipt）机器门禁、
+  P2-1 冻结 package 实际字节现场校验、P2-2 CI 接入 D14B harness；harness L0/L1 本地
+  `44 passed`。目标状态：`D14B_PREPARATION_HARNESS = READY_FOR_REVIEW`（待 exact HEAD
+  复审）；`D14B_FORMAL_L3` 仍 = `UNVERIFIED`，正式 VM 工作仍为 0/8，不以本批冒充正式结果。
+- 返工状态更新（2026-09-09）：按最新 Review Comment 收敛清单关闭 3×P1 + package-bytes +
+  metadata/CI（见 PR 报告与 `18_d14b_vm_validation_batch_20260908.md`），随后 STOP
+  DEVELOPMENT，申请 exact HEAD Preparation Harness re-review；不补 Formal L3 VM。
 - 历史上游状态（2026-09-07）：D13D I3b-completion（#160）初始合入时仅为准备阶段，`D13D_FROZEN=NO`；该历史状态已由下列 2026-09-08 SSOT 更新替代，不得再作为当前 gate 判断。
 - 上游状态更新（2026-09-08，经 `origin/main@77826122a8aa1eaeed60ec9295a4bb8f979b3fe7` 的 `docs/D_TRACK_STATUS.md` 核验）：`D13D_FROZEN=YES`、D14D `L3_READY=true`、`A_FINAL_PACKAGE_READY=YES`；三方身份均绑定 `ba3b50e1bdeea185bca9daee9d1d45958f62a636`，包为 `kylin-memory-a-d14a 0.1.0-d14a`，tar SHA-256 `2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401`，manifest SHA-256 `76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0`。这解除上游身份等待，不替代 D14B 的本地 intake、正式 VM 执行或独立审查。
 

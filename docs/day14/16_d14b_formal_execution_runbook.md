@@ -52,7 +52,14 @@ python scripts/run_d14b_preflight.py \
   --package-manifest <package-manifest.json> \
   --repo-root <exact-clean-checkout> \
   --evidence-root <absolute-new-root>
+  --capture-handoff <d14b-capture-handoff.json> \
+  --package-tar <actual-frozen-tar> \
+  --actual-package-manifest <actual-frozen-manifest.json>
 ```
+
+正式 preflight 现强制：`--capture-handoff`（四类 runner 机器可验证）与
+`--package-tar`/`--actual-package-manifest`（现场校验冻结包字节）；每个 source artifact
+须带 capture receipt，capture 无 provenance 一律拒绝。以上任一不满足即停止。
 
 只有 exit 0 后，操作者才创建一次性 root：
 
