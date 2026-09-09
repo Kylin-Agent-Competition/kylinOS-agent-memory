@@ -185,7 +185,7 @@ main（HEAD=`3ef0ce5…`）后已**过期**；该历史文档快照可失效。�
 
 以下结论**仍受阻塞**，不得写成已闭合：
 
-- D14B_FORMAL_L3=UNVERIFIED；
+- D14B_FORMAL_L3=NOT_RUN/UNVERIFIED；
 - D14B_FORMAL_RESULT=UNVERIFIED；
 - D14B_TASK=PARTIAL/WAIVED_FORMAL_INPUTS；
 - D14C_FORMAL_L3=BLOCKED；
@@ -228,7 +228,7 @@ identity 绑定 + 环境/run ID，并给出「当前是否允许作为最终比�
 | D14C | refs/heads/test/D14C-l3-clean-vm-release-regression tip=77319aa4ce75d7f7fe4d7ed64f7332cffdb88441；PR #156 PR_OPEN（refs/pull/156/head=77319aa4ce75d7f7fe4d7ed64f7332cffdb88441、refs/pull/156/merge=72950fd59bf5fddbfe12d4daad9f040ea227e5f9） | 否（NON_MAIN_BRANCH；NOT_MERGED；与 main ahead/behind=2/11） | D14C_FORMAL_L3=BLOCKED；D14C_FORMAL_RESULT=UNVERIFIED；D14C G4=BLOCKED_PENDING_D15C_HANDOFF（D15C handoff input ready；等待 D14C/D 主审消费） | E15-3 | git ls-remote origin 实测（分支 tip、PR refs、ahead/behind 计数；as-of 2026-09-09） |
 | D15A | docs/day15/00_d15a_rc_lock_matrix_20260906.md（as-of 2026-09-06 快照）；D15A 文档已随 #169/#170 合入 main（2026-09-08） | 是（#169/#170，2026-09-08 合入 origin/main） | A15-1/A15-3=READY_FOR_REVIEW、A15-2=BLOCKED（上游 review 结论）；D15A 冻结矩阵仍为 WAITING_PREREQ（00 文档 as-of 2026-09-06 状态行，快照可失效） | E15-5（overclaim 终检对 A15 相关声明的核验受限） | docs/day14/23 §A.2 + docs/day15/00 文档快照 |
 | D15C | D15C upstream artifact EXISTS and is merged into main via PR #167（branch=feat/C-hook-evidence；final head=b5f8154b9e510c10124e84ecf70d608e4fee7896；merge commit=a4034c9cdab1de31f70bced73dcab8ff2b18407c；review=APPROVED；handoff status=HANDOFF_SUBMITTED） | 是（PR #167 已合入 main；artifact/main entry ready；D15C handoff input ready；not closed） | D14C G4=BLOCKED_PENDING_D15C_HANDOFF（D15C handoff input ready；等待 D14C/D 主审消费；不得自动解除）；TD-007/008/009、R-ARCH-05、Production Identity 未关闭 | E15-3（经 D14C） | git ls-remote / gh PR #167 实测（2026-09-09）；注：.local-agent-workflow/tasks 与 .local-agent-workflow/batches 下无 D15C Task/Batch 仅表示本地 workflow 输入未登记，不能据此推导 upstream artifact 不存在 |
-| D14E | docs/day14/23_d14e_phase1_acceptance_baseline_20260908.md（Phase 1 验收基线；随 PR #171 squash merge 合入） | 是（PR #171 → main HEAD=3ef0ce518844749f14aa384790efbcde5af39ec9） | D14E_PHASE1_ACCEPTANCE_BASELINE=READY；D14E_FINAL_ACCEPTANCE=BLOCKED；D14E_SIGNOFF_STATUS=BLOCKED；final signoff 未签署 | E15-6 | git log 实测（PR #171 squash merge）+ docs/day14/23 状态行 |
+| D14E | docs/day14/23_d14e_phase1_acceptance_baseline_20260908.md（Phase 1 验收基线；随 PR #171 squash merge 合入） | 是（PR #171 merge commit=3ef0ce518844749f14aa384790efbcde5af39ec9；historical merge identity / historical main point，非 current scan-time main；current scan-time main=a7abb1e71c03c4f1558e5c6a9eff2b9f36437993） | D14E_PHASE1_ACCEPTANCE_BASELINE=READY；D14E_FINAL_ACCEPTANCE=BLOCKED；D14E_SIGNOFF_STATUS=BLOCKED；final signoff 未签署 | E15-6 | git log 实测（PR #171 squash merge）+ docs/day14/23 状态行 |
 
 ---
 
@@ -296,9 +296,12 @@ D14E final signoff（该动作超出本任务范围；触发条件与 docs/day14
 - 【BOUND-6】历史文档旧状态不得直接当作当前事实：docs/day14/23 的 as-of=2026-09-08
   与「尚未合入 origin/main」已随 PR #171 失效；引用历史快照必须注明可失效，并以
   2026-09-09 重扫事实为准。
-- 【BOUND-7】不得混淆四类身份对象：scan-time main HEAD（3ef0ce5…）、frozen
+- 【BOUND-7】不得混淆四类身份对象：scan-time main HEAD（current=
+  a7abb1e71c03c4f1558e5c6a9eff2b9f36437993）、frozen
   tested_commit（ba3b50e…）、D14A package SHA（tar/manifest/SHA256SUMS）、
   d13e evidence-report SHA-256（dee80d5…）；互相不得冒充相等。
+  PR #171 merge commit `3ef0ce518844749f14aa384790efbcde5af39ec9` 仅作为 historical merge identity /
+  historical main point 保留，不得标为 current scan-time main HEAD。
 - 【BOUND-8】D15E Phase 0 职责止于提交材料准备与锁定矩阵文档；不得越界修改
   production code、evidence（冻结 root/raw/Seal/attestation/SHA256SUMS/
   index.yaml）、evaluation/datasets 与既有 docs/day13/14、docs/day15 00/01 文档；
@@ -311,6 +314,12 @@ D14E final signoff（该动作超出本任务范围；触发条件与 docs/day14
 - 既有 D15A 守卫 `docs/day15/test_d15a_rc_lock_matrix.py` 仅固定读取
   `docs/day15/00_d15a_rc_lock_matrix_20260906.md`，不扫描 `10_*` 新文件，
   本文件不破坏该守卫；
+- `docs/day15/test_d15e_final_submission_lock_matrix.py` 当前性质是
+  **executable / manual static guard（可执行、当前手工运行的静态守卫）**；
+  它**不是** GitHub merge CI enforced gate（截至 as-of 2026-09-09 未接入
+  `.github/**` workflow，run #805 未执行本守卫）。因此 Repository Baseline
+  Check = green 不得被描述为「D15E guard 已由 GitHub CI 强制执行」；
+  本 PR 不新增 workflow、不新增 runner。
 - 机器守卫只覆盖受控英文 sentinel 缺席、结构化状态行、E15 锁矩阵行级绑定与已定义
   provenance/state token 在场；中文/自然语言同义越级、语义归因与 evidence 真实性
   由独立 Reviewer 人工审查（本文件不引入 NLP/LLM/机器学习检测）。
