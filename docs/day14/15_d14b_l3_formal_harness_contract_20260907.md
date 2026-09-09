@@ -36,12 +36,12 @@ D14A package/hash freeze。D14B 已只读核验以下上游记录：
 
 ```text
 python scripts/run_d14b_preflight.py \
-  --expected-tested-commit <40-hex> \
+  --expected-tested-commit <tested-commit> \
   --d13d-handoff <d13d-handoff.json> \
   --d14d-handoff <d14d-handoff.json> \
-  --package-manifest <manifest.json> \
-  --repo-root <clean-worktree> \
-  --evidence-root <new-absolute-root>
+  --package-manifest <package-manifest.json> \
+  --repo-root <exact-clean-checkout> \
+  --evidence-root <absolute-new-root> \
   --capture-handoff <d14b-capture-handoff.json> \
   --package-tar <actual-frozen-tar> \
   --actual-package-manifest <actual-frozen-manifest.json>
@@ -102,6 +102,36 @@ preflight fail-closed：任一 commit/package 不一致、D13D 非 `FROZEN`、D1
   已存在即拒绝覆盖。comparator 仅用于 service restart / rebuild / OS reboot 的
   invariant 比较，不用于 delete。
 
+## 2bis. Provenance retention（R3）
+
+正式 evidence root 固定保留 provenance 原始 bytes，纳入 SHA256SUMS 闭包：
+
+```text
+evidence/l3-kylin-vm/d14b_<UTC_RUN_ID>_<sha7>/
+  provenance/d14b-capture-handoff.json      # 每个 root 只保存一次，不可覆盖
+  <phase>/<checkpoint>.json
+  <phase>/provenance/<checkpoint>/          # 每次 capture 实际消费的 4 份 receipt
+    sqlite-truth.receipt.json
+    fts5-results.receipt.json
+    vector-results.receipt.json
+    rrf-results.receipt.json
+  SHA256SUMS
+```
+
+checkpoint 的 `capture_sources` 扩展为可独立复核的 provenance 摘要：
+
+```json
+{
+  "sqlite_truth": {"artifact_sha256": "...", "receipt_sha256": "...", "command_id": "...", "runner_sha256": "...", "runner_path": "..."},
+  "fts5": {...}, "vector": {...}, "rrf": {...},
+  "capture_handoff_sha256": "..."
+}
+```
+
+receiver/reviewer 离线复算规则：root 内 handoff/receipt bytes 必须与 checkpoint 登记的
+SHA 一致，且全部文件（含 provenance）都经 `verify_d14b_evidence_manifest.py` 的
+SHA256SUMS 闭合；缺失或篡改任何 retained provenance bytes 即 FAIL。
+
 ## 3. 快照和比较口径
 
 入口：`scripts/compare_d14b_retrieval_snapshots.py`。
@@ -132,13 +162,20 @@ SHA256，并写出一次性 checkpoint；它不连接服务、不写 SQLite、�
 
 ```text
 python scripts/capture_d14b_retrieval_snapshot.py \
-  --tested-commit <40-hex> --checkpoint <name> --user-id <controlled-user> \
-  --captured-at-utc <ISO-8601-Z> \
-  --sqlite-truth <sqlite-truth.json> \
-  --fts5-results <fts5-results.json> \
-  --vector-results <vector-results.json> \
-  --rrf-results <rrf-results.json> \
-  --output <new-checkpoint.json>
+  --tested-commit <tested-commit> \
+  --checkpoint <checkpoint> \
+  --user-id <controlled-user> \
+  --captured-at-utc <UTC-Z> \
+  --capture-handoff <evidence-root>/provenance/d14b-capture-handoff.json \
+  --sqlite-truth <source-dir>/sqlite-truth.json \
+  --sqlite-receipt <source-dir>/sqlite-truth.receipt.json \
+  --fts5-results <source-dir>/fts5-results.json \
+  --fts5-receipt <source-dir>/fts5-results.receipt.json \
+  --vector-results <source-dir>/vector-results.json \
+  --vector-receipt <source-dir>/vector-results.receipt.json \
+  --rrf-results <source-dir>/rrf-results.json \
+  --rrf-receipt <source-dir>/rrf-results.receipt.json \
+  --output <evidence-root>/<phase>/<checkpoint>.json
 ```
 
 生产 capture source command 不是 D14B 自造的业务实现：正式 handoff 必须为每个

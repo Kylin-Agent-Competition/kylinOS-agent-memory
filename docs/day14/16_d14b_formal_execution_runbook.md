@@ -51,7 +51,7 @@ python scripts/run_d14b_preflight.py \
   --d14d-handoff <d14d-handoff.json> \
   --package-manifest <package-manifest.json> \
   --repo-root <exact-clean-checkout> \
-  --evidence-root <absolute-new-root>
+  --evidence-root <absolute-new-root> \
   --capture-handoff <d14b-capture-handoff.json> \
   --package-tar <actual-frozen-tar> \
   --actual-package-manifest <actual-frozen-manifest.json>
@@ -98,12 +98,19 @@ JSON 非法或 output 已存在时，capture CLI fail-closed。D14B 不以手工
 
 ```text
 python scripts/capture_d14b_retrieval_snapshot.py \
-  --tested-commit <tested-commit> --checkpoint <checkpoint> \
-  --user-id <controlled-user> --captured-at-utc <UTC-Z> \
+  --tested-commit <tested-commit> \
+  --checkpoint <checkpoint> \
+  --user-id <controlled-user> \
+  --captured-at-utc <UTC-Z> \
+  --capture-handoff <evidence-root>/provenance/d14b-capture-handoff.json \
   --sqlite-truth <source-dir>/sqlite-truth.json \
+  --sqlite-receipt <source-dir>/sqlite-truth.receipt.json \
   --fts5-results <source-dir>/fts5-results.json \
+  --fts5-receipt <source-dir>/fts5-results.receipt.json \
   --vector-results <source-dir>/vector-results.json \
+  --vector-receipt <source-dir>/vector-results.receipt.json \
   --rrf-results <source-dir>/rrf-results.json \
+  --rrf-receipt <source-dir>/rrf-results.receipt.json \
   --output <evidence-root>/<phase>/<checkpoint>.json
 ```
 
