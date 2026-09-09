@@ -246,23 +246,19 @@ def test_preflight_rejects_existing_evidence_root(tmp_path: Path) -> None:
 
 
 def test_preflight_accepts_a_clean_matching_handoff(tmp_path: Path) -> None:
-    repo, commit = make_clean_git_repo(tmp_path)
-    d13d, d14d, manifest = handoffs(tmp_path, commit)
+    case = make_preflight_suite(tmp_path)
 
     completed = run_script(
         "run_d14b_preflight.py",
-        "--expected-tested-commit",
-        commit,
-        "--d13d-handoff",
-        str(d13d),
-        "--d14d-handoff",
-        str(d14d),
-        "--package-manifest",
-        str(manifest),
-        "--repo-root",
-        str(repo),
-        "--evidence-root",
-        str(tmp_path / "new-evidence"),
+        "--expected-tested-commit", case["commit"],
+        "--d13d-handoff", str(case["d13d"]),
+        "--d14d-handoff", str(case["d14d"]),
+        "--package-manifest", str(case["manifest"]),
+        "--repo-root", str(case["repo_root"]),
+        "--evidence-root", str(case["evidence_root"]),
+        "--capture-handoff", str(case["capture_handoff"]),
+        "--package-tar", str(case["package_tar"]),
+        "--actual-package-manifest", str(case["actual_package_manifest"]),
     )
 
     assert completed.returncode == 0, completed.stderr
@@ -406,59 +402,16 @@ def test_snapshot_comparison_exact_stable_case(tmp_path: Path) -> None:
 
 
 def test_capture_assembles_read_only_channel_artifacts_into_a_checkpoint(tmp_path: Path) -> None:
-    truth = write_json(
-        tmp_path / "sqlite-truth.json",
-        {"stable_ids": ["a"], "active_version_ids": ["v1"]},
-    )
-    channel_result = {
-        "queries": [
-            {
-                "query_id": "q1",
-                "results": [
-                    {
-                        "stable_id": "a",
-                        "user_id": "d14b-controlled-user",
-                        "version_id": "v1",
-                        "rank": 1,
-                    }
-                ],
-            }
-        ]
-    }
-    fts5 = write_json(tmp_path / "fts5.json", channel_result)
-    vector = write_json(tmp_path / "vector.json", channel_result)
-    rrf = write_json(tmp_path / "rrf.json", channel_result)
+    case = make_capture_case(tmp_path)
     output = tmp_path / "checkpoint.json"
 
-    completed = run_script(
-        "capture_d14b_retrieval_snapshot.py",
-        "--tested-commit",
-        SHA,
-        "--checkpoint",
-        "baseline",
-        "--user-id",
-        "d14b-controlled-user",
-        "--captured-at-utc",
-        "2026-09-08T00:00:00Z",
-        "--sqlite-truth",
-        str(truth),
-        "--fts5-results",
-        str(fts5),
-        "--vector-results",
-        str(vector),
-        "--rrf-results",
-        str(rrf),
-        "--output",
-        str(output),
-    )
+    completed = run_capture(case, output)
 
     assert completed.returncode == 0, completed.stderr
     checkpoint = json.loads(output.read_text(encoding="utf-8"))
     assert checkpoint["tested_commit"] == SHA
     assert checkpoint["sqlite"] == {"stable_ids": ["a"], "active_version_ids": ["v1"]}
-    assert checkpoint["fts5"] == channel_result
-    assert checkpoint["capture_sources"]["sqlite_truth"]["sha256"] == hashlib.sha256(truth.read_bytes()).hexdigest()
-
+    assert checkpoint["capture_sources"]["sqlite_truth"]["sha256"] == case["hashes"]["sqlite"]
 
 def test_capture_rejects_an_existing_checkpoint_without_overwriting_it(tmp_path: Path) -> None:
     truth = write_json(tmp_path / "sqlite-truth.json", {"stable_ids": ["a"], "active_version_ids": ["v1"]})
@@ -521,3 +474,485 @@ def test_evidence_manifest_rejects_missing_duplicate_unsafe_and_mismatched_entri
         (root / "SHA256SUMS").write_text(manifest, encoding="utf-8")
         completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
         assert completed.returncode != 0, name
+
+
+def mk_snapshot(
+    truth_ids: list[str], versions: list[str], results: list[dict[str, object]]
+) -> dict[str, object]:
+    return {
+        "tested_commit": SHA,
+        "checkpoint": "checkpoint",
+        "user_id": "d14b-controlled-user",
+        "sqlite": {"stable_ids": truth_ids, "active_version_ids": versions},
+        "fts5": {"queries": [{"query_id": "q1", "results": results}]},
+        "vector": {"queries": [{"query_id": "q1", "results": results}]},
+        "rrf": {"queries": [{"query_id": "q1", "results": results}]},
+    }
+
+
+BASE_RESULT = {"stable_id": "a", "user_id": "d14b-controlled-user", "version_id": "v1", "rank": 1}
+
+
+def test_snapshot_fails_when_non_topk_stable_id_disappears(tmp_path: Path) -> None:
+    """before/after retrieval identical, but truth loses a non-Top-K stable id."""
+    result = [BASE_RESULT]
+    before = mk_snapshot(["a", "b", "c"], ["v1"], result)
+    after = mk_snapshot(["a", "b"], ["v1"], result)
+
+    completed, report = compare(tmp_path, before, after)
+
+    assert completed.returncode != 0
+    assert report["sqlite_missing_stable_ids"] == ["c"]
+    assert report["missing_ids"] == []
+    assert report["status"] == "FAIL"
+
+
+def test_snapshot_fails_when_non_topk_stable_id_appears(tmp_path: Path) -> None:
+    result = [BASE_RESULT]
+    before = mk_snapshot(["a", "b"], ["v1"], result)
+    after = mk_snapshot(["a", "b", "c"], ["v1"], result)
+
+    completed, report = compare(tmp_path, before, after)
+
+    assert completed.returncode != 0
+    assert report["sqlite_unexpected_stable_ids"] == ["c"]
+    assert report["status"] == "FAIL"
+
+
+def test_snapshot_fails_when_active_version_disappears(tmp_path: Path) -> None:
+    result = [BASE_RESULT]
+    before = mk_snapshot(["a"], ["v1", "v2"], result)
+    after = mk_snapshot(["a"], ["v1"], result)
+
+    completed, report = compare(tmp_path, before, after)
+
+    assert completed.returncode != 0
+    assert report["sqlite_missing_active_version_ids"] == ["v2"]
+    assert report["status"] == "FAIL"
+
+
+def test_snapshot_fails_when_active_version_appears(tmp_path: Path) -> None:
+    result = [BASE_RESULT]
+    before = mk_snapshot(["a"], ["v1"], result)
+    after = mk_snapshot(["a"], ["v1", "v2"], result)
+
+    completed, report = compare(tmp_path, before, after)
+
+    assert completed.returncode != 0
+    assert report["sqlite_unexpected_active_version_ids"] == ["v2"]
+    assert report["status"] == "FAIL"
+
+
+def test_snapshot_fails_on_duplicate_before_baseline(tmp_path: Path) -> None:
+    duplicate = [BASE_RESULT, dict(BASE_RESULT)]
+    snapshot = mk_snapshot(["a"], ["v1"], duplicate)
+
+    completed, report = compare(tmp_path, snapshot, snapshot)
+
+    assert completed.returncode != 0
+    assert any(entry.get("side") == "before" for entry in report["duplicate_ids"])
+
+
+def test_snapshot_fails_on_cross_user_before_baseline(tmp_path: Path) -> None:
+    cross_user = [dict(BASE_RESULT, user_id="d14b-other-user")]
+    snapshot = mk_snapshot(["a"], ["v1"], cross_user)
+
+    completed, report = compare(tmp_path, snapshot, snapshot)
+
+    assert completed.returncode != 0
+    assert any(entry.get("side") == "before" for entry in report["cross_user_hits"])
+
+
+def test_snapshot_fails_on_stale_version_before_baseline(tmp_path: Path) -> None:
+    stale = [dict(BASE_RESULT, version_id="v9")]
+    snapshot = mk_snapshot(["a"], ["v1"], stale)
+
+    completed, report = compare(tmp_path, snapshot, snapshot)
+
+    assert completed.returncode != 0
+    assert any(entry.get("side") == "before" for entry in report["stale_version_hits"])
+
+
+def test_snapshot_fails_on_ghost_before_baseline(tmp_path: Path) -> None:
+    ghost = [dict(BASE_RESULT, stable_id="zz")]
+    snapshot = mk_snapshot(["a"], ["v1"], ghost)
+
+    completed, report = compare(tmp_path, snapshot, snapshot)
+
+    assert completed.returncode != 0
+    assert any(entry.get("side") == "before" for entry in report["ghost_hits"])
+
+
+def test_compare_rejects_existing_output_without_overwriting(tmp_path: Path) -> None:
+    snapshot = mk_snapshot(["a"], ["v1"], [BASE_RESULT])
+    before_path = write_json(tmp_path / "before.json", snapshot)
+    after_path = write_json(tmp_path / "after.json", snapshot)
+    output = tmp_path / "comparison.json"
+    output.write_text("fixed-bytes-sentinel\n", encoding="utf-8")
+
+    completed = run_script(
+        "compare_d14b_retrieval_snapshots.py",
+        "--before", str(before_path),
+        "--after", str(after_path),
+        "--output", str(output),
+    )
+
+    assert completed.returncode != 0
+    assert "不得覆盖" in completed.stderr
+    assert output.read_text(encoding="utf-8") == "fixed-bytes-sentinel\n"
+
+# ─────────────────────────── P1-3 / P2-1 provenance & package tests ──────────
+
+def sha256_bytes(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def make_capture_case(
+    tmp_path: Path,
+    *,
+    missing_handoff: bool = False,
+    omit_receipts: tuple[str, ...] = (),
+    handoff_channels: tuple[str, ...] = ("sqlite", "fts5", "vector", "rrf"),
+    receipt_overrides: dict[str, dict[str, object]] | None = None,
+    tamper_artifact: str | None = None,
+) -> dict[str, object]:
+    channel_result = {
+        "queries": [
+            {
+                "query_id": "q1",
+                "results": [
+                    {"stable_id": "a", "user_id": "d14b-controlled-user", "version_id": "v1", "rank": 1}
+                ],
+            }
+        ]
+    }
+    truth = {"stable_ids": ["a"], "active_version_ids": ["v1"]}
+    artifacts = {
+        "sqlite": write_json(tmp_path / "sqlite-truth.json", truth),
+        "fts5": write_json(tmp_path / "fts5.json", channel_result),
+        "vector": write_json(tmp_path / "vector.json", channel_result),
+        "rrf": write_json(tmp_path / "rrf.json", channel_result),
+    }
+    hashes = {ch: sha256_bytes(path.read_bytes()) for ch, path in artifacts.items()}
+    handoff_path: Path | None = None
+    if not missing_handoff:
+        handoff_path = write_json(
+            tmp_path / "capture-handoff.json",
+            {
+                "tested_commit": SHA,
+                "captures": {
+                    ch: {
+                        "runner_path": f"runner_{ch}.py",
+                        "runner_sha256": HASH,
+                        "command_id": f"d14b-{ch}-v1",
+                    }
+                    for ch in handoff_channels
+                },
+            },
+        )
+
+    receipts: dict[str, Path] = {}
+    for ch in ("sqlite", "fts5", "vector", "rrf"):
+        if ch in omit_receipts:
+            receipts[ch] = tmp_path / f"{ch}.receipt.json"
+            continue
+        overrides = (receipt_overrides or {}).get(ch, {})
+        receipt = {
+            "channel": ch,
+            "tested_commit": overrides.get("tested_commit", SHA),
+            "command_id": overrides.get("command_id", f"d14b-{ch}-v1"),
+            "runner_path": overrides.get("runner_path", f"runner_{ch}.py"),
+            "runner_sha256": overrides.get("runner_sha256", HASH),
+            "artifact_path": artifacts[ch].name,
+            "artifact_sha256": hashes[ch],
+            "captured_at_utc": "2026-09-08T00:00:00Z",
+        }
+        receipts[ch] = write_json(tmp_path / f"{ch}.receipt.json", receipt)
+    if tamper_artifact is not None:
+        path = artifacts[tamper_artifact]
+        path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    return {
+        "artifacts": artifacts,
+        "hashes": hashes,
+        "handoff": handoff_path,
+        "receipts": receipts,
+    }
+
+
+def run_capture(case: dict[str, object], output: Path) -> subprocess.CompletedProcess[str]:
+    args: list[str] = [
+        "--tested-commit", SHA,
+        "--checkpoint", "baseline",
+        "--user-id", "d14b-controlled-user",
+        "--captured-at-utc", "2026-09-08T00:00:00Z",
+    ]
+    if case["handoff"] is not None:
+        args += ["--capture-handoff", str(case["handoff"])]
+    artifacts = case["artifacts"]
+    receipts = case["receipts"]
+    args += ["--sqlite-truth", str(artifacts["sqlite"])]
+    args += ["--fts5-results", str(artifacts["fts5"])]
+    args += ["--vector-results", str(artifacts["vector"])]
+    args += ["--rrf-results", str(artifacts["rrf"])]
+    args += ["--sqlite-receipt", str(receipts["sqlite"])]
+    args += ["--fts5-receipt", str(receipts["fts5"])]
+    args += ["--vector-receipt", str(receipts["vector"])]
+    args += ["--rrf-receipt", str(receipts["rrf"])]
+    args += ["--output", str(output)]
+    return run_script("capture_d14b_retrieval_snapshot.py", *args)
+
+
+def test_capture_requires_capture_handoff(tmp_path: Path) -> None:
+    case = make_capture_case(tmp_path, missing_handoff=True)
+    completed = run_capture(case, tmp_path / "checkpoint.json")
+    assert completed.returncode != 0
+    assert "capture-handoff" in completed.stderr
+
+
+def test_capture_requires_a_receipt_for_every_channel(tmp_path: Path) -> None:
+    case = make_capture_case(tmp_path, omit_receipts=("sqlite", "fts5", "vector", "rrf"))
+    completed = run_capture(case, tmp_path / "checkpoint.json")
+    assert completed.returncode != 0
+    assert "receipt" in completed.stderr
+
+
+def test_capture_accepts_valid_handoff_and_receipts(tmp_path: Path) -> None:
+    case = make_capture_case(tmp_path)
+    output = tmp_path / "checkpoint.json"
+    completed = run_capture(case, output)
+    assert completed.returncode == 0, completed.stderr
+    checkpoint = json.loads(output.read_text(encoding="utf-8"))
+    assert checkpoint["sqlite"] == {"stable_ids": ["a"], "active_version_ids": ["v1"]}
+
+
+def test_capture_rejects_receipt_tested_commit_mismatch(tmp_path: Path) -> None:
+    case = make_capture_case(tmp_path, receipt_overrides={"fts5": {"tested_commit": OTHER_SHA}})
+    completed = run_capture(case, tmp_path / "checkpoint.json")
+    assert completed.returncode != 0
+    assert "tested_commit" in completed.stderr
+
+
+def test_capture_rejects_receipt_runner_sha_mismatch(tmp_path: Path) -> None:
+    case = make_capture_case(tmp_path, receipt_overrides={"vector": {"runner_sha256": "d" * 64}})
+    completed = run_capture(case, tmp_path / "checkpoint.json")
+    assert completed.returncode != 0
+    assert "runner_sha256" in completed.stderr
+
+
+def test_capture_rejects_receipt_command_id_mismatch(tmp_path: Path) -> None:
+    case = make_capture_case(tmp_path, receipt_overrides={"rrf": {"command_id": "wrong-command"}})
+    completed = run_capture(case, tmp_path / "checkpoint.json")
+    assert completed.returncode != 0
+    assert "command_id" in completed.stderr
+
+
+def test_capture_rejects_tampered_artifact_bytes(tmp_path: Path) -> None:
+    case = make_capture_case(tmp_path, tamper_artifact="sqlite")
+    completed = run_capture(case, tmp_path / "checkpoint.json")
+    assert completed.returncode != 0
+    assert "artifact_sha256" in completed.stderr
+
+
+def make_preflight_suite(tmp_path: Path) -> dict[str, object]:
+    repo, _ = make_clean_git_repo(tmp_path)
+    runner_shas: dict[str, str] = {}
+    for channel in ("sqlite", "fts5", "vector", "rrf"):
+        runner = repo / f"runner_{channel}.py"
+        runner.write_text(f"#!/usr/bin/env python3\n# {channel} runner\n", encoding="utf-8")
+        runner_shas[channel] = sha256_bytes(runner.read_bytes())
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True, text=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "runners"], check=True, capture_output=True, text=True)
+    commit = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+    capture_handoff = write_json(
+        tmp_path / "capture-handoff.json",
+        {
+            "tested_commit": commit,
+            "captures": {
+                channel: {
+                    "runner_path": f"runner_{channel}.py",
+                    "runner_sha256": runner_shas[channel],
+                    "command_id": f"d14b-{channel}-v1",
+                }
+                for channel in ("sqlite", "fts5", "vector", "rrf")
+            },
+        },
+    )
+
+    package_tar = tmp_path / "package.tar.gz"
+    package_tar.write_bytes(b"frozen-package-tar-bytes\n")
+    tar_sha = sha256_bytes(package_tar.read_bytes())
+    actual_manifest = tmp_path / "package_manifest.json"
+    manifest_value = {
+        "source_commit": commit,
+        "package_version": "0.1.0-d14a",
+        "package_tar_sha256": tar_sha,
+    }
+    actual_manifest.write_text(json.dumps(manifest_value), encoding="utf-8")
+    manifest_sha = sha256_bytes(actual_manifest.read_bytes())
+    manifest_value["package_manifest_sha256"] = manifest_sha
+    actual_manifest.write_text(json.dumps(manifest_value), encoding="utf-8")
+    manifest_sha = sha256_bytes(actual_manifest.read_bytes())
+
+    package = {
+        "package_version": "0.1.0-d14a",
+        "package_tar_sha256": tar_sha,
+        "package_manifest_sha256": manifest_sha,
+    }
+    vm = {
+        "vm_name": "Kylin-V11-2603-BTrack-Base",
+        "vm_uuid": "11111111-1111-1111-1111-111111111111",
+        "snapshot_name": "d14d-clean-base",
+        "snapshot_uuid": "22222222-2222-2222-2222-222222222222",
+        "environment_id": "d14d-l3",
+    }
+    d13d = write_json(
+        tmp_path / "d13d.json",
+        {"freeze_status": "FROZEN", "tested_commit": commit,
+         "freeze_reference": "https://evidence.example.invalid/d13d-seal"},
+    )
+    d14d = write_json(
+        tmp_path / "d14d.json",
+        {"release_status": "L3_READY", "tested_commit": commit,
+         "evidence_reference": "https://evidence.example.invalid/d14d-g9",
+         "package": package, "vm": vm},
+    )
+    manifest = write_json(tmp_path / "manifest.json", {"source_commit": commit, **package})
+    return {
+        "repo_root": repo,
+        "commit": commit,
+        "d13d": d13d,
+        "d14d": d14d,
+        "manifest": manifest,
+        "capture_handoff": capture_handoff,
+        "package_tar": package_tar,
+        "actual_package_manifest": actual_manifest,
+        "evidence_root": tmp_path / "new-evidence",
+        "runner_paths": {channel: repo / f"runner_{channel}.py" for channel in ("sqlite", "fts5", "vector", "rrf")},
+    }
+
+
+def resync_package_manifest_sha(case: dict[str, object]) -> None:
+    """Point the handoff identity at the (modified) actual manifest bytes so a
+    test can exercise a semantic mismatch instead of the byte gate."""
+    new_sha = sha256_bytes(case["actual_package_manifest"].read_bytes())
+    for key in ("d14d", "manifest"):
+        payload = json.loads(case[key].read_text(encoding="utf-8"))
+        if key == "d14d":
+            payload["package"]["package_manifest_sha256"] = new_sha
+        else:
+            payload["package_manifest_sha256"] = new_sha
+        write_json(case[key], payload)
+
+
+def run_preflight_suite(
+    case: dict[str, object], *, extra: tuple[str, ...] = ()
+) -> subprocess.CompletedProcess[str]:
+    return run_script(
+        "run_d14b_preflight.py",
+        "--expected-tested-commit", str(case["commit"]),
+        "--d13d-handoff", str(case["d13d"]),
+        "--d14d-handoff", str(case["d14d"]),
+        "--package-manifest", str(case["manifest"]),
+        "--repo-root", str(case["repo_root"]),
+        "--evidence-root", str(case["evidence_root"]),
+        "--capture-handoff", str(case["capture_handoff"]),
+        "--package-tar", str(case["package_tar"]),
+        "--actual-package-manifest", str(case["actual_package_manifest"]),
+        *extra,
+    )
+
+
+def test_preflight_rejects_missing_capture_handoff(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    completed = run_script(
+        "run_d14b_preflight.py",
+        "--expected-tested-commit", str(case["commit"]),
+        "--d13d-handoff", str(case["d13d"]),
+        "--d14d-handoff", str(case["d14d"]),
+        "--package-manifest", str(case["manifest"]),
+        "--repo-root", str(case["repo_root"]),
+        "--evidence-root", str(case["evidence_root"]),
+    )
+    assert completed.returncode != 0
+    assert "capture-handoff" in completed.stderr
+
+
+def test_preflight_rejects_missing_one_channel_runner(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    handoff = json.loads(case["capture_handoff"].read_text(encoding="utf-8"))
+    del handoff["captures"]["rrf"]
+    write_json(case["capture_handoff"], handoff)
+
+    completed = run_preflight_suite(case)
+
+    assert completed.returncode != 0
+    assert "rrf" in completed.stderr
+
+
+def test_preflight_rejects_missing_runner_file(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    handoff = json.loads(case["capture_handoff"].read_text(encoding="utf-8"))
+    handoff["captures"]["sqlite"]["runner_path"] = "missing_runner.py"
+    write_json(case["capture_handoff"], handoff)
+
+    completed = run_preflight_suite(case)
+
+    assert completed.returncode != 0
+    assert "不可定位" in completed.stderr
+
+
+def test_preflight_rejects_runner_sha_mismatch_in_handoff(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    handoff = json.loads(case["capture_handoff"].read_text(encoding="utf-8"))
+    handoff["captures"]["fts5"]["runner_sha256"] = "d" * 64
+    write_json(case["capture_handoff"], handoff)
+
+    completed = run_preflight_suite(case)
+
+    assert completed.returncode != 0
+    assert "runner_sha256" in completed.stderr
+
+
+def test_preflight_rejects_tampered_package_tar(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    case["package_tar"].write_bytes(b"tampered-tar\n")
+
+    completed = run_preflight_suite(case)
+
+    assert completed.returncode != 0
+    assert "tar SHA-256" in completed.stderr
+
+
+def test_preflight_rejects_tampered_package_manifest(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    case["actual_package_manifest"].write_text('{"tampered": true}\n', encoding="utf-8")
+
+    completed = run_preflight_suite(case)
+
+    assert completed.returncode != 0
+    assert "manifest SHA-256" in completed.stderr
+
+
+def test_preflight_rejects_package_manifest_source_commit_mismatch(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    manifest = json.loads(case["actual_package_manifest"].read_text(encoding="utf-8"))
+    manifest["source_commit"] = OTHER_SHA
+    case["actual_package_manifest"].write_text(json.dumps(manifest), encoding="utf-8")
+    resync_package_manifest_sha(case)
+    completed = run_preflight_suite(case)
+    assert completed.returncode != 0
+    assert "source_commit" in completed.stderr
+
+
+def test_preflight_rejects_package_manifest_version_mismatch(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    manifest = json.loads(case["actual_package_manifest"].read_text(encoding="utf-8"))
+    manifest["package_version"] = "9.9.9"
+    case["actual_package_manifest"].write_text(json.dumps(manifest), encoding="utf-8")
+    resync_package_manifest_sha(case)
+    completed = run_preflight_suite(case)
+    assert completed.returncode != 0
+    assert "package_version" in completed.stderr
