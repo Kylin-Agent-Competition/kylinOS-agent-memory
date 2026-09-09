@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Compare two D14B retrieval snapshots without mutating any state."""
+"""Compare two D14B retrieval snapshots without mutating any state.
+
+Scope: invariant checkpoint comparator for service restart / rebuild / OS
+reboot.  Delete uses its own residual/control checks, not this comparator.
+"""
 
 from __future__ import annotations
 
@@ -23,7 +27,12 @@ VIOLATIONS = (
     "cross_user_hits",
     "stale_version_hits",
     "ghost_hits",
+    "sqlite_missing_stable_ids",
+    "sqlite_unexpected_stable_ids",
+    "sqlite_missing_active_version_ids",
+    "sqlite_unexpected_active_version_ids",
 )
+SIDE_CHECKS = ("duplicate_ids", "cross_user_hits", "stale_version_hits", "ghost_hits")
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -86,12 +95,44 @@ def _truth(snapshot: dict[str, Any]) -> tuple[str, set[str], set[str]]:
     return user_id, set(stable_ids), set(active_versions)
 
 
+def _validate_side(
+    side: str,
+    user_id: str,
+    truth_ids: set[str],
+    versions: set[str],
+    queries_by_channel: dict[str, dict[str, list[dict[str, Any]]]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Baseline sanity for one snapshot side (before or after).
+
+    Detects duplicate / cross-user / stale-version / ghost hits within a single
+    side.  Both sides are validated so an abnormal baseline cannot hide behind
+    an unchanged retrieval result set.
+    """
+    found: dict[str, list[dict[str, Any]]] = {key: [] for key in SIDE_CHECKS}
+    for channel in CHANNELS:
+        for query_id in sorted(queries_by_channel.get(channel, {})):
+            seen: set[str] = set()
+            for result in queries_by_channel[channel][query_id]:
+                stable_id = result["stable_id"]
+                context = {"channel": channel, "query_id": query_id, "side": side, "stable_id": stable_id}
+                if stable_id in seen:
+                    found["duplicate_ids"].append(context)
+                seen.add(stable_id)
+                if result["user_id"] != user_id:
+                    found["cross_user_hits"].append(context)
+                if result["version_id"] not in versions:
+                    found["stale_version_hits"].append(context)
+                if stable_id not in truth_ids:
+                    found["ghost_hits"].append(context)
+    return found
+
+
 def compare(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     if _text(before.get("tested_commit"), "before.tested_commit") != _text(
         after.get("tested_commit"), "after.tested_commit"
     ):
         raise SnapshotError("before/after tested_commit 不一致")
-    before_user, _, _ = _truth(before)
+    before_user, before_truth_ids, before_versions = _truth(before)
     after_user, after_truth_ids, after_versions = _truth(after)
     if before_user != after_user:
         raise SnapshotError("before/after user_id 不一致")
@@ -100,9 +141,25 @@ def compare(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     report["tested_commit"] = before["tested_commit"]
     report["user_id"] = before_user
 
+    # SQLite truth must be compared mechanically on both sides; a non-Top-K
+    # object disappearing/appearing from the truth source is a FAIL even when
+    # every retrieval Top-K is unchanged.
+    report["sqlite_missing_stable_ids"] = sorted(before_truth_ids - after_truth_ids)
+    report["sqlite_unexpected_stable_ids"] = sorted(after_truth_ids - before_truth_ids)
+    report["sqlite_missing_active_version_ids"] = sorted(before_versions - after_versions)
+    report["sqlite_unexpected_active_version_ids"] = sorted(after_versions - before_versions)
+
+    before_channels = {channel: _query_results(before, channel) for channel in CHANNELS}
+    after_channels = {channel: _query_results(after, channel) for channel in CHANNELS}
+
+    before_side = _validate_side("before", before_user, before_truth_ids, before_versions, before_channels)
+    after_side = _validate_side("after", after_user, after_truth_ids, after_versions, after_channels)
+    for key in SIDE_CHECKS:
+        report[key] = before_side[key] + after_side[key]
+
     for channel in CHANNELS:
-        previous_queries = _query_results(before, channel)
-        current_queries = _query_results(after, channel)
+        previous_queries = before_channels[channel]
+        current_queries = after_channels[channel]
         for query_id in sorted(set(previous_queries) | set(current_queries)):
             previous = previous_queries.get(query_id, [])
             current = current_queries.get(query_id, [])
@@ -116,19 +173,6 @@ def compare(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
                 report["missing_ids"].append({**context, "stable_id": stable_id})
             for stable_id in sorted(current_ids - previous_ids):
                 report["unexpected_ids"].append({**context, "stable_id": stable_id})
-
-            seen: set[str] = set()
-            for result in current:
-                stable_id = result["stable_id"]
-                if stable_id in seen:
-                    report["duplicate_ids"].append({**context, "stable_id": stable_id})
-                seen.add(stable_id)
-                if result["user_id"] != after_user:
-                    report["cross_user_hits"].append({**context, "stable_id": stable_id})
-                if result["version_id"] not in after_versions:
-                    report["stale_version_hits"].append({**context, "stable_id": stable_id})
-                if stable_id not in after_truth_ids:
-                    report["ghost_hits"].append({**context, "stable_id": stable_id})
 
             for stable_id in sorted(previous_ids & current_ids):
                 if previous_by_id[stable_id]["rank"] != current_by_id[stable_id]["rank"]:
@@ -153,7 +197,14 @@ def main() -> int:
     except SnapshotError as error:
         print(f"D14B_SNAPSHOT_COMPARE_FAIL: {error}", file=sys.stderr)
         return 2
-    args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    payload = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    # Exclusive create: comparison evidence must never overwrite existing bytes.
+    try:
+        with args.output.open("x", encoding="utf-8") as handle:
+            handle.write(payload)
+    except FileExistsError:
+        print("D14B_SNAPSHOT_COMPARE_FAIL: output 已存在，不得覆盖", file=sys.stderr)
+        return 2
     return 0 if report["status"] == "PASS" else 1
 
 
