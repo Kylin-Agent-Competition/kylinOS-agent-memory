@@ -1854,7 +1854,7 @@ entries:
     source: "evidence/l2-kylin-vm/d15c_20260908/td007_outbound_tool_invocation.json"
     report: "docs/day15/02_d15c_c_to_d_handoff_memo_20260907.md"
     tested_commit: "5a89601"
-    evidence_commit: "pending"
+    evidence_commit: "e4ed61b4f3770c927aa371d7421591ce67d251e1"
     runtime_result: "VERIFIED"
     review_status: "PENDING"
     merge_qualified: false
@@ -1874,7 +1874,7 @@ entries:
     source: "evidence/l2-kylin-vm/d15c_20260908/td008_chatasync_input_analysis.md"
     report: "docs/day15/02_d15c_c_to_d_handoff_memo_20260907.md"
     tested_commit: "5a89601"
-    evidence_commit: "pending"
+    evidence_commit: "e4ed61b4f3770c927aa371d7421591ce67d251e1"
     runtime_result: "AMBIGUOUS"
     review_status: "PENDING"
     merge_qualified: false
@@ -1894,7 +1894,7 @@ entries:
     source: "evidence/l2-kylin-vm/d15c_20260908/td009_execution_path.md"
     report: "docs/day15/02_d15c_c_to_d_handoff_memo_20260907.md"
     tested_commit: "5a89601"
-    evidence_commit: "pending"
+    evidence_commit: "e4ed61b4f3770c927aa371d7421591ce67d251e1"
     runtime_result: "OUTBOUND_VERIFIED; INBOUND_BLOCKED; CANCEL_NOT_OBSERVED"
     review_status: "PENDING"
     merge_qualified: false
@@ -1912,7 +1912,7 @@ entries:
     source: "evidence/l2-kylin-vm/d15c_20260908/rollback_verification.md"
     report: "docs/day15/02_d15c_c_to_d_handoff_memo_20260907.md"
     tested_commit: "5a89601"
-    evidence_commit: "pending"
+    evidence_commit: "e4ed61b4f3770c927aa371d7421591ce67d251e1"
     runtime_result: "PASS"
     review_status: "PENDING"
     merge_qualified: false
