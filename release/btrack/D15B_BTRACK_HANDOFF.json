@@ -1,8 +1,11 @@
 {
   "schema": "d15b-btrack-handoff/v1",
   "b_track_status": "BLOCKED_NOT_COMPLETE",
-  "d15b_pr": null,
-  "d15b_head": "PENDING_REVIEW_AND_FINAL_FREEZE",
+  "d15b_pr": 173,
+  "d15b_pr_url": "https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/173",
+  "d15b_branch": "docs/D15B-retrieval-finalization",
+  "d15b_handoff_source_head": "773694f3791c38e73787a6160dd4ed8759974513",
+  "d15b_final_freeze_head": "PENDING_INDEPENDENT_REVIEW_AND_RELEASE_DECISION",
   "d14b": {
     "pr": 124,
     "merge_sha": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",

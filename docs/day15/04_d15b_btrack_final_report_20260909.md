@@ -13,6 +13,8 @@ B_TRACK_MANIFEST = NOT_FROZEN
 
 把以上任何一项写成 PASS、FROZEN 或 COMPLETE 都会把候选/替代验证错误升级为正式发布结论。
 
+本报告对应 Draft PR [#173](https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/173)，分支为 `docs/D15B-retrieval-finalization`。交接文件记录其产生时的 source head；最终冻结 head 只能在独立审查和发布裁定后填写。
+
 ## 范围与当前组件身份
 
 本次范围仅为 SQLite truth、FTS5、Vector、RRF/hybrid、删除/重建生命周期、D13B evaluator、D14B harness、D9 eval inputs 和 B 轨 evidence/manifest。组件清单及其状态见 [`d15b_btrack_inventory.json`](d15b_btrack_inventory.json)。
