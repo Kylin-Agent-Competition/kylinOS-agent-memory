@@ -120,9 +120,7 @@ SNAPSHOT_FACTS = (
     "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
     "7445c2ee2753100f46d0d8062f28ccf0aed22aad",
     "77319aa4ce75d7f7fe4d7ed64f7332cffdb88441",
-    "404c7e1cadd188d8e64547c992a77bec28e457e2",
     "8fbc705c6b9d1e8966ec688d0dfda9a509dc0f20",
-    "4ec2b74a06606da078d58250a089e4f454aea8f1",
     "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
     "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0",
     "8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67",
@@ -139,8 +137,8 @@ SNAPSHOT_FACTS = (
     "BLOCKED_PENDING_D15C_HANDOFF",
     "RUNTIME_NOT_REQUIRED",
     "72950fd59bf5fddbfe12d4daad9f040ea227e5f9",
-    "34b1acb84eb203147e8757ff09391604d6e5c5ed",
-    "e4ed61b4f3770c927aa371d7421591ce67d251e1",
+    "b5f8154b9e510c10124e84ecf70d608e4fee7896",
+    "a4034c9cdab1de31f70bced73dcab8ff2b18407c",
 )
 
 # 覆盖项 9：文档引用的 evidence 路径（fail-closed 磁盘存在性检查）。
@@ -306,7 +304,7 @@ def _assert_d14c_association(text: str) -> None:
     """HIGH-03：§6 D14C 行级 provenance 绑定。
 
     必须绑定 PR #156 / test/D14C-l3-clean-vm-release-regression / 77319aa4…；
-    禁止错绑 PR #167 / 404c7e1…。
+    禁止错绑 PR #167 / feat/C-hook-evidence / D15C current SHA。
     """
     row = _upstream_row(text, "D14C")
     for token in (
@@ -315,30 +313,41 @@ def _assert_d14c_association(text: str) -> None:
         "test/D14C-l3-clean-vm-release-regression",
     ):
         assert token in row, "§6 D14C 行缺少绑定 token {0}: {1}".format(token, row)
-    for token in ("PR #167", "404c7e1cadd188d8e64547c992a77bec28e457e2"):
+    for token in (
+        "PR #167",
+        "404c7e1cadd188d8e64547c992a77bec28e457e2",
+        "feat/C-hook-evidence",
+        "b5f8154b9e510c10124e84ecf70d608e4fee7896",
+        "a4034c9cdab1de31f70bced73dcab8ff2b18407c",
+    ):
         assert token not in row, "§6 D14C 行出现禁止 token（错绑）{0}: {1}".format(token, row)
 
 
 def _assert_d15c_association(text: str) -> None:
     """HIGH-03：§6 D15C 行级 provenance 绑定。
 
-    必须绑定 PR #167 / feat/C-hook-evidence / 404c7e1…；禁止写成「无该产物」。
+    必须绑定 PR #167 / feat/C-hook-evidence / b5f8154… / a4034c9…；禁止写成
+    「无该产物」「NON_MAIN_BRANCH」「review 未闭合」。
     """
     row = _upstream_row(text, "D15C")
     for token in (
         "PR #167",
-        "404c7e1cadd188d8e64547c992a77bec28e457e2",
         "feat/C-hook-evidence",
+        "b5f8154b9e510c10124e84ecf70d608e4fee7896",
+        "a4034c9cdab1de31f70bced73dcab8ff2b18407c",
+        "HANDOFF_SUBMITTED",
+        "已合入 main",
     ):
         assert token in row, "§6 D15C 行缺少绑定 token {0}: {1}".format(token, row)
-    assert "无该产物" not in row, "§6 D15C 行被写成无产物: {0}".format(row)
+    for token in ("无该产物", "NON_MAIN_BRANCH", "review 未闭合", "NOT_MERGED"):
+        assert token not in row, "§6 D15C 行出现禁止 token {0}: {1}".format(token, row)
 
 
 def _assert_c6_association(text: str) -> None:
     """HIGH-03：§5 C6 行级 provenance 绑定。
 
     必须绑定 PR #156 / test/D14C-l3-clean-vm-release-regression / 77319aa4…；
-    禁止错绑 PR #167 / 404c7e1…。
+    禁止错绑 PR #167 / feat/C-hook-evidence / D15C current SHA。
     """
     row = _c6_row(text)
     for token in (
@@ -347,15 +356,22 @@ def _assert_c6_association(text: str) -> None:
         "test/D14C-l3-clean-vm-release-regression",
     ):
         assert token in row, "§5 C6 行缺少绑定 token {0}: {1}".format(token, row)
-    for token in ("PR #167", "404c7e1cadd188d8e64547c992a77bec28e457e2"):
+    for token in (
+        "PR #167",
+        "404c7e1cadd188d8e64547c992a77bec28e457e2",
+        "feat/C-hook-evidence",
+        "b5f8154b9e510c10124e84ecf70d608e4fee7896",
+        "a4034c9cdab1de31f70bced73dcab8ff2b18407c",
+    ):
         assert token not in row, "§5 C6 行出现禁止 token（错绑）{0}: {1}".format(token, row)
 
 
 def _assert_final_lock_trigger_association(text: str) -> None:
     """HIGH-03：§7 触发条件行级 provenance 绑定。
 
-    D14C 闭合前置行只绑定 PR #156 / test/D14C… / 77319aa4…（禁止 PR #167、404c7e1…）；
-    D15C handoff 前置行必须绑定 PR #167 / feat/C-hook-evidence / 404c7e1…。
+    D14C 闭合前置行只绑定 PR #156 / test/D14C… / 77319aa4…（禁止 PR #167 /
+    feat/C-hook-evidence / D15C current SHA）；D15C handoff 前置行必须绑定
+    PR #167 / feat/C-hook-evidence / b5f8154… / a4034c9…。
     """
     d14c_line = _final_lock_d14c_line(text)
     for token in (
@@ -366,15 +382,23 @@ def _assert_final_lock_trigger_association(text: str) -> None:
         assert token in d14c_line, (
             "§7 D14C 闭合前置行缺少绑定 token {0}: {1}".format(token, d14c_line)
         )
-    for token in ("PR #167", "404c7e1cadd188d8e64547c992a77bec28e457e2"):
+    for token in (
+        "PR #167",
+        "404c7e1cadd188d8e64547c992a77bec28e457e2",
+        "feat/C-hook-evidence",
+        "b5f8154b9e510c10124e84ecf70d608e4fee7896",
+        "a4034c9cdab1de31f70bced73dcab8ff2b18407c",
+    ):
         assert token not in d14c_line, (
             "§7 D14C 闭合前置行出现禁止 token（错绑）{0}: {1}".format(token, d14c_line)
         )
     d15c_line = _final_lock_d15c_line(text)
     for token in (
         "PR #167",
-        "404c7e1cadd188d8e64547c992a77bec28e457e2",
         "feat/C-hook-evidence",
+        "b5f8154b9e510c10124e84ecf70d608e4fee7896",
+        "a4034c9cdab1de31f70bced73dcab8ff2b18407c",
+        "HANDOFF_SUBMITTED",
     ):
         assert token in d15c_line, (
             "§7 D15C handoff 前置行缺少绑定 token {0}: {1}".format(token, d15c_line)
@@ -533,7 +557,8 @@ def test_d14c_d15c_provenance_association() -> None:
 
     §6 D14C 行与 §5 C6 行只绑定 PR #156 / test/D14C… / 77319aa4…；
     §6 D15C 行与 §7 D15C handoff 前置行绑定 PR #167 / feat/C-hook-evidence /
-    404c7e1…；§7 D14C 闭合前置行只绑定 PR #156 / test/D14C… / 77319aa4…。
+    b5f8154… / a4034c9…；§7 D14C 闭合前置行只绑定 PR #156 / test/D14C… /
+    77319aa4…。
     """
     _assert_d14c_association(_TEXT)
     _assert_d15c_association(_TEXT)
@@ -560,7 +585,7 @@ def test_reverse_drift_d14c_row_bound_to_pr167_rejected() -> None:
 def test_reverse_drift_d15c_row_no_artifact_rejected() -> None:
     """反向漂移 2：把 §6 D15C 行写成「不适用（无该产物）」后守卫必须抛 AssertionError。
 
-    漂移行仍保留 PR #167 / feat/C-hook-evidence / 404c7e1… 绑定，仅把产物
+    漂移行仍保留 PR #167 / feat/C-hook-evidence / b5f8154… / a4034c9… 绑定，仅把产物
     状态写成无产物；先自检注入真实生效，再断言守卫判别力。
     """
     row = _upstream_row(_TEXT, "D15C")
