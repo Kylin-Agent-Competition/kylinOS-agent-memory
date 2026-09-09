@@ -1,13 +1,14 @@
-# D14B B 轨替代路线收口报告（2026-09-09）
+# D14B BTrack 替代工程验证报告（2026-09-09）
 
 ## 1. 路线裁定
 
-本批按负责人授权，**放弃继续等待或在 D14D cleanVM 上执行的路线**，改以现有
-`Kylin-V11-2603-BTrack-Base` 作为 B 轨替代验证环境，完成 D14B 的工程验收。
+本批使用 `Kylin-V11-2603-BTrack-Base` 作为 B 轨替代验证环境，记录当前实现级
+工程验证结果。该结果不改变 D14B 原始的 D14D cleanVM Formal L3 完成定义，也不构成
+正式 scope-change 或 waiver。
 
-该决定不把 BTrack 冒充 D14D，也不把结果写成 D14D Formal L3；它只定义本 PR 的
-B 轨替代交付边界：在同一 tested commit 上，用真实 Vector Engine、真实 SQLite/FTS5、
-真实 RRF 编排和真实 service/OS restart 完成可复现的检索与索引全生命周期验证。
+替代验证的边界是：在同一 tested commit 上，用真实 Vector Engine、真实 SQLite/FTS5、
+真实 RRF 编排和真实 service/OS restart 完成可复现的检索与索引生命周期验证；它只能
+作为 `PASS_WITH_LIMITATIONS` 的工程证据，不能关闭 Formal L3。
 
 ## 2. 替代环境身份与边界
 
@@ -19,8 +20,8 @@ B 轨替代交付边界：在同一 tested commit 上，用真实 Vector Engine�
 - 原始替代日志与摘要：VM `~/d14b-substitute-20260909/`
 
 限制：该 VM 不是 D14D cleanVM；未使用 D14D 身份、冻结 package bytes、正式 handoff
-或 Formal evidence root。因此下文结论是 `BTRACK_SUBSTITUTE_PASS`，不是
-`D14D_FORMAL_L3_VERIFIED`。
+或 Formal evidence root。因此下文结论是 `BTRACK_SUBSTITUTE_VALIDATION =
+PASS_WITH_LIMITATIONS`，不是 `D14D_FORMAL_L3_VERIFIED`。
 
 ## 3. 验证结果
 
@@ -37,13 +38,18 @@ B 轨替代交付边界：在同一 tested commit 上，用真实 Vector Engine�
 | Vector OS reboot 持久化 | PASS | guest reboot 后重新加载 DB，`(301,v1),(302,v2)` 与 reboot 前完全一致 |
 | 性能采样 | 已记录 | 500 条语料、30 次/通道：FTS5 P50/P95 `5.630/10.027 ms`；Vector `107.234/148.725 ms`；RRF `2.547/5.473 ms` |
 
-## 4. 替代验收结论
+## 4. 替代验证结论
 
-`D14B_BTRACK_SUBSTITUTE = COMPLETE`
+```text
+BTRACK_SUBSTITUTE_VALIDATION = PASS_WITH_LIMITATIONS
+D14B_FORMAL_L3 = NOT_RUN / UNVERIFIED
+D14B_TASK = PARTIAL / BLOCKED_ON_FORMAL_ENV
+```
 
-本 PR 范围内 B 轨检索与索引生命周期已完成替代验收：持久化、重建、删除无残留、
-跨用户隔离、服务重启、OS 重启、RRF 融合和性能采样均有当前 tested commit 的
-BTrack 实测结果。没有未完成的 B 轨实现项需要等待 D14D 才能继续。
+本报告证明当前 B 轨实现具备替代环境下的工程回归结果：持久化、重建、删除无残留、
+跨用户隔离、服务重启、OS 重启、RRF 融合和性能采样均有记录；但不修改 D14B 原始
+完成定义，不关闭 Formal L3，也不构成 D14B task COMPLETE。后续仍需 Formal L3，或
+先取得正式 scope-change / waiver。
 
 ## 5. 明确未宣称事项
 

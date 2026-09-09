@@ -150,9 +150,9 @@ checkpoint 的 `capture_sources` 扩展为可独立复核的 provenance 摘要�
 ```
 
 receiver/reviewer 离线复算规则：root 内 handoff/receipt bytes 必须与 checkpoint 登记的
-SHA 一致；`CHECKPOINTS.json` 是不可缺失的 checkpoint inventory，verifier 只从该清单
-获得 checkpoint 路径并逐个做 schema + provenance 校验，同时拒绝任何未登记的
-`capture_sources` JSON。全部文件（含 provenance）都经
+SHA 一致。`REQUIRED_CHECKPOINTS` 是 verifier 唯一的 gate authority，直接固定并验证
+上述七个路径；若保留 `CHECKPOINTS.json`，它只能作为可读 summary，不是 checkpoint
+inventory SSOT。verifier 同时拒绝任何未登记的 `capture_sources` JSON。全部文件（含 provenance）都经
 `verify_d14b_evidence_manifest.py` 的 SHA256SUMS 闭合；缺失、未登记或篡改任何
 retained provenance bytes 即 FAIL。
 

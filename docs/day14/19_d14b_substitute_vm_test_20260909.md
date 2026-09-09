@@ -81,11 +81,13 @@ worktree=clean
 
 ```text
 SUBSTITUTE_RESULT=PASS_WITH_LIMITATIONS
+BTRACK_SUBSTITUTE_VALIDATION=PASS_WITH_LIMITATIONS
 D14B_HARNESS=PASS (62/62)
 SERVICE_RESTART=PASS_WITH_STARTUP_DELAY
 OS_REBOOT=PASS_WITH_BOOT_LATENCY_NOTE
 POST_REBOOT_CHECKOUT=PASS (exact commit + clean)
 D14B_FORMAL_L3=NOT_RUN / UNVERIFIED
+D14B_TASK=PARTIAL / BLOCKED_ON_FORMAL_ENV
 ```
 
 该结果证明当前 commit 在 BTrack VM 上具备可继续推进的实现级回归和生命周期恢复能力。
@@ -110,4 +112,3 @@ kylin-memory-a-d14a-0.1.0-d14a-ba3b50e.tar.gz
 - harness 结果证明测试工具和 B 轨逻辑门禁，不等于冻结发布包上的完整生产数据面、跨用户隔离和正式性能阈值通过。
 
 因此本报告可以作为替代工程验收和风险定位材料，但不得升级为 `D14B_FORMAL_L3=PASS` 或 `D14D_L3_READY` 的新证据。
-
