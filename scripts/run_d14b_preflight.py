@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Fail-closed D14B formal L3 handoff preflight.
 
-The command only validates a D13D/D14D handoff.  It never creates an
+The command only validates a D13D/D14D handoff, the production capture
+provenance and the frozen package artifact bytes.  It never creates an
 evidence root or runs a VM command.  A zero exit code is permission to start
 the *next* formal-run step, not a D14B result.
 """
@@ -15,11 +16,11 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
-
+from typing import Any, Optional
 
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+CAPTURE_CHANNELS = ("sqlite", "fts5", "vector", "rrf")
 
 
 class PreflightError(ValueError):
@@ -53,6 +54,13 @@ def _sha256(value: str, label: str) -> str:
     if not SHA256_RE.fullmatch(value):
         raise PreflightError(f"{label} 必须是 64 位小写 SHA-256")
     return value
+
+
+def _sha256_file(path: Path, label: str) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as error:
+        raise PreflightError(f"无法读取 {label}: {error}") from error
 
 
 def _reference(value: str, label: str, repo_root: Path) -> str:
@@ -128,9 +136,91 @@ def _verify_runner(d14d: dict[str, Any], repo_root: Path) -> None:
         raise PreflightError("D14D handoff.runner.path 不得越出 repo_root") from error
     if not candidate.is_file():
         raise PreflightError("D14D handoff.runner.path 不可定位")
-    actual_sha = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    actual_sha = _sha256_file(candidate, "D14D handoff.runner")
     if actual_sha != expected_sha:
         raise PreflightError("D14B runner SHA-256 与 handoff 不一致")
+
+
+def _verify_capture_handoff(
+    capture_handoff: dict[str, Any],
+    repo_root: Path,
+    expected_commit: str,
+) -> None:
+    """Machine gate: the four production capture runners must be pinned.
+
+    SQLite/FTS5/Vector/RRF source artifacts may only be assembled by approved
+    runners, so the handoff must pin each runner path, its SHA-256 and a
+    non-empty command id, all bound to the tested commit.
+    """
+
+    if _commit(
+        _required_text(capture_handoff, "tested_commit", "d14b-capture-handoff"),
+        "d14b-capture-handoff tested_commit",
+    ) != expected_commit:
+        raise PreflightError("d14b-capture-handoff tested_commit 与 formal tested_commit 不一致")
+    captures = capture_handoff.get("captures")
+    if not isinstance(captures, dict):
+        raise PreflightError("d14b-capture-handoff.captures 必须是 object")
+    if set(captures) != set(CAPTURE_CHANNELS):
+        missing = ", ".join(sorted(set(CAPTURE_CHANNELS) - set(captures)))
+        extra = ", ".join(sorted(set(captures) - set(CAPTURE_CHANNELS)))
+        raise PreflightError(
+            "d14b-capture-handoff 必须且只能声明 sqlite/fts5/vector/rrf 四类 runner"
+            + (f"；缺失: {missing}" if missing else "")
+            + (f"；多余: {extra}" if extra else "")
+        )
+    for channel in CAPTURE_CHANNELS:
+        entry = captures[channel]
+        if not isinstance(entry, dict):
+            raise PreflightError(f"d14b-capture-handoff.captures.{channel} 必须是 object")
+        relative_path = _required_text(entry, "runner_path", f"capture {channel}")
+        command_id = _required_text(entry, "command_id", f"capture {channel}")
+        expected_sha = _sha256(
+            _required_text(entry, "runner_sha256", f"capture {channel}"),
+            f"capture {channel}.runner_sha256",
+        )
+        candidate = (repo_root / relative_path).resolve()
+        try:
+            candidate.relative_to(repo_root.resolve())
+        except ValueError as error:
+            raise PreflightError(f"capture {channel}.runner_path 不得越出 repo_root") from error
+        if not candidate.is_file():
+            raise PreflightError(f"capture {channel}.runner_path 不可定位")
+        actual_sha = _sha256_file(candidate, f"capture {channel} runner")
+        if actual_sha != expected_sha:
+            raise PreflightError(f"capture {channel}.runner_sha256 与实际文件不一致")
+
+
+def _verify_package_bytes(
+    package_tar: Path,
+    actual_manifest: Path,
+    expected_package: dict[str, str],
+    expected_commit: str,
+) -> None:
+    """Verify the actual frozen package bytes on disk, not only metadata."""
+
+    tar_sha = _sha256_file(package_tar, "actual package tar")
+    if tar_sha != expected_package["package_tar_sha256"]:
+        raise PreflightError("actual package tar SHA-256 与冻结值不一致")
+    manifest_sha = _sha256_file(actual_manifest, "actual package manifest")
+    if manifest_sha != expected_package["package_manifest_sha256"]:
+        raise PreflightError("actual package manifest SHA-256 与冻结值不一致")
+    try:
+        manifest = json.loads(actual_manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise PreflightError(f"actual package manifest 解析失败: {error}") from error
+    if not isinstance(manifest, dict):
+        raise PreflightError("actual package manifest 必须是 JSON object")
+    if _commit(
+        _required_text(manifest, "source_commit", "actual package manifest"),
+        "actual package manifest source_commit",
+    ) != expected_commit:
+        raise PreflightError("actual package manifest source_commit 与 formal tested_commit 不一致")
+    if (
+        _required_text(manifest, "package_version", "actual package manifest")
+        != expected_package["package_version"]
+    ):
+        raise PreflightError("actual package manifest package_version 与冻结值不一致")
 
 
 def validate_preflight(
@@ -141,6 +231,9 @@ def validate_preflight(
     manifest: dict[str, Any],
     repo_root: Path,
     evidence_root: Path,
+    capture_handoff: Optional[dict[str, Any]] = None,
+    package_tar: Optional[Path] = None,
+    actual_package_manifest: Optional[Path] = None,
 ) -> dict[str, Any]:
     """Validate all identity gates and return a deterministic success report."""
 
@@ -181,6 +274,17 @@ def validate_preflight(
         raise PreflightError("worktree 非干净，formal run 必须停止")
     _verify_runner(d14d, repo_root)
 
+    # Production capture provenance is mandatory: the four source artifacts
+    # must be produced by approved, pinned runners (machine gate).
+    if capture_handoff is None:
+        raise PreflightError("缺少 d14b-capture-handoff：SQLite/FTS5/Vector/RRF 四类 runner 必须机器可验证")
+    _verify_capture_handoff(capture_handoff, repo_root, expected)
+
+    # Actual frozen package bytes must be verified on the spot.
+    if package_tar is None or actual_package_manifest is None:
+        raise PreflightError("缺少 actual package tar/manifest：必须现场校验冻结包字节")
+    _verify_package_bytes(package_tar, actual_package_manifest, d14d_package, expected)
+
     return {
         "status": "PASS",
         "tested_commit": expected,
@@ -193,6 +297,8 @@ def validate_preflight(
             "package_identity",
             "evidence_root_unused",
             "clean_worktree",
+            "capture_provenance",
+            "package_bytes",
         ],
     }
 
@@ -205,6 +311,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--package-manifest", type=Path, required=True)
     parser.add_argument("--repo-root", type=Path, required=True)
     parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument("--capture-handoff", type=Path, default=None)
+    parser.add_argument("--package-tar", type=Path, default=None)
+    parser.add_argument("--actual-package-manifest", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -218,6 +327,13 @@ def main() -> int:
             manifest=_load_object(args.package_manifest, "package manifest"),
             repo_root=args.repo_root,
             evidence_root=args.evidence_root,
+            capture_handoff=(
+                _load_object(args.capture_handoff, "d14b-capture-handoff")
+                if args.capture_handoff is not None
+                else None
+            ),
+            package_tar=args.package_tar,
+            actual_package_manifest=args.actual_package_manifest,
         )
     except PreflightError as error:
         print(f"D14B_PREFLIGHT_FAIL: {error}", file=sys.stderr)
