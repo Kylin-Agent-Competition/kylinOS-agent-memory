@@ -129,7 +129,7 @@ SNAPSHOT_FACTS = (
     "NON_MAIN_BRANCH",
     "PR_OPEN",
     "2/11",
-    "D14B_FORMAL_L3=UNVERIFIED",
+    "D14B_FORMAL_L3=NOT_RUN/UNVERIFIED",
     "D14B_FORMAL_RESULT=UNVERIFIED",
     "D14C_FORMAL_L3=BLOCKED",
     "D14C_FORMAL_RESULT=UNVERIFIED",
@@ -138,6 +138,20 @@ SNAPSHOT_FACTS = (
     "72950fd59bf5fddbfe12d4daad9f040ea227e5f9",
     "b5f8154b9e510c10124e84ecf70d608e4fee7896",
     "a4034c9cdab1de31f70bced73dcab8ff2b18407c",
+)
+
+# 覆盖项 12：current main identity / PR #171 historical merge identity（HIGH-01/HIGH-02）。
+CURRENT_MAIN_SHA = "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993"
+PR171_MERGE_SHA = "3ef0ce518844749f14aa384790efbcde5af39ec9"
+
+# 覆盖项 13：MEDIUM-01 canonical 状态词收口。
+NON_CANONICAL_D15E_STATE_ALIASES = ("D15E_FINAL_LOCK", "D15E_FINAL_COMPLETION_CLAIM")
+
+# 覆盖项 14：MEDIUM-02 D15E guard 的 CI 边界（manual static guard，非 CI gate）。
+D15E_GUARD_CI_BOUNDARY_PHRASES = (
+    "executable / manual static guard",
+    "GitHub merge CI enforced gate",
+    "它**不是** GitHub merge CI enforced gate",
 )
 
 # 覆盖项 9：文档引用的 evidence 路径（fail-closed 磁盘存在性检查）。
@@ -440,6 +454,75 @@ def _assert_final_lock_trigger_association(text: str) -> None:
         )
 
 
+def _scan_time_main_head(text: str) -> str:
+    """HIGH-02：结构化读取 §2.1 表格中的 scan_time_main_head=<40-hex>（恰好一项）。"""
+    block = _section_block_in(text, "## 2. 快照身份与状态行", "## 3.")
+    matches = re.findall(r"scan_time_main_head=([0-9a-f]{40})", block)
+    assert len(matches) == 1, (
+        "§2.1 scan_time_main_head 应恰好 1 项，实际 {0} 项".format(len(matches))
+    )
+    return matches[0]
+
+
+def _bound7_block(text: str) -> str:
+    """HIGH-02：定位 BOUND-7 段落（【BOUND-7】 到 【BOUND-8】 之前，恰好一条）。"""
+    count = text.count("【BOUND-7】")
+    assert count == 1, "【BOUND-7】应恰好 1 处，实际 {0} 处".format(count)
+    m = re.search(r"【BOUND-7】.*?(?=【BOUND-8】)", text, re.S)
+    assert m is not None, "未找到 BOUND-7 段落"
+    return m.group(0)
+
+
+def _assert_current_main_association(text: str) -> None:
+    """HIGH-02：§2.1 current main 与 BOUND-7 current main 必须一致且为 a7abb1e…。
+
+    PR #171 的 3ef0ce… 只能作为 historical merge identity 出现，
+    不得冒充 current scan-time main。
+    """
+    scan = _scan_time_main_head(text)
+    assert scan == CURRENT_MAIN_SHA, (
+        "§2.1 scan_time_main_head 不是 current main: {0}".format(scan)
+    )
+    block = _bound7_block(text)
+    assert CURRENT_MAIN_SHA in block, (
+        "BOUND-7 缺少 current main {0}".format(CURRENT_MAIN_SHA)
+    )
+    for forbidden in (
+        "scan-time main HEAD（3ef0ce",
+        "scan-time main HEAD(3ef0ce",
+        "current scan-time main=3ef0ce",
+        "main HEAD=3ef0ce",
+    ):
+        assert forbidden not in block, (
+            "BOUND-7 把 historical 3ef0ce 标为 current main（禁止）: {0}".format(forbidden)
+        )
+    if PR171_MERGE_SHA in block:
+        assert ("historical" in block) or ("历史" in block), (
+            "BOUND-7 出现 3ef0ce… 但未标注 historical merge identity"
+        )
+
+
+def _assert_d14e_row_association(text: str) -> None:
+    """HIGH-02：§6 D14E 行必须绑定 PR #171 ↔ merge commit=3ef0ce…。
+
+    禁止把 3ef0ce… 写成 main HEAD=…；若该行出现 current main，必须是 a7abb1e…。
+    """
+    row = _upstream_row(text, "D14E")
+    assert "PR #171" in row, "§6 D14E 行缺少 PR #171: {0}".format(row)
+    assert PR171_MERGE_SHA in row, (
+        "§6 D14E 行缺少 PR #171 merge commit: {0}".format(row)
+    )
+    assert ("merge commit" in row) or ("historical merge identity" in row), (
+        "§6 D14E 行缺少 merge commit / historical merge identity 语义: {0}".format(row)
+    )
+    assert "main HEAD=" + PR171_MERGE_SHA not in row, (
+        "§6 D14E 行把 PR #171 merge commit 错标为 main HEAD（禁止）: {0}".format(row)
+    )
+    if "current scan-time main" in row:
+        assert CURRENT_MAIN_SHA in row, (
+            "§6 D14E 行声明 current main 但不是 {0}: {1}".format(CURRENT_MAIN_SHA, row)
+        )
+
 def _e15_matrix_status() -> dict[str, str]:
     """覆盖项 3：解析 §3 块内 E15 锁点行，返回 {锁点: 状态} 并完成全部绑定断言。"""
     block = _section_block("## 3. E15-1 ~ E15-6 Submission Lock Matrix", "## 4.")
@@ -668,3 +751,53 @@ def test_reverse_drift_d14b_formal_debt_removed_rejected() -> None:
     drifted_upstream = _upstream_row(drifted, "D14B")
     assert "D14B_TASK=COMPLETE" in drifted_upstream, "反向漂移注入未生效（自检失败），测试空转"
     _expect_assertion_error(_assert_d14b_formal_boundary, drifted)
+
+
+# 覆盖项 12：current main identity / D14E historical merge association（HIGH-01/HIGH-02）。
+def test_current_main_and_d14e_historical_merge_association() -> None:
+    """§2.1 / BOUND-7 current main 一致为 a7abb1e…；D14E 行绑定 PR #171 merge commit。"""
+    _assert_current_main_association(_TEXT)
+    _assert_d14e_row_association(_TEXT)
+
+
+def test_reverse_drift_bound7_current_main_reverted_rejected() -> None:
+    """反向漂移 A：BOUND-7 current main 回退成 3ef0ce… 后守卫必须抛 AssertionError。"""
+    block = _bound7_block(_TEXT)
+    drifted_block = block.replace(CURRENT_MAIN_SHA, PR171_MERGE_SHA)
+    assert drifted_block != block, "反向漂移注入未生效（自检失败），测试空转"
+    assert CURRENT_MAIN_SHA not in drifted_block, "反向漂移注入未生效（自检失败），测试空转"
+    drifted = _TEXT.replace(block, drifted_block)
+    _expect_assertion_error(_assert_current_main_association, drifted)
+
+
+def test_reverse_drift_d14e_row_main_head_label_rejected() -> None:
+    """反向漂移 B：D14E 行 merge commit 改写成 main HEAD=3ef0ce… 后必须抛 AssertionError。"""
+    row = _upstream_row(_TEXT, "D14E")
+    drifted_row = row.replace(
+        "merge commit=" + PR171_MERGE_SHA, "main HEAD=" + PR171_MERGE_SHA
+    )
+    assert drifted_row != row, "反向漂移注入未生效（自检失败），测试空转"
+    assert "main HEAD=" + PR171_MERGE_SHA in drifted_row, (
+        "反向漂移注入未生效（自检失败），测试空转"
+    )
+    drifted = _TEXT.replace(row, drifted_row)
+    _expect_assertion_error(_assert_d14e_row_association, drifted)
+
+
+# 覆盖项 13：MEDIUM-01 canonical 状态词收口。
+def test_d14b_formal_status_token_canonical() -> None:
+    assert "D14B_FORMAL_L3=NOT_RUN/UNVERIFIED" in _TEXT
+    assert "D14B_FORMAL_L3=UNVERIFIED" not in _TEXT, (
+        "D14B_FORMAL_L3 存在非 canonical 独立写法（MEDIUM-01）"
+    )
+
+
+def test_no_non_canonical_d15e_state_aliases() -> None:
+    for alias in NON_CANONICAL_D15E_STATE_ALIASES:
+        assert alias not in _TEXT, "存在非 canonical D15E 状态别名: {0}".format(alias)
+
+
+# 覆盖项 14：MEDIUM-02 D15E guard 的 CI 边界声明。
+def test_d15e_guard_ci_boundary_declared() -> None:
+    for phrase in D15E_GUARD_CI_BOUNDARY_PHRASES:
+        assert phrase in _TEXT, "缺少 D15E guard CI 边界声明: {0}".format(phrase)
