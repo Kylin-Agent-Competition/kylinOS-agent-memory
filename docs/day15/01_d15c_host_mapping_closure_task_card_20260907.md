@@ -101,7 +101,7 @@ D14C（B 轨代执行，PR #156 任务卡）formal L3 的硬门中，两项直�
 | L2-Hook 部署 | patch 编译部署成功 + 冒烟日志格式验证 + 回退演练 | 原二进制还原后 SHA-256 一致且助手可启动 |
 | L2-TD007 | 成功 / 失败 ≥2 态真实结构化 ToolExecutionEvent；取消态有明确结论（采集成功或缺口登记） | 字段齐（含宿主缺口标注）+ 证据链完整 |
 | L2-TD008 | chatAsync 入参捕获结论 | INJECTED / NOT_IMPLEMENTED_IN_HOST / AMBIGUOUS 三选一 + 证据 |
-| L2-TD009 | 实际 Tool 执行路径结构化事件 | 三态事件即路径证据；Route B 无需激活（主 Hook 可行） |
+| L2-TD009 | 实际 Tool 执行路径结构化事件 | 三态事件齐备前 TD-009 保持 `BLOCKED`；Route B 当前未激活，继续按 ADR-004 保留为备份 |
 | L2-Identity | Hook 时序与 DB 行标识对比数据 | 决策建议 + 依据，无编造 |
 | 证据 | `evidence/l2-kylin-vm/d15c_<UTC_RUN_ID>/` + index.yaml 登记（path / SHA-256 / tested_commit / environment / status） | 每项字段齐全；状态限 VERIFIED / FAILED / BLOCKED / UNVERIFIED |
 
@@ -163,7 +163,7 @@ TD-007/008/009 关闭提请（附证据链）→ R-ARCH-05 状态收敛申请 �
 |----|---------------------|----------|
 | TD-007 | 结构化 ToolExecutionEvent 覆盖成功、失败、取消三类 | 成功/失败实测；**取消态宿主未建模**：若实测无事件，按「成功/失败实测 + 取消缺口登记 + 替代判定建议」提请 D 主审裁量，不伪造第三态 |
 | TD-008 | 确认 Hook 点 A 是否实现 memory_context 注入 | 三选一结论均为有效关闭输入（`NOT_IMPLEMENTED_IN_HOST` 本身即确认） |
-| TD-009 | 确认实际 Tool 执行路径并输出结构化事件 | 三态事件即路径证据（tool_call 出站 + toolReply 回程）；主 Hook 可行 → Route B 无需激活 |
+| TD-009 | 确认实际 Tool 执行路径并输出结构化事件 | 三态证据（tool_call 出站 + toolReply 回程 + 取消态）齐备后才能关闭；当前回程 `BLOCKED`、取消 `NOT_OBSERVED`，Route B 保留为备份 |
 | R-ARCH-05 | S3、S4、S5/L3 证据与 C→D handoff 均具备 | 本卡目标：收敛至「仅剩 D14C formal L3 输入」；若 S5r3/L3 未具备则保持 In Progress 并更新进展登记 |
 
 ---
@@ -184,9 +184,9 @@ TD-007/008/009 关闭提请（附证据链）→ R-ARCH-05 状态收敛申请 �
 |-------|------|---------------|------|
 | P0 环境盘点 | **完成** | 5a89601 | bacon VM 可达，工具链齐备 (qmake+Qt5 dev+make)，DEVROOT 闭包构建 |
 | P1 S3.2 部署+冒烟+回退演练 | **完成** | 5a89601 | 补丁二进制 SHA a712d541...，出站 tool_invocation JSON 验证；回退 SHA 86453fc6... 一致，助手可启动 |
-| P2 S3.3 TD-008 | **AMBIGUOUS** | 5a89601 | sendToolMessage payload 不含 memory_context；ChatSDK "model is empty" 阻塞升级 |
-| P3 S3.4 identity | **决策输入** | 5a89601 | tool_id(rowid) 建议为 Production Identity；DB 时序对比阻塞于 LLM 缺失 |
-| P4 S4 三态采集 | **部分完成** | 5a89601 | 成功 VERIFIED(出站)，失败 VERIFIED(model is empty)，取消 NOT_OBSERVED |
+| P2 S3.3 TD-008 | **BLOCKED** | 5a89601 | sendToolMessage payload 不含 memory_context；业务结论暂为 AMBIGUOUS；ChatSDK "model is empty" 阻塞升级 |
+| P3 S3.4 identity | **BLOCKED** | 5a89601 | Hook 已证明可获得 outbound tool selector；Production Identity 为 UNRESOLVED/BLOCKED，DB 时序对比未执行 |
+| P4 S4 三态采集 | **BLOCKED** | 5a89601 | 成功 VERIFIED(出站)，失败 NOT_OBSERVED（model is empty 为前置阻塞），取消 NOT_OBSERVED |
 | P5 S5r3 服务端全链路 | **BLOCKED** | — | BLOCKED_ON_SERVICE_RUNTIME (条件项) |
 | P6 S6 handoff 备忘 | **完成** | 5a89601 | `02_d15c_c_to_d_handoff_memo_20260907.md` 已生成 |
 | P7 S7 关闭提请 + PR | 待开始 | — | 待用户指令 commit/push/PR |

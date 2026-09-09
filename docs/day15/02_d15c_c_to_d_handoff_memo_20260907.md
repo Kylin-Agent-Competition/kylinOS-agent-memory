@@ -63,9 +63,9 @@
 | file_type | `image` | systemchat.cpp 推断 |
 | started_at | `2026-09-08T16:01:15` | tool_execution_observer.h 时间戳 |
 
-### 2.3 失败态
+### 2.3 环境前置阻塞（失败态未采集）
 
-ChatSDK 回调 `chatCallback` (systemchat.cpp:79) 立即返回 `"model is empty"` — 运行时无聊天 LLM 模型可用, 请求未到达推理服务器。
+ChatSDK 回调 `chatCallback` (systemchat.cpp:79) 立即返回 `"model is empty"` — 运行时无聊天 LLM 模型可用, 请求未到达推理服务器。这是环境 / 前置条件失败，**不计为一次真实 Tool 执行后的 failure result**。
 
 日志: `2026-09-08 16:01:15.031 | chatCallback | model is empty`
 
@@ -105,7 +105,7 @@ ChatSDK 回调 `chatCallback` (systemchat.cpp:79) 立即返回 `"model is empty"
 
 ---
 
-## 四、TD-009 实际 Tool 执行路径（VERIFIED 出站 / BLOCKED 回程）
+## 四、TD-009 实际 Tool 执行路径（整体 BLOCKED；出站 VERIFIED / 回程 BLOCKED）
 
 ### 4.1 执行路径结构化事件
 
@@ -124,7 +124,7 @@ ChatSDK `chatCallback` 返回 `"model is empty"` (code=26), 未产生有效 Tool
 
 ### 4.3 Route B 评估
 
-主 Hook (源码 instrument) 在出站方向可行且已验证。Route B (D-Bus 解码) 无需激活。回程 Hook 在 patch 中已就位 (msgpane.cpp `onRecvMsg` 打点), 仅待 LLM 模型到位后自然触发。
+主 Hook (源码 instrument) 在出站方向可行且已验证。Route B (D-Bus 解码) 当前未激活；在真实 Hook 完成端到端成功 / 失败 / 取消三态验证前，继续按 ADR-004 保留为备份。回程 Hook 在 patch 中已就位 (msgpane.cpp `onRecvMsg` 打点), 仅待 LLM 模型到位后自然触发。
 
 ---
 
@@ -132,35 +132,34 @@ ChatSDK `chatCallback` 返回 `"model is empty"` (code=26), 未产生有效 Tool
 
 ### 5.1 Hook 事件标识
 
-出站 `tool_invocation` JSON 使用 `tool_id` (integer `3`) 作为工具标识。该值对应 `systemchat.cpp` 中 `sendToolMessage` 的第一个参数, 源自 `onPictureOperateClick(3, ...)` 调用。
+出站 `tool_invocation` JSON 使用 `tool_id` (integer `3`) 作为 **outbound tool selector / tool kind id**。该值对应 `systemchat.cpp` 中 `sendToolMessage` 的第一个参数, 源自 `onPictureOperateClick(3, ...)` 调用；它不是 Chat DB 行身份。
 
 ### 5.2 标识来源追踪
 
 | 标识 | 值 | 来源 | 可用性 |
 |------|-----|------|--------|
-| tool_id | `3` (integer) | onPictureOperateClick 硬编码 | **可用** — Hook 出站即可获得 |
-| rowid | 未观察 | Chat DB RECORD 表 | 需 DB 只读查询 (回程阻塞, 未执行) |
+| tool_id | `3` (integer) | onPictureOperateClick 硬编码 | **可用** — 仅作为 outbound tool selector / tool kind id |
+| rowid | 未观察 | Chat DB RECORD 表 | Production Identity 候选；需 P3 DB 只读查询 (未执行) |
 | sessionID | 未观察 | ChatSDK 内部 | Hook 未捕获 |
 | msgIndex | 未观察 | Chat DB RECORD 表 | 需 DB 只读查询 (回程阻塞, 未执行) |
 
-### 5.3 决策建议
+### 5.3 决策结论
 
-**建议**: `tool_id` (integer, 对应 tools 表 rowid) 作为 Production Identity 标识。
+**Production Identity: `UNRESOLVED / BLOCKED`。**
 
 依据:
-1. Hook 出站事件即可获得, 无需 DB 二次查询;
-2. 与 `sendToolMessage` 调用参数一致, 源码可追溯;
-3. 对应 V3-R schema 中 `RECORD.ID` 的 rowid 覆盖路径 (PR #151 S5 V5 适配);
-
-**风险**: tool_id 在不同 session 间可能复用 (相同工具类型共用 ID), 无法唯一标识单次调用。如需唯一标识, 建议组合 `tool_id + started_at` (ISO 时间戳)。
+1. `tool_id=3` 是宿主硬编码传入 `sendToolMessage` 的工具选择 / 类型标识, 会跨 session 和多次调用复用;
+2. 当前没有证据证明 outbound `tool_id` 能映射到 Chat DB `RECORD` 行身份或 `rowid`;
+3. P3 的只读 DB 时序对比未执行, `rowid / sessionID / msgIndex` 均未观察;
+4. 在 P3 或其他可复核证据完成前, 禁止将 `tool_id` 或 `tool_id + started_at` 写入 `ref:chat-record:{messageId}` 所需的 Chat RECORD identity 字段。
 
 **默认配置**: 保持 `fail-closed` (PRODUCTION_RESOLVER_STATUS 不变), 待 D 轨评审确认后调整。
 
 ### 5.4 需 D 轨补充
 
 1. 在具备 LLM 模型的环境中执行 P3 (identity 时序对比): GUI 触发对话 → onRecvTool 打点时刻只读查询 Chat DB → 对比 Hook 事件时序与 RECORD 行 rowid/msgIndex 分配;
-2. 确认 `tool_id` 与 `RECORD.ID` 的映射关系;
-3. 决定 production sourceReference 使用 `rowid` 还是 `tool_id + started_at` 组合。
+2. 在取得可复核的映射证据前, 不把 `tool_id` 解释为 `RECORD.ID`、`tools.rowid` 或任何 Chat DB 行身份;
+3. D14C G4/G5 输入必须记录: 当前只证明 Hook 能拿到 tool selector, 尚未证明能拿到 Chat RECORD identity。
 
 ---
 
@@ -182,8 +181,8 @@ ChatSDK `chatCallback` 返回 `"model is empty"` (code=26), 未产生有效 Tool
 | 配置项 | 当前值 | 建议 | 依据 |
 |--------|--------|------|------|
 | PRODUCTION_RESOLVER_STATUS | `fail-closed` | **保持不变** | TD-008 AMBIGUOUS, 未确认 memory_context 注入 |
-| production identity | `tool_id` (rowid) | 待 D 轨确认 | Hook 出站可用, 需 DB 时序对比补充 |
-| Route B (D-Bus) | 未激活 | **无需激活** | 主 Hook 出站已验证 |
+| production identity | `UNRESOLVED / BLOCKED` | **不可选择 `tool_id`** | 当前仅有 outbound tool selector, 缺少 Chat RECORD 行身份证据 |
+| Route B (D-Bus) | 未激活 | **保留为备份** | 真实 Hook 三态验证完成前不得解除备份地位 |
 
 ---
 
@@ -203,14 +202,14 @@ ChatSDK `chatCallback` 返回 `"model is empty"` (code=26), 未产生有效 Tool
 | 源码 instrument 可靠性 | **高** — header-only observer, 无外部依赖, KyInfo 原生输出 |
 | 出站事件完整性 | **高** — tool_id + arguments + started_at + file_type 完整 |
 | 回程事件完整性 | **低** — 阻塞于 ChatSDK "model is empty", 未验证 |
-| identity 可获得性 | **中** — tool_id 可用, rowid/msgIndex 需 DB 查询 |
+| identity 可获得性 | **BLOCKED** — tool selector 可用, rowid/msgIndex 未观察 |
 | 部署安全性 | **高** — SHA-256 前后记录, 一键回退验证通过 |
 
 ### 8.3 D 轨评估所需补充
 
 1. LLM 模型安装后的完整 round-trip 验证 (TD-008 升级, TD-009 回程确认);
 2. P3 identity 时序对比 (Hook 时刻 vs DB 行写入时序);
-3. D14C formal L3 在干净 VM 复测 (G4/G5 gate 输入);
+3. D14C formal L3 在干净 VM 复测; G4/G5 输入须保持 Production Identity 为 UNRESOLVED/BLOCKED, 仅承认当前 Hook 捕获 outbound tool selector;
 4. S5r3 服务端全链路 (memory-service 运行时栈, 条件项)。
 
 ---
@@ -220,8 +219,8 @@ ChatSDK `chatCallback` 返回 `"model is empty"` (code=26), 未产生有效 Tool
 | 编号 | 文件 | SHA-256 | 状态 |
 |------|------|---------|------|
 | EV-001 | `d15c_20260908/td007_outbound_tool_invocation.json` | 见文件 | VERIFIED |
-| EV-002 | `d15c_20260908/td008_chatasync_input_analysis.md` | 见文件 | AMBIGUOUS |
-| EV-003 | `d15c_20260908/td009_execution_path.md` | 见文件 | VERIFIED(出站)/BLOCKED(回程) |
+| EV-002 | `d15c_20260908/td008_chatasync_input_analysis.md` | 见文件 | BLOCKED（业务结论 AMBIGUOUS） |
+| EV-003 | `d15c_20260908/td009_execution_path.md` | 见文件 | BLOCKED（出站 VERIFIED / 回程 BLOCKED） |
 | EV-004 | `d15c_20260908/rollback_verification.md` | 见文件 | VERIFIED |
 | EV-005 | `d15c_20260908/environment.json` | 见文件 | VERIFIED |
 | EV-006 | `d15c_20260908/deploy_manifest.txt` | 见文件 | VERIFIED |
@@ -233,7 +232,7 @@ ChatSDK `chatCallback` 返回 `"model is empty"` (code=26), 未产生有效 Tool
 | 条件 | 状态 |
 |------|------|
 | S3 Hook 观察点部署 | **完成** (出站 VERIFIED, 回程 BLOCKED on LLM) |
-| S4 TD-007/009 三态采集 | **部分完成** (成功态 VERIFIED, 失败态 VERIFIED, 取消态 NOT_OBSERVED) |
+| S4 TD-007/009 三态采集 | **BLOCKED** (成功态出站 VERIFIED, 失败态 NOT_OBSERVED, 取消态 NOT_OBSERVED) |
 | S5/L3 证据 | S5r2 已完成 (#151), S5r3 BLOCKED_ON_SERVICE_RUNTIME |
 | C→D handoff | **本备忘录** |
 | 收敛目标 | **仅剩 D14C formal L3 输入 + LLM 模型环境复测** |

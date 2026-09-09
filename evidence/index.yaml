@@ -1869,7 +1869,7 @@ entries:
   - id: "D15C-TD008-AMBIGUOUS"
     task_id: "D15C"
     description: "D15C TD-008 Hook 点 A chatAsync 入参捕获：sendToolMessage payload 不含 memory_context/context/history，但 ChatSDK 内部行为未确认（model is empty）"
-    status: "AMBIGUOUS"
+    status: "BLOCKED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d15c_20260908/td008_chatasync_input_analysis.md"
     report: "docs/day15/02_d15c_c_to_d_handoff_memo_20260907.md"
@@ -1881,27 +1881,27 @@ entries:
     date: "2026-09-08"
     reviewer: "D 主审 (pending)"
     limitations: "ChatSDK 返回 model is empty，请求未到达 kytensor 推理服务器；无法确认 ChatSDK 内部是否注入 memory_context。需 LLM 模型安装后复测升级结论。"
-    checksum_sha256: "0e7630741445770064b0ab35176af5757b13342856fa262dd37aa9b00808a243"
+    checksum_sha256: "7fcb86675d6b91e2f8c9e0e6eb8a9422e26a83a3c19ee07d84a1c0dd4b702b8b"
     details: |
       sendToolMessage (systemchat.cpp:692-755) 构造的 JSON 不含 memory_context/context/history/session_id/trace_id。
       ChatSDK chatCallback 返回 "model is empty" (code=26)。
       升级条件：安装 LLM 模型后观察完整 round-trip。
   - id: "D15C-TD009-PATH"
     task_id: "D15C"
-    description: "D15C TD-009 实际 Tool 执行路径结构化事件：出站 tool_invocation VERIFIED，回程 ToolExecutionEvent BLOCKED（无 LLM 模型）"
-    status: "VERIFIED"
+    description: "D15C TD-009 实际 Tool 执行路径结构化事件：整体 BLOCKED；出站 tool_invocation VERIFIED，回程 ToolExecutionEvent BLOCKED（无 LLM 模型）"
+    status: "BLOCKED"
     evidence_level: "E4"
     source: "evidence/l2-kylin-vm/d15c_20260908/td009_execution_path.md"
     report: "docs/day15/02_d15c_c_to_d_handoff_memo_20260907.md"
     tested_commit: "5a89601"
     evidence_commit: "pending"
-    runtime_result: "PARTIAL_VERIFIED"
+    runtime_result: "OUTBOUND_VERIFIED; INBOUND_BLOCKED; CANCEL_NOT_OBSERVED"
     review_status: "PENDING"
     merge_qualified: false
     date: "2026-09-08"
     reviewer: "D 主审 (pending)"
-    limitations: "出站 Hook 可行（Route B 无需激活）；回程 Hook patch 已就位但阻塞于 ChatSDK model is empty。三态：成功 VERIFIED(出站)、失败 VERIFIED、取消 NOT_OBSERVED。"
-    checksum_sha256: "a539d0d5f7798a4585f0314a3baf0b5b217b08a1443650fafc04dc651e590925"
+    limitations: "出站 Hook 可行；Route B 当前未激活并继续按 ADR-004 保留为备份。回程 Hook patch 已就位但阻塞于 ChatSDK model is empty。三态：成功 VERIFIED(出站)、失败 NOT_OBSERVED（model is empty 为环境/前置失败）、取消 NOT_OBSERVED。"
+    checksum_sha256: "f9e1f15daecdc89a1b4b7b3ce88e62bf221f21d5227e05105173f6775444968a"
     details: |
       执行路径：onPictureOperateClick(3) → sendToolMessage → toolStartJson() KyInfo → chatAsync → chatCallback(model is empty) → onRecvMsg(empty)
   - id: "D15C-ROLLBACK"

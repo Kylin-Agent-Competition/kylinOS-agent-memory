@@ -4,7 +4,8 @@
 |-------|-------|
 | Evidence ID | EV-002 |
 | Task | TD-008 |
-| Status | AMBIGUOUS |
+| Status | BLOCKED |
+| Runtime Conclusion | AMBIGUOUS |
 | Capture Time | 2026-09-08T16:01:15+08:00 |
 | Tested Commit | 5a89601 (kylin-aiassistant V11 3.0.67) |
 | PID | 177446 |

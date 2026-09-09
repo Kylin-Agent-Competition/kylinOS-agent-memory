@@ -4,7 +4,7 @@
 |-------|-------|
 | Evidence ID | EV-003 |
 | Task | TD-009 |
-| Status | VERIFIED (outbound) / BLOCKED (inbound) |
+| Status | BLOCKED (overall; outbound VERIFIED / inbound BLOCKED / cancel NOT_OBSERVED) |
 | Capture Time | 2026-09-08T16:01:15+08:00 |
 | Tested Commit | 5a89601 |
 
@@ -39,7 +39,7 @@ Logged at: `systemchat.cpp:756` via `KyInfo()` → `~/.log/kylin-aiassistant.log
 
 ## 4. Route B Assessment
 
-Main Hook (source instrument) is **viable** for outbound direction. Route B (D-Bus decode) is **not needed**.
+Main Hook (source instrument) is **viable** for outbound direction. Route B (D-Bus decode) is **not active** and remains a backup per ADR-004 until the real Hook completes end-to-end success / failure / cancel verification.
 
 Inbound Hook patch is ready in `msgpane.cpp` — will trigger naturally once LLM model is installed and ChatSDK produces valid `ToolExecutionEvent` responses.
 
@@ -48,7 +48,7 @@ Inbound Hook patch is ready in `msgpane.cpp` — will trigger naturally once LLM
 | State | Status | Evidence |
 |-------|--------|----------|
 | Success | VERIFIED (outbound) | tool_invocation JSON captured |
-| Failure | VERIFIED | "model is empty" — ChatSDK error response captured |
+| Failure | NOT_OBSERVED | "model is empty" is an environment/precondition failure; no real Tool failure Result was observed |
 | Cancel | NOT_OBSERVED | Host does not model cancellation; no event produced |
 
 ## 6. Blocker for Full Verification
