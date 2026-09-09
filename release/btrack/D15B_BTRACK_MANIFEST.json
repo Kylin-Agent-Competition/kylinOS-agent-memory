@@ -1,7 +1,31 @@
 {
   "schema": "d15b-btrack-manifest/v1",
   "manifest_status": "NOT_FROZEN",
-  "development_head": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
+  "assessment_base_commit": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
+  "d15b_source_head": "f1950fee10fac0e1eb87efe240620ed8fd5e4d81",
+  "d15b_pr_merge_eligibility": "PASS_WITH_DEBT",
+  "d15b_task_status": "PARTIAL / WAIVED_FORMAL_INPUTS",
+  "b_track_release_readiness": "BLOCKED_NOT_COMPLETE",
+  "b_track_complete": "NO",
+  "waiver": {
+    "source": "PR #124 / docs/day14/21_d14b_formal_l3_intake_blockers_20260909.md",
+    "authority": "WAIVED_BY_OWNER",
+    "scope": [
+      "d13d/d14d handoff",
+      "frozen tar",
+      "four production capture runners",
+      "D14D clean VM/snapshot"
+    ],
+    "applicability": "PR #173 merge-status documentation for the same missing formal inputs only",
+    "does_not_apply_to": [
+      "retrieval eval-input freeze",
+      "final metrics",
+      "B-track manifest freeze",
+      "B_TRACK_COMPLETE",
+      "release_ready",
+      "production_ready"
+    ]
+  },
   "d14b": {
     "pr": 124,
     "merge_sha": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
@@ -37,7 +61,9 @@
     "d14d_l3_reference": {
       "path": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e/summary.json",
       "sha256": "9a9132a115973c96a98093def4c814d64863c1fcc94c384376d6a219ef36c51d",
-      "scope": "D14D G0-G6 reference only; G7/G8 are not run and L3_READY=false"
+      "current_ssot": "D14D=DONE / L3_READY=true (docs/D_TRACK_STATUS.md)",
+      "historical_summary_status": "generated before the final D14D status update; raw bytes are retained unchanged",
+      "scope": "D14D G0-G6 reference; G7=NOT_RUN/N-A and G8=NOT_RUN under the D14D waiver"
     },
     "d15b_formal_evidence_root": null,
     "d15b_sha256sums": null
@@ -47,6 +73,6 @@
     "final_eval": "No sealed retrieval input or formal execution result is present",
     "b_debt_register": "See docs/day15/d15b_btrack_inventory.json; accepted_release_debts is empty"
   },
-  "release_eligibility": "BLOCKED",
+  "release_eligibility": "NOT_APPLICABLE_TO_PR_MERGE",
   "rule": "Only a later manifest with sealed inputs, execution evidence, SHA256SUMS verification and required independent review may be FROZEN."
 }

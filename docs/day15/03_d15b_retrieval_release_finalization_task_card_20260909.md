@@ -8,7 +8,8 @@
 
 | 字段 | 值 | 说明 |
 | --- | --- | --- |
-| `development_head` | `a7abb1e71c03c4f1558e5c6a9eff2b9f36437993` | D14B 合并后的 `origin/main` 基线，也是本 D15B 分支基线。 |
+| `assessment_base_commit` | `a7abb1e71c03c4f1558e5c6a9eff2b9f36437993` | D14B 合并后的 `origin/main` 基线，也是本 D15B 分支基线。 |
+| `d15b_source_head` | `f1950fee10fac0e1eb87efe240620ed8fd5e4d81` | 本次状态评估开始时 PR #173 的 head；最终 identity closure 另行记录。 |
 | `d14b_merge_sha` | `a7abb1e71c03c4f1558e5c6a9eff2b9f36437993` | PR #124 merge commit。 |
 | `d14b_head_sha` | `fb4531e673bb5f02d6a109ec0f467cb6d384e927` | PR #124 审核通过的分支 head；不是 merge 后身份。 |
 | `formal_runtime_tested_commit` | `ba3b50e1bdeea185bca9daee9d1d45958f62a636` | D14B 文档记录的正式运行目标；尚未执行 Formal L3。 |
@@ -19,17 +20,30 @@
 ## 当前状态
 
 ```text
-D15B = BLOCKED_ON_EXTERNAL_RELEASE_INPUTS
+D15B_PR_MERGE_ELIGIBILITY = PASS_WITH_DEBT
+D15B_TASK = PARTIAL / WAIVED_FORMAL_INPUTS
+B_TRACK_RELEASE_READINESS = BLOCKED_NOT_COMPLETE
 D14B_PREPARATION_HARNESS = PASS
 D14B_FORMAL_L3 = NOT_RUN / UNVERIFIED
 BTRACK_SUBSTITUTE_VALIDATION = PASS_WITH_LIMITATIONS
 RETRIEVAL_EVAL_INPUTS = NOT_FROZEN
 B_TRACK_MANIFEST = NOT_FROZEN
-B_TRACK_HANDOFF = BLOCKED
 B_TRACK_COMPLETE = NO
 ```
 
-上述状态是截至本任务卡的仓库事实，不是对 D/E 的裁定。D14B 的 merge waiver 只解除 PR #124 的合并阻塞，不能替代 Formal L3 运行或最终 Release Owner 对 debt 的书面接受。
+上述状态是截至本任务卡的仓库事实，不是对 D/E 的裁定。`PASS_WITH_DEBT` 只描述 #173 对与 #124 相同 formal-input debt 的 merge-time 文档资格；它不替代 Formal L3、B-track release readiness 或最终 Release Owner 对 debt 的接受。
+
+## D14B waiver 的 D15B 适用范围
+
+```text
+WAIVER_SOURCE = PR #124 / docs/day14/21_d14b_formal_l3_intake_blockers_20260909.md
+WAIVER_AUTHORITY = WAIVED_BY_OWNER
+WAIVER_SCOPE = d13d/d14d handoff, frozen tar, four production capture runners, D14D clean VM/snapshot
+WAIVER_APPLICABILITY = PR #173 merge-status documentation for the same missing formal inputs only
+WAIVER_DOES_NOT_APPLY_TO = retrieval eval-input freeze, final metrics, B-track manifest freeze, B_TRACK_COMPLETE, release_ready, production_ready
+```
+
+因此 D15B 可以以 `PASS_WITH_DEBT` 进入独立 D Review；不得以此产生或暗示 formal runtime 结果。
 
 ## 已完成的 B 侧工作
 
@@ -40,7 +54,7 @@ B_TRACK_COMPLETE = NO
 
 ## 停止线与交接条件
 
-下列任一缺失时不得创建 Formal L3 evidence root、不得生成 D13B final metrics、不得将 B 轨写为 COMPLETE：
+下列任一缺失时不得创建 Formal L3 evidence root、不得生成 D13B final metrics、不得将 B 轨写为 COMPLETE；它们不是 #173 对相同 formal-input debt 的 merge-time waiver 反向条件：
 
 1. D 方提供并允许消费的 `d13d-handoff.json`、`d14d-handoff.json`、`d14b-capture-handoff.json`；
 2. 可校验的冻结 tar 实际字节及四个 production capture runner/receipt；

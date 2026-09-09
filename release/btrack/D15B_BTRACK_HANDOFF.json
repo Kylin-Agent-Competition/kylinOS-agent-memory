@@ -1,6 +1,9 @@
 {
   "schema": "d15b-btrack-handoff/v1",
   "b_track_status": "BLOCKED_NOT_COMPLETE",
+  "d15b_pr_merge_eligibility": "PASS_WITH_DEBT",
+  "d15b_task_status": "PARTIAL / WAIVED_FORMAL_INPUTS",
+  "b_track_release_readiness": "BLOCKED_NOT_COMPLETE",
   "d15b_pr": 173,
   "d15b_pr_url": "https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/173",
   "d15b_branch": "docs/D15B-retrieval-finalization",
@@ -11,23 +14,36 @@
     "merge_sha": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
     "formal_l3": "NOT_RUN / UNVERIFIED"
   },
-  "tested_commit": null,
+  "formal_runtime_tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "d15b_formal_execution_commit": null,
   "package_identity": "kylin-memory-a-d14a 0.1.0-d14a; actual frozen tar bytes unavailable to B",
   "retrieval_eval_inputs_manifest": "release/btrack/D15B_RETRIEVAL_EVAL_INPUTS.json",
   "btrack_manifest": "release/btrack/D15B_BTRACK_MANIFEST.json",
   "final_report": "docs/day15/04_d15b_btrack_final_report_20260909.md",
-  "required_external_actions": [
+  "required_before_pr_merge": [
     {
       "owner_track": "D",
-      "action": "Provide formal D13D/D14D/capture handoffs, frozen package bytes, production capture runners/receipts and formal clean-VM execution access; then either close Formal L3 with evidence or record final Release Owner debt acceptance."
-    },
+      "action": "Perform independent review of the waiver applicability, release identity, debt classification and manifest state."
+    }
+  ],
+  "deferred_formal_debt_actions": [
+    {
+      "owner_track": "D",
+      "action": "Provide formal D13D/D14D/capture handoffs, frozen package bytes, production capture runners/receipts and formal clean-VM execution access; then close Formal L3 with evidence or record final Release Owner debt acceptance."
+    }
+  ],
+  "required_before_b_track_complete": [
     {
       "owner_track": "E/D",
       "action": "Provide independently reviewed and sealed retrieval evaluation inputs, provenance and thresholds for the D13B evaluator."
     },
     {
+      "owner_track": "E/D",
+      "action": "Complete formal evaluation or record an explicit applicable accepted debt."
+    },
+    {
       "owner_track": "D",
-      "action": "Perform independent review of D15B release identity, debt state and manifest; E performs supplemental evaluation review where applicable."
+      "action": "Complete final release review after release-blocking debt closure or acceptance; E performs supplemental evaluation review where applicable."
     }
   ],
   "prohibited_interpretations": [
