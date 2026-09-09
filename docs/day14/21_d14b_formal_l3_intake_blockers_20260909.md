@@ -11,6 +11,18 @@
 - `D14B_TASK = PARTIAL / BLOCKED_ON_FORMAL_ENV`。
 - 已在缺失正式输入处停止；本轮没有运行 `run_d14b_preflight.py`，没有创建新的正式证据根，也没有把替代 VM 结果冒充 D14D 正式结果。
 
+## 复审豁免记录
+
+```text
+FORMAL_D14D_INPUTS = WAIVED_BY_OWNER
+WAIVER_SCOPE = d13d/d14d handoff, frozen tar, four production capture runners, D14D clean VM/snapshot
+MERGE_ELIGIBILITY = PASS_WITH_DEBT
+D14B_TASK = PARTIAL / WAIVED_FORMAL_INPUTS
+```
+
+该豁免只解除上述正式输入缺失对 PR #124 合并资格的阻塞；它不改变
+`D14B_FORMAL_L3 = NOT_RUN / UNVERIFIED`，也不把替代 VM 结果升级为 D14D 正式结果。
+
 正式测试身份仍为：`ba3b50e1bdeea185bca9daee9d1d45958f62a636`。
 
 ## 已获取并核验的资源
