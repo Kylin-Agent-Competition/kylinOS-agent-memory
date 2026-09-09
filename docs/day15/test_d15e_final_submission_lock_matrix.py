@@ -117,10 +117,10 @@ CONTROLLED_WORDS = (
 SNAPSHOT_FACTS = (
     "as-of=2026-09-09",
     "3ef0ce518844749f14aa384790efbcde5af39ec9",
+    "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
     "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
-    "7445c2ee2753100f46d0d8062f28ccf0aed22aad",
+    "fb4531e673bb5f02d6a109ec0f467cb6d384e927",
     "77319aa4ce75d7f7fe4d7ed64f7332cffdb88441",
-    "8fbc705c6b9d1e8966ec688d0dfda9a509dc0f20",
     "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
     "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0",
     "8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67",
@@ -128,7 +128,6 @@ SNAPSHOT_FACTS = (
     "0.1.0-d14a",
     "NON_MAIN_BRANCH",
     "PR_OPEN",
-    "2/27",
     "2/11",
     "D14B_FORMAL_L3=UNVERIFIED",
     "D14B_FORMAL_RESULT=UNVERIFIED",
@@ -321,6 +320,42 @@ def _assert_d14c_association(text: str) -> None:
         "a4034c9cdab1de31f70bced73dcab8ff2b18407c",
     ):
         assert token not in row, "§6 D14C 行出现禁止 token（错绑）{0}: {1}".format(token, row)
+
+
+def _assert_d14b_association(text: str) -> None:
+    """PR #124 已合入 main 后的 §6 D14B 行级 provenance 绑定。"""
+    row = _upstream_row(text, "D14B")
+    for token in (
+        "PR #124",
+        "test/D14B-l3-vm-release-regression",
+        "fb4531e673bb5f02d6a109ec0f467cb6d384e927",
+        "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
+        "已合入 main",
+    ):
+        assert token in row, "§6 D14B 行缺少绑定 token {0}: {1}".format(token, row)
+    for token in (
+        "PR_OPEN",
+        "NON_MAIN_BRANCH",
+        "7445c2ee2753100f46d0d8062f28ccf0aed22aad",
+        "8fbc705c6b9d1e8966ec688d0dfda9a509dc0f20",
+        "2/27",
+        "未合入 main",
+        "NOT_MERGED",
+    ):
+        assert token not in row, "§6 D14B 行出现禁止 token（旧快照/错绑）{0}: {1}".format(
+            token, row
+        )
+
+
+def _assert_d14b_formal_boundary(text: str) -> None:
+    """D14B merged 后必须保留 Formal L3 debt 与 owner waiver 边界。"""
+    row = _upstream_row(text, "D14B")
+    for token in (
+        "D14B_FORMAL_L3=NOT_RUN/UNVERIFIED",
+        "D14B_TASK=PARTIAL/WAIVED_FORMAL_INPUTS",
+        "WAIVED_BY_OWNER",
+    ):
+        assert token in row, "§6 D14B 行缺少 Formal debt 边界 {0}: {1}".format(token, row)
 
 
 def _assert_d15c_association(text: str) -> None:
@@ -566,6 +601,12 @@ def test_d14c_d15c_provenance_association() -> None:
     _assert_final_lock_trigger_association(_TEXT)
 
 
+def test_d14b_merged_row_binding_and_formal_boundary() -> None:
+    """PR #124 已合入 main，D14B row 必须绑定 merge identity 并保留 Formal debt。"""
+    _assert_d14b_association(_TEXT)
+    _assert_d14b_formal_boundary(_TEXT)
+
+
 def test_reverse_drift_d14c_row_bound_to_pr167_rejected() -> None:
     """反向漂移 1：把 §6 D14C 行错绑为 PR #167 / 404c7e1… 后守卫必须抛 AssertionError。
 
@@ -594,3 +635,36 @@ def test_reverse_drift_d15c_row_no_artifact_rejected() -> None:
     drifted_upstream = _upstream_row(drifted, "D15C")
     assert "无该产物" in drifted_upstream, "反向漂移注入未生效（自检失败），测试空转"
     _expect_assertion_error(_assert_d15c_association, drifted)
+
+
+def test_reverse_drift_d14b_row_stale_snapshot_rejected() -> None:
+    """把 D14B row 回退为 PR_OPEN/NON_MAIN_BRANCH 旧快照后守卫必须失败。"""
+    row = _upstream_row(_TEXT, "D14B")
+    drifted_row = (
+        row.replace(
+            "fb4531e673bb5f02d6a109ec0f467cb6d384e927",
+            "7445c2ee2753100f46d0d8062f28ccf0aed22aad",
+        )
+        .replace(
+            "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
+            "8fbc705c6b9d1e8966ec688d0dfda9a509dc0f20",
+        )
+        .replace("是（PR #124 已合入 main", "否（NON_MAIN_BRANCH；PR_OPEN")
+    )
+    drifted = _TEXT.replace(row, drifted_row)
+    drifted_upstream = _upstream_row(drifted, "D14B")
+    assert "PR_OPEN" in drifted_upstream, "反向漂移注入未生效（自检失败），测试空转"
+    _expect_assertion_error(_assert_d14b_association, drifted)
+
+
+def test_reverse_drift_d14b_formal_debt_removed_rejected() -> None:
+    """删除或提升 D14B Formal debt 边界后守卫必须失败。"""
+    row = _upstream_row(_TEXT, "D14B")
+    drifted_row = row.replace(
+        "D14B_TASK=PARTIAL/WAIVED_FORMAL_INPUTS",
+        "D14B_TASK=COMPLETE",
+    )
+    drifted = _TEXT.replace(row, drifted_row)
+    drifted_upstream = _upstream_row(drifted, "D14B")
+    assert "D14B_TASK=COMPLETE" in drifted_upstream, "反向漂移注入未生效（自检失败），测试空转"
+    _expect_assertion_error(_assert_d14b_formal_boundary, drifted)
