@@ -1,0 +1,62 @@
+{
+  "schema_version": "d14b-controlled-dataset/v1",
+  "dataset_id": "d14b-controlled-l3-v1",
+  "classification": "PREPARATION_ONLY_NO_USER_BODY",
+  "users": [
+    "d14b-controlled-user-a",
+    "d14b-controlled-user-b"
+  ],
+  "records": [
+    {
+      "stable_id": "d14b-a-delete-target-v1",
+      "memory_id": "d14b-a-delete-target",
+      "version_id": "v1",
+      "user_id": "d14b-controlled-user-a",
+      "role": "delete_target"
+    },
+    {
+      "stable_id": "d14b-a-keep-v1",
+      "memory_id": "d14b-a-keep",
+      "version_id": "v1",
+      "user_id": "d14b-controlled-user-a",
+      "role": "same_user_keep_control"
+    },
+    {
+      "stable_id": "d14b-b-keep-v1",
+      "memory_id": "d14b-b-keep",
+      "version_id": "v1",
+      "user_id": "d14b-controlled-user-b",
+      "role": "foreign_user_keep_control"
+    },
+    {
+      "stable_id": "d14b-a-stale-v0",
+      "memory_id": "d14b-a-delete-target",
+      "version_id": "v0",
+      "user_id": "d14b-controlled-user-a",
+      "role": "stale_version_control"
+    }
+  ],
+  "queries": [
+    {
+      "query_id": "d14b-q-user-a",
+      "user_id": "d14b-controlled-user-a",
+      "expected_active_stable_ids": [
+        "d14b-a-delete-target-v1",
+        "d14b-a-keep-v1"
+      ]
+    },
+    {
+      "query_id": "d14b-q-user-b",
+      "user_id": "d14b-controlled-user-b",
+      "expected_active_stable_ids": [
+        "d14b-b-keep-v1"
+      ]
+    }
+  ],
+  "delete_case": {
+    "target_stable_id": "d14b-a-delete-target-v1",
+    "same_user_keep_stable_id": "d14b-a-keep-v1",
+    "foreign_user_keep_stable_id": "d14b-b-keep-v1",
+    "stale_version_stable_id": "d14b-a-stale-v0"
+  }
+}
