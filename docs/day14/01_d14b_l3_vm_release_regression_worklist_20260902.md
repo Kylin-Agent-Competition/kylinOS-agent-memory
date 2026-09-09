@@ -23,6 +23,11 @@
 - 历史上游状态（2026-09-07）：D13D I3b-completion（#160）初始合入时仅为准备阶段，`D13D_FROZEN=NO`；该历史状态已由下列 2026-09-08 SSOT 更新替代，不得再作为当前 gate 判断。
 - 上游状态更新（2026-09-08，经 `origin/main@77826122a8aa1eaeed60ec9295a4bb8f979b3fe7` 的 `docs/D_TRACK_STATUS.md` 核验）：`D13D_FROZEN=YES`、D14D `L3_READY=true`、`A_FINAL_PACKAGE_READY=YES`；三方身份均绑定 `ba3b50e1bdeea185bca9daee9d1d45958f62a636`，包为 `kylin-memory-a-d14a 0.1.0-d14a`，tar SHA-256 `2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401`，manifest SHA-256 `76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0`。这解除上游身份等待，不替代 D14B 的本地 intake、正式 VM 执行或独立审查。
 
+- 状态更新（2026-09-09 第二轮 Review 返工）：Preparation Harness execution-doc / provenance-retention
+  remediation 完成——R1 preflight 示例续行符与 CLI 对齐、R2 capture 标准命令同步（含
+  capture-handoff + 4 receipt）、R3 provenance handoff/receipt 纳入 formal evidence retention
+  与 SHA256SUMS closure；harness L0/L1 本地 49 passed。当前 `D14B_PREPARATION_HARNESS =
+  READY_FOR_REVIEW`（待 exact HEAD 复审）；`D14B_FORMAL_L3=UNVERIFIED`。
 ## 完成定义
 
 在 D14D L3 干净快照（发布包可安装、可调用真实 SDK、无个人开发目录依赖）与 D13D 冻结环境下，对同一 Commit 完成检索与索引全生命周期回归：Vector/FTS5 数据在服务重启后持久完整；删除无残留且不破坏其他用户/版本；重建后与重建前检索一致；服务/OS 重启后索引状态可确认且检索一致；性能与既有基线可对照；并保存正式回归报告与可复现证据。未取得干净快照 VM 实测的证据结论一律标 `UNVERIFIED`，不得把本地/L1/历史 VM 证据写成当前 Commit 的发布回归结论。
