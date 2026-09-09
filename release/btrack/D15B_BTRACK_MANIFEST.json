@@ -1,0 +1,52 @@
+{
+  "schema": "d15b-btrack-manifest/v1",
+  "manifest_status": "NOT_FROZEN",
+  "development_head": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
+  "d14b": {
+    "pr": 124,
+    "merge_sha": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
+    "approved_head_sha": "fb4531e673bb5f02d6a109ec0f467cb6d384e927",
+    "formal_runtime_tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+    "preparation_harness": "VERIFIED",
+    "formal_l3_result": "NOT_RUN / UNVERIFIED",
+    "substitute_validation": "REFERENCE_ONLY / PASS_WITH_LIMITATIONS",
+    "intake_blocker_record": {
+      "path": "docs/day14/21_d14b_formal_l3_intake_blockers_20260909.md",
+      "sha256": "701b00daa5a88218eb705a4f141974e6a6b271c28c5842d4948dee33e8c524b6"
+    }
+  },
+  "release_package": {
+    "name": "kylin-memory-a-d14a",
+    "version": "0.1.0-d14a",
+    "tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
+    "manifest_sha256": "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0",
+    "actual_tar_bytes_available": false
+  },
+  "components": {
+    "sqlite": "REFERENCE_ONLY",
+    "fts5": "REFERENCE_ONLY",
+    "vector": "REFERENCE_ONLY",
+    "rrf": "REFERENCE_ONLY",
+    "delete_runner": "REFERENCE_ONLY",
+    "retrieval_evaluator": "VERIFIED_CONTRACT_ONLY",
+    "d14b_harness": "VERIFIED"
+  },
+  "eval_inputs_manifest": "release/btrack/D15B_RETRIEVAL_EVAL_INPUTS.json",
+  "formal_metrics": null,
+  "evidence": {
+    "d14d_l3_reference": {
+      "path": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e/summary.json",
+      "sha256": "9a9132a115973c96a98093def4c814d64863c1fcc94c384376d6a219ef36c51d",
+      "scope": "D14D G0-G6 reference only; G7/G8 are not run and L3_READY=false"
+    },
+    "d15b_formal_evidence_root": null,
+    "d15b_sha256sums": null
+  },
+  "open_debts": {
+    "formal_l3": "No formal evidence or final release-owner acceptance record is present",
+    "final_eval": "No sealed retrieval input or formal execution result is present",
+    "b_debt_register": "See docs/day15/d15b_btrack_inventory.json; accepted_release_debts is empty"
+  },
+  "release_eligibility": "BLOCKED",
+  "rule": "Only a later manifest with sealed inputs, execution evidence, SHA256SUMS verification and required independent review may be FROZEN."
+}

@@ -1,0 +1,47 @@
+{
+  "schema": "d15b-retrieval-eval-inputs/v1",
+  "freeze_status": "NOT_FROZEN",
+  "assessment_base_commit": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
+  "tested_commit": null,
+  "dataset": {
+    "path": "evaluation/D9_RETRIEVAL_CORPUS_V2.jsonl",
+    "sha256": "c8181632c91880d13df8bdaba1bd76623e126dd09120f739cae36ec9f19b16f2",
+    "status": "CANDIDATE_REFERENCE"
+  },
+  "queries": {
+    "path": "evaluation/D9_RETRIEVAL_QUERYSET_CANDIDATE_V2.jsonl",
+    "sha256": "67569eeca6fd2e3a94373020722723df3cbecab8dc9f8bb94a52e3346e7a652d",
+    "status": "CANDIDATE_REFERENCE",
+    "freeze_blocker": "contains candidate and pending_review annotations"
+  },
+  "gold_policy": {
+    "path": "evaluation/D9_RETRIEVAL_GOLD_POLICY_V2.json",
+    "sha256": "fa149980ecc866461144432f4e592a15787a43fefed35fe0b722faf694e51022",
+    "status": "TEAM_DEFINED_POLICY_REFERENCE"
+  },
+  "evaluator": {
+    "cli_path": "scripts/run_d13b_formal_eval.py",
+    "cli_sha256": "8fa1414a747025fb9b008af1baea1c7a4b0bf495abab1b67654212e244abbe1d",
+    "ledger_path": "memory-service/retrieval/formal_eval.py",
+    "ledger_sha256": "01c7a2b7b459fefd383369079f1a09ef8ee27d28d71d85a223a84ad872490166",
+    "report_schema": "d13b-retrieval-eval-report/v3"
+  },
+  "config": {
+    "config_version": "d9-retrieval-eval-config/v1",
+    "top_k": 10,
+    "recall_k": 10,
+    "rrf_k": 60,
+    "statistics_method": "not selected for a formal run",
+    "warmup_count": null,
+    "repeat_count": null,
+    "concurrency": null
+  },
+  "required_before_freeze": [
+    "D/E-approved, sealed query/qrel input without candidate or pending_review annotation state",
+    "D13D formal environment provenance and the exact tested commit",
+    "per-channel execution results and independent latency samples",
+    "approved threshold and evidence reference"
+  ],
+  "formal_metrics": null,
+  "rule": "The hashes identify current candidate inputs only. This document deliberately does not freeze them and must not be used as a formal D13B input bundle."
+}
