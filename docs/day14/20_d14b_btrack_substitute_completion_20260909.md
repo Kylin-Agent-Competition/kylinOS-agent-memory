@@ -6,6 +6,18 @@
 工程验证结果。该结果不改变 D14B 原始的 D14D cleanVM Formal L3 完成定义，也不构成
 正式 scope-change 或 waiver。
 
+2026-09-09 复审授权记录：
+
+```text
+FORMAL_D14D_INPUTS = WAIVED_BY_OWNER
+WAIVER_SCOPE = d13d/d14d handoff, frozen tar, four production capture runners, D14D clean VM/snapshot
+MERGE_ELIGIBILITY = PASS_WITH_DEBT
+D14B_TASK = PARTIAL / WAIVED_FORMAL_INPUTS
+```
+
+该豁免只解除上述正式输入缺失对合并资格的阻塞，不把替代验证升级为
+`D14B_FORMAL_L3=PASS`，也不关闭原始 cleanVM 完成定义本身。
+
 替代验证的边界是：在同一 tested commit 上，用真实 Vector Engine、真实 SQLite/FTS5、
 真实 RRF 编排和真实 service/OS restart 完成可复现的检索与索引生命周期验证；它只能
 作为 `PASS_WITH_LIMITATIONS` 的工程证据，不能关闭 Formal L3。
