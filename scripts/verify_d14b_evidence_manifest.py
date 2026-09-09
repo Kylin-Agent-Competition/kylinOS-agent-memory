@@ -20,6 +20,7 @@ RECEIPT_NAMES = {
     "vector": "vector-results.receipt.json",
     "rrf": "rrf-results.receipt.json",
 }
+CHECKPOINT_INVENTORY_RELPATH = "CHECKPOINTS.json"
 
 
 class ManifestError(ValueError):
@@ -84,19 +85,61 @@ def require_manifest_file(root: Path, entries: dict[str, str], path: Path, label
         raise ManifestError(f"必需 {label} 未进入 SHA256SUMS: {relative}")
 
 
-def discover_d14b_checkpoints(root: Path) -> list[tuple[Path, dict[str, Any]]]:
+def load_checkpoint_inventory(root: Path, entries: dict[str, str]) -> list[str]:
+    inventory_path = root / CHECKPOINT_INVENTORY_RELPATH
+    require_manifest_file(root, entries, inventory_path, "checkpoint inventory")
+    raw = inventory_path.read_text(encoding="utf-8")
+    try:
+        value = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise ManifestError(f"checkpoint inventory 不是合法 JSON: {inventory_path}") from error
+    if not isinstance(value, list):
+        raise ManifestError("checkpoint inventory 必须是 JSON array")
+
+    relpaths: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ManifestError("checkpoint inventory 项必须是非空字符串")
+        relpath = item.strip()
+        path = Path(relpath)
+        if (
+            path.is_absolute()
+            or ".." in path.parts
+            or relpath in {"SHA256SUMS", CHECKPOINT_INVENTORY_RELPATH}
+        ):
+            raise ManifestError(f"checkpoint inventory 路径非法: {relpath}")
+        relpaths.append(relpath)
+    if len(set(relpaths)) != len(relpaths):
+        raise ManifestError("checkpoint inventory 存在重复路径")
+    return relpaths
+
+
+def load_checkpoint(
+    root: Path, entries: dict[str, str], relpath: str
+) -> tuple[Path, dict[str, Any]]:
+    path = root / relpath
+    require_manifest_file(root, entries, path, "checkpoint")
+    value = load_object(path, "checkpoint")
     required = {"tested_commit", "checkpoint", "capture_sources", *CHANNELS}
-    checkpoints: list[tuple[Path, dict[str, Any]]] = []
+    missing = sorted(required - value.keys())
+    if missing:
+        raise ManifestError(f"checkpoint schema 缺少字段 {missing}: {relpath}")
+    return path, value
+
+
+def ensure_no_unlisted_checkpoints(root: Path, inventory: set[str]) -> None:
+    inventory_path = root / CHECKPOINT_INVENTORY_RELPATH
     for path in root.rglob("*.json"):
-        if path.is_symlink():
+        if path == inventory_path or path.is_symlink():
             continue
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             continue
-        if isinstance(value, dict) and required.issubset(value):
-            checkpoints.append((path, value))
-    return checkpoints
+        if isinstance(value, dict) and "capture_sources" in value:
+            relpath = path.relative_to(root).as_posix()
+            if relpath not in inventory:
+                raise ManifestError(f"未登记 D14B checkpoint: {relpath}")
 
 
 def require_equal(actual: object, expected: object, label: str) -> None:
@@ -142,10 +185,13 @@ def verify_checkpoint_provenance(
 
 def verify(evidence_root: Path) -> None:
     entries = verify_sha256_closure(evidence_root)
-    for checkpoint_path, checkpoint in discover_d14b_checkpoints(evidence_root):
+    inventory_rels = load_checkpoint_inventory(evidence_root, entries)
+    for relpath in inventory_rels:
+        checkpoint_path, checkpoint = load_checkpoint(evidence_root, entries, relpath)
         verify_checkpoint_provenance(
             root=evidence_root, entries=entries, checkpoint_path=checkpoint_path, checkpoint=checkpoint
         )
+    ensure_no_unlisted_checkpoints(evidence_root, set(inventory_rels))
 
 
 def main() -> int:

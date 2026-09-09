@@ -444,8 +444,15 @@ def test_evidence_manifest_hash_closure(tmp_path: Path) -> None:
     root.mkdir()
     payload = root / "baseline.json"
     payload.write_text('{"status":"PREPARED"}\n', encoding="utf-8")
-    digest = hashlib.sha256(payload.read_bytes()).hexdigest()
-    (root / "SHA256SUMS").write_text(f"{digest}  baseline.json\n", encoding="utf-8")
+    inventory = root / "CHECKPOINTS.json"
+    inventory.write_text('[]\n', encoding="utf-8")
+    (root / "SHA256SUMS").write_text(
+        "".join(
+            f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(root).as_posix()}\n"
+            for path in (payload, inventory)
+        ),
+        encoding="utf-8",
+    )
 
     valid = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
     assert valid.returncode == 0, valid.stderr
@@ -1040,8 +1047,50 @@ def make_provenance_evidence_root(tmp_path: Path) -> tuple[Path, dict[str, Path]
         }),
         encoding="utf-8",
     )
+    (root / "CHECKPOINTS.json").write_text(json.dumps(["baseline.json"]), encoding="utf-8")
     write_evidence_manifest(root)
     return root, receipts
+
+
+def test_evidence_verifier_rejects_missing_checkpoint_inventory(tmp_path: Path) -> None:
+    root, _ = make_provenance_evidence_root(tmp_path)
+    (root / "CHECKPOINTS.json").unlink()
+    write_evidence_manifest(root)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+    assert "checkpoint inventory" in completed.stderr
+
+
+def test_evidence_verifier_rejects_weakened_checkpoint_schema_and_removed_provenance(
+    tmp_path: Path,
+) -> None:
+    root, receipts = make_provenance_evidence_root(tmp_path)
+    checkpoint = root / "baseline.json"
+    payload = json.loads(checkpoint.read_text(encoding="utf-8"))
+    del payload["capture_sources"]
+    write_json(checkpoint, payload)
+    (root / "provenance" / "d14b-capture-handoff.json").unlink()
+    for receipt in receipts.values():
+        receipt.unlink()
+    write_evidence_manifest(root)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+    assert "capture_sources" in completed.stderr
+
+
+def test_evidence_verifier_rejects_unlisted_checkpoint_with_capture_sources(
+    tmp_path: Path,
+) -> None:
+    root, _ = make_provenance_evidence_root(tmp_path)
+    extra = root / "unlisted-checkpoint.json"
+    extra.write_text(json.dumps({"capture_sources": {}}), encoding="utf-8")
+    write_evidence_manifest(root)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+    assert "未登记 D14B checkpoint" in completed.stderr
 
 
 def test_evidence_verifier_rejects_missing_required_receipt_even_with_regenerated_manifest(

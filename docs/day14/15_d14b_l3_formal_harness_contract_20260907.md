@@ -129,8 +129,11 @@ checkpoint 的 `capture_sources` 扩展为可独立复核的 provenance 摘要�
 ```
 
 receiver/reviewer 离线复算规则：root 内 handoff/receipt bytes 必须与 checkpoint 登记的
-SHA 一致，且全部文件（含 provenance）都经 `verify_d14b_evidence_manifest.py` 的
-SHA256SUMS 闭合；缺失或篡改任何 retained provenance bytes 即 FAIL。
+SHA 一致；`CHECKPOINTS.json` 是不可缺失的 checkpoint inventory，verifier 只从该清单
+获得 checkpoint 路径并逐个做 schema + provenance 校验，同时拒绝任何未登记的
+`capture_sources` JSON。全部文件（含 provenance）都经
+`verify_d14b_evidence_manifest.py` 的 SHA256SUMS 闭合；缺失、未登记或篡改任何
+retained provenance bytes 即 FAIL。
 
 ## 3. 快照和比较口径
 
@@ -191,6 +194,7 @@ evidence/l3-kylin-vm/d14b_<UTC_RUN_ID>_<sha7>/
   README.md
   environment.json
   handoff_identity.json
+  CHECKPOINTS.json
   commands.log
   baseline/{sqlite_counts,retrieval_fts5,retrieval_vector,retrieval_rrf,retrieval_formal_eval}.json
   service_restart/{before,after}.json
