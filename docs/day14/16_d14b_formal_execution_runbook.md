@@ -114,6 +114,22 @@ python scripts/capture_d14b_retrieval_snapshot.py \
   --output <evidence-root>/<phase>/<checkpoint>.json
 ```
 
+正式 lifecycle 的 output 路径固定如下；不得以任意 phase/checkpoint 名称替代：
+
+```text
+baseline → <evidence-root>/baseline/baseline.json
+service_restart_after → <evidence-root>/service_restart/service_restart_after.json
+rebuild_after → <evidence-root>/rebuild/rebuild_after.json
+delete_before → <evidence-root>/delete/delete_before.json
+delete_after → <evidence-root>/delete/delete_after.json
+reboot_before → <evidence-root>/os_reboot/reboot_before.json
+reboot_after → <evidence-root>/os_reboot/reboot_after.json
+```
+
+比较关系固定为：`baseline → service_restart_after`、`service_restart_after →
+rebuild_after`、`reboot_before → reboot_after`。delete 使用 `delete_before →
+delete_after` 及 residual/control assertions，不进入 invariant comparator。
+
 ## 4. 机械生命周期顺序
 
 1. 用 production path 初始化 controlled dataset；记录命令与 dataset contract SHA256。

@@ -14,6 +14,24 @@ from typing import Any
 
 LINE_RE = re.compile(r"^([0-9a-f]{64})  (.+)$")
 CHANNELS = ("sqlite", "fts5", "vector", "rrf")
+REQUIRED_CHECKPOINTS = {
+    "baseline": "baseline/baseline.json",
+    "service_restart_after": "service_restart/service_restart_after.json",
+    "rebuild_after": "rebuild/rebuild_after.json",
+    "delete_before": "delete/delete_before.json",
+    "delete_after": "delete/delete_after.json",
+    "reboot_before": "os_reboot/reboot_before.json",
+    "reboot_after": "os_reboot/reboot_after.json",
+}
+CHECKPOINT_REQUIRED_KEYS = {
+    "tested_commit",
+    "checkpoint",
+    "captured_at_utc",
+    "user_id",
+    "capture_sources",
+    *CHANNELS,
+}
+COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 RECEIPT_NAMES = {
     "sqlite": "sqlite-truth.receipt.json",
     "fts5": "fts5-results.receipt.json",
@@ -32,8 +50,15 @@ def sha256(path: Path) -> str:
 
 def verify_sha256_closure(evidence_root: Path) -> dict[str, str]:
     manifest = evidence_root / "SHA256SUMS"
+    if evidence_root.is_symlink():
+        raise ManifestError("evidence root 不得是 symlink")
     if not evidence_root.is_dir() or not manifest.is_file():
         raise ManifestError("evidence root 或 SHA256SUMS 不存在")
+    if manifest.is_symlink():
+        raise ManifestError("SHA256SUMS 不得是 symlink")
+    for path in evidence_root.rglob("*"):
+        if path.is_symlink():
+            raise ManifestError(f"evidence root 不允许 symlink: {path.relative_to(evidence_root)}")
     entries: dict[str, str] = {}
     for number, line in enumerate(manifest.read_text(encoding="utf-8").splitlines(), start=1):
         matched = LINE_RE.fullmatch(line)
@@ -84,19 +109,23 @@ def require_manifest_file(root: Path, entries: dict[str, str], path: Path, label
         raise ManifestError(f"必需 {label} 未进入 SHA256SUMS: {relative}")
 
 
-def discover_d14b_checkpoints(root: Path) -> list[tuple[Path, dict[str, Any]]]:
-    required = {"tested_commit", "checkpoint", "capture_sources", *CHANNELS}
-    checkpoints: list[tuple[Path, dict[str, Any]]] = []
-    for path in root.rglob("*.json"):
-        if path.is_symlink():
-            continue
-        try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            continue
-        if isinstance(value, dict) and required.issubset(value):
-            checkpoints.append((path, value))
-    return checkpoints
+def load_required_checkpoint(
+    root: Path, entries: dict[str, str], checkpoint_id: str, relative_path: str
+) -> tuple[Path, dict[str, Any]]:
+    path = root / relative_path
+    require_manifest_file(root, entries, path, f"required checkpoint {checkpoint_id}")
+    checkpoint = load_object(path, f"required checkpoint {checkpoint_id}")
+    missing = CHECKPOINT_REQUIRED_KEYS - checkpoint.keys()
+    if missing:
+        raise ManifestError(f"checkpoint 缺少必需字段 ({checkpoint_id}): {sorted(missing)}")
+    if checkpoint["checkpoint"] != checkpoint_id:
+        raise ManifestError(f"checkpoint 名称与固定路径不一致: {checkpoint_id}")
+    tested_commit = checkpoint["tested_commit"]
+    if not isinstance(tested_commit, str) or COMMIT_RE.fullmatch(tested_commit) is None:
+        raise ManifestError(f"checkpoint tested_commit 非法: {checkpoint_id}")
+    if not isinstance(checkpoint["capture_sources"], dict):
+        raise ManifestError(f"checkpoint capture_sources 非 object: {checkpoint_id}")
+    return path, checkpoint
 
 
 def require_equal(actual: object, expected: object, label: str) -> None:
@@ -142,7 +171,15 @@ def verify_checkpoint_provenance(
 
 def verify(evidence_root: Path) -> None:
     entries = verify_sha256_closure(evidence_root)
-    for checkpoint_path, checkpoint in discover_d14b_checkpoints(evidence_root):
+    formal_commit: str | None = None
+    for checkpoint_id, relative_path in REQUIRED_CHECKPOINTS.items():
+        checkpoint_path, checkpoint = load_required_checkpoint(
+            evidence_root, entries, checkpoint_id, relative_path
+        )
+        if formal_commit is None:
+            formal_commit = checkpoint["tested_commit"]
+        else:
+            require_equal(checkpoint["tested_commit"], formal_commit, "checkpoint.tested_commit")
         verify_checkpoint_provenance(
             root=evidence_root, entries=entries, checkpoint_path=checkpoint_path, checkpoint=checkpoint
         )

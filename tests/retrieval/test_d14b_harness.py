@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+from scripts.verify_d14b_evidence_manifest import REQUIRED_CHECKPOINTS
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = REPOSITORY_ROOT / "scripts"
@@ -440,12 +443,7 @@ def test_capture_rejects_an_existing_checkpoint_without_overwriting_it(tmp_path:
 
 
 def test_evidence_manifest_hash_closure(tmp_path: Path) -> None:
-    root = tmp_path / "evidence"
-    root.mkdir()
-    payload = root / "baseline.json"
-    payload.write_text('{"status":"PREPARED"}\n', encoding="utf-8")
-    digest = hashlib.sha256(payload.read_bytes()).hexdigest()
-    (root / "SHA256SUMS").write_text(f"{digest}  baseline.json\n", encoding="utf-8")
+    root, _ = make_formal_lifecycle_evidence_root(tmp_path)
 
     valid = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
     assert valid.returncode == 0, valid.stderr
@@ -457,10 +455,8 @@ def test_evidence_manifest_hash_closure(tmp_path: Path) -> None:
 
 
 def test_evidence_manifest_rejects_missing_duplicate_unsafe_and_mismatched_entries(tmp_path: Path) -> None:
-    root = tmp_path / "evidence"
-    root.mkdir()
-    payload = root / "baseline.json"
-    payload.write_text("baseline\n", encoding="utf-8")
+    root, _ = make_formal_lifecycle_evidence_root(tmp_path)
+    payload = root / REQUIRED_CHECKPOINTS["baseline"]
     digest = hashlib.sha256(payload.read_bytes()).hexdigest()
 
     cases = {
@@ -984,7 +980,16 @@ def write_evidence_manifest(root: Path) -> None:
     (root / "SHA256SUMS").write_text("\n".join(entries) + "\n", encoding="utf-8")
 
 
-def make_provenance_evidence_root(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
+def symlink_or_skip(link: Path, target: Path) -> None:
+    try:
+        os.symlink(target, link)
+    except OSError as error:
+        pytest.skip(f"当前平台不允许创建 symlink: {error}")
+
+
+def make_formal_lifecycle_evidence_root(
+    tmp_path: Path,
+) -> tuple[Path, dict[str, dict[str, Path]]]:
     root = tmp_path / "evidence"
     (root / "provenance").mkdir(parents=True)
     handoff = root / "provenance" / "d14b-capture-handoff.json"
@@ -1003,43 +1008,49 @@ def make_provenance_evidence_root(tmp_path: Path) -> tuple[Path, dict[str, Path]
         "vector": "vector-results.receipt.json",
         "rrf": "rrf-results.receipt.json",
     }
-    receipt_dir = root / "provenance" / "baseline"
-    receipt_dir.mkdir()
-    receipts: dict[str, Path] = {}
-    sources: dict[str, object] = {
-        "capture_handoff_sha256": sha256_bytes(handoff.read_bytes()),
-    }
-    for channel in ("sqlite", "fts5", "vector", "rrf"):
-        receipt = receipt_dir / receipt_names[channel]
-        artifact = root / f"{channel}.artifact.json"
-        artifact.write_text(json.dumps({"channel": channel}), encoding="utf-8")
-        receipt.write_text(
-            json.dumps({
-                "tested_commit": SHA,
+    receipts: dict[str, dict[str, Path]] = {}
+    for checkpoint_id, relative_path in REQUIRED_CHECKPOINTS.items():
+        checkpoint = root / relative_path
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        receipt_dir = checkpoint.parent / "provenance" / checkpoint_id
+        receipt_dir.mkdir(parents=True)
+        checkpoint_receipts: dict[str, Path] = {}
+        sources: dict[str, object] = {
+            "capture_handoff_sha256": sha256_bytes(handoff.read_bytes()),
+        }
+        for channel in ("sqlite", "fts5", "vector", "rrf"):
+            receipt = receipt_dir / receipt_names[channel]
+            artifact = root / f"{checkpoint_id}-{channel}.artifact.json"
+            artifact.write_text(json.dumps({"channel": channel}), encoding="utf-8")
+            receipt.write_text(
+                json.dumps({
+                    "tested_commit": SHA,
+                    **captures[channel],
+                    "artifact_sha256": sha256_bytes(artifact.read_bytes()),
+                }),
+                encoding="utf-8",
+            )
+            checkpoint_receipts[channel] = receipt
+            sources[channel] = {
+                "receipt_sha256": sha256_bytes(receipt.read_bytes()),
                 **captures[channel],
                 "artifact_sha256": sha256_bytes(artifact.read_bytes()),
+            }
+        checkpoint.write_text(
+            json.dumps({
+                "tested_commit": SHA,
+                "checkpoint": checkpoint_id,
+                "captured_at_utc": "2026-09-09T00:00:00Z",
+                "user_id": "d14b-controlled-user",
+                "capture_sources": sources,
+                "sqlite": {},
+                "fts5": {},
+                "vector": {},
+                "rrf": {},
             }),
             encoding="utf-8",
         )
-        receipts[channel] = receipt
-        sources[channel] = {
-            "receipt_sha256": sha256_bytes(receipt.read_bytes()),
-            **captures[channel],
-            "artifact_sha256": sha256_bytes(artifact.read_bytes()),
-        }
-    checkpoint = root / "baseline.json"
-    checkpoint.write_text(
-        json.dumps({
-            "tested_commit": SHA,
-            "checkpoint": "baseline",
-            "capture_sources": sources,
-            "sqlite": {},
-            "fts5": {},
-            "vector": {},
-            "rrf": {},
-        }),
-        encoding="utf-8",
-    )
+        receipts[checkpoint_id] = checkpoint_receipts
     write_evidence_manifest(root)
     return root, receipts
 
@@ -1047,12 +1058,12 @@ def make_provenance_evidence_root(tmp_path: Path) -> tuple[Path, dict[str, Path]
 def test_evidence_verifier_rejects_missing_required_receipt_even_with_regenerated_manifest(
     tmp_path: Path,
 ) -> None:
-    root, receipts = make_provenance_evidence_root(tmp_path)
+    root, receipts = make_formal_lifecycle_evidence_root(tmp_path)
 
     completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
     assert completed.returncode == 0, completed.stderr
 
-    receipts["fts5"].unlink()
+    receipts["baseline"]["fts5"].unlink()
     write_evidence_manifest(root)
     missing = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
     assert missing.returncode != 0
@@ -1061,7 +1072,7 @@ def test_evidence_verifier_rejects_missing_required_receipt_even_with_regenerate
 def test_evidence_verifier_rejects_missing_handoff_even_with_regenerated_manifest(
     tmp_path: Path,
 ) -> None:
-    root, _ = make_provenance_evidence_root(tmp_path)
+    root, _ = make_formal_lifecycle_evidence_root(tmp_path)
 
     (root / "provenance" / "d14b-capture-handoff.json").unlink()
     write_evidence_manifest(root)
@@ -1074,11 +1085,11 @@ def test_evidence_verifier_rejects_missing_handoff_even_with_regenerated_manifes
 def test_evidence_verifier_rejects_tampered_receipt_with_regenerated_manifest(
     tmp_path: Path,
 ) -> None:
-    root, receipts = make_provenance_evidence_root(tmp_path)
+    root, receipts = make_formal_lifecycle_evidence_root(tmp_path)
 
-    receipt = json.loads(receipts["vector"].read_text(encoding="utf-8"))
+    receipt = json.loads(receipts["baseline"]["vector"].read_text(encoding="utf-8"))
     receipt["artifact_sha256"] = "d" * 64
-    write_json(receipts["vector"], receipt)
+    write_json(receipts["baseline"]["vector"], receipt)
     write_evidence_manifest(root)
 
     completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
@@ -1089,7 +1100,7 @@ def test_evidence_verifier_rejects_tampered_receipt_with_regenerated_manifest(
 def test_evidence_verifier_rejects_tampered_handoff_with_regenerated_manifest(
     tmp_path: Path,
 ) -> None:
-    root, _ = make_provenance_evidence_root(tmp_path)
+    root, _ = make_formal_lifecycle_evidence_root(tmp_path)
 
     handoff = root / "provenance" / "d14b-capture-handoff.json"
     payload = json.loads(handoff.read_text(encoding="utf-8"))
@@ -1105,20 +1116,123 @@ def test_evidence_verifier_rejects_tampered_handoff_with_regenerated_manifest(
 def test_evidence_verifier_rejects_runner_metadata_semantic_mismatch(
     tmp_path: Path,
 ) -> None:
-    root, receipts = make_provenance_evidence_root(tmp_path)
+    root, receipts = make_formal_lifecycle_evidence_root(tmp_path)
 
-    receipt = json.loads(receipts["rrf"].read_text(encoding="utf-8"))
+    receipt = json.loads(receipts["baseline"]["rrf"].read_text(encoding="utf-8"))
     receipt["runner_sha256"] = "d" * 64
-    write_json(receipts["rrf"], receipt)
-    checkpoint = root / "baseline.json"
+    write_json(receipts["baseline"]["rrf"], receipt)
+    checkpoint = root / REQUIRED_CHECKPOINTS["baseline"]
     payload = json.loads(checkpoint.read_text(encoding="utf-8"))
-    payload["capture_sources"]["rrf"]["receipt_sha256"] = sha256_bytes(receipts["rrf"].read_bytes())
+    payload["capture_sources"]["rrf"]["receipt_sha256"] = sha256_bytes(receipts["baseline"]["rrf"].read_bytes())
     write_json(checkpoint, payload)
     write_evidence_manifest(root)
 
     completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
     assert completed.returncode != 0
     assert "runner_sha256" in completed.stderr
+
+
+def test_evidence_verifier_rejects_weakened_checkpoint_schema_even_with_regenerated_manifest(
+    tmp_path: Path,
+) -> None:
+    root, receipts = make_formal_lifecycle_evidence_root(tmp_path)
+    checkpoint = root / REQUIRED_CHECKPOINTS["baseline"]
+    payload = json.loads(checkpoint.read_text(encoding="utf-8"))
+    del payload["capture_sources"]
+    write_json(checkpoint, payload)
+    for receipt in receipts["baseline"].values():
+        receipt.unlink()
+    write_evidence_manifest(root)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+
+
+def test_evidence_verifier_rejects_missing_required_lifecycle_checkpoint(tmp_path: Path) -> None:
+    root, _ = make_formal_lifecycle_evidence_root(tmp_path)
+    (root / REQUIRED_CHECKPOINTS["rebuild_after"]).unlink()
+    write_evidence_manifest(root)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+    assert "rebuild_after" in completed.stderr
+
+
+def test_evidence_verifier_rejects_checkpoint_id_mismatch(tmp_path: Path) -> None:
+    root, _ = make_formal_lifecycle_evidence_root(tmp_path)
+    checkpoint = root / REQUIRED_CHECKPOINTS["delete_before"]
+    payload = json.loads(checkpoint.read_text(encoding="utf-8"))
+    payload["checkpoint"] = "baseline"
+    write_json(checkpoint, payload)
+    write_evidence_manifest(root)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+    assert "固定路径" in completed.stderr
+
+
+def test_evidence_verifier_rejects_checkpoint_tested_commit_drift(tmp_path: Path) -> None:
+    root, _ = make_formal_lifecycle_evidence_root(tmp_path)
+    checkpoint = root / REQUIRED_CHECKPOINTS["reboot_after"]
+    payload = json.loads(checkpoint.read_text(encoding="utf-8"))
+    payload["tested_commit"] = OTHER_SHA
+    write_json(checkpoint, payload)
+    write_evidence_manifest(root)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+    assert "tested_commit" in completed.stderr
+
+
+def test_evidence_verifier_rejects_missing_checkpoint_channel(tmp_path: Path) -> None:
+    root, _ = make_formal_lifecycle_evidence_root(tmp_path)
+    checkpoint = root / REQUIRED_CHECKPOINTS["delete_after"]
+    payload = json.loads(checkpoint.read_text(encoding="utf-8"))
+    del payload["rrf"]
+    write_json(checkpoint, payload)
+    write_evidence_manifest(root)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+    assert "rrf" in completed.stderr
+
+
+def test_evidence_verifier_rejects_non_object_capture_sources(tmp_path: Path) -> None:
+    root, _ = make_formal_lifecycle_evidence_root(tmp_path)
+    checkpoint = root / REQUIRED_CHECKPOINTS["service_restart_after"]
+    payload = json.loads(checkpoint.read_text(encoding="utf-8"))
+    payload["capture_sources"] = None
+    write_json(checkpoint, payload)
+    write_evidence_manifest(root)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+    assert "capture_sources" in completed.stderr
+
+
+def test_evidence_verifier_rejects_symlinked_evidence_file(tmp_path: Path) -> None:
+    root, _ = make_formal_lifecycle_evidence_root(tmp_path)
+    target = root / "target.json"
+    target.write_text('{"target": true}\n', encoding="utf-8")
+    symlink_or_skip(root / "linked.json", target)
+    write_evidence_manifest(root)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+    assert "symlink" in completed.stderr
+
+
+def test_evidence_verifier_rejects_symlinked_manifest(tmp_path: Path) -> None:
+    root, _ = make_formal_lifecycle_evidence_root(tmp_path)
+    manifest = root / "SHA256SUMS"
+    target = tmp_path / "manifest-target.txt"
+    target.write_bytes(manifest.read_bytes())
+    manifest.unlink()
+    symlink_or_skip(manifest, target)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+    assert "SHA256SUMS" in completed.stderr
 
 
 def test_formal_docs_are_in_sync_with_preflight_cli(tmp_path: Path) -> None:
@@ -1176,6 +1290,17 @@ def test_formal_docs_capture_examples_match_current_cli(tmp_path: Path) -> None:
         "--rrf-receipt",
     ):
         assert flag in help_run.stdout
+
+
+def test_formal_docs_list_all_required_lifecycle_checkpoint_paths(tmp_path: Path) -> None:
+    docs = (
+        REPOSITORY_ROOT / "docs/day14/15_d14b_l3_formal_harness_contract_20260907.md",
+        REPOSITORY_ROOT / "docs/day14/16_d14b_formal_execution_runbook.md",
+    )
+    for doc in docs:
+        text = doc.read_text(encoding="utf-8")
+        for relative_path in REQUIRED_CHECKPOINTS.values():
+            assert relative_path in text, f"{doc.name} missing required checkpoint path: {relative_path}"
 
 
 def test_preflight_docs_evidence_root_lines_continue(tmp_path: Path) -> None:

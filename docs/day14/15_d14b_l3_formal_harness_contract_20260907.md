@@ -118,6 +118,27 @@ evidence/l3-kylin-vm/d14b_<UTC_RUN_ID>_<sha7>/
   SHA256SUMS
 ```
 
+### Required lifecycle checkpoints
+
+Formal evidence verifier 不采用 JSON heuristic discovery。下列路径是唯一接受的
+lifecycle checkpoint 集合；每一个都必须是进入 `SHA256SUMS` 的 regular file，含完整
+checkpoint schema，且内部 `checkpoint` 值必须与路径中的 ID 相同。缺失、schema
+不完整或路径/ID 不一致一律 fail-closed。
+
+```text
+baseline/baseline.json                         # baseline
+service_restart/service_restart_after.json     # service_restart_after
+rebuild/rebuild_after.json                     # rebuild_after
+delete/delete_before.json                      # delete_before
+delete/delete_after.json                       # delete_after
+os_reboot/reboot_before.json                   # reboot_before
+os_reboot/reboot_after.json                    # reboot_after
+```
+
+`baseline.tested_commit` 是本次 formal run 的 commit；其余六个 checkpoint 及全局
+capture handoff 的 `tested_commit` 必须完全一致。evidence root、`SHA256SUMS` 与 root
+内任意路径均不得为 symlink。
+
 checkpoint 的 `capture_sources` 扩展为可独立复核的 provenance 摘要：
 
 ```json
@@ -192,11 +213,14 @@ evidence/l3-kylin-vm/d14b_<UTC_RUN_ID>_<sha7>/
   environment.json
   handoff_identity.json
   commands.log
-  baseline/{sqlite_counts,retrieval_fts5,retrieval_vector,retrieval_rrf,retrieval_formal_eval}.json
-  service_restart/{before,after}.json
-  rebuild/{before,after,comparison}.json
-  delete/{before,after,residual}.json
-  os_reboot/{before,after,boot_identity}.json
+  baseline/baseline.json
+  service_restart/service_restart_after.json
+  rebuild/rebuild_after.json
+  delete/delete_before.json
+  delete/delete_after.json
+  os_reboot/reboot_before.json
+  os_reboot/reboot_after.json
+  comparisons/{service_restart,rebuild,reboot,delete_residual}.json
   performance/{raw,summary,comparison}.json
   l0_l1/pytest.log
   SHA256SUMS
