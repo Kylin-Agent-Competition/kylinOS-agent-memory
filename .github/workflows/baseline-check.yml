@@ -81,7 +81,8 @@ jobs:
             packaging/release/test_d14a_transactional_rollback.py \
             packaging/release/test_d14a_verify_smoke.py \
             docs/day14/test_d14a_release_provenance.py \
-            docs/day15/test_d15a_rc_lock_matrix.py
+            docs/day15/test_d15a_rc_lock_matrix.py \
+            docs/day15/test_d15b_btrack_finalization.py
 
   carlton-independent-host-evidence:
     name: Carlton independent host evidence closure
