@@ -47,7 +47,7 @@ evaluation/test_d9_retrieval_gold_spec.py
 
 `docs/day14/21_d14b_formal_l3_intake_blockers_20260909.md` 已记录 Formal L3 缺失标准 handoff、冻结 tar 实际字节、四个 production runner 和 D14D clean-VM/snapshot。D14D 现有 evidence summary 的范围仅为 G0-G6，且 `G7=NOT_RUN_NA`、`G8=NOT_RUN`、`L3_READY=false`；它不能代替 B 的 lifecycle Formal L3。
 
-技术债总账中仍有 B 轨 Open 项，完整标识见 inventory。它们没有 D/E 所需的关闭或 release-debt acceptance 记录，故本报告不改写其状态。当前未发现未经解释的 B 轨 P0/High 条目；这不等同于所有 Medium/Low 技术债已关闭。
+技术债总账中仍有 B 轨 Open 项，完整标识见 inventory 和逐项[审计](05_d15b_btrack_open_debt_audit_20260909.md)。它们没有 D/E 所需的关闭或 release-debt acceptance 记录，故本报告不改写其状态。当前未发现未经解释的 B 轨 P0/High 条目；这不等同于所有 Medium/Low 技术债已关闭。
 
 ## 评测输入与指标
 

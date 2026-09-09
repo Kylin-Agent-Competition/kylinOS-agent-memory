@@ -79,5 +79,6 @@
     "TD-001", "TD-002", "TD-018", "TD-019", "TD-020", "TD-021", "TD-027", "TD-029", "TD-030", "TD-032", "TD-033", "TD-034", "TD-035", "TD-036", "TD-037", "TD-038", "TD-054"
   ],
   "accepted_release_debts": [],
+  "debt_audit": "docs/day15/05_d15b_btrack_open_debt_audit_20260909.md",
   "conclusion": "No unresolved B-track P0/High item was found in the current debt register, but the listed Open debt items have not been marked CLOSED or ACCEPTED_RELEASE_DEBT by their required reviewers. This inventory must not be interpreted as B_TRACK_COMPLETE."
 }
