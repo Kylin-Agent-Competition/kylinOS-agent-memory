@@ -6,6 +6,12 @@ already approved production Repository/API/service paths.  Every source
 artifact must carry a machine-verifiable capture receipt bound to the approved
 capture handoff; this command validates and records those bytes only.  It
 never calls a service, writes a database, or changes an index.
+
+The produced checkpoint records the full provenance chain (checkpoint ->
+receipt -> handoff -> pinned runner): per source it keeps artifact SHA,
+receipt SHA, command id and runner SHA, plus the capture-handoff SHA.  The
+raw handoff/receipt bytes are retained by the formal evidence root and closed
+by the existing SHA256SUMS verifier.
 """
 
 from __future__ import annotations
@@ -47,11 +53,6 @@ def _load(path: Path, label: str) -> tuple[dict[str, Any], str]:
     if not isinstance(value, dict):
         raise CaptureError(f"{label} 必须是 JSON object")
     return value, hashlib.sha256(raw).hexdigest()
-
-
-def _load_object(path: Path, label: str) -> dict[str, Any]:
-    value, _ = _load(path, label)
-    return value
 
 
 def _text(value: Any, label: str) -> str:
@@ -112,14 +113,16 @@ def _verify_receipts(
     *,
     tested_commit: str,
     capture_handoff: dict[str, Any],
+    capture_handoff_sha: str,
     artifact_hashes: dict[str, str],
     artifact_paths: dict[str, Path],
     receipt_paths: dict[str, Path],
-) -> None:
-    """Bind every source artifact to its capture receipt and the handoff.
+) -> dict[str, dict[str, str]]:
+    """Bind every source artifact to its receipt and the handoff.
 
-    A receipt is mandatory per source; a hand-written JSON without provenance
-    must fail closed even when its structure and hashes look self-consistent.
+    Returns per-channel provenance: artifact_sha256, receipt_sha256,
+    command_id, runner_sha256, runner_path.  Receipt hashes are computed over
+    the raw receipt bytes, never over a re-serialised object.
     """
 
     if not isinstance(capture_handoff, dict):
@@ -131,6 +134,7 @@ def _verify_receipts(
     if not isinstance(captures, dict) or set(captures) != set(ALL_CHANNELS):
         raise CaptureError("capture-handoff.captures 必须声明 sqlite/fts5/vector/rrf 四类 runner")
 
+    provenance: dict[str, dict[str, str]] = {}
     for channel in ALL_CHANNELS:
         handoff_entry = captures[channel]
         if not isinstance(handoff_entry, dict):
@@ -138,7 +142,7 @@ def _verify_receipts(
         receipt_path = receipt_paths[channel]
         if receipt_path is None:
             raise CaptureError(f"{channel} 缺少 capture receipt，禁止无 provenance 采集")
-        receipt = _load_object(receipt_path, f"{channel} receipt")
+        receipt, receipt_sha = _load(receipt_path, f"{channel} receipt")
         for field in RECEIPT_FIELDS:
             if field not in receipt:
                 raise CaptureError(f"{channel} receipt 缺少字段 {field}")
@@ -171,6 +175,15 @@ def _verify_receipts(
             != artifact_hashes[channel]
         ):
             raise CaptureError(f"{channel} receipt.artifact_sha256 与实际 artifact 不一致")
+        provenance[channel] = {
+            "artifact_sha256": artifact_hashes[channel],
+            "receipt_sha256": receipt_sha,
+            "command_id": _text(receipt.get("command_id"), f"{channel} receipt.command_id"),
+            "runner_sha256": _text(receipt.get("runner_sha256"), f"{channel} receipt.runner_sha256"),
+            "runner_path": _text(receipt.get("runner_path"), f"{channel} receipt.runner_path"),
+        }
+    provenance["capture_handoff_sha256"] = capture_handoff_sha
+    return provenance
 
 
 def build_checkpoint(
@@ -181,7 +194,7 @@ def build_checkpoint(
     captured_at_utc: str,
     truth: dict[str, Any],
     channels: dict[str, dict[str, Any]],
-    source_hashes: dict[str, str],
+    provenance: dict[str, dict[str, str]],
 ) -> dict[str, Any]:
     if not COMMIT_RE.fullmatch(tested_commit):
         raise CaptureError("tested_commit 必须是 40 位小写十六进制")
@@ -195,9 +208,7 @@ def build_checkpoint(
         "captured_at_utc": captured_at_utc,
         "user_id": user_value,
         "sqlite": _truth(truth),
-        "capture_sources": {
-            name: {"sha256": digest} for name, digest in sorted(source_hashes.items())
-        },
+        "capture_sources": provenance,
     }
     for channel in CHANNELS:
         result[channel] = _channel(channels[channel], channel)
@@ -251,10 +262,11 @@ def main() -> int:
             artifact_hashes[channel] = source_hashes[channel]
         if args.capture_handoff is None:
             raise CaptureError("缺少 d14b-capture-handoff：禁止无 provenance 采集")
-        capture_handoff = _load_object(args.capture_handoff, "d14b-capture-handoff")
-        _verify_receipts(
+        capture_handoff, capture_handoff_sha = _load(args.capture_handoff, "d14b-capture-handoff")
+        provenance = _verify_receipts(
             tested_commit=args.tested_commit,
             capture_handoff=capture_handoff,
+            capture_handoff_sha=capture_handoff_sha,
             artifact_hashes=artifact_hashes,
             artifact_paths=artifact_paths,
             receipt_paths=receipt_paths,
@@ -266,7 +278,7 @@ def main() -> int:
             captured_at_utc=args.captured_at_utc,
             truth=truth,
             channels=channels,
-            source_hashes=source_hashes,
+            provenance=provenance,
         )
         args.output.write_text(
             json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True) + "\n",

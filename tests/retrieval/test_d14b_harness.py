@@ -411,7 +411,7 @@ def test_capture_assembles_read_only_channel_artifacts_into_a_checkpoint(tmp_pat
     checkpoint = json.loads(output.read_text(encoding="utf-8"))
     assert checkpoint["tested_commit"] == SHA
     assert checkpoint["sqlite"] == {"stable_ids": ["a"], "active_version_ids": ["v1"]}
-    assert checkpoint["capture_sources"]["sqlite_truth"]["sha256"] == case["hashes"]["sqlite"]
+    assert checkpoint["capture_sources"]["sqlite"]["artifact_sha256"] == case["hashes"]["sqlite"]
 
 def test_capture_rejects_an_existing_checkpoint_without_overwriting_it(tmp_path: Path) -> None:
     truth = write_json(tmp_path / "sqlite-truth.json", {"stable_ids": ["a"], "active_version_ids": ["v1"]})
@@ -956,3 +956,116 @@ def test_preflight_rejects_package_manifest_version_mismatch(tmp_path: Path) -> 
     completed = run_preflight_suite(case)
     assert completed.returncode != 0
     assert "package_version" in completed.stderr
+
+# ─────────────────── R3 provenance retention + docs/CLI smoke ──────────────
+
+def test_checkpoint_records_handoff_and_receipt_provenance(tmp_path: Path) -> None:
+    case = make_capture_case(tmp_path)
+    output = tmp_path / "checkpoint.json"
+    completed = run_capture(case, output)
+    assert completed.returncode == 0, completed.stderr
+    checkpoint = json.loads(output.read_text(encoding="utf-8"))
+    sources = checkpoint["capture_sources"]
+    assert sources["capture_handoff_sha256"] == sha256_bytes(case["handoff"].read_bytes())
+    for channel in ("sqlite", "fts5", "vector", "rrf"):
+        entry = sources[channel]
+        assert entry["artifact_sha256"] == sha256_bytes(case["artifacts"][channel].read_bytes())
+        assert entry["receipt_sha256"] == sha256_bytes(case["receipts"][channel].read_bytes())
+        assert entry["command_id"] == f"d14b-{channel}-v1"
+        assert entry["runner_sha256"] == HASH
+
+
+def test_provenance_handoff_receipts_close_in_evidence_manifest(tmp_path: Path) -> None:
+    root = tmp_path / "evidence"
+    (root / "provenance").mkdir(parents=True)
+    (root / "baseline" / "provenance").mkdir(parents=True)
+    handoff = root / "provenance" / "d14b-capture-handoff.json"
+    handoff.write_text(json.dumps({"tested_commit": SHA, "captures": {}}), encoding="utf-8")
+    receipt_files = []
+    for channel in ("sqlite", "fts5", "vector", "rrf"):
+        receipt = root / "baseline" / "provenance" / f"{channel}-truth.receipt.json"
+        receipt.write_text(json.dumps({"channel": channel}), encoding="utf-8")
+        receipt_files.append(receipt)
+    lines = []
+    for path in [handoff, *receipt_files]:
+        lines.append(f"{sha256_bytes(path.read_bytes())}  {path.relative_to(root).as_posix()}")
+    (root / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode == 0, completed.stderr
+
+    receipt_files[1].unlink()
+    missing = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert missing.returncode != 0
+
+    receipt_files[1].write_text('{"channel": "tampered"}\n', encoding="utf-8")
+    tampered = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert tampered.returncode != 0
+
+
+def test_formal_docs_are_in_sync_with_preflight_cli(tmp_path: Path) -> None:
+    docs = (
+        REPOSITORY_ROOT / "docs/day14/15_d14b_l3_formal_harness_contract_20260907.md",
+        REPOSITORY_ROOT / "docs/day14/16_d14b_formal_execution_runbook.md",
+    )
+    for doc in docs:
+        text = doc.read_text(encoding="utf-8")
+        for flag in (
+            "--expected-tested-commit",
+            "--d13d-handoff",
+            "--d14d-handoff",
+            "--package-manifest",
+            "--repo-root",
+            "--evidence-root",
+            "--capture-handoff",
+            "--package-tar",
+            "--actual-package-manifest",
+        ):
+            assert flag in text, f"{doc.name} missing {flag}"
+    help_run = run_script("run_d14b_preflight.py", "--help")
+    assert help_run.returncode == 0
+    for flag in (
+        "--capture-handoff",
+        "--package-tar",
+        "--actual-package-manifest",
+        "--evidence-root",
+    ):
+        assert flag in help_run.stdout
+
+
+def test_formal_docs_capture_examples_match_current_cli(tmp_path: Path) -> None:
+    docs = (
+        REPOSITORY_ROOT / "docs/day14/15_d14b_l3_formal_harness_contract_20260907.md",
+        REPOSITORY_ROOT / "docs/day14/16_d14b_formal_execution_runbook.md",
+    )
+    for doc in docs:
+        text = doc.read_text(encoding="utf-8")
+        for flag in (
+            "--capture-handoff",
+            "--sqlite-receipt",
+            "--fts5-receipt",
+            "--vector-receipt",
+            "--rrf-receipt",
+        ):
+            assert flag in text, f"{doc.name} missing {flag}"
+    help_run = run_script("capture_d14b_retrieval_snapshot.py", "--help")
+    assert help_run.returncode == 0
+    for flag in (
+        "--capture-handoff",
+        "--sqlite-receipt",
+        "--fts5-receipt",
+        "--vector-receipt",
+        "--rrf-receipt",
+    ):
+        assert flag in help_run.stdout
+
+
+def test_preflight_docs_evidence_root_lines_continue(tmp_path: Path) -> None:
+    docs = (
+        REPOSITORY_ROOT / "docs/day14/15_d14b_l3_formal_harness_contract_20260907.md",
+        REPOSITORY_ROOT / "docs/day14/16_d14b_formal_execution_runbook.md",
+    )
+    canonical = "  --evidence-root <absolute-new-root> \\"
+    for doc in docs:
+        text = doc.read_text(encoding="utf-8")
+        assert canonical in text, f"{doc.name}: preflight --evidence-root 行必须存在且以 \\ 续行"
