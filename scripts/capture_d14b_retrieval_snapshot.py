@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Assemble a read-only D14B retrieval checkpoint from production artifacts.
 
-The caller obtains SQLite truth and the FTS5/Vector/RRF result artifacts by
-the already approved production Repository/API/service paths.  This command
-only validates and records those bytes; it never calls a service, writes a
-database, or changes an index.
+The caller obtains SQLite truth and the FTS5/Vector/RRF result artifacts by the
+already approved production Repository/API/service paths.  Every source
+artifact must carry a machine-verifiable capture receipt bound to the approved
+capture handoff; this command validates and records those bytes only.  It
+never calls a service, writes a database, or changes an index.
 """
 
 from __future__ import annotations
@@ -17,9 +18,20 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 CHANNELS = ("fts5", "vector", "rrf")
+TRUTH_CHANNEL = "sqlite"
+ALL_CHANNELS = (TRUTH_CHANNEL, *CHANNELS)
+RECEIPT_FIELDS = (
+    "channel",
+    "tested_commit",
+    "command_id",
+    "runner_path",
+    "runner_sha256",
+    "artifact_path",
+    "artifact_sha256",
+    "captured_at_utc",
+)
 
 
 class CaptureError(ValueError):
@@ -35,6 +47,11 @@ def _load(path: Path, label: str) -> tuple[dict[str, Any], str]:
     if not isinstance(value, dict):
         raise CaptureError(f"{label} 必须是 JSON object")
     return value, hashlib.sha256(raw).hexdigest()
+
+
+def _load_object(path: Path, label: str) -> dict[str, Any]:
+    value, _ = _load(path, label)
+    return value
 
 
 def _text(value: Any, label: str) -> str:
@@ -91,6 +108,71 @@ def _channel(value: dict[str, Any], label: str) -> dict[str, list[dict[str, Any]
     return {"queries": normalized}
 
 
+def _verify_receipts(
+    *,
+    tested_commit: str,
+    capture_handoff: dict[str, Any],
+    artifact_hashes: dict[str, str],
+    artifact_paths: dict[str, Path],
+    receipt_paths: dict[str, Path],
+) -> None:
+    """Bind every source artifact to its capture receipt and the handoff.
+
+    A receipt is mandatory per source; a hand-written JSON without provenance
+    must fail closed even when its structure and hashes look self-consistent.
+    """
+
+    if not isinstance(capture_handoff, dict):
+        raise CaptureError("d14b-capture-handoff 必须是 JSON object")
+    handoff_commit = _text(capture_handoff.get("tested_commit"), "capture-handoff.tested_commit")
+    if handoff_commit != tested_commit:
+        raise CaptureError("capture-handoff.tested_commit 与 requested tested_commit 不一致")
+    captures = capture_handoff.get("captures")
+    if not isinstance(captures, dict) or set(captures) != set(ALL_CHANNELS):
+        raise CaptureError("capture-handoff.captures 必须声明 sqlite/fts5/vector/rrf 四类 runner")
+
+    for channel in ALL_CHANNELS:
+        handoff_entry = captures[channel]
+        if not isinstance(handoff_entry, dict):
+            raise CaptureError(f"capture-handoff.captures.{channel} 必须是 object")
+        receipt_path = receipt_paths[channel]
+        if receipt_path is None:
+            raise CaptureError(f"{channel} 缺少 capture receipt，禁止无 provenance 采集")
+        receipt = _load_object(receipt_path, f"{channel} receipt")
+        for field in RECEIPT_FIELDS:
+            if field not in receipt:
+                raise CaptureError(f"{channel} receipt 缺少字段 {field}")
+        if _text(receipt.get("channel"), f"{channel} receipt.channel") != channel:
+            raise CaptureError(f"{channel} receipt.channel 与通道不一致")
+        if _text(receipt.get("tested_commit"), f"{channel} receipt.tested_commit") != tested_commit:
+            raise CaptureError(f"{channel} receipt.tested_commit 与 requested tested_commit 不一致")
+        if (
+            _text(receipt.get("command_id"), f"{channel} receipt.command_id")
+            != _text(handoff_entry.get("command_id"), f"capture-handoff.{channel}.command_id")
+        ):
+            raise CaptureError(f"{channel} receipt.command_id 与 capture-handoff 不一致")
+        if (
+            _text(receipt.get("runner_path"), f"{channel} receipt.runner_path")
+            != _text(handoff_entry.get("runner_path"), f"capture-handoff.{channel}.runner_path")
+        ):
+            raise CaptureError(f"{channel} receipt.runner_path 与 capture-handoff 不一致")
+        if (
+            _text(receipt.get("runner_sha256"), f"{channel} receipt.runner_sha256")
+            != _text(handoff_entry.get("runner_sha256"), f"capture-handoff.{channel}.runner_sha256")
+        ):
+            raise CaptureError(f"{channel} receipt.runner_sha256 与 capture-handoff 不一致")
+        if (
+            Path(_text(receipt.get("artifact_path"), f"{channel} receipt.artifact_path")).name
+            != artifact_paths[channel].name
+        ):
+            raise CaptureError(f"{channel} receipt.artifact_path 与本次 artifact 不一致")
+        if (
+            _text(receipt.get("artifact_sha256"), f"{channel} receipt.artifact_sha256")
+            != artifact_hashes[channel]
+        ):
+            raise CaptureError(f"{channel} receipt.artifact_sha256 与实际 artifact 不一致")
+
+
 def build_checkpoint(
     *,
     tested_commit: str,
@@ -128,10 +210,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--user-id", required=True)
     parser.add_argument("--captured-at-utc", required=True)
+    parser.add_argument("--capture-handoff", type=Path, default=None)
     parser.add_argument("--sqlite-truth", type=Path, required=True)
     parser.add_argument("--fts5-results", type=Path, required=True)
     parser.add_argument("--vector-results", type=Path, required=True)
     parser.add_argument("--rrf-results", type=Path, required=True)
+    parser.add_argument("--sqlite-receipt", type=Path, default=None)
+    parser.add_argument("--fts5-receipt", type=Path, default=None)
+    parser.add_argument("--vector-receipt", type=Path, default=None)
+    parser.add_argument("--rrf-receipt", type=Path, default=None)
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
 
@@ -146,12 +233,32 @@ def main() -> int:
         truth, truth_hash = _load(args.sqlite_truth, "sqlite truth")
         channels: dict[str, dict[str, Any]] = {}
         source_hashes = {"sqlite_truth": truth_hash}
+        artifact_paths = {"sqlite": args.sqlite_truth}
+        artifact_hashes = {"sqlite": truth_hash}
+        receipt_paths = {
+            "sqlite": args.sqlite_receipt,
+            "fts5": args.fts5_receipt,
+            "vector": args.vector_receipt,
+            "rrf": args.rrf_receipt,
+        }
         for channel, path in (
             ("fts5", args.fts5_results),
             ("vector", args.vector_results),
             ("rrf", args.rrf_results),
         ):
             channels[channel], source_hashes[channel] = _load(path, f"{channel} results")
+            artifact_paths[channel] = path
+            artifact_hashes[channel] = source_hashes[channel]
+        if args.capture_handoff is None:
+            raise CaptureError("缺少 d14b-capture-handoff：禁止无 provenance 采集")
+        capture_handoff = _load_object(args.capture_handoff, "d14b-capture-handoff")
+        _verify_receipts(
+            tested_commit=args.tested_commit,
+            capture_handoff=capture_handoff,
+            artifact_hashes=artifact_hashes,
+            artifact_paths=artifact_paths,
+            receipt_paths=receipt_paths,
+        )
         output = build_checkpoint(
             tested_commit=args.tested_commit,
             checkpoint=args.checkpoint,
@@ -161,7 +268,10 @@ def main() -> int:
             channels=channels,
             source_hashes=source_hashes,
         )
-        args.output.write_text(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        args.output.write_text(
+            json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     except CaptureError as error:
         print(f"D14B_CAPTURE_FAIL: {error}", file=sys.stderr)
         return 2
