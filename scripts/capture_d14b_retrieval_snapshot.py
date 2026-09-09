@@ -237,8 +237,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        if args.output.exists():
-            raise CaptureError("checkpoint output 已存在，禁止覆盖 evidence")
         if not args.output.parent.is_dir():
             raise CaptureError("checkpoint output 父目录不存在")
         truth, truth_hash = _load(args.sqlite_truth, "sqlite truth")
@@ -280,10 +278,11 @@ def main() -> int:
             channels=channels,
             provenance=provenance,
         )
-        args.output.write_text(
-            json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        try:
+            with args.output.open("x", encoding="utf-8") as handle:
+                handle.write(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        except FileExistsError as error:
+            raise CaptureError("checkpoint output 已存在，禁止覆盖 evidence") from error
     except CaptureError as error:
         print(f"D14B_CAPTURE_FAIL: {error}", file=sys.stderr)
         return 2
