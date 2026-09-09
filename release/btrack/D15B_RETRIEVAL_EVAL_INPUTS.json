@@ -1,8 +1,10 @@
 {
   "schema": "d15b-retrieval-eval-inputs/v1",
-  "freeze_status": "NOT_FROZEN",
+  "input_freeze_status": "NOT_FROZEN",
+  "execution_binding_status": "NOT_BOUND",
   "assessment_base_commit": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
-  "tested_commit": null,
+  "formal_runtime_tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "formal_execution_commit": null,
   "dataset": {
     "path": "evaluation/D9_RETRIEVAL_CORPUS_V2.jsonl",
     "sha256": "c8181632c91880d13df8bdaba1bd76623e126dd09120f739cae36ec9f19b16f2",
@@ -36,12 +38,19 @@
     "repeat_count": null,
     "concurrency": null
   },
-  "required_before_freeze": [
+  "required_before_input_freeze": [
     "D/E-approved, sealed query/qrel input without candidate or pending_review annotation state",
-    "D13D formal environment provenance and the exact tested commit",
-    "per-channel execution results and independent latency samples",
-    "approved threshold and evidence reference"
+    "approved Gold policy identity and approval reference",
+    "evaluator SHA-256 and metric schema identity",
+    "frozen EvalConfig identity",
+    "approved threshold policy where the intended formal gate uses thresholds"
+  ],
+  "required_before_formal_execution": [
+    "formal execution commit",
+    "D13D environment and VM identity",
+    "package identity",
+    "per-channel runner, command, raw results, latency samples and exit code"
   ],
   "formal_metrics": null,
-  "rule": "The hashes identify current candidate inputs only. This document deliberately does not freeze them and must not be used as a formal D13B input bundle."
+  "rule": "The hashes identify current candidate inputs only. Input freeze and formal execution binding are separate gates: execution outputs never gate input freeze. This document deliberately does not freeze the current candidates and must not be used as a formal D13B execution bundle."
 }
