@@ -1,0 +1,17 @@
+=== G4 REAL SDK VERIFY ===
+2026年 09月 07日 星期一 14:14:58 UTC
+[d14a-verify] PASS: service active
+[d14a-verify] PASS: socket holder = MainPID=27257
+[d14a-verify] PASS: cmdline 指向发布包 venv（无开发目录依赖）
+[d14a-verify] memory.embed: {"status": "ok", "dim": 768, "len": 768, "latency_ms": 125.9, "degraded": false}
+[d14a-verify] PASS: 真实 SDK memory.embed dim=768
+[d14a-verify] PASS: embedding server SDK 实际加载 SHA 校验通过
+[d14a-verify] ALL PASS
+VERIFY_RC=0
+=== PROCESS MAPS SDK LINE ===
+77dfe14b4000-77dfe14c5000 r--p 00000000 00:1c 1470608                    /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0
+77dfe14c5000-77dfe14f7000 r-xp 00011000 00:1c 1470608                    /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0
+77dfe14f7000-77dfe150b000 r--p 00043000 00:1c 1470608                    /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0
+77dfe150b000-77dfe150e000 r--p 00056000 00:1c 1470608                    /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0
+77dfe150e000-77dfe150f000 rw-p 00059000 00:1c 1470608                    /usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0
+=== G4 END ===

@@ -1,0 +1,114 @@
+=== G6 POST REBOOT DETAIL ===
+2026年 09月 07日 星期一 14:17:50 UTC
+2026-09-07 22:16:22
+enabled
+● kylin-memory.service - Kylin Memory Service
+     Loaded: loaded (/home/kylin-agent/.config/systemd/user/kylin-memory.service; enabled; preset: enabled)
+     Active: active (running) since Mon 2026-09-07 22:16:41 CST; 1min 9s ago
+       Docs: https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory
+   Main PID: 3062 (python)
+      Tasks: 3 (limit: 9406)
+     Memory: 52.0M (peak: 56.3M)
+        CPU: 1.253s
+     CGroup: /user.slice/user-1000.slice/user@1000.service/app.slice/kylin-memory.service
+             └─3062 /home/kylin-agent/.local/share/kylin-memory-d14a/runtime/python/bin/python -m app --socket /run/user/1000/kylin-memory/memory.sock --no-migrate
+
+9月 07 22:16:41 kylin-agent-pc systemd[2798]: Started kylin-memory.service - Kylin Memory Service.
+9月 07 22:16:44 kylin-agent-pc kylin-memory-server[3062]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 07 22:16:44 kylin-agent-pc kylin-memory-server[3062]: 2026-09-07T22:16:44+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 07 22:16:44 kylin-agent-pc kylin-memory-server[3062]: 2026-09-07T22:16:44+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 07 22:16:44 kylin-agent-pc kylin-memory-server[3062]: 2026-09-07T22:16:44+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 07 22:16:44 kylin-agent-pc kylin-memory-server[3062]: 2026-09-07T22:16:44+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+MainPID=3062
+ActiveState=active
+SubState=running
+FragmentPath=/home/kylin-agent/.config/systemd/user/kylin-memory.service
+UnitFileState=enabled
+--- user journal ---
+8月 28 14:38:10 kylin-agent-pc systemd[2714]: Started kylin-memory.service - Kylin Memory Service.
+8月 28 14:38:11 kylin-agent-pc kylin-memory-server[1227808]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+8月 28 14:38:11 kylin-agent-pc kylin-memory-server[1227808]: 2026-08-28T14:38:11+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+8月 28 14:38:11 kylin-agent-pc kylin-memory-server[1227808]: 2026-08-28T14:38:11+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+8月 28 14:38:11 kylin-agent-pc kylin-memory-server[1227808]: 2026-08-28T14:38:11+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+8月 28 14:38:11 kylin-agent-pc kylin-memory-server[1227808]: 2026-08-28T14:38:11+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+-- Boot 0aacdf6207194ce7b9e880a33f713940 --
+8月 31 21:57:00 kylin-agent-pc systemd[2765]: Stopping kylin-memory.service - Kylin Memory Service...
+8月 31 21:57:00 kylin-agent-pc systemd[2765]: Stopped kylin-memory.service - Kylin Memory Service.
+8月 31 21:57:00 kylin-agent-pc systemd[2765]: kylin-memory.service: Consumed 24.417s CPU time.
+-- Boot 93cfe5daf90f4fad98770021a703f2a3 --
+9月 01 14:48:21 kylin-agent-pc systemd[2545]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 01 14:48:21 kylin-agent-pc systemd[2545]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 01 14:48:21 kylin-agent-pc systemd[2545]: kylin-memory.service: Consumed 10.889s CPU time, 52.9M memory peak, 9.1M memory swap peak.
+9月 01 15:14:55 kylin-agent-pc systemd[2545]: Started kylin-memory.service - Kylin Memory Service.
+9月 01 15:14:56 kylin-agent-pc kylin-memory-server[67275]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 01 15:14:56 kylin-agent-pc kylin-memory-server[67275]: 2026-09-01T15:14:56+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 01 15:14:56 kylin-agent-pc kylin-memory-server[67275]: 2026-09-01T15:14:56+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 01 15:14:56 kylin-agent-pc kylin-memory-server[67275]: 2026-09-01T15:14:56+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+9月 01 15:14:56 kylin-agent-pc kylin-memory-server[67275]: 2026-09-01T15:14:56+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 01 15:14:59 kylin-agent-pc systemd[2545]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 01 15:14:59 kylin-agent-pc systemd[2545]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 01 15:14:59 kylin-agent-pc systemd[2545]: Started kylin-memory.service - Kylin Memory Service.
+9月 01 15:14:59 kylin-agent-pc kylin-memory-server[67289]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 01 15:14:59 kylin-agent-pc kylin-memory-server[67289]: 2026-09-01T15:14:59+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 01 15:14:59 kylin-agent-pc kylin-memory-server[67289]: 2026-09-01T15:14:59+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 01 15:14:59 kylin-agent-pc kylin-memory-server[67289]: 2026-09-01T15:14:59+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 01 15:14:59 kylin-agent-pc kylin-memory-server[67289]: 2026-09-01T15:14:59+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+9月 01 15:16:18 kylin-agent-pc systemd[2545]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 01 15:16:18 kylin-agent-pc systemd[2545]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 01 15:16:18 kylin-agent-pc systemd[2545]: Started kylin-memory.service - Kylin Memory Service.
+9月 01 15:16:19 kylin-agent-pc kylin-memory-server[67360]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 01 15:16:19 kylin-agent-pc kylin-memory-server[67360]: 2026-09-01T15:16:19+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 01 15:16:19 kylin-agent-pc kylin-memory-server[67360]: 2026-09-01T15:16:19+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 01 15:16:19 kylin-agent-pc kylin-memory-server[67360]: 2026-09-01T15:16:19+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 01 15:16:19 kylin-agent-pc kylin-memory-server[67360]: 2026-09-01T15:16:19+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+9月 01 22:07:22 kylin-agent-pc systemd[2545]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 01 22:07:23 kylin-agent-pc systemd[2545]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 01 22:07:23 kylin-agent-pc systemd[2545]: kylin-memory.service: Consumed 36.220s CPU time, 32.5M memory peak, 0B memory swap peak.
+-- Boot cba8d72e756c49449b1409690be86965 --
+9月 03 09:35:32 kylin-agent-pc systemd[2857]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 03 09:35:32 kylin-agent-pc systemd[2857]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 03 09:35:32 kylin-agent-pc systemd[2857]: kylin-memory.service: Consumed 36.425s CPU time.
+-- Boot 1e404fac65664fa79d60f470d8b5d88d --
+9月 03 09:40:00 kylin-agent-pc systemd[2530]: Started kylin-memory.service - Kylin Memory Service.
+9月 03 09:40:12 kylin-agent-pc kylin-memory-server[2897]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 03 09:40:12 kylin-agent-pc kylin-memory-server[2897]: 2026-09-03T09:40:12+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 03 09:40:14 kylin-agent-pc kylin-memory-server[2897]: 2026-09-03T09:40:14+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 03 09:40:14 kylin-agent-pc kylin-memory-server[2897]: 2026-09-03T09:40:14+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+9月 03 09:40:14 kylin-agent-pc kylin-memory-server[2897]: 2026-09-03T09:40:14+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 03 14:16:50 kylin-agent-pc systemd[2530]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 03 14:16:50 kylin-agent-pc systemd[2530]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 03 14:16:50 kylin-agent-pc systemd[2530]: kylin-memory.service: Consumed 42.519s CPU time.
+-- Boot 59f241587273417fa63217aed6c4f9c0 --
+9月 03 16:31:30 kylin-agent-pc systemd[2528]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 03 16:31:30 kylin-agent-pc systemd[2528]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 03 16:31:30 kylin-agent-pc systemd[2528]: kylin-memory.service: Consumed 18.377s CPU time.
+-- Boot a1d6e385bcaf4a399932b6b157318c2a --
+9月 03 17:10:25 kylin-agent-pc systemd[2377]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 03 17:10:25 kylin-agent-pc systemd[2377]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 03 17:10:25 kylin-agent-pc systemd[2377]: kylin-memory.service: Consumed 16.364s CPU time, 55.3M memory peak, 12.5M memory swap peak.
+-- Boot 5fe43cb21c77438291f1b0f4da0cc29e --
+9月 07 22:13:32 kylin-agent-pc systemd[2912]: Started kylin-memory.service - Kylin Memory Service.
+9月 07 22:13:38 kylin-agent-pc kylin-memory-server[26700]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 07 22:13:38 kylin-agent-pc kylin-memory-server[26700]: 2026-09-07T22:13:38+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 07 22:13:39 kylin-agent-pc kylin-memory-server[26700]: 2026-09-07T22:13:39+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 07 22:13:39 kylin-agent-pc kylin-memory-server[26700]: 2026-09-07T22:13:39+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 07 22:13:39 kylin-agent-pc kylin-memory-server[26700]: 2026-09-07T22:13:39+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+9月 07 22:14:23 kylin-agent-pc systemd[2912]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 07 22:14:23 kylin-agent-pc systemd[2912]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 07 22:14:23 kylin-agent-pc systemd[2912]: kylin-memory.service: Consumed 4.378s CPU time.
+9月 07 22:14:23 kylin-agent-pc systemd[2912]: Started kylin-memory.service - Kylin Memory Service.
+9月 07 22:14:24 kylin-agent-pc kylin-memory-server[27257]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 07 22:14:24 kylin-agent-pc kylin-memory-server[27257]: 2026-09-07T22:14:24+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 07 22:14:24 kylin-agent-pc kylin-memory-server[27257]: 2026-09-07T22:14:24+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 07 22:14:24 kylin-agent-pc kylin-memory-server[27257]: 2026-09-07T22:14:24+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+9月 07 22:14:24 kylin-agent-pc kylin-memory-server[27257]: 2026-09-07T22:14:24+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 07 22:15:34 kylin-agent-pc systemd[2912]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 07 22:15:34 kylin-agent-pc systemd[2912]: Stopped kylin-memory.service - Kylin Memory Service.
+9月 07 22:15:36 kylin-agent-pc systemd[2912]: Started kylin-memory.service - Kylin Memory Service.
+9月 07 22:15:37 kylin-agent-pc kylin-memory-server[27415]: 配置文件不存在 /home/kylin-agent/.config/kylin-memory/config.toml，使用全部默认值启动
+9月 07 22:15:37 kylin-agent-pc kylin-memory-server[27415]: 2026-09-07T22:15:37+0800 INFO __main__ [MainThread] 生产模式：alembic_version 校验通过，schema 由 Alembic 管理
+9月 07 22:15:37 kylin-agent-pc kylin-memory-server[27415]: 2026-09-07T22:15:37+0800 INFO outbox.worker [MainThread] Outbox Worker 启动（poll=1s, max_retries=3）
+9月 07 22:15:37 kylin-agent-pc kylin-memory-server[27415]: 2026-09-07T22:15:37+0800 INFO __main__ [MainThread] Memory Service 就绪（socket=/run/user/1000/kylin-memory/memory.sock）
+9月 07 22:15:37 kylin-agent-pc kylin-memory-server[27415]: 2026-09-07T22:15:37+0800 INFO gateway.server [ipc-gateway] IPC Gateway 启动: /run/user/1000/kylin-memory/memory.sock
+9月 07 22:16:05 kylin-agent-pc systemd[2912]: Stopping kylin-memory.service - Kylin Memory Service...
+9月 07 22:16:05 kylin-agent-pc systemd[2912]: Stopped kylin-memory.service - Kylin Memory Service.

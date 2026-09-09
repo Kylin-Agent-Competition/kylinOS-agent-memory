@@ -1,0 +1,3 @@
+=== TARGETED BUILD/USER PATH SCAN ===
+/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/systemd/verify.sh:68:echo "$CMDLINE" | grep -qiE "(\.venv|d4d-venv|/home/[^/]+/kylinOS-agent-memory)" \
+TARGET_SCAN_RC=0

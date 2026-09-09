@@ -1,0 +1,13 @@
+=== G2 PACKAGE HASH AND EXTRACTION ===
+2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401  /tmp/kylin-memory-a-d14a-0.1.0-d14a-ba3b50e.tar.gz
+=== SHA256SUMS VERIFY ===
+runtime/python/pyvenv.cfg: 成功
+systemd/install.sh: 成功
+systemd/kylin-memory.service: 成功
+systemd/uninstall.sh: 成功
+systemd/verify.sh: 成功
+SHA_VERIFY_RC=0
+=== INTEGRITY GATE ===
+包完整性 Gate: PASS（3360 文件，三向闭合，identity 绑定）
+[d14a-install] 仅执行完整性 Gate（_integrity-gate）
+INTEGRITY_RC=0

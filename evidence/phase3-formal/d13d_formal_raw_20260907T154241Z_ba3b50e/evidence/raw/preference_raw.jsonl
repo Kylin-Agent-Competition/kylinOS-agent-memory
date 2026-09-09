@@ -1,0 +1,4 @@
+{"actual":{"explicitness":"explicit","is_temporary":false,"key":"response.language","record_count":1,"scope":"global","should_persist":true},"metric":"preference","sample_id":"d13e-pref-001","trace_reference":"dispatch/d13e-pref-001.json"}
+{"actual":{"explicitness":"explicit","is_temporary":true,"key":"response.length","record_count":1,"scope":"session","should_persist":false},"metric":"preference","sample_id":"d13e-pref-002","trace_reference":"dispatch/d13e-pref-002.json"}
+{"actual":{"explicitness":"explicit","is_temporary":false,"key":"tool_selection.preference","record_count":1,"scope":"tool","should_persist":true},"metric":"preference","sample_id":"d13e-pref-003","trace_reference":"dispatch/d13e-pref-003.json"}
+{"actual":{"record_count":0,"should_persist":false},"metric":"preference","sample_id":"d13e-pref-004","trace_reference":"dispatch/d13e-pref-004.json"}

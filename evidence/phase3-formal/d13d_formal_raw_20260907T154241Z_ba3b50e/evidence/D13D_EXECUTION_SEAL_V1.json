@@ -1,0 +1,15 @@
+{
+  "seal_version": "d13d-execution-seal/v1",
+  "signature_scheme": "ed25519",
+  "reviewer_identity": "lovezy0730-create",
+  "attestation_sha256": "2407d92e7b4ea4b237fdf7ba10960b57c943efe2b5df70e49295b43ade316c8d",
+  "implementation_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "environment_id": "d13d-phase3-formal@Kylin-D14D-clean-vdi-20260906:d14d-clean-base-20260907-r4",
+  "dependency_version_reference": "package_tar_sha256=2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401;D14A_final_package=NOT_FROZEN_at_raw_time",
+  "data_version_reference": "dataset_sha256=9740c00f4a9d91471bec8e6fa8aeeeb52f890f8680d83f740a84db2b1701a44b;gold_sha256=aeea9beab5d25461083bb693424014a813cd91bae6b0d7b60443f817f33c6be0",
+  "evidence_root": "evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence",
+  "evidence_reference": "evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence",
+  "frozen_by_track": "D",
+  "approval_reference": "https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/165#pullrequestreview-5137833119",
+  "key_id": "d13d-execution-lovezy0730-20260908-v1"
+}
