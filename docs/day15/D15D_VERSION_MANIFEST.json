@@ -2,27 +2,64 @@
   "schema_version": "d15d-version-manifest/v2",
   "run_id": "20260910T205300Z",
   "current_main": {
-    "sha": "2782a9048c235006c17024c9798cf988a07627a1",
-    "verified_at": "2026-09-10T14:10:00Z",
+    "sha": "ad782f5be747d9d59f273c1c0813535d62b50dcb",
+    "verified_at": "2026-09-10T15:19:37Z",
     "release_commit_is_current_main": false,
     "runtime_sensitive_drift_since_release_commit": false,
     "docs_only_drift_since_release_commit": true,
     "docs_only_paths": [
       "docs/day15/03_c_track_production_integration_closure_status_20260910.md",
-      "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md"
+      "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md",
+      "docs/day15/D15D_VERSION_MANIFEST.json",
+      "docs/day14/00_d14a_release_package_contract.md",
+      "packaging/systemd/README.md"
+    ],
+    "raw_c2_locked_hits_since_release_commit": [
+      "docs/day14/00_d14a_release_package_contract.md",
+      "packaging/systemd/README.md"
+    ],
+    "approved_docs_c2_locked_exceptions": [
+      {
+        "path": "docs/day14/00_d14a_release_package_contract.md",
+        "kind": "DOCUMENTATION_ONLY",
+        "reason": "PR #175 contract/provenance status and identity adjudication backfill; no executable, script, unit, schema, IPC, database, or runtime source change.",
+        "authority": "PR #175 Reviewer E approved HEAD 702973e3fc05f9c8435dd82f662788e448eda487 with APPROVE / G-D7 SIGNED",
+        "review_id": 5168962906,
+        "merge_commit": "ad782f5be747d9d59f273c1c0813535d62b50dcb"
+      },
+      {
+        "path": "packaging/systemd/README.md",
+        "kind": "DOCUMENTATION_ONLY",
+        "reason": "README-only pointer/status update; no executable, script, unit, schema, IPC, database, or runtime source change.",
+        "authority": "PR #175 Reviewer E approved HEAD 702973e3fc05f9c8435dd82f662788e448eda487 with APPROVE / G-D7 SIGNED",
+        "review_id": 5168962906,
+        "merge_commit": "ad782f5be747d9d59f273c1c0813535d62b50dcb"
+      }
     ],
     "source": "kylin-mem/main"
   },
   "post_lock_consistency": {
     "gate": "C2",
     "status": "PASS_CURRENT_MAIN_NO_RUNTIME_SENSITIVE_DRIFT",
-    "current_main_sha": "2782a9048c235006c17024c9798cf988a07627a1",
-    "comparison": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541..2782a9048c235006c17024c9798cf988a07627a1",
+    "current_main_sha": "ad782f5be747d9d59f273c1c0813535d62b50dcb",
+    "comparison": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541..ad782f5be747d9d59f273c1c0813535d62b50dcb",
     "locked_runtime_prefix_hits": [],
+    "raw_c2_locked_hits": [
+      "docs/day14/00_d14a_release_package_contract.md",
+      "packaging/systemd/README.md"
+    ],
+    "approved_docs_c2_locked_exceptions": [
+      "docs/day14/00_d14a_release_package_contract.md",
+      "packaging/systemd/README.md"
+    ],
     "docs_only_prefix_hits": [
       "docs/day15/03_c_track_production_integration_closure_status_20260910.md",
-      "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md"
+      "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md",
+      "docs/day15/D15D_VERSION_MANIFEST.json",
+      "docs/day14/00_d14a_release_package_contract.md",
+      "packaging/systemd/README.md"
     ],
+    "note": "The raw C2 locked diff contains exactly the two manifest-registered docs-only exceptions (D14A contract and packaging README); it has no non-excepted runtime-sensitive hit.",
     "frozen_package_lock_valid": false,
     "historical_lock_invalidation": {
       "release_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
@@ -178,12 +215,23 @@
     "missing_entries": [],
     "checksums_full_pass": true
   },
+  "c13": {
+    "gate": "C13",
+    "status": "SIGNED",
+    "pr_number": 175,
+    "review_id": 5168962906,
+    "reviewer_account": "lovezy0730-create",
+    "review_submitted_at": "2026-09-10T15:18:19Z",
+    "reviewed_head": "702973e3fc05f9c8435dd82f662788e448eda487",
+    "merge_commit": "ad782f5be747d9d59f273c1c0813535d62b50dcb",
+    "merged_at": "2026-09-10T15:19:37Z"
+  },
   "contract": {
     "path": "docs/day14/00_d14a_release_package_contract.md",
     "version": 5,
     "section_6bis": "G0_IDENTITY_CLOSED",
-    "status": "PROPOSED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / PENDING_FINAL_D15D_SIGN",
-    "final_d15d_sign": "PENDING",
+    "status": "SIGNED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / G_D7_SIGNED",
+    "final_d15d_sign": "SIGNED",
     "package_identity": {
       "source_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
       "tested_runtime_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
@@ -217,7 +265,7 @@
     "L3_READY": true,
     "release_ready": false,
     "production_ready": false,
-    "final_sign": "PENDING",
+    "final_sign": "SIGNED",
     "G7": "NOT_RUN/N-A",
     "G8": "NOT_RUN with D-10 waiver"
   }

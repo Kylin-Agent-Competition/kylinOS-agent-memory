@@ -20,7 +20,7 @@
       "evidence": [
         "docs/day15/D15D_VERSION_MANIFEST.json"
       ],
-      "note": "4a6323f..2782a904 has two docs/day15 additions and no runtime-sensitive prefix hit."
+      "note": "4a6323f..ad782f5 uses the full Runbook C2 locked-path scope. It has two docs/day15 additions and exactly two manifest-registered docs-only exceptions (D14A contract and packaging README); no unapproved locked-path hit."
     },
     {
       "gate": "C3_C6",
@@ -90,8 +90,15 @@
     },
     {
       "gate": "C13",
-      "status": "PENDING_FINAL_D15D_SIGN",
-      "note": "Reviewer E review and approval remain required; no self-sign-off is claimed."
+      "status": "SIGNED",
+      "evidence": [
+        "E_SIGN_OFF.md"
+      ],
+      "review_id": 5168962906,
+      "reviewer_account": "lovezy0730-create",
+      "review_submitted_at": "2026-09-10T15:18:19Z",
+      "reviewed_head": "702973e3fc05f9c8435dd82f662788e448eda487",
+      "merge_commit": "ad782f5be747d9d59f273c1c0813535d62b50dcb"
     }
   ]
 }

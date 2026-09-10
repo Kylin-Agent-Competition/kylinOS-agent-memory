@@ -24,7 +24,7 @@
     "C10": "PASS_REFERENCE_IDENTITY_MATCHED",
     "C11": "PASS_RELEASE_BINDING_ALTERNATIVE_FORMALIZED",
     "C12": "PASS",
-    "C13": "PENDING_FINAL_D15D_SIGN"
+    "C13": "SIGNED"
   },
   "evidence_semantics": {
     "root_scope": "D15D_CLEAN_TAR_VM_RELEASE_BINDING",

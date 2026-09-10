@@ -117,7 +117,12 @@ _RUNTIME_PREFIXES = (
     "config/",
 )
 
-_CURRENT_MAIN_SHA = "2782a9048c235006c17024c9798cf988a07627a1"
+# Runbook C2 的完整锁定路径范围：runtime prefixes 加唯一 docs contract 精确路径。
+_C2_CONTRACT_PATH = "docs/day14/00_d14a_release_package_contract.md"
+_C2_LOCKED_PATHS = (*_RUNTIME_PREFIXES, _C2_CONTRACT_PATH)
+
+_CURRENT_MAIN_SHA = "ad782f5be747d9d59f273c1c0813535d62b50dcb"
+_ROUND4_C2_MAIN_SHA = "2782a9048c235006c17024c9798cf988a07627a1"
 
 # 旧实现遗留的固定 current_pr_head 字面量与旧固定 diff 范围（禁止回退出现）。
 _LEGACY_CURRENT_PR_HEAD = "15de7c67426909c7c872f9cb3f9a04a2575753fd"
@@ -461,14 +466,14 @@ def test_verify_embedding_pid_report():
 
 # ---------- 8. Contract 状态：Reviewer E adjudication approved / final sign pending ----------
 
-def test_contract_status_proposed_v5_pending_final_sign():
+def test_contract_status_signed_v5_g_d7():
     _assert_all(
         _docs()["contract"],
-        ["PROPOSED v5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
-         "PENDING_FINAL_D15D_SIGN",
+        ["SIGNED / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
+         "G_D7_SIGNED",
          "溯源收口 v5", "pull/175#issuecomment-5615523980",
          "PR author `Ducknesses`", "invalid historical authority record",
-         "ReviewerE identity adjudication", "PENDING_FINAL_D15D_SIGN"],
+         "ReviewerE identity adjudication", "G_D7_SIGNED"],
         "contract",
     )
 
@@ -496,7 +501,7 @@ def test_blocker_c_identity_frozen_contract():
             "BLOCKER C",
             "PR author `Ducknesses`",
             "ReviewerE identity adjudication",
-            "PENDING_FINAL_D15D_SIGN",
+            "G_D7_SIGNED",
             "d14d_20260907T141000Z_ba3b50e/dependency_identity.json",
             "028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48",
             "b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225",
@@ -582,10 +587,10 @@ def test_contract_manifest_d14d_three_way_identity():
 
     governance = _load_json(_D15D_MANIFEST)["contract"]
     assert governance["status"] == (
-        "PROPOSED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
-        "PENDING_FINAL_D15D_SIGN"
+        "SIGNED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
+        "G_D7_SIGNED"
     )
-    assert governance["final_d15d_sign"] == "PENDING"
+    assert governance["final_d15d_sign"] == "SIGNED"
     assert governance["authorization"]["authority_valid"] is False
     assert governance["authorization"]["record_disposition"] == (
         "HISTORICAL_INVALID_NOT_AN_ACTIVE_BLOCKER"
@@ -612,7 +617,7 @@ def _assert_documentation_consistency(cls: str):
     """按 live 判定的分类对两文档做一致性断言（fail-closed 负向断言全部生效）：
 
     - 任意分类下：重打包/重算 hash/重跑真实 VM 规则必须存在；report 必须为
-      PACKAGE_IMPLEMENTATION_CANDIDATE；contract 必须含 PROPOSED v5 + BLOCKER C
+      PACKAGE_IMPLEMENTATION_CANDIDATE；contract 必须含 SIGNED v5 + BLOCKER C
       + 当前 D14D G0 身份闭合；两文档不得含 HOST_VERIFIED /
       L3 PASS / 旧『无 D14A packaging/runtime 行为文件变化』结论。
     - 接受真实 RUNTIME_EVIDENCE_STALE 为已声明中间态（PASS），不因"确实 stale"
@@ -631,8 +636,8 @@ def _assert_documentation_consistency(cls: str):
     )
     _assert_all(
         texts["contract"],
-        ["PROPOSED v5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
-         "PENDING_FINAL_D15D_SIGN", "BLOCKER C",
+        ["SIGNED / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
+         "G_D7_SIGNED", "BLOCKER C",
          "溯源收口 v5", "release_ready=false", "production_ready=false"],
         "contract",
     )
@@ -665,11 +670,37 @@ def _current_main_ref() -> str:
     raise AssertionError("current main ref 不存在：origin/main 或 kylin-mem/main")
 
 
-def _release_runtime_drift_hits(main_ref: str) -> list:
-    """检查 current release commit 到 current main 的 runtime-sensitive paths。"""
+def _approved_docs_c2_locked_exceptions() -> tuple[str, ...]:
+    """从 D15D manifest 读取登记的 C2 locked-path docs-only 例外。"""
+    current_main = _load_json(_D15D_MANIFEST)["current_main"]
+    entries = current_main.get("approved_docs_c2_locked_exceptions", [])
+    assert isinstance(entries, list), "approved docs exceptions 必须是数组"
+
+    paths = []
+    for entry in entries:
+        assert isinstance(entry, dict), "exception entry 必须是 object"
+        path = entry.get("path")
+        assert isinstance(path, str) and path, "exception path 必须是非空字符串"
+        assert (
+            any(path.startswith(prefix) for prefix in _RUNTIME_PREFIXES)
+            or path == _C2_CONTRACT_PATH
+        ), (
+            f"exception path 不在 C2 locked paths 内: {path}"
+        )
+        assert entry.get("kind") == "DOCUMENTATION_ONLY"
+        assert entry.get("review_id") == 5168962906
+        assert entry.get("merge_commit") == _CURRENT_MAIN_SHA
+        paths.append(path)
+
+    assert len(paths) == len(set(paths)), "approved docs exceptions 不得重复"
+    return tuple(sorted(paths))
+
+
+def _release_c2_locked_drift_hits(main_ref: str) -> list:
+    """检查 current release commit 到 current main 的 Runbook C2 locked paths。"""
     proc = subprocess.run(
         ["git", "diff", "--name-only", f"{_CURRENT_RELEASE_COMMIT}..{main_ref}",
-         "--", *_RUNTIME_PREFIXES],
+         "--", *_C2_LOCKED_PATHS],
         cwd=str(_REPO_ROOT),
         capture_output=True,
         text=True,
@@ -679,7 +710,18 @@ def _release_runtime_drift_hits(main_ref: str) -> list:
         f"git diff current release drift 失败 (rc={proc.returncode}): "
         f"{proc.stderr.strip()}"
     )
-    return [line for line in proc.stdout.splitlines() if line.strip()]
+    raw_hits = sorted(
+        line
+        for line in proc.stdout.splitlines()
+        if line.strip()
+    )
+    allowed = set(_approved_docs_c2_locked_exceptions())
+    unexpected = [hit for hit in raw_hits if hit not in allowed]
+    assert set(raw_hits) == set(allowed), (
+        f"raw C2 locked hits 与 manifest 例外不一致: raw={raw_hits}, "
+        f"approved={sorted(allowed)}"
+    )
+    return unexpected
 
 
 def _diff_name_only_paths(left_ref: str, right_ref: str) -> list:
@@ -704,7 +746,7 @@ def test_live_diff_fail_closed():
     """
     head = _head_sha()
     main_ref = _current_main_ref()
-    hits = _release_runtime_drift_hits(main_ref)
+    hits = _release_c2_locked_drift_hits(main_ref)
     assert not hits, (
         f"current release `4a6323f` 到 {main_ref} 出现 runtime drift: {hits}"
     )
@@ -712,15 +754,15 @@ def test_live_diff_fail_closed():
         path for path in _diff_name_only_paths(_CURRENT_RELEASE_COMMIT, main_ref)
         if path.startswith("docs/day15/")
     ]
-    assert len(docs_only) == 2, (
-        f"current release 到 {main_ref} 的 docs/day15 漂移数应为 2: {docs_only}"
+    assert len(docs_only) == 3, (
+        f"current release 到 {main_ref} 的 docs/day15 漂移数应为 3: {docs_only}"
     )
 
     # 记录执行时事实到测试日志。
     print(f"[live] HEAD={head}")
     print(f"[live] current_release_commit={_CURRENT_RELEASE_COMMIT}")
     print(f"[live] current_main_ref={main_ref}")
-    print(f"[live] runtime_prefix_hits={hits}")
+    print(f"[live] c2_locked_hits={hits}")
 
     # 文档一致性（负向 fail-closed 断言恒生效）。
     _assert_documentation_consistency("CURRENT_RELEASE_NO_RUNTIME_DRIFT")
@@ -731,10 +773,10 @@ def test_governance_ssot_after_identity_adjudication():
     manifest = _load_json(_D15D_MANIFEST)
     governance = manifest["contract"]
     assert governance["status"] == (
-        "PROPOSED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
-        "PENDING_FINAL_D15D_SIGN"
+        "SIGNED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
+        "G_D7_SIGNED"
     )
-    assert governance["final_d15d_sign"] == "PENDING"
+    assert governance["final_d15d_sign"] == "SIGNED"
 
     for path in (_TASK_CARD, _ROUND2_REWORK):
         assert path.is_file(), f"缺失治理 SSOT 文件: {path}"
@@ -748,9 +790,14 @@ def test_governance_ssot_after_identity_adjudication():
         assert "REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED" in text, (
             f"{path.name} 缺少 Reviewer E identity adjudication approved 状态"
         )
-        assert "PENDING_FINAL_D15D_SIGN" in text, (
-            f"{path.name} 缺少 final sign pending 状态"
-        )
+
+    task_card = _TASK_CARD.read_text(encoding="utf-8")
+    assert "G_D7_SIGNED" in task_card, "TaskCard 缺少 G-D7 signed 状态"
+
+    round2_rework = _ROUND2_REWORK.read_text(encoding="utf-8")
+    assert "PENDING_FINAL_D15D_SIGN" in round2_rework, (
+        "Round 2 历史证据缺少签署前的状态记录"
+    )
 
 
 def test_current_main_drift_invalidation_ssot():
@@ -758,6 +805,16 @@ def test_current_main_drift_invalidation_ssot():
     manifest = _load_json(_D15D_MANIFEST)
     consistency = manifest["post_lock_consistency"]
     historical = consistency["historical_lock_invalidation"]
+    current_main = manifest["current_main"]
+    exception_paths = [
+        entry["path"]
+        for entry in current_main["approved_docs_c2_locked_exceptions"]
+    ]
+    assert exception_paths == consistency["approved_docs_c2_locked_exceptions"]
+    assert tuple(exception_paths) == tuple(
+        current_main["raw_c2_locked_hits_since_release_commit"]
+    )
+    assert tuple(exception_paths) == tuple(consistency["raw_c2_locked_hits"])
     assert manifest["current_main"]["sha"] == _CURRENT_MAIN_SHA
     assert manifest["current_main"]["release_commit_is_current_main"] is False
     assert manifest["current_main"]["runtime_sensitive_drift_since_release_commit"] is False
@@ -808,6 +865,15 @@ def test_current_main_drift_invalidation_ssot():
     assert manifest["c12"]["unexpected_extras"] == []
     assert manifest["c12"]["missing_entries"] == []
     assert manifest["c12"]["checksums_full_pass"] is True
+
+    summary = _load_json(_REPO_ROOT / _NEW_EVIDENCE_ROOT / "summary.json")
+    assert summary["gate_conclusion"]["C13"] == "SIGNED"
+    gate_matrix = _load_json(_REPO_ROOT / _NEW_EVIDENCE_ROOT / "gate_matrix.json")
+    c13 = next(entry for entry in gate_matrix["gates"] if entry["gate"] == "C13")
+    assert c13["status"] == "SIGNED"
+    assert c13["evidence"] == ["E_SIGN_OFF.md"]
+    assert c13["review_id"] == 5168962906
+    assert c13["merge_commit"] == _CURRENT_MAIN_SHA
     assert consistency["rebuild_required"] is True
     assert consistency["host_vm_required"] is True
 
@@ -818,7 +884,7 @@ def test_current_main_drift_invalidation_ssot():
 
     assert _ROUND4_C2_EVIDENCE.is_file(), f"缺失 C2 失效证据: {_ROUND4_C2_EVIDENCE}"
     evidence = _ROUND4_C2_EVIDENCE.read_text(encoding="utf-8")
-    assert _CURRENT_MAIN_SHA in evidence
+    assert _ROUND4_C2_MAIN_SHA in evidence
     assert "FAIL_INVALIDATED" in evidence
     assert "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY" in evidence
     assert "does not claim a new L2/L3 PASS" in evidence
