@@ -3,6 +3,8 @@
   "generated_at": "2026-09-10T00:00:00Z",
   "source_document": "D13D_CLOSURE_HANDOFF_20260908.md",
   "tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "freeze_status": "FROZEN",
+  "freeze_reference": "evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/D13D_FREEZE_RECORD_20260908.md",
   "status": "D13D_FROZEN",
   "pr_160_merge_sha": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
   "phase3_formal": {
@@ -38,10 +40,10 @@
     "forget": { "status": "PASS", "violations": 0 }
   },
   "dataset_identity": {
-    "dataset_sha256": "9740c00f",
-    "gold_sha256": "aeea9bea",
-    "threshold_sha256": "561034df",
-    "manifest_sha256": "2dc0b955"
+    "dataset_sha256_prefix": "9740c00f",
+    "gold_sha256_prefix": "aeea9bea",
+    "threshold_sha256_prefix": "561034df",
+    "manifest_sha256_prefix": "2dc0b955"
   },
   "vm_environment": {
     "os": "Kylin V11",

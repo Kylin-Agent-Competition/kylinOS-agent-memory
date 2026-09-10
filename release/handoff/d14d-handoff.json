@@ -1,12 +1,14 @@
 {
   "schema": "d14d-handoff/v1",
   "generated_at": "2026-09-10T00:00:00Z",
-  "updated_at": "2026-09-10T02:10:00Z",
+  "updated_at": "2026-09-10T02:55:00Z",
   "source_documents": [
     "docs/D_TRACK_STATUS.md",
     "docs/day14/15_d14d_phase0_start_replacement_arbitration_20260907.md"
   ],
   "tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "release_status": "L3_READY",
+  "evidence_reference": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e",
   "status": "DONE",
   "l3_ready": true,
   "release_ready": false,
@@ -48,6 +50,18 @@
     "version": "0.1.0-d14a",
     "source_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
     "tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401"
+  },
+  "package": {
+    "package_version": "0.1.0-d14a",
+    "package_tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
+    "package_manifest_sha256": "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0"
+  },
+  "vm": {
+    "vm_name": "Kylin-D14D-clean-vdi-20260906",
+    "vm_uuid": "70ca1ea3-c27e-483d-aaba-0cac7dc5c77c",
+    "snapshot_name": "d14d-clean-base-20260907-r4",
+    "snapshot_uuid": "6dc9468e-36a8-41b3-b7c9-6115c7b8fc56",
+    "environment_id": "d14d-l3@Kylin-D14D-clean-vdi-20260906:d14d-clean-base-20260907-r4"
   },
   "blocked_items_for_b_track": {
     "frozen_tar_bytes_available": false,

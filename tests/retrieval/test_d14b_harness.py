@@ -73,6 +73,29 @@ def handoffs(tmp_path: Path, commit: str = SHA) -> tuple[Path, Path, Path]:
     return d13d, d14d, manifest
 
 
+def test_committed_formal_handoffs_are_preflight_contract_compatible(tmp_path: Path) -> None:
+    d13d_path = REPOSITORY_ROOT / "release/handoff/d13d-handoff.json"
+    d14d_path = REPOSITORY_ROOT / "release/handoff/d14d-handoff.json"
+    d14d = json.loads(d14d_path.read_text(encoding="utf-8"))
+    package_manifest = write_json(
+        tmp_path / "package-manifest.json",
+        {"source_commit": d14d["tested_commit"], **d14d["package"]},
+    )
+
+    completed = run_script(
+        "run_d14b_preflight.py",
+        "--expected-tested-commit", d14d["tested_commit"],
+        "--d13d-handoff", str(d13d_path),
+        "--d14d-handoff", str(d14d_path),
+        "--package-manifest", str(package_manifest),
+        "--repo-root", str(REPOSITORY_ROOT),
+        "--evidence-root", str(tmp_path / "new-evidence"),
+    )
+
+    assert completed.returncode != 0
+    assert "worktree HEAD 与 tested_commit 不一致" in completed.stderr
+
+
 def preflight(
     tmp_path: Path, d13d: Path, d14d: Path, manifest: Path, *extra: str
 ) -> subprocess.CompletedProcess[str]:
