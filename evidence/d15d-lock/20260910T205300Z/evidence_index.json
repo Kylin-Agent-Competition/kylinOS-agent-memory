@@ -120,6 +120,10 @@
     {
       "path": "d15d_smoke_cleanup_confirm_4a6323f_20260910T205300Z.log",
       "role": "preserved_cleanup_confirm_log"
+    },
+    {
+      "path": "E_SIGN_OFF.md",
+      "role": "reviewer_e_g_d7_sign_off"
     }
   ]
 }

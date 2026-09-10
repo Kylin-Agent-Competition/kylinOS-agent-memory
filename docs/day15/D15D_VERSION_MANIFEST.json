@@ -178,12 +178,23 @@
     "missing_entries": [],
     "checksums_full_pass": true
   },
+  "c13": {
+    "gate": "C13",
+    "status": "SIGNED",
+    "pr_number": 175,
+    "review_id": 5168962906,
+    "reviewer_account": "lovezy0730-create",
+    "review_submitted_at": "2026-09-10T15:18:19Z",
+    "reviewed_head": "702973e3fc05f9c8435dd82f662788e448eda487",
+    "merge_commit": "ad782f5be747d9d59f273c1c0813535d62b50dcb",
+    "merged_at": "2026-09-10T15:19:37Z"
+  },
   "contract": {
     "path": "docs/day14/00_d14a_release_package_contract.md",
     "version": 5,
     "section_6bis": "G0_IDENTITY_CLOSED",
     "status": "PROPOSED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / PENDING_FINAL_D15D_SIGN",
-    "final_d15d_sign": "PENDING",
+    "final_d15d_sign": "SIGNED",
     "package_identity": {
       "source_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
       "tested_runtime_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
@@ -217,7 +228,7 @@
     "L3_READY": true,
     "release_ready": false,
     "production_ready": false,
-    "final_sign": "PENDING",
+    "final_sign": "SIGNED",
     "G7": "NOT_RUN/N-A",
     "G8": "NOT_RUN with D-10 waiver"
   }
