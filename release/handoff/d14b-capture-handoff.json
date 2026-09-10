@@ -1,0 +1,47 @@
+{
+  "schema": "d14b-capture-handoff/v1",
+  "generated_at": "2026-09-10T00:00:00Z",
+  "tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "captures": {
+    "sqlite_truth": {
+      "runner_path": "scripts/capture_d14b_sqlite_truth.py",
+      "runner_sha256": "78effef6cd0a4be4202400039211a75aec42bbf3aa7f56c9f91714b3bded0da6",
+      "command_id": "d14b-capture-sqlite-truth"
+    },
+    "fts5": {
+      "runner_path": "scripts/capture_d14b_fts5_results.py",
+      "runner_sha256": "0d7732f67362997ff011183a641db139b2a0fa1a445ce5f5bdbc763544c17827",
+      "command_id": "d14b-capture-fts5"
+    },
+    "rrf": {
+      "runner_path": "scripts/capture_d14b_rrf_results.py",
+      "runner_sha256": "a144e2e3e53e859623766634536e901ae0dc95edbc9300abdc1007f31138c111",
+      "command_id": "d14b-capture-rrf"
+    },
+    "vector": {
+      "runner_path": "scripts/capture_d14b_vector_results.py",
+      "runner_sha256": "1fb93dc7e90322fcb910dcfa45230698f082ad4b901a0ec08ac63c9c985e3f56",
+      "command_id": "d14b-capture-vector"
+    }
+  },
+  "source_bindings": {
+    "sqlite_truth": {
+      "production_db_path": "/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db"
+    },
+    "fts5": {
+      "production_db_path": "/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db",
+      "query_spec_path": "tests/retrieval/fixtures/d14b_controlled_queries_v1.json",
+      "query_spec_sha256": "6f9f796b6603e3370680f85abdf31a47bc2f06ae925168129a3608fa2295d3c3"
+    },
+    "vector": {
+      "production_db_path": "/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db",
+      "query_spec_path": "tests/retrieval/fixtures/d14b_controlled_queries_v1.json",
+      "query_spec_sha256": "6f9f796b6603e3370680f85abdf31a47bc2f06ae925168129a3608fa2295d3c3",
+      "vector_cli_path": "/home/kylin-agent/d13d-g6-prep/vector_bridge_cli",
+      "vector_cli_sha256": "004876742624e4c7d32d65aa7b0f14280e9faafa077eca9a7035a7caa375e489"
+    },
+    "rrf": {
+      "production_db_path": "/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db"
+    }
+  }
+}
