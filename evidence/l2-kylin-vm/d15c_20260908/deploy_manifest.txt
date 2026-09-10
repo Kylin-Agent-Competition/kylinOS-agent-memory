@@ -1,0 +1,23 @@
+[2026-09-08 12:22:03] step51 layer deploy
+layer_path=/var/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-aiassistant/binary/3.0.67/files/bin/kylin-aiassistant
+source=/home/bacon/d15c/src/kylin-aiassistant/kylin-aiassistant
+source_sha256=715e382f14b39e2359c53873e60468eb91bfb85574b499d718e2252547431d37
+backup=/home/bacon/d15c/backup/layer-kylin-aiassistant.orig
+backup_sha256=86453fc660a47940c26031d87807cc735ea1cfd628a657f34a5c896cb0c7ccf6
+rollback_cmd=sudo cp /home/bacon/d15c/backup/layer-kylin-aiassistant.orig /var/opt/kaiming/layers/stable/x86_64/app/cn.kylin.kylin-aiassistant/binary/3.0.67/files/bin/kylin-aiassistant
+[2026-09-08 14:36:12] step114 auto-trigger build deploy (v2)
+source=/home/bacon/d15c/src/kylin-aiassistant/kylin-aiassistant
+source_sha256=715e382f14b39e2359c53873e60468eb91bfb85574b499d718e2252547431d37
+includes=tool_hook_patch.diff + auto-trigger onPictureOperateClick(3) in onShowImage
+rollback=layer orig backup 86453fc660a47940 at ~/d15c/backup/layer-kylin-aiassistant.orig
+[2026-09-08 14:43:31] step117 auto-trigger v2 deploy sha256=d7655f8a3e603fa98c70b06b769ee9be800c1afb5d0547b02240b022db73b386
+[2026-09-08 16:00:50] step138 direct-trigger build deploy (v3)
+source_sha256=a712d541496934520092d0688cd2be0e26d7c7cbd2fe254551f0af8dc06a82f0
+includes=tool_hook_patch.diff + auto-trigger(onShowImage) + no-load-timer + direct +10s onPictureOperateClick(3)
+msgpane_backup=/home/bacon/d15c/backup/msgpane.cpp.step137bak
+rollback_binary=~/d15c/backup/layer-kylin-aiassistant.orig (86453fc660a47940)
+---
+[2026-09-08 17:05:00] step147 rollback executed
+restored_sha256=86453fc660a47940c26031d87807cc735ea1cfd628a657f34a5c896cb0c7ccf6
+assistant_started=PIDs 187375,187390 (offscreen mode)
+rollback_status=VERIFIED
