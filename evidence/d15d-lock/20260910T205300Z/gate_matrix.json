@@ -20,7 +20,7 @@
       "evidence": [
         "docs/day15/D15D_VERSION_MANIFEST.json"
       ],
-      "note": "4a6323f..ad782f5 has two docs/day15 additions and exactly one manifest-registered docs-only packaging README exception; no unapproved runtime-sensitive prefix hit."
+      "note": "4a6323f..ad782f5 uses the full Runbook C2 locked-path scope. It has two docs/day15 additions and exactly two manifest-registered docs-only exceptions (D14A contract and packaging README); no unapproved locked-path hit."
     },
     {
       "gate": "C3_C6",

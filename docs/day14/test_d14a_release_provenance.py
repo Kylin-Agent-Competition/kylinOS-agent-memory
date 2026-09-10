@@ -117,6 +117,10 @@ _RUNTIME_PREFIXES = (
     "config/",
 )
 
+# Runbook C2 的完整锁定路径范围：runtime prefixes 加唯一 docs contract 精确路径。
+_C2_CONTRACT_PATH = "docs/day14/00_d14a_release_package_contract.md"
+_C2_LOCKED_PATHS = (*_RUNTIME_PREFIXES, _C2_CONTRACT_PATH)
+
 _CURRENT_MAIN_SHA = "ad782f5be747d9d59f273c1c0813535d62b50dcb"
 _ROUND4_C2_MAIN_SHA = "2782a9048c235006c17024c9798cf988a07627a1"
 
@@ -666,10 +670,10 @@ def _current_main_ref() -> str:
     raise AssertionError("current main ref 不存在：origin/main 或 kylin-mem/main")
 
 
-def _approved_docs_runtime_prefix_exceptions() -> tuple[str, ...]:
-    """从 D15D manifest 读取登记的 runtime-prefix docs-only 例外。"""
+def _approved_docs_c2_locked_exceptions() -> tuple[str, ...]:
+    """从 D15D manifest 读取登记的 C2 locked-path docs-only 例外。"""
     current_main = _load_json(_D15D_MANIFEST)["current_main"]
-    entries = current_main.get("approved_docs_runtime_prefix_exceptions", [])
+    entries = current_main.get("approved_docs_c2_locked_exceptions", [])
     assert isinstance(entries, list), "approved docs exceptions 必须是数组"
 
     paths = []
@@ -677,8 +681,11 @@ def _approved_docs_runtime_prefix_exceptions() -> tuple[str, ...]:
         assert isinstance(entry, dict), "exception entry 必须是 object"
         path = entry.get("path")
         assert isinstance(path, str) and path, "exception path 必须是非空字符串"
-        assert any(path.startswith(prefix) for prefix in _RUNTIME_PREFIXES), (
-            f"exception path 不在 runtime prefixes 内: {path}"
+        assert (
+            any(path.startswith(prefix) for prefix in _RUNTIME_PREFIXES)
+            or path == _C2_CONTRACT_PATH
+        ), (
+            f"exception path 不在 C2 locked paths 内: {path}"
         )
         assert entry.get("kind") == "DOCUMENTATION_ONLY"
         assert entry.get("review_id") == 5168962906
@@ -686,14 +693,14 @@ def _approved_docs_runtime_prefix_exceptions() -> tuple[str, ...]:
         paths.append(path)
 
     assert len(paths) == len(set(paths)), "approved docs exceptions 不得重复"
-    return tuple(paths)
+    return tuple(sorted(paths))
 
 
-def _release_runtime_drift_hits(main_ref: str) -> list:
-    """检查 current release commit 到 current main 的 runtime-sensitive paths。"""
+def _release_c2_locked_drift_hits(main_ref: str) -> list:
+    """检查 current release commit 到 current main 的 Runbook C2 locked paths。"""
     proc = subprocess.run(
         ["git", "diff", "--name-only", f"{_CURRENT_RELEASE_COMMIT}..{main_ref}",
-         "--", *_RUNTIME_PREFIXES],
+         "--", *_C2_LOCKED_PATHS],
         cwd=str(_REPO_ROOT),
         capture_output=True,
         text=True,
@@ -703,15 +710,15 @@ def _release_runtime_drift_hits(main_ref: str) -> list:
         f"git diff current release drift 失败 (rc={proc.returncode}): "
         f"{proc.stderr.strip()}"
     )
-    raw_hits = [
+    raw_hits = sorted(
         line
         for line in proc.stdout.splitlines()
         if line.strip()
-    ]
-    allowed = set(_approved_docs_runtime_prefix_exceptions())
+    )
+    allowed = set(_approved_docs_c2_locked_exceptions())
     unexpected = [hit for hit in raw_hits if hit not in allowed]
     assert set(raw_hits) == set(allowed), (
-        f"raw runtime hits 与 manifest 例外不一致: raw={raw_hits}, "
+        f"raw C2 locked hits 与 manifest 例外不一致: raw={raw_hits}, "
         f"approved={sorted(allowed)}"
     )
     return unexpected
@@ -739,7 +746,7 @@ def test_live_diff_fail_closed():
     """
     head = _head_sha()
     main_ref = _current_main_ref()
-    hits = _release_runtime_drift_hits(main_ref)
+    hits = _release_c2_locked_drift_hits(main_ref)
     assert not hits, (
         f"current release `4a6323f` 到 {main_ref} 出现 runtime drift: {hits}"
     )
@@ -755,7 +762,7 @@ def test_live_diff_fail_closed():
     print(f"[live] HEAD={head}")
     print(f"[live] current_release_commit={_CURRENT_RELEASE_COMMIT}")
     print(f"[live] current_main_ref={main_ref}")
-    print(f"[live] runtime_prefix_hits={hits}")
+    print(f"[live] c2_locked_hits={hits}")
 
     # 文档一致性（负向 fail-closed 断言恒生效）。
     _assert_documentation_consistency("CURRENT_RELEASE_NO_RUNTIME_DRIFT")
@@ -801,13 +808,13 @@ def test_current_main_drift_invalidation_ssot():
     current_main = manifest["current_main"]
     exception_paths = [
         entry["path"]
-        for entry in current_main["approved_docs_runtime_prefix_exceptions"]
+        for entry in current_main["approved_docs_c2_locked_exceptions"]
     ]
-    assert exception_paths == consistency["approved_docs_runtime_prefix_exceptions"]
+    assert exception_paths == consistency["approved_docs_c2_locked_exceptions"]
     assert tuple(exception_paths) == tuple(
-        current_main["raw_runtime_prefix_hits_since_release_commit"]
+        current_main["raw_c2_locked_hits_since_release_commit"]
     )
-    assert tuple(exception_paths) == tuple(consistency["raw_runtime_prefix_hits"])
+    assert tuple(exception_paths) == tuple(consistency["raw_c2_locked_hits"])
     assert manifest["current_main"]["sha"] == _CURRENT_MAIN_SHA
     assert manifest["current_main"]["release_commit_is_current_main"] is False
     assert manifest["current_main"]["runtime_sensitive_drift_since_release_commit"] is False
