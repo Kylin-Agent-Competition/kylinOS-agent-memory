@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -13,6 +16,7 @@ from evaluation.d14c_l3_harness import (
     D14CPreflightError,
     HANDOFF_SCHEMA_VERSION,
     convert_runtime_capture,
+    load_and_validate_authoritative_handoff,
     validate_formal_handoff,
 )
 
@@ -28,6 +32,8 @@ def _git(_root: Path, *args: str) -> str:
         return HEAD
     if args[:2] == ("cat-file", "-e"):
         return ""
+    if args[:2] == ("merge-base", "--is-ancestor"):
+        return ""
     raise AssertionError(args)
 
 
@@ -38,20 +44,83 @@ def _write(root: Path, relative: str, contents: bytes) -> tuple[str, str]:
     return relative, hashlib.sha256(contents).hexdigest()
 
 
+def _write_json(root: Path, relative: str, value: dict) -> tuple[str, str]:
+    return _write(root, relative, json.dumps(value, sort_keys=True).encode("utf-8"))
+
+
+def _update_json(root: Path, relative: str, **updates: object) -> None:
+    path = root / relative
+    value = json.loads(path.read_text(encoding="utf-8"))
+    value.update(updates)
+    path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+
+
 def _handoff(root: Path) -> dict:
-    d13d_reference, _ = _write(root, "evidence/d13d/final.json", b"d13d")
-    d14d_reference, _ = _write(root, "evidence/d14d/final.json", b"d14d")
     package_path, package_sha = _write(root, "release/packages/frozen.tar", b"release-package")
-    approval_reference, _ = _write(root, "evidence/approvals/host.json", b"host-approval")
-    freeze_reference, _ = _write(root, "evidence/context/freeze.json", b"context-freeze")
+    manifest_path, manifest_sha = _write_json(
+        root,
+        "release/packages/frozen.manifest.json",
+        {"source_commit": HEAD, "package_version": "1", "package_sha256": package_sha},
+    )
+    d13d_reference, _ = _write_json(
+        root,
+        "evidence/d13d/final.json",
+        {"status": "FROZEN", "frozen": True, "tested_commit": HEAD},
+    )
+    d14d_reference, _ = _write_json(
+        root,
+        "evidence/d14d/final.json",
+        {
+            "status": "L3_READY",
+            "l3_ready": True,
+            "tested_commit": HEAD,
+            "package_tar_sha256": package_sha,
+        },
+    )
     schema_path, schema_sha = _write(root, "contracts/memory-context-v1.json", b"memory-context-schema")
     artifacts = {}
     for name in ("ai_assistant", "memory_client", "memory_service"):
         path, sha = _write(root, f"release/artifacts/{name}.bin", name.encode("utf-8"))
         artifacts[name] = {"path": path, "version": "1", "sha256": sha}
+    approval_reference, approval_sha = _write_json(
+        root,
+        "evidence/approvals/host.json",
+        {
+            "schema": "d14c-trusted-host-approval/v1",
+            "status": "APPROVED",
+            "tested_commit": HEAD,
+            "environment_id": "kylin-vm-01",
+            "service_package_sha256": artifacts["memory_service"]["sha256"],
+            "process_identity": "assistant",
+            "db_identity": "chat-db",
+        },
+    )
+    freeze_reference, _ = _write_json(
+        root,
+        "evidence/context/freeze.json",
+        {
+            "schema": "d14c-memory-context-freeze/v1",
+            "status": "FROZEN",
+            "tested_commit": HEAD,
+            "environment_id": "kylin-vm-01",
+            "service_package_sha256": artifacts["memory_service"]["sha256"],
+            "memory_context_schema_sha256": schema_sha,
+        },
+    )
     routes = {}
     for method in ("turn.finalized", "event.ingest", "forget.preview", "forget.execute"):
-        reference, _ = _write(root, f"evidence/routes/{method}.json", method.encode("utf-8"))
+        reference, _ = _write_json(
+            root,
+            f"evidence/routes/{method}.json",
+            {
+                "schema": "d14c-route-activation/v1",
+                "method": method,
+                "status": "ACTIVE",
+                "tested_commit": HEAD,
+                "environment_id": "kylin-vm-01",
+                "service_package_sha256": artifacts["memory_service"]["sha256"],
+            },
+        )
         routes[method] = {
             "status": "ACTIVE",
             "tested_commit": HEAD,
@@ -65,10 +134,10 @@ def _handoff(root: Path) -> dict:
         "preflight_runner_commit": HEAD,
         "d13d": {"status": "FROZEN", "frozen": True, "tested_commit": HEAD, "evidence_reference": d13d_reference},
         "d14d": {"status": "L3_READY", "l3_ready": True, "tested_commit": HEAD, "package_tar_sha256": package_sha, "evidence_reference": d14d_reference},
-        "release_package": {"path": package_path, "version": "1", "sha256": package_sha, "manifest_sha256": SHA, "source_commit": HEAD},
+        "release_package": {"path": package_path, "version": "1", "sha256": package_sha, "manifest_path": manifest_path, "manifest_sha256": manifest_sha, "source_commit": HEAD},
         "artifacts": artifacts,
         "vm": {"environment_id": "kylin-vm-01", "name": "Kylin", "uuid": "vm-uuid", "snapshot": "clean", "snapshot_uuid": "snap-uuid"},
-        "trusted_host_identity": {"status": "APPROVED", "tested_commit": HEAD, "environment_id": "kylin-vm-01", "service_package_sha256": artifacts["memory_service"]["sha256"], "approval_reference": approval_reference, "process_identity": "assistant", "db_identity": "chat-db", "identity_sha256": SHA},
+        "trusted_host_identity": {"status": "APPROVED", "tested_commit": HEAD, "environment_id": "kylin-vm-01", "service_package_sha256": artifacts["memory_service"]["sha256"], "approval_reference": approval_reference, "process_identity": "assistant", "db_identity": "chat-db", "identity_sha256": approval_sha},
         "production_routes": routes,
         "memory_context": {"status": "FROZEN", "tested_commit": HEAD, "environment_id": "kylin-vm-01", "service_package_sha256": artifacts["memory_service"]["sha256"], "schema_version": "v1", "schema_path": schema_path, "freeze_reference": freeze_reference, "no_match_semantics": "skipped", "failure_semantics": "fail-closed", "schema_sha256": schema_sha},
         "evidence_root": "evidence/l3-kylin-vm/d14c_20260907T000000Z_aaaaaaaa",
@@ -95,6 +164,16 @@ def test_preflight_accepts_frozen_runtime_commit_with_current_preflight_runner(t
     handoff["memory_context"]["tested_commit"] = "c" * 40
     for route in handoff["production_routes"].values():
         route["tested_commit"] = "c" * 40
+    for section in ("d13d", "d14d"):
+        _update_json(tmp_path, handoff[section]["evidence_reference"], tested_commit="c" * 40)
+    _update_json(tmp_path, handoff["release_package"]["manifest_path"], source_commit="c" * 40)
+    _update_json(tmp_path, handoff["trusted_host_identity"]["approval_reference"], tested_commit="c" * 40)
+    handoff["trusted_host_identity"]["identity_sha256"] = hashlib.sha256(
+        (tmp_path / handoff["trusted_host_identity"]["approval_reference"]).read_bytes()
+    ).hexdigest()
+    _update_json(tmp_path, handoff["memory_context"]["freeze_reference"], tested_commit="c" * 40)
+    for route in handoff["production_routes"].values():
+        _update_json(tmp_path, route["activation_reference"], tested_commit="c" * 40)
 
     report = validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
 
@@ -120,6 +199,19 @@ def test_preflight_rejects_d14d_handoff_with_another_package(tmp_path):
     handoff["d14d"]["package_tar_sha256"] = "c" * 64
 
     with pytest.raises(D14CPreflightError, match="d14d.package_tar_sha256 must equal release_package.sha256"):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
+def test_preflight_rejects_d14d_reference_with_another_package(tmp_path):
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff(tmp_path)
+    _update_json(
+        tmp_path,
+        handoff["d14d"]["evidence_reference"],
+        package_tar_sha256="c" * 64,
+    )
+
+    with pytest.raises(D14CPreflightError, match="evidence_reference.package_tar_sha256 must equal"):
         validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
 
 
@@ -278,6 +370,89 @@ def test_preflight_rejects_trusted_host_identity_with_missing_approval_reference
         validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
 
 
+def test_preflight_rejects_unapproved_trusted_host_reference(tmp_path):
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff(tmp_path)
+    approval_path = tmp_path / handoff["trusted_host_identity"]["approval_reference"]
+    approval = json.loads(approval_path.read_text(encoding="utf-8"))
+    approval["status"] = "PENDING"
+    approval_path.write_text(json.dumps(approval, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(D14CPreflightError, match="approval_reference.status must be APPROVED"):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
+def test_preflight_rejects_trusted_host_reference_with_mismatched_bytes(tmp_path):
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff(tmp_path)
+    handoff["trusted_host_identity"]["identity_sha256"] = SHA
+
+    with pytest.raises(D14CPreflightError, match="identity_sha256 does not match approval_reference bytes"):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
+@pytest.mark.parametrize(
+    ("reference_key", "updates", "message"),
+    (
+        ("activation_reference", {"status": "PENDING"}, "activation_reference.status must be ACTIVE"),
+        ("activation_reference", {"tested_commit": "c" * 40}, "activation_reference.tested_commit must equal"),
+        ("activation_reference", {"service_package_sha256": "c" * 64}, "activation_reference.service_package_sha256 must equal"),
+        ("activation_reference", {"method": "other.route"}, "activation_reference.method must equal route method"),
+    ),
+)
+def test_preflight_rejects_route_reference_without_matching_activation(
+    tmp_path, reference_key, updates, message
+):
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff(tmp_path)
+    route = handoff["production_routes"]["turn.finalized"]
+    _update_json(tmp_path, route[reference_key], **updates)
+
+    with pytest.raises(D14CPreflightError, match=message):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
+def test_preflight_rejects_context_freeze_with_another_schema(tmp_path):
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff(tmp_path)
+    _update_json(
+        tmp_path,
+        handoff["memory_context"]["freeze_reference"],
+        memory_context_schema_sha256="c" * 64,
+    )
+
+    with pytest.raises(D14CPreflightError, match="memory_context_schema_sha256 must equal"):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
+@pytest.mark.parametrize(
+    ("gate_name", "updates", "message"),
+    (
+        ("d13d", {"frozen": False}, "d13d.evidence_reference.frozen must be true"),
+        ("d14d", {"l3_ready": False}, "d14d.evidence_reference.l3_ready must be true"),
+    ),
+)
+def test_preflight_rejects_nonfinal_gate_reference(tmp_path, gate_name, updates, message):
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff(tmp_path)
+    _update_json(tmp_path, handoff[gate_name]["evidence_reference"], **updates)
+
+    with pytest.raises(D14CPreflightError, match=message):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
+def test_preflight_rejects_manifest_with_another_source_commit(tmp_path):
+    (tmp_path / ".git").mkdir()
+    handoff = _handoff(tmp_path)
+    _update_json(tmp_path, handoff["release_package"]["manifest_path"], source_commit="c" * 40)
+    handoff["release_package"]["manifest_sha256"] = hashlib.sha256(
+        (tmp_path / handoff["release_package"]["manifest_path"]).read_bytes()
+    ).hexdigest()
+
+    with pytest.raises(D14CPreflightError, match="manifest.source_commit must equal"):
+        validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
 @pytest.mark.parametrize(
     ("key", "value"),
     (
@@ -312,6 +487,115 @@ def test_preflight_rejects_memory_context_from_another_runtime_environment(tmp_p
 
     with pytest.raises(D14CPreflightError, match="memory_context.environment_id must equal vm.environment_id"):
         validate_formal_handoff(handoff, repository_root=tmp_path, git_runner=_git)
+
+
+def _run_git(root: Path, *args: str) -> str:
+    completed = subprocess.run(
+        ["git", "-C", str(root), *args], check=True, capture_output=True, text=True
+    )
+    return completed.stdout.strip()
+
+
+def _authoritative_control_repo(tmp_path: Path) -> tuple[Path, str]:
+    _run_git(tmp_path, "init")
+    _run_git(tmp_path, "config", "user.email", "d14c@example.invalid")
+    _run_git(tmp_path, "config", "user.name", "D14C test")
+    (tmp_path / "control.txt").write_text("base", encoding="utf-8")
+    _run_git(tmp_path, "add", "control.txt")
+    _run_git(tmp_path, "commit", "-m", "base")
+    runner_commit = _run_git(tmp_path, "rev-parse", "HEAD")
+    handoff = _handoff(tmp_path)
+    handoff["formal_tested_commit"] = runner_commit
+    handoff["preflight_runner_commit"] = runner_commit
+    handoff["release_package"]["source_commit"] = runner_commit
+    for gate_name in ("d13d", "d14d"):
+        handoff[gate_name]["tested_commit"] = runner_commit
+        _update_json(
+            tmp_path, handoff[gate_name]["evidence_reference"], tested_commit=runner_commit
+        )
+    _update_json(
+        tmp_path, handoff["release_package"]["manifest_path"], source_commit=runner_commit
+    )
+    handoff["release_package"]["manifest_sha256"] = hashlib.sha256(
+        (tmp_path / handoff["release_package"]["manifest_path"]).read_bytes()
+    ).hexdigest()
+    handoff["trusted_host_identity"]["tested_commit"] = runner_commit
+    _update_json(
+        tmp_path, handoff["trusted_host_identity"]["approval_reference"], tested_commit=runner_commit
+    )
+    handoff["trusted_host_identity"]["identity_sha256"] = hashlib.sha256(
+        (tmp_path / handoff["trusted_host_identity"]["approval_reference"]).read_bytes()
+    ).hexdigest()
+    handoff["memory_context"]["tested_commit"] = runner_commit
+    _update_json(
+        tmp_path, handoff["memory_context"]["freeze_reference"], tested_commit=runner_commit
+    )
+    for route in handoff["production_routes"].values():
+        route["tested_commit"] = runner_commit
+        _update_json(tmp_path, route["activation_reference"], tested_commit=runner_commit)
+    canonical = tmp_path / "release/handoff/d14c-formal-handoff.json"
+    canonical.parent.mkdir(parents=True, exist_ok=True)
+    canonical.write_text(json.dumps(handoff, sort_keys=True), encoding="utf-8")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "authoritative handoff")
+    return canonical, _run_git(tmp_path, "rev-parse", "HEAD")
+
+
+def test_authoritative_preflight_accepts_control_head_tracked_canonical_handoff(tmp_path):
+    canonical, control_head = _authoritative_control_repo(tmp_path)
+
+    report = load_and_validate_authoritative_handoff(
+        canonical, control_root=tmp_path, expected_control_head=control_head
+    )
+
+    assert report["status"] == "PREFLIGHT_ONLY"
+    assert report["formal_dispatch"] == "NOT_STARTED"
+
+
+def test_authoritative_preflight_rejects_external_handoff_even_when_valid(tmp_path):
+    canonical, control_head = _authoritative_control_repo(tmp_path)
+    external = tmp_path.parent / "external-handoff.json"
+    external.write_bytes(canonical.read_bytes())
+
+    with pytest.raises(D14CPreflightError, match="canonical path"):
+        load_and_validate_authoritative_handoff(
+            external, control_root=tmp_path, expected_control_head=control_head
+        )
+
+
+def test_authoritative_preflight_rejects_git_blob_drift(tmp_path):
+    canonical, control_head = _authoritative_control_repo(tmp_path)
+    canonical.write_text("{}", encoding="utf-8")
+    _run_git(tmp_path, "update-index", "--assume-unchanged", "release/handoff/d14c-formal-handoff.json")
+
+    with pytest.raises(D14CPreflightError, match="Git blob"):
+        load_and_validate_authoritative_handoff(
+            canonical, control_root=tmp_path, expected_control_head=control_head
+        )
+
+
+def test_formal_preflight_cli_accepts_only_the_authoritative_control_handoff(tmp_path):
+    canonical, control_head = _authoritative_control_repo(tmp_path)
+    script = Path(__file__).resolve().parents[2] / "scripts/run_d14c_formal_preflight.py"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--control-root",
+            str(tmp_path),
+            "--expected-control-head",
+            control_head,
+            "--handoff",
+            str(canonical),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert json.loads(completed.stdout)["status"] == "PREFLIGHT_ONLY"
 
 
 def _capture() -> dict:

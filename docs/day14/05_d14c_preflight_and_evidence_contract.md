@@ -4,7 +4,7 @@
 
 本契约只建立开跑前拒绝机制和数据转换入口：
 
-- `scripts/run_d14c_formal_preflight.py <handoff.json>` 只读校验，不启动服务、不创建 evidence root、不产生 PASS。
+- `scripts/run_d14c_formal_preflight.py --control-root <checkout> --expected-control-head <SHA> [--handoff release/handoff/d14c-formal-handoff.json]` 只读校验，不启动服务、不创建 evidence root、不产生 PASS。
 - `scripts/build_d14c_d13c_bundle.py <capture.json> -o <bundle.json>` 只把真实 VM capture 的既有 D13C 字段交给 `scripts/run_d13c_session_eval.py`；不新增 evaluator 或评测阈值。
 
 实现位于 `memory-service/evaluation/d14c_l3_harness.py`。L1 负向用例覆盖 dirty worktree、无法解析的 tested commit、缺失或越界的证据引用、实际构建物 SHA 不匹配、未冻结 D13D/D14D、未批准或跨运行身份的 host identity、无绑定 ACTIVE 路由、未冻结或跨运行身份的 MemoryContext、非法/复用 evidence root，以及非 VM capture/provenance 漂移。
@@ -15,10 +15,10 @@
 
 ```text
 formal_tested_commit（冻结 runtime/package 的 40 位 SHA）
-preflight_runner_commit（执行预检的干净工作树 HEAD）
+preflight_runner_commit（可由 control HEAD 追溯的预检实现提交）
 d13d.status=FROZEN + d13d.frozen=true + d13d.tested_commit=formal_tested_commit + existing evidence_reference
 d14d.status=L3_READY + d14d.l3_ready=true + d14d.tested_commit=formal_tested_commit + existing evidence_reference
-release package: existing repository-local regular file + path/version/SHA-256/manifest SHA-256/source_commit（且 source_commit=formal_tested_commit）
+release package: existing repository-local regular file + path/version/SHA-256/manifest_path/manifest SHA-256/source_commit（且 source_commit=formal_tested_commit）
 AI Assistant、MemoryClient、Memory Service: existing repository-local regular file + path/version/SHA-256
 VM: environment_id/name/uuid/snapshot/snapshot_uuid
 trusted host identity: APPROVED + same tested_commit/environment_id/service_package_sha256 + existing approval reference + process/DB reference + SHA-256
@@ -31,11 +31,33 @@ evidence_root = evidence/l3-kylin-vm/d14c_<new-run-id>
 preflight 工具在 clean development HEAD 运行，同时保持 D13D/D14A/D14D 已冻结的
 runtime tested commit 不变；两种 SHA 均受校验，不能互相替代。
 
-`formal_tested_commit` 必须由 Git `cat-file -e <commit>^{commit}` 解析为真实提交，
-但不要求等于 `preflight_runner_commit`。所有 evidence/reference/artifact/schema path
+`formal_tested_commit` 与 `preflight_runner_commit` 均必须由 Git 解析为真实提交，后者必须是
+control HEAD 的祖先，但两者不要求相等。所有 evidence/reference/artifact/schema path
 必须是存在的 repository-relative 路径，解析后仍留在 repository root 内；绝对路径、
 `..` 路径和 symlink escape 均拒绝。release package、三个 component artifact 与
 MemoryContext schema 都以实际文件 bytes 重新计算 SHA-256，并要求等于 handoff 声明。
+
+### Control handoff authority 与语义绑定
+
+CLI 只接受 `control_root` 内 `release/handoff/d14c-formal-handoff.json`：control root 必须是
+Git worktree、HEAD 必须等于 `expected_control_head`、worktree 必须干净；handoff 必须是 tracked
+regular file、不得经 symlink 逃逸，且工作区 bytes 必须逐字节等于
+`expected_control_head:release/handoff/d14c-formal-handoff.json` 的 Git blob。因而临时目录或
+未提交的 handoff 不能触发正式预检。
+
+所有外部批准/激活/冻结引用都必须是 repository-local regular JSON 文件，不仅检查“存在”：
+
+- trusted-host approval 必须为 `d14c-trusted-host-approval/v1` / `APPROVED`，其 tested commit、
+  environment、service package、process 与 DB identity 必须等于外层；外层 `identity_sha256`
+  必须等于该 JSON 原始 bytes 的 SHA-256。
+- 每条 production route 的 reference 必须为 `d14c-route-activation/v1` / `ACTIVE`，并绑定其
+  method 与全部运行身份。
+- MemoryContext freeze reference 必须为 `d14c-memory-context-freeze/v1` / `FROZEN`，并将
+  `memory_context_schema_sha256` 绑定至 schema 实际 bytes 的 SHA-256。
+- D13D/D14D reference 分别必须再次证明 `FROZEN`/`frozen=true` 与 `L3_READY`/`l3_ready=true`、
+  相同 tested commit；D14D reference 的 package SHA 还必须等于 D14D/release package。
+- release manifest 必须作为 regular JSON 文件校验 bytes SHA，且 `source_commit` 必须等于
+  formal tested commit。
 
 `RAW_READY_PENDING_SEALS`、仅有 D13D Execution Seal、D14D G0-G6 完成但
 `l3_ready=false`，以及包来源提交与 formal tested commit 不一致，均必须 fail-closed。
