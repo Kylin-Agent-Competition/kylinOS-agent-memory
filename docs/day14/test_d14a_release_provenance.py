@@ -121,7 +121,8 @@ _RUNTIME_PREFIXES = (
 _C2_CONTRACT_PATH = "docs/day14/00_d14a_release_package_contract.md"
 _C2_LOCKED_PATHS = (*_RUNTIME_PREFIXES, _C2_CONTRACT_PATH)
 
-_CURRENT_MAIN_SHA = "ad782f5be747d9d59f273c1c0813535d62b50dcb"
+_CURRENT_MAIN_SHA = "6e9f56d2983b36c3b174e7acf6687c4af79439d4"
+_PRE_CLOSEOUT_MAIN_SHA = "ad782f5be747d9d59f273c1c0813535d62b50dcb"
 _ROUND4_C2_MAIN_SHA = "2782a9048c235006c17024c9798cf988a07627a1"
 
 # 旧实现遗留的固定 current_pr_head 字面量与旧固定 diff 范围（禁止回退出现）。
@@ -650,8 +651,24 @@ def _assert_documentation_consistency(cls: str):
     print(f"[live] 文档一致性校验通过，classification={cls}")
 
 
+def _is_ancestor(ancestor: str, descendant: str) -> bool:
+    """返回 git merge-base --is-ancestor 的确定性结果。"""
+    proc = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+        cwd=str(_REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode in (0, 1), (
+        f"git merge-base --is-ancestor 失败 (rc={proc.returncode}): "
+        f"{proc.stderr.strip()}"
+    )
+    return proc.returncode == 0
+
+
 def _current_main_ref() -> str:
-    """选择可用的 current main ref；本地与 CI 的 remote 名不同。"""
+    """选择包含 D15D closeout 的实时 main ref。"""
     for candidate in ("origin/main", "kylin-mem/main"):
         proc = subprocess.run(
             ["git", "rev-parse", "--verify", "--quiet", candidate],
@@ -663,8 +680,9 @@ def _current_main_ref() -> str:
         if proc.returncode == 0:
             sha = proc.stdout.strip()
             assert _SHA40.fullmatch(sha), f"{candidate} 输出非法: {sha!r}"
-            assert sha == _CURRENT_MAIN_SHA, (
-                f"{candidate}={sha} 不是登记的 current main {_CURRENT_MAIN_SHA}"
+            assert _is_ancestor(_CURRENT_MAIN_SHA, sha), (
+                f"{candidate}={sha} 不包含登记的 current main snapshot "
+                f"{_CURRENT_MAIN_SHA}"
             )
             return candidate
     raise AssertionError("current main ref 不存在：origin/main 或 kylin-mem/main")
@@ -688,12 +706,43 @@ def _approved_docs_c2_locked_exceptions() -> tuple[str, ...]:
             f"exception path 不在 C2 locked paths 内: {path}"
         )
         assert entry.get("kind") == "DOCUMENTATION_ONLY"
-        assert entry.get("review_id") == 5168962906
-        assert entry.get("merge_commit") == _CURRENT_MAIN_SHA
+        if path == _C2_CONTRACT_PATH:
+            expected_review_id = 5170478077
+            expected_merge_commit = _CURRENT_MAIN_SHA
+        else:
+            expected_review_id = 5168962906
+            expected_merge_commit = _PRE_CLOSEOUT_MAIN_SHA
+        assert entry.get("review_id") == expected_review_id, (
+            f"exception path {path} 的 authority review ID 不一致"
+        )
+        assert entry.get("merge_commit") == expected_merge_commit, (
+            f"exception path {path} 的 authority merge commit 不一致"
+        )
         paths.append(path)
 
     assert len(paths) == len(set(paths)), "approved docs exceptions 不得重复"
     return tuple(sorted(paths))
+
+
+def _assert_registered_exceptions_stable(main_ref: str) -> None:
+    """禁止任何已批准 docs-only locked path 在 authority merge 后再变更。"""
+    entries = _load_json(_D15D_MANIFEST)["current_main"][
+        "approved_docs_c2_locked_exceptions"
+    ]
+    for entry in entries:
+        path = entry["path"]
+        merge_commit = entry["merge_commit"]
+        proc = subprocess.run(
+            ["git", "diff", "--quiet", f"{merge_commit}..{main_ref}", "--", path],
+            cwd=str(_REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, (
+            f"已批准 exception {path} 在 {merge_commit}..{main_ref} 再次变更: "
+            f"{proc.stderr.strip()}"
+        )
 
 
 def _release_c2_locked_drift_hits(main_ref: str) -> list:
@@ -716,6 +765,7 @@ def _release_c2_locked_drift_hits(main_ref: str) -> list:
         if line.strip()
     )
     allowed = set(_approved_docs_c2_locked_exceptions())
+    _assert_registered_exceptions_stable(main_ref)
     unexpected = [hit for hit in raw_hits if hit not in allowed]
     assert set(raw_hits) == set(allowed), (
         f"raw C2 locked hits 与 manifest 例外不一致: raw={raw_hits}, "
@@ -762,6 +812,7 @@ def test_live_diff_fail_closed():
     print(f"[live] HEAD={head}")
     print(f"[live] current_release_commit={_CURRENT_RELEASE_COMMIT}")
     print(f"[live] current_main_ref={main_ref}")
+    print(f"[live] current_main_snapshot={_CURRENT_MAIN_SHA}")
     print(f"[live] c2_locked_hits={hits}")
 
     # 文档一致性（负向 fail-closed 断言恒生效）。
@@ -816,6 +867,13 @@ def test_current_main_drift_invalidation_ssot():
     )
     assert tuple(exception_paths) == tuple(consistency["raw_c2_locked_hits"])
     assert manifest["current_main"]["sha"] == _CURRENT_MAIN_SHA
+    assert manifest["closeout"]["pr_number"] == 177
+    assert manifest["closeout"]["status"] == "MERGED"
+    assert manifest["closeout"]["review_decision"] == "APPROVED"
+    assert manifest["closeout"]["head_sha"] == (
+        "8dc21f7df7ea359b880efc93902569a5ca4187d8"
+    )
+    assert manifest["closeout"]["merge_commit"] == _CURRENT_MAIN_SHA
     assert manifest["current_main"]["release_commit_is_current_main"] is False
     assert manifest["current_main"]["runtime_sensitive_drift_since_release_commit"] is False
     assert manifest["current_main"]["docs_only_drift_since_release_commit"] is True
@@ -873,7 +931,7 @@ def test_current_main_drift_invalidation_ssot():
     assert c13["status"] == "SIGNED"
     assert c13["evidence"] == ["E_SIGN_OFF.md"]
     assert c13["review_id"] == 5168962906
-    assert c13["merge_commit"] == _CURRENT_MAIN_SHA
+    assert c13["merge_commit"] == _PRE_CLOSEOUT_MAIN_SHA
     assert consistency["rebuild_required"] is True
     assert consistency["host_vm_required"] is True
 
