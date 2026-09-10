@@ -1,0 +1,86 @@
+{
+  "schema": "d14d-handoff/v1",
+  "generated_at": "2026-09-10T00:00:00Z",
+  "updated_at": "2026-09-10T02:55:00Z",
+  "source_documents": [
+    "docs/D_TRACK_STATUS.md",
+    "docs/day14/15_d14d_phase0_start_replacement_arbitration_20260907.md"
+  ],
+  "tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "release_status": "L3_READY",
+  "evidence_reference": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e",
+  "status": "DONE",
+  "l3_ready": true,
+  "release_ready": false,
+  "production_ready": false,
+  "pr_165": {
+    "number": 165,
+    "state": "MERGED",
+    "merged_at": "2026-09-08T11:37:40Z",
+    "final_reviewed_head": "cb6c528e6f5a88d7a9c847f8a597597f1e70638a",
+    "squash_merge_sha": "ec7a66b3e52f8d76b156300d375467290fdc42b6"
+  },
+  "gates": {
+    "g0_baseline": "PASS",
+    "g1_snapshot": "PASS",
+    "g2_package_audit": "PASS",
+    "g3_install": "PASS",
+    "g4_embed_server_start": "PASS",
+    "g5_service_restart": "PASS",
+    "g6_os_reboot": "PASS",
+    "g7_upgrade": "NOT_RUN / N-A (D-09 waiver)",
+    "g8_performance": "NOT_RUN (D-10 waiver)",
+    "g9_evidence": "PASS"
+  },
+  "evidence_root": {
+    "path": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e",
+    "package_tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
+    "package_manifest_sha256": "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0",
+    "sha256sums_sha256": "8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67",
+    "manifest_file_count": 3360
+  },
+  "formal_start_replacement": {
+    "original_snapshot_uuid": "c5e3c3de-1c70-4f58-b22a-ab07b2d2d56d",
+    "replacement_snapshot_uuid": "6dc9468e-36a8-41b3-b7c9-6115c7b8fc56",
+    "status": "CONFIRMED_BY_REVIEWER_E",
+    "arbitration_doc": "docs/day14/15_d14d_phase0_start_replacement_arbitration_20260907.md"
+  },
+  "package_identity": {
+    "name": "kylin-memory-a-d14a",
+    "version": "0.1.0-d14a",
+    "source_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+    "tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401"
+  },
+  "package": {
+    "package_version": "0.1.0-d14a",
+    "package_tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
+    "package_manifest_sha256": "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0"
+  },
+  "vm": {
+    "vm_name": "Kylin-D14D-clean-vdi-20260906",
+    "vm_uuid": "70ca1ea3-c27e-483d-aaba-0cac7dc5c77c",
+    "snapshot_name": "d14d-clean-base-20260907-r4",
+    "snapshot_uuid": "6dc9468e-36a8-41b3-b7c9-6115c7b8fc56",
+    "environment_id": "d14d-l3@Kylin-D14D-clean-vdi-20260906:d14d-clean-base-20260907-r4"
+  },
+  "blocked_items_for_b_track": {
+    "frozen_tar_bytes_available": false,
+    "frozen_tar_bytes_note": "The original frozen tar bytes were searched on the current VM and the r1 parent snapshot on 2026-09-10 and were not found; the recorded original tar SHA-256 remains authoritative.",
+    "rebuilt_tar_bytes_available": true,
+    "rebuilt_tar_path": "release/packages/kylin-memory-a-d14a-0.1.0-d14a-rebuilt-ba3b50e.tar.gz",
+    "rebuilt_tar_sha256": "de4050ee22d3c70f67c3cbf314ada1a76ac7d8d0527d7ba397477122553a30d8",
+    "rebuilt_manifest_sha256": "d16f117d6b874ed18f395d7767ebbed92ae6950734106957fcee3e9a11482646",
+    "rebuilt_tar_source_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+    "rebuilt_tar_note": "Provenance-labeled Kylin VM rebuild for B-track intake; not a byte-level recovery of the original frozen tar.",
+    "capture_runner_credentials_available": true,
+    "capture_runner_credentials_note": "VM SSH access confirmed 2026-09-10 (port 2223); kylin_memory.db present with full schema (memory_entries empty on clean snapshot); credentials passed via KYLIN_VM_PASSWORD env var, never stored in files",
+    "clean_vm_snapshot_access_available": true,
+    "clean_vm_snapshot_note": "Confirmed 2026-09-10: Kylin-D14D-clean-vdi-20260906 running, snapshot d14d-clean-base-20260907-r4 (UUID 6dc9468e-36a8-41b3-b7c9-6115c7b8fc56) active; SSH 127.0.0.1:2223",
+    "capture_runner_evidence": {
+      "sqlite_truth_artifact_path": "evidence/d14b/sqlite_truth.json",
+      "sqlite_truth_artifact_sha256": "5c09e7fbda93858e051aac9f71c19f980481376da6350ee555b808e91939212c",
+      "sqlite_truth_receipt_path": "evidence/d14b/sqlite_truth_receipt.json",
+      "scope_note": "VM capture-runner binding and production SQLite truth read; not a full D14B retrieval run."
+    }
+  }
+}

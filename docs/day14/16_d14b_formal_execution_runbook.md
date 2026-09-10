@@ -34,30 +34,33 @@ D14D release_status = L3_READY
 D14A final package version/tar SHA/manifest SHA 已冻结
 三方 tested_commit 与 manifest source_commit 相同
 VM UUID / snapshot UUID / environment_id 与 D14D handoff 相同
-checkout 的 HEAD == tested_commit，且 git status --porcelain 为空
+tested checkout 的 HEAD == tested_commit，且 git status --porcelain 为空
+control checkout 自身 HEAD/clean 状态可验证；D13D/D14D evidence 引用与 runner 在其中解析
 ```
 
-当前仍缺少 D14B 可消费的标准化 `d13d-handoff.json` / `d14d-handoff.json`、四类
-production capture command 与 runner identity；这些必须由正式交接提供，D14B 不得从
-上游 evidence 自行拼装为 handoff。当前开发分支 HEAD 也不是 `tested_commit`，必须在
-精确 commit 的干净 checkout 中重验。
+tested root 与 control root 必须分开。被测源码 checkout 只证明 HEAD/clean identity；
+reviewed handoff、capture runner、query spec 与 evidence 引用从 control root 解析。
+四类 production capture command 与 runner/source dependency identity 必须由正式交接提供，
+D14B 不得从上游 evidence 自行拼装为 handoff。
 
 在未存在的新路径上运行：
 
 ```text
 python scripts/run_d14b_preflight.py \
   --expected-tested-commit <tested-commit> \
+  --expected-control-head <approved-control-plane-commit> \
   --d13d-handoff <d13d-handoff.json> \
   --d14d-handoff <d14d-handoff.json> \
   --package-manifest <package-manifest.json> \
-  --repo-root <exact-clean-checkout> \
+  --tested-repo-root <exact-clean-checkout> \
+  --control-root <reviewed-tooling-checkout> \
   --evidence-root <absolute-new-root> \
   --capture-handoff <d14b-capture-handoff.json> \
   --package-tar <actual-frozen-tar> \
   --actual-package-manifest <actual-frozen-manifest.json>
 ```
 
-正式 preflight 现强制：`--capture-handoff`（四类 runner 机器可验证）与
+正式 preflight 现强制：`--capture-handoff`（四类 runner 和 source bindings 机器可验证）与
 `--package-tar`/`--actual-package-manifest`（现场校验冻结包字节）；每个 source artifact
 须带 capture receipt，capture 无 provenance 一律拒绝。以上任一不满足即停止。
 
@@ -79,6 +82,12 @@ FTS5 query command    -> fts5-results.json
 Vector query command  -> vector-results.json
 RRF query command     -> rrf-results.json
 ```
+
+handoff 还必须包含 `source_bindings`：四类 channel 固定 production DB path；FTS5/Vector
+另行固定 query spec path + SHA-256；Vector 固定 CLI path + SHA-256。capture runner 在任何
+production 查询前复核这些 binding，不一致即 fail-closed。RRF receipt 记录
+`fts5_input_sha256` 与 `vector_input_sha256`，checkpoint assembler 和 evidence verifier
+交叉校验父 artifact bytes。
 
 每个 channel artifact 的格式为：
 

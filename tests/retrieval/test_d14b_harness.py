@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -51,8 +52,10 @@ def handoffs(tmp_path: Path, commit: str = SHA) -> tuple[Path, Path, Path]:
         "snapshot_uuid": "22222222-2222-2222-2222-222222222222",
         "environment_id": "d14d-l3",
     }
+    control = tmp_path / "control"
+    (control / "release/handoff").mkdir(parents=True)
     d13d = write_json(
-        tmp_path / "d13d.json",
+        control / "release/handoff/d13d-handoff.json",
         {
             "freeze_status": "FROZEN",
             "tested_commit": commit,
@@ -60,7 +63,7 @@ def handoffs(tmp_path: Path, commit: str = SHA) -> tuple[Path, Path, Path]:
         },
     )
     d14d = write_json(
-        tmp_path / "d14d.json",
+        control / "release/handoff/d14d-handoff.json",
         {
             "release_status": "L3_READY",
             "tested_commit": commit,
@@ -70,7 +73,61 @@ def handoffs(tmp_path: Path, commit: str = SHA) -> tuple[Path, Path, Path]:
         },
     )
     manifest = write_json(tmp_path / "manifest.json", {"source_commit": commit, **package})
+    for arguments in (
+        ["git", "init", "-q", str(control)],
+        ["git", "-C", str(control), "config", "user.email", "d14b@example.invalid"],
+        ["git", "-C", str(control), "config", "user.name", "D14B test"],
+        ["git", "-C", str(control), "add", "release/handoff"],
+        ["git", "-C", str(control), "commit", "-qm", "canonical handoffs"],
+    ):
+        subprocess.run(arguments, check=True, capture_output=True, text=True)
     return d13d, d14d, manifest
+
+
+def test_committed_formal_handoffs_are_preflight_contract_compatible(tmp_path: Path) -> None:
+    d13d_path = REPOSITORY_ROOT / "release/handoff/d13d-handoff.json"
+    d14d_path = REPOSITORY_ROOT / "release/handoff/d14d-handoff.json"
+    d13d = json.loads(d13d_path.read_text(encoding="utf-8"))
+    d14d = json.loads(d14d_path.read_text(encoding="utf-8"))
+    package_manifest = write_json(
+        tmp_path / "package-manifest.json",
+        {"source_commit": d14d["tested_commit"], **d14d["package"]},
+    )
+    control = tmp_path / "committed-control"
+    (control / "release/handoff").mkdir(parents=True)
+    (control / "release/handoff/d13d-handoff.json").write_bytes(d13d_path.read_bytes())
+    (control / "release/handoff/d14d-handoff.json").write_bytes(d14d_path.read_bytes())
+    for reference in (d13d["freeze_reference"], d14d["evidence_reference"]):
+        source = REPOSITORY_ROOT / reference
+        destination = control / reference
+        if source.is_dir():
+            shutil.copytree(source, destination)
+        else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+    for arguments in (
+        ["git", "init", "-q", str(control)],
+        ["git", "-C", str(control), "config", "user.email", "d14b@example.invalid"],
+        ["git", "-C", str(control), "config", "user.name", "D14B test"],
+        ["git", "-C", str(control), "add", "."],
+        ["git", "-C", str(control), "commit", "-qm", "committed handoffs"],
+    ):
+        subprocess.run(arguments, check=True, capture_output=True, text=True)
+
+    completed = run_script(
+        "run_d14b_preflight.py",
+        "--expected-tested-commit", d14d["tested_commit"],
+        "--expected-control-head", control_head(control),
+        "--d13d-handoff", str(control / "release/handoff/d13d-handoff.json"),
+        "--d14d-handoff", str(control / "release/handoff/d14d-handoff.json"),
+        "--package-manifest", str(package_manifest),
+        "--tested-repo-root", str(REPOSITORY_ROOT),
+        "--control-root", str(control),
+        "--evidence-root", str(tmp_path / "new-evidence"),
+    )
+
+    assert completed.returncode != 0
+    assert "tested worktree HEAD 与 tested_commit 不一致" in completed.stderr
 
 
 def preflight(
@@ -80,14 +137,18 @@ def preflight(
         "run_d14b_preflight.py",
         "--expected-tested-commit",
         SHA,
+        "--expected-control-head",
+        control_head(tmp_path / "control"),
         "--d13d-handoff",
         str(d13d),
         "--d14d-handoff",
         str(d14d),
         "--package-manifest",
         str(manifest),
-        "--repo-root",
+        "--tested-repo-root",
         str(tmp_path / "not-reached-on-invalid-input"),
+        "--control-root",
+        str(tmp_path / "control"),
         "--evidence-root",
         str(tmp_path / "new-evidence"),
         *extra,
@@ -96,7 +157,7 @@ def preflight(
 
 def make_clean_git_repo(path: Path) -> tuple[Path, str]:
     repo = path / "repo"
-    repo.mkdir()
+    repo.mkdir(parents=True)
     for arguments in (
         ["git", "init", "-q", str(repo)],
         ["git", "-C", str(repo), "config", "user.email", "d14b@example.invalid"],
@@ -115,8 +176,33 @@ def make_clean_git_repo(path: Path) -> tuple[Path, str]:
     return repo, commit
 
 
+def control_head(repo: Path) -> str:
+    completed = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip()
+
+
+def commit_control_repo(repo: Path) -> None:
+    for arguments in (
+        ["git", "-C", str(repo), "add", "."],
+        ["git", "-C", str(repo), "commit", "-qm", "update handoff"],
+    ):
+        subprocess.run(arguments, check=True, capture_output=True, text=True)
+
+
 def run_preflight_with_repo(
-    *, repo: Path, commit: str, d13d: Path, d14d: Path, manifest: Path, evidence_root: Path
+    *,
+    repo: Path,
+    commit: str,
+    d13d: Path,
+    d14d: Path,
+    manifest: Path,
+    evidence_root: Path,
+    control_repo: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return run_script(
         "run_d14b_preflight.py",
@@ -128,8 +214,12 @@ def run_preflight_with_repo(
         str(d14d),
         "--package-manifest",
         str(manifest),
-        "--repo-root",
+        "--tested-repo-root",
         str(repo),
+        "--control-root",
+        str(control_repo or repo),
+        "--expected-control-head",
+        control_head(control_repo or repo),
         "--evidence-root",
         str(evidence_root),
     )
@@ -140,6 +230,7 @@ def test_preflight_rejects_commit_mismatch(tmp_path: Path) -> None:
     payload = json.loads(d13d.read_text(encoding="utf-8"))
     payload["tested_commit"] = OTHER_SHA
     write_json(d13d, payload)
+    commit_control_repo(tmp_path / "control")
 
     completed = preflight(tmp_path, d13d, d14d, manifest)
 
@@ -152,6 +243,7 @@ def test_preflight_rejects_non_frozen_d13d(tmp_path: Path) -> None:
     payload = json.loads(d13d.read_text(encoding="utf-8"))
     payload["freeze_status"] = "PREPARED"
     write_json(d13d, payload)
+    commit_control_repo(tmp_path / "control")
 
     completed = preflight(tmp_path, d13d, d14d, manifest)
 
@@ -164,6 +256,7 @@ def test_preflight_rejects_non_l3_ready_d14d(tmp_path: Path) -> None:
     payload = json.loads(d14d.read_text(encoding="utf-8"))
     payload["release_status"] = "ENV_PREPARED"
     write_json(d14d, payload)
+    commit_control_repo(tmp_path / "control")
 
     completed = preflight(tmp_path, d13d, d14d, manifest)
 
@@ -176,6 +269,7 @@ def test_preflight_rejects_package_tar_sha_mismatch(tmp_path: Path) -> None:
     payload = json.loads(d14d.read_text(encoding="utf-8"))
     payload["package"]["package_tar_sha256"] = "d" * 64
     write_json(d14d, payload)
+    commit_control_repo(tmp_path / "control")
 
     completed = preflight(tmp_path, d13d, d14d, manifest)
 
@@ -200,6 +294,7 @@ def test_preflight_rejects_an_unlocatable_freeze_reference(tmp_path: Path) -> No
     payload = json.loads(d13d.read_text(encoding="utf-8"))
     payload["freeze_reference"] = "not-an-artifact-or-url"
     write_json(d13d, payload)
+    commit_control_repo(tmp_path / "control")
     repo = tmp_path / "repo"
     repo.mkdir()
 
@@ -207,14 +302,18 @@ def test_preflight_rejects_an_unlocatable_freeze_reference(tmp_path: Path) -> No
         "run_d14b_preflight.py",
         "--expected-tested-commit",
         SHA,
+        "--expected-control-head",
+        control_head(tmp_path / "control"),
         "--d13d-handoff",
         str(d13d),
         "--d14d-handoff",
         str(d14d),
         "--package-manifest",
         str(manifest),
-        "--repo-root",
+        "--tested-repo-root",
         str(repo),
+        "--control-root",
+        str(tmp_path / "control"),
         "--evidence-root",
         str(tmp_path / "new-evidence"),
     )
@@ -232,14 +331,18 @@ def test_preflight_rejects_existing_evidence_root(tmp_path: Path) -> None:
         "run_d14b_preflight.py",
         "--expected-tested-commit",
         SHA,
+        "--expected-control-head",
+        control_head(tmp_path / "control"),
         "--d13d-handoff",
         str(d13d),
         "--d14d-handoff",
         str(d14d),
         "--package-manifest",
         str(manifest),
-        "--repo-root",
+        "--tested-repo-root",
         str(tmp_path / "not-reached-on-invalid-root"),
+        "--control-root",
+        str(tmp_path / "control"),
         "--evidence-root",
         str(existing),
     )
@@ -257,7 +360,9 @@ def test_preflight_accepts_a_clean_matching_handoff(tmp_path: Path) -> None:
         "--d13d-handoff", str(case["d13d"]),
         "--d14d-handoff", str(case["d14d"]),
         "--package-manifest", str(case["manifest"]),
-        "--repo-root", str(case["repo_root"]),
+        "--tested-repo-root", str(case["tested_repo_root"]),
+        "--control-root", str(case["repo_root"]),
+        "--expected-control-head", control_head(case["repo_root"]),
         "--evidence-root", str(case["evidence_root"]),
         "--capture-handoff", str(case["capture_handoff"]),
         "--package-tar", str(case["package_tar"]),
@@ -265,7 +370,166 @@ def test_preflight_accepts_a_clean_matching_handoff(tmp_path: Path) -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert json.loads(completed.stdout)["status"] == "PASS"
+    report = json.loads(completed.stdout)
+    assert report["status"] == "PASS"
+    assert report["d13d_handoff_sha256"] == sha256_bytes(case["d13d"].read_bytes())
+    assert report["d14d_handoff_sha256"] == sha256_bytes(case["d14d"].read_bytes())
+    assert report["capture_handoff_sha256"] == sha256_bytes(case["capture_handoff"].read_bytes())
+
+
+def run_preflight_with_handoff_override(
+    case: dict[str, object], *, d14d: Path | None = None, capture: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    return run_script(
+        "run_d14b_preflight.py",
+        "--expected-tested-commit", str(case["commit"]),
+        "--expected-control-head", str(case["control_head"]),
+        "--d13d-handoff", str(case["d13d"]),
+        "--d14d-handoff", str(d14d or case["d14d"]),
+        "--package-manifest", str(case["manifest"]),
+        "--tested-repo-root", str(case["tested_repo_root"]),
+        "--control-root", str(case["repo_root"]),
+        "--evidence-root", str(case["evidence_root"]),
+        "--capture-handoff", str(capture or case["capture_handoff"]),
+        "--package-tar", str(case["package_tar"]),
+        "--actual-package-manifest", str(case["actual_package_manifest"]),
+    )
+
+
+def test_preflight_rejects_an_external_copy_of_the_same_d14d_handoff(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    external = tmp_path / "external-d14d-handoff.json"
+    external.write_bytes(case["d14d"].read_bytes())
+
+    completed = run_preflight_with_handoff_override(case, d14d=external)
+
+    assert completed.returncode != 0
+    assert "canonical 路径" in completed.stderr
+
+
+def test_preflight_rejects_an_external_tampered_d14d_handoff(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    payload = json.loads(case["d14d"].read_text(encoding="utf-8"))
+    payload["package"]["package_tar_sha256"] = "d" * 64
+    external = tmp_path / "external-tampered-d14d.json"
+    external.write_text(json.dumps(payload), encoding="utf-8")
+
+    completed = run_preflight_with_handoff_override(case, d14d=external)
+
+    assert completed.returncode != 0
+    assert "canonical 路径" in completed.stderr
+
+
+def test_preflight_rejects_an_external_capture_handoff_with_a_fake_cli(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    payload = json.loads(case["capture_handoff"].read_text(encoding="utf-8"))
+    payload["source_bindings"]["vector"]["vector_cli_path"] = "/tmp/fake-vector-cli"
+    external = tmp_path / "external-capture-handoff.json"
+    external.write_text(json.dumps(payload), encoding="utf-8")
+
+    completed = run_preflight_with_handoff_override(case, capture=external)
+
+    assert completed.returncode != 0
+    assert "canonical 路径" in completed.stderr
+
+
+def test_preflight_rejects_an_untracked_capture_handoff(tmp_path: Path) -> None:
+    d13d, d14d, manifest = handoffs(tmp_path)
+    control = tmp_path / "control"
+    (control / ".gitignore").write_text("release/handoff/d14b-capture-handoff.json\n", encoding="utf-8")
+    commit_control_repo(control)
+    capture = control / "release/handoff/d14b-capture-handoff.json"
+    capture.write_text(json.dumps({"tested_commit": SHA, "captures": {}}), encoding="utf-8")
+
+    completed = run_script(
+        "run_d14b_preflight.py",
+        "--expected-tested-commit", SHA,
+        "--expected-control-head", control_head(control),
+        "--d13d-handoff", str(d13d),
+        "--d14d-handoff", str(d14d),
+        "--package-manifest", str(manifest),
+        "--tested-repo-root", str(tmp_path / "not-reached"),
+        "--control-root", str(control),
+        "--evidence-root", str(tmp_path / "new-evidence"),
+        "--capture-handoff", str(capture),
+    )
+
+    assert completed.returncode != 0
+    assert "tracked" in completed.stderr
+
+
+def test_preflight_rejects_a_symlinked_canonical_handoff(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    control = case["repo_root"]
+    (control / ".gitignore").write_text("release/handoff/d14d-handoff.json\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(control), "rm", "--cached", "release/handoff/d14d-handoff.json"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    commit_control_repo(control)
+    case["control_head"] = control_head(control)
+    target = tmp_path / "outside-d14d-handoff.json"
+    target.write_bytes(case["d14d"].read_bytes())
+    case["d14d"].unlink()
+    symlink_or_skip(case["d14d"], target)
+
+    completed = run_preflight_with_handoff_override(case)
+
+    assert completed.returncode != 0
+    assert "symlink" in completed.stderr
+
+
+def test_preflight_rejects_working_tree_handoff_bytes_that_differ_from_control_head(
+    tmp_path: Path,
+) -> None:
+    case = make_preflight_suite(tmp_path)
+    payload = json.loads(case["d14d"].read_text(encoding="utf-8"))
+    case["d14d"].write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    completed = run_preflight_with_handoff_override(case)
+
+    assert completed.returncode != 0
+    assert "非干净" in completed.stderr
+
+
+def test_preflight_rejects_a_wrong_expected_control_head(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+
+    completed = run_preflight_suite(case, extra=("--expected-control-head", OTHER_SHA))
+
+    assert completed.returncode != 0
+    assert "expected_control_head" in completed.stderr
+
+
+def test_preflight_rejects_a_self_created_clean_control_repo(tmp_path: Path) -> None:
+    case = make_preflight_suite(tmp_path)
+    control = tmp_path / "self-created-control"
+    (control / "release/handoff").mkdir(parents=True)
+    for name in ("d13d-handoff.json", "d14d-handoff.json", "d14b-capture-handoff.json"):
+        (control / "release/handoff" / name).write_bytes(
+            (case["repo_root"] / "release/handoff" / name).read_bytes()
+        )
+    for runner_path in case["runner_paths"].values():
+        (control / runner_path.name).write_bytes(runner_path.read_bytes())
+    (control / "d14b-queries.json").write_bytes((case["repo_root"] / "d14b-queries.json").read_bytes())
+    for arguments in (
+        ["git", "init", "-q", str(control)],
+        ["git", "-C", str(control), "config", "user.email", "d14b@example.invalid"],
+        ["git", "-C", str(control), "config", "user.name", "D14B test"],
+        ["git", "-C", str(control), "add", "."],
+        ["git", "-C", str(control), "commit", "-qm", "self-created control"],
+    ):
+        subprocess.run(arguments, check=True, capture_output=True, text=True)
+
+    completed = run_preflight_suite(
+        case,
+        extra=("--control-root", str(control)),
+    )
+
+    assert completed.returncode != 0
+    assert "expected_control_head" in completed.stderr
 
 
 def test_preflight_rejects_a_dirty_worktree(tmp_path: Path) -> None:
@@ -280,6 +544,7 @@ def test_preflight_rejects_a_dirty_worktree(tmp_path: Path) -> None:
         d14d=d14d,
         manifest=manifest,
         evidence_root=tmp_path / "new-evidence",
+        control_repo=tmp_path / "control",
     )
 
     assert completed.returncode != 0
@@ -297,6 +562,7 @@ def test_preflight_rejects_a_head_mismatch(tmp_path: Path) -> None:
         d14d=d14d,
         manifest=manifest,
         evidence_root=tmp_path / "new-evidence",
+        control_repo=tmp_path / "control",
     )
 
     assert completed.returncode != 0
@@ -316,9 +582,12 @@ def test_preflight_rejects_a_runner_hash_mismatch(tmp_path: Path) -> None:
         text=True,
     ).stdout.strip()
     d13d, d14d, manifest = handoffs(tmp_path, commit)
+    (tmp_path / "control/runner.sh").write_bytes(runner.read_bytes())
+    commit_control_repo(tmp_path / "control")
     payload = json.loads(d14d.read_text(encoding="utf-8"))
     payload["runner"] = {"path": "runner.sh", "sha256": "d" * 64}
     write_json(d14d, payload)
+    commit_control_repo(tmp_path / "control")
 
     completed = run_preflight_with_repo(
         repo=repo,
@@ -327,6 +596,7 @@ def test_preflight_rejects_a_runner_hash_mismatch(tmp_path: Path) -> None:
         d14d=d14d,
         manifest=manifest,
         evidence_root=tmp_path / "new-evidence",
+        control_repo=tmp_path / "control",
     )
 
     assert completed.returncode != 0
@@ -414,7 +684,7 @@ def test_capture_assembles_read_only_channel_artifacts_into_a_checkpoint(tmp_pat
     checkpoint = json.loads(output.read_text(encoding="utf-8"))
     assert checkpoint["tested_commit"] == SHA
     assert checkpoint["sqlite"] == {"stable_ids": ["a"], "active_version_ids": ["v1"]}
-    assert checkpoint["capture_sources"]["sqlite"]["artifact_sha256"] == case["hashes"]["sqlite"]
+    assert checkpoint["capture_sources"]["sqlite_truth"]["artifact_sha256"] == case["hashes"]["sqlite_truth"]
 
 def test_capture_rejects_an_existing_checkpoint_without_overwriting_it(tmp_path: Path) -> None:
     truth = write_json(tmp_path / "sqlite-truth.json", {"stable_ids": ["a"], "active_version_ids": ["v1"]})
@@ -608,7 +878,7 @@ def make_capture_case(
     *,
     missing_handoff: bool = False,
     omit_receipts: tuple[str, ...] = (),
-    handoff_channels: tuple[str, ...] = ("sqlite", "fts5", "vector", "rrf"),
+    handoff_channels: tuple[str, ...] = ("sqlite_truth", "fts5", "vector", "rrf"),
     receipt_overrides: dict[str, dict[str, object]] | None = None,
     tamper_artifact: str | None = None,
 ) -> dict[str, object]:
@@ -624,7 +894,7 @@ def make_capture_case(
     }
     truth = {"stable_ids": ["a"], "active_version_ids": ["v1"]}
     artifacts = {
-        "sqlite": write_json(tmp_path / "sqlite-truth.json", truth),
+        "sqlite_truth": write_json(tmp_path / "sqlite-truth.json", truth),
         "fts5": write_json(tmp_path / "fts5.json", channel_result),
         "vector": write_json(tmp_path / "vector.json", channel_result),
         "rrf": write_json(tmp_path / "rrf.json", channel_result),
@@ -648,7 +918,7 @@ def make_capture_case(
         )
 
     receipts: dict[str, Path] = {}
-    for ch in ("sqlite", "fts5", "vector", "rrf"):
+    for ch in ("sqlite_truth", "fts5", "vector", "rrf"):
         if ch in omit_receipts:
             receipts[ch] = tmp_path / f"{ch}.receipt.json"
             continue
@@ -663,6 +933,9 @@ def make_capture_case(
             "artifact_sha256": hashes[ch],
             "captured_at_utc": "2026-09-08T00:00:00Z",
         }
+        if ch == "rrf":
+            receipt["fts5_input_sha256"] = hashes["fts5"]
+            receipt["vector_input_sha256"] = hashes["vector"]
         receipts[ch] = write_json(tmp_path / f"{ch}.receipt.json", receipt)
     if tamper_artifact is not None:
         path = artifacts[tamper_artifact]
@@ -686,11 +959,11 @@ def run_capture(case: dict[str, object], output: Path) -> subprocess.CompletedPr
         args += ["--capture-handoff", str(case["handoff"])]
     artifacts = case["artifacts"]
     receipts = case["receipts"]
-    args += ["--sqlite-truth", str(artifacts["sqlite"])]
+    args += ["--sqlite-truth", str(artifacts["sqlite_truth"])]
     args += ["--fts5-results", str(artifacts["fts5"])]
     args += ["--vector-results", str(artifacts["vector"])]
     args += ["--rrf-results", str(artifacts["rrf"])]
-    args += ["--sqlite-receipt", str(receipts["sqlite"])]
+    args += ["--sqlite-receipt", str(receipts["sqlite_truth"])]
     args += ["--fts5-receipt", str(receipts["fts5"])]
     args += ["--vector-receipt", str(receipts["vector"])]
     args += ["--rrf-receipt", str(receipts["rrf"])]
@@ -706,7 +979,7 @@ def test_capture_requires_capture_handoff(tmp_path: Path) -> None:
 
 
 def test_capture_requires_a_receipt_for_every_channel(tmp_path: Path) -> None:
-    case = make_capture_case(tmp_path, omit_receipts=("sqlite", "fts5", "vector", "rrf"))
+    case = make_capture_case(tmp_path, omit_receipts=("sqlite_truth", "fts5", "vector", "rrf"))
     completed = run_capture(case, tmp_path / "checkpoint.json")
     assert completed.returncode != 0
     assert "receipt" in completed.stderr
@@ -743,36 +1016,62 @@ def test_capture_rejects_receipt_command_id_mismatch(tmp_path: Path) -> None:
 
 
 def test_capture_rejects_tampered_artifact_bytes(tmp_path: Path) -> None:
-    case = make_capture_case(tmp_path, tamper_artifact="sqlite")
+    case = make_capture_case(tmp_path, tamper_artifact="sqlite_truth")
     completed = run_capture(case, tmp_path / "checkpoint.json")
     assert completed.returncode != 0
     assert "artifact_sha256" in completed.stderr
 
 
 def make_preflight_suite(tmp_path: Path) -> dict[str, object]:
+    tested_repo, tested_commit = make_clean_git_repo(tmp_path / "tested")
     repo, _ = make_clean_git_repo(tmp_path)
     runner_shas: dict[str, str] = {}
-    for channel in ("sqlite", "fts5", "vector", "rrf"):
+    for channel in ("sqlite_truth", "fts5", "vector", "rrf"):
         runner = repo / f"runner_{channel}.py"
         runner.write_text(f"#!/usr/bin/env python3\n# {channel} runner\n", encoding="utf-8")
         runner_shas[channel] = sha256_bytes(runner.read_bytes())
+    query_spec = repo / "d14b-queries.json"
+    query_spec.write_text(
+        json.dumps({"queries": [{"query_id": "q1", "match": "control", "vector": [0.0]}]}),
+        encoding="utf-8",
+    )
     subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True, text=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "runners"], check=True, capture_output=True, text=True)
-    commit = subprocess.run(
+    subprocess.run(
         ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
-    ).stdout.strip()
+    )
+    commit = tested_commit
+    commit = tested_commit
+
+    (repo / "release/handoff").mkdir(parents=True)
 
     capture_handoff = write_json(
-        tmp_path / "capture-handoff.json",
+        repo / "release/handoff/d14b-capture-handoff.json",
         {
-            "tested_commit": commit,
+            "tested_commit": tested_commit,
             "captures": {
                 channel: {
                     "runner_path": f"runner_{channel}.py",
                     "runner_sha256": runner_shas[channel],
                     "command_id": f"d14b-{channel}-v1",
-                }
-                for channel in ("sqlite", "fts5", "vector", "rrf")
+                    }
+                for channel in ("sqlite_truth", "fts5", "vector", "rrf")
+            },
+            "source_bindings": {
+                "sqlite_truth": {"production_db_path": "/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db"},
+                "fts5": {
+                    "production_db_path": "/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db",
+                    "query_spec_path": "d14b-queries.json",
+                    "query_spec_sha256": sha256_bytes(query_spec.read_bytes()),
+                },
+                "vector": {
+                    "production_db_path": "/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db",
+                    "query_spec_path": "d14b-queries.json",
+                    "query_spec_sha256": sha256_bytes(query_spec.read_bytes()),
+                    "vector_cli_path": "/opt/kylin/bin/vector_cli",
+                    "vector_cli_sha256": HASH,
+                },
+                "rrf": {"production_db_path": "/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db"},
             },
         },
     )
@@ -805,20 +1104,24 @@ def make_preflight_suite(tmp_path: Path) -> dict[str, object]:
         "environment_id": "d14d-l3",
     }
     d13d = write_json(
-        tmp_path / "d13d.json",
+        repo / "release/handoff/d13d-handoff.json",
         {"freeze_status": "FROZEN", "tested_commit": commit,
          "freeze_reference": "https://evidence.example.invalid/d13d-seal"},
     )
     d14d = write_json(
-        tmp_path / "d14d.json",
+        repo / "release/handoff/d14d-handoff.json",
         {"release_status": "L3_READY", "tested_commit": commit,
          "evidence_reference": "https://evidence.example.invalid/d14d-g9",
          "package": package, "vm": vm},
     )
     manifest = write_json(tmp_path / "manifest.json", {"source_commit": commit, **package})
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True, text=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "canonical handoffs"], check=True, capture_output=True, text=True)
     return {
         "repo_root": repo,
+        "tested_repo_root": tested_repo,
         "commit": commit,
+        "control_head": control_head(repo),
         "d13d": d13d,
         "d14d": d14d,
         "manifest": manifest,
@@ -826,7 +1129,7 @@ def make_preflight_suite(tmp_path: Path) -> dict[str, object]:
         "package_tar": package_tar,
         "actual_package_manifest": actual_manifest,
         "evidence_root": tmp_path / "new-evidence",
-        "runner_paths": {channel: repo / f"runner_{channel}.py" for channel in ("sqlite", "fts5", "vector", "rrf")},
+        "runner_paths": {channel: repo / f"runner_{channel}.py" for channel in ("sqlite_truth", "fts5", "vector", "rrf")},
     }
 
 
@@ -841,6 +1144,8 @@ def resync_package_manifest_sha(case: dict[str, object]) -> None:
         else:
             payload["package_manifest_sha256"] = new_sha
         write_json(case[key], payload)
+    commit_control_repo(case["repo_root"])
+    case["control_head"] = control_head(case["repo_root"])
 
 
 def run_preflight_suite(
@@ -849,10 +1154,12 @@ def run_preflight_suite(
     return run_script(
         "run_d14b_preflight.py",
         "--expected-tested-commit", str(case["commit"]),
+        "--expected-control-head", str(case["control_head"]),
         "--d13d-handoff", str(case["d13d"]),
         "--d14d-handoff", str(case["d14d"]),
         "--package-manifest", str(case["manifest"]),
-        "--repo-root", str(case["repo_root"]),
+        "--tested-repo-root", str(case["tested_repo_root"]),
+        "--control-root", str(case["repo_root"]),
         "--evidence-root", str(case["evidence_root"]),
         "--capture-handoff", str(case["capture_handoff"]),
         "--package-tar", str(case["package_tar"]),
@@ -866,10 +1173,12 @@ def test_preflight_rejects_missing_capture_handoff(tmp_path: Path) -> None:
     completed = run_script(
         "run_d14b_preflight.py",
         "--expected-tested-commit", str(case["commit"]),
+        "--expected-control-head", str(case["control_head"]),
         "--d13d-handoff", str(case["d13d"]),
         "--d14d-handoff", str(case["d14d"]),
         "--package-manifest", str(case["manifest"]),
-        "--repo-root", str(case["repo_root"]),
+        "--tested-repo-root", str(case["tested_repo_root"]),
+        "--control-root", str(case["repo_root"]),
         "--evidence-root", str(case["evidence_root"]),
     )
     assert completed.returncode != 0
@@ -881,6 +1190,8 @@ def test_preflight_rejects_missing_one_channel_runner(tmp_path: Path) -> None:
     handoff = json.loads(case["capture_handoff"].read_text(encoding="utf-8"))
     del handoff["captures"]["rrf"]
     write_json(case["capture_handoff"], handoff)
+    commit_control_repo(case["repo_root"])
+    case["control_head"] = control_head(case["repo_root"])
 
     completed = run_preflight_suite(case)
 
@@ -891,8 +1202,10 @@ def test_preflight_rejects_missing_one_channel_runner(tmp_path: Path) -> None:
 def test_preflight_rejects_missing_runner_file(tmp_path: Path) -> None:
     case = make_preflight_suite(tmp_path)
     handoff = json.loads(case["capture_handoff"].read_text(encoding="utf-8"))
-    handoff["captures"]["sqlite"]["runner_path"] = "missing_runner.py"
+    handoff["captures"]["sqlite_truth"]["runner_path"] = "missing_runner.py"
     write_json(case["capture_handoff"], handoff)
+    commit_control_repo(case["repo_root"])
+    case["control_head"] = control_head(case["repo_root"])
 
     completed = run_preflight_suite(case)
 
@@ -905,6 +1218,8 @@ def test_preflight_rejects_runner_sha_mismatch_in_handoff(tmp_path: Path) -> Non
     handoff = json.loads(case["capture_handoff"].read_text(encoding="utf-8"))
     handoff["captures"]["fts5"]["runner_sha256"] = "d" * 64
     write_json(case["capture_handoff"], handoff)
+    commit_control_repo(case["repo_root"])
+    case["control_head"] = control_head(case["repo_root"])
 
     completed = run_preflight_suite(case)
 
@@ -963,7 +1278,7 @@ def test_checkpoint_records_handoff_and_receipt_provenance(tmp_path: Path) -> No
     checkpoint = json.loads(output.read_text(encoding="utf-8"))
     sources = checkpoint["capture_sources"]
     assert sources["capture_handoff_sha256"] == sha256_bytes(case["handoff"].read_bytes())
-    for channel in ("sqlite", "fts5", "vector", "rrf"):
+    for channel in ("sqlite_truth", "fts5", "vector", "rrf"):
         entry = sources[channel]
         assert entry["artifact_sha256"] == sha256_bytes(case["artifacts"][channel].read_bytes())
         assert entry["receipt_sha256"] == sha256_bytes(case["receipts"][channel].read_bytes())
@@ -999,11 +1314,11 @@ def make_formal_lifecycle_evidence_root(
             "runner_path": f"runner_{channel}.py",
             "runner_sha256": HASH,
         }
-        for channel in ("sqlite", "fts5", "vector", "rrf")
+        for channel in ("sqlite_truth", "fts5", "vector", "rrf")
     }
     handoff.write_text(json.dumps({"tested_commit": SHA, "captures": captures}), encoding="utf-8")
     receipt_names = {
-        "sqlite": "sqlite-truth.receipt.json",
+        "sqlite_truth": "sqlite-truth.receipt.json",
         "fts5": "fts5-results.receipt.json",
         "vector": "vector-results.receipt.json",
         "rrf": "rrf-results.receipt.json",
@@ -1018,7 +1333,7 @@ def make_formal_lifecycle_evidence_root(
         sources: dict[str, object] = {
             "capture_handoff_sha256": sha256_bytes(handoff.read_bytes()),
         }
-        for channel in ("sqlite", "fts5", "vector", "rrf"):
+        for channel in ("sqlite_truth", "fts5", "vector", "rrf"):
             receipt = receipt_dir / receipt_names[channel]
             artifact = root / f"{checkpoint_id}-{channel}.artifact.json"
             artifact.write_text(json.dumps({"channel": channel}), encoding="utf-8")
@@ -1030,12 +1345,28 @@ def make_formal_lifecycle_evidence_root(
                 }),
                 encoding="utf-8",
             )
+            if channel == "rrf":
+                payload = json.loads(receipt.read_text(encoding="utf-8"))
+                payload["fts5_input_sha256"] = sha256_bytes(
+                    (root / f"{checkpoint_id}-fts5.artifact.json").read_bytes()
+                )
+                payload["vector_input_sha256"] = sha256_bytes(
+                    (root / f"{checkpoint_id}-vector.artifact.json").read_bytes()
+                )
+                receipt.write_text(json.dumps(payload), encoding="utf-8")
             checkpoint_receipts[channel] = receipt
             sources[channel] = {
                 "receipt_sha256": sha256_bytes(receipt.read_bytes()),
                 **captures[channel],
                 "artifact_sha256": sha256_bytes(artifact.read_bytes()),
             }
+            if channel == "rrf":
+                sources[channel]["fts5_input_sha256"] = sha256_bytes(
+                    (root / f"{checkpoint_id}-fts5.artifact.json").read_bytes()
+                )
+                sources[channel]["vector_input_sha256"] = sha256_bytes(
+                    (root / f"{checkpoint_id}-vector.artifact.json").read_bytes()
+                )
         checkpoint.write_text(
             json.dumps({
                 "tested_commit": SHA,
@@ -1130,6 +1461,28 @@ def test_evidence_verifier_rejects_runner_metadata_semantic_mismatch(
     completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
     assert completed.returncode != 0
     assert "runner_sha256" in completed.stderr
+
+
+def test_evidence_verifier_rejects_rrf_parent_artifact_substitution(
+    tmp_path: Path,
+) -> None:
+    root, receipts = make_formal_lifecycle_evidence_root(tmp_path)
+
+    receipt = json.loads(receipts["baseline"]["rrf"].read_text(encoding="utf-8"))
+    receipt["fts5_input_sha256"] = "d" * 64
+    write_json(receipts["baseline"]["rrf"], receipt)
+    checkpoint = root / REQUIRED_CHECKPOINTS["baseline"]
+    payload = json.loads(checkpoint.read_text(encoding="utf-8"))
+    payload["capture_sources"]["rrf"]["fts5_input_sha256"] = "d" * 64
+    payload["capture_sources"]["rrf"]["receipt_sha256"] = sha256_bytes(
+        receipts["baseline"]["rrf"].read_bytes()
+    )
+    write_json(checkpoint, payload)
+    write_evidence_manifest(root)
+
+    completed = run_script("verify_d14b_evidence_manifest.py", "--evidence-root", str(root))
+    assert completed.returncode != 0
+    assert "fts5_input_sha256" in completed.stderr
 
 
 def test_evidence_verifier_rejects_weakened_checkpoint_schema_even_with_regenerated_manifest(
@@ -1244,10 +1597,12 @@ def test_formal_docs_are_in_sync_with_preflight_cli(tmp_path: Path) -> None:
         text = doc.read_text(encoding="utf-8")
         for flag in (
             "--expected-tested-commit",
+            "--expected-control-head",
             "--d13d-handoff",
             "--d14d-handoff",
             "--package-manifest",
-            "--repo-root",
+            "--tested-repo-root",
+            "--control-root",
             "--evidence-root",
             "--capture-handoff",
             "--package-tar",
