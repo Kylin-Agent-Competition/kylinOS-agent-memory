@@ -46,4 +46,3 @@
 - 不实现 Kaiming；
 - 不把 `packaging/systemd/README.md` 修改提前到 D15D PR 之外；
 - 不因 main 前进而追改本表资产路径（main 前进时先重建盘点快照再更新）。
-
