@@ -87,3 +87,24 @@ change the fail-closed conclusion.
 
 This is a fail-closed invalidation record. The D14D frozen tar remains valid as
 a historical D14D artifact, but it is not a valid D15D lock of current main.
+
+## Round 7 current-main recheck
+
+After the `4a6323f-r2` rebuild, current main advanced to:
+
+```text
+2782a9048c235006c17024c9798cf988a07627a1
+```
+
+The added files are docs-only:
+
+```text
+docs/day15/03_c_track_production_integration_closure_status_20260910.md
+docs/day15/04_c1_rebuilt_vm_test_status_20260910.md
+```
+
+`4a6323f..2782a904` has no hit under `packaging/`, `memory-service/`,
+`cpp-bridge/`, `migrations/`, `config/`, or the D14A contract path. Therefore
+the Round 4 fail-closed decision above remains the historical cause of the
+rebuild, while C2 for the completed `4a6323f-r2` release is
+`PASS_CURRENT_MAIN_NO_RUNTIME_SENSITIVE_DRIFT` at current main `2782a904`.
