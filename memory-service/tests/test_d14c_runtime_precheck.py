@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from evaluation.d14c_runtime_precheck import collect_precheck_observation
+import pytest
+
+from evaluation.d14c_runtime_precheck import D14CPrecheckError, collect_precheck_observation
 
 
 SHA = "b" * 64
@@ -84,3 +86,23 @@ def test_collector_keeps_failed_component_as_observation_not_host_verification()
     assert observation["components"]["memory_service"]["systemd"]["exit_code"] == 3
     assert observation["components"]["memory_service"]["systemd"]["reason"] == "unit-inactive"
     assert "HOST_VERIFIED" not in str(observation)
+
+
+def test_collector_rejects_unsupported_runtime_ids_without_echoing_plaintext():
+    request = _request()
+    request["runtime_ids"].update(
+        {
+            "user_text": "USER_SECRET_123",
+            "assistant_text": "ASSISTANT_SECRET_456",
+            "token": "TOKEN_SECRET_789",
+            "secret": "TOP_SECRET",
+        }
+    )
+
+    with pytest.raises(D14CPrecheckError, match="runtime_ids contains unsupported fields") as error:
+        collect_precheck_observation(request, probe=_Probe())
+
+    assert "USER_SECRET_123" not in str(error.value)
+    assert "ASSISTANT_SECRET_456" not in str(error.value)
+    assert "TOKEN_SECRET_789" not in str(error.value)
+    assert "TOP_SECRET" not in str(error.value)

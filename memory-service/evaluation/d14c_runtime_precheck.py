@@ -19,6 +19,13 @@ from typing import Any, Mapping, Protocol
 
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 SCHEMA_VERSION = "d14c-runtime-precheck/v1"
+SAFE_RUNTIME_ID_KEYS = (
+    "session_id",
+    "trace_id",
+    "turn_id",
+    "event_id",
+    "execution_record_id",
+)
 
 
 class D14CPrecheckError(ValueError):
@@ -189,8 +196,9 @@ def collect_precheck_observation(request: Mapping[str, Any], *, probe: RuntimePr
     service_unit = _text(service, "unit", "memory_service")
     socket_path, db_path = _text(request, "socket_path", "request"), _text(request, "db_path", "request")
     vm_identity = {key: _text(vm, key, "vm") for key in ("name", "uuid", "snapshot", "snapshot_uuid")}
-    for key in ("session_id", "trace_id", "turn_id", "event_id", "execution_record_id"):
-        _text(runtime_ids, key, "runtime_ids")
+    if set(runtime_ids) - set(SAFE_RUNTIME_ID_KEYS):
+        raise D14CPrecheckError("runtime_ids contains unsupported fields")
+    safe_runtime_ids = {key: _text(runtime_ids, key, "runtime_ids") for key in SAFE_RUNTIME_ID_KEYS}
     _text(command, "name", "command")
     if not isinstance(command.get("exit_code"), int):
         raise D14CPrecheckError("command.exit_code must be an integer")
@@ -227,7 +235,7 @@ def collect_precheck_observation(request: Mapping[str, Any], *, probe: RuntimePr
         },
         "socket": dict(probe.path_identity(socket_path)),
         "database": {"path": db_path, "identity": dict(probe.path_identity(db_path)), "checkpoint_references": []},
-        "runtime_ids": dict(runtime_ids),
+        "runtime_ids": safe_runtime_ids,
         "command": {"name": command["name"], "exit_code": command["exit_code"]},
         "safety": {"user_plaintext_recorded": False, "assistant_plaintext_recorded": False},
     }

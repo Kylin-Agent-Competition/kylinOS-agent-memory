@@ -9,6 +9,7 @@ converter below merely preserves a real VM capture's D13C-compatible payload.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -69,6 +70,63 @@ def _sha256(data: Mapping[str, Any], key: str, label: str) -> None:
         raise D14CPreflightError(f"{label}.{key} must be a lowercase SHA-256")
 
 
+def _resolve_evidence_reference(root: Path, value: str, label: str) -> Path:
+    """Resolve one existing repository-local evidence reference fail-closed."""
+
+    relative = Path(value)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise D14CPreflightError(f"{label} must be a safe repository-relative path")
+    resolved = (root / relative).resolve()
+    if root not in resolved.parents:
+        raise D14CPreflightError(f"{label} must stay inside repository_root")
+    if not resolved.exists():
+        raise D14CPreflightError(f"{label} must reference an existing path")
+    return resolved
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_file_sha256(
+    root: Path,
+    path_value: str,
+    expected_sha256: str,
+    label: str,
+    *,
+    sha_key: str = "sha256",
+) -> Path:
+    """Bind a declared artifact identity to existing regular-file bytes."""
+
+    path = _resolve_evidence_reference(root, path_value, f"{label}.path")
+    if not path.is_file():
+        raise D14CPreflightError(f"{label}.path must reference a regular file")
+    if _sha256_file(path) != expected_sha256:
+        raise D14CPreflightError(f"{label}.{sha_key} does not match file bytes")
+    return path
+
+
+def _require_same_identity(
+    data: Mapping[str, Any],
+    *,
+    label: str,
+    tested_commit: str,
+    environment_id: str,
+    service_package_sha256: str,
+) -> None:
+    if _required_text(data, "tested_commit", label) != tested_commit:
+        raise D14CPreflightError(f"{label}.tested_commit must equal formal_tested_commit")
+    if _required_text(data, "environment_id", label) != environment_id:
+        raise D14CPreflightError(f"{label}.environment_id must equal vm.environment_id")
+    _sha256(data, "service_package_sha256", label)
+    if data["service_package_sha256"] != service_package_sha256:
+        raise D14CPreflightError(f"{label}.service_package_sha256 must equal artifacts.memory_service.sha256")
+
+
 def validate_formal_handoff(
     handoff: Mapping[str, Any],
     *,
@@ -93,6 +151,10 @@ def validate_formal_handoff(
     tested_commit = _required_text(handoff, "formal_tested_commit", "handoff")
     if not _GIT_SHA.fullmatch(tested_commit):
         raise D14CPreflightError("formal_tested_commit must be a full lowercase Git SHA")
+    try:
+        git_runner(root, "cat-file", "-e", f"{tested_commit}^{{commit}}")
+    except D14CPreflightError as exc:
+        raise D14CPreflightError("formal_tested_commit must resolve to an existing commit") from exc
     runner_commit = _required_text(handoff, "preflight_runner_commit", "handoff")
     if not _GIT_SHA.fullmatch(runner_commit):
         raise D14CPreflightError("preflight_runner_commit must be a full lowercase Git SHA")
@@ -115,7 +177,7 @@ def validate_formal_handoff(
             raise D14CPreflightError(f"{gate_name}.tested_commit must equal formal_tested_commit")
         if gate_name == "d14d":
             d14d_gate = gate
-        _required_text(gate, "evidence_reference", gate_name)
+        _resolve_evidence_reference(root, _required_text(gate, "evidence_reference", gate_name), f"{gate_name}.evidence_reference")
 
     release = _object(handoff.get("release_package"), "release_package")
     for key in ("path", "version"):
@@ -133,6 +195,7 @@ def validate_formal_handoff(
         raise D14CPreflightError("d14d.package_tar_sha256 must be a lowercase SHA-256")
     if d14d_package_sha != release["sha256"]:
         raise D14CPreflightError("d14d.package_tar_sha256 must equal release_package.sha256")
+    _verify_file_sha256(root, release["path"], release["sha256"], "release_package")
 
     artifacts = _object(handoff.get("artifacts"), "artifacts")
     for name in ("ai_assistant", "memory_client", "memory_service"):
@@ -140,10 +203,12 @@ def validate_formal_handoff(
         for key in ("path", "version"):
             _required_text(artifact, key, f"artifacts.{name}")
         _sha256(artifact, "sha256", f"artifacts.{name}")
+        _verify_file_sha256(root, artifact["path"], artifact["sha256"], f"artifacts.{name}")
 
     vm = _object(handoff.get("vm"), "vm")
     for key in ("environment_id", "name", "uuid", "snapshot", "snapshot_uuid"):
         _required_text(vm, key, "vm")
+    environment_id = vm["environment_id"]
 
     identity = _object(handoff.get("trusted_host_identity"), "trusted_host_identity")
     if identity.get("status") != "APPROVED":
@@ -151,18 +216,45 @@ def validate_formal_handoff(
     for key in ("approval_reference", "process_identity", "db_identity"):
         _required_text(identity, key, "trusted_host_identity")
     _sha256(identity, "identity_sha256", "trusted_host_identity")
+    _require_same_identity(
+        identity,
+        label="trusted_host_identity",
+        tested_commit=tested_commit,
+        environment_id=environment_id,
+        service_package_sha256=artifacts["memory_service"]["sha256"],
+    )
+    _resolve_evidence_reference(root, identity["approval_reference"], "trusted_host_identity.approval_reference")
 
     routes = _object(handoff.get("production_routes"), "production_routes")
     for method in REQUIRED_ROUTES:
-        if routes.get(method) != "ACTIVE":
-            raise D14CPreflightError(f"production_routes.{method} must be ACTIVE")
+        route_label = f"production_routes.{method}"
+        route = _object(routes.get(method), route_label)
+        if route.get("status") != "ACTIVE":
+            raise D14CPreflightError(f"{route_label}.status must be ACTIVE")
+        _require_same_identity(
+            route,
+            label=route_label,
+            tested_commit=tested_commit,
+            environment_id=environment_id,
+            service_package_sha256=artifacts["memory_service"]["sha256"],
+        )
+        _resolve_evidence_reference(root, _required_text(route, "activation_reference", route_label), f"{route_label}.activation_reference")
 
     context = _object(handoff.get("memory_context"), "memory_context")
     if context.get("status") != "FROZEN":
         raise D14CPreflightError("memory_context.status must be FROZEN")
-    for key in ("schema_version", "freeze_reference", "no_match_semantics", "failure_semantics"):
+    for key in ("schema_version", "schema_path", "freeze_reference", "no_match_semantics", "failure_semantics"):
         _required_text(context, key, "memory_context")
     _sha256(context, "schema_sha256", "memory_context")
+    _require_same_identity(
+        context,
+        label="memory_context",
+        tested_commit=tested_commit,
+        environment_id=environment_id,
+        service_package_sha256=artifacts["memory_service"]["sha256"],
+    )
+    _resolve_evidence_reference(root, context["freeze_reference"], "memory_context.freeze_reference")
+    _verify_file_sha256(root, context["schema_path"], context["schema_sha256"], "memory_context", sha_key="schema_sha256")
 
     relative_evidence_root = _required_text(handoff, "evidence_root", "handoff")
     if not _EVIDENCE_ROOT.fullmatch(relative_evidence_root):
@@ -175,7 +267,7 @@ def validate_formal_handoff(
         "status": "PREFLIGHT_ONLY",
         "tested_commit": tested_commit,
         "preflight_runner_commit": runner_commit,
-        "environment_id": _required_text(vm, "environment_id", "vm"),
+        "environment_id": environment_id,
         "evidence_root": relative_evidence_root,
         "formal_dispatch": "NOT_STARTED",
     }

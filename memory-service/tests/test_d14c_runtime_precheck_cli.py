@@ -53,3 +53,27 @@ def test_cli_rejects_incomplete_request_without_creating_output(tmp_path):
     assert completed.returncode == 2
     assert json.loads(completed.stdout)["status"] == "REJECTED"
     assert not output.exists()
+
+
+def test_cli_rejects_unsupported_runtime_ids_without_echoing_plaintext(tmp_path):
+    request = tmp_path / "request.json"
+    output = tmp_path / "observation.json"
+    payload = _request()
+    payload["runtime_ids"].update(
+        {
+            "user_text": "USER_SECRET_123",
+            "assistant_text": "ASSISTANT_SECRET_456",
+            "token": "TOKEN_SECRET_789",
+            "secret": "TOP_SECRET",
+        }
+    )
+    request.write_text(json.dumps(payload), encoding="utf-8")
+
+    completed = subprocess.run([sys.executable, str(CLI), str(request), "--output", str(output)], capture_output=True, text=True, timeout=30)
+
+    assert completed.returncode == 2
+    assert json.loads(completed.stdout)["status"] == "REJECTED"
+    assert not output.exists()
+    for plaintext in ("USER_SECRET_123", "ASSISTANT_SECRET_456", "TOKEN_SECRET_789", "TOP_SECRET"):
+        assert plaintext not in completed.stdout
+        assert plaintext not in completed.stderr
