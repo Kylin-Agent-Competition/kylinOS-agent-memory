@@ -4,7 +4,7 @@
 
 `main@c5573c1ce75ad08427b86e3551074e18ed806279`（PR #174）已补齐并可消费 D13D/D14D/capture 三份机器可读 handoff、四个生产 capture runner、VM 访问事实和一次 SQLite truth capture/receipt。D15B 的 formal-input 状态由“全部缺失”收窄为 `PARTIALLY_REMEDIATED`。
 
-这不是 Formal L3 完成：原始 `kylin-memory-a-d14a-0.1.0-d14a.tar.gz` 字节仍不可得。新提交的 `rebuilt-ba3b50e` 包 SHA 为 `de4050ee22d3c70f67c3cbf314ada1a76ac7d8d0527d7ba397477122553a30d8`，其身份被明确标为 provenance-labeled rebuild，不得作为原冻结 tar SHA `2222c904cd2fca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401` 的替代。
+这不是 Formal L3 完成：原始 `kylin-memory-a-d14a-0.1.0-d14a.tar.gz` 字节仍不可得。新提交的 `rebuilt-ba3b50e` 包 SHA 为 `de4050ee22d3c70f67c3cbf314ada1a76ac7d8d0527d7ba397477122553a30d8`，其身份被明确标为 provenance-labeled rebuild，不得作为原冻结 tar SHA `2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401` 的替代。
 
 ## 已接收的 control-plane 输入
 

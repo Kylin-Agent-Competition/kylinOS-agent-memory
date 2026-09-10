@@ -2,7 +2,14 @@
 
 ## 结论
 
-本报告类型是 **D15B merge-time finalization/status report**，不是 B-track final release acceptance report。它完成 B 轨发布收口的事实盘点、当前输入身份固定和跨轨交接；**不宣布 `B_TRACK_COMPLETE`**。截至 `origin/main@a7abb1e71c03c4f1558e5c6a9eff2b9f36437993`，D14B Preparation Harness 已通过，但 Formal L3 和 D13B final retrieval evaluation 均没有可消费的正式输入或运行证据。因此 D15B 的正确状态是：
+本报告类型是 **D15B merge-time finalization/status report**，不是 B-track final release acceptance report。它完成 B 轨发布收口的事实盘点、当前输入身份固定和跨轨交接；**不宣布 `B_TRACK_COMPLETE`**。
+
+```text
+assessment_base_commit = a7abb1e71c03c4f1558e5c6a9eff2b9f36437993
+current_state_base = c5573c1ce75ad08427b86e3551074e18ed806279
+```
+
+在 `assessment_base_commit`，D14B Preparation Harness 已通过。`current_state_base` 已纳入 PR #174：三份 formal handoff、四个 production capture runner 和 formal clean-VM 入口可消费；原始冻结 tar 实际字节仍缺失，故 package-bytes preflight 不能通过，Formal L3 保持 `NOT_RUN / UNVERIFIED`。D13B final retrieval evaluation 的 sealed inputs 与 formal execution evidence 也仍未到位。因此 D15B 的正确状态是：
 
 ```text
 B_TRACK_STATUS = BLOCKED_NOT_COMPLETE
@@ -16,9 +23,13 @@ B_TRACK_COMPLETE = NO
 
 把以上任何一项写成 PASS、FROZEN 或 COMPLETE 都会把候选/替代验证错误升级为正式发布结论。
 
-本报告对应 Draft PR [#173](https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/173)，分支为 `docs/D15B-retrieval-finalization`。交接文件记录其产生时的 source head；最终冻结 head 只能在独立审查和发布裁定后填写。
+本报告对应 PR [#173](https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/173)，分支为 `docs/D15B-retrieval-finalization`。PR 的 Draft/Ready 生命周期状态不作为本报告冻结身份；本报告只记录 PR 号、分支、评估基线与材料生成时 source head。交接文件记录其产生时的 source head；最终冻结 head 只能在独立审查和发布裁定后填写。
 
 对与 PR #124 相同的 formal-input debt，#173 的 merge-time 口径为 `D15B_PR_MERGE_ELIGIBILITY=PASS_WITH_DEBT`、`D15B_TASK=PARTIAL / WAIVED_FORMAL_INPUTS`。该 waiver 只适用于 PR merge-status documentation，明确不适用于 eval-input freeze、final metrics、manifest freeze、`B_TRACK_COMPLETE`、`release_ready` 或 `production_ready`。
+
+### Waiver precedence
+
+`21_d14b_formal_l3_intake_blockers_20260909.md` 末尾“补齐 formal inputs 前不具 merge 资格”的表述属于 waiver 前 historical merge stop-line；同文件的“复审豁免记录”中 `WAIVED_BY_OWNER / MERGE_ELIGIBILITY=PASS_WITH_DEBT`，以及 PR #124 最终 owner/reviewer merge 裁定，对同类 merge eligibility 具有后续优先级。该 precedence 仅解释 PR #124/#173 的 merge-time 资格，**不改变** `D14B_FORMAL_L3=NOT_RUN / UNVERIFIED`。
 
 ## 范围与当前组件身份
 
@@ -31,7 +42,7 @@ B_TRACK_COMPLETE = NO
 | D14B merge | PR #124 → `a7abb1e…` | 已合并；不是 Formal L3 完成。 |
 | D14B harness | PR #124 CI + 本地契约回归 | Preparation Harness `PASS`。 |
 | lifecycle substitute VM | `ba3b50e…` 上的替代环境 | `PASS_WITH_LIMITATIONS`，仅参考。 |
-| D14B Formal L3 | 标准 handoff/tar/runner/clean-VM 缺失 | `NOT_RUN / UNVERIFIED`。 |
+| D14B Formal L3 | handoff/runner/clean-VM 已由 PR #174 补齐；original frozen tar bytes 仍缺失 | `NOT_RUN / UNVERIFIED`。 |
 | D13B evaluator | CLI/账本契约可用 | 可执行，不代表已产生 final metrics。 |
 | D9 corpus/query/Gold policy | 当前候选文件及 SHA | 仅 candidate/reference，未冻结。 |
 
@@ -68,12 +79,22 @@ evaluation/test_d9_retrieval_gold_spec.py
 - [`D15B_BTRACK_HANDOFF.json`](../../release/btrack/D15B_BTRACK_HANDOFF.json) 向 D/E 指明所需的 formal inputs、审查责任和禁止外推的结论。
 - 现有 D6B、D8B、D10B、D13B、D14B 记录只按 formal/reference 边界消费；本任务未删除、覆盖或重写历史 evidence。
 
+在未来 `B_TRACK_MANIFEST=FROZEN` 前，`d15b_source_head` 与 `d15b_handoff_source_head` 仍须完成 commit existence、ancestry 与材料生成绑定校验；本报告不把该 LOW-01 后续 debt 升级为 PR #173 当前 merge blocker。
+
+## PR merge 与 B-track release closure 的分界
+
+`PR #173 merge lifecycle != B-track release-closure lifecycle`。
+
+PR #173 在独立 D review 后可按 `PASS_WITH_DEBT` 合并，交付的是 `PARTIAL / WAIVED_FORMAL_INPUTS` 的状态与交接材料；该 merge 不冻结 manifest，且 `B_TRACK_COMPLETE = NO` 保持不变。
+
+后续 release-closure PR/commit 才负责消费 Formal L3 或适用的 accepted debt、sealed eval inputs、final metrics、release-blocking debt closure/acceptance 与 evidence closure；仅在其全部条件满足并完成 D/E final review 后，才可冻结 manifest 并设置 `B_TRACK_COMPLETE=YES`。
+
 ## 达成 `B_TRACK_COMPLETE` 的唯一后续路径
 
 1. D 提供可验证 Formal L3 输入并在 clean-VM 完成 B0/B1/B2/B3、删除残留和 evidence closure，或由最终 Release Owner 书面接受该 debt；
 2. D/E 提供 sealed retrieval eval inputs，B 在冻结环境运行既有 D13B evaluator 并固定 raw/results/metrics；
 3. 生成并校验正式 D15B evidence `SHA256SUMS`，更新 `evidence/index.yaml`；
 4. 将 `RELEASE_BLOCKING` B debt 逐项关闭、适用 waiver 或取得明确的 `ACCEPTED_RELEASE_DEBT`；`CARRY_FORWARD_NON_BLOCKING` debt 保留 owner/status/follow-up，TD-030 由总账 authority 完成 reconciliation；
-5. D 独立审查、适用时 E 补审，随后才可冻结 manifest、合并 D15B 并标记 `B_TRACK_COMPLETE=YES`。
+5. D 独立审查、适用时 E 补审后，由后续 release-closure PR/commit 冻结 manifest，并在所有 release closure 条件满足后设置 `B_TRACK_COMPLETE=YES`；PR #173 的 merge 不等于该最终 release closure。
 
 在上述条件满足前，本 PR 只交付可审计的停止线与交接材料，不会越权替 D/E 作出接受、封存或发布裁定。

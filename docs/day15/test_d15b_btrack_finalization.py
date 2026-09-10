@@ -9,6 +9,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
+EXPECTED_FROZEN_TAR_SHA = "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401"
+INCORRECT_FROZEN_TAR_SHA = "2222c904cd2fca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401"
 
 
 def _json(relative_path: str) -> dict[str, object]:
@@ -17,6 +19,10 @@ def _json(relative_path: str) -> dict[str, object]:
 
 def _sha256(relative_path: str) -> str:
     return hashlib.sha256((ROOT / relative_path).read_bytes()).hexdigest()
+
+
+def _text(relative_path: str) -> str:
+    return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
 def test_d15b_status_and_identity_are_consistent() -> None:
@@ -130,3 +136,42 @@ def test_d15b_formal_input_remediation_remains_package_blocked() -> None:
     rebuilt_tar = manifest["release_package"]["rebuilt_tar"]
     assert _sha256(rebuilt_tar["path"]) == rebuilt_tar["sha256"]
     assert rebuilt_tar["status"] == "PROVENANCE_LABELED_REBUILD_NOT_ORIGINAL_FROZEN_BYTES"
+
+
+def test_d15b_original_frozen_tar_identity_is_consistent_across_intake() -> None:
+    manifest = _json("release/btrack/D15B_BTRACK_MANIFEST.json")
+    intake = _text("docs/day15/07_d15b_formal_input_intake_20260910.md")
+
+    assert manifest["release_package"]["tar_sha256"] == EXPECTED_FROZEN_TAR_SHA
+    assert EXPECTED_FROZEN_TAR_SHA in intake
+    assert INCORRECT_FROZEN_TAR_SHA not in intake
+
+
+def test_d15b_final_report_preserves_pr174_partial_remediation_state() -> None:
+    report = _text("docs/day15/04_d15b_btrack_final_report_20260909.md")
+
+    assert "assessment_base_commit = a7abb1e71c03c4f1558e5c6a9eff2b9f36437993" in report
+    assert "current_state_base = c5573c1ce75ad08427b86e3551074e18ed806279" in report
+    assert "D14B_FORMAL_INPUTS = PARTIALLY_REMEDIATED" in report
+    assert "标准 handoff/tar/runner/clean-VM 缺失" not in report
+
+
+def test_d15b_final_report_separates_pr_merge_from_release_closure() -> None:
+    report = _text("docs/day15/04_d15b_btrack_final_report_20260909.md")
+
+    assert "PR #173 merge lifecycle != B-track release-closure lifecycle" in report
+    assert "后续 release-closure PR/commit" in report
+    assert "B_TRACK_COMPLETE = NO" in report
+    assert "合并 D15B 并标记 `B_TRACK_COMPLETE=YES`" not in report
+    assert "Draft PR" not in report
+
+
+def test_d15b_waiver_precedence_is_limited_to_merge_eligibility() -> None:
+    manifest = _json("release/btrack/D15B_BTRACK_MANIFEST.json")
+    report = _text("docs/day15/04_d15b_btrack_final_report_20260909.md")
+
+    precedence = manifest["waiver"]["precedence"]
+    assert "supersede" in precedence
+    assert "NOT_RUN / UNVERIFIED" in precedence
+    assert "Waiver precedence" in report
+    assert manifest["d14b"]["formal_l3_result"] == "NOT_RUN / UNVERIFIED"

@@ -17,6 +17,7 @@
       "D14D clean VM/snapshot"
     ],
     "applicability": "PR #173 merge-status documentation for the same missing formal inputs only",
+    "precedence": "The waiver record and PR #124 final owner/reviewer merge decision supersede the pre-waiver historical merge stop-line in the same Day14 document for the same merge eligibility only; this does not change D14B_FORMAL_L3=NOT_RUN / UNVERIFIED.",
     "does_not_apply_to": [
       "retrieval eval-input freeze",
       "final metrics",
