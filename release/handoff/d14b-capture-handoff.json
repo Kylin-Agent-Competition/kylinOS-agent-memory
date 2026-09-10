@@ -5,7 +5,7 @@
   "captures": {
     "sqlite_truth": {
       "runner_path": "scripts/capture_d14b_sqlite_truth.py",
-      "runner_sha256": "650ded4bc4232738e9ccb4bc5b1d5d4fc4b9a3e43dab30f2ad19f9452d3782f7",
+      "runner_sha256": "beb61f3d537c1f372da6086ddc43fa0aee7e1568cc3cd3fcd1a3843337f36ee2",
       "command_id": "d14b-capture-sqlite-truth"
     },
     "fts5": {

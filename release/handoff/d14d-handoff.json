@@ -1,6 +1,7 @@
 {
   "schema": "d14d-handoff/v1",
   "generated_at": "2026-09-10T00:00:00Z",
+  "updated_at": "2026-09-10T02:10:00Z",
   "source_documents": [
     "docs/D_TRACK_STATUS.md",
     "docs/day14/15_d14d_phase0_start_replacement_arbitration_20260907.md"
@@ -50,9 +51,22 @@
   },
   "blocked_items_for_b_track": {
     "frozen_tar_bytes_available": false,
+    "frozen_tar_bytes_note": "The original frozen tar bytes were searched on the current VM and the r1 parent snapshot on 2026-09-10 and were not found; the recorded original tar SHA-256 remains authoritative.",
+    "rebuilt_tar_bytes_available": true,
+    "rebuilt_tar_path": "release/packages/kylin-memory-a-d14a-0.1.0-d14a-rebuilt-ba3b50e.tar.gz",
+    "rebuilt_tar_sha256": "de4050ee22d3c70f67c3cbf314ada1a76ac7d8d0527d7ba397477122553a30d8",
+    "rebuilt_manifest_sha256": "d16f117d6b874ed18f395d7767ebbed92ae6950734106957fcee3e9a11482646",
+    "rebuilt_tar_source_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+    "rebuilt_tar_note": "Provenance-labeled Kylin VM rebuild for B-track intake; not a byte-level recovery of the original frozen tar.",
     "capture_runner_credentials_available": true,
     "capture_runner_credentials_note": "VM SSH access confirmed 2026-09-10 (port 2223); kylin_memory.db present with full schema (memory_entries empty on clean snapshot); credentials passed via KYLIN_VM_PASSWORD env var, never stored in files",
     "clean_vm_snapshot_access_available": true,
-    "clean_vm_snapshot_note": "Confirmed 2026-09-10: Kylin-D14D-clean-vdi-20260906 running, snapshot d14d-clean-base-20260907-r4 (UUID 6dc9468e-36a8-41b3-b7c9-6115c7b8fc56) active; SSH 127.0.0.1:2223"
+    "clean_vm_snapshot_note": "Confirmed 2026-09-10: Kylin-D14D-clean-vdi-20260906 running, snapshot d14d-clean-base-20260907-r4 (UUID 6dc9468e-36a8-41b3-b7c9-6115c7b8fc56) active; SSH 127.0.0.1:2223",
+    "capture_runner_evidence": {
+      "sqlite_truth_artifact_path": "evidence/d14b/sqlite_truth.json",
+      "sqlite_truth_artifact_sha256": "5c09e7fbda93858e051aac9f71c19f980481376da6350ee555b808e91939212c",
+      "sqlite_truth_receipt_path": "evidence/d14b/sqlite_truth_receipt.json",
+      "scope_note": "VM capture-runner binding and production SQLite truth read; not a full D14B retrieval run."
+    }
   }
 }

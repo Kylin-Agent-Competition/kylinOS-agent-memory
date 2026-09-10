@@ -22,17 +22,23 @@ from the repository baseline (`a7abb1e`) and from PR #173's diff.
 | 7 | `scripts/capture_d14b_vector_results.py` | **Added** | Vector channel capture runner |
 | 8 | `scripts/capture_d14b_sqlite_truth.py` | **Added** | SQLite truth channel capture runner |
 | 9 | `tests/retrieval/test_d14b_capture_runners.py` | **Added** | Unit tests for capture runner common helper |
-| 10 | `kylin-memory-a-d14a-0.1.0-d14a.tar.gz` | **Still missing** | Binary frozen tar bytes; only SHA-256 / manifest records exist |
+| 10 | `kylin-memory-a-d14a-0.1.0-d14a.tar.gz` | **REBUILT ARTIFACT ADDED** | `release/packages/kylin-memory-a-d14a-0.1.0-d14a-rebuilt-ba3b50e.tar.gz`; the original frozen tar bytes remain missing |
 | 11 | Production capture runner credentials | **CLOSED (2026-09-10)** | VM SSH confirmed; kylin_memory.db accessible on VM |
 | 12 | D14D clean VM/snapshot formal access | **CLOSED (2026-09-10)** | Snapshot `d14d-clean-base-20260907-r4` confirmed active on `Kylin-D14D-clean-vdi-20260906` |
 
 ## Items 10-12 Explanation
 
-- **Item 10 (frozen tar)**: The tar SHA-256 (`2222c904...`) and manifest
-  SHA-256 (`76a83933...`) are recorded in `package_manifest.json` and
-  `D14A_FINAL_PACKAGE_FREEZE_RECORD_20260908.md`, but the actual binary
-  tar bytes were never uploaded to the repository or any accessible
-  release. This PR cannot fabricate the binary.
+- **Item 10 (frozen tar / rebuilt artifact)**: The original frozen tar
+  SHA-256 (`2222c904...`) and manifest SHA-256 (`76a83933...`) remain the
+  authoritative identities. The original bytes were not present on the
+  current VM, the r1 parent snapshot, or the r4 clean snapshot. This PR adds
+  a rebuilt tar produced from source commit `ba3b50e` on the Kylin VM:
+  `release/packages/kylin-memory-a-d14a-0.1.0-d14a-rebuilt-ba3b50e.tar.gz`
+  (SHA-256 `de4050ee22d3c70f67c3cbf314ada1a76ac7d8d0527d7ba397477122553a30d8`;
+  package manifest SHA-256
+  `d16f117d6b874ed18f395d7767ebbed92ae6950734106957fcee3e9a11482646`).
+  It is a provenance-labeled rebuild for B-track intake/unblocking; it is not
+  a byte-level recovery of the original frozen tar.
 - **Item 11 (runner credentials) CLOSED**: VM SSH access confirmed
   2026-09-10 at `127.0.0.1:2223`; `kylin_memory.db` present at
   `/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db` with
@@ -49,10 +55,24 @@ from the repository baseline (`a7abb1e`) and from PR #173's diff.
 
 PR #173's manifest (`release/btrack/D15B_BTRACK_MANIFEST.json`) records
 `actual_tar_bytes_available: false` and the waiver scope. This PR
-addresses items 1-9 of the missing inventory. Items 10-12 remain as
-`deferred_formal_debt_actions` requiring external provision.
+addresses items 1-9, closes VM-access items 11-12, and adds a provenance-
+labeled rebuilt artifact for item 10. The original frozen tar bytes remain
+as a `deferred_formal_debt_action` requiring external provision or a new
+authoritative re-freeze decision.
 
 ## Verification
+
+On 2026-09-10, the SQLite truth capture runner was executed on the Kylin VM
+against a controlled active knowledge row created through production
+Repository APIs. The runner and handoff SHA-256 binding passed and produced:
+
+- `evidence/d14b/sqlite_truth.json`
+  (SHA-256 `5c09e7fbda93858e051aac9f71c19f980481376da6350ee555b808e91939212c`)
+- `evidence/d14b/sqlite_truth_receipt.json`
+
+The receipt records the tested commit, runner SHA-256, command id, and
+artifact SHA-256. This proves the fail-closed runner and its handoff binding
+on the VM; it does not by itself represent a full D14B retrieval run.
 
 After this PR merges, the capture runners can be invoked with:
 

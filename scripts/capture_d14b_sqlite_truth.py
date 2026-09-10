@@ -42,7 +42,7 @@ def run(args: argparse.Namespace) -> int:
         connection.close()
 
     write_artifact_and_receipt(
-        channel="sqlite",
+        channel="sqlite_truth",
         tested_commit=args.tested_commit,
         capture_handoff=args.capture_handoff,
         runner_file=Path(__file__),

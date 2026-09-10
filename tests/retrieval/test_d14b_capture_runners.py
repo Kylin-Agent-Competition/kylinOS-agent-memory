@@ -38,7 +38,7 @@ def write_json(path: Path, value: object) -> Path:
 
 def make_capture_handoff(tmp_path: Path) -> Path:
     channels = {
-        "sqlite": "capture_d14b_sqlite_truth.py",
+        "sqlite_truth": "capture_d14b_sqlite_truth.py",
         "fts5": "capture_d14b_fts5_results.py",
         "vector": "capture_d14b_vector_results.py",
         "rrf": "capture_d14b_rrf_results.py",
@@ -326,5 +326,5 @@ def test_production_capture_runners_generate_provenant_checkpoint(tmp_path: Path
         "d14b-a-delete-target-v1",
         "d14b-a-keep-v1",
     ]
-    assert payload["capture_sources"]["sqlite"]["runner_path"] == "scripts/capture_d14b_sqlite_truth.py"
+    assert payload["capture_sources"]["sqlite_truth"]["runner_path"] == "scripts/capture_d14b_sqlite_truth.py"
     assert set(ids) == {"d14b-a-keep", "d14b-a-delete-target"}

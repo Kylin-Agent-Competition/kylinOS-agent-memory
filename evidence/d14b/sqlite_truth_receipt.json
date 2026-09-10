@@ -1,0 +1,10 @@
+{
+  "artifact_path": "sqlite_truth.json",
+  "artifact_sha256": "5c09e7fbda93858e051aac9f71c19f980481376da6350ee555b808e91939212c",
+  "captured_at_utc": "2026-09-10T01:54:18Z",
+  "channel": "sqlite_truth",
+  "command_id": "d14b-capture-sqlite-truth",
+  "runner_path": "scripts/capture_d14b_sqlite_truth.py",
+  "runner_sha256": "beb61f3d537c1f372da6086ddc43fa0aee7e1568cc3cd3fcd1a3843337f36ee2",
+  "tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
+}

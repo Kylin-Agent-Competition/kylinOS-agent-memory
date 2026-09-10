@@ -26,7 +26,7 @@ from typing import Any
 
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 CHANNELS = ("fts5", "vector", "rrf")
-TRUTH_CHANNEL = "sqlite"
+TRUTH_CHANNEL = "sqlite_truth"
 ALL_CHANNELS = (TRUTH_CHANNEL, *CHANNELS)
 RECEIPT_FIELDS = (
     "channel",
@@ -132,7 +132,7 @@ def _verify_receipts(
         raise CaptureError("capture-handoff.tested_commit 与 requested tested_commit 不一致")
     captures = capture_handoff.get("captures")
     if not isinstance(captures, dict) or set(captures) != set(ALL_CHANNELS):
-        raise CaptureError("capture-handoff.captures 必须声明 sqlite/fts5/vector/rrf 四类 runner")
+        raise CaptureError("capture-handoff.captures 必须声明 sqlite_truth/fts5/vector/rrf 四类 runner")
 
     provenance: dict[str, dict[str, str]] = {}
     for channel in ALL_CHANNELS:
@@ -241,11 +241,11 @@ def main() -> int:
             raise CaptureError("checkpoint output 父目录不存在")
         truth, truth_hash = _load(args.sqlite_truth, "sqlite truth")
         channels: dict[str, dict[str, Any]] = {}
-        source_hashes = {"sqlite_truth": truth_hash}
-        artifact_paths = {"sqlite": args.sqlite_truth}
-        artifact_hashes = {"sqlite": truth_hash}
+        source_hashes = {TRUTH_CHANNEL: truth_hash}
+        artifact_paths = {TRUTH_CHANNEL: args.sqlite_truth}
+        artifact_hashes = {TRUTH_CHANNEL: truth_hash}
         receipt_paths = {
-            "sqlite": args.sqlite_receipt,
+            TRUTH_CHANNEL: args.sqlite_receipt,
             "fts5": args.fts5_receipt,
             "vector": args.vector_receipt,
             "rrf": args.rrf_receipt,
