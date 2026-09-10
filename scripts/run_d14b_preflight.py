@@ -187,10 +187,8 @@ def _require_control_tracked_handoffs(
     d13d_path: Path,
     d14d_path: Path,
     capture_path: Optional[Path],
+    control_head: str,
 ) -> dict[str, bytes]:
-    control_head = _git(control_root, "rev-parse", "HEAD")
-    if not COMMIT_RE.fullmatch(control_head):
-        raise PreflightError("control-root HEAD 必须是 40 位小写 commit")
     bindings: dict[str, bytes] = {
         "d13d": _require_control_tracked_file(
             control_root,
@@ -216,6 +214,16 @@ def _require_control_tracked_handoffs(
             control_head,
         )
     return bindings
+
+
+def _verify_control_head_authority(control_root: Path, expected_control_head: str) -> str:
+    expected = _commit(expected_control_head, "requested control_head")
+    actual = _git(control_root, "rev-parse", "HEAD")
+    if actual != expected:
+        raise PreflightError("control-root HEAD 与 expected_control_head 不一致")
+    if _git(control_root, "status", "--porcelain"):
+        raise PreflightError("control worktree 非干净，formal run 必须停止")
+    return actual
 
 
 def _verify_runner(d14d: dict[str, Any], control_root: Path) -> None:
@@ -417,10 +425,12 @@ def validate_preflight(
     package_tar: Optional[Path] = None,
     actual_package_manifest: Optional[Path] = None,
     control_handoff_bindings: Optional[dict[str, bytes]] = None,
+    expected_control_head: str = "",
 ) -> dict[str, Any]:
     """Validate all identity gates and return a deterministic success report."""
 
     expected = _commit(expected_tested_commit, "requested tested_commit")
+    control_head = _verify_control_head_authority(control_root, expected_control_head)
     bindings = control_handoff_bindings or {}
     if not {"d13d", "d14d"}.issubset(bindings) or set(bindings) - {
         "d13d",
@@ -469,11 +479,6 @@ def validate_preflight(
     if _git(tested_repo_root, "status", "--porcelain"):
         raise PreflightError("tested worktree 非干净，formal run 必须停止")
 
-    control_head = _git(control_root, "rev-parse", "HEAD")
-    if not COMMIT_RE.fullmatch(control_head):
-        raise PreflightError("control-root HEAD 必须是 40 位小写 commit")
-    if _git(control_root, "status", "--porcelain"):
-        raise PreflightError("control worktree 非干净，formal run 必须停止")
     _verify_runner(d14d, control_root)
 
     # Production capture provenance is mandatory: the four source artifacts
@@ -501,6 +506,7 @@ def validate_preflight(
             "evidence_root_unused",
             "clean_tested_worktree",
             "clean_control_worktree",
+            "expected_control_head",
             "control_tracked_handoffs",
             "capture_provenance",
             "capture_source_bindings",
@@ -514,6 +520,7 @@ def validate_preflight(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expected-tested-commit", required=True)
+    parser.add_argument("--expected-control-head", required=True)
     parser.add_argument("--d13d-handoff", type=Path, required=True)
     parser.add_argument("--d14d-handoff", type=Path, required=True)
     parser.add_argument("--package-manifest", type=Path, required=True)
@@ -529,11 +536,16 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
+        control_head = _verify_control_head_authority(
+            args.control_root,
+            args.expected_control_head,
+        )
         bindings = _require_control_tracked_handoffs(
             control_root=args.control_root,
             d13d_path=args.d13d_handoff,
             d14d_path=args.d14d_handoff,
             capture_path=args.capture_handoff,
+            control_head=control_head,
         )
         report = validate_preflight(
             expected_tested_commit=args.expected_tested_commit,
@@ -551,6 +563,7 @@ def main() -> int:
             package_tar=args.package_tar,
             actual_package_manifest=args.actual_package_manifest,
             control_handoff_bindings=bindings,
+            expected_control_head=control_head,
         )
     except PreflightError as error:
         print(f"D14B_PREFLIGHT_FAIL: {error}", file=sys.stderr)

@@ -48,6 +48,7 @@ D14B 不得从上游 evidence 自行拼装为 handoff。
 ```text
 python scripts/run_d14b_preflight.py \
   --expected-tested-commit <tested-commit> \
+  --expected-control-head <approved-control-plane-commit> \
   --d13d-handoff <d13d-handoff.json> \
   --d14d-handoff <d14d-handoff.json> \
   --package-manifest <package-manifest.json> \

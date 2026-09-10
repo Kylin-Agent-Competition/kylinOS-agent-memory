@@ -37,6 +37,7 @@ D14A package/hash freeze。D14B 已只读核验以下上游记录：
 ```text
 python scripts/run_d14b_preflight.py \
   --expected-tested-commit <tested-commit> \
+  --expected-control-head <approved-control-plane-commit> \
   --d13d-handoff <d13d-handoff.json> \
   --d14d-handoff <d14d-handoff.json> \
   --package-manifest <package-manifest.json> \
@@ -85,7 +86,9 @@ python scripts/run_d14b_preflight.py \
 
 preflight 把 tested root 与 control root 分离。tested root 必须是 exact
 `tested_commit` 的干净 checkout；control root 必须是另一个干净 Git worktree，负责解析
-handoff/evidence/runner/query spec 并登记实际 `control_head`。任一 commit/package 不一致、
+handoff/evidence/runner/query spec。`--expected-control-head` 必须来自已完成 exact-head
+Review 后正式批准的控制面 commit，且 control root 实际 HEAD、干净状态和 canonical
+handoff Git blob 都机械绑定到该值。任一 commit/package/control_head 不一致、
 D13D 非 `FROZEN`、D14D 非 `L3_READY`、Seal/G9 引用不是既有仓库路径或 HTTPS URL、
 evidence root 已存在、任一 worktree 非干净、tested HEAD 不同或 control HEAD 非法，
 都会返回非零状态。它成功时也**不**创建 evidence root；正式操作者在成功后才能创建一次性 root。
