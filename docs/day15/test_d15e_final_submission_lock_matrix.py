@@ -128,14 +128,12 @@ SNAPSHOT_FACTS = (
     "0.1.0-d14a",
     "NON_MAIN_BRANCH",
     "PR_OPEN",
-    "2/11",
     "D14B_FORMAL_L3=NOT_RUN/UNVERIFIED",
     "D14B_FORMAL_RESULT=UNVERIFIED",
     "D14C_FORMAL_L3=BLOCKED",
     "D14C_FORMAL_RESULT=UNVERIFIED",
     "BLOCKED_PENDING_D15C_HANDOFF",
     "RUNTIME_NOT_REQUIRED",
-    "72950fd59bf5fddbfe12d4daad9f040ea227e5f9",
     "b5f8154b9e510c10124e84ecf70d608e4fee7896",
     "a4034c9cdab1de31f70bced73dcab8ff2b18407c",
 )
@@ -317,7 +315,8 @@ def _assert_d14c_association(text: str) -> None:
     """HIGH-03：§6 D14C 行级 provenance 绑定。
 
     必须绑定 PR #156 / test/D14C-l3-clean-vm-release-regression / 77319aa4…；
-    禁止错绑 PR #167 / feat/C-hook-evidence / D15C current SHA。
+    禁止错绑 PR #167 / feat/C-hook-evidence / D15C current SHA；
+    禁止把易漂移的 synthetic merge ref（refs/pull/156/merge=）与 ahead/behind= 写回 canonical row。
     """
     row = _upstream_row(text, "D14C")
     for token in (
@@ -332,6 +331,8 @@ def _assert_d14c_association(text: str) -> None:
         "feat/C-hook-evidence",
         "b5f8154b9e510c10124e84ecf70d608e4fee7896",
         "a4034c9cdab1de31f70bced73dcab8ff2b18407c",
+        "refs/pull/156/merge=",
+        "ahead/behind=",
     ):
         assert token not in row, "§6 D14C 行出现禁止 token（错绑）{0}: {1}".format(token, row)
 
@@ -396,7 +397,8 @@ def _assert_c6_association(text: str) -> None:
     """HIGH-03：§5 C6 行级 provenance 绑定。
 
     必须绑定 PR #156 / test/D14C-l3-clean-vm-release-regression / 77319aa4…；
-    禁止错绑 PR #167 / feat/C-hook-evidence / D15C current SHA。
+    禁止错绑 PR #167 / feat/C-hook-evidence / D15C current SHA；
+    禁止出现 synthetic merge ref（refs/pull/156/merge=）与 ahead/behind= 诊断量。
     """
     row = _c6_row(text)
     for token in (
@@ -411,6 +413,8 @@ def _assert_c6_association(text: str) -> None:
         "feat/C-hook-evidence",
         "b5f8154b9e510c10124e84ecf70d608e4fee7896",
         "a4034c9cdab1de31f70bced73dcab8ff2b18407c",
+        "refs/pull/156/merge=",
+        "ahead/behind=",
     ):
         assert token not in row, "§5 C6 行出现禁止 token（错绑）{0}: {1}".format(token, row)
 
