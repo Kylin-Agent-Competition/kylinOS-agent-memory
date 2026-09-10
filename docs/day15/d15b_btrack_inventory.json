@@ -1,0 +1,95 @@
+{
+  "schema": "d15b-btrack-inventory/v1",
+  "assessment_base_commit": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
+  "owner_track": "B",
+  "assessment_status": "COMPLETE_ASSESSMENT_NOT_RELEASE_ACCEPTANCE",
+  "components": [
+    {
+      "component": "SQLite retrieval truth",
+      "path": "memory-service/retrieval",
+      "owner": "B",
+      "status": "REFERENCE_ONLY",
+      "last_test": "D14B substitute validation; current formal lifecycle is not run",
+      "evidence_ref": "docs/day14/20_d14b_btrack_substitute_completion_20260909.md",
+      "formal_or_reference": "reference",
+      "open_debt": "Formal L3 input and clean-VM execution are unavailable"
+    },
+    {
+      "component": "FTS5 retrieval",
+      "path": "memory-service/retrieval/fts5.py",
+      "owner": "B",
+      "status": "REFERENCE_ONLY",
+      "last_test": "D14B substitute validation",
+      "evidence_ref": "docs/day14/20_d14b_btrack_substitute_completion_20260909.md",
+      "formal_or_reference": "reference",
+      "open_debt": "Formal L3 input and clean-VM execution are unavailable"
+    },
+    {
+      "component": "Vector retrieval and rebuild/delete lifecycle",
+      "path": "memory-service/retrieval/real_vector_provider.py",
+      "owner": "B",
+      "status": "REFERENCE_ONLY",
+      "last_test": "D14B substitute validation",
+      "evidence_ref": "docs/day14/20_d14b_btrack_substitute_completion_20260909.md",
+      "formal_or_reference": "reference",
+      "open_debt": "Formal L3 input and clean-VM execution are unavailable"
+    },
+    {
+      "component": "RRF hybrid retrieval",
+      "path": "memory-service/retrieval/fusion.py; docs/adr/001-application-layer-rrf.md",
+      "owner": "B",
+      "status": "REFERENCE_ONLY",
+      "last_test": "D14B substitute validation",
+      "evidence_ref": "docs/day14/20_d14b_btrack_substitute_completion_20260909.md",
+      "formal_or_reference": "reference",
+      "open_debt": "Formal L3 input and clean-VM execution are unavailable"
+    },
+    {
+      "component": "D14B preparation harness",
+      "path": "scripts/run_d14b_preflight.py; scripts/capture_d14b_retrieval_snapshot.py; scripts/compare_d14b_retrieval_snapshots.py; scripts/verify_d14b_evidence_manifest.py",
+      "owner": "B",
+      "status": "VERIFIED",
+      "last_test": "PR #124 Repository Baseline Check and local 2026-09-09 contract run",
+      "evidence_ref": "PR #124; tests/retrieval/test_d14b_harness.py",
+      "formal_or_reference": "formal preparation harness only",
+      "open_debt": "A passing harness is not a Formal L3 run"
+    },
+    {
+      "component": "D13B retrieval evaluator",
+      "path": "scripts/run_d13b_formal_eval.py; memory-service/retrieval/formal_eval.py",
+      "owner": "B",
+      "status": "VERIFIED",
+      "last_test": "local 2026-09-09 contract run",
+      "evidence_ref": "memory-service/tests/retrieval/test_formal_eval.py",
+      "formal_or_reference": "formal evaluator contract only",
+      "open_debt": "No sealed retrieval execution bundle has been supplied"
+    },
+    {
+      "component": "D9 retrieval corpus/query/Gold policy",
+      "path": "evaluation/D9_RETRIEVAL_CORPUS_V2.jsonl; evaluation/D9_RETRIEVAL_QUERYSET_CANDIDATE_V2.jsonl; evaluation/D9_RETRIEVAL_GOLD_POLICY_V2.json",
+      "owner": "B consumes E inputs",
+      "status": "REFERENCE_ONLY",
+      "last_test": "local 2026-09-09 D9 schema contracts",
+      "evidence_ref": "evaluation/test_d9_retrieval_dataset.py; evaluation/test_d9_retrieval_gold_spec.py",
+      "formal_or_reference": "candidate/reference",
+      "open_debt": "Query annotations include candidate/pending_review states and are not a sealed final input"
+    }
+  ],
+  "unresolved_b_debts": [
+    "TD-001", "TD-002", "TD-018", "TD-019", "TD-020", "TD-021", "TD-027", "TD-029", "TD-030", "TD-032", "TD-033", "TD-034", "TD-035", "TD-036", "TD-037", "TD-038", "TD-054"
+  ],
+  "debt_classification": {
+    "release_blocking": [
+      "TD-018", "TD-019", "TD-020", "TD-027", "TD-032", "TD-033", "TD-034", "TD-035", "TD-036", "TD-037", "TD-038"
+    ],
+    "carry_forward_non_blocking": [
+      "TD-001", "TD-002", "TD-021", "TD-029", "TD-054"
+    ],
+    "register_reconciliation_required": [
+      "TD-030"
+    ]
+  },
+  "accepted_release_debts": [],
+  "debt_audit": "docs/day15/05_d15b_btrack_open_debt_audit_20260909.md",
+  "conclusion": "No unresolved B-track P0/High item was found. RELEASE_BLOCKING debts require closure, an applicable waiver, or explicit acceptance before B-track final release; CARRY_FORWARD_NON_BLOCKING debts require an owner, current status and follow-up; TD-030 requires register reconciliation against its existing implementation/review evidence. This inventory must not be interpreted as B_TRACK_COMPLETE."
+}

@@ -1,0 +1,102 @@
+{
+  "schema": "d15b-btrack-manifest/v1",
+  "manifest_status": "NOT_FROZEN",
+  "assessment_base_commit": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
+  "d15b_source_head": "f1950fee10fac0e1eb87efe240620ed8fd5e4d81",
+  "d15b_pr_merge_eligibility": "PASS_WITH_DEBT",
+  "d15b_task_status": "PARTIAL / WAIVED_FORMAL_INPUTS",
+  "b_track_release_readiness": "BLOCKED_NOT_COMPLETE",
+  "b_track_complete": "NO",
+  "waiver": {
+    "source": "PR #124 / docs/day14/21_d14b_formal_l3_intake_blockers_20260909.md",
+    "authority": "WAIVED_BY_OWNER",
+    "scope": [
+      "d13d/d14d handoff",
+      "frozen tar",
+      "four production capture runners",
+      "D14D clean VM/snapshot"
+    ],
+    "applicability": "PR #173 merge-status documentation for the same missing formal inputs only",
+    "precedence": "The waiver record and PR #124 final owner/reviewer merge decision supersede the pre-waiver historical merge stop-line in the same Day14 document for the same merge eligibility only; this does not change D14B_FORMAL_L3=NOT_RUN / UNVERIFIED.",
+    "does_not_apply_to": [
+      "retrieval eval-input freeze",
+      "final metrics",
+      "B-track manifest freeze",
+      "B_TRACK_COMPLETE",
+      "release_ready",
+      "production_ready"
+    ]
+  },
+  "d14b": {
+    "pr": 124,
+    "merge_sha": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
+    "approved_head_sha": "fb4531e673bb5f02d6a109ec0f467cb6d384e927",
+    "formal_runtime_tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+    "preparation_harness": "VERIFIED",
+    "formal_l3_result": "NOT_RUN / UNVERIFIED",
+    "substitute_validation": "REFERENCE_ONLY / PASS_WITH_LIMITATIONS",
+    "formal_input_remediation": {
+      "control_head": "c5573c1ce75ad08427b86e3551074e18ed806279",
+      "d13d_handoff": {
+        "path": "release/handoff/d13d-handoff.json",
+        "sha256": "4138e4f839971132315f3109cd521a32a31685dccf80bbb9210508b98c915b3a"
+      },
+      "d14d_handoff": {
+        "path": "release/handoff/d14d-handoff.json",
+        "sha256": "1265d7fd27b0d2c986d21b5e2f1c4ed2a2da83bc6a0a58d88ceaa6f0ad206130"
+      },
+      "capture_handoff": {
+        "path": "release/handoff/d14b-capture-handoff.json",
+        "sha256": "8457db5a8ec773cb968e80e7e8226212324cdc6ba2ef957fd42ffe0523707ec2"
+      },
+      "status": "PARTIALLY_REMEDIATED",
+      "remaining_gate": "Original frozen tar bytes or an authoritative package identity/refreeze decision is required before package-bytes preflight can pass."
+    },
+    "intake_blocker_record": {
+      "path": "docs/day14/21_d14b_formal_l3_intake_blockers_20260909.md",
+      "sha256": "701b00daa5a88218eb705a4f141974e6a6b271c28c5842d4948dee33e8c524b6"
+    }
+  },
+  "release_package": {
+    "name": "kylin-memory-a-d14a",
+    "version": "0.1.0-d14a",
+    "tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
+    "manifest_sha256": "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0",
+    "actual_tar_bytes_available": false,
+    "rebuilt_tar": {
+      "path": "release/packages/kylin-memory-a-d14a-0.1.0-d14a-rebuilt-ba3b50e.tar.gz",
+      "sha256": "de4050ee22d3c70f67c3cbf314ada1a76ac7d8d0527d7ba397477122553a30d8",
+      "source_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+      "status": "PROVENANCE_LABELED_REBUILD_NOT_ORIGINAL_FROZEN_BYTES"
+    }
+  },
+  "components": {
+    "sqlite": "REFERENCE_ONLY",
+    "fts5": "REFERENCE_ONLY",
+    "vector": "REFERENCE_ONLY",
+    "rrf": "REFERENCE_ONLY",
+    "delete_runner": "REFERENCE_ONLY",
+    "retrieval_evaluator": "VERIFIED_CONTRACT_ONLY",
+    "d14b_harness": "VERIFIED"
+  },
+  "eval_inputs_manifest": "release/btrack/D15B_RETRIEVAL_EVAL_INPUTS.json",
+  "formal_metrics": null,
+  "evidence": {
+    "d14d_l3_reference": {
+      "path": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e/summary.json",
+      "sha256": "9a9132a115973c96a98093def4c814d64863c1fcc94c384376d6a219ef36c51d",
+      "current_ssot": "D14D=DONE / L3_READY=true (docs/D_TRACK_STATUS.md)",
+      "historical_summary_status": "generated before the final D14D status update; raw bytes are retained unchanged",
+      "scope": "D14D G0-G6 reference; G7=NOT_RUN/N-A and G8=NOT_RUN under the D14D waiver"
+    },
+    "d15b_formal_evidence_root": null,
+    "d15b_sha256sums": null
+  },
+  "open_debts": {
+    "formal_l3": "D13D/D14D/capture handoffs and formal VM access are now available, but original frozen tar bytes or an authoritative refreeze decision is still required before preflight and Formal L3 execution.",
+    "final_eval": "No sealed retrieval input or formal execution result is present",
+    "b_debt_register": "See docs/day15/d15b_btrack_inventory.json; accepted_release_debts is empty"
+  },
+  "release_eligibility": "NOT_APPLICABLE_TO_PR_MERGE",
+  "rule": "Only a later manifest with sealed inputs, execution evidence, SHA256SUMS verification and required independent review may be FROZEN."
+}
