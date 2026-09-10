@@ -13,7 +13,8 @@ from typing import Any
 
 
 LINE_RE = re.compile(r"^([0-9a-f]{64})  (.+)$")
-CHANNELS = ("sqlite", "fts5", "vector", "rrf")
+CHECKPOINT_DATA_CHANNELS = ("sqlite", "fts5", "vector", "rrf")
+CAPTURE_CHANNELS = ("sqlite_truth", "fts5", "vector", "rrf")
 REQUIRED_CHECKPOINTS = {
     "baseline": "baseline/baseline.json",
     "service_restart_after": "service_restart/service_restart_after.json",
@@ -29,11 +30,11 @@ CHECKPOINT_REQUIRED_KEYS = {
     "captured_at_utc",
     "user_id",
     "capture_sources",
-    *CHANNELS,
+    *CHECKPOINT_DATA_CHANNELS,
 }
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 RECEIPT_NAMES = {
-    "sqlite": "sqlite-truth.receipt.json",
+    "sqlite_truth": "sqlite-truth.receipt.json",
     "fts5": "fts5-results.receipt.json",
     "vector": "vector-results.receipt.json",
     "rrf": "rrf-results.receipt.json",
@@ -151,7 +152,7 @@ def verify_checkpoint_provenance(
     if not isinstance(captures, dict):
         raise ManifestError("capture handoff.captures 非 object")
     receipt_directory = checkpoint_path.parent / "provenance" / checkpoint_name
-    for channel in CHANNELS:
+    for channel in CAPTURE_CHANNELS:
         source = sources.get(channel)
         if not isinstance(source, dict):
             raise ManifestError(f"capture_sources 缺少 {channel}")

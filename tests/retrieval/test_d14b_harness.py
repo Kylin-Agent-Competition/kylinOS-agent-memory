@@ -414,7 +414,7 @@ def test_capture_assembles_read_only_channel_artifacts_into_a_checkpoint(tmp_pat
     checkpoint = json.loads(output.read_text(encoding="utf-8"))
     assert checkpoint["tested_commit"] == SHA
     assert checkpoint["sqlite"] == {"stable_ids": ["a"], "active_version_ids": ["v1"]}
-    assert checkpoint["capture_sources"]["sqlite"]["artifact_sha256"] == case["hashes"]["sqlite"]
+    assert checkpoint["capture_sources"]["sqlite_truth"]["artifact_sha256"] == case["hashes"]["sqlite_truth"]
 
 def test_capture_rejects_an_existing_checkpoint_without_overwriting_it(tmp_path: Path) -> None:
     truth = write_json(tmp_path / "sqlite-truth.json", {"stable_ids": ["a"], "active_version_ids": ["v1"]})
@@ -608,7 +608,7 @@ def make_capture_case(
     *,
     missing_handoff: bool = False,
     omit_receipts: tuple[str, ...] = (),
-    handoff_channels: tuple[str, ...] = ("sqlite", "fts5", "vector", "rrf"),
+    handoff_channels: tuple[str, ...] = ("sqlite_truth", "fts5", "vector", "rrf"),
     receipt_overrides: dict[str, dict[str, object]] | None = None,
     tamper_artifact: str | None = None,
 ) -> dict[str, object]:
@@ -624,7 +624,7 @@ def make_capture_case(
     }
     truth = {"stable_ids": ["a"], "active_version_ids": ["v1"]}
     artifacts = {
-        "sqlite": write_json(tmp_path / "sqlite-truth.json", truth),
+        "sqlite_truth": write_json(tmp_path / "sqlite-truth.json", truth),
         "fts5": write_json(tmp_path / "fts5.json", channel_result),
         "vector": write_json(tmp_path / "vector.json", channel_result),
         "rrf": write_json(tmp_path / "rrf.json", channel_result),
@@ -648,7 +648,7 @@ def make_capture_case(
         )
 
     receipts: dict[str, Path] = {}
-    for ch in ("sqlite", "fts5", "vector", "rrf"):
+    for ch in ("sqlite_truth", "fts5", "vector", "rrf"):
         if ch in omit_receipts:
             receipts[ch] = tmp_path / f"{ch}.receipt.json"
             continue
@@ -686,11 +686,11 @@ def run_capture(case: dict[str, object], output: Path) -> subprocess.CompletedPr
         args += ["--capture-handoff", str(case["handoff"])]
     artifacts = case["artifacts"]
     receipts = case["receipts"]
-    args += ["--sqlite-truth", str(artifacts["sqlite"])]
+    args += ["--sqlite-truth", str(artifacts["sqlite_truth"])]
     args += ["--fts5-results", str(artifacts["fts5"])]
     args += ["--vector-results", str(artifacts["vector"])]
     args += ["--rrf-results", str(artifacts["rrf"])]
-    args += ["--sqlite-receipt", str(receipts["sqlite"])]
+    args += ["--sqlite-receipt", str(receipts["sqlite_truth"])]
     args += ["--fts5-receipt", str(receipts["fts5"])]
     args += ["--vector-receipt", str(receipts["vector"])]
     args += ["--rrf-receipt", str(receipts["rrf"])]
@@ -706,7 +706,7 @@ def test_capture_requires_capture_handoff(tmp_path: Path) -> None:
 
 
 def test_capture_requires_a_receipt_for_every_channel(tmp_path: Path) -> None:
-    case = make_capture_case(tmp_path, omit_receipts=("sqlite", "fts5", "vector", "rrf"))
+    case = make_capture_case(tmp_path, omit_receipts=("sqlite_truth", "fts5", "vector", "rrf"))
     completed = run_capture(case, tmp_path / "checkpoint.json")
     assert completed.returncode != 0
     assert "receipt" in completed.stderr
@@ -743,7 +743,7 @@ def test_capture_rejects_receipt_command_id_mismatch(tmp_path: Path) -> None:
 
 
 def test_capture_rejects_tampered_artifact_bytes(tmp_path: Path) -> None:
-    case = make_capture_case(tmp_path, tamper_artifact="sqlite")
+    case = make_capture_case(tmp_path, tamper_artifact="sqlite_truth")
     completed = run_capture(case, tmp_path / "checkpoint.json")
     assert completed.returncode != 0
     assert "artifact_sha256" in completed.stderr
@@ -752,7 +752,7 @@ def test_capture_rejects_tampered_artifact_bytes(tmp_path: Path) -> None:
 def make_preflight_suite(tmp_path: Path) -> dict[str, object]:
     repo, _ = make_clean_git_repo(tmp_path)
     runner_shas: dict[str, str] = {}
-    for channel in ("sqlite", "fts5", "vector", "rrf"):
+    for channel in ("sqlite_truth", "fts5", "vector", "rrf"):
         runner = repo / f"runner_{channel}.py"
         runner.write_text(f"#!/usr/bin/env python3\n# {channel} runner\n", encoding="utf-8")
         runner_shas[channel] = sha256_bytes(runner.read_bytes())
@@ -772,7 +772,7 @@ def make_preflight_suite(tmp_path: Path) -> dict[str, object]:
                     "runner_sha256": runner_shas[channel],
                     "command_id": f"d14b-{channel}-v1",
                 }
-                for channel in ("sqlite", "fts5", "vector", "rrf")
+                for channel in ("sqlite_truth", "fts5", "vector", "rrf")
             },
         },
     )
@@ -826,7 +826,7 @@ def make_preflight_suite(tmp_path: Path) -> dict[str, object]:
         "package_tar": package_tar,
         "actual_package_manifest": actual_manifest,
         "evidence_root": tmp_path / "new-evidence",
-        "runner_paths": {channel: repo / f"runner_{channel}.py" for channel in ("sqlite", "fts5", "vector", "rrf")},
+        "runner_paths": {channel: repo / f"runner_{channel}.py" for channel in ("sqlite_truth", "fts5", "vector", "rrf")},
     }
 
 
@@ -891,7 +891,7 @@ def test_preflight_rejects_missing_one_channel_runner(tmp_path: Path) -> None:
 def test_preflight_rejects_missing_runner_file(tmp_path: Path) -> None:
     case = make_preflight_suite(tmp_path)
     handoff = json.loads(case["capture_handoff"].read_text(encoding="utf-8"))
-    handoff["captures"]["sqlite"]["runner_path"] = "missing_runner.py"
+    handoff["captures"]["sqlite_truth"]["runner_path"] = "missing_runner.py"
     write_json(case["capture_handoff"], handoff)
 
     completed = run_preflight_suite(case)
@@ -963,7 +963,7 @@ def test_checkpoint_records_handoff_and_receipt_provenance(tmp_path: Path) -> No
     checkpoint = json.loads(output.read_text(encoding="utf-8"))
     sources = checkpoint["capture_sources"]
     assert sources["capture_handoff_sha256"] == sha256_bytes(case["handoff"].read_bytes())
-    for channel in ("sqlite", "fts5", "vector", "rrf"):
+    for channel in ("sqlite_truth", "fts5", "vector", "rrf"):
         entry = sources[channel]
         assert entry["artifact_sha256"] == sha256_bytes(case["artifacts"][channel].read_bytes())
         assert entry["receipt_sha256"] == sha256_bytes(case["receipts"][channel].read_bytes())
@@ -999,11 +999,11 @@ def make_formal_lifecycle_evidence_root(
             "runner_path": f"runner_{channel}.py",
             "runner_sha256": HASH,
         }
-        for channel in ("sqlite", "fts5", "vector", "rrf")
+        for channel in ("sqlite_truth", "fts5", "vector", "rrf")
     }
     handoff.write_text(json.dumps({"tested_commit": SHA, "captures": captures}), encoding="utf-8")
     receipt_names = {
-        "sqlite": "sqlite-truth.receipt.json",
+        "sqlite_truth": "sqlite-truth.receipt.json",
         "fts5": "fts5-results.receipt.json",
         "vector": "vector-results.receipt.json",
         "rrf": "rrf-results.receipt.json",
@@ -1018,7 +1018,7 @@ def make_formal_lifecycle_evidence_root(
         sources: dict[str, object] = {
             "capture_handoff_sha256": sha256_bytes(handoff.read_bytes()),
         }
-        for channel in ("sqlite", "fts5", "vector", "rrf"):
+        for channel in ("sqlite_truth", "fts5", "vector", "rrf"):
             receipt = receipt_dir / receipt_names[channel]
             artifact = root / f"{checkpoint_id}-{channel}.artifact.json"
             artifact.write_text(json.dumps({"channel": channel}), encoding="utf-8")

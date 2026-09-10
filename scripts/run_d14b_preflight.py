@@ -20,7 +20,7 @@ from typing import Any, Optional
 
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-CAPTURE_CHANNELS = ("sqlite", "fts5", "vector", "rrf")
+CAPTURE_CHANNELS = ("sqlite_truth", "fts5", "vector", "rrf")
 
 
 class PreflightError(ValueError):
@@ -165,7 +165,7 @@ def _verify_capture_handoff(
         missing = ", ".join(sorted(set(CAPTURE_CHANNELS) - set(captures)))
         extra = ", ".join(sorted(set(captures) - set(CAPTURE_CHANNELS)))
         raise PreflightError(
-            "d14b-capture-handoff 必须且只能声明 sqlite/fts5/vector/rrf 四类 runner"
+            "d14b-capture-handoff 必须且只能声明 sqlite_truth/fts5/vector/rrf 四类 runner"
             + (f"；缺失: {missing}" if missing else "")
             + (f"；多余: {extra}" if extra else "")
         )
