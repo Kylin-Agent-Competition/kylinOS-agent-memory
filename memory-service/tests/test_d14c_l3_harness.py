@@ -167,6 +167,9 @@ def test_preflight_accepts_frozen_runtime_commit_with_current_preflight_runner(t
     for section in ("d13d", "d14d"):
         _update_json(tmp_path, handoff[section]["evidence_reference"], tested_commit="c" * 40)
     _update_json(tmp_path, handoff["release_package"]["manifest_path"], source_commit="c" * 40)
+    handoff["release_package"]["manifest_sha256"] = hashlib.sha256(
+        (tmp_path / handoff["release_package"]["manifest_path"]).read_bytes()
+    ).hexdigest()
     _update_json(tmp_path, handoff["trusted_host_identity"]["approval_reference"], tested_commit="c" * 40)
     handoff["trusted_host_identity"]["identity_sha256"] = hashlib.sha256(
         (tmp_path / handoff["trusted_host_identity"]["approval_reference"]).read_bytes()
@@ -491,7 +494,12 @@ def test_preflight_rejects_memory_context_from_another_runtime_environment(tmp_p
 
 def _run_git(root: Path, *args: str) -> str:
     completed = subprocess.run(
-        ["git", "-C", str(root), *args], check=True, capture_output=True, text=True
+        ["git", "-C", str(root), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return completed.stdout.strip()
 
