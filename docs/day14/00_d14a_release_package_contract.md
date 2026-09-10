@@ -12,6 +12,11 @@
 > 该 reference 由 PR author `Ducknesses` 发布；按作者/Reviewer 分离要求，它尚未构成
 > 非作者 ReviewerD 独立会签，因此 v5 在非作者 D review 与 Reviewer E 会签前均不得
 > 写成 FROZEN 终态。
+> 2026-09-10 ReviewerE identity adjudication：非作者 Reviewer E 在
+> <https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/175#issuecomment-5616426125>
+> 独立裁定接受 D14D `ba3b50e` identity/provenance closure，并确认可回填 contract、
+> D15D manifest 与 Round 2 evidence。该裁定仅覆盖 identity/provenance/contract
+> consistency closure，不替代 D15D 最终签署。
 > 该升版只冻结外部依赖身份；不改变 D14D `L3_READY=true` / `release_ready=false` /
 > `production_ready=false` 边界，也不宣称 Release Gate 或 production 就绪。
 > 冻结方式：本文件为 package contract 唯一真源；任何字段改动需 D 主审会签并升版。
@@ -321,7 +326,8 @@ bash systemd/verify.sh --embed-socket <EMBED_SOCK> --embed-pid <REAL_EMBEDDING_S
 
 - [x] contract PROPOSED v5 / PENDING_INDEPENDENT_D_REVIEW_AND_E_SIGN（2026-09-10
   已同步 D14D `ba3b50e` formal identity；既有 `Ducknesses` 授权评论不满足非作者
-  D review，仍待独立 D 主审与 Reviewer E 会签）
+  D review；Reviewer E 已在 PR comment 5616426125 独立裁定 identity/provenance
+  closure APPROVED，最终 D15D 签署仍待独立完成）
 - [x] 本地/L1 package smoke PASS（D14D G3/G4：package-only install → real SDK
   smoke → restart；evidence root 见 §1.2）
 - [x] dependency audit PASS（D14D G2 无开发路径/RPATH/not-found）
