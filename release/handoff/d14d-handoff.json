@@ -1,0 +1,56 @@
+{
+  "schema": "d14d-handoff/v1",
+  "generated_at": "2026-09-10T00:00:00Z",
+  "source_documents": [
+    "docs/D_TRACK_STATUS.md",
+    "docs/day14/15_d14d_phase0_start_replacement_arbitration_20260907.md"
+  ],
+  "tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "status": "DONE",
+  "l3_ready": true,
+  "release_ready": false,
+  "production_ready": false,
+  "pr_165": {
+    "number": 165,
+    "state": "MERGED",
+    "merged_at": "2026-09-08T11:37:40Z",
+    "final_reviewed_head": "cb6c528e6f5a88d7a9c847f8a597597f1e70638a",
+    "squash_merge_sha": "ec7a66b3e52f8d76b156300d375467290fdc42b6"
+  },
+  "gates": {
+    "g0_baseline": "PASS",
+    "g1_snapshot": "PASS",
+    "g2_package_audit": "PASS",
+    "g3_install": "PASS",
+    "g4_embed_server_start": "PASS",
+    "g5_service_restart": "PASS",
+    "g6_os_reboot": "PASS",
+    "g7_upgrade": "NOT_RUN / N-A (D-09 waiver)",
+    "g8_performance": "NOT_RUN (D-10 waiver)",
+    "g9_evidence": "PASS"
+  },
+  "evidence_root": {
+    "path": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e",
+    "package_tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
+    "package_manifest_sha256": "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0",
+    "sha256sums_sha256": "8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67",
+    "manifest_file_count": 3360
+  },
+  "formal_start_replacement": {
+    "original_snapshot_uuid": "c5e3c3de-1c70-4f58-b22a-ab07b2d2d56d",
+    "replacement_snapshot_uuid": "6dc9468e-36a8-41b3-b7c9-6115c7b8fc56",
+    "status": "CONFIRMED_BY_REVIEWER_E",
+    "arbitration_doc": "docs/day14/15_d14d_phase0_start_replacement_arbitration_20260907.md"
+  },
+  "package_identity": {
+    "name": "kylin-memory-a-d14a",
+    "version": "0.1.0-d14a",
+    "source_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+    "tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401"
+  },
+  "blocked_items_for_b_track": {
+    "frozen_tar_bytes_available": false,
+    "capture_runner_credentials_available": false,
+    "clean_vm_snapshot_access_available": false
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "schema": "d13d-handoff/v1",
+  "generated_at": "2026-09-10T00:00:00Z",
+  "source_document": "D13D_CLOSURE_HANDOFF_20260908.md",
+  "tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "status": "D13D_FROZEN",
+  "pr_160_merge_sha": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "phase3_formal": {
+    "state": "RAW_READY_PENDING_SEALS -> SEALS_SIGNED -> TRUST_ROOT_INSTALLED -> GATE_0_10_PASS -> FROZEN",
+    "reviewer_d": "Ducknesses",
+    "reviewer_e": "lovezy0730-create",
+    "runner_script_sha256": "297d534a4c1a4a3009942cc90a7614dc17eaec5843656d9b50ba601028a3036f",
+    "formal_report_sha256": "dee80d5044c2194b79f13e7185b39f0162c63468f7a47b86799a1abb23c489ee",
+    "evidence_root_path": "evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence/"
+  },
+  "review_seal": {
+    "key_id": "d13e-review-rd-20260908-v1",
+    "public_key_anchor": "a107ee92d7acb4f8fac7fe0b4cf393a68631d5a85d6aa45d99f24eb86eeb6286",
+    "canonical_sha256": "b4822ec7f223b3fbee1365f2d8ff6df81e609a4ef2590c8346e51d04e426ecab"
+  },
+  "execution_seal": {
+    "key_id": "d13d-execution-lovezy0730-20260908-v1",
+    "public_key_anchor": "bbba93c041746231e203237995ae7e763ef584e912d4ad2467e8500edbf2b406",
+    "json_blob_sha256": "34117a2e414109e9f0d20e27c5fd6b7ac9df5c1b7b4aca5b7d8e76be07752f08",
+    "sig_sha256": "7ff05d6fe304a55cf1844ad028b56ad82b5a0c3bcc52b9901c6245790cf8717c"
+  },
+  "trust_root": {
+    "store_json_sha256": "cdd22c5c62e3de592bddca62f018a8c7e293b0144c9bda44c7c10573bad99d6e",
+    "install_path": "/etc/kylin-memory/trust",
+    "install_record": "evidence/phase3-prep/d13d_trust_root_install_20260908/"
+  },
+  "runner_gate_results": {
+    "gate_range": "0-10",
+    "exit_code": 0,
+    "preference": { "status": "PASS", "accuracy": 1.0 },
+    "conflict": { "status": "PASS", "accuracy": 1.0 },
+    "safety": { "status": "PASS", "violations": 0 },
+    "forget": { "status": "PASS", "violations": 0 }
+  },
+  "dataset_identity": {
+    "dataset_sha256": "9740c00f",
+    "gold_sha256": "aeea9bea",
+    "threshold_sha256": "561034df",
+    "manifest_sha256": "2dc0b955"
+  },
+  "vm_environment": {
+    "os": "Kylin V11",
+    "kylin_release_id": "2603",
+    "kernel": "6.6.0-76-generic",
+    "arch": "x86_64",
+    "hostname": "kylin-agent-pc",
+    "ssh": "127.0.0.1:2223"
+  },
+  "private_key_redline": "Ed25519 private keys are held only by Reviewer D and Reviewer E on their local machines; never committed to repo, PR, evidence root, CI, VM, or chat."
+}

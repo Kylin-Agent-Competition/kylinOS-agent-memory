@@ -1,0 +1,27 @@
+{
+  "schema": "d14b-capture-handoff/v1",
+  "generated_at": "2026-09-10T00:00:00Z",
+  "tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "captures": {
+    "sqlite_truth": {
+      "runner_path": "scripts/capture_d14b_sqlite_truth.py",
+      "runner_sha256": "650ded4bc4232738e9ccb4bc5b1d5d4fc4b9a3e43dab30f2ad19f9452d3782f7",
+      "command_id": "d14b-capture-sqlite-truth"
+    },
+    "fts5": {
+      "runner_path": "scripts/capture_d14b_fts5_results.py",
+      "runner_sha256": "4e2cc881d354994cded40a3ce03ca42486ae6237517b5b6f7cb07861787a39a4",
+      "command_id": "d14b-capture-fts5"
+    },
+    "rrf": {
+      "runner_path": "scripts/capture_d14b_rrf_results.py",
+      "runner_sha256": "f7fa29d73628de7db01e37b53d5fb4eda6f15fbeaa2caeeaa6a9ded68299fab5",
+      "command_id": "d14b-capture-rrf"
+    },
+    "vector": {
+      "runner_path": "scripts/capture_d14b_vector_results.py",
+      "runner_sha256": "ef66fe8fa93b4103d875ea62d43ac9a5f256fdeded0b52f9913ddc9629fcda04",
+      "command_id": "d14b-capture-vector"
+    }
+  }
+}
