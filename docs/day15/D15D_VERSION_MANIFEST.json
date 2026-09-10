@@ -1,8 +1,36 @@
 {
   "schema_version": "d15d-version-manifest/v1",
   "run_id": "20260910T142417Z",
+  "current_main": {
+    "sha": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
+    "verified_at": "2026-09-10T10:52:45Z",
+    "ancestor_of_release_commit": false,
+    "release_commit_is_ancestor": true,
+    "source": "kylin-mem/main"
+  },
+  "post_lock_consistency": {
+    "gate": "C2",
+    "status": "FAIL_INVALIDATED",
+    "current_main_sha": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
+    "comparison": "ba3b50e1bdeea185bca9daee9d1d45958f62a636..4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
+    "locked_runtime_prefix_hits": [
+      "memory-service/evaluation/d14c_evidence_package.py",
+      "memory-service/evaluation/d14c_l3_harness.py",
+      "memory-service/evaluation/d14c_runtime_precheck.py",
+      "memory-service/tests/test_d14c_evidence_package.py",
+      "memory-service/tests/test_d14c_l3_harness.py",
+      "memory-service/tests/test_d14c_runtime_precheck.py",
+      "memory-service/tests/test_d14c_runtime_precheck_cli.py"
+    ],
+    "frozen_package_lock_valid": false,
+    "conclusion": "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY",
+    "rebuild_required": true,
+    "host_vm_required": true,
+    "evidence": "evidence/d15d-lock/20260910T105245Z/c2_main_drift_invalidation.md",
+    "round4_review": "ReviewerE formal review 2026-09-10T10:43:30Z"
+  },
   "release_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
-  "release_classification": "DOCS_EVIDENCE_ONLY",
+  "release_classification": "RUNTIME_EVIDENCE_STALE_AGAINST_CURRENT_MAIN",
   "package": {
     "name": "kylin-memory-a-d14a",
     "version": "0.1.0-d14a",

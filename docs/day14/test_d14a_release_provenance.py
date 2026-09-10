@@ -81,6 +81,10 @@ _HISTORICAL_IDENTITIES = {
 
 _D15D_MANIFEST = _REPO_ROOT / "docs/day15/D15D_VERSION_MANIFEST.json"
 _TASK_CARD = _REPO_ROOT / "docs/D15D_TaskCard_20260906.md"
+_ROUND4_C2_EVIDENCE = (
+    _REPO_ROOT / "evidence/d15d-lock/"
+    "20260910T105245Z/c2_main_drift_invalidation.md"
+)
 _ROUND2_REWORK = (
     _REPO_ROOT / "evidence/d15d-lock/20260910T090314Z/round2_rework.md"
 )
@@ -100,6 +104,17 @@ _RUNTIME_PREFIXES = (
     "cpp-bridge/",
     "migrations/",
     "config/",
+)
+
+_CURRENT_MAIN_SHA = "4a6323fb3a8c73e0b15f1f3629d28dfc12071541"
+_EXPECTED_MAIN_DRIFT_HITS = (
+    "memory-service/evaluation/d14c_evidence_package.py",
+    "memory-service/evaluation/d14c_l3_harness.py",
+    "memory-service/evaluation/d14c_runtime_precheck.py",
+    "memory-service/tests/test_d14c_evidence_package.py",
+    "memory-service/tests/test_d14c_l3_harness.py",
+    "memory-service/tests/test_d14c_runtime_precheck.py",
+    "memory-service/tests/test_d14c_runtime_precheck_cli.py",
 )
 
 # 旧实现遗留的固定 current_pr_head 字面量与旧固定 diff 范围（禁止回退出现）。
@@ -668,6 +683,38 @@ def test_governance_ssot_after_identity_adjudication():
         assert "PENDING_FINAL_D15D_SIGN" in text, (
             f"{path.name} 缺少 final sign pending 状态"
         )
+
+
+def test_current_main_drift_invalidation_ssot():
+    """第 4 轮 main drift 必须显式失效旧包锁定，禁止回退 docs-only 结论。"""
+    manifest = _load_json(_D15D_MANIFEST)
+    consistency = manifest["post_lock_consistency"]
+    assert manifest["current_main"]["sha"] == _CURRENT_MAIN_SHA
+    assert manifest["current_main"]["ancestor_of_release_commit"] is False
+    assert manifest["current_main"]["release_commit_is_ancestor"] is True
+    assert manifest["release_classification"] == (
+        "RUNTIME_EVIDENCE_STALE_AGAINST_CURRENT_MAIN"
+    )
+    assert consistency["gate"] == "C2"
+    assert consistency["status"] == "FAIL_INVALIDATED"
+    assert consistency["current_main_sha"] == _CURRENT_MAIN_SHA
+    assert tuple(consistency["locked_runtime_prefix_hits"]) == _EXPECTED_MAIN_DRIFT_HITS
+    assert consistency["frozen_package_lock_valid"] is False
+    assert consistency["conclusion"] == "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY"
+    assert consistency["rebuild_required"] is True
+    assert consistency["host_vm_required"] is True
+
+    task_card = _TASK_CARD.read_text(encoding="utf-8")
+    assert _CURRENT_MAIN_SHA in task_card
+    assert "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY" in task_card
+    assert "RUNTIME_EVIDENCE_STALE_AGAINST_CURRENT_MAIN" not in task_card
+
+    assert _ROUND4_C2_EVIDENCE.is_file(), f"缺失 C2 失效证据: {_ROUND4_C2_EVIDENCE}"
+    evidence = _ROUND4_C2_EVIDENCE.read_text(encoding="utf-8")
+    assert _CURRENT_MAIN_SHA in evidence
+    assert "FAIL_INVALIDATED" in evidence
+    assert "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY" in evidence
+    assert "does not claim a new L2/L3 PASS" in evidence
 
 
 # ---------- 运行入口（直接执行时同样可用；pytest 收集上面 test_*） ----------

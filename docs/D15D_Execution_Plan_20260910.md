@@ -1,7 +1,7 @@
 # D15D 执行计划与任务流程
 
 > 日期：2026-09-10
-> 状态：`EXECUTED / PENDING_E_SIGN`（2026-09-10 Reviewer E REWORK 后，C1/C8/C10 返工证据已重建）
+> 状态：`C2_INVALIDATED_PENDING_NEW_RELEASE_IDENTITY / PENDING_E_SIGN`（2026-09-10 Reviewer E 第 4 轮检出 main 前移）
 > 前置文档：`docs/D15D_TaskCard_20260906.md`、`docs/D15D_Asset_Inventory_Gap_20260906.md`、`docs/D15D_PostLock_Consistency_Runbook_20260906.md`
 > 本文件基于 2026-09-10 实际前置闭合状态制定，取代任务卡 §5 中尚未回填的占位值。
 
@@ -9,18 +9,19 @@
 
 | 维度 | 状态 |
 |---|---|
-| release_commit | 可定为 `ba3b50e`（D13D_FROZEN + D14A frozen package 一致） |
+| release_commit | `ba3b50e` 的既有锁定已因 current main 运行时漂移失效；新 release commit 待重建 |
 | 已冻结包 | `kylin-memory-a-d14a 0.1.0-d14a`，tar SHA `2222c904…` |
 | D14D 证据 | `L3_READY`，G0-G6 PASS，G8 waiver，evidence root 已入 PR #165 |
-| main 当前位置 | `cdcce34`（PR #175 基线，2026-09-10）；`306c15e` 是 Phase 0 初始历史快照 |
-| D15D 自身进展 | PR #175 已提交 Phase 0-5 材料；Reviewer E REWORK 后按 C1/C8/C10 修复，G-D7 仍待 E APPROVE |
+| main 当前位置 | `4a6323f`（2026-09-10 PR #156 合入）；`cdcce34` 与 `306c15e` 是历史快照 |
+| D15D 自身进展 | PR #175 第 4 轮返工：C2 `FAIL_INVALIDATED`，选择触发新 release/package identity；G-D7 不可签署 |
 
 ### 核心决策点：release_commit 选 `ba3b50e` 还是 `306c15e`
 
 Runbook C2 的判定逻辑：
 
 - 若 `ba3b50e..306c15e` 仍为 `DOCS_EVIDENCE_ONLY`（不触碰 `packaging/` `memory-service/` `cpp-bridge/` `migrations/` `config/`），则 **release_commit = `ba3b50e`**，复用已冻结包 `2222c904`，免重打包。
-- 若触发了运行时/打包路径，则 **release_commit = `306c15e`**，必须从该 commit 重建包并重跑全部一致性检查。
+- 若触发了运行时/打包路径，则必须选择新的 release commit 并重建包、重跑全部一致性检查。当前
+  `ba3b50e..4a6323f` 已命中 `memory-service/`，结论为 `TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY`。
 
 #170 时（`35cc43d`）确认过为 DOCS_EVIDENCE_ONLY。之后 #171/#172/#174 合入，需重新验证。
 

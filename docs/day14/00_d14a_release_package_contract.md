@@ -84,7 +84,9 @@
   - `RUNTIME_EVIDENCE_STALE`：diff 含上述任一 packaging/runtime 前缀——必须
     **重新打包 → 重算 hash → 重跑真实 VM** → 回填新的 `tested_runtime_commit` /
     `evidence_commit` 后才可更新 runtime evidence。
-- 当前 D15D 锁定材料相对当前 `tested_runtime_commit` 为 docs/evidence-only；
+- 2026-09-10 第 4 轮返工事实：`ba3b50e..current-main@4a6323f` 命中
+  `memory-service/` 锁定前缀，既有 frozen package lock 对 current main 为
+  `FAIL_INVALIDATED`；D15D 已登记 `TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY`。
   守卫在每次执行时按 `git diff --name-only tested_runtime_commit..HEAD` 复核分类，
   不得以本段静态文字替代 live 判定。
 - 仅文档/测试变更（`DOCS_EVIDENCE_ONLY`）不触发重包，但 `current_pr_head` 前移时
@@ -240,7 +242,8 @@ embedding server PID**，`grep -F '.so' /proc/<embedding_pid>/maps` 中实际加
 ## 6bis. BLOCKER C — runtime/model 冻结身份（v5：正式 G0 冻结）
 
 - v4 曾将 runtime/model **identity / version / hash / vendor-frozen lock** 记为
-  **HANDOFF_REQUIRED**；该状态由正式 D14D G0 证据和 2026-09-10 ReviewerD 授权解除。
+  **HANDOFF_REQUIRED**；该状态由正式 D14D G0 证据与 2026-09-10 Reviewer E identity
+  adjudication 解除。
 - 本节身份只声明外部依赖的冻结输入，不改变 L3 证据边界，不宣称
   `release_ready=true` 或 `production_ready=true`。
 - 不得伪造 runtime/model version、hash、vendor lock、reviewer 会签或麒麟 evidence；
@@ -340,8 +343,9 @@ bash systemd/verify.sh --embed-socket <EMBED_SOCK> --embed-pid <REAL_EMBEDDING_S
 > 全文不产生任何状态越级声明
 > （既不宣称宿主环境已验证，也不宣称三级验收通过），v5 仅冻结 §6bis 外部依赖身份。
 > 备注：上述 Gate 引用的是 D14D formal evidence root 对同一 `ba3b50e` frozen tar
-> 的既得结果，不是新 PR HEAD 的重跑结果。当前 PR HEAD 仅允许 docs/evidence-only
-> 漂移；任何 runtime/packaging 漂移仍触发 §1.1 的重打包与真实 VM 重测规则。
+> 的既得结果，不是新 PR HEAD 的重跑结果。第 4 轮 main drift 后，当前 frozen
+> package lock 对 current main 为 `RUNTIME_EVIDENCE_STALE_AGAINST_CURRENT_MAIN`;
+> 任何 runtime/packaging 漂移仍触发 §1.1 的重打包与真实 VM 重测规则。
 
 ## 12. Evidence 输出（`evidence/l3-kylin-vm/d14a_<run_id>/`）
 
