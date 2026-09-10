@@ -1,8 +1,11 @@
-# D14A Release Package Contract（FROZEN · 溯源收口 v4 · 2026-09-06 会签）
+# D14A Release Package Contract（FROZEN · 溯源收口 v5 · 2026-09-10 升版）
 
 > 依据：D14A 交接文档（2026-09-05）§Phase 2 + §A14-B01 解除要求。
 > 状态：**FROZEN**（2026-09-06 D14D 人工裁决清单 D-03/D-04 会签：§3/§6bis 语义统一后
 > 以 v4 升 FROZEN；GitHub 第四轮 review 执行仍属 Ducknesses 的实际动作，本会签不替代）。
+> 2026-09-10 v5：ReviewerD 授权以 D14D 正式 G0 证据闭合 §6bis runtime/model 身份。
+> 该升版只冻结外部依赖身份；不改变 D14D `L3_READY=true` / `release_ready=false` /
+> `production_ready=false` 边界，也不宣称 Release Gate 或 production 就绪。
 > 冻结方式：本文件为 package contract 唯一真源；任何字段改动需 D 主审会签并升版。
 > 2026-09-06 会签变更：§3/§6bis 统一为“SDK 全量 fail-closed；runtime/model
 > HANDOFF_REQUIRED，由正式 D14D G0 采集冻结后回填并升版”；正式 package version 固定
@@ -125,8 +128,8 @@ dist/kylin-memory-a-d14a-0.1.0-d14a/
 
 ```text
 libkylin-coreai-embedding = 1.2.0.0-0k0.4   (amd64)   # SDK：install 全量 fail-closed（版本 + SHA）
-kylin-ai-runtime         = 1.2.0.4-0k0.1               # runtime：参考值；HANDOFF_REQUIRED（见 §6bis）
-kylin-gte-base-model     = 1.0.0.1-0k0.9               # model：参考值；HANDOFF_REQUIRED（见 §6bis）
+kylin-ai-runtime         = 1.2.0.4-0k0.1               # runtime：正式 G0 冻结值（见 §6bis）
+kylin-gte-base-model     = 1.0.0.1-0k0.9               # model：正式 G0 冻结值（见 §6bis）
 python3.12               (系统 python，用于创建包内 venv)
 ```
 
@@ -134,10 +137,8 @@ python3.12               (系统 python，用于创建包内 venv)
 > - **SDK**（`libkylin-coreai-embedding` `.so`）：install 必须执行存在性 + exact
 >   package version + SHA-256，缺一即 fail-closed（当前实现）。
 > - **runtime / model**：上表版本仅为参考值（基线 v2 实测来源），未经 D Reviewer
->   冻结验证；本版保持 `HANDOFF_REQUIRED`，不伪造/不补写 version/hash。
->   正式 D14D run（收敛 `tested_commit` + `r1` VM 起点 + Phase 4 单 root）在 G0 采集
->   `dpkg-query -W` 身份及相关 `.so`/包 SHA 后回填本表并升版，再扩展为 install
->   全量 fail-closed。
+>   冻结验证；v5 依据 D14D 正式 G0 证据冻结 version/hash，仅用于安装前提审计。
+>   本版 install 仍按原实现对 SDK 全量 fail-closed；runtime/model 不做 hash Gate。
 
 ---
 
@@ -210,17 +211,25 @@ embedding server PID**，`grep -F '.so' /proc/<embedding_pid>/maps` 中实际加
 
 ---
 
-## 6bis. BLOCKER C — runtime/model 冻结身份（2026-09-06 裁决：HANDOFF_REQUIRED）
+## 6bis. BLOCKER C — runtime/model 冻结身份（v5：正式 G0 冻结）
 
-- runtime/model **identity / version / hash / vendor-frozen lock** 尚无 D Reviewer 接受的
-  可信外部冻结输入，状态 **HANDOFF_REQUIRED**（不再以 DEPENDENCY_BLOCKED 阻塞本 PR
-  packaging 代码线收敛；不宣称已闭环）。
+- v4 曾将 runtime/model **identity / version / hash / vendor-frozen lock** 记为
+  **HANDOFF_REQUIRED**；该状态由正式 D14D G0 证据和 2026-09-10 ReviewerD 授权解除。
+- 本节身份只声明外部依赖的冻结输入，不改变 L3 证据边界，不宣称
+  `release_ready=true` 或 `production_ready=true`。
 - 不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence；
   不由本文档或本 Task 补写虚构的 runtime/model version/hash/vendor lock/D Reviewer 会签。
-- 解除条件：正式 D14D run 在 G0 采集并冻结 runtime/model 的 `dpkg-query -W` 身份与
-  相关 `.so`/包 SHA，回填本表并升版；或外部提供可信冻结输入 + D Reviewer 会签。
-- 解除前，安装 Gate（§7）与任何验收声明**不得宣称 runtime/model identity 闭环**。
-- 解除前 install 只对 SDK 做全量 fail-closed（§3），不对 runtime/model 做 hash Gate。
+- 解除依据：
+  `evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e/dependency_identity.json`
+  及其原始 `raw/g0_baseline.log`、`raw/g0_packages.log`；contract 证据校验记录见
+  `evidence/d15d-lock/20260910T142417Z/c10_contract_closure.md`。
+- D14D G0 冻结身份如下：
+
+| Component | Version | Path | SHA-256 |
+|---|---|---|---|
+| SDK canonical `.so` | `1.2.0.0-0k0.4` | `/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0` | `028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48` |
+| Runtime binary | `kylin-ai-runtime 1.2.0.4-0k0.1` | `/usr/bin/kylin-ai-runtime` | `b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225` |
+| GTE ONNX model | `kylin-gte-base-model 1.0.0.1-0k0.9` | `/usr/share/kylin-ai/model-repository/embd_gte-base_uint8-text/1/gte-base-multilingual-model_QUInt8.onnx` | `cef0fc76165ee5bb4f3da5ab6b9b6e6fdfdd278d3077f2db2d4a6cde4d4c32b1` |
 
 ---
 
@@ -237,7 +246,7 @@ EXPECT_SOURCE_COMMIT=<40位完整 source commit> bash systemd/install.sh install
 #   1. 校验 EXPECT_SOURCE_COMMIT 与 manifest.source_commit 绑定（fail-closed）＋
 #      manifest/SHA256SUMS 校验（与已冻结 hash 一致）
 #   2. SDK（§3/§6）存在 + exact package version + SHA-256（fail-closed）；
-#      runtime/model 按 §6bis 为 HANDOFF_REQUIRED，本版不做 hash Gate
+#      runtime/model 身份按 §6bis v5 冻结；本版仍不对 runtime/model 做 hash Gate
 #   3. 整包复制到 <install_prefix>（${XDG_DATA_HOME:-$HOME/.local/share}/kylin-memory-d14a）；
 #      $HOME/.local/bin 创建 launcher symlink 指向 <install_prefix>/bin/kylin-memory-server；
 #      unit 渲染 ExecStart=<install_prefix>/bin/kylin-memory-server（安装前缀 launcher）
@@ -288,16 +297,17 @@ bash systemd/verify.sh --embed-socket <EMBED_SOCK> --embed-pid <REAL_EMBEDDING_S
 
 ## 11. 验收 Gate（D14A READY 前置）
 
-- [x] contract FROZEN（2026-09-06 D-03/D-04 仲裁会签 v4）
+- [x] contract FROZEN（2026-09-06 D-03/D-04 仲裁会签 v4；2026-09-10 ReviewerD
+  授权以 D14D G0 证据升 v5 并闭合 §6bis 身份）
 - [ ] 本地/L1 package smoke PASS（build → install → start → real SDK smoke → restart → rollback）
 - [ ] dependency audit PASS（无开发路径/RPATH/not-found）
 - [ ] clean-VM L3：package-only install + real SDK + recovery + D13A 可比性能
 - [ ] L3 evidence 完整（§12）
 
-> Gate 边界：contract 已按 2026-09-06 D-03/D-04 裁决升 **FROZEN v4**；本 Gate 清单与
+> Gate 边界：contract 已按 2026-09-06 D-03/D-04 裁决升 **FROZEN v4**，并于
+> 2026-09-10 按 ReviewerD 授权以 D14D G0 证据升 **FROZEN v5**。本 Gate 清单与
 > 全文不产生任何状态越级声明
-> （既不宣称宿主环境已验证，也不宣称三级验收通过），且 BLOCKER C 解除前不得
-> 宣称 runtime/model identity 闭环。
+> （既不宣称宿主环境已验证，也不宣称三级验收通过），v5 仅冻结 §6bis 外部依赖身份。
 > 备注：Gate 各条引用仅以**刷新后的 runtime evidence** 为前提——当前 runtime evidence
 > 相对 HEAD 为 **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**（见 §1.1/§10），
 > 正式重打包 → 重算 hash → 真实 VM 重测完成前，本条 Gate 不因任何本地静态结果

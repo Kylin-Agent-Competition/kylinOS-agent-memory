@@ -1,0 +1,83 @@
+{
+  "schema_version": "d15d-version-manifest/v1",
+  "run_id": "20260910T142417Z",
+  "release_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "release_classification": "DOCS_EVIDENCE_ONLY",
+  "package": {
+    "name": "kylin-memory-a-d14a",
+    "version": "0.1.0-d14a",
+    "tar_path": "C:\\Users\\jackb\\AppData\\Local\\Temp\\kylin-memory-a-d14a-0.1.0-d14a-ba3b50e.tar.gz",
+    "tar_size_bytes": 21149791,
+    "tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
+    "manifest_name": "manifest.json",
+    "manifest_sha256": "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0",
+    "sha256sums_sha256": "8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67",
+    "manifest_file_count": 3360,
+    "checksums": {
+      "regular_files": 3357,
+      "ok": 3357,
+      "symlinks_unhashable_on_wsl": 3
+    }
+  },
+  "source_blobs": {
+    "packaging/release/systemd_install.sh": "bce16242411929dbe2e3297a06de31e65d91c94a9ffc0638f5658eb73fa31cc7",
+    "packaging/release/systemd_uninstall.sh": "e29d63ee11c44529fabeeeb87d164454ff2ea08e21ab33fce3b19ae061c00a33",
+    "packaging/release/systemd_verify.sh": "b9a367900e748184cfed8e51ad3f7f4f0144bfa1ff095b97a538105c4ee48f20",
+    "packaging/systemd/kylin-memory.service": "cf8f76aab5da36dd5eaff6276a71f8307bf4511b1da135d2226af0402e120c28"
+  },
+  "package_blob_mapping": {
+    "packaging/release/systemd_install.sh": "systemd/install.sh",
+    "packaging/release/systemd_uninstall.sh": "systemd/uninstall.sh",
+    "packaging/release/systemd_verify.sh": "systemd/verify.sh",
+    "packaging/systemd/kylin-memory.service": "systemd/kylin-memory.service"
+  },
+  "version_map": {
+    "path": "Kylin-runtime-knowledge/VERSION_MAP.md",
+    "updated_at": "2026-09-01"
+  },
+  "host_identity": {
+    "sdk": {
+      "package": "libkylin-coreai-embedding",
+      "version": "1.2.0.0-0k0.4",
+      "path": "/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0",
+      "sha256": "028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48"
+    },
+    "runtime": {
+      "package": "kylin-ai-runtime",
+      "version": "1.2.0.4-0k0.1",
+      "path": "/usr/bin/kylin-ai-runtime",
+      "sha256": "b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225"
+    },
+    "model": {
+      "package": "kylin-gte-base-model",
+      "version": "1.0.0.1-0k0.9",
+      "path": "/usr/share/kylin-ai/model-repository/embd_gte-base_uint8-text/1/gte-base-multilingual-model_QUInt8.onnx",
+      "sha256": "cef0fc76165ee5bb4f3da5ab6b9b6e6fdfdd278d3077f2db2d4a6cde4d4c32b1"
+    }
+  },
+  "d14d_evidence": {
+    "root": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e",
+    "tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+    "package_tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
+    "package_manifest_sha256": "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0",
+    "package_sha256sums_sha256": "8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67",
+    "checksums": "23/23 OK"
+  },
+  "contract": {
+    "path": "docs/day14/00_d14a_release_package_contract.md",
+    "version": 5,
+    "section_6bis": "FROZEN_G0_IDENTITY",
+    "authorization": {
+      "reviewer": "ReviewerD",
+      "date": "2026-09-10",
+      "record": "evidence/d15d-lock/20260910T142417Z/c10_contract_closure.md"
+    }
+  },
+  "boundaries": {
+    "L3_READY": true,
+    "release_ready": false,
+    "production_ready": false,
+    "G7": "NOT_RUN/N-A",
+    "G8": "NOT_RUN with D-10 waiver"
+  }
+}
