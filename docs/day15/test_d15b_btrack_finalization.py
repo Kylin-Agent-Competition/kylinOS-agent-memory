@@ -115,3 +115,18 @@ def test_d15b_paths_and_hashes_are_verifiable() -> None:
         assert (ROOT / relative_path).is_file()
     assert inventory_path == "docs/day15/d15b_btrack_inventory.json"
     assert "current_ssot" in manifest["evidence"]["d14d_l3_reference"]
+
+
+def test_d15b_formal_input_remediation_remains_package_blocked() -> None:
+    manifest = _json("release/btrack/D15B_BTRACK_MANIFEST.json")
+    remediation = manifest["d14b"]["formal_input_remediation"]
+
+    assert remediation["control_head"] == "c5573c1ce75ad08427b86e3551074e18ed806279"
+    assert remediation["status"] == "PARTIALLY_REMEDIATED"
+    for handoff in ("d13d_handoff", "d14d_handoff", "capture_handoff"):
+        entry = remediation[handoff]
+        assert _sha256(entry["path"]) == entry["sha256"]
+    assert manifest["release_package"]["actual_tar_bytes_available"] is False
+    rebuilt_tar = manifest["release_package"]["rebuilt_tar"]
+    assert _sha256(rebuilt_tar["path"]) == rebuilt_tar["sha256"]
+    assert rebuilt_tar["status"] == "PROVENANCE_LABELED_REBUILD_NOT_ORIGINAL_FROZEN_BYTES"

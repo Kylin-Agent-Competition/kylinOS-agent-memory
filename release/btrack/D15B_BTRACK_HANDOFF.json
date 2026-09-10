@@ -29,7 +29,11 @@
   "deferred_formal_debt_actions": [
     {
       "owner_track": "D",
-      "action": "Provide formal D13D/D14D/capture handoffs, frozen package bytes, production capture runners/receipts and formal clean-VM execution access; then close Formal L3 with evidence or record final Release Owner debt acceptance."
+      "action": "Provide the original frozen package tar bytes, or issue an authoritative replacement package identity/refreeze decision. The PR #174 rebuilt tar is provenance-labeled and is not byte-level recovery of the original frozen package."
+    },
+    {
+      "owner_track": "D/B",
+      "action": "After the package-bytes gate is satisfied, run the approved four production capture runners and Formal L3 on the formal clean VM, preserving per-run receipts and evidence closure."
     }
   ],
   "required_before_b_track_complete": [

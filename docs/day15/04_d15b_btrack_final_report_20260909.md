@@ -6,6 +6,7 @@
 
 ```text
 B_TRACK_STATUS = BLOCKED_NOT_COMPLETE
+D14B_FORMAL_INPUTS = PARTIALLY_REMEDIATED
 D14B_FORMAL_L3 = NOT_RUN / UNVERIFIED
 RETRIEVAL_EVAL_INPUTS = NOT_FROZEN
 B_TRACK_MANIFEST = NOT_FROZEN
@@ -49,7 +50,9 @@ evaluation/test_d9_retrieval_gold_spec.py
 
 ## 正式 debt 与运行时停止线
 
-`docs/day14/21_d14b_formal_l3_intake_blockers_20260909.md` 已记录 Formal L3 缺失标准 handoff、冻结 tar 实际字节、四个 production runner 和 D14D clean-VM/snapshot。当前 D 轨 SSOT（`docs/D_TRACK_STATUS.md`）为 `D14D=DONE / L3_READY=true`，其中 G7=`NOT_RUN/N-A`、G8=`NOT_RUN` 且已按 D14D waiver 闭合。evidence root 内 `summary.json` 的 `L3_READY=false` 是最终状态更新前生成的历史原始字节，保留但不覆盖当前 SSOT。D14D current SSOT 仍不能代替 B 的 lifecycle Formal L3 execution。
+`docs/day14/21_d14b_formal_l3_intake_blockers_20260909.md` 原记录的标准 handoff、四个 production runner 与 D14D clean-VM/snapshot，现已由 `main@c5573c1ce75ad08427b86e3551074e18ed806279`（PR #174）补齐并可机器核验。当前 D 轨 SSOT（`docs/D_TRACK_STATUS.md`）为 `D14D=DONE / L3_READY=true`，其中 G7=`NOT_RUN/N-A`、G8=`NOT_RUN` 且已按 D14D waiver 闭合。evidence root 内 `summary.json` 的 `L3_READY=false` 是最终状态更新前生成的历史原始字节，保留但不覆盖当前 SSOT。
+
+仍未闭合的是原始冻结 tar 的实际字节。PR #174 提供的 `release/packages/kylin-memory-a-d14a-0.1.0-d14a-rebuilt-ba3b50e.tar.gz` 是带 provenance 的 rebuild，不是原始 SHA `2222c904…` 的字节级恢复；现有 preflight 正确拒绝把它当作原冻结包。因此在取得原始字节或正式 refreeze 决定前，D14D current SSOT 和新 handoff 均不能代替 B 的 lifecycle Formal L3 execution。
 
 技术债总账中仍有 B 轨 Open 项，完整标识见 inventory 和逐项[审计](05_d15b_btrack_open_debt_audit_20260909.md)。它们没有 D/E 所需的关闭或 release-debt acceptance 记录，故本报告不改写其状态。当前未发现未经解释的 B 轨 P0/High 条目；这不等同于所有 Medium/Low 技术债已关闭。
 
