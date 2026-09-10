@@ -32,8 +32,8 @@ D14D_EVIDENCE_ROOT="<D14D 正式 G0–G9 evidence root>"
 | C8 | 包完整性 | 在 `$PACKAGE_DIR` 下 `sha256sum -c SHA256SUMS`；并校验 manifest.source_commit == RELEASE_COMMIT、package_version == `0.1.0-d14a` | 全部 PASS，identity 一致。若本地因宿主缺 `/usr/bin/python3.12` 导致仅三个包内 `runtime/python/bin/python*` symlink 无法 open/read，且 tar SHA-256 与 D14D G2 已验证的 frozen tar 完全相等、其余 regular files 全部 OK，可记录为 `PASS_INHERITED_FROZEN_TAR_IDENTITY`；不允许把其他 mismatch、missing file 或 rebuild 掩盖为环境 note |
 | C9 | 版本清单与包一致 | `python -m json.tool "$VERSION_MANIFEST"` 后逐项断言 manifest/tar/SHA256SUMS/脚本/unit SHA 相等 | 无任何不一致字段 |
 | C10 | VERSION_MAP/宿主身份一致 | 版本清单中 SDK/runtime/model 与 D14D G0 采集（`dpkg-query -W` + `.so`/包 SHA）相等；VERSION_MAP 参考值不冲突 | 正式 G0 回填后无 `HANDOFF_REQUIRED` 遗留（遗留则结论最高 PARTIAL） |
-| C11 | D14D 证据绑定 | `$D14D_EVIDENCE_ROOT` 存在，G0–G9/checksums/index 存在，其中 release_commit/tar/manifest 与 C1/C8 相等 | 证据链完整且一致 |
-| C12 | 提交包一一对应 | 提交包文件清单（tar、解包目录、版本清单、契约、证据索引）与 main 锁定清单比较：`comm -3 <expected> <actual>` | 无多余、无缺失 |
+| C11 | D14D 证据绑定 / release binding | 按 G-D4 二选一闭合：完整路径要求当前 release 的 D14D formal G0–G9 root 且 release_commit/tar/manifest 与 C1/C8 相等；备选路径要求 D15D clean-tar VM evidence root 含 `summary.json`、`gate_matrix.json`、`evidence_index.json`、`checksums.txt`、failed→final run 选择关系，并显式声明不替代 D14D G0–G9 | 证据链完整、一致、机读；历史 D14D root 只作 reference input |
+| C12 | 提交包一一对应 | 提交包文件清单（tar、解包目录、版本清单、契约、证据索引）与当前 release 锁定清单比较：`comm -3 <expected> <actual>` 或等价确定性 set diff；结果、extra/missing 计数与 checksums 入库 | 无多余、无缺失；包 manifest ↔ tar 条目比较闭合 |
 | C13 | 签署 Gate | Reviewer E APPROVE 记录在 D15D PR/材料上；任务卡升 `SIGNED_PREPARED`；台账 H→I→J 顺序可核验 | E 签署存在；D 轨无自签 |
 
 ## 3. 输出与证据布局
@@ -43,9 +43,11 @@ docs/day15/
   D15D_VERSION_MANIFEST.json      # release_commit/package hash/scripts+unit SHA/宿主版本/evidence 引用
 evidence/d15d-lock/<run-id>/      # 正式锁定证据（入 PR 阶段）
   checksums.txt
+  evidence_index.json
   consistency_*.log               # C1–C13 每项命令/stdout/stderr/exit code
   gate_matrix.json
   summary.json
+  submission_inventory.json       # C12 当前 artifact / package manifest ↔ tar 对账
   E_SIGN_OFF.md
 ```
 

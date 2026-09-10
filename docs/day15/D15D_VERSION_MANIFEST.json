@@ -2,18 +2,27 @@
   "schema_version": "d15d-version-manifest/v2",
   "run_id": "20260910T205300Z",
   "current_main": {
-    "sha": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
-    "verified_at": "2026-09-10T13:00:00Z",
-    "release_commit_is_current_main": true,
+    "sha": "2782a9048c235006c17024c9798cf988a07627a1",
+    "verified_at": "2026-09-10T14:10:00Z",
+    "release_commit_is_current_main": false,
     "runtime_sensitive_drift_since_release_commit": false,
+    "docs_only_drift_since_release_commit": true,
+    "docs_only_paths": [
+      "docs/day15/03_c_track_production_integration_closure_status_20260910.md",
+      "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md"
+    ],
     "source": "kylin-mem/main"
   },
   "post_lock_consistency": {
     "gate": "C2",
     "status": "PASS_CURRENT_MAIN_NO_RUNTIME_SENSITIVE_DRIFT",
-    "current_main_sha": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
-    "comparison": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541..kylin-mem/main",
+    "current_main_sha": "2782a9048c235006c17024c9798cf988a07627a1",
+    "comparison": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541..2782a9048c235006c17024c9798cf988a07627a1",
     "locked_runtime_prefix_hits": [],
+    "docs_only_prefix_hits": [
+      "docs/day15/03_c_track_production_integration_closure_status_20260910.md",
+      "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md"
+    ],
     "frozen_package_lock_valid": false,
     "historical_lock_invalidation": {
       "release_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
@@ -135,11 +144,39 @@
   },
   "c11": {
     "gate": "C11",
-    "status": "HISTORICAL_PASS_AT_ba3b50e / NOT_SUFFICIENT_FOR_NEW_RELEASE",
+    "status": "PASS_RELEASE_BINDING_ALTERNATIVE_FORMALIZED",
+    "historical_status": "HISTORICAL_PASS_AT_ba3b50e / NOT_SUFFICIENT_FOR_NEW_RELEASE",
     "historical_evidence_root": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e",
     "current_release_evidence_root": "evidence/d15d-lock/20260910T205300Z",
+    "gate_semantics": "ALTERNATIVE_CLEAN_TAR_VM_RELEASE_BINDING",
+    "root_metadata": {
+      "summary_path": "summary.json",
+      "gate_matrix_path": "gate_matrix.json",
+      "evidence_index_path": "evidence_index.json",
+      "checksums_path": "checksums.txt"
+    },
+    "does_not_replace_d14d_g0_g9": true,
+    "historical_root_accepted_as_final_for_new_release": false,
     "current_release_binding_closed": true,
     "old_root_accepted_as_final_for_new_release": false
+  },
+  "c12": {
+    "gate": "C12",
+    "status": "PASS",
+    "submission_inventory_path": "evidence/d15d-lock/20260910T205300Z/submission_inventory.json",
+    "release_commit": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
+    "package_tar_sha256": "974c2584a08bc2ae5277a8526ce3c5dbd711bc0d54c9844e99d658892cca9f28",
+    "comparison": "PACKAGE_MANIFEST_VS_TAR_NON_DIR_ENTRIES",
+    "manifest_entries": 3351,
+    "tar_non_dir_entries": 3354,
+    "expected_top_level_metadata_and_symlink_extras": [
+      "SHA256SUMS",
+      "manifest.json",
+      "runtime/python/lib64"
+    ],
+    "unexpected_extras": [],
+    "missing_entries": [],
+    "checksums_full_pass": true
   },
   "contract": {
     "path": "docs/day14/00_d14a_release_package_contract.md",

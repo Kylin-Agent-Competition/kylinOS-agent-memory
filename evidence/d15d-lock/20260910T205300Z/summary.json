@@ -1,0 +1,58 @@
+{
+  "schema_version": "d15d-evidence-root-summary/v1",
+  "run_id": "20260910T205300Z",
+  "root": "evidence/d15d-lock/20260910T205300Z",
+  "release_commit": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
+  "current_main_sha": "2782a9048c235006c17024c9798cf988a07627a1",
+  "current_main_runtime_sensitive_drift": false,
+  "package": {
+    "name": "kylin-memory-a-d14a",
+    "version": "0.1.0-d14a",
+    "identity": "4a6323f-r2",
+    "tar_size_bytes": 21016935,
+    "tar_sha256": "974c2584a08bc2ae5277a8526ce3c5dbd711bc0d54c9844e99d658892cca9f28",
+    "manifest_sha256": "4b42d9281e1fac269bc0e0ba43d831317424fc6200a751380ebf985241124ec4",
+    "sha256sums_sha256": "9d1ac01fab8a2a876b97ffc5ffd375085661c78029b03a35c6984b7c91f4d9f4"
+  },
+  "gate_conclusion": {
+    "C1": "PASS",
+    "C2": "PASS_CURRENT_MAIN_NO_RUNTIME_SENSITIVE_DRIFT",
+    "C3_C6": "PASS",
+    "C7": "PASS",
+    "C8": "PASS",
+    "C9": "PASS",
+    "C10": "PASS_REFERENCE_IDENTITY_MATCHED",
+    "C11": "PASS_RELEASE_BINDING_ALTERNATIVE_FORMALIZED",
+    "C12": "PASS",
+    "C13": "PENDING_FINAL_D15D_SIGN"
+  },
+  "evidence_semantics": {
+    "root_scope": "D15D_CLEAN_TAR_VM_RELEASE_BINDING",
+    "does_not_replace_d14d_g0_g9": true,
+    "historical_d14d_root": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e",
+    "historical_role": "REFERENCE_INPUT_ONLY"
+  },
+  "run_selection": {
+    "authoritative_smoke_run_id": "d15d_smoke_clean_tar_nbc2_4a6323f_20260910T205300Z",
+    "failed_smoke_run_ids": [
+      "d15d_smoke_4a6323f_20260910T124830Z",
+      "d15d_smoke_clean_4a6323f_20260910T205300Z",
+      "d15d_smoke_clean_nbc_4a6323f_20260910T205300Z",
+      "d15d_smoke_clean_tar_nbc_4a6323f_20260910T205300Z"
+    ],
+    "cleanup_run_ids": [
+      "d15d_smoke_cleanup_4a6323f_20260910T205300Z",
+      "d15d_smoke_cleanup_confirm_4a6323f_20260910T205300Z"
+    ],
+    "selection_rule": "The final PASS is authoritative only because the package bytes were unchanged, the tar was freshly extracted, and PYTHONDONTWRITEBYTECODE=1 removed the recorded pyc/environment causes.",
+    "failed_runs_deleted_or_weakened": false,
+    "authoritative_smoke_vm_test_exit": 0,
+    "authoritative_smoke_runtime_app_pyc": 0,
+    "authoritative_smoke_runtime_app_pycache_dirs": 0
+  },
+  "boundaries": {
+    "L3_READY": true,
+    "release_ready": false,
+    "production_ready": false
+  }
+}

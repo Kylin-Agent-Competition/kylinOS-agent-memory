@@ -12,7 +12,7 @@
 | release_commit | `4a6323f`（old `ba3b50e` lock 仅保留为 historical invalidated record） |
 | 新发布包 | `kylin-memory-a-d14a 0.1.0-d14a`，tar SHA `974c2584…`，manifest SHA `4b42d928…`，SHA256SUMS SHA `9d1ac01f…` |
 | D14D 证据 | `L3_READY`，G0-G6 PASS，G8 waiver，evidence root 已入 PR #165 |
-| main 当前位置 | `4a6323f`（2026-09-10 PR #156 合入）；`cdcce34` 与 `306c15e` 是历史快照 |
+| main 当前位置 | `2782a904`（相对 release_commit `4a6323f` 只新增两个 day15 文档）；`cdcce34` 与 `306c15e` 是历史快照 |
 | D15D 自身进展 | PR #175 Round 6 返工：新 `4a6323f` release/package/runtime evidence 链已建立；G-D7 仍等待 Reviewer E 签署 |
 
 ### Active release identity flow
@@ -23,7 +23,8 @@
 1. 在干净的 detached worktree checkout `R`，验证 C1：`HEAD == R` 且完整 worktree 为空。
 2. 按当前 Runbook C2 执行 `git diff --name-only R..main -- packaging/ memory-service/
    cpp-bridge/ migrations/ config/ docs/day14/00_d14a_release_package_contract.md`；
-   非空且未获批准登记即停。
+   非空且未获批准登记即停。`4a6323f..2782a904` 只有 day15 文档新增，属 C2 允许的
+   docs-only drift。
 3. 在 `R` 干净树上重建包，生成新的 tar / manifest / SHA256SUMS identity，禁止复用 `2222c904`。
 4. 重跑 C3-C12 完整一致性链，并完成所需的麒麟 VM 证据后再请求 G-D7。
 5. 本轮执行结果与 run-id 登记在 `evidence/d15d-lock/20260910T205300Z/`。
@@ -77,8 +78,9 @@
 | 2.4 | — | 确认 `L3_READY=true`、`release_ready=false`、`production_ready=false` 边界 |
 
 **Gate**：C10 身份闭合且新 release identity 的 C11 由 `evidence/d15d-lock/20260910T205300Z/`
-闭合后进入 Phase 3。旧 D14D root 仅作参考输入；若 runtime/model 身份仍有
-`HANDOFF_REQUIRED` 遗留，D15D 结论最高 PARTIAL。
+的备选 release-binding 语义闭合后进入 Phase 3。旧 D14D root 仅作参考输入，不作为当前
+release 的 G0–G9 rerun；若 runtime/model 身份仍有 `HANDOFF_REQUIRED` 遗留，D15D 结论
+最高 PARTIAL。
 
 ---
 
@@ -103,8 +105,8 @@
 | 步骤 | 对应 Runbook | 内容 |
 |---|---|---|
 | 4.1 | C12 | 定义固定内容清单：发布包 tar + 解包目录 + 版本清单 + 契约 + 证据索引 |
-| 4.2 | C12 | 与 main 锁定清单 `comm -3` 比对：无多余、无缺失 |
-| 4.3 | — | 全量 checksums 校验 |
+| 4.2 | C12 | 与当前 release 锁定清单 `comm -3` 或等价确定性 set diff 比对：无多余、无缺失 |
+| 4.3 | — | 包 manifest ↔ tar 条目对账、全量 checksums 校验，并把结果写入 `submission_inventory.json` |
 
 **Gate**：C12 PASS → 进入 Phase 5。缺件 → 补全后重跑。
 

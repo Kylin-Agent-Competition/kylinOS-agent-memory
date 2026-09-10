@@ -1,0 +1,97 @@
+{
+  "schema_version": "d15d-evidence-gate-matrix/v1",
+  "run_id": "20260910T205300Z",
+  "release_commit": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
+  "current_main_sha": "2782a9048c235006c17024c9798cf988a07627a1",
+  "package_tar_sha256": "974c2584a08bc2ae5277a8526ce3c5dbd711bc0d54c9844e99d658892cca9f28",
+  "gates": [
+    {
+      "gate": "C1",
+      "status": "PASS",
+      "run_id": "d15d_build_4a6323f_20260910T205300Z",
+      "evidence": [
+        "d15d_build_4a6323f_20260910T205300Z.json",
+        "d15d_build_4a6323f_20260910T205300Z.log"
+      ]
+    },
+    {
+      "gate": "C2",
+      "status": "PASS_CURRENT_MAIN_NO_RUNTIME_SENSITIVE_DRIFT",
+      "evidence": [
+        "docs/day15/D15D_VERSION_MANIFEST.json"
+      ],
+      "note": "4a6323f..2782a904 has two docs/day15 additions and no runtime-sensitive prefix hit."
+    },
+    {
+      "gate": "C3_C6",
+      "status": "PASS",
+      "run_id": "d15d_c3_c6_4a6323f_20260910T205300Z",
+      "evidence": [
+        "d15d_c3_c6_4a6323f_20260910T205300Z.json",
+        "d15d_c3_c6_4a6323f_20260910T205300Z.log"
+      ]
+    },
+    {
+      "gate": "C7",
+      "status": "PASS",
+      "authoritative_run_id": "d15d_smoke_clean_tar_nbc2_4a6323f_20260910T205300Z",
+      "evidence": [
+        "d15d_smoke_clean_tar_nbc2_4a6323f_20260910T205300Z.json",
+        "d15d_smoke_clean_tar_nbc2_4a6323f_20260910T205300Z.log"
+      ],
+      "failed_run_disposition": "PRESERVED_REFERENCE_ONLY"
+    },
+    {
+      "gate": "C8",
+      "status": "PASS",
+      "run_id": "d15d_c8_4a6323f_20260910T205300Z",
+      "evidence": [
+        "d15d_c8_4a6323f_20260910T205300Z.json",
+        "d15d_c8_4a6323f_20260910T205300Z.log",
+        "SHA256SUMS",
+        "c8_sha256sums_full.log"
+      ]
+    },
+    {
+      "gate": "C9",
+      "status": "PASS",
+      "evidence": [
+        "docs/day15/D15D_VERSION_MANIFEST.json"
+      ]
+    },
+    {
+      "gate": "C10",
+      "status": "PASS_REFERENCE_IDENTITY_MATCHED",
+      "evidence": [
+        "docs/day15/D15D_VERSION_MANIFEST.json"
+      ],
+      "historical_source": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e"
+    },
+    {
+      "gate": "C11",
+      "status": "PASS_RELEASE_BINDING_ALTERNATIVE_FORMALIZED",
+      "evidence": [
+        "README.md",
+        "summary.json",
+        "gate_matrix.json",
+        "evidence_index.json",
+        "checksums.txt"
+      ],
+      "does_not_replace_d14d_g0_g9": true
+    },
+    {
+      "gate": "C12",
+      "status": "PASS",
+      "evidence": [
+        "submission_inventory.json",
+        "manifest.json",
+        "SHA256SUMS"
+      ]
+    },
+    {
+      "gate": "C13",
+      "status": "PENDING_FINAL_D15D_SIGN",
+      "note": "Reviewer E review and approval remain required; no self-sign-off is claimed."
+    }
+  ]
+}

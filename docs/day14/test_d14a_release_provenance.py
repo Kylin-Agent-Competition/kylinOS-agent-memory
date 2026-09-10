@@ -117,7 +117,7 @@ _RUNTIME_PREFIXES = (
     "config/",
 )
 
-_CURRENT_MAIN_SHA = "4a6323fb3a8c73e0b15f1f3629d28dfc12071541"
+_CURRENT_MAIN_SHA = "2782a9048c235006c17024c9798cf988a07627a1"
 
 # 旧实现遗留的固定 current_pr_head 字面量与旧固定 diff 范围（禁止回退出现）。
 _LEGACY_CURRENT_PR_HEAD = "15de7c67426909c7c872f9cb3f9a04a2575753fd"
@@ -558,8 +558,8 @@ def test_contract_manifest_d14d_three_way_identity():
     historical_commit = _SOURCE_COMMIT
     evidence_commit = _EVIDENCE_COMMIT
     assert values["current_release_commit"] == _CURRENT_RELEASE_COMMIT
-    assert values["current_main_sha"] == _CURRENT_RELEASE_COMMIT
-    assert values["current_main_release_commit_is_current_main"] is True
+    assert values["current_main_sha"] == _CURRENT_MAIN_SHA
+    assert values["current_main_release_commit_is_current_main"] is False
     assert values["current_main_drift"] is False
     assert values["new_package_tar_sha256"] == _NEW_TAR_SHA256
     assert values["new_package_manifest_sha256"] == _NEW_MANIFEST_SHA256
@@ -682,9 +682,24 @@ def _release_runtime_drift_hits(main_ref: str) -> list:
     return [line for line in proc.stdout.splitlines() if line.strip()]
 
 
+def _diff_name_only_paths(left_ref: str, right_ref: str) -> list:
+    """获取两个 refs 的完整 diff path 列表，用于 docs-only drift 复核。"""
+    proc = subprocess.run(
+        ["git", "diff", "--name-only", f"{left_ref}..{right_ref}"],
+        cwd=str(_REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, (
+        f"git diff --name-only 失败 (rc={proc.returncode}): {proc.stderr.strip()}"
+    )
+    return [line for line in proc.stdout.splitlines() if line.strip()]
+
+
 def test_live_diff_fail_closed():
     """live 门禁：D15D current release `4a6323f` 到 current main 的 diff 不得
-    命中 packaging/runtime 前缀；D14D contract 的 historical 三分类保留，
+    命中 runtime-sensitive 前缀；D14D contract 的 historical 三分类保留，
     但不再替代当前 release 的新鲜性判定。
     """
     head = _head_sha()
@@ -692,6 +707,13 @@ def test_live_diff_fail_closed():
     hits = _release_runtime_drift_hits(main_ref)
     assert not hits, (
         f"current release `4a6323f` 到 {main_ref} 出现 runtime drift: {hits}"
+    )
+    docs_only = [
+        path for path in _diff_name_only_paths(_CURRENT_RELEASE_COMMIT, main_ref)
+        if path.startswith("docs/day15/")
+    ]
+    assert len(docs_only) == 2, (
+        f"current release 到 {main_ref} 的 docs/day15 漂移数应为 2: {docs_only}"
     )
 
     # 记录执行时事实到测试日志。
@@ -732,13 +754,14 @@ def test_governance_ssot_after_identity_adjudication():
 
 
 def test_current_main_drift_invalidation_ssot():
-    """第 4 轮旧包失效记录必须保留，且当前 main 已由 4a6323f 新链闭合。"""
+    """第 4 轮旧包失效记录必须保留；current main 可 docs-only 前移。"""
     manifest = _load_json(_D15D_MANIFEST)
     consistency = manifest["post_lock_consistency"]
     historical = consistency["historical_lock_invalidation"]
     assert manifest["current_main"]["sha"] == _CURRENT_MAIN_SHA
-    assert manifest["current_main"]["release_commit_is_current_main"] is True
+    assert manifest["current_main"]["release_commit_is_current_main"] is False
     assert manifest["current_main"]["runtime_sensitive_drift_since_release_commit"] is False
+    assert manifest["current_main"]["docs_only_drift_since_release_commit"] is True
     assert manifest["release_classification"] == (
         "NEW_RELEASE_IDENTITY_BUILT_AND_VM_VERIFIED"
     )
@@ -747,7 +770,7 @@ def test_current_main_drift_invalidation_ssot():
     assert consistency["current_main_sha"] == _CURRENT_MAIN_SHA
     assert tuple(consistency["locked_runtime_prefix_hits"]) == ()
     assert consistency["frozen_package_lock_valid"] is False
-    assert consistency["comparison"] == f"{_CURRENT_MAIN_SHA}..kylin-mem/main"
+    assert consistency["comparison"] == f"{_CURRENT_RELEASE_COMMIT}..{_CURRENT_MAIN_SHA}"
     assert consistency["rebuild_required"] is True
     assert consistency["rebuild_completed"] is True
     assert consistency["host_vm_required"] is True
@@ -757,7 +780,7 @@ def test_current_main_drift_invalidation_ssot():
     assert historical["status"] == "FAIL_INVALIDATED"
     assert historical["conclusion"] == "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY"
     assert manifest["new_release_evidence"]["root"] == _NEW_EVIDENCE_ROOT
-    assert manifest["new_release_evidence"]["release_commit"] == _CURRENT_MAIN_SHA
+    assert manifest["new_release_evidence"]["release_commit"] == _CURRENT_RELEASE_COMMIT
     assert manifest["new_release_evidence"]["c1_clean_detached_worktree"]["status"] == "PASS"
     assert manifest["new_release_evidence"]["c3_c6_source_blob_consistency"]["status"] == "PASS"
     assert manifest["new_release_evidence"]["c7_clean_package_smoke"]["status"] == "PASS"
@@ -765,10 +788,26 @@ def test_current_main_drift_invalidation_ssot():
     assert manifest["package"]["runtime_app_pyc"] == 0
     assert manifest["package"]["runtime_app_pycache_dirs"] == 0
     assert manifest["c11"]["status"] == (
-        "HISTORICAL_PASS_AT_ba3b50e / NOT_SUFFICIENT_FOR_NEW_RELEASE"
+        "PASS_RELEASE_BINDING_ALTERNATIVE_FORMALIZED"
     )
+    assert manifest["c11"]["gate_semantics"] == (
+        "ALTERNATIVE_CLEAN_TAR_VM_RELEASE_BINDING"
+    )
+    assert manifest["c11"]["does_not_replace_d14d_g0_g9"] is True
+    assert manifest["c11"]["root_metadata"]["summary_path"] == "summary.json"
+    assert manifest["c11"]["root_metadata"]["gate_matrix_path"] == "gate_matrix.json"
+    assert manifest["c11"]["root_metadata"]["evidence_index_path"] == "evidence_index.json"
+    assert manifest["c11"]["root_metadata"]["checksums_path"] == "checksums.txt"
     assert manifest["c11"]["old_root_accepted_as_final_for_new_release"] is False
     assert manifest["c11"]["current_release_binding_closed"] is True
+    assert manifest["c12"]["status"] == "PASS"
+    assert manifest["c12"]["release_commit"] == _CURRENT_RELEASE_COMMIT
+    assert manifest["c12"]["package_tar_sha256"] == _NEW_TAR_SHA256
+    assert manifest["c12"]["manifest_entries"] == 3351
+    assert manifest["c12"]["tar_non_dir_entries"] == 3354
+    assert manifest["c12"]["unexpected_extras"] == []
+    assert manifest["c12"]["missing_entries"] == []
+    assert manifest["c12"]["checksums_full_pass"] is True
     assert consistency["rebuild_required"] is True
     assert consistency["host_vm_required"] is True
 
