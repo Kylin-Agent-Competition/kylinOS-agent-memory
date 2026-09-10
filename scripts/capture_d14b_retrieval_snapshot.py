@@ -26,7 +26,7 @@ from typing import Any
 
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 CHANNELS = ("fts5", "vector", "rrf")
-TRUTH_CHANNEL = "sqlite"
+TRUTH_CHANNEL = "sqlite_truth"
 ALL_CHANNELS = (TRUTH_CHANNEL, *CHANNELS)
 RECEIPT_FIELDS = (
     "channel",
@@ -37,6 +37,11 @@ RECEIPT_FIELDS = (
     "artifact_path",
     "artifact_sha256",
     "captured_at_utc",
+)
+RRF_RECEIPT_FIELDS = (
+    *RECEIPT_FIELDS,
+    "fts5_input_sha256",
+    "vector_input_sha256",
 )
 
 
@@ -132,7 +137,7 @@ def _verify_receipts(
         raise CaptureError("capture-handoff.tested_commit 与 requested tested_commit 不一致")
     captures = capture_handoff.get("captures")
     if not isinstance(captures, dict) or set(captures) != set(ALL_CHANNELS):
-        raise CaptureError("capture-handoff.captures 必须声明 sqlite/fts5/vector/rrf 四类 runner")
+        raise CaptureError("capture-handoff.captures 必须声明 sqlite_truth/fts5/vector/rrf 四类 runner")
 
     provenance: dict[str, dict[str, str]] = {}
     for channel in ALL_CHANNELS:
@@ -175,6 +180,18 @@ def _verify_receipts(
             != artifact_hashes[channel]
         ):
             raise CaptureError(f"{channel} receipt.artifact_sha256 与实际 artifact 不一致")
+        if channel == "rrf":
+            parent_fields = {
+                "fts5_input_sha256": "fts5",
+                "vector_input_sha256": "vector",
+            }
+            for field, parent_channel in parent_fields.items():
+                if field not in receipt:
+                    raise CaptureError(f"{channel} receipt 缺少字段 {field}")
+                if _text(receipt.get(field), f"{channel} receipt.{field}") != artifact_hashes[parent_channel]:
+                    raise CaptureError(
+                        f"{channel} receipt.{field} 与实际 {parent_channel} artifact 不一致"
+                    )
         provenance[channel] = {
             "artifact_sha256": artifact_hashes[channel],
             "receipt_sha256": receipt_sha,
@@ -182,6 +199,13 @@ def _verify_receipts(
             "runner_sha256": _text(receipt.get("runner_sha256"), f"{channel} receipt.runner_sha256"),
             "runner_path": _text(receipt.get("runner_path"), f"{channel} receipt.runner_path"),
         }
+        if channel == "rrf":
+            provenance[channel]["fts5_input_sha256"] = _text(
+                receipt.get("fts5_input_sha256"), f"{channel} receipt.fts5_input_sha256"
+            )
+            provenance[channel]["vector_input_sha256"] = _text(
+                receipt.get("vector_input_sha256"), f"{channel} receipt.vector_input_sha256"
+            )
     provenance["capture_handoff_sha256"] = capture_handoff_sha
     return provenance
 
@@ -241,11 +265,11 @@ def main() -> int:
             raise CaptureError("checkpoint output 父目录不存在")
         truth, truth_hash = _load(args.sqlite_truth, "sqlite truth")
         channels: dict[str, dict[str, Any]] = {}
-        source_hashes = {"sqlite_truth": truth_hash}
-        artifact_paths = {"sqlite": args.sqlite_truth}
-        artifact_hashes = {"sqlite": truth_hash}
+        source_hashes = {TRUTH_CHANNEL: truth_hash}
+        artifact_paths = {TRUTH_CHANNEL: args.sqlite_truth}
+        artifact_hashes = {TRUTH_CHANNEL: truth_hash}
         receipt_paths = {
-            "sqlite": args.sqlite_receipt,
+            TRUTH_CHANNEL: args.sqlite_receipt,
             "fts5": args.fts5_receipt,
             "vector": args.vector_receipt,
             "rrf": args.rrf_receipt,
