@@ -2,12 +2,14 @@
   "schema_version": "d15d-version-manifest/v2",
   "run_id": "20260910T205300Z",
   "current_main": {
-    "sha": "ad782f5be747d9d59f273c1c0813535d62b50dcb",
-    "verified_at": "2026-09-10T15:19:37Z",
+    "sha": "6e9f56d2983b36c3b174e7acf6687c4af79439d4",
+    "verified_at": "2026-09-10T17:52:08Z",
     "release_commit_is_current_main": false,
     "runtime_sensitive_drift_since_release_commit": false,
     "docs_only_drift_since_release_commit": true,
     "docs_only_paths": [
+      "docs/D15D_TaskCard_20260906.md",
+      "docs/day14/test_d14a_release_provenance.py",
       "docs/day15/03_c_track_production_integration_closure_status_20260910.md",
       "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md",
       "docs/day15/D15D_VERSION_MANIFEST.json",
@@ -22,10 +24,10 @@
       {
         "path": "docs/day14/00_d14a_release_package_contract.md",
         "kind": "DOCUMENTATION_ONLY",
-        "reason": "PR #175 contract/provenance status and identity adjudication backfill; no executable, script, unit, schema, IPC, database, or runtime source change.",
-        "authority": "PR #175 Reviewer E approved HEAD 702973e3fc05f9c8435dd82f662788e448eda487 with APPROVE / G-D7 SIGNED",
-        "review_id": 5168962906,
-        "merge_commit": "ad782f5be747d9d59f273c1c0813535d62b50dcb"
+        "reason": "PR #177 full C2 locked-path scope and final closeout guard correction; no executable, script, unit, schema, IPC, database, or runtime source change.",
+        "authority": "PR #177 Reviewer E approved HEAD 8dc21f7df7ea359b880efc93902569a5ca4187d8 with APPROVE",
+        "review_id": 5170478077,
+        "merge_commit": "6e9f56d2983b36c3b174e7acf6687c4af79439d4"
       },
       {
         "path": "packaging/systemd/README.md",
@@ -36,13 +38,13 @@
         "merge_commit": "ad782f5be747d9d59f273c1c0813535d62b50dcb"
       }
     ],
-    "source": "kylin-mem/main"
+    "source": "origin/main / kylin-mem/main"
   },
   "post_lock_consistency": {
     "gate": "C2",
     "status": "PASS_CURRENT_MAIN_NO_RUNTIME_SENSITIVE_DRIFT",
-    "current_main_sha": "ad782f5be747d9d59f273c1c0813535d62b50dcb",
-    "comparison": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541..ad782f5be747d9d59f273c1c0813535d62b50dcb",
+    "current_main_sha": "6e9f56d2983b36c3b174e7acf6687c4af79439d4",
+    "comparison": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541..6e9f56d2983b36c3b174e7acf6687c4af79439d4",
     "locked_runtime_prefix_hits": [],
     "raw_c2_locked_hits": [
       "docs/day14/00_d14a_release_package_contract.md",
@@ -53,6 +55,8 @@
       "packaging/systemd/README.md"
     ],
     "docs_only_prefix_hits": [
+      "docs/D15D_TaskCard_20260906.md",
+      "docs/day14/test_d14a_release_provenance.py",
       "docs/day15/03_c_track_production_integration_closure_status_20260910.md",
       "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md",
       "docs/day15/D15D_VERSION_MANIFEST.json",
