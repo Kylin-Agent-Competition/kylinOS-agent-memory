@@ -24,3 +24,21 @@
 ## 跨轨验证风险
 
 在本 Windows 工作站，新加的 `test_preflight_accepts_a_clean_matching_handoff` 失败于 `source_bindings.*.production_db_path` 的 POSIX `/home/...` 路径被 `pathlib.Path.is_absolute()` 视为非绝对路径。该测试/脚本属于 D14B control-plane，本记录不修改它；D 轨应调整 host-independent 路径验证或明确将该用例限制为 Linux。PR #174 的 Linux CI 为 green，这不构成对 Windows 回归的替代证明。
+
+## 替代 VM 工程回归（非 Formal L3）
+
+2026-09-10 通过 SSH 在 `Kylin-V11-2603-BTrack-Base` 的 `D14B` 快照执行：
+
+```text
+checkout = /home/yanmouren778/d14b-ba3b50e-full-preparation
+HEAD = ba3b50e1bdeea185bca9daee9d1d45958f62a636
+VM = yanmouren778-pc / Linux 6.6.0-63-generic
+command = PYTHONPATH=memory-service python3 -m pytest -q \
+  memory-service/tests/retrieval/test_formal_eval.py \
+  evaluation/test_d9_retrieval_dataset.py \
+  evaluation/test_d9_retrieval_gold_spec.py \
+  memory-service/tests/retrieval/test_truth_record_validity.py
+result = 173 passed, exit 0
+```
+
+该 VM 的内核与 D14D formal handoff 声明的 `6.6.0-76-generic` 不一致，且 checkout 不含 PR #174 的 capture runners；因此本结果仅为 `PASS_WITH_LIMITATIONS` 的工程参考。未创建 Formal evidence root、未运行 production capture、未写入 SQLite，也未生成 final metrics。
