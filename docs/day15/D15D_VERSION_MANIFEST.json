@@ -226,6 +226,16 @@
     "merge_commit": "ad782f5be747d9d59f273c1c0813535d62b50dcb",
     "merged_at": "2026-09-10T15:19:37Z"
   },
+  "closeout": {
+    "pr_number": 177,
+    "status": "MERGED",
+    "review_decision": "APPROVED",
+    "reviewer_account": "lovezy0730-create",
+    "review_submitted_at": "2026-09-10T17:47:02Z",
+    "head_sha": "8dc21f7df7ea359b880efc93902569a5ca4187d8",
+    "merge_commit": "6e9f56d2983b36c3b174e7acf6687c4af79439d4",
+    "merged_at": "2026-09-10T17:52:08Z"
+  },
   "contract": {
     "path": "docs/day14/00_d14a_release_package_contract.md",
     "version": 5,

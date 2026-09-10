@@ -122,6 +122,7 @@ _C2_CONTRACT_PATH = "docs/day14/00_d14a_release_package_contract.md"
 _C2_LOCKED_PATHS = (*_RUNTIME_PREFIXES, _C2_CONTRACT_PATH)
 
 _CURRENT_MAIN_SHA = "ad782f5be747d9d59f273c1c0813535d62b50dcb"
+_CLOSEOUT_MERGE_COMMIT = "6e9f56d2983b36c3b174e7acf6687c4af79439d4"
 _ROUND4_C2_MAIN_SHA = "2782a9048c235006c17024c9798cf988a07627a1"
 
 # 旧实现遗留的固定 current_pr_head 字面量与旧固定 diff 范围（禁止回退出现）。
@@ -650,8 +651,24 @@ def _assert_documentation_consistency(cls: str):
     print(f"[live] 文档一致性校验通过，classification={cls}")
 
 
+def _is_ancestor(ancestor: str, descendant: str) -> bool:
+    """返回 git merge-base --is-ancestor 的确定性结果。"""
+    proc = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+        cwd=str(_REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode in (0, 1), (
+        f"git merge-base --is-ancestor 失败 (rc={proc.returncode}): "
+        f"{proc.stderr.strip()}"
+    )
+    return proc.returncode == 0
+
+
 def _current_main_ref() -> str:
-    """选择可用的 current main ref；本地与 CI 的 remote 名不同。"""
+    """选择包含 D15D closeout 的实时 main ref。"""
     for candidate in ("origin/main", "kylin-mem/main"):
         proc = subprocess.run(
             ["git", "rev-parse", "--verify", "--quiet", candidate],
@@ -663,8 +680,9 @@ def _current_main_ref() -> str:
         if proc.returncode == 0:
             sha = proc.stdout.strip()
             assert _SHA40.fullmatch(sha), f"{candidate} 输出非法: {sha!r}"
-            assert sha == _CURRENT_MAIN_SHA, (
-                f"{candidate}={sha} 不是登记的 current main {_CURRENT_MAIN_SHA}"
+            assert _is_ancestor(_CLOSEOUT_MERGE_COMMIT, sha), (
+                f"{candidate}={sha} 不包含登记的 closeout merge commit "
+                f"{_CLOSEOUT_MERGE_COMMIT}"
             )
             return candidate
     raise AssertionError("current main ref 不存在：origin/main 或 kylin-mem/main")
@@ -762,6 +780,7 @@ def test_live_diff_fail_closed():
     print(f"[live] HEAD={head}")
     print(f"[live] current_release_commit={_CURRENT_RELEASE_COMMIT}")
     print(f"[live] current_main_ref={main_ref}")
+    print(f"[live] closeout_merge_commit={_CLOSEOUT_MERGE_COMMIT}")
     print(f"[live] c2_locked_hits={hits}")
 
     # 文档一致性（负向 fail-closed 断言恒生效）。
@@ -816,6 +835,13 @@ def test_current_main_drift_invalidation_ssot():
     )
     assert tuple(exception_paths) == tuple(consistency["raw_c2_locked_hits"])
     assert manifest["current_main"]["sha"] == _CURRENT_MAIN_SHA
+    assert manifest["closeout"]["pr_number"] == 177
+    assert manifest["closeout"]["status"] == "MERGED"
+    assert manifest["closeout"]["review_decision"] == "APPROVED"
+    assert manifest["closeout"]["head_sha"] == (
+        "8dc21f7df7ea359b880efc93902569a5ca4187d8"
+    )
+    assert manifest["closeout"]["merge_commit"] == _CLOSEOUT_MERGE_COMMIT
     assert manifest["current_main"]["release_commit_is_current_main"] is False
     assert manifest["current_main"]["runtime_sensitive_drift_since_release_commit"] is False
     assert manifest["current_main"]["docs_only_drift_since_release_commit"] is True
