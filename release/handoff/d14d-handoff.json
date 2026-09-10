@@ -50,7 +50,9 @@
   },
   "blocked_items_for_b_track": {
     "frozen_tar_bytes_available": false,
-    "capture_runner_credentials_available": false,
-    "clean_vm_snapshot_access_available": false
+    "capture_runner_credentials_available": true,
+    "capture_runner_credentials_note": "VM SSH access confirmed 2026-09-10 (port 2223); kylin_memory.db present with full schema (memory_entries empty on clean snapshot); credentials passed via KYLIN_VM_PASSWORD env var, never stored in files",
+    "clean_vm_snapshot_access_available": true,
+    "clean_vm_snapshot_note": "Confirmed 2026-09-10: Kylin-D14D-clean-vdi-20260906 running, snapshot d14d-clean-base-20260907-r4 (UUID 6dc9468e-36a8-41b3-b7c9-6115c7b8fc56) active; SSH 127.0.0.1:2223"
   }
 }

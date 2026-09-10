@@ -23,8 +23,8 @@ from the repository baseline (`a7abb1e`) and from PR #173's diff.
 | 8 | `scripts/capture_d14b_sqlite_truth.py` | **Added** | SQLite truth channel capture runner |
 | 9 | `tests/retrieval/test_d14b_capture_runners.py` | **Added** | Unit tests for capture runner common helper |
 | 10 | `kylin-memory-a-d14a-0.1.0-d14a.tar.gz` | **Still missing** | Binary frozen tar bytes; only SHA-256 / manifest records exist |
-| 11 | Production capture runner credentials | **Still missing** | External access not available in this workspace |
-| 12 | D14D clean VM/snapshot formal access | **Still missing** | External VirtualBox resource not available |
+| 11 | Production capture runner credentials | **CLOSED (2026-09-10)** | VM SSH confirmed; kylin_memory.db accessible on VM |
+| 12 | D14D clean VM/snapshot formal access | **CLOSED (2026-09-10)** | Snapshot `d14d-clean-base-20260907-r4` confirmed active on `Kylin-D14D-clean-vdi-20260906` |
 
 ## Items 10-12 Explanation
 
@@ -33,13 +33,17 @@ from the repository baseline (`a7abb1e`) and from PR #173's diff.
   `D14A_FINAL_PACKAGE_FREEZE_RECORD_20260908.md`, but the actual binary
   tar bytes were never uploaded to the repository or any accessible
   release. This PR cannot fabricate the binary.
-- **Item 11 (runner credentials)**: The four production capture runners
-  are now in the repo with SHA-256-bound handoff identity, but the
-  credentials required to execute them against the production database
-  (SSH keys, DB passwords, API tokens) remain external.
-- **Item 12 (clean VM/snapshot)**: The formal D14D clean VM snapshot
-  (`d14d-clean-base-20260907-r4`, UUID `6dc9468e-...`) lives on a
-  VirtualBox host that is not accessible from this workspace.
+- **Item 11 (runner credentials) CLOSED**: VM SSH access confirmed
+  2026-09-10 at `127.0.0.1:2223`; `kylin_memory.db` present at
+  `/home/kylin-agent/.local/share/kylin-memory/kylin_memory.db` with
+  full schema (`memory_entries` empty on clean snapshot, expected).
+  Password passed via `KYLIN_VM_PASSWORD` env var, never stored in
+  files. Long-term solution remains SSH public key.
+- **Item 12 (clean VM/snapshot) CLOSED**: VirtualBox snapshot
+  `d14d-clean-base-20260907-r4` (UUID `6dc9468e-36a8-41b3-b7c9-
+  6115c7b8fc56`) confirmed active on VM `Kylin-D14D-clean-vdi-
+  20260906` (UUID `70ca1ea3-c27e-483d-aaba-0cac7dc5c77c`), VM running,
+  OS Kylin V11 / kernel 6.6.0-76-generic / x86_64.
 
 ## Waiver Relationship
 
