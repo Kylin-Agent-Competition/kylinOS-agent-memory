@@ -2,27 +2,49 @@
   "schema_version": "d15d-version-manifest/v2",
   "run_id": "20260910T205300Z",
   "current_main": {
-    "sha": "2782a9048c235006c17024c9798cf988a07627a1",
-    "verified_at": "2026-09-10T14:10:00Z",
+    "sha": "ad782f5be747d9d59f273c1c0813535d62b50dcb",
+    "verified_at": "2026-09-10T15:19:37Z",
     "release_commit_is_current_main": false,
     "runtime_sensitive_drift_since_release_commit": false,
     "docs_only_drift_since_release_commit": true,
     "docs_only_paths": [
       "docs/day15/03_c_track_production_integration_closure_status_20260910.md",
-      "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md"
+      "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md",
+      "packaging/systemd/README.md"
+    ],
+    "raw_runtime_prefix_hits_since_release_commit": [
+      "packaging/systemd/README.md"
+    ],
+    "approved_docs_runtime_prefix_exceptions": [
+      {
+        "path": "packaging/systemd/README.md",
+        "kind": "DOCUMENTATION_ONLY",
+        "reason": "README-only pointer/status update; no executable, script, unit, schema, IPC, database, or runtime source change.",
+        "authority": "PR #175 Reviewer E approved HEAD 702973e3fc05f9c8435dd82f662788e448eda487 with APPROVE / G-D7 SIGNED",
+        "review_id": 5168962906,
+        "merge_commit": "ad782f5be747d9d59f273c1c0813535d62b50dcb"
+      }
     ],
     "source": "kylin-mem/main"
   },
   "post_lock_consistency": {
     "gate": "C2",
     "status": "PASS_CURRENT_MAIN_NO_RUNTIME_SENSITIVE_DRIFT",
-    "current_main_sha": "2782a9048c235006c17024c9798cf988a07627a1",
-    "comparison": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541..2782a9048c235006c17024c9798cf988a07627a1",
+    "current_main_sha": "ad782f5be747d9d59f273c1c0813535d62b50dcb",
+    "comparison": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541..ad782f5be747d9d59f273c1c0813535d62b50dcb",
     "locked_runtime_prefix_hits": [],
+    "raw_runtime_prefix_hits": [
+      "packaging/systemd/README.md"
+    ],
+    "approved_docs_runtime_prefix_exceptions": [
+      "packaging/systemd/README.md"
+    ],
     "docs_only_prefix_hits": [
       "docs/day15/03_c_track_production_integration_closure_status_20260910.md",
-      "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md"
+      "docs/day15/04_c1_rebuilt_vm_test_status_20260910.md",
+      "packaging/systemd/README.md"
     ],
+    "note": "The raw packaging diff contains exactly one manifest-registered docs-only exception; it has no non-excepted runtime-sensitive hit.",
     "frozen_package_lock_valid": false,
     "historical_lock_invalidation": {
       "release_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
@@ -193,7 +215,7 @@
     "path": "docs/day14/00_d14a_release_package_contract.md",
     "version": 5,
     "section_6bis": "G0_IDENTITY_CLOSED",
-    "status": "PROPOSED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / PENDING_FINAL_D15D_SIGN",
+    "status": "SIGNED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / G_D7_SIGNED",
     "final_d15d_sign": "SIGNED",
     "package_identity": {
       "source_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",

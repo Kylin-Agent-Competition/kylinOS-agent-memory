@@ -19,8 +19,10 @@ triggered by that approval.
 Scope and boundary:
 
 - No release or package identity change.
-- No Gate semantics change.
-- No runtime-sensitive file change.
+- No Gate conclusion changes.
+- The current-main guard refresh uses the manifest-registered docs-only
+  `packaging/systemd/README.md` exception from approved PR #175; no executable,
+  script, unit, schema, IPC, database, or runtime source content changes.
 - No evidence conclusion change.
 - No D15E final submission lock claim.
 - Boundaries remain `L3_READY=true`, `release_ready=false`, `production_ready=false`.
