@@ -21,6 +21,11 @@ from typing import Any, Optional
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 CAPTURE_CHANNELS = ("sqlite_truth", "fts5", "vector", "rrf")
+CANONICAL_HANDOFF_PATHS = {
+    "d13d": Path("release/handoff/d13d-handoff.json"),
+    "d14d": Path("release/handoff/d14d-handoff.json"),
+    "capture": Path("release/handoff/d14b-capture-handoff.json"),
+}
 
 
 class PreflightError(ValueError):
@@ -31,6 +36,16 @@ def _load_object(path: Path, label: str) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
+        raise PreflightError(f"无法读取 {label}: {error}") from error
+    if not isinstance(value, dict):
+        raise PreflightError(f"{label} 必须是 JSON object")
+    return value
+
+
+def _load_object_bytes(raw: bytes, label: str) -> dict[str, Any]:
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise PreflightError(f"无法读取 {label}: {error}") from error
     if not isinstance(value, dict):
         raise PreflightError(f"{label} 必须是 JSON object")
@@ -114,6 +129,93 @@ def _git(repo_root: Path, *args: str) -> str:
         detail = completed.stderr.strip() or completed.stdout.strip()
         raise PreflightError(f"git {' '.join(args)} 失败: {detail}")
     return completed.stdout.strip()
+
+
+def _git_blob(repo_root: Path, head: str, relative_path: str, label: str) -> bytes:
+    completed = subprocess.run(
+        ["git", "-C", str(repo_root), "show", f"{head}:{relative_path}"],
+        check=False,
+        capture_output=True,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise PreflightError(f"无法读取 {label} 的 control_head blob: {detail}")
+    return completed.stdout
+
+
+def _require_control_tracked_file(
+    control_root: Path,
+    supplied_path: Path,
+    relative_path: Path,
+    label: str,
+    control_head: str,
+) -> bytes:
+    """Bind a supplied handoff to the reviewed control_head blob byte-for-byte."""
+
+    try:
+        supplied = supplied_path.resolve(strict=True)
+        canonical = (control_root / relative_path).resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise PreflightError(f"{label} 不可定位: {error}") from error
+    if supplied != canonical:
+        raise PreflightError(
+            f"{label} 必须使用 control-root canonical 路径: {relative_path.as_posix()}"
+        )
+    if supplied_path.is_symlink() or supplied.is_symlink():
+        raise PreflightError(f"{label} 必须是 regular file，不能是 symlink")
+    if not supplied.is_file():
+        raise PreflightError(f"{label} 必须是 regular file")
+    try:
+        _git(control_root, "ls-files", "--error-unmatch", relative_path.as_posix())
+    except PreflightError as error:
+        raise PreflightError(f"{label} 未被 control-root tracked") from error
+    raw = supplied.read_bytes()
+    expected = _git_blob(
+        control_root,
+        control_head,
+        relative_path.as_posix(),
+        label,
+    )
+    if raw != expected:
+        raise PreflightError(f"{label} bytes 与 control_head Git blob 不一致")
+    return raw
+
+
+def _require_control_tracked_handoffs(
+    *,
+    control_root: Path,
+    d13d_path: Path,
+    d14d_path: Path,
+    capture_path: Optional[Path],
+) -> dict[str, bytes]:
+    control_head = _git(control_root, "rev-parse", "HEAD")
+    if not COMMIT_RE.fullmatch(control_head):
+        raise PreflightError("control-root HEAD 必须是 40 位小写 commit")
+    bindings: dict[str, bytes] = {
+        "d13d": _require_control_tracked_file(
+            control_root,
+            d13d_path,
+            CANONICAL_HANDOFF_PATHS["d13d"],
+            "D13D handoff",
+            control_head,
+        ),
+        "d14d": _require_control_tracked_file(
+            control_root,
+            d14d_path,
+            CANONICAL_HANDOFF_PATHS["d14d"],
+            "D14D handoff",
+            control_head,
+        ),
+    }
+    if capture_path is not None:
+        bindings["capture"] = _require_control_tracked_file(
+            control_root,
+            capture_path,
+            CANONICAL_HANDOFF_PATHS["capture"],
+            "d14b-capture-handoff",
+            control_head,
+        )
+    return bindings
 
 
 def _verify_runner(d14d: dict[str, Any], control_root: Path) -> None:
@@ -314,10 +416,22 @@ def validate_preflight(
     capture_handoff: Optional[dict[str, Any]] = None,
     package_tar: Optional[Path] = None,
     actual_package_manifest: Optional[Path] = None,
+    control_handoff_bindings: Optional[dict[str, bytes]] = None,
 ) -> dict[str, Any]:
     """Validate all identity gates and return a deterministic success report."""
 
     expected = _commit(expected_tested_commit, "requested tested_commit")
+    bindings = control_handoff_bindings or {}
+    if not {"d13d", "d14d"}.issubset(bindings) or set(bindings) - {
+        "d13d",
+        "d14d",
+        "capture",
+    }:
+        raise PreflightError("缺少 control-root 绑定的 canonical handoff bytes")
+    handoff_hashes = {
+        f"{key}_handoff_sha256": hashlib.sha256(raw).hexdigest()
+        for key, raw in bindings.items()
+    }
     d13d_commit = _commit(_required_text(d13d, "tested_commit", "D13D handoff"), "D13D tested_commit")
     d14d_commit = _commit(_required_text(d14d, "tested_commit", "D14D handoff"), "D14D tested_commit")
     manifest_commit = _commit(
@@ -387,11 +501,13 @@ def validate_preflight(
             "evidence_root_unused",
             "clean_tested_worktree",
             "clean_control_worktree",
+            "control_tracked_handoffs",
             "capture_provenance",
             "capture_source_bindings",
             "package_bytes",
         ],
         "control_head": control_head,
+        **handoff_hashes,
     }
 
 
@@ -413,21 +529,28 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
+        bindings = _require_control_tracked_handoffs(
+            control_root=args.control_root,
+            d13d_path=args.d13d_handoff,
+            d14d_path=args.d14d_handoff,
+            capture_path=args.capture_handoff,
+        )
         report = validate_preflight(
             expected_tested_commit=args.expected_tested_commit,
-            d13d=_load_object(args.d13d_handoff, "D13D handoff"),
-            d14d=_load_object(args.d14d_handoff, "D14D handoff"),
+            d13d=_load_object_bytes(bindings["d13d"], "D13D handoff"),
+            d14d=_load_object_bytes(bindings["d14d"], "D14D handoff"),
             manifest=_load_object(args.package_manifest, "package manifest"),
             tested_repo_root=args.tested_repo_root,
             control_root=args.control_root,
             evidence_root=args.evidence_root,
             capture_handoff=(
-                _load_object(args.capture_handoff, "d14b-capture-handoff")
+                _load_object_bytes(bindings["capture"], "d14b-capture-handoff")
                 if args.capture_handoff is not None
                 else None
             ),
             package_tar=args.package_tar,
             actual_package_manifest=args.actual_package_manifest,
+            control_handoff_bindings=bindings,
         )
     except PreflightError as error:
         print(f"D14B_PREFLIGHT_FAIL: {error}", file=sys.stderr)
