@@ -15,15 +15,17 @@
 | main 当前位置 | `4a6323f`（2026-09-10 PR #156 合入）；`cdcce34` 与 `306c15e` 是历史快照 |
 | D15D 自身进展 | PR #175 第 4 轮返工：C2 `FAIL_INVALIDATED`，选择触发新 release/package identity；G-D7 不可签署 |
 
-### 核心决策点：release_commit 选 `ba3b50e` 还是 `306c15e`
+### Active release identity flow
 
-Runbook C2 的判定逻辑：
+旧的 `ba3b50e` / `306c15e` 选择问题已关闭，只作为历史记录保留，不再是可执行路径。
+当前 active flow 是从 `main@4a6323f` 及其后续状态选定新的 release commit `R`：
 
-- 若 `ba3b50e..306c15e` 仍为 `DOCS_EVIDENCE_ONLY`（不触碰 `packaging/` `memory-service/` `cpp-bridge/` `migrations/` `config/`），则 **release_commit = `ba3b50e`**，复用已冻结包 `2222c904`，免重打包。
-- 若触发了运行时/打包路径，则必须选择新的 release commit 并重建包、重跑全部一致性检查。当前
-  `ba3b50e..4a6323f` 已命中 `memory-service/`，结论为 `TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY`。
-
-#170 时（`35cc43d`）确认过为 DOCS_EVIDENCE_ONLY。之后 #171/#172/#174 合入，需重新验证。
+1. 在干净的 detached worktree checkout `R`，验证 C1：`HEAD == R` 且完整 worktree 为空。
+2. 按当前 Runbook C2 执行 `git diff --name-only R..main -- packaging/ memory-service/
+   cpp-bridge/ migrations/ config/ docs/day14/00_d14a_release_package_contract.md`；
+   非空且未获批准登记即停。
+3. 在 `R` 干净树上重建包，生成新的 tar / manifest / SHA256SUMS identity，禁止复用 `2222c904`。
+4. 重跑 C3-C12 完整一致性链，并完成所需的麒麟 VM 证据后再请求 G-D7。
 
 ---
 
@@ -33,12 +35,14 @@ Runbook C2 的判定逻辑：
 
 | 步骤 | 内容 | 产出 |
 |---|---|---|
-| 0.1 | 在 `main` checkout（`306c15e`）跑 `git diff --name-only ba3b50e..HEAD -- packaging/ memory-service/ cpp-bridge/ migrations/ config/`，判定 DOCS_EVIDENCE_ONLY 与否 | 分类结论 |
-| 0.2 | 重跑 D15A/D14A 守卫（37 tests）确认回归基线 | CI-equivalent PASS log |
-| 0.3 | 更新 `docs/D15D_TaskCard_20260906.md`：release_commit 从 PENDING 回填为 `ba3b50e` 或 `306c15e`；更新 §5 输入状态表 | 任务卡 v2 |
-| 0.4 | 用 `kylin-memory-dev` skill 走代码/文档变更流程 | — |
+| 0.1 | 从干净 `main@4a6323f` 或其后续状态选定新的 release commit `R`，记录 40 位 SHA | selected release commit |
+| 0.2 | 在 detached worktree 验证 C1，并按含 `config/` 的当前 C2 scope 复核 `R..main` | C1/C2 结论 |
+| 0.3 | 重跑当前 D15A/D14A 守卫全套确认回归基线 | CI-equivalent PASS log |
+| 0.4 | 更新 `docs/D15D_TaskCard_20260906.md`：release_commit 回填为新的 `R`；更新 §5 输入状态表 | 任务卡 v3 |
+| 0.5 | 用 `kylin-memory-dev` skill 走代码/文档变更流程 | — |
 
-**Gate**：Phase 0 完成的标志 = 任务卡状态仍为 `DRAFT / PREPARED`（不是 READY/LOCKED），且 release_commit 为 40 位实值。
+**Gate**：Phase 0 完成的标志 = 选定 40 位新 release commit `R`，C1/C2 结论明确，
+且任务卡状态不宣称 READY/LOCKED。
 
 ---
 

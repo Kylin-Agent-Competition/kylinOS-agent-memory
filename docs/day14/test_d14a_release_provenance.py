@@ -85,6 +85,7 @@ _ROUND4_C2_EVIDENCE = (
     _REPO_ROOT / "evidence/d15d-lock/"
     "20260910T105245Z/c2_main_drift_invalidation.md"
 )
+_RUNBOOK = _REPO_ROOT / "docs/D15D_PostLock_Consistency_Runbook_20260906.md"
 _ROUND2_REWORK = (
     _REPO_ROOT / "evidence/d15d-lock/20260910T090314Z/round2_rework.md"
 )
@@ -111,6 +112,17 @@ _EXPECTED_MAIN_DRIFT_HITS = (
     "memory-service/evaluation/d14c_evidence_package.py",
     "memory-service/evaluation/d14c_l3_harness.py",
     "memory-service/evaluation/d14c_runtime_precheck.py",
+    "memory-service/tests/test_d14c_evidence_package.py",
+    "memory-service/tests/test_d14c_l3_harness.py",
+    "memory-service/tests/test_d14c_runtime_precheck.py",
+    "memory-service/tests/test_d14c_runtime_precheck_cli.py",
+)
+_EXPECTED_PACKAGE_CONTENT_HITS = (
+    "memory-service/evaluation/d14c_evidence_package.py",
+    "memory-service/evaluation/d14c_l3_harness.py",
+    "memory-service/evaluation/d14c_runtime_precheck.py",
+)
+_EXPECTED_BUILDER_EXCLUDED_HITS = (
     "memory-service/tests/test_d14c_evidence_package.py",
     "memory-service/tests/test_d14c_l3_harness.py",
     "memory-service/tests/test_d14c_runtime_precheck.py",
@@ -699,6 +711,8 @@ def test_current_main_drift_invalidation_ssot():
     assert consistency["status"] == "FAIL_INVALIDATED"
     assert consistency["current_main_sha"] == _CURRENT_MAIN_SHA
     assert tuple(consistency["locked_runtime_prefix_hits"]) == _EXPECTED_MAIN_DRIFT_HITS
+    assert tuple(consistency["package_content_hits"]) == _EXPECTED_PACKAGE_CONTENT_HITS
+    assert tuple(consistency["builder_excluded_hits"]) == _EXPECTED_BUILDER_EXCLUDED_HITS
     assert consistency["frozen_package_lock_valid"] is False
     assert consistency["conclusion"] == "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY"
     assert consistency["rebuild_required"] is True
@@ -715,6 +729,12 @@ def test_current_main_drift_invalidation_ssot():
     assert "FAIL_INVALIDATED" in evidence
     assert "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY" in evidence
     assert "does not claim a new L2/L3 PASS" in evidence
+
+    runbook = _RUNBOOK.read_text(encoding="utf-8")
+    c2_line = next(
+        line for line in runbook.splitlines() if line.startswith("| C2 |")
+    )
+    assert "config/" in c2_line, "Runbook C2 scope 必须包含 config/"
 
 
 # ---------- 运行入口（直接执行时同样可用；pytest 收集上面 test_*） ----------

@@ -23,7 +23,7 @@ D14D_EVIDENCE_ROOT="<D14D 正式 G0–G9 evidence root>"
 | # | 检查 | 命令/断言（Linux/WSL 口径，Windows 执行时等价转换） | 通过条件 |
 | --- | --- | --- | --- |
 | C1 | Release Commit 与 main 关系 | `git -C "$REPO_DIR" rev-parse HEAD`；`git -C "$REPO_DIR" status --porcelain`；`git merge-base --is-ancestor "$RELEASE_COMMIT" main` | HEAD == RELEASE_COMMIT；工作树空；RELEASE_COMMIT 是 main 祖先 |
-| C2 | 锁定后 main 无发布路径漂移 | `git -C "$REPO_DIR" diff --name-only "$RELEASE_COMMIT" main -- packaging/ memory-service/ cpp-bridge/ migrations/ docs/day14/00_d14a_release_package_contract.md` | diff 为空（或仅明确批准的 docs/evidence 且已在版本清单登记） |
+| C2 | 锁定后 main 无发布路径漂移 | `git -C "$REPO_DIR" diff --name-only "$RELEASE_COMMIT" main -- packaging/ memory-service/ cpp-bridge/ migrations/ config/ docs/day14/00_d14a_release_package_contract.md` | diff 为空（或仅明确批准的 docs/evidence 且已在版本清单登记） |
 | C3 | 包内 install 脚本一致 | 见下方“C3–C6 命令块”（`assert_same`） | 两值相等 |
 | C4 | 包内 uninstall 脚本一致 | 同上 | 两值相等 |
 | C5 | 包内 verify 脚本一致 | 同上 | 两值相等 |

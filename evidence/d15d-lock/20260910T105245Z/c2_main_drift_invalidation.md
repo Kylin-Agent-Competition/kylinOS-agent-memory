@@ -53,8 +53,22 @@ is not an ancestor of the new main snapshot.
 `packaging/release/build_release_package.sh` uses `shutil.copytree` from
 `memory-service/` to `runtime/app/` with exclusions only for `tests`,
 `__pycache__`, `*.pyc`, and `.pytest_cache`. It does not exclude `evaluation/`.
-Therefore the seven `memory-service/` files above would enter a package rebuilt
-from current main.
+Therefore the seven paths above are all C2 policy hits, but they have two
+different package-content outcomes:
+
+- 3 files enter `runtime/app/`: `memory-service/evaluation/d14c_evidence_package.py`,
+  `memory-service/evaluation/d14c_l3_harness.py`, and
+  `memory-service/evaluation/d14c_runtime_precheck.py`.
+- 4 files do not enter the package because the builder excludes the whole
+  `memory-service/tests/` directory:
+  `memory-service/tests/test_d14c_evidence_package.py`,
+  `memory-service/tests/test_d14c_l3_harness.py`,
+  `memory-service/tests/test_d14c_runtime_precheck.py`, and
+  `memory-service/tests/test_d14c_runtime_precheck_cli.py`.
+
+The test files still trigger C2 because the existing Runbook classifies the
+entire `memory-service/` prefix as runtime-sensitive. This distinction does not
+change the fail-closed conclusion.
 
 ## Gate conclusion
 

@@ -22,6 +22,17 @@
       "memory-service/tests/test_d14c_runtime_precheck.py",
       "memory-service/tests/test_d14c_runtime_precheck_cli.py"
     ],
+    "package_content_hits": [
+      "memory-service/evaluation/d14c_evidence_package.py",
+      "memory-service/evaluation/d14c_l3_harness.py",
+      "memory-service/evaluation/d14c_runtime_precheck.py"
+    ],
+    "builder_excluded_hits": [
+      "memory-service/tests/test_d14c_evidence_package.py",
+      "memory-service/tests/test_d14c_l3_harness.py",
+      "memory-service/tests/test_d14c_runtime_precheck.py",
+      "memory-service/tests/test_d14c_runtime_precheck_cli.py"
+    ],
     "frozen_package_lock_valid": false,
     "conclusion": "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY",
     "rebuild_required": true,
