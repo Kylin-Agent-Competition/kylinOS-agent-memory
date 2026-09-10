@@ -7,7 +7,17 @@
 production / formal runtime 结论。
 
 本批次对应 PR `feat(C): D14C production integration closure`。它是 C-1，
-不是 D14C formal evidence PR，也不是 D15C final asset lock PR。
+不是 D14C formal evidence PR，也不是 C-2 final asset lock PR。
+
+## 阶段 ID 定义
+
+- `D15C` = 已合入的 Host Mapping / C→D handoff（PR #167）。
+- `C-1` = 当前 Production Integration Closure（PR #176）。
+- `D14C Formal Evidence` = 后续正式 L3 evidence 阶段。
+- `C-2` = D14C Formal Verified 后的 final asset lock。
+
+`D15C` 只保留 Host Mapping / C→D handoff 的既有含义，不再复用于 future
+final asset lock。
 
 ## 当前可核验状态
 
@@ -17,7 +27,7 @@ production / formal runtime 结论。
 | D15C Host Mapping / C→D handoff | `MERGED_WITH_OPEN_FORMAL_BLOCKERS` | `docs/day15/01_d15c_host_mapping_closure_task_card_20260907.md`、`02_d15c_c_to_d_handoff_memo_20260907.md` |
 | D14C preparation | `MERGED_AND_APPROVED` | PR #156 / `docs/day14/11_d14c_main_intake_audit_20260910.md` |
 | D14C formal runtime | `BLOCKED / NOT_STARTED / UNVERIFIED` | G4--G7 尚未满足 |
-| C final asset lock | `NOT_STARTED` | 需在 D14C formal verified 后开始 |
+| C-2 Final Asset Lock | `NOT_STARTED` | 需在 D14C formal verified 后开始 |
 
 ## C-1 范围
 
@@ -50,7 +60,7 @@ production / formal runtime 结论。
   -> D trusted identity approval + production resolver/routes ACTIVE
   -> C/D/E MemoryContext freeze
   -> 唯一 D14C formal evidence PR
-  -> D15C final asset lock PR
+  -> C-2 final asset lock PR
 ```
 
 在真实 Host 依赖可用前，C-1 只可完成不依赖该环境、且已由最终用户范围授权的

@@ -6,6 +6,17 @@
 这些结果用于确认客户端构建、单元测试和本地 UDS 基线，不等同于 D14C formal
 runtime evidence，也不改变 C-1 文档中 `BLOCKED / UNVERIFIED` 的结论。
 
+```text
+EVIDENCE_GRADE = LOCAL_OBSERVATION / NOT_FORMAL / NOT_REVIEW_VERIFIED
+FORMAL_GATE_CONSUMABLE = NO
+HOST_VERIFIED = NO
+L3_GATE_CONSUMABLE = NO
+```
+
+本记录不得被后续 D14C G4-G8、`HOST_VERIFIED` 或 L3 Gate 直接消费。任何 formal
+结论必须在正式 D14C runtime run 中重新采集，并写入唯一 formal evidence root
+与对应 evidence index。
+
 ## 环境与来源
 
 | 项目 | 记录 |
