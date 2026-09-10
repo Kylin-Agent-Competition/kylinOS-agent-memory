@@ -1,0 +1,58 @@
+{
+  "schema": "d15b-btrack-handoff/v1",
+  "b_track_status": "BLOCKED_NOT_COMPLETE",
+  "d15b_pr_merge_eligibility": "PASS_WITH_DEBT",
+  "d15b_task_status": "PARTIAL / WAIVED_FORMAL_INPUTS",
+  "b_track_release_readiness": "BLOCKED_NOT_COMPLETE",
+  "d15b_pr": 173,
+  "d15b_pr_url": "https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/173",
+  "d15b_branch": "docs/D15B-retrieval-finalization",
+  "d15b_handoff_source_head": "773694f3791c38e73787a6160dd4ed8759974513",
+  "d15b_final_freeze_head": "PENDING_INDEPENDENT_REVIEW_AND_RELEASE_DECISION",
+  "d14b": {
+    "pr": 124,
+    "merge_sha": "a7abb1e71c03c4f1558e5c6a9eff2b9f36437993",
+    "formal_l3": "NOT_RUN / UNVERIFIED"
+  },
+  "formal_runtime_tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "d15b_formal_execution_commit": null,
+  "package_identity": "kylin-memory-a-d14a 0.1.0-d14a; actual frozen tar bytes unavailable to B",
+  "retrieval_eval_inputs_manifest": "release/btrack/D15B_RETRIEVAL_EVAL_INPUTS.json",
+  "btrack_manifest": "release/btrack/D15B_BTRACK_MANIFEST.json",
+  "final_report": "docs/day15/04_d15b_btrack_final_report_20260909.md",
+  "required_before_pr_merge": [
+    {
+      "owner_track": "D",
+      "action": "Perform independent review of the waiver applicability, release identity, debt classification and manifest state."
+    }
+  ],
+  "deferred_formal_debt_actions": [
+    {
+      "owner_track": "D",
+      "action": "Provide the original frozen package tar bytes, or issue an authoritative replacement package identity/refreeze decision. The PR #174 rebuilt tar is provenance-labeled and is not byte-level recovery of the original frozen package."
+    },
+    {
+      "owner_track": "D/B",
+      "action": "After the package-bytes gate is satisfied, run the approved four production capture runners and Formal L3 on the formal clean VM, preserving per-run receipts and evidence closure."
+    }
+  ],
+  "required_before_b_track_complete": [
+    {
+      "owner_track": "E/D",
+      "action": "Provide independently reviewed and sealed retrieval evaluation inputs, provenance and thresholds for the D13B evaluator."
+    },
+    {
+      "owner_track": "E/D",
+      "action": "Complete formal evaluation or record an explicit applicable accepted debt."
+    },
+    {
+      "owner_track": "D",
+      "action": "Complete final release review after release-blocking debt closure or acceptance; E performs supplemental evaluation review where applicable."
+    }
+  ],
+  "prohibited_interpretations": [
+    "D14B substitute validation is not Formal L3 PASS",
+    "D9 candidate inputs are not frozen final inputs",
+    "this handoff is not a B_TRACK_COMPLETE declaration"
+  ]
+}
