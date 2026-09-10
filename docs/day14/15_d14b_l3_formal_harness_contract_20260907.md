@@ -40,7 +40,8 @@ python scripts/run_d14b_preflight.py \
   --d13d-handoff <d13d-handoff.json> \
   --d14d-handoff <d14d-handoff.json> \
   --package-manifest <package-manifest.json> \
-  --repo-root <exact-clean-checkout> \
+  --tested-repo-root <exact-clean-checkout> \
+  --control-root <reviewed-tooling-checkout> \
   --evidence-root <absolute-new-root> \
   --capture-handoff <d14b-capture-handoff.json> \
   --package-tar <actual-frozen-tar> \
@@ -82,15 +83,19 @@ python scripts/run_d14b_preflight.py \
 }
 ```
 
-preflight fail-closed：任一 commit/package 不一致、D13D 非 `FROZEN`、D14D 非
-`L3_READY`、Seal/G9 引用不是既有仓库路径或 HTTPS URL、evidence root 已存在、工作树
-非干净或 HEAD 不同、已声明 runner 的路径/哈希不可验证，都会返回非零状态。它成功时也**不**创建 evidence root；正式
-操作者在成功后才能创建一次性 root。
+preflight 把 tested root 与 control root 分离。tested root 必须是 exact
+`tested_commit` 的干净 checkout；control root 必须是另一个干净 Git worktree，负责解析
+handoff/evidence/runner/query spec 并登记实际 `control_head`。任一 commit/package 不一致、
+D13D 非 `FROZEN`、D14D 非 `L3_READY`、Seal/G9 引用不是既有仓库路径或 HTTPS URL、
+evidence root 已存在、任一 worktree 非干净、tested HEAD 不同或 control HEAD 非法，
+都会返回非零状态。它成功时也**不**创建 evidence root；正式操作者在成功后才能创建一次性 root。
 
 正式 preflight 另强制两道机器门禁：
 - **P1-3 capture provenance**：`--capture-handoff` 必须声明 SQLite/FTS5/Vector/RRF
-  四类 runner（path 不越 repo、实际 SHA-256 == 声明、command_id 非空、tested_commit
-  一致），任一缺失/不一致即 `D14B_PREFLIGHT_FAIL`；每个 source artifact 还必须带
+  四类 runner（path 不越 control repo、实际 SHA-256 == 声明、command_id 非空、tested_commit
+  一致），任一缺失/不一致即 `D14B_PREFLIGHT_FAIL`。handoff 还必须声明 `source_bindings`：
+  四类 channel 的 production DB path、FTS5/Vector 的 query spec path + SHA-256，以及
+  Vector 的 CLI path + SHA-256。每个 source artifact 还必须带
   `.receipt.json`（channel/commit/command_id/runner SHA/artifact SHA），capture 逐项
   校验后才汇编 checkpoint，手工 JSON 无 provenance 一律拒绝。
 - **P2-1 package bytes**：`--package-tar`/`--actual-package-manifest` 现场计算 SHA-256
@@ -148,6 +153,9 @@ checkpoint 的 `capture_sources` 扩展为可独立复核的 provenance 摘要�
   "capture_handoff_sha256": "..."
 }
 ```
+
+`rrf.capture_sources` 额外记录 `fts5_input_sha256` / `vector_input_sha256`。verifier 用它们
+交叉校验 RRF receipt 与实际 FTS5/Vector parent artifact bytes；替换任一父 artifact 即 FAIL。
 
 receiver/reviewer 离线复算规则：root 内 handoff/receipt bytes 必须与 checkpoint 登记的
 SHA 一致。`REQUIRED_CHECKPOINTS` 是 verifier 唯一的 gate authority，直接固定并验证

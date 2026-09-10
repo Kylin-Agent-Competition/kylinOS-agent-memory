@@ -29,9 +29,11 @@ from scripts.d14b_capture_runner_common import (  # noqa: E402
     CaptureRunnerError,
     fetch_active_entries,
     identity_map,
+    load_source_binding,
     load_queries,
     open_readonly_sqlite,
     production_identity,
+    validate_source_binding,
     write_artifact_and_receipt,
 )
 
@@ -65,6 +67,14 @@ def _top_n(value: Any, query_id: str) -> int:
 
 
 def run(args: argparse.Namespace) -> int:
+    binding = load_source_binding("vector", args.capture_handoff)
+    validate_source_binding(
+        binding,
+        "vector",
+        db_path=args.db_path,
+        queries_file=args.queries_file,
+        vector_cli=Path(args.vector_cli),
+    )
     queries = load_queries(args.queries_file, required_key="vector", required_kind="array")
     if args.dimension <= 0:
         raise CaptureRunnerError("--dimension 必须是正整数")

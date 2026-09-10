@@ -168,6 +168,21 @@ def verify_checkpoint_provenance(
             raise ManifestError(f"capture handoff 缺少 {channel}")
         for field in ("command_id", "runner_path", "runner_sha256"):
             require_equal(handoff_capture.get(field), receipt.get(field), f"{channel} handoff.{field}")
+        if channel == "rrf":
+            for field, parent_channel in {
+                "fts5_input_sha256": "fts5",
+                "vector_input_sha256": "vector",
+            }.items():
+                parent_source = sources.get(parent_channel)
+                if not isinstance(parent_source, dict) or parent_source.get("artifact_sha256") is None:
+                    raise ManifestError(f"capture_sources 缺少 {parent_channel}.artifact_sha256")
+                if field not in receipt:
+                    raise ManifestError(f"{channel} receipt 缺少字段 {field}")
+                require_equal(
+                    receipt.get(field),
+                    parent_source.get("artifact_sha256"),
+                    f"{channel} receipt.{field}",
+                )
 
 
 def verify(evidence_root: Path) -> None:

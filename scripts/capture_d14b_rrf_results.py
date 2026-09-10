@@ -31,9 +31,12 @@ from scripts.d14b_capture_runner_common import (  # noqa: E402
     fetch_active_entries,
     identity_map,
     load_json,
+    load_source_binding,
     open_readonly_sqlite,
     production_identity,
     require_text,
+    sha256_file,
+    validate_source_binding,
     write_artifact_and_receipt,
 )
 
@@ -176,6 +179,10 @@ def _build_truth(
 
 
 def run(args: argparse.Namespace) -> int:
+    binding = load_source_binding("rrf", args.capture_handoff)
+    validate_source_binding(binding, "rrf", db_path=args.db_path)
+    fts5_input_sha256 = sha256_file(args.fts5_results)
+    vector_input_sha256 = sha256_file(args.vector_results)
     fts_queries = _load_channel_artifact(args.fts5_results)
     vector_queries = _load_channel_artifact(args.vector_results)
     connection = open_readonly_sqlite(args.db_path)
@@ -237,6 +244,10 @@ def run(args: argparse.Namespace) -> int:
         artifact_path=args.output,
         receipt_path=args.receipt_output,
         artifact={"queries": rendered},
+        extra_receipt_fields={
+            "fts5_input_sha256": fts5_input_sha256,
+            "vector_input_sha256": vector_input_sha256,
+        },
     )
     return 0
 

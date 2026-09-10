@@ -15,7 +15,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.capture_d14b_retrieval_snapshot import RECEIPT_FIELDS  # noqa: E402
+from scripts.capture_d14b_retrieval_snapshot import (  # noqa: E402
+    RECEIPT_FIELDS,
+    RRF_RECEIPT_FIELDS,
+)
 
 
 class CaptureRunnerError(ValueError):
@@ -42,7 +45,7 @@ def sha256_file(path: Path) -> str:
     try:
         return hashlib.sha256(path.read_bytes()).hexdigest()
     except OSError as error:
-        raise CaptureRunnerError(f"无法读取 runner 字节: {error}") from error
+        raise CaptureRunnerError(f"无法读取 {path} 字节: {error}") from error
 
 
 def load_capture_handoff(
@@ -83,17 +86,78 @@ def load_capture_handoff(
     }
 
 
+def load_source_binding(channel: str, capture_handoff: Path) -> dict[str, str]:
+    """Load the approved production inputs for a capture channel."""
+
+    handoff = load_json(capture_handoff, "d14b-capture-handoff")
+    bindings = handoff.get("source_bindings")
+    if not isinstance(bindings, dict):
+        raise CaptureRunnerError("d14b-capture-handoff.source_bindings 必须是 object")
+    binding = bindings.get(channel)
+    if not isinstance(binding, dict):
+        raise CaptureRunnerError(f"d14b-capture-handoff.source_bindings.{channel} 必须是 object")
+    required = ["production_db_path"]
+    if channel in ("fts5", "vector"):
+        required.extend(["query_spec_path", "query_spec_sha256"])
+    if channel == "vector":
+        required.extend(["vector_cli_path", "vector_cli_sha256"])
+    missing = [key for key in required if not binding.get(key)]
+    if missing:
+        raise CaptureRunnerError(
+            f"source_bindings.{channel} 缺少字段: {', '.join(missing)}"
+        )
+    return {key: require_text(binding.get(key), f"source_bindings.{channel}.{key}") for key in required}
+
+
+def validate_source_binding(
+    binding: dict[str, str],
+    channel: str,
+    *,
+    db_path: Path,
+    queries_file: Path | None = None,
+    vector_cli: Path | None = None,
+) -> None:
+    """Fail closed before production queries unless actual inputs are pinned."""
+
+    pinned_db = Path(binding["production_db_path"]).resolve()
+    if pinned_db != db_path.resolve():
+        raise CaptureRunnerError(f"capture {channel}.production_db_path 与 --db-path 不一致")
+    if not db_path.is_file():
+        raise CaptureRunnerError(f"pinned production_db_path 不可定位: {db_path}")
+    if queries_file is not None:
+        pinned_queries = Path(binding["query_spec_path"]).resolve()
+        if pinned_queries != queries_file.resolve():
+            raise CaptureRunnerError(f"capture {channel}.query_spec_path 与 --queries-file 不一致")
+        actual_sha = sha256_file(queries_file)
+        if actual_sha != binding["query_spec_sha256"]:
+            raise CaptureRunnerError(f"capture {channel}.query_spec_sha256 与实际文件不一致")
+    if vector_cli is not None:
+        pinned_cli = Path(binding["vector_cli_path"]).resolve()
+        if pinned_cli != vector_cli.resolve():
+            raise CaptureRunnerError(f"capture {channel}.vector_cli_path 与 --vector-cli 不一致")
+        if not vector_cli.is_file():
+            raise CaptureRunnerError(f"pinned vector_cli_path 不可定位: {vector_cli}")
+        actual_sha = sha256_file(vector_cli)
+        if actual_sha != binding["vector_cli_sha256"]:
+            raise CaptureRunnerError(f"capture {channel}.vector_cli_sha256 与实际文件不一致")
+
+
 def utc_now_z() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def exclusive_json_write(path: Path, value: dict[str, Any]) -> None:
+    created = False
     try:
-        with path.open("x", encoding="utf-8") as handle:
+        handle = path.open("x", encoding="utf-8")
+        created = True
+        with handle:
             handle.write(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     except FileExistsError as error:
         raise CaptureRunnerError(f"输出已存在，禁止覆盖: {path}") from error
     except OSError as error:
+        if created:
+            path.unlink(missing_ok=True)
         raise CaptureRunnerError(f"无法写出 {path}: {error}") from error
 
 
@@ -106,6 +170,7 @@ def write_artifact_and_receipt(
     artifact_path: Path,
     receipt_path: Path,
     artifact: dict[str, Any],
+    extra_receipt_fields: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     identity = load_capture_handoff(
         channel=channel,
@@ -117,9 +182,15 @@ def write_artifact_and_receipt(
         raise CaptureRunnerError(f"artifact 父目录不存在: {artifact_path}")
     if not receipt_path.parent.is_dir():
         raise CaptureRunnerError(f"receipt 父目录不存在: {receipt_path}")
+    if artifact_path.exists() or artifact_path.is_symlink():
+        raise CaptureRunnerError(f"artifact 输出已存在，禁止覆盖: {artifact_path}")
+    if receipt_path.exists() or receipt_path.is_symlink():
+        raise CaptureRunnerError(f"receipt 输出已存在，禁止覆盖: {receipt_path}")
     captured_at_utc = utc_now_z()
+    artifact_created = False
     try:
         exclusive_json_write(artifact_path, artifact)
+        artifact_created = True
         receipt = {
             "channel": channel,
             "tested_commit": tested_commit,
@@ -130,11 +201,17 @@ def write_artifact_and_receipt(
             "artifact_sha256": sha256_file(artifact_path),
             "captured_at_utc": captured_at_utc,
         }
-        if tuple(receipt) != RECEIPT_FIELDS:
+        extra_fields = tuple((extra_receipt_fields or {}).keys())
+        receipt.update(extra_receipt_fields or {})
+        expected_fields = RECEIPT_FIELDS + extra_fields
+        if channel == "rrf" and tuple(extra_fields) != tuple(RRF_RECEIPT_FIELDS[len(RECEIPT_FIELDS):]):
+            raise CaptureRunnerError("RRF receipt 输入 SHA 字段契约漂移")
+        if tuple(receipt) != expected_fields:
             raise CaptureRunnerError("receipt 字段契约漂移")
         exclusive_json_write(receipt_path, receipt)
     except Exception:
-        artifact_path.unlink(missing_ok=True)
+        if artifact_created:
+            artifact_path.unlink(missing_ok=True)
         raise
     return identity
 

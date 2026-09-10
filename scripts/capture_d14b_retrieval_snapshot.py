@@ -38,6 +38,11 @@ RECEIPT_FIELDS = (
     "artifact_sha256",
     "captured_at_utc",
 )
+RRF_RECEIPT_FIELDS = (
+    *RECEIPT_FIELDS,
+    "fts5_input_sha256",
+    "vector_input_sha256",
+)
 
 
 class CaptureError(ValueError):
@@ -175,6 +180,18 @@ def _verify_receipts(
             != artifact_hashes[channel]
         ):
             raise CaptureError(f"{channel} receipt.artifact_sha256 与实际 artifact 不一致")
+        if channel == "rrf":
+            parent_fields = {
+                "fts5_input_sha256": "fts5",
+                "vector_input_sha256": "vector",
+            }
+            for field, parent_channel in parent_fields.items():
+                if field not in receipt:
+                    raise CaptureError(f"{channel} receipt 缺少字段 {field}")
+                if _text(receipt.get(field), f"{channel} receipt.{field}") != artifact_hashes[parent_channel]:
+                    raise CaptureError(
+                        f"{channel} receipt.{field} 与实际 {parent_channel} artifact 不一致"
+                    )
         provenance[channel] = {
             "artifact_sha256": artifact_hashes[channel],
             "receipt_sha256": receipt_sha,
@@ -182,6 +199,13 @@ def _verify_receipts(
             "runner_sha256": _text(receipt.get("runner_sha256"), f"{channel} receipt.runner_sha256"),
             "runner_path": _text(receipt.get("runner_path"), f"{channel} receipt.runner_path"),
         }
+        if channel == "rrf":
+            provenance[channel]["fts5_input_sha256"] = _text(
+                receipt.get("fts5_input_sha256"), f"{channel} receipt.fts5_input_sha256"
+            )
+            provenance[channel]["vector_input_sha256"] = _text(
+                receipt.get("vector_input_sha256"), f"{channel} receipt.vector_input_sha256"
+            )
     provenance["capture_handoff_sha256"] = capture_handoff_sha
     return provenance
 

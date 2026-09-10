@@ -17,8 +17,10 @@ from scripts.d14b_capture_runner_common import (
     CaptureRunnerError,
     fetch_active_entries,
     identity_map,
+    load_source_binding,
     load_queries,
     open_readonly_sqlite,
+    validate_source_binding,
     write_artifact_and_receipt,
 )
 
@@ -42,6 +44,13 @@ def _positive_limit(value: Any, query_id: str) -> int:
 
 
 def run(args: argparse.Namespace) -> int:
+    binding = load_source_binding("fts5", args.capture_handoff)
+    validate_source_binding(
+        binding,
+        "fts5",
+        db_path=args.db_path,
+        queries_file=args.queries_file,
+    )
     queries = load_queries(args.queries_file, required_key="match")
     connection = open_readonly_sqlite(args.db_path)
     rendered: list[dict[str, Any]] = []

@@ -14,8 +14,10 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.d14b_capture_runner_common import (
     CaptureRunnerError,
     fetch_active_entries,
+    load_source_binding,
     open_readonly_sqlite,
     production_identity,
+    validate_source_binding,
     write_artifact_and_receipt,
 )
 
@@ -32,6 +34,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> int:
+    binding = load_source_binding("sqlite_truth", args.capture_handoff)
+    validate_source_binding(binding, "sqlite_truth", db_path=args.db_path)
     connection = open_readonly_sqlite(args.db_path)
     try:
         rows = fetch_active_entries(connection, args.user_id)
