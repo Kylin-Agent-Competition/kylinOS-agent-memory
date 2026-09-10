@@ -1,0 +1,17 @@
+{
+  "allow_missing_repo": false,
+  "completed_at_utc": "2026-09-10T13:01:41.086065+00:00",
+  "duration_seconds": 44.865,
+  "endpoint": "127.0.0.1:2223",
+  "exit_code": 0,
+  "log_file": "d15d_smoke_clean_tar_nbc2_4a6323f_20260910T205300Z.log",
+  "log_sha256": "b960fdb76dc242d4f76da2372ae226dab3654cf219df3b2c3975b0b2d1bd4af9",
+  "mode": "command",
+  "requested_command": "set -e; tar_path=/tmp/kylin-memory-a-d14a-0.1.0-d14a-4a6323f-r2.tar.gz; smoke_pkg=/tmp/kylin-d14a-smoke-package-4a6323f-r2; rm -rf \"$smoke_pkg\"; mkdir -p \"$smoke_pkg\"; tar -xzf \"$tar_path\" -C \"$smoke_pkg\"; echo smoke_pkg=$smoke_pkg; echo pre_active=$(systemctl --user is-active kylin-memory.service || true); echo pre_app_pyc=$(find \"$smoke_pkg/runtime/app\" -type f -name \"*.pyc\" | wc -l); echo pre_app_pycache=$(find \"$smoke_pkg/runtime/app\" -type d -name \"__pycache__\" | wc -l); PYTHONDONTWRITEBYTECODE=1 bash packaging/release/package_smoke.sh --package \"$smoke_pkg\" --prefix /tmp/kylin-d14a-smoke-prefix --expect-source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --scenario clean; echo post_active=$(systemctl --user is-active kylin-memory.service || true); echo post_app_pyc=$(find \"$smoke_pkg/runtime/app\" -type f -name \"*.pyc\" | wc -l); echo post_app_pycache=$(find \"$smoke_pkg/runtime/app\" -type d -name \"__pycache__\" | wc -l)",
+  "run_id": "d15d_smoke_clean_tar_nbc2_4a6323f_20260910T205300Z",
+  "started_at_utc": "2026-09-10T13:00:56.221279+00:00",
+  "status": "PASS",
+  "sudo": false,
+  "timed_out": false,
+  "user": "kylin-agent"
+}

@@ -1,0 +1,108 @@
+# Kylin VM test evidence
+run_id=d15d_build_4a6323f_20260910T205300Z
+collected_at_utc=2026-09-10T12:52:16.094084+00:00
+endpoint=127.0.0.1:2223
+user=kylin-agent
+mode=command
+privilege=user
+requested_command=PYTHONDONTWRITEBYTECODE=1 bash packaging/release/build_release_package.sh --source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --dist-dir /tmp/kylin-d14a-dist
+--- guest script ---
+set -eu
+git -C /tmp/kylin-memory-main-4a6323f rev-parse --is-inside-work-tree >/dev/null
+cd /tmp/kylin-memory-main-4a6323f
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'git_head='; git rev-parse HEAD
+printf 'git_branch='; git branch --show-current
+printf 'git_dirty='; git status --porcelain | wc -l
+set +e
+bash -lc 'PYTHONDONTWRITEBYTECODE=1 bash packaging/release/build_release_package.sh --source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --dist-dir /tmp/kylin-d14a-dist'
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+guest_utc=2026-09-10T12:52:16Z
+git_head=4a6323fb3a8c73e0b15f1f3629d28dfc12071541
+git_branch=git_dirty=0
+[d14a-build] 构建 cpp-bridge…
+-- Found pybind11: /tmp/kylin-d14a-build-venv/lib/python3.12/site-packages/pybind11/include (found version "3.1.0")
+-- Configuring done (0.1s)
+[stderr] CMake Warning (author) at /tmp/kylin-d14a-build-venv/lib/python3.12/site-packages/pybind11/share/cmake/pybind11/FindPythonLibsNew.cmake:101 (message):
+  Policy CMP0148 is not set: The FindPythonInterp and FindPythonLibs modules
+  are removed.  Run "cmake --help-policy CMP0148" for policy details.  Use
+  the cmake_policy command to set the policy and suppress this warning, or
+  preferably upgrade to using FindPython, either by calling it explicitly
+  before pybind11, or by setting PYBIND11_FINDPYTHON ON before pybind11.
+Call Stack (most recent call first):
+  /tmp/kylin-d14a-build-venv/lib/python3.12/site-packages/pybind11/share/cmake/pybind11/pybind11Tools.cmake:44 (find_package)
+  /tmp/kylin-d14a-build-venv/lib/python3.12/site-packages/pybind11/share/cmake/pybind11/pybind11Common.cmake:243 (include)
+  /tmp/kylin-d14a-build-venv/lib/python3.12/site-packages/pybind11/share/cmake/pybind11/pybind11Config.cmake:257 (include)
+  CMakeLists.txt:28 (find_package)
+This warning is for project developers.  Use -Wno-author to suppress it.
+
+CMake Warning (deprecated) at /tmp/kylin-d14a-build-venv/lib/python3.12/site-packages/pybind11/share/cmake/pybind11/FindPythonLibsNew.cmake:110 (cmake_policy):
+  The OLD behavior for policy CMP0148 will be removed from a future version
+  of CMake.
+
+  The cmake-policies(7) manual explains that the OLD behaviors of all
+  policies are deprecated and that a policy should be set to OLD only under
+  specific short-term circumstances.  Projects should be ported to the NEW
+  behavior and not rely on setting a policy to OLD.
+Call Stack (most recent call first):
+  /tmp/kylin-d14a-build-venv/lib/python3.12/site-packages/pybind11/share/cmake/pybind11/pybind11Tools.cmake:44 (find_package)
+  /tmp/kylin-d14a-build-venv/lib/python3.12/site-packages/pybind11/share/cmake/pybind11/pybind11Common.cmake:243 (include)
+  /tmp/kylin-d14a-build-venv/lib/python3.12/site-packages/pybind11/share/cmake/pybind11/pybind11Config.cmake:257 (include)
+  CMakeLists.txt:28 (find_package)
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+-- Generating done (0.1s)
+-- Build files have been written to: /tmp/kylin-memory-main-4a6323f/cpp-bridge/build-d14a-release
+[ 10%] Built target fake_sdk_malformed
+[ 20%] Built target fake_sdk_missing_dlsym
+[ 30%] Built target embedding_bridge_core
+[ 40%] Built target test_bridge_so_not_found
+[ 50%] Built target test_bridge_errors
+[ 60%] Built target test_bridge_malformed
+[ 70%] Built target test_bridge_failure_recovery
+[ 80%] Built target test_bridge_dlsym_missing
+[ 90%] Built target test_bridge_destroyed
+[ 95%] Building CXX object CMakeFiles/kylin_embedding.dir/src/py_module.cpp.o
+[100%] Linking CXX shared module kylin_embedding.cpython-312-x86_64-linux-gnu.so
+[100%] Built target kylin_embedding
+env.py rewritten deterministically
+[d14a-build] 扫描 runtime/python/bin 常规文件的构建路径残留（/tmp/kylin-d14a-build-venv）…
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/activate
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/pip3.12
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/py.test
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/pygmentize
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/activate.csh
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/pip3
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/pytest
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/mako-render
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/activate.fish
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/pybind11-config
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/pip
+[d14a-build] 移除构建路径残留命令: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/runtime/python/bin/alembic
+[d14a-build] runtime/python/bin 构建路径残留扫描: 通过
+[d14a-build] 删除构建 venv（smoke 前置，验证模块入口独立）…
+[d14a-build] 包内 Alembic migration smoke…
+[stderr] INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 001_initial_schema, 001_initial_schema — D4D 基线迁移（ADR-007 命名：001_initial_schema.py）
+[stderr] INFO  [alembic.runtime.migration] Running upgrade 001_initial_schema -> 20260826_add_trace_id, 20260826_add_trace_id — ADR-011：turns/memory_entries 新增 nullable trace_id/host_turn_id 列
+INFO  [alembic.runtime.migration] Running upgrade 20260826_add_trace_id -> 20260831_preference_versions, 20260831_preference_versions — D7D 偏好版本真源与不可变历史。
+INFO  [alembic.runtime.migration] Running upgrade 20260831_preference_versions -> 20260831_add_source_events, 20260831_add_source_events — ADR-013：多源事件持久化表 source_events（FRZ-DB-001 扩展）
+INFO  [alembic.runtime.migration] Running upgrade 20260831_add_source_events -> 20260901_d10b_vector_ledger, D10-B：Vector 代次、索引项与幂等回执账本。
+INFO  [alembic.runtime.migration] Running upgrade 20260901_d10b_vector_ledger -> 20260901_add_forget_plan, 20260901_add_forget_plan — ADR-015：精准遗忘持久化（FRZ-DB-001 扩展）
+[stderr] INFO  [alembic.runtime.migration] Running upgrade 20260901_add_forget_plan -> 20260902_add_memory_relation_conflict, ADR-017: relation/conflict/lifecycle persistence and trusted knowledge mapping.
+INFO  [alembic.runtime.migration] Running upgrade 20260902_add_memory_relation_conflict -> 20260906_add_forget_topic_key, Add the structured topic key used by D13D Forget topic execution.
+INFO  [alembic.runtime.migration] Running upgrade 20260906_add_forget_topic_key -> 20260906_add_preference_receipt_trace, Add auditable trace identity to preference write receipts for D13D Safety.
+migrate head: 20260906_add_preference_receipt_trace
+[d14a-build] 包内 Alembic migration smoke: PASS
+[d14a-build] DONE: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a
+[d14a-build] 文件数: 3350 | 大小: 87M
+[d14a-build] manifest: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/manifest.json
+[d14a-build] SHA256SUMS: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a/SHA256SUMS
+VM_TEST_EXIT=0
+--- runner summary ---
+{"allow_missing_repo": false, "completed_at_utc": "2026-09-10T12:52:37.165405+00:00", "duration_seconds": 21.072, "endpoint": "127.0.0.1:2223", "exit_code": 0, "mode": "command", "requested_command": "PYTHONDONTWRITEBYTECODE=1 bash packaging/release/build_release_package.sh --source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --dist-dir /tmp/kylin-d14a-dist", "run_id": "d15d_build_4a6323f_20260910T205300Z", "started_at_utc": "2026-09-10T12:52:16.093767+00:00", "status": "PASS", "sudo": false, "timed_out": false, "user": "kylin-agent"}

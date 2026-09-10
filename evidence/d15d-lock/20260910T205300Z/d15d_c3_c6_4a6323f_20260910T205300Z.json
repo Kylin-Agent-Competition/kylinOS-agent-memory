@@ -1,0 +1,17 @@
+{
+  "allow_missing_repo": false,
+  "completed_at_utc": "2026-09-10T12:56:01.489427+00:00",
+  "duration_seconds": 0.356,
+  "endpoint": "127.0.0.1:2223",
+  "exit_code": 0,
+  "log_file": "d15d_c3_c6_4a6323f_20260910T205300Z.log",
+  "log_sha256": "659792644e7db9f41ba25dfa93ddf026ca102badfd87ef63b1a2eb858de146b2",
+  "mode": "command",
+  "requested_command": "set -e; repo=/tmp/kylin-memory-main-4a6323f; dist=/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a; rel=4a6323fb3a8c73e0b15f1f3629d28dfc12071541; assert_same(){ src_path=\"$1\"; pkg_rel=\"$2\"; want=$(git -C \"$repo\" show \"$rel:$src_path\" | sha256sum | awk \"{print \\$1}\"); got=$(sha256sum \"$dist/$pkg_rel\" | awk \"{print \\$1}\"); [ \"$want\" = \"$got\" ] || { echo \"MISMATCH: $src_path\"; exit 1; }; echo \"PASS: $src_path -> $pkg_rel ($want)\"; }; assert_same packaging/release/systemd_install.sh systemd/install.sh; assert_same packaging/release/systemd_uninstall.sh systemd/uninstall.sh; assert_same packaging/release/systemd_verify.sh systemd/verify.sh; assert_same packaging/systemd/kylin-memory.service systemd/kylin-memory.service",
+  "run_id": "d15d_c3_c6_4a6323f_20260910T205300Z",
+  "started_at_utc": "2026-09-10T12:56:01.133407+00:00",
+  "status": "PASS",
+  "sudo": false,
+  "timed_out": false,
+  "user": "kylin-agent"
+}

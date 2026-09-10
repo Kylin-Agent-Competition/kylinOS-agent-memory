@@ -1,7 +1,7 @@
 # D15D 执行计划与任务流程
 
 > 日期：2026-09-10
-> 状态：`C2_INVALIDATED_PENDING_NEW_RELEASE_IDENTITY / PENDING_E_SIGN`（2026-09-10 Reviewer E 第 4 轮检出 main 前移）
+> 状态：`NEW_RELEASE_IDENTITY_BUILT_AND_VM_VERIFIED / PENDING_E_SIGN`
 > 前置文档：`docs/D15D_TaskCard_20260906.md`、`docs/D15D_Asset_Inventory_Gap_20260906.md`、`docs/D15D_PostLock_Consistency_Runbook_20260906.md`
 > 本文件基于 2026-09-10 实际前置闭合状态制定，取代任务卡 §5 中尚未回填的占位值。
 
@@ -9,16 +9,16 @@
 
 | 维度 | 状态 |
 |---|---|
-| release_commit | `ba3b50e` 的既有锁定已因 current main 运行时漂移失效；新 release commit 待重建 |
-| 已冻结包 | `kylin-memory-a-d14a 0.1.0-d14a`，tar SHA `2222c904…` |
+| release_commit | `4a6323f`（old `ba3b50e` lock 仅保留为 historical invalidated record） |
+| 新发布包 | `kylin-memory-a-d14a 0.1.0-d14a`，tar SHA `974c2584…`，manifest SHA `4b42d928…`，SHA256SUMS SHA `9d1ac01f…` |
 | D14D 证据 | `L3_READY`，G0-G6 PASS，G8 waiver，evidence root 已入 PR #165 |
 | main 当前位置 | `4a6323f`（2026-09-10 PR #156 合入）；`cdcce34` 与 `306c15e` 是历史快照 |
-| D15D 自身进展 | PR #175 第 4 轮返工：C2 `FAIL_INVALIDATED`，选择触发新 release/package identity；G-D7 不可签署 |
+| D15D 自身进展 | PR #175 Round 6 返工：新 `4a6323f` release/package/runtime evidence 链已建立；G-D7 仍等待 Reviewer E 签署 |
 
 ### Active release identity flow
 
 旧的 `ba3b50e` / `306c15e` 选择问题已关闭，只作为历史记录保留，不再是可执行路径。
-当前 active flow 是从 `main@4a6323f` 及其后续状态选定新的 release commit `R`：
+当前 active release commit 已选定为 `R = 4a6323f`，并按下表重建与验证：
 
 1. 在干净的 detached worktree checkout `R`，验证 C1：`HEAD == R` 且完整 worktree 为空。
 2. 按当前 Runbook C2 执行 `git diff --name-only R..main -- packaging/ memory-service/
@@ -26,6 +26,7 @@
    非空且未获批准登记即停。
 3. 在 `R` 干净树上重建包，生成新的 tar / manifest / SHA256SUMS identity，禁止复用 `2222c904`。
 4. 重跑 C3-C12 完整一致性链，并完成所需的麒麟 VM 证据后再请求 G-D7。
+5. 本轮执行结果与 run-id 登记在 `evidence/d15d-lock/20260910T205300Z/`。
 
 ---
 
@@ -70,12 +71,14 @@
 
 | 步骤 | 对应 Runbook | 内容 |
 |---|---|---|
-| 2.1 | C11 | 确认 D14D evidence root（`evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e`）存在且 checksums 23/23 OK |
+| 2.1 | C11 | D14D evidence root（`evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e`）checksums 23/23 OK 只记录为 `HISTORICAL_PASS_AT_ba3b50e`；它不是新 release commit `R` 的最终 C11 证明 |
 | 2.2 | C10 | 从 D14D G0 提取 SDK/runtime/model 身份（SDK `1.2.0.0-0k0.4` SHA `028e7099…`；runtime `1.2.0.4-0k0.1`；model `1.0.0.1-0k0.9`），确认无 `HANDOFF_REQUIRED` 遗留 |
 | 2.3 | — | 确认 G7 = NOT_RUN / N-A（D-09），G8 = NOT_RUN + 正式 waiver（D-10），与版本清单口径一致 |
 | 2.4 | — | 确认 `L3_READY=true`、`release_ready=false`、`production_ready=false` 边界 |
 
-**Gate**：C10 + C11 PASS → 进入 Phase 3。若 runtime/model 身份仍有 HANDOFF_REQUIRED 遗留，D15D 结论最高 PARTIAL。
+**Gate**：C10 身份闭合且新 release identity 的 C11 由 `evidence/d15d-lock/20260910T205300Z/`
+闭合后进入 Phase 3。旧 D14D root 仅作参考输入；若 runtime/model 身份仍有
+`HANDOFF_REQUIRED` 遗留，D15D 结论最高 PARTIAL。
 
 ---
 

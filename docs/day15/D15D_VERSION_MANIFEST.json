@@ -1,62 +1,47 @@
 {
-  "schema_version": "d15d-version-manifest/v1",
-  "run_id": "20260910T142417Z",
+  "schema_version": "d15d-version-manifest/v2",
+  "run_id": "20260910T205300Z",
   "current_main": {
     "sha": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
-    "verified_at": "2026-09-10T10:52:45Z",
-    "ancestor_of_release_commit": false,
-    "release_commit_is_ancestor": true,
+    "verified_at": "2026-09-10T13:00:00Z",
+    "release_commit_is_current_main": true,
+    "runtime_sensitive_drift_since_release_commit": false,
     "source": "kylin-mem/main"
   },
   "post_lock_consistency": {
     "gate": "C2",
-    "status": "FAIL_INVALIDATED",
+    "status": "PASS_CURRENT_MAIN_NO_RUNTIME_SENSITIVE_DRIFT",
     "current_main_sha": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
-    "comparison": "ba3b50e1bdeea185bca9daee9d1d45958f62a636..4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
-    "locked_runtime_prefix_hits": [
-      "memory-service/evaluation/d14c_evidence_package.py",
-      "memory-service/evaluation/d14c_l3_harness.py",
-      "memory-service/evaluation/d14c_runtime_precheck.py",
-      "memory-service/tests/test_d14c_evidence_package.py",
-      "memory-service/tests/test_d14c_l3_harness.py",
-      "memory-service/tests/test_d14c_runtime_precheck.py",
-      "memory-service/tests/test_d14c_runtime_precheck_cli.py"
-    ],
-    "package_content_hits": [
-      "memory-service/evaluation/d14c_evidence_package.py",
-      "memory-service/evaluation/d14c_l3_harness.py",
-      "memory-service/evaluation/d14c_runtime_precheck.py"
-    ],
-    "builder_excluded_hits": [
-      "memory-service/tests/test_d14c_evidence_package.py",
-      "memory-service/tests/test_d14c_l3_harness.py",
-      "memory-service/tests/test_d14c_runtime_precheck.py",
-      "memory-service/tests/test_d14c_runtime_precheck_cli.py"
-    ],
+    "comparison": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541..kylin-mem/main",
+    "locked_runtime_prefix_hits": [],
     "frozen_package_lock_valid": false,
-    "conclusion": "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY",
+    "historical_lock_invalidation": {
+      "release_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+      "status": "FAIL_INVALIDATED",
+      "conclusion": "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY",
+      "evidence": "evidence/d15d-lock/20260910T105245Z/c2_main_drift_invalidation.md"
+    },
     "rebuild_required": true,
+    "rebuild_completed": true,
     "host_vm_required": true,
-    "evidence": "evidence/d15d-lock/20260910T105245Z/c2_main_drift_invalidation.md",
-    "round4_review": "ReviewerE formal review 2026-09-10T10:43:30Z"
+    "host_vm_completed": true
   },
-  "release_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
-  "release_classification": "RUNTIME_EVIDENCE_STALE_AGAINST_CURRENT_MAIN",
+  "release_commit": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
+  "release_classification": "NEW_RELEASE_IDENTITY_BUILT_AND_VM_VERIFIED",
   "package": {
     "name": "kylin-memory-a-d14a",
     "version": "0.1.0-d14a",
-    "tar_path": "C:\\Users\\jackb\\AppData\\Local\\Temp\\kylin-memory-a-d14a-0.1.0-d14a-ba3b50e.tar.gz",
-    "tar_size_bytes": 21149791,
-    "tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
+    "tar_path": "/tmp/kylin-memory-a-d14a-0.1.0-d14a-4a6323f-r2.tar.gz",
+    "local_downloaded_path": "E:\\Kylin-memory-dev\\tmp\\d15d-package-4a6323f-r2\\kylin-memory-a-d14a-0.1.0-d14a-4a6323f-r2.tar.gz",
+    "tar_size_bytes": 21016935,
+    "tar_sha256": "974c2584a08bc2ae5277a8526ce3c5dbd711bc0d54c9844e99d658892cca9f28",
     "manifest_name": "manifest.json",
-    "manifest_sha256": "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0",
-    "sha256sums_sha256": "8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67",
-    "manifest_file_count": 3360,
-    "checksums": {
-      "regular_files": 3357,
-      "ok": 3357,
-      "symlinks_unhashable_on_wsl": 3
-    }
+    "manifest_sha256": "4b42d9281e1fac269bc0e0ba43d831317424fc6200a751380ebf985241124ec4",
+    "sha256sums_sha256": "9d1ac01fab8a2a876b97ffc5ffd375085661c78029b03a35c6984b7c91f4d9f4",
+    "sha256sums_entries": 3351,
+    "regular_files_in_dist": 3350,
+    "runtime_app_pyc": 0,
+    "runtime_app_pycache_dirs": 0
   },
   "source_blobs": {
     "packaging/release/systemd_install.sh": "bce16242411929dbe2e3297a06de31e65d91c94a9ffc0638f5658eb73fa31cc7",
@@ -94,14 +79,67 @@
       "sha256": "cef0fc76165ee5bb4f3da5ab6b9b6e6fdfdd278d3077f2db2d4a6cde4d4c32b1"
     }
   },
+  "new_release_evidence": {
+    "root": "evidence/d15d-lock/20260910T205300Z",
+    "endpoint": "127.0.0.1:2223",
+    "guest_worktree": "/tmp/kylin-memory-main-4a6323f",
+    "release_commit": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
+    "c1_clean_detached_worktree": {
+      "status": "PASS",
+      "run_id": "d15d_build_4a6323f_20260910T205300Z",
+      "git_dirty": 0
+    },
+    "c2_current_main_no_drift": {
+      "status": "PASS",
+      "diff_command": "git diff --name-only 4a6323fb3a8c73e0b15f1f3629d28dfc12071541..kylin-mem/main -- packaging/ memory-service/ cpp-bridge/ migrations/ config/ docs/day14/00_d14a_release_package_contract.md"
+    },
+    "c3_c6_source_blob_consistency": {
+      "status": "PASS",
+      "run_id": "d15d_c3_c6_4a6323f_20260910T205300Z"
+    },
+    "c7_clean_package_smoke": {
+      "status": "PASS",
+      "run_id": "d15d_smoke_clean_tar_nbc2_4a6323f_20260910T205300Z",
+      "scope": "install -> migration -> start -> real SDK verify -> restart -> rollback"
+    },
+    "c8_package_integrity": {
+      "status": "PASS",
+      "run_id": "d15d_c8_4a6323f_20260910T205300Z",
+      "checksum_status": "3351/3351 OK"
+    },
+    "environment_control": {
+      "pyc_orphan_initial_failure_run_ids": [
+        "d15d_smoke_4a6323f_20260910T124830Z",
+        "d15d_smoke_clean_4a6323f_20260910T205300Z",
+        "d15d_smoke_clean_nbc_4a6323f_20260910T205300Z",
+        "d15d_smoke_clean_tar_nbc_4a6323f_20260910T205300Z"
+      ],
+      "long_running_service_cleanup_run_ids": [
+        "d15d_smoke_cleanup_4a6323f_20260910T205300Z",
+        "d15d_smoke_cleanup_confirm_4a6323f_20260910T205300Z"
+      ],
+      "final_smoke_runtime_app_pyc": 0,
+      "final_smoke_runtime_app_pycache_dirs": 0
+    }
+  },
   "d14d_evidence": {
     "root": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e",
+    "status": "HISTORICAL_PASS_AT_ba3b50e / NOT_SUFFICIENT_FOR_NEW_RELEASE",
+    "role": "REFERENCE_INPUT_ONLY",
     "evidence_commit": "ec7a66b3e52f8d76b156300d375467290fdc42b6",
     "tested_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
     "package_tar_sha256": "2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401",
     "package_manifest_sha256": "76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0",
     "package_sha256sums_sha256": "8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67",
     "checksums": "23/23 OK"
+  },
+  "c11": {
+    "gate": "C11",
+    "status": "HISTORICAL_PASS_AT_ba3b50e / NOT_SUFFICIENT_FOR_NEW_RELEASE",
+    "historical_evidence_root": "evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e",
+    "current_release_evidence_root": "evidence/d15d-lock/20260910T205300Z",
+    "current_release_binding_closed": true,
+    "old_root_accepted_as_final_for_new_release": false
   },
   "contract": {
     "path": "docs/day14/00_d14a_release_package_contract.md",
@@ -112,7 +150,8 @@
     "package_identity": {
       "source_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
       "tested_runtime_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
-      "evidence_commit": "ec7a66b3e52f8d76b156300d375467290fdc42b6"
+      "evidence_commit": "ec7a66b3e52f8d76b156300d375467290fdc42b6",
+      "historical_scope_only": true
     },
     "authorization": {
       "reviewer": "ReviewerD",
@@ -141,6 +180,7 @@
     "L3_READY": true,
     "release_ready": false,
     "production_ready": false,
+    "final_sign": "PENDING",
     "G7": "NOT_RUN/N-A",
     "G8": "NOT_RUN with D-10 waiver"
   }

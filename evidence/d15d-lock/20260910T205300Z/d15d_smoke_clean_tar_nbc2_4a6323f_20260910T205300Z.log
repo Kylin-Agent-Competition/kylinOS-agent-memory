@@ -1,0 +1,74 @@
+# Kylin VM test evidence
+run_id=d15d_smoke_clean_tar_nbc2_4a6323f_20260910T205300Z
+collected_at_utc=2026-09-10T13:00:56.221648+00:00
+endpoint=127.0.0.1:2223
+user=kylin-agent
+mode=command
+privilege=user
+requested_command=set -e; tar_path=/tmp/kylin-memory-a-d14a-0.1.0-d14a-4a6323f-r2.tar.gz; smoke_pkg=/tmp/kylin-d14a-smoke-package-4a6323f-r2; rm -rf "$smoke_pkg"; mkdir -p "$smoke_pkg"; tar -xzf "$tar_path" -C "$smoke_pkg"; echo smoke_pkg=$smoke_pkg; echo pre_active=$(systemctl --user is-active kylin-memory.service || true); echo pre_app_pyc=$(find "$smoke_pkg/runtime/app" -type f -name "*.pyc" | wc -l); echo pre_app_pycache=$(find "$smoke_pkg/runtime/app" -type d -name "__pycache__" | wc -l); PYTHONDONTWRITEBYTECODE=1 bash packaging/release/package_smoke.sh --package "$smoke_pkg" --prefix /tmp/kylin-d14a-smoke-prefix --expect-source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --scenario clean; echo post_active=$(systemctl --user is-active kylin-memory.service || true); echo post_app_pyc=$(find "$smoke_pkg/runtime/app" -type f -name "*.pyc" | wc -l); echo post_app_pycache=$(find "$smoke_pkg/runtime/app" -type d -name "__pycache__" | wc -l)
+--- guest script ---
+set -eu
+git -C /tmp/kylin-memory-main-4a6323f rev-parse --is-inside-work-tree >/dev/null
+cd /tmp/kylin-memory-main-4a6323f
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'git_head='; git rev-parse HEAD
+printf 'git_branch='; git branch --show-current
+printf 'git_dirty='; git status --porcelain | wc -l
+set +e
+bash -lc 'set -e; tar_path=/tmp/kylin-memory-a-d14a-0.1.0-d14a-4a6323f-r2.tar.gz; smoke_pkg=/tmp/kylin-d14a-smoke-package-4a6323f-r2; rm -rf "$smoke_pkg"; mkdir -p "$smoke_pkg"; tar -xzf "$tar_path" -C "$smoke_pkg"; echo smoke_pkg=$smoke_pkg; echo pre_active=$(systemctl --user is-active kylin-memory.service || true); echo pre_app_pyc=$(find "$smoke_pkg/runtime/app" -type f -name "*.pyc" | wc -l); echo pre_app_pycache=$(find "$smoke_pkg/runtime/app" -type d -name "__pycache__" | wc -l); PYTHONDONTWRITEBYTECODE=1 bash packaging/release/package_smoke.sh --package "$smoke_pkg" --prefix /tmp/kylin-d14a-smoke-prefix --expect-source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --scenario clean; echo post_active=$(systemctl --user is-active kylin-memory.service || true); echo post_app_pyc=$(find "$smoke_pkg/runtime/app" -type f -name "*.pyc" | wc -l); echo post_app_pycache=$(find "$smoke_pkg/runtime/app" -type d -name "__pycache__" | wc -l)'
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+guest_utc=2026-09-10T13:00:56Z
+git_head=4a6323fb3a8c73e0b15f1f3629d28dfc12071541
+git_branch=git_dirty=0
+smoke_pkg=/tmp/kylin-d14a-smoke-package-4a6323f-r2
+pre_active=inactive
+pre_app_pyc=0
+pre_app_pycache=0
+[d14a-smoke] package: /tmp/kylin-d14a-smoke-package-4a6323f-r2
+[d14a-smoke] 清理旧 prefix: /tmp/kylin-d14a-smoke-prefix
+[d14a-smoke] 执行 install…
+包完整性 Gate: PASS（3351 文件，三向闭合，identity 绑定）
+[d14a-install] 事务捕获: 旧 launcher 为 symlink → /tmp/kylin-d14a-smoke-prefix/bin/kylin-memory-server
+[d14a-install] 事务就绪: /home/kylin-agent/.local/state/kylin-memory/d14a-install-txn（old_prefix=absent old_unit=present old_launcher=symlink）
+[d14a-install] 执行 Alembic 迁移（upgrade head）…
+[stderr] INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+alembic_version: 20260906_add_preference_receipt_trace
+[stderr] Created symlink /home/kylin-agent/.config/systemd/user/default.target.wants/kylin-memory.service → /home/kylin-agent/.config/systemd/user/kylin-memory.service.
+[d14a-install] restart 验证…
+[d14a-install] 安装完成: prefix=/tmp/kylin-d14a-smoke-prefix unit=/home/kylin-agent/.config/systemd/user/kylin-memory.service symlink=/home/kylin-agent/.local/bin/kylin-memory-server
+[d14a-install] socket: /run/user/1000/kylin-memory/memory.sock
+[d14a-smoke] 执行 verify…
+[d14a-verify] PASS: service active
+[d14a-verify] PASS: socket holder = MainPID=203111
+[d14a-verify] PASS: cmdline 指向发布包 venv（无开发目录依赖）
+[d14a-verify] memory.embed: {"status": "ok", "dim": 768, "len": 768, "latency_ms": 100.5, "degraded": false}
+[d14a-verify] PASS: 真实 SDK memory.embed dim=768
+[d14a-verify] PASS: embedding server SDK 实际加载 SHA 校验通过
+[d14a-verify] ALL PASS
+[d14a-smoke] restart 后再次 verify…
+[d14a-verify] PASS: service active
+[d14a-verify] PASS: socket holder = MainPID=203158
+[d14a-verify] PASS: cmdline 指向发布包 venv（无开发目录依赖）
+[d14a-verify] memory.embed: {"status": "ok", "dim": 768, "len": 768, "latency_ms": 1.5, "degraded": false}
+[d14a-verify] PASS: 真实 SDK memory.embed dim=768
+[d14a-verify] PASS: embedding server SDK 实际加载 SHA 校验通过
+[d14a-verify] ALL PASS
+[d14a-smoke] 执行 rollback…
+[d14a-rollback] 存在安装事务（/home/kylin-agent/.local/state/kylin-memory/d14a-install-txn），开始精确恢复旧状态…
+[d14a-rollback] 已恢复旧 launcher（symlink → /tmp/kylin-d14a-smoke-prefix/bin/kylin-memory-server）
+[d14a-rollback] 已恢复旧 unit: /home/kylin-agent/.config/systemd/user/kylin-memory.service
+[d14a-rollback] 旧 prefix 本不存在，已移除新 prefix
+[d14a-rollback] 事务已提交并清理: /home/kylin-agent/.local/state/kylin-memory/d14a-install-txn
+[d14a-rollback] 回退完成：服务已停止/禁用，旧状态已恢复或 clean-state 清理完成
+[d14a-smoke] ALL PASS: install → migration → start → verify(real SDK) → restart → rollback
+[d14a-smoke] ALL PASS
+post_active=inactive
+post_app_pyc=0
+post_app_pycache=0
+VM_TEST_EXIT=0
+--- runner summary ---
+{"allow_missing_repo": false, "completed_at_utc": "2026-09-10T13:01:41.086065+00:00", "duration_seconds": 44.865, "endpoint": "127.0.0.1:2223", "exit_code": 0, "mode": "command", "requested_command": "set -e; tar_path=/tmp/kylin-memory-a-d14a-0.1.0-d14a-4a6323f-r2.tar.gz; smoke_pkg=/tmp/kylin-d14a-smoke-package-4a6323f-r2; rm -rf \"$smoke_pkg\"; mkdir -p \"$smoke_pkg\"; tar -xzf \"$tar_path\" -C \"$smoke_pkg\"; echo smoke_pkg=$smoke_pkg; echo pre_active=$(systemctl --user is-active kylin-memory.service || true); echo pre_app_pyc=$(find \"$smoke_pkg/runtime/app\" -type f -name \"*.pyc\" | wc -l); echo pre_app_pycache=$(find \"$smoke_pkg/runtime/app\" -type d -name \"__pycache__\" | wc -l); PYTHONDONTWRITEBYTECODE=1 bash packaging/release/package_smoke.sh --package \"$smoke_pkg\" --prefix /tmp/kylin-d14a-smoke-prefix --expect-source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --scenario clean; echo post_active=$(systemctl --user is-active kylin-memory.service || true); echo post_app_pyc=$(find \"$smoke_pkg/runtime/app\" -type f -name \"*.pyc\" | wc -l); echo post_app_pycache=$(find \"$smoke_pkg/runtime/app\" -type d -name \"__pycache__\" | wc -l)", "run_id": "d15d_smoke_clean_tar_nbc2_4a6323f_20260910T205300Z", "started_at_utc": "2026-09-10T13:00:56.221279+00:00", "status": "PASS", "sudo": false, "timed_out": false, "user": "kylin-agent"}

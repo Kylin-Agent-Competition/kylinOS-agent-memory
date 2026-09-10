@@ -1,0 +1,37 @@
+# Kylin VM test evidence
+run_id=d15d_c8_4a6323f_20260910T205300Z
+collected_at_utc=2026-09-10T12:55:49.597335+00:00
+endpoint=127.0.0.1:2223
+user=kylin-agent
+mode=command
+privilege=user
+requested_command=set -e; dist=/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a; c8_log=/tmp/d15d-c8-4a6323f-20260910T205300Z.log; cd "$dist"; sha256sum -c SHA256SUMS > "$c8_log" 2>&1; rc=$?; echo exit_code=$rc; echo ok_count=$(grep -c ": OK$" "$c8_log"); echo failure_count=$(grep -cE ": (FAILED|failure)" "$c8_log") || true; echo log_sha256=$(sha256sum "$c8_log" | awk "{print \$1}"); echo source_commit=$(python3 -c "import json; print(json.load(open(\"manifest.json\"))[\"source_commit\"])"); echo package_version=$(python3 -c "import json; print(json.load(open(\"manifest.json\"))[\"package_version\"])"); tail -3 "$c8_log"; exit "$rc"
+--- guest script ---
+set -eu
+git -C /tmp/kylin-memory-main-4a6323f rev-parse --is-inside-work-tree >/dev/null
+cd /tmp/kylin-memory-main-4a6323f
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'git_head='; git rev-parse HEAD
+printf 'git_branch='; git branch --show-current
+printf 'git_dirty='; git status --porcelain | wc -l
+set +e
+bash -lc 'set -e; dist=/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a; c8_log=/tmp/d15d-c8-4a6323f-20260910T205300Z.log; cd "$dist"; sha256sum -c SHA256SUMS > "$c8_log" 2>&1; rc=$?; echo exit_code=$rc; echo ok_count=$(grep -c ": OK$" "$c8_log"); echo failure_count=$(grep -cE ": (FAILED|failure)" "$c8_log") || true; echo log_sha256=$(sha256sum "$c8_log" | awk "{print \$1}"); echo source_commit=$(python3 -c "import json; print(json.load(open(\"manifest.json\"))[\"source_commit\"])"); echo package_version=$(python3 -c "import json; print(json.load(open(\"manifest.json\"))[\"package_version\"])"); tail -3 "$c8_log"; exit "$rc"'
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+guest_utc=2026-09-10T12:55:50Z
+git_head=4a6323fb3a8c73e0b15f1f3629d28dfc12071541
+git_branch=git_dirty=0
+exit_code=0
+ok_count=0
+failure_count=0
+log_sha256=e0d91d0141a0b044c99660c6319c1e19bd24db43102395a649723a70a17e94f4
+source_commit=4a6323fb3a8c73e0b15f1f3629d28dfc12071541
+package_version=0.1.0-d14a
+systemd/kylin-memory.service: 成功
+systemd/uninstall.sh: 成功
+systemd/verify.sh: 成功
+VM_TEST_EXIT=0
+--- runner summary ---
+{"allow_missing_repo": false, "completed_at_utc": "2026-09-10T12:55:50.124161+00:00", "duration_seconds": 0.527, "endpoint": "127.0.0.1:2223", "exit_code": 0, "mode": "command", "requested_command": "set -e; dist=/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a; c8_log=/tmp/d15d-c8-4a6323f-20260910T205300Z.log; cd \"$dist\"; sha256sum -c SHA256SUMS > \"$c8_log\" 2>&1; rc=$?; echo exit_code=$rc; echo ok_count=$(grep -c \": OK$\" \"$c8_log\"); echo failure_count=$(grep -cE \": (FAILED|failure)\" \"$c8_log\") || true; echo log_sha256=$(sha256sum \"$c8_log\" | awk \"{print \\$1}\"); echo source_commit=$(python3 -c \"import json; print(json.load(open(\\\"manifest.json\\\"))[\\\"source_commit\\\"])\"); echo package_version=$(python3 -c \"import json; print(json.load(open(\\\"manifest.json\\\"))[\\\"package_version\\\"])\"); tail -3 \"$c8_log\"; exit \"$rc\"", "run_id": "d15d_c8_4a6323f_20260910T205300Z", "started_at_utc": "2026-09-10T12:55:49.596953+00:00", "status": "PASS", "sudo": false, "timed_out": false, "user": "kylin-agent"}

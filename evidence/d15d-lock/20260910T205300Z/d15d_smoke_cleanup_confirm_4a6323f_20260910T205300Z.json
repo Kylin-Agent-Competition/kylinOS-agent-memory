@@ -1,0 +1,17 @@
+{
+  "allow_missing_repo": false,
+  "completed_at_utc": "2026-09-10T13:00:36.915090+00:00",
+  "duration_seconds": 1.604,
+  "endpoint": "127.0.0.1:2223",
+  "exit_code": 0,
+  "log_file": "d15d_smoke_cleanup_confirm_4a6323f_20260910T205300Z.log",
+  "log_sha256": "2a6515e900ce21640989ad4543662f11fa3cb354bc336fd06ea10aad4794a728",
+  "mode": "command",
+  "requested_command": "set -e; echo active=$(systemctl --user is-active kylin-memory.service || true); echo enabled=$(systemctl --user is-enabled kylin-memory.service || true); pkill -f \"[e]mbedding.server --socket /tmp/kylin-d14a-embed.sock\" || true; rm -f \"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/memory.sock\" /tmp/kylin-d14a-embed.sock; sleep 1; echo embedding_processes=$(pgrep -f \"[e]mbedding.server --socket /tmp/kylin-d14a-embed.sock\" | wc -l); echo socket_exists=$(test -S \"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/memory.sock\" && echo yes || echo no); echo embed_socket_exists=$(test -S /tmp/kylin-d14a-embed.sock && echo yes || echo no)",
+  "run_id": "d15d_smoke_cleanup_confirm_4a6323f_20260910T205300Z",
+  "started_at_utc": "2026-09-10T13:00:35.311344+00:00",
+  "status": "PASS",
+  "sudo": false,
+  "timed_out": false,
+  "user": "kylin-agent"
+}

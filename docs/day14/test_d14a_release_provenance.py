@@ -1,12 +1,14 @@
-"""D14A 发布契约与 provenance 溯源文档确定性静态事实测试（v5）。
+"""D14A 发布契约与 provenance 溯源文档确定性静态事实测试（v5 + D15D v2）。
 
 性质：源码级确定性静态事实测试（纯 stdlib，无网络、无真实 VM、无跨分支文件、
 无 stash/pyc 依赖、无 conditional/unconditional skip、不读取不修改历史 evidence）。
 
 方式：基于本文件（__file__）定位仓库根（docs/day14/..）：
 
-- 当前 contract/package identity 绑定 D14D formal evidence `ba3b50e`；
-  D14A v4 identity 只允许作为 historical/superseded 记录；
+- 当前 contract/package identity 继续绑定 D14D formal evidence `ba3b50e`，
+  并标记 historical scope；D14A v4 identity 只允许作为 historical/superseded 记录；
+- D15D current release identity 绑定 `4a6323f`，由 D15D manifest v2 承载，
+  不改写 Reviewer E 已专项裁定的 D14D contract historical identity；
 - `current_pr_head` **不再**硬编码任何固定 SHA 字面量，执行时以
   `git rev-parse HEAD` 为唯一真源（命令失败即测试错误，不静默、不伪造）；
 - 以历史 `tested_runtime_commit` 为证据身份，执行
@@ -39,7 +41,8 @@
    ExecStart 安装前缀 launcher；
 7. verify 架构：SDK 经独立 embedding server PID 实际加载校验
    （/proc/<embedding_pid>/maps 生效路径+hash），非 gateway 单 PID 自加载；
-8. Contract v5 当前身份与 D15D manifest / D14D evidence 三方一致；
+8. Contract v5 historical 身份与 D14D evidence 一致；D15D manifest v2 当前
+   release identity 与 package evidence 一致，且新旧身份不混写；
 9. Report 保持 PACKAGE_IMPLEMENTATION_CANDIDATE；两文档全文不出现 HOST_VERIFIED、
    L3 PASS 字面量与状态越级声明；
 10. BLOCKER C fail-closed：§6bis G0 identity value-matched；既有 PR author
@@ -59,7 +62,7 @@ _REPO_ROOT = _DOC_DIR.parent.parent
 _DOC00 = _DOC_DIR / "00_d14a_release_package_contract.md"
 _DOC01 = _DOC_DIR / "01_d14a_implementation_report_20260905.md"
 
-# 当前 D14D formal identity（current_pr_head 为执行时动态事实，不在此落库）。
+# D14D formal identity（current_pr_head 为执行时动态事实，不在此落库）。
 _SOURCE_COMMIT = "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
 _TESTED_RUNTIME_COMMIT = "ba3b50e1bdeea185bca9daee9d1d45958f62a636"
 _EVIDENCE_COMMIT = "ec7a66b3e52f8d76b156300d375467290fdc42b6"
@@ -71,6 +74,13 @@ _STATIC_IDENTITIES = {
     "tested_runtime_commit": _TESTED_RUNTIME_COMMIT,
     "evidence_commit": _EVIDENCE_COMMIT,
 }
+
+# D15D 当前 release identity：由 D15D manifest v2 承载，不替换 D14D contract。
+_CURRENT_RELEASE_COMMIT = "4a6323fb3a8c73e0b15f1f3629d28dfc12071541"
+_NEW_TAR_SHA256 = "974c2584a08bc2ae5277a8526ce3c5dbd711bc0d54c9844e99d658892cca9f28"
+_NEW_MANIFEST_SHA256 = "4b42d9281e1fac269bc0e0ba43d831317424fc6200a751380ebf985241124ec4"
+_NEW_SHA256SUMS_SHA256 = "9d1ac01fab8a2a876b97ffc5ffd375085661c78029b03a35c6984b7c91f4d9f4"
+_NEW_EVIDENCE_ROOT = "evidence/d15d-lock/20260910T205300Z"
 
 # D14A v4 历史身份：仅允许保留为 historical/superseded，不参与当前 live 门禁。
 _HISTORICAL_IDENTITIES = {
@@ -108,26 +118,6 @@ _RUNTIME_PREFIXES = (
 )
 
 _CURRENT_MAIN_SHA = "4a6323fb3a8c73e0b15f1f3629d28dfc12071541"
-_EXPECTED_MAIN_DRIFT_HITS = (
-    "memory-service/evaluation/d14c_evidence_package.py",
-    "memory-service/evaluation/d14c_l3_harness.py",
-    "memory-service/evaluation/d14c_runtime_precheck.py",
-    "memory-service/tests/test_d14c_evidence_package.py",
-    "memory-service/tests/test_d14c_l3_harness.py",
-    "memory-service/tests/test_d14c_runtime_precheck.py",
-    "memory-service/tests/test_d14c_runtime_precheck_cli.py",
-)
-_EXPECTED_PACKAGE_CONTENT_HITS = (
-    "memory-service/evaluation/d14c_evidence_package.py",
-    "memory-service/evaluation/d14c_l3_harness.py",
-    "memory-service/evaluation/d14c_runtime_precheck.py",
-)
-_EXPECTED_BUILDER_EXCLUDED_HITS = (
-    "memory-service/tests/test_d14c_evidence_package.py",
-    "memory-service/tests/test_d14c_l3_harness.py",
-    "memory-service/tests/test_d14c_runtime_precheck.py",
-    "memory-service/tests/test_d14c_runtime_precheck_cli.py",
-)
 
 # 旧实现遗留的固定 current_pr_head 字面量与旧固定 diff 范围（禁止回退出现）。
 _LEGACY_CURRENT_PR_HEAD = "15de7c67426909c7c872f9cb3f9a04a2575753fd"
@@ -154,13 +144,26 @@ def _load_json(path: Path) -> dict:
     return value
 
 
-def _three_way_identity() -> dict:
-    """收敛 contract、D15D manifest、D14D evidence 的当前身份事实。"""
+def _identity_ssot() -> dict:
+    """分别收敛 historical D14D identity 与 D15D current release identity。"""
     manifest = _load_json(_D15D_MANIFEST)
     summary = _load_json(_D14D_SUMMARY)
     build = _load_json(_D14D_BUILD_IDENTITY)
     contract = manifest["contract"]
     return {
+        "current_release_commit": manifest["release_commit"],
+        "current_main_sha": manifest["current_main"]["sha"],
+        "current_main_release_commit_is_current_main":
+            manifest["current_main"]["release_commit_is_current_main"],
+        "current_main_drift": manifest["current_main"]["runtime_sensitive_drift_since_release_commit"],
+        "new_package_tar_sha256": manifest["package"]["tar_sha256"],
+        "new_package_manifest_sha256": manifest["package"]["manifest_sha256"],
+        "new_package_sha256sums_sha256": manifest["package"]["sha256sums_sha256"],
+        "new_evidence_root": manifest["new_release_evidence"]["root"],
+        "d14d_evidence_commit": manifest["d14d_evidence"]["evidence_commit"],
+        "d14d_package_tar_sha256": manifest["d14d_evidence"]["package_tar_sha256"],
+        "d14d_package_manifest_sha256": manifest["d14d_evidence"]["package_manifest_sha256"],
+        "d14d_package_sha256sums_sha256": manifest["d14d_evidence"]["package_sha256sums_sha256"],
         "release_commit": manifest["release_commit"],
         "manifest_source_commit": build["source_commit"],
         "manifest_tested_commit": summary["tested_commit"],
@@ -549,25 +552,33 @@ def test_classifier_negative_cases():
 # ---------- 12. contract ↔ D15D manifest ↔ D14D evidence 三方一致 ----------
 
 def test_contract_manifest_d14d_three_way_identity():
-    """当前 contract/package identity 必须与 D15D manifest 和 D14D evidence
-    三方一致；任何漂移、历史值回流或 hash 混写都 fail-closed。"""
-    values = _three_way_identity()
-    current_commit = _SOURCE_COMMIT
+    """contract 与 D14D evidence 保持 historical identity 一致；
+    D15D manifest 承载 current release identity，且新旧身份不得混写。"""
+    values = _identity_ssot()
+    historical_commit = _SOURCE_COMMIT
     evidence_commit = _EVIDENCE_COMMIT
-    assert values["release_commit"] == current_commit
-    assert values["manifest_source_commit"] == current_commit
-    assert values["manifest_tested_commit"] == current_commit
-    assert values["contract_source_commit"] == current_commit
-    assert values["contract_tested_runtime_commit"] == current_commit
+    assert values["current_release_commit"] == _CURRENT_RELEASE_COMMIT
+    assert values["current_main_sha"] == _CURRENT_RELEASE_COMMIT
+    assert values["current_main_release_commit_is_current_main"] is True
+    assert values["current_main_drift"] is False
+    assert values["new_package_tar_sha256"] == _NEW_TAR_SHA256
+    assert values["new_package_manifest_sha256"] == _NEW_MANIFEST_SHA256
+    assert values["new_package_sha256sums_sha256"] == _NEW_SHA256SUMS_SHA256
+    assert values["new_evidence_root"] == _NEW_EVIDENCE_ROOT
+
+    assert values["manifest_source_commit"] == historical_commit
+    assert values["manifest_tested_commit"] == historical_commit
+    assert values["contract_source_commit"] == historical_commit
+    assert values["contract_tested_runtime_commit"] == historical_commit
     assert values["contract_evidence_commit"] == evidence_commit
-    assert values["manifest_evidence_commit"] == evidence_commit
     assert values["package_tar_sha256"] == _FROZEN_TAR_SHA256
     assert values["build_package_tar_sha256"] == _FROZEN_TAR_SHA256
-    assert values["manifest_package_tar_sha256"] == _FROZEN_TAR_SHA256
     assert values["manifest_sha256"] == _FROZEN_MANIFEST_SHA256
-    assert values["manifest_manifest_sha256"] == _FROZEN_MANIFEST_SHA256
     assert values["sha256sums_sha256"] == _FROZEN_SHA256SUMS_SHA256
-    assert values["manifest_sha256sums_sha256"] == _FROZEN_SHA256SUMS_SHA256
+    assert values["d14d_evidence_commit"] == evidence_commit
+    assert values["d14d_package_tar_sha256"] == _FROZEN_TAR_SHA256
+    assert values["d14d_package_manifest_sha256"] == _FROZEN_MANIFEST_SHA256
+    assert values["d14d_package_sha256sums_sha256"] == _FROZEN_SHA256SUMS_SHA256
 
     governance = _load_json(_D15D_MANIFEST)["contract"]
     assert governance["status"] == (
@@ -584,7 +595,7 @@ def test_contract_manifest_d14d_three_way_identity():
 
     contract = _docs()["contract"]
     for value in (
-        current_commit,
+        historical_commit,
         evidence_commit,
         _FROZEN_TAR_SHA256,
         _FROZEN_MANIFEST_SHA256,
@@ -592,9 +603,10 @@ def test_contract_manifest_d14d_three_way_identity():
         "docs/day15/D15D_VERSION_MANIFEST.json",
     ):
         assert value in contract, f"contract 缺少当前三方身份值: {value}"
+    assert governance["package_identity"].get("historical_scope_only") is True
 
 
-# ---------- 13. live 门禁：真实 diff 三分类 + 文档一致性（接受真实 STALE 为 PASS） ----------
+# ---------- 13. live 门禁：current release 无 runtime drift + 文档一致性 ----------
 
 def _assert_documentation_consistency(cls: str):
     """按 live 判定的分类对两文档做一致性断言（fail-closed 负向断言全部生效）：
@@ -633,41 +645,63 @@ def _assert_documentation_consistency(cls: str):
     print(f"[live] 文档一致性校验通过，classification={cls}")
 
 
-def test_live_diff_fail_closed():
-    """live 门禁：以 tested_runtime_commit..HEAD 真实 git diff 为事实，断言
-    分类器输出与直接前缀扫描一致，并把真实分类与命中前缀打印到测试日志。
+def _current_main_ref() -> str:
+    """选择可用的 current main ref；本地与 CI 的 remote 名不同。"""
+    for candidate in ("origin/main", "kylin-mem/main"):
+        proc = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", candidate],
+            cwd=str(_REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode == 0:
+            sha = proc.stdout.strip()
+            assert _SHA40.fullmatch(sha), f"{candidate} 输出非法: {sha!r}"
+            assert sha == _CURRENT_MAIN_SHA, (
+                f"{candidate}={sha} 不是登记的 current main {_CURRENT_MAIN_SHA}"
+            )
+            return candidate
+    raise AssertionError("current main ref 不存在：origin/main 或 kylin-mem/main")
 
-    当前分支真实分类为 RUNTIME_EVIDENCE_STALE（本批次 Task1/2b/2/3 已引入
-    packaging/memory-service/migrations 等变更；正式重打包→hash→真实 VM 刷新
-    明确超出本 Task 且尚未执行）时，测试记录并接受该分类为 PASS——
-    不因"当前确实 stale"红门禁；负向断言仍 fail-closed。
+
+def _release_runtime_drift_hits(main_ref: str) -> list:
+    """检查 current release commit 到 current main 的 runtime-sensitive paths。"""
+    proc = subprocess.run(
+        ["git", "diff", "--name-only", f"{_CURRENT_RELEASE_COMMIT}..{main_ref}",
+         "--", *_RUNTIME_PREFIXES],
+        cwd=str(_REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, (
+        f"git diff current release drift 失败 (rc={proc.returncode}): "
+        f"{proc.stderr.strip()}"
+    )
+    return [line for line in proc.stdout.splitlines() if line.strip()]
+
+
+def test_live_diff_fail_closed():
+    """live 门禁：D15D current release `4a6323f` 到 current main 的 diff 不得
+    命中 packaging/runtime 前缀；D14D contract 的 historical 三分类保留，
+    但不再替代当前 release 的新鲜性判定。
     """
     head = _head_sha()
-    changed = _diff_name_only()
-    cls, hits = classify_changed_paths(changed)
-
-    # 独立事实复核：直接前缀扫描，保证分类器与 git diff 事实一致。
-    direct_hits = [p for p in changed if p.startswith(_RUNTIME_PREFIXES)]
-    if not changed:
-        direct_cls = "EVIDENCE_CURRENT"
-    elif direct_hits:
-        direct_cls = "RUNTIME_EVIDENCE_STALE"
-    else:
-        direct_cls = "DOCS_EVIDENCE_ONLY"
-    assert cls == direct_cls, (
-        f"分类器({cls})与直接前缀扫描({direct_cls})不一致（错误分类 fail-closed）"
+    main_ref = _current_main_ref()
+    hits = _release_runtime_drift_hits(main_ref)
+    assert not hits, (
+        f"current release `4a6323f` 到 {main_ref} 出现 runtime drift: {hits}"
     )
-    assert hits == direct_hits, f"分类器命中({hits})与直接扫描({direct_hits})不一致"
 
     # 记录执行时事实到测试日志。
     print(f"[live] HEAD={head}")
-    print(f"[live] tested_runtime_commit={_TESTED_RUNTIME_COMMIT}")
-    print(f"[live] changed_files={len(changed)}")
-    print(f"[live] classification={cls}")
+    print(f"[live] current_release_commit={_CURRENT_RELEASE_COMMIT}")
+    print(f"[live] current_main_ref={main_ref}")
     print(f"[live] runtime_prefix_hits={hits}")
 
-    # 文档一致性（负向 fail-closed 断言恒生效；真实 STALE 作为已声明中间态 PASS）。
-    _assert_documentation_consistency(cls)
+    # 文档一致性（负向 fail-closed 断言恒生效）。
+    _assert_documentation_consistency("CURRENT_RELEASE_NO_RUNTIME_DRIFT")
 
 
 def test_governance_ssot_after_identity_adjudication():
@@ -698,30 +732,50 @@ def test_governance_ssot_after_identity_adjudication():
 
 
 def test_current_main_drift_invalidation_ssot():
-    """第 4 轮 main drift 必须显式失效旧包锁定，禁止回退 docs-only 结论。"""
+    """第 4 轮旧包失效记录必须保留，且当前 main 已由 4a6323f 新链闭合。"""
     manifest = _load_json(_D15D_MANIFEST)
     consistency = manifest["post_lock_consistency"]
+    historical = consistency["historical_lock_invalidation"]
     assert manifest["current_main"]["sha"] == _CURRENT_MAIN_SHA
-    assert manifest["current_main"]["ancestor_of_release_commit"] is False
-    assert manifest["current_main"]["release_commit_is_ancestor"] is True
+    assert manifest["current_main"]["release_commit_is_current_main"] is True
+    assert manifest["current_main"]["runtime_sensitive_drift_since_release_commit"] is False
     assert manifest["release_classification"] == (
-        "RUNTIME_EVIDENCE_STALE_AGAINST_CURRENT_MAIN"
+        "NEW_RELEASE_IDENTITY_BUILT_AND_VM_VERIFIED"
     )
     assert consistency["gate"] == "C2"
-    assert consistency["status"] == "FAIL_INVALIDATED"
+    assert consistency["status"] == "PASS_CURRENT_MAIN_NO_RUNTIME_SENSITIVE_DRIFT"
     assert consistency["current_main_sha"] == _CURRENT_MAIN_SHA
-    assert tuple(consistency["locked_runtime_prefix_hits"]) == _EXPECTED_MAIN_DRIFT_HITS
-    assert tuple(consistency["package_content_hits"]) == _EXPECTED_PACKAGE_CONTENT_HITS
-    assert tuple(consistency["builder_excluded_hits"]) == _EXPECTED_BUILDER_EXCLUDED_HITS
+    assert tuple(consistency["locked_runtime_prefix_hits"]) == ()
     assert consistency["frozen_package_lock_valid"] is False
-    assert consistency["conclusion"] == "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY"
+    assert consistency["comparison"] == f"{_CURRENT_MAIN_SHA}..kylin-mem/main"
+    assert consistency["rebuild_required"] is True
+    assert consistency["rebuild_completed"] is True
+    assert consistency["host_vm_required"] is True
+    assert consistency["host_vm_completed"] is True
+
+    assert historical["release_commit"] == _SOURCE_COMMIT
+    assert historical["status"] == "FAIL_INVALIDATED"
+    assert historical["conclusion"] == "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY"
+    assert manifest["new_release_evidence"]["root"] == _NEW_EVIDENCE_ROOT
+    assert manifest["new_release_evidence"]["release_commit"] == _CURRENT_MAIN_SHA
+    assert manifest["new_release_evidence"]["c1_clean_detached_worktree"]["status"] == "PASS"
+    assert manifest["new_release_evidence"]["c3_c6_source_blob_consistency"]["status"] == "PASS"
+    assert manifest["new_release_evidence"]["c7_clean_package_smoke"]["status"] == "PASS"
+    assert manifest["new_release_evidence"]["c8_package_integrity"]["status"] == "PASS"
+    assert manifest["package"]["runtime_app_pyc"] == 0
+    assert manifest["package"]["runtime_app_pycache_dirs"] == 0
+    assert manifest["c11"]["status"] == (
+        "HISTORICAL_PASS_AT_ba3b50e / NOT_SUFFICIENT_FOR_NEW_RELEASE"
+    )
+    assert manifest["c11"]["old_root_accepted_as_final_for_new_release"] is False
+    assert manifest["c11"]["current_release_binding_closed"] is True
     assert consistency["rebuild_required"] is True
     assert consistency["host_vm_required"] is True
 
     task_card = _TASK_CARD.read_text(encoding="utf-8")
     assert _CURRENT_MAIN_SHA in task_card
     assert "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY" in task_card
-    assert "RUNTIME_EVIDENCE_STALE_AGAINST_CURRENT_MAIN" not in task_card
+    assert "NEW_RELEASE_IDENTITY_BUILT_AND_VM_VERIFIED" in task_card
 
     assert _ROUND4_C2_EVIDENCE.is_file(), f"缺失 C2 失效证据: {_ROUND4_C2_EVIDENCE}"
     evidence = _ROUND4_C2_EVIDENCE.read_text(encoding="utf-8")
