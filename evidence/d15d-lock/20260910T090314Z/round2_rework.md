@@ -8,8 +8,9 @@ Run ID: `20260910T090314Z`
   the D14D formal evidence root `d14d_20260907T141000Z_ba3b50e`.
 - MEDIUM-1: synchronized D15D TaskCard runtime/model state and G-D1 frozen-tar
   consumption semantics.
-- BLOCKER-2: marked the existing PR-author authorization as not valid for
-  independent ReviewerD review. A non-author ReviewerD record is still pending.
+- BLOCKER-2: marked the existing PR-author authorization as not valid. Reviewer E
+  later adjudicated the special identity/provenance/contract consistency closure;
+  no additional non-author ReviewerD record is required for that adjudication.
 
 ## Current identity
 
@@ -38,9 +39,9 @@ environment.
 ## Authority boundary
 
 The existing GitHub comment `5615523980` was posted by `Ducknesses`, who is
-also PR #175 author. It therefore does not satisfy author/reviewer separation.
-The contract status is `PROPOSED v5 / PENDING_INDEPENDENT_D_REVIEW_AND_E_SIGN`.
-Reviewer E sign-off remains pending.
+also PR #175 author. It is retained only as an invalid historical authority
+record. Reviewer E's identity adjudication closes the special authority item;
+the final D15D/G-D7 sign-off remains pending.
 
 ## Reviewer E identity adjudication
 
@@ -53,3 +54,6 @@ package identity and authorizes backfill to contract, `D15D_VERSION_MANIFEST.jso
 and Round 2 evidence. Its scope is limited to identity/provenance/contract
 consistency closure and does not create a runtime, release, or production claim.
 It is not treated as a ReviewerD signature or as final D15D sign-off.
+
+Governance status is therefore
+`REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / PENDING_FINAL_D15D_SIGN`.

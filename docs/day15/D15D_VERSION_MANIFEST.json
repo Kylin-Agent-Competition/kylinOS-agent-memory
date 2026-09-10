@@ -68,7 +68,8 @@
     "path": "docs/day14/00_d14a_release_package_contract.md",
     "version": 5,
     "section_6bis": "G0_IDENTITY_CLOSED",
-    "status": "PROPOSED_PENDING_INDEPENDENT_D_REVIEW_AND_E_SIGN",
+    "status": "PROPOSED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / PENDING_FINAL_D15D_SIGN",
+    "final_d15d_sign": "PENDING",
     "package_identity": {
       "source_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
       "tested_runtime_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
@@ -83,7 +84,8 @@
       "authority_comment_id": 5615523980,
       "authority_comment_author": "Ducknesses",
       "authority_valid": false,
-      "invalidity_reason": "authority_comment_author equals PR #175 author; independent non-author ReviewerD record is pending"
+      "invalidity_reason": "authority_comment_author equals PR #175 author",
+      "record_disposition": "HISTORICAL_INVALID_NOT_AN_ACTIVE_BLOCKER"
     },
     "identity_adjudication": {
       "status": "APPROVED",

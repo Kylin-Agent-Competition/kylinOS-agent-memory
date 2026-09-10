@@ -1,7 +1,7 @@
-# D14A Release Package Contract（溯源收口 v5 · ReviewerD 授权 · PENDING_E_SIGN）
+# D14A Release Package Contract（溯源收口 v5 · Reviewer E Identity Adjudication Approved · PENDING_FINAL_D15D_SIGN）
 
 > 依据：D14A 交接文档（2026-09-05）§Phase 2 + §A14-B01 解除要求。
-> 状态：**PROPOSED / PENDING_E_SIGN**（v4 曾按 2026-09-06 D14D 人工裁决清单
+> 状态：**PROPOSED / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / PENDING_FINAL_D15D_SIGN**（v4 曾按 2026-09-06 D14D 人工裁决清单
 > D-03/D-04 会签为 FROZEN；GitHub 第四轮 review 执行仍属 Ducknesses 的实际动作，
 > 本会签不替代）。
 > 2026-09-10 v5 第二轮返工：当前 package/provenance identity 改为消费 D14D 正式
@@ -9,9 +9,7 @@
 > 旧 v4 身份仅保留为 §1.3 historical/superseded 记录。§6bis 的 ReviewerD 授权
 > repository reference 为
 > <https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/175#issuecomment-5615523980>。
-> 该 reference 由 PR author `Ducknesses` 发布；按作者/Reviewer 分离要求，它尚未构成
-> 非作者 ReviewerD 独立会签，因此 v5 在非作者 D review 与 Reviewer E 会签前均不得
-> 写成 FROZEN 终态。
+> 该 reference 由 PR author `Ducknesses` 发布，因此仅保留为 invalid historical authority record，不再作为当前 active blocker。
 > 2026-09-10 ReviewerE identity adjudication：非作者 Reviewer E 在
 > <https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/175#issuecomment-5616426125>
 > 独立裁定接受 D14D `ba3b50e` identity/provenance closure，并确认可回填 contract、
@@ -19,7 +17,8 @@
 > consistency closure，不替代 D15D 最终签署。
 > 该升版只冻结外部依赖身份；不改变 D14D `L3_READY=true` / `release_ready=false` /
 > `production_ready=false` 边界，也不宣称 Release Gate 或 production 就绪。
-> 冻结方式：本文件为 package contract 唯一真源；任何字段改动需 D 主审会签并升版。
+> 冻结方式：本文件为 package contract 唯一真源；本 v5 identity closure 由上述
+> ReviewerE identity adjudication 专项裁定，最终 D15D/G-D7 签署另行执行。
 > 2026-09-06 会签变更：§3/§6bis 统一为“SDK 全量 fail-closed；runtime/model
 > HANDOFF_REQUIRED，由正式 D14D G0 采集冻结后回填并升版”；正式 package version 固定
 > `0.1.0-d14a`（D-05）。除此之外 v4 溯源收口内容不变。
@@ -244,7 +243,7 @@ embedding server PID**，`grep -F '.so' /proc/<embedding_pid>/maps` 中实际加
   **HANDOFF_REQUIRED**；该状态由正式 D14D G0 证据和 2026-09-10 ReviewerD 授权解除。
 - 本节身份只声明外部依赖的冻结输入，不改变 L3 证据边界，不宣称
   `release_ready=true` 或 `production_ready=true`。
-- 不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence；
+- 不得伪造 runtime/model version、hash、vendor lock、reviewer 会签或麒麟 evidence；
   不由本文档或本 Task 补写虚构的 runtime/model version/hash/vendor lock/D Reviewer 会签。
 - 解除依据：
   `evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e/dependency_identity.json`
@@ -324,20 +323,20 @@ bash systemd/verify.sh --embed-socket <EMBED_SOCK> --embed-pid <REAL_EMBEDDING_S
 
 ## 11. 验收 Gate（D14A READY 前置）
 
-- [x] contract PROPOSED v5 / PENDING_INDEPENDENT_D_REVIEW_AND_E_SIGN（2026-09-10
-  已同步 D14D `ba3b50e` formal identity；既有 `Ducknesses` 授权评论不满足非作者
-  D review；Reviewer E 已在 PR comment 5616426125 独立裁定 identity/provenance
-  closure APPROVED，最终 D15D 签署仍待独立完成）
+- [x] contract PROPOSED v5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / PENDING_FINAL_D15D_SIGN（2026-09-10 已同步 D14D `ba3b50e` formal identity；
+  既有 `Ducknesses` 授权评论仅保留为 invalid historical authority record；Reviewer E 已在
+  PR comment 5616426125 独立裁定 identity/provenance closure APPROVED，最终 D15D
+  签署仍待独立完成）
 - [x] 本地/L1 package smoke PASS（D14D G3/G4：package-only install → real SDK
   smoke → restart；evidence root 见 §1.2）
 - [x] dependency audit PASS（D14D G2 无开发路径/RPATH/not-found）
 - [x] clean-VM L3：package-only install + real SDK + restart + OS reboot（D14D
   G3/G4/G5/G6 PASS；G7/G8 不在已验证范围）
-- [x] L3 evidence 完整（D14D evidence root 23/23 checksums OK；独立非作者
-  Reviewer 接受前不得升级为 L3_READY/发布就绪）
+- [x] L3 evidence 完整（D14D evidence root 23/23 checksums OK；Reviewer E 已专项
+  接受 identity/provenance closure，但不因此升级 release/production claim）
 
 > Gate 边界：contract 已按 2026-09-06 D-03/D-04 裁决升 **FROZEN v4**，并于
-> 2026-09-10 按 ReviewerD 授权以 D14D G0 证据形成 **PROPOSED v5 / PENDING_E_SIGN**。本 Gate 清单与
+> 2026-09-10 按 ReviewerE identity adjudication 以 D14D G0 证据形成 **PROPOSED v5 / PENDING_FINAL_D15D_SIGN**。本 Gate 清单与
 > 全文不产生任何状态越级声明
 > （既不宣称宿主环境已验证，也不宣称三级验收通过），v5 仅冻结 §6bis 外部依赖身份。
 > 备注：上述 Gate 引用的是 D14D formal evidence root 对同一 `ba3b50e` frozen tar

@@ -43,8 +43,10 @@
 9. Report 保持 PACKAGE_IMPLEMENTATION_CANDIDATE；两文档全文不出现 HOST_VERIFIED、
    L3 PASS 字面量与状态越级声明；
 10. BLOCKER C fail-closed：§6bis G0 identity value-matched；既有 PR author
-     授权评论不能替代非作者 ReviewerD 独立会签；文档声明不得伪造 runtime/model
-     version、hash、vendor lock、D Reviewer 会签或麒麟 evidence。
+     授权评论仅保留为 invalid historical record，专项 authority 由 Reviewer E
+     identity adjudication 闭合；最终 D15D 签署仍分离待办；文档声明不得伪造
+     runtime/model
+     version、hash、vendor lock、reviewer 会签或麒麟 evidence。
 """
 
 import json
@@ -78,6 +80,10 @@ _HISTORICAL_IDENTITIES = {
 }
 
 _D15D_MANIFEST = _REPO_ROOT / "docs/day15/D15D_VERSION_MANIFEST.json"
+_TASK_CARD = _REPO_ROOT / "docs/D15D_TaskCard_20260906.md"
+_ROUND2_REWORK = (
+    _REPO_ROOT / "evidence/d15d-lock/20260910T090314Z/round2_rework.md"
+)
 _D14D_SUMMARY = (
     _REPO_ROOT / "evidence/l3-kylin-vm/"
     "d14d_20260907T141000Z_ba3b50e/summary.json"
@@ -423,15 +429,16 @@ def test_verify_embedding_pid_report():
     )
 
 
-# ---------- 8. Contract 状态：PROPOSED v5 / PENDING_INDEPENDENT_D_REVIEW_AND_E_SIGN ----------
+# ---------- 8. Contract 状态：Reviewer E adjudication approved / final sign pending ----------
 
-def test_contract_status_proposed_v5_pending_reviews():
+def test_contract_status_proposed_v5_pending_final_sign():
     _assert_all(
         _docs()["contract"],
-        ["PROPOSED v5 / PENDING_INDEPENDENT_D_REVIEW_AND_E_SIGN",
+        ["PROPOSED v5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
+         "PENDING_FINAL_D15D_SIGN",
          "溯源收口 v5", "pull/175#issuecomment-5615523980",
-         "PR author `Ducknesses`", "非作者 ReviewerD 独立会签",
-         "Reviewer E 会签"],
+         "PR author `Ducknesses`", "invalid historical authority record",
+         "ReviewerE identity adjudication", "PENDING_FINAL_D15D_SIGN"],
         "contract",
     )
 
@@ -458,7 +465,8 @@ def test_blocker_c_identity_frozen_contract():
         [
             "BLOCKER C",
             "PR author `Ducknesses`",
-            "非作者 ReviewerD 独立会签",
+            "ReviewerE identity adjudication",
+            "PENDING_FINAL_D15D_SIGN",
             "d14d_20260907T141000Z_ba3b50e/dependency_identity.json",
             "028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48",
             "b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225",
@@ -466,7 +474,7 @@ def test_blocker_c_identity_frozen_contract():
             "release_ready=false",
             "production_ready=false",
             "fail-closed",
-            "不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence",
+            "不得伪造 runtime/model version、hash、vendor lock、reviewer 会签或麒麟 evidence",
         ],
         "contract",
     )
@@ -479,7 +487,7 @@ def test_blocker_c_fail_closed_report():
             "BLOCKER C",
             "HANDOFF_REQUIRED",
             "fail-closed",
-            "不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence",
+            "不得伪造 runtime/model version、hash、vendor lock、reviewer 会签或麒麟 evidence",
         ],
         "report",
     )
@@ -534,6 +542,19 @@ def test_contract_manifest_d14d_three_way_identity():
     assert values["sha256sums_sha256"] == _FROZEN_SHA256SUMS_SHA256
     assert values["manifest_sha256sums_sha256"] == _FROZEN_SHA256SUMS_SHA256
 
+    governance = _load_json(_D15D_MANIFEST)["contract"]
+    assert governance["status"] == (
+        "PROPOSED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
+        "PENDING_FINAL_D15D_SIGN"
+    )
+    assert governance["final_d15d_sign"] == "PENDING"
+    assert governance["authorization"]["authority_valid"] is False
+    assert governance["authorization"]["record_disposition"] == (
+        "HISTORICAL_INVALID_NOT_AN_ACTIVE_BLOCKER"
+    )
+    assert governance["identity_adjudication"]["status"] == "APPROVED"
+    assert governance["identity_adjudication"]["authority_comment_id"] == 5616426125
+
     contract = _docs()["contract"]
     for value in (
         current_commit,
@@ -571,7 +592,8 @@ def _assert_documentation_consistency(cls: str):
     )
     _assert_all(
         texts["contract"],
-        ["PROPOSED v5 / PENDING_INDEPENDENT_D_REVIEW_AND_E_SIGN", "BLOCKER C",
+        ["PROPOSED v5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
+         "PENDING_FINAL_D15D_SIGN", "BLOCKER C",
          "溯源收口 v5", "release_ready=false", "production_ready=false"],
         "contract",
     )
@@ -619,6 +641,33 @@ def test_live_diff_fail_closed():
 
     # 文档一致性（负向 fail-closed 断言恒生效；真实 STALE 作为已声明中间态 PASS）。
     _assert_documentation_consistency(cls)
+
+
+def test_governance_ssot_after_identity_adjudication():
+    """专项 identity authority 已由 E 裁定，旧 ReviewerD 状态不得回潮。"""
+    manifest = _load_json(_D15D_MANIFEST)
+    governance = manifest["contract"]
+    assert governance["status"] == (
+        "PROPOSED_V5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / "
+        "PENDING_FINAL_D15D_SIGN"
+    )
+    assert governance["final_d15d_sign"] == "PENDING"
+
+    for path in (_TASK_CARD, _ROUND2_REWORK):
+        assert path.is_file(), f"缺失治理 SSOT 文件: {path}"
+        text = path.read_text(encoding="utf-8")
+        assert "PENDING_INDEPENDENT_D_REVIEW" not in text, (
+            f"{path.name} 仍保留旧非作者 ReviewerD active gate 状态"
+        )
+        assert "non-author ReviewerD record is still pending" not in text, (
+            f"{path.name} 仍声明等待非作者 ReviewerD record"
+        )
+        assert "REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED" in text, (
+            f"{path.name} 缺少 Reviewer E identity adjudication approved 状态"
+        )
+        assert "PENDING_FINAL_D15D_SIGN" in text, (
+            f"{path.name} 缺少 final sign pending 状态"
+        )
 
 
 # ---------- 运行入口（直接执行时同样可用；pytest 收集上面 test_*） ----------
