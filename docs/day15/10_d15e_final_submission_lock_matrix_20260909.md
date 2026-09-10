@@ -107,8 +107,8 @@ D15E_SIGNOFF_STATUS=BLOCKED
 `docs/day14/23_d14e_phase1_acceptance_baseline_20260908.md` 自述的
 as-of=2026-09-08 与「基线提交尚未合入 origin/main」在 PR #171 squash merge 合入
 main（HEAD=`3ef0ce5…`）后已**过期**；该历史文档快照可失效。本文件以 2026-09-09
-重新扫描的仓库事实为准（scan_time_main_head、D14B/D14C 分支 tip 与 ahead/behind
-计数、PR refs 快照等全部按 2026-09-09 值登记）。
+重新扫描的仓库事实为准（scan_time_main_head、D14B/D14C 稳定身份（PR / branch /
+head）等全部按 2026-09-09 值登记）。
 
 ---
 
@@ -212,7 +212,7 @@ identity 绑定 + 环境/run ID，并给出「当前是否允许作为最终比�
 | C3 D14A final release package identity 已冻结 | evidence/l3-kylin-vm/d14a_final_package_20260908/D14A_FINAL_PACKAGE_FREEZE_RECORD_20260908.md | package kylin-memory-a-d14a 0.1.0-d14a；tar/manifest/SHA256SUMS SHA（见 §2.1）；index id D14A-FINAL-PACKAGE-FREEZE | 允许（仅 package identity 冻结） | 不代表 production release |
 | C4 D14D clean Kylin L3 evidence READY | evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e/ | tested_commit ba3b50e1bd…；PR #165 ec7a66b、#168 2bd5948 | 允许（必须带 L3_READY=true / release_ready=false / production_ready=false 边界） | G7 NOT_RUN/N-A、G8 NOT_RUN waiver；不得解释为 release readiness 或 production readiness（BOUND-3） |
 | C5 Day14 检索/索引生命周期发布回归最终通过 | 无正式 evidence（D14B Formal L3 debt 未闭合） | PR #124 / test/D14B-l3-vm-release-regression（final head=fb4531e673bb5f02d6a109ec0f467cb6d384e927；merge commit=a7abb1e71c03c4f1558e5c6a9eff2b9f36437993；MERGED into main） | **不允许**（当前不可声明） | D14B_FORMAL_L3=NOT_RUN/UNVERIFIED、D14B_FORMAL_RESULT=UNVERIFIED；D14B_TASK=PARTIAL/WAIVED_FORMAL_INPUTS；Preparation Harness PASS 与 substitute validation PASS_WITH_LIMITATIONS 不替代 formal evidence（BOUND-1/BOUND-5） |
-| C6 官方 AI Assistant production E2E 已正式通过 | 无正式 evidence（D14C 未闭合） | 分支 test/D14C-l3-clean-vm-release-regression（2026-09-09 tip=refs/pull/156/head=77319aa4ce75d7f7fe4d7ed64f7332cffdb88441；refs/pull/156/merge=72950fd59bf5fddbfe12d4daad9f040ea227e5f9；PR #156 PR_OPEN） | **不允许**（当前不可声明） | D14C_FORMAL_L3=BLOCKED、D14C_FORMAL_RESULT=UNVERIFIED；G4=BLOCKED_PENDING_D15C_HANDOFF（D15C handoff input ready；等待 D14C/D 主审消费）；未合入 main（NON_MAIN_BRANCH）（BOUND-2/BOUND-5） |
+| C6 官方 AI Assistant production E2E 已正式通过 | 无正式 evidence（D14C 未闭合） | 分支 test/D14C-l3-clean-vm-release-regression（2026-09-09 tip=refs/pull/156/head=77319aa4ce75d7f7fe4d7ed64f7332cffdb88441；PR #156 PR_OPEN） | **不允许**（当前不可声明） | D14C_FORMAL_L3=BLOCKED、D14C_FORMAL_RESULT=UNVERIFIED；G4=BLOCKED_PENDING_D15C_HANDOFF（D15C handoff input ready；等待 D14C/D 主审消费）；未合入 main（NON_MAIN_BRANCH）（BOUND-2/BOUND-5） |
 | C7 D14E 业务/安全最终签署 | N/A（后续 final 流程产生） | N/A | **不允许**（当前不可声明） | D14E_FINAL_ACCEPTANCE=BLOCKED、D14E_SIGNOFF_STATUS=BLOCKED；final signoff 未签署 |
 | C8 Demo/视频素材与比赛叙事一致 | N/A（对照 artifact 待建） | N/A | **不允许**（当前不可声明） | 须在 D14B/D14C 事实与最终素材就绪后逐条核对 |
 
@@ -225,7 +225,7 @@ identity 绑定 + 环境/run ID，并给出「当前是否允许作为最终比�
 | 上游 | ref/PR | 是否合入 main | 当前受控状态 | 阻塞的 E15 项 | 来源 |
 |------|--------|---------------|--------------|----------------|------|
 | D14B | PR #124 / test/D14B-l3-vm-release-regression（final head=fb4531e673bb5f02d6a109ec0f467cb6d384e927；merge commit=a7abb1e71c03c4f1558e5c6a9eff2b9f36437993） | 是（PR #124 已合入 main；Formal L3 debt 未闭合） | D14B_FORMAL_L3=NOT_RUN/UNVERIFIED；D14B_FORMAL_RESULT=UNVERIFIED；D14B_TASK=PARTIAL/WAIVED_FORMAL_INPUTS；Formal Input Waiver=WAIVED_BY_OWNER（仅 merge eligibility） | E15-2 | gh PR #124 实测（final head、merge commit；as-of 2026-09-09） |
-| D14C | refs/heads/test/D14C-l3-clean-vm-release-regression tip=77319aa4ce75d7f7fe4d7ed64f7332cffdb88441；PR #156 PR_OPEN（refs/pull/156/head=77319aa4ce75d7f7fe4d7ed64f7332cffdb88441、refs/pull/156/merge=72950fd59bf5fddbfe12d4daad9f040ea227e5f9） | 否（NON_MAIN_BRANCH；NOT_MERGED；与 main ahead/behind=2/11） | D14C_FORMAL_L3=BLOCKED；D14C_FORMAL_RESULT=UNVERIFIED；D14C G4=BLOCKED_PENDING_D15C_HANDOFF（D15C handoff input ready；等待 D14C/D 主审消费） | E15-3 | git ls-remote origin 实测（分支 tip、PR refs、ahead/behind 计数；as-of 2026-09-09） |
+| D14C | PR #156 / branch=test/D14C-l3-clean-vm-release-regression / head=77319aa4ce75d7f7fe4d7ed64f7332cffdb88441（PR_OPEN；NON_MAIN_BRANCH；NOT_MERGED） | 否（NON_MAIN_BRANCH；NOT_MERGED） | D14C_FORMAL_L3=BLOCKED；D14C_FORMAL_RESULT=UNVERIFIED；D14C G4=BLOCKED_PENDING_D15C_HANDOFF（D15C handoff input ready；等待 D14C/D 主审消费） | E15-3 | GitHub PR #156 / branch head 实测（stable identity；as-of 2026-09-09） |
 | D15A | docs/day15/00_d15a_rc_lock_matrix_20260906.md（as-of 2026-09-06 快照）；D15A 文档已随 #169/#170 合入 main（2026-09-08） | 是（#169/#170，2026-09-08 合入 origin/main） | A15-1/A15-3=READY_FOR_REVIEW、A15-2=BLOCKED（上游 review 结论）；D15A 冻结矩阵仍为 WAITING_PREREQ（00 文档 as-of 2026-09-06 状态行，快照可失效） | E15-5（overclaim 终检对 A15 相关声明的核验受限） | docs/day14/23 §A.2 + docs/day15/00 文档快照 |
 | D15C | D15C upstream artifact EXISTS and is merged into main via PR #167（branch=feat/C-hook-evidence；final head=b5f8154b9e510c10124e84ecf70d608e4fee7896；merge commit=a4034c9cdab1de31f70bced73dcab8ff2b18407c；review=APPROVED；handoff status=HANDOFF_SUBMITTED） | 是（PR #167 已合入 main；artifact/main entry ready；D15C handoff input ready；not closed） | D14C G4=BLOCKED_PENDING_D15C_HANDOFF（D15C handoff input ready；等待 D14C/D 主审消费；不得自动解除）；TD-007/008/009、R-ARCH-05、Production Identity 未关闭 | E15-3（经 D14C） | git ls-remote / gh PR #167 实测（2026-09-09）；注：.local-agent-workflow/tasks 与 .local-agent-workflow/batches 下无 D15C Task/Batch 仅表示本地 workflow 输入未登记，不能据此推导 upstream artifact 不存在 |
 | D14E | docs/day14/23_d14e_phase1_acceptance_baseline_20260908.md（Phase 1 验收基线；随 PR #171 squash merge 合入） | 是（PR #171 merge commit=3ef0ce518844749f14aa384790efbcde5af39ec9；historical merge identity / historical main point，非 current scan-time main；current scan-time main=a7abb1e71c03c4f1558e5c6a9eff2b9f36437993） | D14E_PHASE1_ACCEPTANCE_BASELINE=READY；D14E_FINAL_ACCEPTANCE=BLOCKED；D14E_SIGNOFF_STATUS=BLOCKED；final signoff 未签署 | E15-6 | git log 实测（PR #171 squash merge）+ docs/day14/23 状态行 |
