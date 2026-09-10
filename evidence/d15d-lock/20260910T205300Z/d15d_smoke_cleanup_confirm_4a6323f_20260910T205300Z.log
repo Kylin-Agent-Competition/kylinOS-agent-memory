@@ -1,0 +1,33 @@
+# Kylin VM test evidence
+run_id=d15d_smoke_cleanup_confirm_4a6323f_20260910T205300Z
+collected_at_utc=2026-09-10T13:00:35.311696+00:00
+endpoint=127.0.0.1:2223
+user=kylin-agent
+mode=command
+privilege=user
+requested_command=set -e; echo active=$(systemctl --user is-active kylin-memory.service || true); echo enabled=$(systemctl --user is-enabled kylin-memory.service || true); pkill -f "[e]mbedding.server --socket /tmp/kylin-d14a-embed.sock" || true; rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/memory.sock" /tmp/kylin-d14a-embed.sock; sleep 1; echo embedding_processes=$(pgrep -f "[e]mbedding.server --socket /tmp/kylin-d14a-embed.sock" | wc -l); echo socket_exists=$(test -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/memory.sock" && echo yes || echo no); echo embed_socket_exists=$(test -S /tmp/kylin-d14a-embed.sock && echo yes || echo no)
+--- guest script ---
+set -eu
+git -C /tmp/kylin-memory-main-4a6323f rev-parse --is-inside-work-tree >/dev/null
+cd /tmp/kylin-memory-main-4a6323f
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'git_head='; git rev-parse HEAD
+printf 'git_branch='; git branch --show-current
+printf 'git_dirty='; git status --porcelain | wc -l
+set +e
+bash -lc 'set -e; echo active=$(systemctl --user is-active kylin-memory.service || true); echo enabled=$(systemctl --user is-enabled kylin-memory.service || true); pkill -f "[e]mbedding.server --socket /tmp/kylin-d14a-embed.sock" || true; rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/memory.sock" /tmp/kylin-d14a-embed.sock; sleep 1; echo embedding_processes=$(pgrep -f "[e]mbedding.server --socket /tmp/kylin-d14a-embed.sock" | wc -l); echo socket_exists=$(test -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/memory.sock" && echo yes || echo no); echo embed_socket_exists=$(test -S /tmp/kylin-d14a-embed.sock && echo yes || echo no)'
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+guest_utc=2026-09-10T13:00:35Z
+git_head=4a6323fb3a8c73e0b15f1f3629d28dfc12071541
+git_branch=git_dirty=0
+active=inactive
+enabled=disabled
+embedding_processes=0
+socket_exists=no
+embed_socket_exists=no
+VM_TEST_EXIT=0
+--- runner summary ---
+{"allow_missing_repo": false, "completed_at_utc": "2026-09-10T13:00:36.915090+00:00", "duration_seconds": 1.604, "endpoint": "127.0.0.1:2223", "exit_code": 0, "mode": "command", "requested_command": "set -e; echo active=$(systemctl --user is-active kylin-memory.service || true); echo enabled=$(systemctl --user is-enabled kylin-memory.service || true); pkill -f \"[e]mbedding.server --socket /tmp/kylin-d14a-embed.sock\" || true; rm -f \"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/memory.sock\" /tmp/kylin-d14a-embed.sock; sleep 1; echo embedding_processes=$(pgrep -f \"[e]mbedding.server --socket /tmp/kylin-d14a-embed.sock\" | wc -l); echo socket_exists=$(test -S \"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kylin-memory/memory.sock\" && echo yes || echo no); echo embed_socket_exists=$(test -S /tmp/kylin-d14a-embed.sock && echo yes || echo no)", "run_id": "d15d_smoke_cleanup_confirm_4a6323f_20260910T205300Z", "started_at_utc": "2026-09-10T13:00:35.311344+00:00", "status": "PASS", "sudo": false, "timed_out": false, "user": "kylin-agent"}

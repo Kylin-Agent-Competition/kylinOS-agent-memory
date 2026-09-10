@@ -1,9 +1,24 @@
-# D14A Release Package Contract（FROZEN · 溯源收口 v4 · 2026-09-06 会签）
+# D14A Release Package Contract（溯源收口 v5 · Reviewer E Identity Adjudication Approved · PENDING_FINAL_D15D_SIGN）
 
 > 依据：D14A 交接文档（2026-09-05）§Phase 2 + §A14-B01 解除要求。
-> 状态：**FROZEN**（2026-09-06 D14D 人工裁决清单 D-03/D-04 会签：§3/§6bis 语义统一后
-> 以 v4 升 FROZEN；GitHub 第四轮 review 执行仍属 Ducknesses 的实际动作，本会签不替代）。
-> 冻结方式：本文件为 package contract 唯一真源；任何字段改动需 D 主审会签并升版。
+> 状态：**PROPOSED / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / PENDING_FINAL_D15D_SIGN**（v4 曾按 2026-09-06 D14D 人工裁决清单
+> D-03/D-04 会签为 FROZEN；GitHub 第四轮 review 执行仍属 Ducknesses 的实际动作，
+> 本会签不替代）。
+> 2026-09-10 v5 第二轮返工：当前 package/provenance identity 改为消费 D14D 正式
+> evidence root（`d14d_20260907T141000Z_ba3b50e`）的 `ba3b50e` 冻结身份；
+> 旧 v4 身份仅保留为 §1.3 historical/superseded 记录。§6bis 的 ReviewerD 授权
+> repository reference 为
+> <https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/175#issuecomment-5615523980>。
+> 该 reference 由 PR author `Ducknesses` 发布，因此仅保留为 invalid historical authority record，不再作为当前 active blocker。
+> 2026-09-10 ReviewerE identity adjudication：非作者 Reviewer E 在
+> <https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/175#issuecomment-5616426125>
+> 独立裁定接受 D14D `ba3b50e` identity/provenance closure，并确认可回填 contract、
+> D15D manifest 与 Round 2 evidence。该裁定仅覆盖 identity/provenance/contract
+> consistency closure，不替代 D15D 最终签署。
+> 该升版只冻结外部依赖身份；不改变 D14D `L3_READY=true` / `release_ready=false` /
+> `production_ready=false` 边界，也不宣称 Release Gate 或 production 就绪。
+> 冻结方式：本文件为 package contract 唯一真源；本 v5 identity closure 由上述
+> ReviewerE identity adjudication 专项裁定，最终 D15D/G-D7 签署另行执行。
 > 2026-09-06 会签变更：§3/§6bis 统一为“SDK 全量 fail-closed；runtime/model
 > HANDOFF_REQUIRED，由正式 D14D G0 采集冻结后回填并升版”；正式 package version 固定
 > `0.1.0-d14a`（D-05）。除此之外 v4 溯源收口内容不变。
@@ -34,7 +49,7 @@
 |---|---|---|
 | `package_name` | `kylin-memory-a-d14a` | A 轨发布包名 |
 | `package_version` | `0.1.0-d14a` | 首个 D14A 版本 |
-| `source_commit` | **`5424d28e1178d3d16764ad7c050b878bc8981583`** | **构建声明基线**（仅声明打包基线，非执行/证据/当前 head）；若 main 前移，开工前重新冻结；四身份语义见 §1.1，禁止互相伪造相等 |
+| `source_commit` | **`ba3b50e1bdeea185bca9daee9d1d45958f62a636`** | **当前 D14D 冻结包构建声明基线**（D14D `package_build_identity.json` 的 `source_commit`）；若 main 前移触及发布路径，必须重新冻结；身份语义见 §1.1，禁止与 evidence/head 混写 |
 | `source_tree_dirty` | `false`（打包时 git status --porcelain 为空） | 打包入口强制检查 |
 | `target_os` | 银河麒麟桌面 V11 2603 x86_64（kernel 6.6.x） | 与 D14B/D14D 干净快照一致 |
 | `target_arch` | amd64 (x86_64) | |
@@ -48,16 +63,19 @@
 
 ---
 
-## 1.1 Provenance 身份语义（四类字段，禁止互相伪造相等）
+## 1.1 Provenance 身份语义（当前 D14D 冻结身份）
 
 | 身份字段 | 值 | 语义 |
 |---|---|---|
-| `source_commit` | `5424d28e1178d3d16764ad7c050b878bc8981583` | **构建时声明基线**（非执行/证据/当前 head） |
-| `tested_runtime_commit` | `e3d4b9d565e2c3c153973125b3c071225e1b9e4d` | 历史 runtime 包在真实 VM **实际执行**的提交 |
-| `evidence_commit` | `68bb8f764e204818759fceae0616cac0048753a2` | evidence-only 快照提交 |
+| `source_commit` | `ba3b50e1bdeea185bca9daee9d1d45958f62a636` | 当前 D14D 冻结包构建声明基线 |
+| `tested_runtime_commit` | `ba3b50e1bdeea185bca9daee9d1d45958f62a636` | 当前 D14D 正式 L3 evidence root 实际测试的提交；D14D 的构建/测试提交有意相等，不构成伪造 |
+| `evidence_commit` | `ec7a66b3e52f8d76b156300d375467290fdc42b6` | D14D evidence root 正式入库 commit（PR #165） |
 | `current_pr_head` | `<git rev-parse HEAD 输出>`（执行时事实） | **动态值**：本表不落库固定 SHA，以 `git rev-parse HEAD` 输出为唯一真源；随新提交前移，禁止把 `tested_runtime_commit` 写成 current_pr_head |
 
-- 四者独立，**不得互相伪造相等**；尤其**不得把 `tested_runtime_commit` 写成当前 PR head**。
+- 四者语义独立，**不得互相伪造相等**；当前 `source_commit == tested_runtime_commit`
+  是 D14D formal evidence 的真实事实（同一冻结包先构建、后在同一 commit 的
+  evidence root 中测试），不表示 evidence/head 可混写。尤其**不得把
+  `tested_runtime_commit` 写成当前 PR head**。
 - 证据新鲜性以 `git diff --name-only tested_runtime_commit..HEAD`（HEAD 为执行时
   `git rev-parse HEAD` 事实，不落库固定 SHA）做三分类：
   - `EVIDENCE_CURRENT`：diff 为空；
@@ -66,22 +84,35 @@
   - `RUNTIME_EVIDENCE_STALE`：diff 含上述任一 packaging/runtime 前缀——必须
     **重新打包 → 重算 hash → 重跑真实 VM** → 回填新的 `tested_runtime_commit` /
     `evidence_commit` 后才可更新 runtime evidence。
-- **当前事实（执行时判定）**：`git diff --name-only tested_runtime_commit..HEAD`
-  前缀扫描命中的 packaging/runtime 路径按 git history/diff 事实归因如下（归因拆分见
-  报告 §5.1 A/B）：`packaging/release/*` 属 **PR152 自有 remediation** 引入——
-  由 PR152 自有 D14A commit（4fb71cc/bf0fe65/c06c718/93b9325/26e8c00/ebcdbbd 第一父链）
-  引入；`memory-service/`（db|gateway|pipeline|service|tests）、
-  `migrations/versions/20260906_*`、`evaluation/`、`scripts/` 等属
-  **Upstream/main synchronization** 引入——由 main 同步 merge
-  （15de7c6/c3a5489/8a04441，另含 02ca7a0 handoff 同步）带入的
-  upstream PR #150/#157/#134/#148 变更，**非 PR152 引入**。当前 HEAD 相对
-  `tested_runtime_commit` 分类为 **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**——
-  该分类是前缀扫描的**客观分类结果**，不是对 PR152 路径的归因断言；正式
-  「重新打包 → 重算 hash → 重跑真实 VM」并回填 `tested_runtime_commit` /
-  `evidence_commit` 属后续独立事项（超出本 Task、尚未执行），完成前不得宣称
-  runtime evidence 与当前 head 一致。
+- 2026-09-10 第 4 轮返工事实：`ba3b50e..current-main@4a6323f` 命中
+  `memory-service/` 锁定前缀，既有 frozen package lock 对 current main 为
+  `FAIL_INVALIDATED`；D15D 已登记 `TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY`。
+  守卫在每次执行时按 `git diff --name-only tested_runtime_commit..HEAD` 复核分类，
+  不得以本段静态文字替代 live 判定。
 - 仅文档/测试变更（`DOCS_EVIDENCE_ONLY`）不触发重包，但 `current_pr_head` 前移时
   仍须按上述三分类复核。
+
+### 1.2 当前 D14D 冻结包身份（v5，SSOT 口径）
+
+| 字段 | 值 | 来源 |
+|---|---|---|
+| package name / version | `kylin-memory-a-d14a` / `0.1.0-d14a` | D14D `package_build_identity.json` |
+| frozen tar SHA-256 | `2222c904cd2f1ca4e7fec65a1fe76f611760d2c49a63d5839cfb5011dd32b401` | D14D `package_build_identity.json` |
+| package manifest SHA-256 | `76a839335541814bbc7ff53b510ded9877a216b85da87bec6840c7916cd46fc0` | D14D `package_build_identity.json` |
+| package `SHA256SUMS` SHA-256 | `8540cd1dc2b8c743bc466cd89f435e09940ddc5e5df842cacb9367021eddcf67` | D14D `package_build_identity.json` |
+| evidence root | `evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e` | D14D `summary.json` |
+| machine-readable mirror | `docs/day15/D15D_VERSION_MANIFEST.json` | D15D lock manifest |
+
+本表与 D15D manifest、D14D evidence 的任何身份字段不一致时守卫必须失败；
+失败时不得用历史 v4 身份或重建产物解释为当前身份。
+
+### 1.3 Historical / superseded D14A v4 identity
+
+| 身份字段 | 历史值 | 状态 |
+|---|---|---|
+| `source_commit` | `5424d28e1178d3d16764ad7c050b878bc8981583` | **historical / superseded**，不得用于当前安装或锁定 |
+| `tested_runtime_commit` | `e3d4b9d565e2c3c153973125b3c071225e1b9e4d` | **historical / superseded**，仅解释 D14A v4 历史 evidence |
+| `evidence_commit` | `68bb8f764e204818759fceae0616cac0048753a2` | **historical / superseded**，仅指 D14A v4 历史 evidence 快照 |
 
 ---
 
@@ -125,8 +156,8 @@ dist/kylin-memory-a-d14a-0.1.0-d14a/
 
 ```text
 libkylin-coreai-embedding = 1.2.0.0-0k0.4   (amd64)   # SDK：install 全量 fail-closed（版本 + SHA）
-kylin-ai-runtime         = 1.2.0.4-0k0.1               # runtime：参考值；HANDOFF_REQUIRED（见 §6bis）
-kylin-gte-base-model     = 1.0.0.1-0k0.9               # model：参考值；HANDOFF_REQUIRED（见 §6bis）
+kylin-ai-runtime         = 1.2.0.4-0k0.1               # runtime：正式 G0 冻结值（见 §6bis）
+kylin-gte-base-model     = 1.0.0.1-0k0.9               # model：正式 G0 冻结值（见 §6bis）
 python3.12               (系统 python，用于创建包内 venv)
 ```
 
@@ -134,10 +165,8 @@ python3.12               (系统 python，用于创建包内 venv)
 > - **SDK**（`libkylin-coreai-embedding` `.so`）：install 必须执行存在性 + exact
 >   package version + SHA-256，缺一即 fail-closed（当前实现）。
 > - **runtime / model**：上表版本仅为参考值（基线 v2 实测来源），未经 D Reviewer
->   冻结验证；本版保持 `HANDOFF_REQUIRED`，不伪造/不补写 version/hash。
->   正式 D14D run（收敛 `tested_commit` + `r1` VM 起点 + Phase 4 单 root）在 G0 采集
->   `dpkg-query -W` 身份及相关 `.so`/包 SHA 后回填本表并升版，再扩展为 install
->   全量 fail-closed。
+>   冻结验证；v5 依据 D14D 正式 G0 证据冻结 version/hash，仅用于安装前提审计。
+>   本版 install 仍按原实现对 SDK 全量 fail-closed；runtime/model 不做 hash Gate。
 
 ---
 
@@ -210,17 +239,26 @@ embedding server PID**，`grep -F '.so' /proc/<embedding_pid>/maps` 中实际加
 
 ---
 
-## 6bis. BLOCKER C — runtime/model 冻结身份（2026-09-06 裁决：HANDOFF_REQUIRED）
+## 6bis. BLOCKER C — runtime/model 冻结身份（v5：正式 G0 冻结）
 
-- runtime/model **identity / version / hash / vendor-frozen lock** 尚无 D Reviewer 接受的
-  可信外部冻结输入，状态 **HANDOFF_REQUIRED**（不再以 DEPENDENCY_BLOCKED 阻塞本 PR
-  packaging 代码线收敛；不宣称已闭环）。
-- 不得伪造 runtime/model version、hash、vendor lock、D Reviewer 会签或麒麟 evidence；
+- v4 曾将 runtime/model **identity / version / hash / vendor-frozen lock** 记为
+  **HANDOFF_REQUIRED**；该状态由正式 D14D G0 证据与 2026-09-10 Reviewer E identity
+  adjudication 解除。
+- 本节身份只声明外部依赖的冻结输入，不改变 L3 证据边界，不宣称
+  `release_ready=true` 或 `production_ready=true`。
+- 不得伪造 runtime/model version、hash、vendor lock、reviewer 会签或麒麟 evidence；
   不由本文档或本 Task 补写虚构的 runtime/model version/hash/vendor lock/D Reviewer 会签。
-- 解除条件：正式 D14D run 在 G0 采集并冻结 runtime/model 的 `dpkg-query -W` 身份与
-  相关 `.so`/包 SHA，回填本表并升版；或外部提供可信冻结输入 + D Reviewer 会签。
-- 解除前，安装 Gate（§7）与任何验收声明**不得宣称 runtime/model identity 闭环**。
-- 解除前 install 只对 SDK 做全量 fail-closed（§3），不对 runtime/model 做 hash Gate。
+- 解除依据：
+  `evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e/dependency_identity.json`
+  及其原始 `raw/g0_baseline.log`、`raw/g0_packages.log`；contract 证据校验记录见
+  `evidence/d15d-lock/20260910T142417Z/c10_contract_closure.md`。
+- D14D G0 冻结身份如下：
+
+| Component | Version | Path | SHA-256 |
+|---|---|---|---|
+| SDK canonical `.so` | `1.2.0.0-0k0.4` | `/usr/lib/x86_64-linux-gnu/libkysdk-coreai-embedding.so.1.0.0` | `028e7099c8434ee2f62d8477d4bc4a1154e4c1b31230e11b0901f1bc52f48d48` |
+| Runtime binary | `kylin-ai-runtime 1.2.0.4-0k0.1` | `/usr/bin/kylin-ai-runtime` | `b3f83fc90966394e7397979945f324a4691a208a1b944ed1c2488b20b296e225` |
+| GTE ONNX model | `kylin-gte-base-model 1.0.0.1-0k0.9` | `/usr/share/kylin-ai/model-repository/embd_gte-base_uint8-text/1/gte-base-multilingual-model_QUInt8.onnx` | `cef0fc76165ee5bb4f3da5ab6b9b6e6fdfdd278d3077f2db2d4a6cde4d4c32b1` |
 
 ---
 
@@ -237,7 +275,7 @@ EXPECT_SOURCE_COMMIT=<40位完整 source commit> bash systemd/install.sh install
 #   1. 校验 EXPECT_SOURCE_COMMIT 与 manifest.source_commit 绑定（fail-closed）＋
 #      manifest/SHA256SUMS 校验（与已冻结 hash 一致）
 #   2. SDK（§3/§6）存在 + exact package version + SHA-256（fail-closed）；
-#      runtime/model 按 §6bis 为 HANDOFF_REQUIRED，本版不做 hash Gate
+#      runtime/model 身份按 §6bis v5 冻结；本版仍不对 runtime/model 做 hash Gate
 #   3. 整包复制到 <install_prefix>（${XDG_DATA_HOME:-$HOME/.local/share}/kylin-memory-d14a）；
 #      $HOME/.local/bin 创建 launcher symlink 指向 <install_prefix>/bin/kylin-memory-server；
 #      unit 渲染 ExecStart=<install_prefix>/bin/kylin-memory-server（安装前缀 launcher）
@@ -279,29 +317,35 @@ bash systemd/verify.sh --embed-socket <EMBED_SOCK> --embed-pid <REAL_EMBEDDING_S
 - `SHA256SUMS`：打包后生成，作为正式 evidence 的 package 身份。
 - 后续任何 VM 测试只允许引用该 hash；若补文件 → 重新打包 → 新 hash → 重置 snapshot → 重测。
 - 任何 packaging/runtime 行为变更必须 **重新打包 → 重算 hash → 重跑真实 VM**，并回填 §1.1 身份表。
-- **当前声明**：本 PR HEAD（`git rev-parse HEAD` 执行时事实）相对 `tested_runtime_commit`
-  （`e3d4b9d…`）的 runtime evidence 为 **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**——
-  正式 package 未重建、正式 hash 未重算、真实 VM 未重跑，刷新属后续独立事项；完成前
-  §10 的 hash/§11 的 Gate 引用仅以刷新后的 runtime evidence 为前提。
+- **当前声明**：当前冻结包身份为 §1.2 的 D14D formal frozen tar；其 `tested_runtime_commit`
+  为 `ba3b50e…`，evidence root 已由 PR #165 入库。相对当前 `git rev-parse HEAD` 的
+  新鲜性由守卫 live 三分类判定；本契约不再声明历史 v4 的 `RUNTIME_EVIDENCE_STALE`
+  作为当前状态。
 
 ---
 
 ## 11. 验收 Gate（D14A READY 前置）
 
-- [x] contract FROZEN（2026-09-06 D-03/D-04 仲裁会签 v4）
-- [ ] 本地/L1 package smoke PASS（build → install → start → real SDK smoke → restart → rollback）
-- [ ] dependency audit PASS（无开发路径/RPATH/not-found）
-- [ ] clean-VM L3：package-only install + real SDK + recovery + D13A 可比性能
-- [ ] L3 evidence 完整（§12）
+- [x] contract PROPOSED v5 / REVIEWER_E_IDENTITY_ADJUDICATION_APPROVED / PENDING_FINAL_D15D_SIGN（2026-09-10 已同步 D14D `ba3b50e` formal identity；
+  既有 `Ducknesses` 授权评论仅保留为 invalid historical authority record；Reviewer E 已在
+  PR comment 5616426125 独立裁定 identity/provenance closure APPROVED，最终 D15D
+  签署仍待独立完成）
+- [x] 本地/L1 package smoke PASS（D14D G3/G4：package-only install → real SDK
+  smoke → restart；evidence root 见 §1.2）
+- [x] dependency audit PASS（D14D G2 无开发路径/RPATH/not-found）
+- [x] clean-VM L3：package-only install + real SDK + restart + OS reboot（D14D
+  G3/G4/G5/G6 PASS；G7/G8 不在已验证范围）
+- [x] L3 evidence 完整（D14D evidence root 23/23 checksums OK；Reviewer E 已专项
+  接受 identity/provenance closure，但不因此升级 release/production claim）
 
-> Gate 边界：contract 已按 2026-09-06 D-03/D-04 裁决升 **FROZEN v4**；本 Gate 清单与
+> Gate 边界：contract 已按 2026-09-06 D-03/D-04 裁决升 **FROZEN v4**，并于
+> 2026-09-10 按 ReviewerE identity adjudication 以 D14D G0 证据形成 **PROPOSED v5 / PENDING_FINAL_D15D_SIGN**。本 Gate 清单与
 > 全文不产生任何状态越级声明
-> （既不宣称宿主环境已验证，也不宣称三级验收通过），且 BLOCKER C 解除前不得
-> 宣称 runtime/model identity 闭环。
-> 备注：Gate 各条引用仅以**刷新后的 runtime evidence** 为前提——当前 runtime evidence
-> 相对 HEAD 为 **RUNTIME_EVIDENCE_STALE / RUNTIME_UNVERIFIED**（见 §1.1/§10），
-> 正式重打包 → 重算 hash → 真实 VM 重测完成前，本条 Gate 不因任何本地静态结果
-> 视为已达成。
+> （既不宣称宿主环境已验证，也不宣称三级验收通过），v5 仅冻结 §6bis 外部依赖身份。
+> 备注：上述 Gate 引用的是 D14D formal evidence root 对同一 `ba3b50e` frozen tar
+> 的既得结果，不是新 PR HEAD 的重跑结果。第 4 轮 main drift 后，当前 frozen
+> package lock 对 current main 为 `RUNTIME_EVIDENCE_STALE_AGAINST_CURRENT_MAIN`;
+> 任何 runtime/packaging 漂移仍触发 §1.1 的重打包与真实 VM 重测规则。
 
 ## 12. Evidence 输出（`evidence/l3-kylin-vm/d14a_<run_id>/`）
 

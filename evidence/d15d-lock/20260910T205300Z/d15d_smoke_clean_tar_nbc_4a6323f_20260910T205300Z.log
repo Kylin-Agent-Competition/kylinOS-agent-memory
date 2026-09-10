@@ -1,0 +1,42 @@
+# Kylin VM test evidence
+run_id=d15d_smoke_clean_tar_nbc_4a6323f_20260910T205300Z
+collected_at_utc=2026-09-10T12:57:25.886988+00:00
+endpoint=127.0.0.1:2223
+user=kylin-agent
+mode=command
+privilege=user
+requested_command=set -e; tar_path=/tmp/kylin-memory-a-d14a-0.1.0-d14a-4a6323f-r2.tar.gz; smoke_pkg=/tmp/kylin-d14a-smoke-package-4a6323f-r2; rm -rf "$smoke_pkg"; mkdir -p "$smoke_pkg"; tar -xzf "$tar_path" -C "$smoke_pkg"; echo smoke_pkg=$smoke_pkg; echo pre_app_pyc=$(find "$smoke_pkg/runtime/app" -type f -name "*.pyc" | wc -l); echo pre_app_pycache=$(find "$smoke_pkg/runtime/app" -type d -name "__pycache__" | wc -l); PYTHONDONTWRITEBYTECODE=1 bash packaging/release/package_smoke.sh --package "$smoke_pkg" --prefix /tmp/kylin-d14a-smoke-prefix --expect-source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --scenario clean; echo post_app_pyc=$(find "$smoke_pkg/runtime/app" -type f -name "*.pyc" | wc -l); echo post_app_pycache=$(find "$smoke_pkg/runtime/app" -type d -name "__pycache__" | wc -l)
+--- guest script ---
+set -eu
+git -C /tmp/kylin-memory-main-4a6323f rev-parse --is-inside-work-tree >/dev/null
+cd /tmp/kylin-memory-main-4a6323f
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'git_head='; git rev-parse HEAD
+printf 'git_branch='; git branch --show-current
+printf 'git_dirty='; git status --porcelain | wc -l
+set +e
+bash -lc 'set -e; tar_path=/tmp/kylin-memory-a-d14a-0.1.0-d14a-4a6323f-r2.tar.gz; smoke_pkg=/tmp/kylin-d14a-smoke-package-4a6323f-r2; rm -rf "$smoke_pkg"; mkdir -p "$smoke_pkg"; tar -xzf "$tar_path" -C "$smoke_pkg"; echo smoke_pkg=$smoke_pkg; echo pre_app_pyc=$(find "$smoke_pkg/runtime/app" -type f -name "*.pyc" | wc -l); echo pre_app_pycache=$(find "$smoke_pkg/runtime/app" -type d -name "__pycache__" | wc -l); PYTHONDONTWRITEBYTECODE=1 bash packaging/release/package_smoke.sh --package "$smoke_pkg" --prefix /tmp/kylin-d14a-smoke-prefix --expect-source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --scenario clean; echo post_app_pyc=$(find "$smoke_pkg/runtime/app" -type f -name "*.pyc" | wc -l); echo post_app_pycache=$(find "$smoke_pkg/runtime/app" -type d -name "__pycache__" | wc -l)'
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+guest_utc=2026-09-10T12:57:26Z
+git_head=4a6323fb3a8c73e0b15f1f3629d28dfc12071541
+git_branch=git_dirty=0
+smoke_pkg=/tmp/kylin-d14a-smoke-package-4a6323f-r2
+pre_app_pyc=0
+pre_app_pycache=0
+[d14a-smoke] package: /tmp/kylin-d14a-smoke-package-4a6323f-r2
+[d14a-smoke] 执行 install…
+包完整性 Gate: PASS（3351 文件，三向闭合，identity 绑定）
+[d14a-install] 事务捕获: 旧 launcher 为 symlink → /home/kylin-agent/.local/share/kylin-memory-d14a/bin/kylin-memory-server
+[d14a-install] 事务就绪: /home/kylin-agent/.local/state/kylin-memory/d14a-install-txn（old_prefix=absent old_unit=present old_launcher=symlink）
+[d14a-install] 执行 Alembic 迁移（upgrade head）…
+[stderr] INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+alembic_version: 20260906_add_preference_receipt_trace
+VM_TEST_EXIT=1
+[stderr] [d14a-install] ERROR: socket 未就绪: /run/user/1000/kylin-memory/memory.sock
+[d14a-smoke] FAIL: install 失败
+--- runner summary ---
+{"allow_missing_repo": false, "completed_at_utc": "2026-09-10T12:58:02.953353+00:00", "duration_seconds": 37.067, "endpoint": "127.0.0.1:2223", "exit_code": 1, "mode": "command", "requested_command": "set -e; tar_path=/tmp/kylin-memory-a-d14a-0.1.0-d14a-4a6323f-r2.tar.gz; smoke_pkg=/tmp/kylin-d14a-smoke-package-4a6323f-r2; rm -rf \"$smoke_pkg\"; mkdir -p \"$smoke_pkg\"; tar -xzf \"$tar_path\" -C \"$smoke_pkg\"; echo smoke_pkg=$smoke_pkg; echo pre_app_pyc=$(find \"$smoke_pkg/runtime/app\" -type f -name \"*.pyc\" | wc -l); echo pre_app_pycache=$(find \"$smoke_pkg/runtime/app\" -type d -name \"__pycache__\" | wc -l); PYTHONDONTWRITEBYTECODE=1 bash packaging/release/package_smoke.sh --package \"$smoke_pkg\" --prefix /tmp/kylin-d14a-smoke-prefix --expect-source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --scenario clean; echo post_app_pyc=$(find \"$smoke_pkg/runtime/app\" -type f -name \"*.pyc\" | wc -l); echo post_app_pycache=$(find \"$smoke_pkg/runtime/app\" -type d -name \"__pycache__\" | wc -l)", "run_id": "d15d_smoke_clean_tar_nbc_4a6323f_20260910T205300Z", "started_at_utc": "2026-09-10T12:57:25.886577+00:00", "status": "FAIL", "sudo": false, "timed_out": false, "user": "kylin-agent"}

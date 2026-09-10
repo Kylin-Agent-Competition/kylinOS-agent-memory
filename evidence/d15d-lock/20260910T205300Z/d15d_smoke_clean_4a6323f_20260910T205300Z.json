@@ -1,0 +1,17 @@
+{
+  "allow_missing_repo": false,
+  "completed_at_utc": "2026-09-10T12:56:16.503923+00:00",
+  "duration_seconds": 3.776,
+  "endpoint": "127.0.0.1:2223",
+  "exit_code": 1,
+  "log_file": "d15d_smoke_clean_4a6323f_20260910T205300Z.log",
+  "log_sha256": "0edf633bb559e3d5a58c160f51f1482f38cb2808654a651474b3942f8d66bc23",
+  "mode": "command",
+  "requested_command": "bash packaging/release/package_smoke.sh --package /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a --prefix /tmp/kylin-d14a-smoke-prefix --expect-source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --scenario clean",
+  "run_id": "d15d_smoke_clean_4a6323f_20260910T205300Z",
+  "started_at_utc": "2026-09-10T12:56:12.728156+00:00",
+  "status": "FAIL",
+  "sudo": false,
+  "timed_out": false,
+  "user": "kylin-agent"
+}

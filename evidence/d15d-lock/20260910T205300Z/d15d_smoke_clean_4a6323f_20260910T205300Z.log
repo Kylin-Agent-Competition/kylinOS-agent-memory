@@ -1,0 +1,33 @@
+# Kylin VM test evidence
+run_id=d15d_smoke_clean_4a6323f_20260910T205300Z
+collected_at_utc=2026-09-10T12:56:12.728515+00:00
+endpoint=127.0.0.1:2223
+user=kylin-agent
+mode=command
+privilege=user
+requested_command=bash packaging/release/package_smoke.sh --package /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a --prefix /tmp/kylin-d14a-smoke-prefix --expect-source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --scenario clean
+--- guest script ---
+set -eu
+git -C /tmp/kylin-memory-main-4a6323f rev-parse --is-inside-work-tree >/dev/null
+cd /tmp/kylin-memory-main-4a6323f
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'git_head='; git rev-parse HEAD
+printf 'git_branch='; git branch --show-current
+printf 'git_dirty='; git status --porcelain | wc -l
+set +e
+bash -lc 'bash packaging/release/package_smoke.sh --package /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a --prefix /tmp/kylin-d14a-smoke-prefix --expect-source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --scenario clean'
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+guest_utc=2026-09-10T12:56:13Z
+git_head=4a6323fb3a8c73e0b15f1f3629d28dfc12071541
+git_branch=git_dirty=0
+[d14a-smoke] package: /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a
+[d14a-smoke] 执行 install…
+VM_TEST_EXIT=1
+[stderr] 完整性Gate: 未受管实际文件: ['runtime/app/domain/__pycache__/__init__.cpython-312.pyc', 'runtime/app/domain/__pycache__/common.cpython-312.pyc', 'runtime/app/domain/__pycache__/conflict.cpython-312.pyc', 'runtime/app/domain/__pycache__/enums.cpython-312.pyc', 'runtime/app/domain/__pycache__/forgetting.cpython-312.pyc', 'runtime/app/domain/__pycache__/knowledge.cpython-312.pyc', 'runtime/app/domain/__pycache__/preference.cpython-312.pyc', 'runtime/app/embedding/__pycache__/__init__.cpython-312.pyc', 'runtime/app/embedding/__pycache__/cache_invalidator.cpython-312.pyc', 'runtime/app/embedding/__pycache__/embedding_cache.cpython-312.pyc', 'runtime/app/embedding/__pycache__/embedding_metrics.cpython-312.pyc', 'runtime/app/embedding/__pycache__/embedding_service.cpython-312.pyc', 'runtime/app/embedding/__pycache__/outbox_consumer.cpython-312.pyc', 'runtime/app/embedding/__pycache__/protocol.cpython-312.pyc', 'runtime/app/embedding/__pycache__/server.cpython-312.pyc', 'runtime/app/observability/__pycache__/__init__.cpython-312.pyc', 'runtime/app/observability/__pycache__/json_logging.cpython-312.pyc', 'runtime/app/observability/__pycache__/request_context.cpython-312.pyc', 'runtime/app/pipeline/__pycache__/__init__.cpython-312.pyc', 'runtime/app/pipeline/__pycache__/cleaner.cpython-312.pyc', 'runtime/app/pipeline/__pycache__/fingerprint.cpython-312.pyc', 'runtime/app/pipeline/__pycache__/pipeline.cpython-312.pyc', 'runtime/app/pipeline/__pycache__/quality.cpython-312.pyc', 'runtime/app/pipeline/__pycache__/schemas.cpython-312.pyc', 'runtime/app/pipeline/__pycache__/sensitive.cpython-312.pyc', 'runtime/app/providers/__pycache__/__init__.cpython-312.pyc', 'runtime/app/providers/__pycache__/embedding_provider.cpython-312.pyc']
+[d14a-install] ERROR: 包完整性 Gate 失败（详见上方错误）
+[d14a-smoke] FAIL: install 失败
+--- runner summary ---
+{"allow_missing_repo": false, "completed_at_utc": "2026-09-10T12:56:16.503923+00:00", "duration_seconds": 3.776, "endpoint": "127.0.0.1:2223", "exit_code": 1, "mode": "command", "requested_command": "bash packaging/release/package_smoke.sh --package /tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a --prefix /tmp/kylin-d14a-smoke-prefix --expect-source-commit 4a6323fb3a8c73e0b15f1f3629d28dfc12071541 --scenario clean", "run_id": "d15d_smoke_clean_4a6323f_20260910T205300Z", "started_at_utc": "2026-09-10T12:56:12.728156+00:00", "status": "FAIL", "sudo": false, "timed_out": false, "user": "kylin-agent"}

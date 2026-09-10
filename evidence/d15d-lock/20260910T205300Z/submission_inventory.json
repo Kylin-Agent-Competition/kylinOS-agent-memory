@@ -1,0 +1,64 @@
+{
+  "schema_version": "d15d-submission-inventory/v1",
+  "run_id": "20260910T205300Z",
+  "release_commit": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
+  "package": {
+    "name": "kylin-memory-a-d14a",
+    "version": "0.1.0-d14a",
+    "identity": "4a6323f-r2",
+    "tar_size_bytes": 21016935,
+    "tar_sha256": "974c2584a08bc2ae5277a8526ce3c5dbd711bc0d54c9844e99d658892cca9f28",
+    "manifest_sha256": "4b42d9281e1fac269bc0e0ba43d831317424fc6200a751380ebf985241124ec4",
+    "sha256sums_sha256": "9d1ac01fab8a2a876b97ffc5ffd375085661c78029b03a35c6984b7c91f4d9f4"
+  },
+  "artifacts": [
+    {
+      "id": "package_tar",
+      "path": "/tmp/kylin-memory-a-d14a-0.1.0-d14a-4a6323f-r2.tar.gz",
+      "sha256": "974c2584a08bc2ae5277a8526ce3c5dbd711bc0d54c9844e99d658892cca9f28"
+    },
+    {
+      "id": "extracted_package_dir",
+      "path": "/tmp/kylin-d14a-smoke-package-4a6323f-r2",
+      "manifest_sha256": "4b42d9281e1fac269bc0e0ba43d831317424fc6200a751380ebf985241124ec4",
+      "sha256sums_sha256": "9d1ac01fab8a2a876b97ffc5ffd375085661c78029b03a35c6984b7c91f4d9f4"
+    },
+    {
+      "id": "d15d_version_manifest",
+      "path": "docs/day15/D15D_VERSION_MANIFEST.json",
+      "sha256": "38b55f99a4b8d1c316c497ba5a29c04198f9765e6a0e3202dce1032e0cef052e"
+    },
+    {
+      "id": "package_contract",
+      "path": "docs/day14/00_d14a_release_package_contract.md",
+      "sha256": "c84c6742d3738ec2ae13969b199b41e1986452857f33f6ca56bc07929e87948b"
+    },
+    {
+      "id": "evidence_index",
+      "path": "evidence/d15d-lock/20260910T205300Z/evidence_index.json",
+      "sha256_source": "checksums.txt"
+    }
+  ],
+  "manifest_vs_tar": {
+    "comparison": "PACKAGE_MANIFEST_VS_TAR_NON_DIR_ENTRIES",
+    "manifest_entries": 3351,
+    "tar_non_dir_entries": 3354,
+    "expected_top_level_metadata_and_symlink_extras": [
+      "SHA256SUMS",
+      "manifest.json",
+      "runtime/python/lib64"
+    ],
+    "unexpected_extras": [],
+    "missing_entries": [],
+    "result": "PASS"
+  },
+  "checksums": {
+    "sha256sums_entries": 3351,
+    "full_pass": true
+  },
+  "boundary": {
+    "final_submission_lock": false,
+    "production_release": false,
+    "reviewer_e_sign_off": false
+  }
+}

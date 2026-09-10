@@ -1,0 +1,125 @@
+{
+  "schema_version": "d15d-evidence-index/v1",
+  "root": "evidence/d15d-lock/20260910T205300Z",
+  "release_commit": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
+  "package_tar_sha256": "974c2584a08bc2ae5277a8526ce3c5dbd711bc0d54c9844e99d658892cca9f28",
+  "checksum_manifest": "checksums.txt",
+  "files": [
+    {
+      "path": "README.md",
+      "role": "root_semantics_and_mixed_run_disposition"
+    },
+    {
+      "path": "summary.json",
+      "role": "root_summary_and_gate_conclusions"
+    },
+    {
+      "path": "gate_matrix.json",
+      "role": "gate_to_evidence_file_mapping"
+    },
+    {
+      "path": "submission_inventory.json",
+      "role": "c12_current_submission_inventory"
+    },
+    {
+      "path": "manifest.json",
+      "role": "package_manifest"
+    },
+    {
+      "path": "SHA256SUMS",
+      "role": "package_file_checksums"
+    },
+    {
+      "path": "c8_sha256sums_full.log",
+      "role": "c8_full_integrity_log"
+    },
+    {
+      "path": "d15d_build_4a6323f_20260910T205300Z.json",
+      "role": "c1_build_result"
+    },
+    {
+      "path": "d15d_build_4a6323f_20260910T205300Z.log",
+      "role": "c1_build_log"
+    },
+    {
+      "path": "d15d_package_4a6323f_20260910T205300Z.json",
+      "role": "package_identity_result"
+    },
+    {
+      "path": "d15d_package_4a6323f_20260910T205300Z.log",
+      "role": "package_identity_log"
+    },
+    {
+      "path": "d15d_c3_c6_4a6323f_20260910T205300Z.json",
+      "role": "c3_c6_blob_consistency_result"
+    },
+    {
+      "path": "d15d_c3_c6_4a6323f_20260910T205300Z.log",
+      "role": "c3_c6_blob_consistency_log"
+    },
+    {
+      "path": "d15d_c8_4a6323f_20260910T205300Z.json",
+      "role": "c8_integrity_result"
+    },
+    {
+      "path": "d15d_c8_4a6323f_20260910T205300Z.log",
+      "role": "c8_integrity_log"
+    },
+    {
+      "path": "d15d_smoke_clean_tar_nbc2_4a6323f_20260910T205300Z.json",
+      "role": "authoritative_c7_clean_tar_smoke_result"
+    },
+    {
+      "path": "d15d_smoke_clean_tar_nbc2_4a6323f_20260910T205300Z.log",
+      "role": "authoritative_c7_clean_tar_smoke_log"
+    },
+    {
+      "path": "d15d_smoke_4a6323f_20260910T124830Z.json",
+      "role": "preserved_failed_smoke_result"
+    },
+    {
+      "path": "d15d_smoke_4a6323f_20260910T124830Z.log",
+      "role": "preserved_failed_smoke_log"
+    },
+    {
+      "path": "d15d_smoke_clean_4a6323f_20260910T205300Z.json",
+      "role": "preserved_failed_smoke_result"
+    },
+    {
+      "path": "d15d_smoke_clean_4a6323f_20260910T205300Z.log",
+      "role": "preserved_failed_smoke_log"
+    },
+    {
+      "path": "d15d_smoke_clean_nbc_4a6323f_20260910T205300Z.json",
+      "role": "preserved_failed_smoke_result"
+    },
+    {
+      "path": "d15d_smoke_clean_nbc_4a6323f_20260910T205300Z.log",
+      "role": "preserved_failed_smoke_log"
+    },
+    {
+      "path": "d15d_smoke_clean_tar_nbc_4a6323f_20260910T205300Z.json",
+      "role": "preserved_failed_smoke_result"
+    },
+    {
+      "path": "d15d_smoke_clean_tar_nbc_4a6323f_20260910T205300Z.log",
+      "role": "preserved_failed_smoke_log"
+    },
+    {
+      "path": "d15d_smoke_cleanup_4a6323f_20260910T205300Z.json",
+      "role": "preserved_cleanup_run"
+    },
+    {
+      "path": "d15d_smoke_cleanup_4a6323f_20260910T205300Z.log",
+      "role": "preserved_cleanup_log"
+    },
+    {
+      "path": "d15d_smoke_cleanup_confirm_4a6323f_20260910T205300Z.json",
+      "role": "preserved_cleanup_confirm_result"
+    },
+    {
+      "path": "d15d_smoke_cleanup_confirm_4a6323f_20260910T205300Z.log",
+      "role": "preserved_cleanup_confirm_log"
+    }
+  ]
+}

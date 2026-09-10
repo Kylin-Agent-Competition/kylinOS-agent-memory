@@ -1,0 +1,17 @@
+{
+  "allow_missing_repo": false,
+  "completed_at_utc": "2026-09-10T12:55:13.945749+00:00",
+  "duration_seconds": 3.238,
+  "endpoint": "127.0.0.1:2223",
+  "exit_code": 0,
+  "log_file": "d15d_package_4a6323f_20260910T205300Z.log",
+  "log_sha256": "a6e3089a4c7d06dfcc809756695b766ecfce51029b6024d2a4dc648177f4c372",
+  "mode": "command",
+  "requested_command": "set -e; dist=/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a; tar_path=/tmp/kylin-memory-a-d14a-0.1.0-d14a-4a6323f-r2.tar.gz; tar -C \"$dist\" -czf \"$tar_path\" .; echo tar_path=$tar_path; echo tar_size=$(stat -c \"%s\" \"$tar_path\"); echo tar_sha256=$(sha256sum \"$tar_path\" | awk \"{print \\$1}\"); echo manifest_sha256=$(sha256sum \"$dist/manifest.json\" | awk \"{print \\$1}\"); echo sha256sums_sha256=$(sha256sum \"$dist/SHA256SUMS\" | awk \"{print \\$1}\"); echo regular_files=$(find \"$dist\" -type f | wc -l); echo app_pyc=$(find \"$dist/runtime/app\" -type f -name \"*.pyc\" | wc -l); echo app_pycache=$(find \"$dist/runtime/app\" -type d -name \"__pycache__\" | wc -l)",
+  "run_id": "d15d_package_4a6323f_20260910T205300Z",
+  "started_at_utc": "2026-09-10T12:55:10.707846+00:00",
+  "status": "PASS",
+  "sudo": false,
+  "timed_out": false,
+  "user": "kylin-agent"
+}

@@ -1,0 +1,32 @@
+# Kylin VM test evidence
+run_id=d15d_c3_c6_4a6323f_20260910T205300Z
+collected_at_utc=2026-09-10T12:56:01.133860+00:00
+endpoint=127.0.0.1:2223
+user=kylin-agent
+mode=command
+privilege=user
+requested_command=set -e; repo=/tmp/kylin-memory-main-4a6323f; dist=/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a; rel=4a6323fb3a8c73e0b15f1f3629d28dfc12071541; assert_same(){ src_path="$1"; pkg_rel="$2"; want=$(git -C "$repo" show "$rel:$src_path" | sha256sum | awk "{print \$1}"); got=$(sha256sum "$dist/$pkg_rel" | awk "{print \$1}"); [ "$want" = "$got" ] || { echo "MISMATCH: $src_path"; exit 1; }; echo "PASS: $src_path -> $pkg_rel ($want)"; }; assert_same packaging/release/systemd_install.sh systemd/install.sh; assert_same packaging/release/systemd_uninstall.sh systemd/uninstall.sh; assert_same packaging/release/systemd_verify.sh systemd/verify.sh; assert_same packaging/systemd/kylin-memory.service systemd/kylin-memory.service
+--- guest script ---
+set -eu
+git -C /tmp/kylin-memory-main-4a6323f rev-parse --is-inside-work-tree >/dev/null
+cd /tmp/kylin-memory-main-4a6323f
+printf 'guest_utc='; date -u +%FT%TZ
+printf 'git_head='; git rev-parse HEAD
+printf 'git_branch='; git branch --show-current
+printf 'git_dirty='; git status --porcelain | wc -l
+set +e
+bash -lc 'set -e; repo=/tmp/kylin-memory-main-4a6323f; dist=/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a; rel=4a6323fb3a8c73e0b15f1f3629d28dfc12071541; assert_same(){ src_path="$1"; pkg_rel="$2"; want=$(git -C "$repo" show "$rel:$src_path" | sha256sum | awk "{print \$1}"); got=$(sha256sum "$dist/$pkg_rel" | awk "{print \$1}"); [ "$want" = "$got" ] || { echo "MISMATCH: $src_path"; exit 1; }; echo "PASS: $src_path -> $pkg_rel ($want)"; }; assert_same packaging/release/systemd_install.sh systemd/install.sh; assert_same packaging/release/systemd_uninstall.sh systemd/uninstall.sh; assert_same packaging/release/systemd_verify.sh systemd/verify.sh; assert_same packaging/systemd/kylin-memory.service systemd/kylin-memory.service'
+test_exit=$?
+printf 'VM_TEST_EXIT=%s\n' "$test_exit"
+exit "$test_exit"
+--- guest output ---
+guest_utc=2026-09-10T12:56:01Z
+git_head=4a6323fb3a8c73e0b15f1f3629d28dfc12071541
+git_branch=git_dirty=0
+PASS: packaging/release/systemd_install.sh -> systemd/install.sh (bce16242411929dbe2e3297a06de31e65d91c94a9ffc0638f5658eb73fa31cc7)
+PASS: packaging/release/systemd_uninstall.sh -> systemd/uninstall.sh (e29d63ee11c44529fabeeeb87d164454ff2ea08e21ab33fce3b19ae061c00a33)
+PASS: packaging/release/systemd_verify.sh -> systemd/verify.sh (b9a367900e748184cfed8e51ad3f7f4f0144bfa1ff095b97a538105c4ee48f20)
+PASS: packaging/systemd/kylin-memory.service -> systemd/kylin-memory.service (cf8f76aab5da36dd5eaff6276a71f8307bf4511b1da135d2226af0402e120c28)
+VM_TEST_EXIT=0
+--- runner summary ---
+{"allow_missing_repo": false, "completed_at_utc": "2026-09-10T12:56:01.489427+00:00", "duration_seconds": 0.356, "endpoint": "127.0.0.1:2223", "exit_code": 0, "mode": "command", "requested_command": "set -e; repo=/tmp/kylin-memory-main-4a6323f; dist=/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a; rel=4a6323fb3a8c73e0b15f1f3629d28dfc12071541; assert_same(){ src_path=\"$1\"; pkg_rel=\"$2\"; want=$(git -C \"$repo\" show \"$rel:$src_path\" | sha256sum | awk \"{print \\$1}\"); got=$(sha256sum \"$dist/$pkg_rel\" | awk \"{print \\$1}\"); [ \"$want\" = \"$got\" ] || { echo \"MISMATCH: $src_path\"; exit 1; }; echo \"PASS: $src_path -> $pkg_rel ($want)\"; }; assert_same packaging/release/systemd_install.sh systemd/install.sh; assert_same packaging/release/systemd_uninstall.sh systemd/uninstall.sh; assert_same packaging/release/systemd_verify.sh systemd/verify.sh; assert_same packaging/systemd/kylin-memory.service systemd/kylin-memory.service", "run_id": "d15d_c3_c6_4a6323f_20260910T205300Z", "started_at_utc": "2026-09-10T12:56:01.133407+00:00", "status": "PASS", "sudo": false, "timed_out": false, "user": "kylin-agent"}

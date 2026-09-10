@@ -1,0 +1,32 @@
+{
+  "schema_version": "d15d-lock/rework-summary/v1",
+  "run_id": "20260910T082403Z",
+  "supersedes_run_id": "20260910T142417Z",
+  "release_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+  "status": "PENDING_E_SIGN",
+  "final_lock_authorized": false,
+  "checks": {
+    "C1": "PASS_CLEAN_DETACHED_WORKTREE",
+    "C2": "PASS",
+    "C3": "PASS",
+    "C4": "PASS",
+    "C5": "PASS",
+    "C6": "PASS",
+    "C7": "NOT_RUN",
+    "C8": "PASS_INHERITED_FROZEN_TAR_IDENTITY",
+    "C9": "PASS",
+    "C10": "PASS_GITHUB_AUTHORITY_BOUND",
+    "C11": "PASS",
+    "C12": "PASS",
+    "C13": "PENDING_E_SIGN"
+  },
+  "blockers": [],
+  "evidence_files": [
+    "c1_clean_detached_worktree.md",
+    "c8_inherited_integrity_closure.md",
+    "c10_authority_binding.md",
+    "ssot_refresh.md",
+    "verification.md",
+    "checksums.txt"
+  ]
+}
