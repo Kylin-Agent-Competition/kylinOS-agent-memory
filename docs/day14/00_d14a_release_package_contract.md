@@ -1,9 +1,13 @@
-# D14A Release Package Contract（FROZEN · 溯源收口 v5 · 2026-09-10 升版）
+# D14A Release Package Contract（溯源收口 v5 · ReviewerD 授权 · PENDING_E_SIGN）
 
 > 依据：D14A 交接文档（2026-09-05）§Phase 2 + §A14-B01 解除要求。
-> 状态：**FROZEN**（2026-09-06 D14D 人工裁决清单 D-03/D-04 会签：§3/§6bis 语义统一后
-> 以 v4 升 FROZEN；GitHub 第四轮 review 执行仍属 Ducknesses 的实际动作，本会签不替代）。
-> 2026-09-10 v5：ReviewerD 授权以 D14D 正式 G0 证据闭合 §6bis runtime/model 身份。
+> 状态：**PROPOSED / PENDING_E_SIGN**（v4 曾按 2026-09-06 D14D 人工裁决清单
+> D-03/D-04 会签为 FROZEN；GitHub 第四轮 review 执行仍属 Ducknesses 的实际动作，
+> 本会签不替代）。
+> 2026-09-10 v5：ReviewerD 授权以 D14D 正式 G0 证据闭合 §6bis runtime/model 身份；
+> 授权 repository reference 为
+> <https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/175#issuecomment-5615523980>。
+> 该授权绑定 G0 身份和 §6bis 内容，但在 Reviewer E 会签前不得写成 v5 FROZEN 终态。
 > 该升版只冻结外部依赖身份；不改变 D14D `L3_READY=true` / `release_ready=false` /
 > `production_ready=false` 边界，也不宣称 Release Gate 或 production 就绪。
 > 冻结方式：本文件为 package contract 唯一真源；任何字段改动需 D 主审会签并升版。
@@ -297,15 +301,15 @@ bash systemd/verify.sh --embed-socket <EMBED_SOCK> --embed-pid <REAL_EMBEDDING_S
 
 ## 11. 验收 Gate（D14A READY 前置）
 
-- [x] contract FROZEN（2026-09-06 D-03/D-04 仲裁会签 v4；2026-09-10 ReviewerD
-  授权以 D14D G0 证据升 v5 并闭合 §6bis 身份）
+- [x] contract PROPOSED v5 / PENDING_E_SIGN（2026-09-06 D-03/D-04 仲裁会签 v4；
+  2026-09-10 ReviewerD 授权以 D14D G0 证据升 v5 并闭合 §6bis 身份，E 会签待补）
 - [ ] 本地/L1 package smoke PASS（build → install → start → real SDK smoke → restart → rollback）
 - [ ] dependency audit PASS（无开发路径/RPATH/not-found）
 - [ ] clean-VM L3：package-only install + real SDK + recovery + D13A 可比性能
 - [ ] L3 evidence 完整（§12）
 
 > Gate 边界：contract 已按 2026-09-06 D-03/D-04 裁决升 **FROZEN v4**，并于
-> 2026-09-10 按 ReviewerD 授权以 D14D G0 证据升 **FROZEN v5**。本 Gate 清单与
+> 2026-09-10 按 ReviewerD 授权以 D14D G0 证据形成 **PROPOSED v5 / PENDING_E_SIGN**。本 Gate 清单与
 > 全文不产生任何状态越级声明
 > （既不宣称宿主环境已验证，也不宣称三级验收通过），v5 仅冻结 §6bis 外部依赖身份。
 > 备注：Gate 各条引用仅以**刷新后的 runtime evidence** 为前提——当前 runtime evidence

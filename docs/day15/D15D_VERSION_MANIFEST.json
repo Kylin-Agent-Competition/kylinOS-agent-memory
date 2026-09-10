@@ -66,11 +66,15 @@
   "contract": {
     "path": "docs/day14/00_d14a_release_package_contract.md",
     "version": 5,
-    "section_6bis": "FROZEN_G0_IDENTITY",
+    "section_6bis": "G0_IDENTITY_CLOSED",
+    "status": "PROPOSED_PENDING_E_SIGN",
     "authorization": {
       "reviewer": "ReviewerD",
       "date": "2026-09-10",
-      "record": "evidence/d15d-lock/20260910T142417Z/c10_contract_closure.md"
+      "record": "evidence/d15d-lock/20260910T142417Z/c10_contract_closure.md",
+      "authority_reference": "https://github.com/Kylin-Agent-Competition/kylinOS-agent-memory/pull/175#issuecomment-5615523980",
+      "authority_reference_type": "GITHUB_PR_COMMENT",
+      "authority_comment_id": 5615523980
     }
   },
   "boundaries": {

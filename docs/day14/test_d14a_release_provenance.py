@@ -353,12 +353,13 @@ def test_verify_embedding_pid_report():
     )
 
 
-# ---------- 8. Contract 状态：FROZEN v5（2026-09-10 G0 身份闭合） ----------
+# ---------- 8. Contract 状态：PROPOSED v5 / PENDING_E_SIGN ----------
 
-def test_contract_status_frozen_v5():
+def test_contract_status_proposed_v5_pending_e_sign():
     _assert_all(
         _docs()["contract"],
-        ["FROZEN", "溯源收口 v5"],
+        ["PROPOSED / PENDING_E_SIGN", "溯源收口 v5",
+         "pull/175#issuecomment-5615523980"],
         "contract",
     )
 
@@ -462,7 +463,8 @@ def _assert_documentation_consistency(cls: str):
     )
     _assert_all(
         texts["contract"],
-        ["FROZEN", "BLOCKER C", "溯源收口 v5", "release_ready=false", "production_ready=false"],
+        ["PROPOSED / PENDING_E_SIGN", "BLOCKER C", "溯源收口 v5",
+         "release_ready=false", "production_ready=false"],
         "contract",
     )
     _assert_all(

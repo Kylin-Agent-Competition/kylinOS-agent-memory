@@ -1,7 +1,7 @@
 # D15D 执行计划与任务流程
 
 > 日期：2026-09-10
-> 状态：`PREPARED / PENDING_EXECUTION`
+> 状态：`EXECUTED / PENDING_E_SIGN`（2026-09-10 Reviewer E REWORK 后，C1/C8/C10 返工证据已重建）
 > 前置文档：`docs/D15D_TaskCard_20260906.md`、`docs/D15D_Asset_Inventory_Gap_20260906.md`、`docs/D15D_PostLock_Consistency_Runbook_20260906.md`
 > 本文件基于 2026-09-10 实际前置闭合状态制定，取代任务卡 §5 中尚未回填的占位值。
 
@@ -12,8 +12,8 @@
 | release_commit | 可定为 `ba3b50e`（D13D_FROZEN + D14A frozen package 一致） |
 | 已冻结包 | `kylin-memory-a-d14a 0.1.0-d14a`，tar SHA `2222c904…` |
 | D14D 证据 | `L3_READY`，G0-G6 PASS，G8 waiver，evidence root 已入 PR #165 |
-| main 当前位置 | `306c15e`（PR #174 merge，2026-09-10） |
-| D15D 自身进展 | 本地草稿就绪；G-D0~G-D7 未启动；main 上无 D15D 文件 |
+| main 当前位置 | `cdcce34`（PR #175 基线，2026-09-10）；`306c15e` 是 Phase 0 初始历史快照 |
+| D15D 自身进展 | PR #175 已提交 Phase 0-5 材料；Reviewer E REWORK 后按 C1/C8/C10 修复，G-D7 仍待 E APPROVE |
 
 ### 核心决策点：release_commit 选 `ba3b50e` 还是 `306c15e`
 
@@ -172,4 +172,3 @@ Phase 5 (PR + E 签署)
 | Phase 5 | `kylin-memory-review` | PR review |
 | 全阶段 commit 前 | `kylin-commit-standard` | 敏感信息扫描 |
 | C7（如需 VM 复核） | `kylin-vm-test` | 麒麟 VM 验证 |
-
