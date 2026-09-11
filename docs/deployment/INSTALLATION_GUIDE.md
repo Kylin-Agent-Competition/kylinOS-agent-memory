@@ -244,8 +244,10 @@ PKG="/tmp/kylin-d14a-dist/kylin-memory-a-d14a-0.1.0-d14a"
 
 cat "$PKG/VERSION"
 python3 -m json.tool "$PKG/manifest.json" | less
-sha256sum -c "$PKG/SHA256SUMS"
+( cd "$PKG" && sha256sum -c SHA256SUMS )
 ```
+
+`SHA256SUMS` 中记录的是相对于发布包根目录的路径，因此校验必须在 `$PKG` 目录中执行；不要在仓库目录直接运行 `sha256sum -c "$PKG/SHA256SUMS"`。
 
 正式交付时建议单独记录：
 
@@ -393,20 +395,58 @@ Log:      INFO
 
 ### 7.3 config.toml
 
-配置文件缺失时服务可以使用默认值启动；若需要自定义，创建：
+配置文件缺失时服务可以使用默认值启动，因此**不需要为了首次安装而创建 `config.toml`**。
+
+> 当前 D14A builder 会优先把仓库的 `config/environment.example` 复制为发布包内的 `config/config.toml.example`。该文件本质上是环境变量示例，包含 `KYLIN_MEMORY_*=...` 形式内容，**不是可直接复制为 `~/.config/kylin-memory/config.toml` 的 TOML 模板**。在 builder 修复前，请不要执行 `cp "$PKG/config/config.toml.example" ~/.config/kylin-memory/config.toml`。
+
+确需覆盖默认配置时，可以手工创建一个有效 TOML。例如下面只覆盖 deadline、outbox、embedding 与日志级别，Socket 与数据库路径继续使用程序默认值：
 
 ```bash
 mkdir -p ~/.config/kylin-memory
-cp "$PKG/config/config.toml.example" ~/.config/kylin-memory/config.toml
+cat > ~/.config/kylin-memory/config.toml <<'EOF'
+[deadline]
+default_ms = 5000
+retrieve_ms = 150
+
+[outbox]
+poll_interval_s = 1
+max_retries = 3
+
+[embedding]
+model = "default"
+
+[log]
+level = "INFO"
+EOF
 ```
 
-修改后重启：
+创建后可先做 TOML 语法检查，再重启服务：
 
 ```bash
+python3 - <<'PY'
+from pathlib import Path
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
+path = Path.home() / ".config/kylin-memory/config.toml"
+with path.open("rb") as f:
+    tomllib.load(f)
+print("CONFIG_TOML_PARSE=PASS")
+PY
+
 systemctl --user restart kylin-memory
 ```
 
-> 不要把 SSH 密码、API Key、Token、私钥等敏感信息提交到仓库或正式 evidence。
+如果只需要默认值，删除该文件即可恢复默认配置路径：
+
+```bash
+rm -f ~/.config/kylin-memory/config.toml
+systemctl --user restart kylin-memory
+```
+
+> 配置文件存在但 TOML 无法解析时，Memory Service 会 fail-fast；不要把 shell 环境变量格式误写进 `config.toml`。也不要把 SSH 密码、API Key、Token、私钥等敏感信息提交到仓库或正式 evidence。
 
 ---
 
