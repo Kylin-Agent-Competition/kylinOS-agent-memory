@@ -124,6 +124,7 @@ _C2_LOCKED_PATHS = (*_RUNTIME_PREFIXES, _C2_CONTRACT_PATH)
 
 _CURRENT_MAIN_SHA = "cf741a3fb9fa706c94e703a83e4441444a0a4f33"
 _D15D_CLOSEOUT_MAIN_SHA = "6e9f56d2983b36c3b174e7acf6687c4af79439d4"
+_D15D_EVIDENCE_MAIN_SHA = "2782a9048c235006c17024c9798cf988a07627a1"
 _PRE_CLOSEOUT_MAIN_SHA = "ad782f5be747d9d59f273c1c0813535d62b50dcb"
 _ROUND4_C2_MAIN_SHA = "2782a9048c235006c17024c9798cf988a07627a1"
 
@@ -1048,6 +1049,24 @@ def test_current_main_drift_invalidation_ssot():
         line for line in runbook.splitlines() if line.startswith("| C2 |")
     )
     assert "config/" in c2_line, "Runbook C2 scope 必须包含 config/"
+
+
+def test_post_m2_stale_state_historical_scope_is_unambiguous():
+    """旧 closeout 与 C2 PASS 只能作为历史记录，不能冒充当前 Gate。"""
+    manifest = _load_json(_D15D_MANIFEST)
+    historical_c2 = manifest["new_release_evidence"]["c2_current_main_no_drift"]
+    task_card = _TASK_CARD.read_text(encoding="utf-8")
+
+    assert "> 当前资产真源：`kylin-mem/main = " + _CURRENT_MAIN_SHA in task_card
+    assert "历史快照状态（AT_2026-09-10_CLOSEOUT）" in task_card
+    assert "`release_commit`（历史快照）" in task_card
+    assert "| `release_commit` | `4a6323fb3a8c73e0b15f1f3629d28dfc12071541` | current main" not in task_card
+
+    assert historical_c2["status"] == "HISTORICAL_PASS_AT_EVIDENCE_RUN_NOT_CURRENT"
+    assert historical_c2["historical_status"] == "PASS"
+    assert historical_c2["evaluated_main_sha"] == _D15D_EVIDENCE_MAIN_SHA
+    assert historical_c2["historical_scope_only"] is True
+    assert historical_c2["current_valid"] is False
 
 
 # ---------- 运行入口（直接执行时同样可用；pytest 收集上面 test_*） ----------

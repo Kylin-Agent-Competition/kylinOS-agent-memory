@@ -186,7 +186,11 @@
       "git_dirty": 0
     },
     "c2_current_main_no_drift": {
-      "status": "PASS",
+      "status": "HISTORICAL_PASS_AT_EVIDENCE_RUN_NOT_CURRENT",
+      "historical_status": "PASS",
+      "evaluated_main_sha": "2782a9048c235006c17024c9798cf988a07627a1",
+      "historical_scope_only": true,
+      "current_valid": false,
       "diff_command": "git diff --name-only 4a6323fb3a8c73e0b15f1f3629d28dfc12071541..kylin-mem/main -- packaging/ memory-service/ cpp-bridge/ migrations/ config/ docs/day14/00_d14a_release_package_contract.md"
     },
     "c3_c6_source_blob_consistency": {
