@@ -40,7 +40,18 @@ jobs:
         env:
           PYTHONPATH: memory-service
         run: |
-          python3 -m pytest memory-service/tests/test_main_to_data_m2_import.py -q
+          python3 -m pytest \
+            memory-service/tests/test_main_to_data_m2_import.py \
+            memory-service/tests/test_main_to_data_m2_binding.py \
+            -q
+
+      - name: M2 RC10 import evidence receipt guard
+        env:
+          PYTHONPATH: memory-service
+        run: |
+          python3 scripts/main_to_data_m2_receipt.py \
+            --evidence-dir evidence/main_to_data/runtime_gate/m2_rc_import \
+            --check interfaces/main_to_data/m2_import_receipt.json
 
       - name: D13D prerequisite L1 regression
         env:

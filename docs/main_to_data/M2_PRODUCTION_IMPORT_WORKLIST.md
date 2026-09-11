@@ -1,6 +1,6 @@
 # M2 Main → Data Production Import 工作清单
 
-> 状态：IN PROGRESS / NOT YET PASS  
+> 状态：MAIN_M2_EVIDENCE_READY（Main 侧证据已就绪；最终 `M2=PASS` 待 Data-R 独立复核裁定）  
 > 目标：在已合并 M1-KB contract v2 的基础上，完成 RC10 的真实 Main 绑定、生产导入、授权读回与幂等重放，形成可供 Data-R 一次性裁定的 M2 evidence package。
 
 ## 0. 已冻结基线
@@ -303,21 +303,47 @@ evidence_root =
 ## 10. Definition of Done
 
 ```text
-[ ] M1-KB v2 baseline bound
-[ ] RC10 real source binding 10/10
-[ ] no cross-user / no fake provenance
-[ ] production import path implemented/available
-[ ] durable import registry active
-[ ] final RC10 real import executed
-[ ] imported_count > 0
-[ ] authorized readback PASS
-[ ] same-request replay PASS
-[ ] conflict replay PASS
-[ ] complete evidence package
-[ ] independent review
-[ ] final Main M2 receipt
+[x] M1-KB v2 baseline bound
+[x] RC10 real source binding 10/10
+[x] no cross-user / no fake provenance
+[x] production import path implemented/available
+[x] durable import registry active
+[x] final RC10 real import executed
+[x] imported_count > 0
+[x] authorized readback PASS
+[x] same-request replay PASS
+[x] conflict replay PASS
+[x] complete evidence package
+[x] mechanical evidence guard（scripts/main_to_data_m2_receipt.py --check）
+[ ] independent human review（Data-R 最终裁定前）
+[x] final Main M2 receipt
 
 MAIN_M2_EVIDENCE_READY = true
 ```
 
 > 本 PR 完成后仍不自动打开 Runtime lane；还需要 Data-R 确认 M2，以及独立 M3 handoff PASS。
+
+## 11. 执行结果（Main 侧证据就绪）
+
+2026-09-11 已消费 Data 预绑定包（`m2_rc_prebinding`，PR #68）与 Data-R 准入
+receipt，完成真实 Main binding、Data-B 最终 RC 组装、真实生产导入、授权读回、
+same-request replay 与 same-key/different-request conflict 探针，并生成：
+
+- `interfaces/main_to_data/m2_rc_binding_response.json`（10/10，checks 全 0）
+- `interfaces/main_to_data/m2_import_receipt.json`（`MAIN_M2_EVIDENCE_READY=true`）
+- `evidence/main_to_data/runtime_gate/m2_rc_import/`（完整证据包 + README）
+
+关键产物：
+
+```text
+input_rc_10.jsonl exact SHA-256 = 8879a54a2c2b95fc58d6af54d2d91962748728231ef64ab354a069e4ad48c756
+RFC8785 source_manifest SHA-256 = 9b83ccdcd00095a517360feed55217957b69900f617a8ad29514b1debf711874
+imported_count = 10 / rejected_count = 0
+readback_verified = true / same_request_replay_verified = true / conflict_replay_verified = true
+production_path_used = true / mock_used = false
+final_m2_adjudication = PENDING_DATA_R_REVIEW
+```
+
+CI 守卫：`memory-service/tests/test_main_to_data_m2_binding.py` +
+`scripts/main_to_data_m2_receipt.py --check`（证据/收据漂移在合并前失败）。
+
