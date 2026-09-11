@@ -24,15 +24,16 @@ D15E_SIGNOFF_STATUS=BLOCKED
 | source matrix | `docs/day15/10_d15e_final_submission_lock_matrix_20260909.md` |
 | D-track SSOT | `docs/D_TRACK_STATUS.md` |
 
-The working HEAD is a docs-only continuation after the D15D closeout. It is not
-the D15D release commit and must not be presented as one. The active release
-identity remains independently recorded below.
+The working HEAD is a docs-only continuation. It is not the D15D release commit
+and must not be presented as one. The historical D15D release identity is
+retained below, but PR #182 supersedes it for current main until a new runtime
+package rebuild and Kylin VM revalidation close.
 
 ## 2. Current identity and boundaries
 
 | Item | Value | Boundary |
 |---|---|---|
-| D15D active release commit | `4a6323fb3a8c73e0b15f1f3629d28dfc12071541` | Release identity only; not current-main identity |
+| D15D historical release commit | `4a6323fb3a8c73e0b15f1f3629d28dfc12071541` | Historical release identity only; not current-main identity |
 | D15D package | `kylin-memory-a-d14a 0.1.0-d14a` | Package identity only |
 | package tar SHA-256 | `974c2584a08bc2ae5277a8526ce3c5dbd711bc0d54c9844e99d658892cca9f28` | Must not be conflated with manifest, SHA256SUMS, source, or evidence hashes |
 | package manifest SHA-256 | `4b42d9281e1fac269bc0e0ba43d831317424fc6200a751380ebf985241124ec4` | Package manifest identity |
@@ -40,10 +41,15 @@ identity remains independently recorded below.
 | D15D evidence root | `evidence/d15d-lock/20260910T205300Z` | Clean-tar VM release binding; not a D14D G0-G9 replacement |
 | historical tested commit | `ba3b50e1bdeea185bca9daee9d1d45958f62a636` | Historical D13D/D14A/D14D scope only |
 
-D15D status is `SIGNED_PREPARED / MERGED / LOCKED` for its release-identity
-scope. It does not establish `release_ready=true` or `production_ready=true`.
-The D14D boundary remains `L3_READY=true`, `release_ready=false`, and
-`production_ready=false`.
+D15D status is `HISTORICAL_VALID_AT_RELEASE_COMMIT / SUPERSEDED_FOR_CURRENT_MAIN
+/ RUNTIME_EVIDENCE_STALE_PENDING_REBUILD`. Its identity fields are historical
+only: `release_commit_is_current_main=false`,
+`runtime_sensitive_drift_since_release_commit=true`,
+`frozen_package_lock_valid=false`, `rebuild_required=true`,
+`rebuild_completed=false`, `host_vm_required=true`, and
+`host_vm_completed=false`. This does not establish `release_ready=true` or
+`production_ready=true`. The D14D boundary remains `L3_READY=true`,
+`release_ready=false`, and `production_ready=false`.
 
 Current upstream blockers are explicit:
 
@@ -54,7 +60,9 @@ Current upstream blockers are explicit:
 - D14C formal runtime is `BLOCKED`. RC3 provides real Host Chat usability
   evidence, but the exact package, binary, model, and runtime identity fields
   required by P0-3 remain incomplete.
-- D15A A15-2 remains `BLOCKED`; A15-1/A15-3 still require D adjudication against the active D15D identity.
+- D15A A15-2 remains `BLOCKED`; A15-1/A15-3 evidence refresh is limited to
+  historical cross-check until a current-main runtime package rebuild and Kylin
+  VM release-identity revalidation close.
 - D14E final acceptance remains unsigned.
 
 ## 3. E15-1 technical and user documentation outline
@@ -76,9 +84,9 @@ architecture and verified boundaries, not around aspirational features:
 4. **Data and retrieval design**: write-path separation of original user text
    and model-request memory context; asynchronous indexing; deletion and
    lifecycle behavior kept as pending formal validation while D14B is blocked.
-5. **Release identity**: the active D15D package and evidence root; explicit
-   distinction between release identity, current main, historical tested commit,
-   and evidence hashes.
+5. **Release identity**: the historical D15D package and evidence root; explicit
+   distinction between historical release identity, current main, historical
+   tested commit, and evidence hashes.
 6. **Security and privacy**: local service boundary, user isolation, sensitive
    write controls, retrieval output filtering, and no plaintext-secret policy.
    No absolute security claim is permitted.
@@ -109,7 +117,7 @@ D14B/D14C/D15A/D15B facts before any submission-facing version is issued.
 
 | Item | Current state | Freeze state | Identity/evidence anchor |
 |---|---|---|---|
-| Active release package | Recorded and checksum-verified in D15D | Package identity may be referenced as D15D-locked, not as final release approval | `evidence/d15d-lock/20260910T205300Z/submission_inventory.json` |
+| Historical release package | Recorded and checksum-verified at D15D release commit | Package identity may be referenced as historical D15D evidence only, not as a current-main lock | `evidence/d15d-lock/20260910T205300Z/submission_inventory.json` |
 | Release manifest | Machine-readable v2 manifest present | Not a final submission manifest | `docs/day15/D15D_VERSION_MANIFEST.json` |
 | Technical document | Draft outline only | `NOT_FROZEN` | This file, E15-1 |
 | User manual | Draft outline only | `NOT_FROZEN` | This file, E15-1 |
@@ -122,8 +130,9 @@ D14B/D14C/D15A/D15B facts before any submission-facing version is issued.
 | Claim-to-evidence mapping | Draft mapping only | `NOT_FROZEN` | This file, E15-5 |
 
 The D15D package inventory records 3,351 manifest entries with a full checksum
-pass and no unexpected manifest/tar difference. That fact applies to package
-integrity only; it does not turn pending reports into delivered material.
+pass and no unexpected manifest/tar difference. That fact applies only to the
+`4a6323f` release-commit package; it does not establish a current-main release
+lock or turn pending reports into delivered material.
 
 ## 5. E15-5 claim-to-evidence mapping draft
 
@@ -132,8 +141,8 @@ not allowed may be described only as pending or blocked.
 
 | Claim | Evidence / status | Allowed as final competition fact | Constraint |
 |---|---|---|---|
-| D15D active release identity is locked and package integrity is verified | `evidence/d15d-lock/20260910T205300Z`; package hashes above; 3351/3351 checksum pass | Allowed only for release-identity/package-integrity scope | Not release readiness, production readiness, or final submission readiness |
-| D15D clean-tar VM release binding smoke completed | D15D evidence root, clean detached rebuild, install/migration/start/real SDK verify/restart/rollback scope | Allowed only with the cited run scope | Does not replace D14D G0-G9 and does not close D14B/D14C |
+| D15D historical release identity and package integrity | `evidence/d15d-lock/20260910T205300Z`; package hashes above; 3351/3351 checksum pass | Allowed only as historical release-commit/package-integrity evidence | Not a current-main release lock, release readiness, production readiness, or final submission readiness |
+| D15D historical clean-tar VM release binding smoke completed | D15D evidence root, clean detached rebuild, install/migration/start/real SDK verify/restart/rollback scope | Allowed only with the cited `4a6323f` run scope | Does not replace D14D G0-G9, does not validate current main, and does not close D14B/D14C |
 | D13D formal business-domain execution closed | `evidence/phase3-formal/d13d_formal_raw_20260907T154241Z_ba3b50e/evidence/D13E_FORMAL_REPORT_V1.json`; report SHA-256 `dee80d5044c2194b79f13e7185b39f0162c63468f7a47b86799a1abb23c489ee` | Allowed only with frozen D13D scope, small sample sizes, dataset/threshold identity, and historical tested commit | No unqualified whole-system or safety claim |
 | D14D clean Kylin VM L3 evidence exists | `evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e`; historical tested commit `ba3b50e...` | Allowed only as historical D14D evidence with `L3_READY=true`, `release_ready=false`, `production_ready=false` | G7 is `NOT_RUN/N-A`; G8 remains waived; not sufficient for new release identity |
 | Day14 retrieval/index lifecycle formal regression is complete | D14B formal evidence absent; package preflight passed, but capture is blocked by a pending `vector_bridge_cli` refreeze decision | Not allowed | Preparation, substitute VM, or rebuild results cannot be promoted |
@@ -145,8 +154,8 @@ not allowed may be described only as pending or blocked.
 
 Before any draft becomes a submission-facing version:
 
-1. Separate current main HEAD, D15D release commit, historical tested commit,
-   package hashes, and evidence/report hashes.
+1. Separate current main HEAD, historical D15D release commit, historical tested
+   commit, package hashes, and evidence/report hashes.
 2. Keep `release_ready=false` and `production_ready=false` unless a later
    authoritative decision explicitly changes them.
 3. Do not convert D14B preparation, D14C preparation, mock data, or local

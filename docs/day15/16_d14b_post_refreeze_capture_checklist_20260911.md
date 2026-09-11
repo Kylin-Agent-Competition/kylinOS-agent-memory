@@ -13,15 +13,20 @@ schema, DB, or error-code contract.
 
 1. A Release Owner / Reviewer D decision has been recorded with approver
    identity, UTC time, and the exact approved `vector_bridge_cli` SHA-256.
-2. A new D14B capture handoff has been derived from the reviewed handoff. It
-   may change only the approved vector CLI identity and required approval
-   provenance fields.
-3. A new unused evidence root has been selected. The existing
+2. A reviewed control-plane PR has updated the canonical
+   `release/handoff/d14b-capture-handoff.json`: the vector CLI SHA-256 is the
+   approved rebuild SHA, and approval provenance is a handoff top-level object.
+   No approval field may be added to `source_bindings.vector`, whose fields are
+   strictly allow-listed by preflight.
+3. That control-plane PR has been merged into an approved control head. Work
+   from a clean checkout of that exact SHA; do not reuse a locally edited,
+   untracked, or dirty handoff.
+4. A new unused evidence root has been selected. The existing
    `d14b_20260911T091924Z_ba3b50e` preflight root remains immutable and is not
    reused.
-4. `run_d14b_preflight.py` has returned exit code 0 against the new handoff
-   and evidence root.
-5. The VM and snapshot identity still match the D14D handoff.
+5. `run_d14b_preflight.py` has returned exit code 0 with the approved control
+   head, canonical handoff bytes, and new evidence root.
+6. The VM and snapshot identity still match the D14D handoff.
 
 ## Capture Sequence
 

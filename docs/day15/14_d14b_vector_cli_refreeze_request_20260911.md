@@ -15,16 +15,28 @@ result semantics are proposed for change.
 
 If approved:
 
-1. Create a new D14B capture handoff derived from the reviewed
-   `d14b-capture-handoff.json`, changing only
-   `source_bindings.vector.vector_cli_sha256` to the approved rebuild SHA.
-2. Record the approval decision, approver identity, UTC time, and provenance
-   details in that handoff.
-3. Run `run_d14b_preflight.py` again using a new exclusive evidence root.
-4. Continue only if the new preflight PASSes. The existing
+1. Approve the exact rebuild SHA-256 and the request identity.
+2. In a separate reviewed control-plane PR, update the canonical
+   `release/handoff/d14b-capture-handoff.json` so that
+   `source_bindings.vector.vector_cli_sha256` contains the approved rebuild
+   SHA. Do not add approval fields under `source_bindings.vector`: the
+   preflight enforces a strict allow-list there.
+3. Record the approval as a handoff top-level object (for example
+   `refreeze_approval`) containing the approver identity, UTC decision time,
+   decision, request path, and approved SHA-256.
+4. Review and merge that control-plane PR. The resulting merge commit is the
+   approved `--expected-control-head`.
+5. Create a clean checkout of that approved control head.
+6. Run `run_d14b_preflight.py` again using that approved control head and a new
+   exclusive evidence root.
+7. Continue only if the new preflight PASSes. The existing
    `d14b_20260911T091924Z_ba3b50e` preflight remains an isolated preflight
    artifact and must not be reused, overwritten, or upgraded into formal
    evidence.
+
+Do not edit the handoff only in a local worktree. `run_d14b_preflight.py`
+requires the canonical capture handoff bytes to equal the Git blob at the
+approved control head and the control worktree to be clean.
 
 If rejected, D14B remains `BLOCKED / NOT_RUN / UNVERIFIED`; no rebuild may be
 substituted for the missing original identity.

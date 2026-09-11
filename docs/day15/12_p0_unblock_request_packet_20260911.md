@@ -112,6 +112,11 @@ Provide exactly one of the following:
 Either decision must be followed by a new preflight using a new evidence root.
 This does not reuse or upgrade the existing preflight evidence root.
 
+For the refreeze path, the approved SHA must first be applied to the canonical
+`release/handoff/d14b-capture-handoff.json` in a separately reviewed
+control-plane PR. The resulting approved control head is then used with a clean
+checkout and new evidence root; a locally edited handoff is not sufficient.
+
 ## P0-3: D14C Host Chat LLM Input
 
 The current Host Chat LLM identity audit is recorded in
