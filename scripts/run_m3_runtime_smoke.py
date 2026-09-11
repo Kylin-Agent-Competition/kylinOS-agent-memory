@@ -135,6 +135,9 @@ def main() -> int:
             _write_json(output_dir / "side_effect_after.json", after_evidence)
             trace.append({"step": "event.ingest", "response": response, "utc": datetime.now(timezone.utc).isoformat()})
             trace.append({"step": "after", **after_evidence, "utc": datetime.now(timezone.utc).isoformat()})
+            # Windows keeps an SQLite handle open until SQLAlchemy's pool is
+            # disposed; release it before TemporaryDirectory cleanup.
+            engine.dispose()
 
     trace_path = output_dir / "raw_trace.jsonl"
     trace_path.write_text("".join(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n" for entry in trace), encoding="utf-8", newline="\n")
