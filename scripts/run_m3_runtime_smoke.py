@@ -89,6 +89,9 @@ def main() -> int:
         "captured_at": now,
         "content_summary": "M3 isolated runtime probe: file-status tool completed successfully.",
         "tool_call_id": "m3-tool-call-001",
+        # A tool-result source is accepted only after the upstream raw-payload
+        # security check.  This is a true contract input, not a bypass.
+        "payload_security_checked": True,
         "consent_scope": "memory_only",
     }
     _write_json(output_dir / "input_script.json", {"method": "event.ingest", "payload": payload})
@@ -116,6 +119,8 @@ def main() -> int:
                 idempotency_key=payload["idempotency_key"],
             )
             response = handler(payload, context)
+            if response.get("admission_decision") != "allow_extraction":
+                raise RuntimeError("M3 tool-result probe was not admitted for extraction")
             with engine.connect() as conn:
                 row = conn.execute(
                     select(
@@ -156,7 +161,7 @@ def main() -> int:
         "tool_call_id_present": True,
         "tool_not_applicable": False,
         "tool_call_id": payload["tool_call_id"],
-        "actual_status": "event.ingest completed; persisted source event admission is recorded in side_effect_after.json",
+        "actual_status": "event.ingest completed with allow_extraction; persisted source event admission is recorded in side_effect_after.json",
         "limits": [
             "No remote Kylin host deployment was exercised.",
             "This receipt does not claim system production readiness or authorize Runtime160 execution.",
