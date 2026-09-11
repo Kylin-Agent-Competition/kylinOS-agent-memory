@@ -1,0 +1,27 @@
+#!/bin/bash
+# Runs *inside* the Kaiming sandbox. The host-side `kaiming run` command filters
+# arbitrary environment variables, so LD_PRELOAD must be set here, after entry.
+# Fail-open: if the hook is unavailable, the official assistant still starts.
+set -u
+
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+INSTALL_ROOT="$(cd "$SELF_DIR/.." && pwd)"
+HOOK="$INSTALL_ROOT/lib/libkylin-memory-prechat.so"
+
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+CONTEXT="$RUNTIME_DIR/kylin-memory/active-context.txt"
+STATE_DIR="$HOME/.local/state/kylin-memory/host-integration"
+LOG="$STATE_DIR/prechat.log"
+
+mkdir -p "$STATE_DIR" 2>/dev/null || true
+chmod 700 "$STATE_DIR" 2>/dev/null || true
+
+if [ -r "$HOOK" ]; then
+    export LD_PRELOAD="$HOOK"
+    export MEMORY_PRECHAT_LOG="$LOG"
+    export MEMORY_ACTIVE_CONTEXT="$CONTEXT"
+else
+    unset LD_PRELOAD 2>/dev/null || true
+fi
+
+exec /usr/bin/kylin-aiassistant "$@"

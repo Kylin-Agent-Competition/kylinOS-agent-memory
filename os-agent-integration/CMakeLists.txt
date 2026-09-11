@@ -54,3 +54,16 @@ if(BUILD_TESTING)
         COMMAND test_memory_event_contract_v1
     )
 endif()
+
+# Post-D15D host-integration RC: validated pre-chat interposer for the
+# Kylin AI Assistant 3.0.67 chatAsync ABI. This target is Linux-only because
+# it uses ELF symbol interposition via dlsym(RTLD_NEXT, ...).
+if(UNIX AND NOT APPLE)
+    add_library(kylin_memory_prechat_hook SHARED
+        prechat-hook/memory_prechat_final.cpp
+    )
+    target_link_libraries(kylin_memory_prechat_hook PRIVATE dl)
+    set_target_properties(kylin_memory_prechat_hook PROPERTIES
+        OUTPUT_NAME "kylin-memory-prechat"
+    )
+endif()

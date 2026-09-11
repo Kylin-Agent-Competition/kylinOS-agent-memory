@@ -1,0 +1,8 @@
+[host-integration] assistant binary identity: PASS
+[host-integration] Kaiming installed-hook/context visibility: PASS
+[host-integration] preference.list IPC smoke: PASS
+[host-integration] installed at /home/Carlton/.local/share/kylin-memory-host-integration
+[host-integration] Memory Service + bridge + context-sync are enabled.
+[host-integration] The current already-running AI Assistant is not killed or modified.
+[host-integration] Log out and log back in once so the XDG autostart override launches the hooked assistant.
+[host-integration] Then run: /home/Carlton/kylin-memory-rc2-final-src/os-agent-integration/host-memory-bridge/verify_host_integration_rc.sh --runtime
