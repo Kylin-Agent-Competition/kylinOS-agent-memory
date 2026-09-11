@@ -588,4 +588,3 @@ def test_installer_preflights_downstream_assistant_chat_abi():
     ) < text.index(
         'install -m 0700 "$SELF_DIR/host_memory_bridge.py"'
     )
-
