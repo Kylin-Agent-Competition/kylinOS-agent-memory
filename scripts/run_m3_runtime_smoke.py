@@ -100,6 +100,10 @@ def main() -> int:
     with stdout_path.open("w", encoding="utf-8", newline="\n") as stdout, stderr_path.open("w", encoding="utf-8", newline="\n") as stderr:
         with redirect_stdout(stdout), redirect_stderr(stderr), tempfile.TemporaryDirectory(prefix="m3-runtime-state-") as state_dir:
             db_path = Path(state_dir) / "m3-runtime.sqlite"
+            # ``create_db_engine`` applies the DB-file permission contract at
+            # construction time; create the empty SQLite target first so that
+            # this real smoke does not emit a benign missing-file warning.
+            db_path.touch(exist_ok=False)
             engine = create_db_engine(str(db_path))
             init_schema(engine)
             registry = HandlerRegistry()
