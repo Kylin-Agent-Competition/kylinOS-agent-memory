@@ -5,6 +5,7 @@
 pydantic>=2,<3        # 事件模型/候选模型校验（架构批准 Pydantic v2）
 sqlalchemy>=2.0,<2.1  # SQLite 结构化存储（架构批准 SQLAlchemy 2.0 Core）
 alembic>=1.13         # 数据库迁移（FR-DB-002，ADR-007 基线命名）
+rfc8785>=0.1.4,<0.2  # M1-KB v2：RFC 8785/JCS manifest + canonical request hash
 tomli>=2.0; python_version < "3.11"  # config.toml 解析（Python 3.10 兼容）
 
 # ── 测试依赖（开发环境） ──
