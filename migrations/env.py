@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "memory-service"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from db.schema import metadata  # noqa: E402
+from db import m2_schema as _m2_schema  # noqa: E402,F401  # register M2 tables in shared metadata
 
 config = context.config
 

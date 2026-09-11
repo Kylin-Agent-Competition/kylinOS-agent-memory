@@ -26,4 +26,11 @@
 # immutable package as binary: no line-ending conversion or text diff checks.
 evidence/l2-kylin-vm/d13d_20260905T090507Z/** binary
 
-evidence/l2-kylin-vm/host-memory-e2e-20260911/final-rc2/* -text
+# M2 RC10 import evidence is verified by exact JSONL SHA-256 and the RFC 8785
+# source manifest; treat the immutable package as binary to prevent any
+# line-ending conversion on checkout.
+evidence/main_to_data/runtime_gate/m2_rc_import/** binary
+
+# Host Memory E2E final RC evidence is sealed byte-for-byte by SHA256SUMS.
+# Treat the immutable evidence as binary to prevent line-ending conversion.
+evidence/l2-kylin-vm/host-memory-e2e-20260911/final-rc2/** binary
