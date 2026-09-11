@@ -52,6 +52,7 @@
      version、hash、vendor lock、reviewer 会签或麒麟 evidence。
 """
 
+import copy
 import json
 import re
 import subprocess
@@ -121,9 +122,25 @@ _RUNTIME_PREFIXES = (
 _C2_CONTRACT_PATH = "docs/day14/00_d14a_release_package_contract.md"
 _C2_LOCKED_PATHS = (*_RUNTIME_PREFIXES, _C2_CONTRACT_PATH)
 
-_CURRENT_MAIN_SHA = "6e9f56d2983b36c3b174e7acf6687c4af79439d4"
+_CURRENT_MAIN_SHA = "cf741a3fb9fa706c94e703a83e4441444a0a4f33"
+_D15D_CLOSEOUT_MAIN_SHA = "6e9f56d2983b36c3b174e7acf6687c4af79439d4"
 _PRE_CLOSEOUT_MAIN_SHA = "ad782f5be747d9d59f273c1c0813535d62b50dcb"
 _ROUND4_C2_MAIN_SHA = "2782a9048c235006c17024c9798cf988a07627a1"
+
+_POST_M2_RUNTIME_PACKAGE_PATHS = (
+    "memory-service/db/m2_schema.py",
+    "memory-service/requirements.txt",
+    "memory-service/service/main_to_data_binding.py",
+    "memory-service/service/main_to_data_import.py",
+    "migrations/env.py",
+    "migrations/versions/20260911_main_to_data_m2_registry.py",
+)
+_POST_M2_TEST_ONLY_PATHS = (
+    "memory-service/tests/test_event_ingest_d6d.py",
+    "memory-service/tests/test_forget_persistence_d10d.py",
+    "memory-service/tests/test_main_to_data_m2_binding.py",
+    "memory-service/tests/test_main_to_data_m2_import.py",
+)
 
 # 旧实现遗留的固定 current_pr_head 字面量与旧固定 diff 范围（禁止回退出现）。
 _LEGACY_CURRENT_PR_HEAD = "15de7c67426909c7c872f9cb3f9a04a2575753fd"
@@ -555,6 +572,25 @@ def test_classifier_negative_cases():
         assert hits == expected_hits, f"{changed} -> 命中 {hits}，期望 {expected_hits}"
 
 
+def test_post_m2_stale_manifest_negative_cases():
+    """N1/N2/N3/N4：stale SSOT 不完整或伪 docs-only 均须 fail-closed。"""
+    manifest = _load_json(_D15D_MANIFEST)
+    hits = list(_POST_M2_RUNTIME_PACKAGE_PATHS + _POST_M2_TEST_ONLY_PATHS)
+    _assert_explicit_stale_manifest(manifest, hits)
+
+    missing_stale = copy.deepcopy(manifest)
+    missing_stale["current_main"]["runtime_sensitive_drift_since_release_commit"] = False
+    _assert_rejected_stale_manifest(missing_stale, hits)
+
+    missing_rebuild = copy.deepcopy(manifest)
+    missing_rebuild["post_lock_consistency"]["rebuild_required"] = False
+    _assert_rejected_stale_manifest(missing_rebuild, hits)
+
+    _assert_rejected_docs_only_exception(
+        "memory-service/service/main_to_data_import.py"
+    )
+
+
 # ---------- 12. contract ↔ D15D manifest ↔ D14D evidence 三方一致 ----------
 
 def test_contract_manifest_d14d_three_way_identity():
@@ -566,7 +602,7 @@ def test_contract_manifest_d14d_three_way_identity():
     assert values["current_release_commit"] == _CURRENT_RELEASE_COMMIT
     assert values["current_main_sha"] == _CURRENT_MAIN_SHA
     assert values["current_main_release_commit_is_current_main"] is False
-    assert values["current_main_drift"] is False
+    assert values["current_main_drift"] is True
     assert values["new_package_tar_sha256"] == _NEW_TAR_SHA256
     assert values["new_package_manifest_sha256"] == _NEW_MANIFEST_SHA256
     assert values["new_package_sha256sums_sha256"] == _NEW_SHA256SUMS_SHA256
@@ -699,16 +735,11 @@ def _approved_docs_c2_locked_exceptions() -> tuple[str, ...]:
         assert isinstance(entry, dict), "exception entry 必须是 object"
         path = entry.get("path")
         assert isinstance(path, str) and path, "exception path 必须是非空字符串"
-        assert (
-            any(path.startswith(prefix) for prefix in _RUNTIME_PREFIXES)
-            or path == _C2_CONTRACT_PATH
-        ), (
-            f"exception path 不在 C2 locked paths 内: {path}"
-        )
+        _assert_docs_only_exception_path(path)
         assert entry.get("kind") == "DOCUMENTATION_ONLY"
         if path == _C2_CONTRACT_PATH:
             expected_review_id = 5170478077
-            expected_merge_commit = _CURRENT_MAIN_SHA
+            expected_merge_commit = _D15D_CLOSEOUT_MAIN_SHA
         else:
             expected_review_id = 5168962906
             expected_merge_commit = _PRE_CLOSEOUT_MAIN_SHA
@@ -722,6 +753,53 @@ def _approved_docs_c2_locked_exceptions() -> tuple[str, ...]:
 
     assert len(paths) == len(set(paths)), "approved docs exceptions 不得重复"
     return tuple(sorted(paths))
+
+
+def _assert_docs_only_exception_path(path: str) -> None:
+    """只允许已独立批准的两条文档路径成为 C2 exception。"""
+    assert path in (_C2_CONTRACT_PATH, "packaging/systemd/README.md"), (
+        f"DOCUMENTATION_ONLY exception 不能覆盖 runtime/package 路径: {path}"
+    )
+
+
+def _assert_explicit_stale_manifest(manifest: dict, hits: list[str]) -> None:
+    """验证 runtime drift 的唯一合法中间态，而非静默放宽 C2。"""
+    current_main = manifest["current_main"]
+    consistency = manifest["post_lock_consistency"]
+    assert hits, "explicit stale state 必须以真实 runtime/package drift 为前提"
+    assert current_main["runtime_sensitive_drift_since_release_commit"] is True
+    assert current_main["docs_only_drift_since_release_commit"] is False
+    assert consistency["status"] == "RUNTIME_EVIDENCE_STALE_PENDING_REBUILD"
+    assert consistency["frozen_package_lock_valid"] is False
+    assert consistency["rebuild_required"] is True
+    assert consistency["rebuild_completed"] is False
+    assert consistency["host_vm_required"] is True
+    assert consistency["host_vm_completed"] is False
+    assert set(consistency["runtime_package_impacting_paths"]) == set(
+        _POST_M2_RUNTIME_PACKAGE_PATHS
+    )
+    assert set(consistency["test_only_locked_paths"]) == set(_POST_M2_TEST_ONLY_PATHS)
+    assert set(consistency["locked_runtime_prefix_hits"]) == set(hits)
+    for entry in current_main["approved_docs_c2_locked_exceptions"]:
+        _assert_docs_only_exception_path(entry["path"])
+
+
+def _assert_rejected_stale_manifest(manifest: dict, hits: list[str]) -> None:
+    """构造性负例必须被 stale-state seam 拒绝。"""
+    try:
+        _assert_explicit_stale_manifest(manifest, hits)
+    except AssertionError:
+        return
+    raise AssertionError("不完整 stale manifest 被错误接受")
+
+
+def _assert_rejected_docs_only_exception(path: str) -> None:
+    """runtime/package 路径伪装为 documentation-only 必须失败。"""
+    try:
+        _assert_docs_only_exception_path(path)
+    except AssertionError:
+        return
+    raise AssertionError("runtime/package path 被错误接受为 documentation-only")
 
 
 def _assert_registered_exceptions_stable(main_ref: str) -> None:
@@ -767,8 +845,8 @@ def _release_c2_locked_drift_hits(main_ref: str) -> list:
     allowed = set(_approved_docs_c2_locked_exceptions())
     _assert_registered_exceptions_stable(main_ref)
     unexpected = [hit for hit in raw_hits if hit not in allowed]
-    assert set(raw_hits) == set(allowed), (
-        f"raw C2 locked hits 与 manifest 例外不一致: raw={raw_hits}, "
+    assert set(raw_hits) >= allowed, (
+        f"raw C2 locked hits 缺少已登记 docs-only exception: raw={raw_hits}, "
         f"approved={sorted(allowed)}"
     )
     return unexpected
@@ -789,23 +867,35 @@ def _diff_name_only_paths(left_ref: str, right_ref: str) -> list:
     return [line for line in proc.stdout.splitlines() if line.strip()]
 
 
-def test_live_diff_fail_closed():
-    """live 门禁：D15D current release `4a6323f` 到 current main 的 diff 不得
-    命中 runtime-sensitive 前缀；D14D contract 的 historical 三分类保留，
-    但不再替代当前 release 的新鲜性判定。
-    """
+def test_live_diff_explicit_stale_state_fail_closed():
+    """live 门禁：runtime drift 只能进入完整登记的 stale/rebuild 中间态。"""
     head = _head_sha()
     main_ref = _current_main_ref()
     hits = _release_c2_locked_drift_hits(main_ref)
-    assert not hits, (
-        f"current release `4a6323f` 到 {main_ref} 出现 runtime drift: {hits}"
+    manifest = _load_json(_D15D_MANIFEST)
+    current_main = manifest["current_main"]
+    consistency = manifest["post_lock_consistency"]
+
+    assert hits, "此修复基线应有 post-M2 runtime/package drift"
+    _assert_explicit_stale_manifest(manifest, hits)
+    assert tuple(consistency["runtime_package_impacting_paths"]) == _POST_M2_RUNTIME_PACKAGE_PATHS
+    assert tuple(consistency["test_only_locked_paths"]) == _POST_M2_TEST_ONLY_PATHS
+    assert set(hits) == set(_POST_M2_RUNTIME_PACKAGE_PATHS + _POST_M2_TEST_ONLY_PATHS), (
+        f"所有未豁免 C2 locked hits 都必须登记并分型: actual={hits}"
     )
-    docs_only = [
-        path for path in _diff_name_only_paths(_CURRENT_RELEASE_COMMIT, main_ref)
-        if path.startswith("docs/day15/")
-    ]
-    assert len(docs_only) == 3, (
-        f"current release 到 {main_ref} 的 docs/day15 漂移数应为 3: {docs_only}"
+    assert current_main["sha"] == _CURRENT_MAIN_SHA
+    assert current_main["runtime_sensitive_drift_since_release_commit"] is True
+    assert current_main["docs_only_drift_since_release_commit"] is False
+    assert consistency["status"] == "RUNTIME_EVIDENCE_STALE_PENDING_REBUILD"
+    assert consistency["current_main_sha"] == _CURRENT_MAIN_SHA
+    assert consistency["comparison"] == f"{_CURRENT_RELEASE_COMMIT}..{_CURRENT_MAIN_SHA}"
+    assert consistency["frozen_package_lock_valid"] is False
+    assert consistency["rebuild_required"] is True
+    assert consistency["rebuild_completed"] is False
+    assert consistency["host_vm_required"] is True
+    assert consistency["host_vm_completed"] is False
+    assert manifest["release_classification"] == (
+        "HISTORICAL_VALID_AT_RELEASE_COMMIT_SUPERSEDED_FOR_CURRENT_MAIN"
     )
 
     # 记录执行时事实到测试日志。
@@ -816,7 +906,7 @@ def test_live_diff_fail_closed():
     print(f"[live] c2_locked_hits={hits}")
 
     # 文档一致性（负向 fail-closed 断言恒生效）。
-    _assert_documentation_consistency("CURRENT_RELEASE_NO_RUNTIME_DRIFT")
+    _assert_documentation_consistency("RUNTIME_EVIDENCE_STALE_PENDING_REBUILD")
 
 
 def test_governance_ssot_after_identity_adjudication():
@@ -852,7 +942,7 @@ def test_governance_ssot_after_identity_adjudication():
 
 
 def test_current_main_drift_invalidation_ssot():
-    """第 4 轮旧包失效记录必须保留；current main 可 docs-only 前移。"""
+    """旧包历史 identity 必须保留；post-M2 runtime drift 必须显式 stale。"""
     manifest = _load_json(_D15D_MANIFEST)
     consistency = manifest["post_lock_consistency"]
     historical = consistency["historical_lock_invalidation"]
@@ -862,10 +952,12 @@ def test_current_main_drift_invalidation_ssot():
         for entry in current_main["approved_docs_c2_locked_exceptions"]
     ]
     assert exception_paths == consistency["approved_docs_c2_locked_exceptions"]
-    assert tuple(exception_paths) == tuple(
+    assert set(exception_paths).issubset(
         current_main["raw_c2_locked_hits_since_release_commit"]
     )
-    assert tuple(exception_paths) == tuple(consistency["raw_c2_locked_hits"])
+    assert tuple(current_main["raw_c2_locked_hits_since_release_commit"]) == tuple(
+        consistency["raw_c2_locked_hits"]
+    )
     assert manifest["current_main"]["sha"] == _CURRENT_MAIN_SHA
     assert manifest["closeout"]["pr_number"] == 177
     assert manifest["closeout"]["status"] == "MERGED"
@@ -873,23 +965,27 @@ def test_current_main_drift_invalidation_ssot():
     assert manifest["closeout"]["head_sha"] == (
         "8dc21f7df7ea359b880efc93902569a5ca4187d8"
     )
-    assert manifest["closeout"]["merge_commit"] == _CURRENT_MAIN_SHA
+    assert manifest["closeout"]["merge_commit"] == _D15D_CLOSEOUT_MAIN_SHA
     assert manifest["current_main"]["release_commit_is_current_main"] is False
-    assert manifest["current_main"]["runtime_sensitive_drift_since_release_commit"] is False
-    assert manifest["current_main"]["docs_only_drift_since_release_commit"] is True
+    assert manifest["current_main"]["runtime_sensitive_drift_since_release_commit"] is True
+    assert manifest["current_main"]["docs_only_drift_since_release_commit"] is False
     assert manifest["release_classification"] == (
-        "NEW_RELEASE_IDENTITY_BUILT_AND_VM_VERIFIED"
+        "HISTORICAL_VALID_AT_RELEASE_COMMIT_SUPERSEDED_FOR_CURRENT_MAIN"
     )
     assert consistency["gate"] == "C2"
-    assert consistency["status"] == "PASS_CURRENT_MAIN_NO_RUNTIME_SENSITIVE_DRIFT"
+    assert consistency["status"] == "RUNTIME_EVIDENCE_STALE_PENDING_REBUILD"
     assert consistency["current_main_sha"] == _CURRENT_MAIN_SHA
-    assert tuple(consistency["locked_runtime_prefix_hits"]) == ()
+    assert tuple(consistency["runtime_package_impacting_paths"]) == _POST_M2_RUNTIME_PACKAGE_PATHS
+    assert tuple(consistency["test_only_locked_paths"]) == _POST_M2_TEST_ONLY_PATHS
+    assert set(consistency["locked_runtime_prefix_hits"]) == set(
+        _POST_M2_RUNTIME_PACKAGE_PATHS + _POST_M2_TEST_ONLY_PATHS
+    )
     assert consistency["frozen_package_lock_valid"] is False
     assert consistency["comparison"] == f"{_CURRENT_RELEASE_COMMIT}..{_CURRENT_MAIN_SHA}"
     assert consistency["rebuild_required"] is True
-    assert consistency["rebuild_completed"] is True
+    assert consistency["rebuild_completed"] is False
     assert consistency["host_vm_required"] is True
-    assert consistency["host_vm_completed"] is True
+    assert consistency["host_vm_completed"] is False
 
     assert historical["release_commit"] == _SOURCE_COMMIT
     assert historical["status"] == "FAIL_INVALIDATED"
@@ -938,7 +1034,7 @@ def test_current_main_drift_invalidation_ssot():
     task_card = _TASK_CARD.read_text(encoding="utf-8")
     assert _CURRENT_MAIN_SHA in task_card
     assert "TRIGGER_NEW_RELEASE_PACKAGE_IDENTITY" in task_card
-    assert "NEW_RELEASE_IDENTITY_BUILT_AND_VM_VERIFIED" in task_card
+    assert "RUNTIME_EVIDENCE_STALE_PENDING_REBUILD" in task_card
 
     assert _ROUND4_C2_EVIDENCE.is_file(), f"缺失 C2 失效证据: {_ROUND4_C2_EVIDENCE}"
     evidence = _ROUND4_C2_EVIDENCE.read_text(encoding="utf-8")
