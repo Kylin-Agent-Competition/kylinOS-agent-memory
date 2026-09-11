@@ -588,3 +588,31 @@ def test_installer_preflights_downstream_assistant_chat_abi():
     ) < text.index(
         'install -m 0700 "$SELF_DIR/host_memory_bridge.py"'
     )
+
+
+def test_installer_has_no_generator_paste_corruption():
+    """RC3 guard for the corrupted installer generator output.
+
+    An earlier generator merged a comment into a single physical line that
+    contained a literal ``\\n`` and also risked leaving unified-diff patch
+    ``+`` / ``@@`` markers behind. The preflight-only assertion above cannot
+    see that corruption when it lands outside the preflight block, so scan the
+    whole installer: legitimate ``\\n`` escapes only ever appear inside
+    ``printf``/Python string literals, never immediately before a comment
+    ``#``.
+    """
+
+    text = (
+        BRIDGE_DIR / "install_host_integration_rc.sh"
+    ).read_text(encoding="utf-8")
+
+    merged_comment = "\\n#"
+    assert merged_comment not in text
+
+    lines = text.splitlines()
+    assert not [line for line in lines if line.startswith("+")]
+    assert not [line for line in lines if line.startswith("@@")]
+    assert not [line for line in lines if line.endswith("+")]
+
+    # LF-only generated script: a stray CR would be another paste artifact.
+    assert "\r" not in text

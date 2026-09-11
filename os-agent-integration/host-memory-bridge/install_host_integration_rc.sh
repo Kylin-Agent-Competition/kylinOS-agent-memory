@@ -124,7 +124,8 @@ else
     trap - EXIT
 fi
 
-# Prove the *installed* hook path can be loaded inside Kaiming and that the\n# runtime context directory is visible there. This catches KYSEC/path/mount
+# Prove the *installed* hook path can be loaded inside Kaiming and that the
+# runtime context directory is visible there. This catches KYSEC/path/mount
 # failures before the user's normal Assistant launch is overridden.
 PROBE_DIR="${XDG_RUNTIME_DIR}/kylin-memory"
 PROBE_CONTEXT="$PROBE_DIR/host-integration-install-probe.txt"
