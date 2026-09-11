@@ -247,8 +247,6 @@ python3 -m json.tool "$PKG/manifest.json" | less
 ( cd "$PKG" && sha256sum -c SHA256SUMS )
 ```
 
-`SHA256SUMS` 中记录的是相对于发布包根目录的路径，因此校验必须在 `$PKG` 目录中执行；不要在仓库目录直接运行 `sha256sum -c "$PKG/SHA256SUMS"`。
-
 正式交付时建议单独记录：
 
 ```text
@@ -510,7 +508,7 @@ D14A `verify.sh` 要求真实、独立的 embedding server 已运行。验证器
 ### 9.1 启动独立 embedding server
 
 ```bash
-INSTALL_PREFIX="${INSTALL_PREFIX:-$HOME/.local/share/kylin-memory-d14a}"
+export INSTALL_PREFIX="${INSTALL_PREFIX:-$HOME/.local/share/kylin-memory-d14a}"
 
 PYTHONPATH="$INSTALL_PREFIX/runtime/app:$INSTALL_PREFIX/runtime/bridge" \
   "$INSTALL_PREFIX/runtime/python/bin/python" -m embedding.server \
