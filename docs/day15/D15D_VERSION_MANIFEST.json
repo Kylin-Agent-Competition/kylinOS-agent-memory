@@ -2,11 +2,11 @@
   "schema_version": "d15d-version-manifest/v2",
   "run_id": "20260910T205300Z",
   "current_main": {
-    "sha": "6e9f56d2983b36c3b174e7acf6687c4af79439d4",
-    "verified_at": "2026-09-10T17:52:08Z",
+    "sha": "cf741a3fb9fa706c94e703a83e4441444a0a4f33",
+    "verified_at": "2026-09-11T00:00:00Z",
     "release_commit_is_current_main": false,
-    "runtime_sensitive_drift_since_release_commit": false,
-    "docs_only_drift_since_release_commit": true,
+    "runtime_sensitive_drift_since_release_commit": true,
+    "docs_only_drift_since_release_commit": false,
     "docs_only_paths": [
       "docs/D15D_TaskCard_20260906.md",
       "docs/day14/test_d14a_release_provenance.py",
@@ -18,6 +18,16 @@
     ],
     "raw_c2_locked_hits_since_release_commit": [
       "docs/day14/00_d14a_release_package_contract.md",
+      "memory-service/db/m2_schema.py",
+      "memory-service/requirements.txt",
+      "memory-service/service/main_to_data_binding.py",
+      "memory-service/service/main_to_data_import.py",
+      "memory-service/tests/test_event_ingest_d6d.py",
+      "memory-service/tests/test_forget_persistence_d10d.py",
+      "memory-service/tests/test_main_to_data_m2_binding.py",
+      "memory-service/tests/test_main_to_data_m2_import.py",
+      "migrations/env.py",
+      "migrations/versions/20260911_main_to_data_m2_registry.py",
       "packaging/systemd/README.md"
     ],
     "approved_docs_c2_locked_exceptions": [
@@ -42,12 +52,47 @@
   },
   "post_lock_consistency": {
     "gate": "C2",
-    "status": "PASS_CURRENT_MAIN_NO_RUNTIME_SENSITIVE_DRIFT",
-    "current_main_sha": "6e9f56d2983b36c3b174e7acf6687c4af79439d4",
-    "comparison": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541..6e9f56d2983b36c3b174e7acf6687c4af79439d4",
-    "locked_runtime_prefix_hits": [],
+    "status": "RUNTIME_EVIDENCE_STALE_PENDING_REBUILD",
+    "current_main_sha": "cf741a3fb9fa706c94e703a83e4441444a0a4f33",
+    "comparison": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541..cf741a3fb9fa706c94e703a83e4441444a0a4f33",
+    "locked_runtime_prefix_hits": [
+      "memory-service/db/m2_schema.py",
+      "memory-service/requirements.txt",
+      "memory-service/service/main_to_data_binding.py",
+      "memory-service/service/main_to_data_import.py",
+      "memory-service/tests/test_event_ingest_d6d.py",
+      "memory-service/tests/test_forget_persistence_d10d.py",
+      "memory-service/tests/test_main_to_data_m2_binding.py",
+      "memory-service/tests/test_main_to_data_m2_import.py",
+      "migrations/env.py",
+      "migrations/versions/20260911_main_to_data_m2_registry.py"
+    ],
+    "runtime_package_impacting_paths": [
+      "memory-service/db/m2_schema.py",
+      "memory-service/requirements.txt",
+      "memory-service/service/main_to_data_binding.py",
+      "memory-service/service/main_to_data_import.py",
+      "migrations/env.py",
+      "migrations/versions/20260911_main_to_data_m2_registry.py"
+    ],
+    "test_only_locked_paths": [
+      "memory-service/tests/test_event_ingest_d6d.py",
+      "memory-service/tests/test_forget_persistence_d10d.py",
+      "memory-service/tests/test_main_to_data_m2_binding.py",
+      "memory-service/tests/test_main_to_data_m2_import.py"
+    ],
     "raw_c2_locked_hits": [
       "docs/day14/00_d14a_release_package_contract.md",
+      "memory-service/db/m2_schema.py",
+      "memory-service/requirements.txt",
+      "memory-service/service/main_to_data_binding.py",
+      "memory-service/service/main_to_data_import.py",
+      "memory-service/tests/test_event_ingest_d6d.py",
+      "memory-service/tests/test_forget_persistence_d10d.py",
+      "memory-service/tests/test_main_to_data_m2_binding.py",
+      "memory-service/tests/test_main_to_data_m2_import.py",
+      "migrations/env.py",
+      "migrations/versions/20260911_main_to_data_m2_registry.py",
       "packaging/systemd/README.md"
     ],
     "approved_docs_c2_locked_exceptions": [
@@ -63,7 +108,7 @@
       "docs/day14/00_d14a_release_package_contract.md",
       "packaging/systemd/README.md"
     ],
-    "note": "The raw C2 locked diff contains exactly the two manifest-registered docs-only exceptions (D14A contract and packaging README); it has no non-excepted runtime-sensitive hit.",
+    "note": "The raw C2 locked diff retains the two historical documentation-only exceptions and adds post-#181 runtime/package and test-only hits. The package-impacting hits are explicitly stale, are not documentation exceptions, and require a later clean rebuild plus real Kylin VM validation after runtime freeze.",
     "frozen_package_lock_valid": false,
     "historical_lock_invalidation": {
       "release_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
@@ -72,12 +117,12 @@
       "evidence": "evidence/d15d-lock/20260910T105245Z/c2_main_drift_invalidation.md"
     },
     "rebuild_required": true,
-    "rebuild_completed": true,
+    "rebuild_completed": false,
     "host_vm_required": true,
-    "host_vm_completed": true
+    "host_vm_completed": false
   },
   "release_commit": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
-  "release_classification": "NEW_RELEASE_IDENTITY_BUILT_AND_VM_VERIFIED",
+  "release_classification": "HISTORICAL_VALID_AT_RELEASE_COMMIT_SUPERSEDED_FOR_CURRENT_MAIN",
   "package": {
     "name": "kylin-memory-a-d14a",
     "version": "0.1.0-d14a",
@@ -134,13 +179,18 @@
     "endpoint": "127.0.0.1:2223",
     "guest_worktree": "/tmp/kylin-memory-main-4a6323f",
     "release_commit": "4a6323fb3a8c73e0b15f1f3629d28dfc12071541",
+    "current_main_disposition": "HISTORICAL_VALID_AT_RELEASE_COMMIT / SUPERSEDED_FOR_CURRENT_MAIN / REBUILD_REQUIRED",
     "c1_clean_detached_worktree": {
       "status": "PASS",
       "run_id": "d15d_build_4a6323f_20260910T205300Z",
       "git_dirty": 0
     },
     "c2_current_main_no_drift": {
-      "status": "PASS",
+      "status": "HISTORICAL_PASS_AT_EVIDENCE_RUN_NOT_CURRENT",
+      "historical_status": "PASS",
+      "evaluated_main_sha": "2782a9048c235006c17024c9798cf988a07627a1",
+      "historical_scope_only": true,
+      "current_valid": false,
       "diff_command": "git diff --name-only 4a6323fb3a8c73e0b15f1f3629d28dfc12071541..kylin-mem/main -- packaging/ memory-service/ cpp-bridge/ migrations/ config/ docs/day14/00_d14a_release_package_contract.md"
     },
     "c3_c6_source_blob_consistency": {
