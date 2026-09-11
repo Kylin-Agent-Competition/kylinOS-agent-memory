@@ -406,7 +406,9 @@ mkdir -p ~/.config/kylin-memory
 cat > ~/.config/kylin-memory/config.toml <<'EOF'
 [deadline]
 default_ms = 5000
-retrieve_ms = 150
+
+[retrieve]
+deadline_ms = 150
 
 [outbox]
 poll_interval_s = 1
