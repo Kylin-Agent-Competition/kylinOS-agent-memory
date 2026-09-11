@@ -36,6 +36,12 @@ jobs:
       - name: Install Memory Service L1 dependencies
         run: python3 -m pip install -r memory-service/requirements.txt
 
+      - name: M2 production import L1
+        env:
+          PYTHONPATH: memory-service
+        run: |
+          python3 -m pytest memory-service/tests/test_main_to_data_m2_import.py -q
+
       - name: D13D prerequisite L1 regression
         env:
           PYTHONPATH: memory-service
