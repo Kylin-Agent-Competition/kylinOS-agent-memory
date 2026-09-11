@@ -34,6 +34,10 @@ CURSOR_PATH = Path(
 ).expanduser()
 
 
+class ChatDbChanged(RuntimeError):
+    """Assistant Chat DB changed during a polling operation."""
+
+
 def _connect_ro() -> sqlite3.Connection:
     uri = DB_PATH.resolve().as_uri() + "?mode=ro"
     return sqlite3.connect(uri, uri=True)
@@ -42,18 +46,49 @@ def _connect_ro() -> sqlite3.Connection:
 def current_max_rowid() -> int:
     con = _connect_ro()
     try:
-        return int(con.execute("SELECT COALESCE(MAX(rowid), 0) FROM RECORD").fetchone()[0])
+        return int(
+            con.execute(
+                "SELECT COALESCE(MAX(rowid), 0) FROM RECORD"
+            ).fetchone()[0]
+        )
     finally:
         con.close()
 
 
-def read_new_user_rows(after_rowid: int) -> tuple[list[dict], int]:
-    """Read one ordered DB batch and return user rows plus its safe high watermark.
+def current_db_identity() -> str:
+    """Stable identity for the current Chat DB file."""
+    st = DB_PATH.stat()
+    return f"{st.st_dev}:{st.st_ino}"
 
-    The high watermark is taken from the same SQLite result set, so when every
-    relevant user row in the batch has been acknowledged we can advance past Bot
-    and malformed rows without a second-query race that could skip a new user row.
-    """
+
+def current_db_snapshot() -> tuple[int, str]:
+    """Return a stable (tail, identity) snapshot."""
+    identity_before = current_db_identity()
+    tail = current_max_rowid()
+    identity_after = current_db_identity()
+
+    if identity_before != identity_after:
+        raise ChatDbChanged("Chat DB changed while reading tail")
+
+    return tail, identity_after
+
+
+def read_new_user_rows(
+    after_rowid: int,
+    expected_identity: str | None = None,
+) -> tuple[list[dict], int]:
+    """Read one ordered DB batch and return user rows plus safe high watermark."""
+
+    identity_before = current_db_identity()
+
+    if (
+        expected_identity is not None
+        and identity_before != expected_identity
+    ):
+        raise ChatDbChanged(
+            "Chat DB identity changed before batch read"
+        )
+
     con = _connect_ro()
     try:
         rows = con.execute(
@@ -68,21 +103,38 @@ def read_new_user_rows(after_rowid: int) -> tuple[list[dict], int]:
     finally:
         con.close()
 
+    identity_after = current_db_identity()
+    if identity_before != identity_after:
+        raise ChatDbChanged(
+            "Chat DB changed during batch read"
+        )
+
     high_watermark = after_rowid
     result = []
+
     for rowid, raw in rows:
         rowid = int(rowid)
         high_watermark = max(high_watermark, rowid)
+
         try:
             obj = json.loads(raw)
         except (TypeError, json.JSONDecodeError):
             continue
+
         if obj.get("author") != "User":
             continue
-        text = obj.get("message")
-        if not isinstance(text, str) or not text.strip():
+
+        message = obj.get("message")
+        if not isinstance(message, str) or not message.strip():
             continue
-        result.append({"rowid": rowid, "text": text.strip()})
+
+        result.append(
+            {
+                "rowid": rowid,
+                "text": message.strip(),
+            }
+        )
+
     return result, high_watermark
 
 
@@ -115,7 +167,26 @@ def extract_preferences(text: str) -> list[dict]:
     return []
 
 
-def write_preference(rowid: int, pref: dict) -> bool:
+def write_preference(
+    rowid: int,
+    pref: dict,
+    generation: int = 0,
+) -> bool:
+    # Keep generation 0 identifiers backward compatible with RC2 so an
+    # interrupted pre-upgrade write cannot be duplicated during migration.
+    if generation == 0:
+        evidence_event_id = (
+            f"kylin-aiassistant-chat-record-{rowid}"
+        )
+        idem = f"host-chat-pref-{rowid}-{pref['key']}"
+    else:
+        evidence_event_id = (
+            f"kylin-aiassistant-chat-g{generation}-record-{rowid}"
+        )
+        idem = (
+            f"host-chat-pref-g{generation}-{rowid}-{pref['key']}"
+        )
+
     payload = {
         "user_id": USER_ID,
         "preference_key": pref["key"],
@@ -123,9 +194,9 @@ def write_preference(rowid: int, pref: dict) -> bool:
         "preference_value": pref["value"],
         "is_temporary": False,
         "should_persist": True,
-        "evidence_event_ids": [f"kylin-aiassistant-chat-record-{rowid}"],
+        "evidence_event_ids": [evidence_event_id],
     }
-    idem = f"host-chat-pref-{rowid}-{pref['key']}"
+
     cmd = [
         sys.executable,
         str(IPC_CALL),
@@ -133,14 +204,26 @@ def write_preference(rowid: int, pref: dict) -> bool:
         json.dumps(payload, ensure_ascii=False),
         idem,
     ]
+
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
     except subprocess.TimeoutExpired:
-        print(f"[bridge] ERROR rowid={rowid}: IPC timeout", flush=True)
+        print(
+            f"[bridge] ERROR rowid={rowid}: IPC timeout",
+            flush=True,
+        )
         return False
 
     if proc.returncode != 0:
-        print(f"[bridge] ERROR rowid={rowid} rc={proc.returncode}", flush=True)
+        print(
+            f"[bridge] ERROR rowid={rowid} rc={proc.returncode}",
+            flush=True,
+        )
         if proc.stderr.strip():
             print(proc.stderr.strip(), flush=True)
         return False
@@ -148,31 +231,52 @@ def write_preference(rowid: int, pref: dict) -> bool:
     try:
         response = json.loads(proc.stdout)
     except json.JSONDecodeError:
-        print(f"[bridge] ERROR rowid={rowid}: malformed IPC response", flush=True)
-        return False
-    if response.get("status") != "ok":
-        print(f"[bridge] ERROR rowid={rowid}: IPC status={response.get('status')}", flush=True)
+        print(
+            f"[bridge] ERROR rowid={rowid}: malformed IPC response",
+            flush=True,
+        )
         return False
 
-    print(f"[bridge] STORED rowid={rowid} key={pref['key']}", flush=True)
+    if response.get("status") != "ok":
+        print(
+            f"[bridge] ERROR rowid={rowid}: "
+            f"IPC status={response.get('status')}",
+            flush=True,
+        )
+        return False
+
+    print(
+        f"[bridge] STORED generation={generation} "
+        f"rowid={rowid} key={pref['key']}",
+        flush=True,
+    )
     return True
 
 
-def process_rows(last_rowid: int, rows: list[dict], writer=write_preference) -> tuple[int, bool]:
-    """Process rows in order without acknowledging a preference row before IPC succeeds.
+def process_rows(
+    last_rowid: int,
+    rows: list[dict],
+    writer=write_preference,
+    generation: int = 0,
+) -> tuple[int, bool]:
+    """Process rows without acknowledging a failed preference IPC write."""
 
-    Returns ``(last_rowid, retry_required)``. A failed preference write leaves
-    that row unacknowledged so the next poll retries it with the same idempotency
-    key instead of silently losing the memory.
-    """
     for row in rows:
         prefs = extract_preferences(row["text"])
+
         if not prefs:
             last_rowid = max(last_rowid, row["rowid"])
             continue
 
-        if not all(writer(row["rowid"], pref) for pref in prefs):
-            print(f"[bridge] RETRY rowid={row['rowid']} after IPC recovery", flush=True)
+        if not all(
+            writer(row["rowid"], pref, generation)
+            for pref in prefs
+        ):
+            print(
+                f"[bridge] RETRY rowid={row['rowid']} "
+                "after IPC recovery",
+                flush=True,
+            )
             return last_rowid, True
 
         last_rowid = max(last_rowid, row["rowid"])
@@ -180,37 +284,180 @@ def process_rows(last_rowid: int, rows: list[dict], writer=write_preference) -> 
     return last_rowid, False
 
 
-
-def load_cursor() -> int | None:
+def load_cursor() -> dict | None:
     try:
-        raw = CURSOR_PATH.read_text(encoding="ascii").strip()
-        value = int(raw)
-        return value if value >= 0 else None
-    except (OSError, ValueError):
+        raw = CURSOR_PATH.read_text(
+            encoding="ascii"
+        ).strip()
+        obj = json.loads(raw)
+    except (OSError, ValueError, json.JSONDecodeError):
         return None
 
+    # RC2 persisted just one integer rowid.
+    if type(obj) is int:
+        if obj < 0:
+            return None
+        return {
+            "rowid": obj,
+            "generation": 0,
+            "db_identity": None,
+        }
 
-def save_cursor(rowid: int) -> None:
-    CURSOR_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not isinstance(obj, dict):
+        return None
+
+    rowid = obj.get("rowid")
+    generation = obj.get("generation", 0)
+    db_identity = obj.get("db_identity")
+
+    if type(rowid) is not int or rowid < 0:
+        return None
+
+    if type(generation) is not int or generation < 0:
+        return None
+
+    if (
+        db_identity is not None
+        and not isinstance(db_identity, str)
+    ):
+        return None
+
+    return {
+        "rowid": rowid,
+        "generation": generation,
+        "db_identity": db_identity,
+    }
+
+
+def save_cursor(
+    rowid: int,
+    generation: int = 0,
+    db_identity: str | None = None,
+) -> None:
+    CURSOR_PATH.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+        mode=0o700,
+    )
+
     try:
         os.chmod(CURSOR_PATH.parent, 0o700)
     except OSError:
         pass
-    tmp = CURSOR_PATH.with_name(CURSOR_PATH.name + ".tmp")
-    tmp.write_text(f"{int(rowid)}\n", encoding="ascii")
+
+    tmp = CURSOR_PATH.with_name(
+        CURSOR_PATH.name + ".tmp"
+    )
+
+    state = {
+        "rowid": int(rowid),
+        "generation": int(generation),
+        "db_identity": db_identity,
+    }
+
+    tmp.write_text(
+        json.dumps(
+            state,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="ascii",
+    )
+
     os.chmod(tmp, 0o600)
     os.replace(tmp, CURSOR_PATH)
 
-def wait_for_chat_db_tail() -> int:
-    """Wait for the assistant DB at login, then start at its current tail."""
+
+def reconcile_cursor(
+    saved: dict | None,
+    tail: int,
+    db_identity: str,
+) -> tuple[dict, str]:
+    if saved is None:
+        return {
+            "rowid": tail,
+            "generation": 0,
+            "db_identity": db_identity,
+        }, "new-tail"
+
+    identity_changed = (
+        saved["db_identity"] is not None
+        and saved["db_identity"] != db_identity
+    )
+
+    if identity_changed or saved["rowid"] > tail:
+        return {
+            "rowid": tail,
+            "generation": saved["generation"] + 1,
+            "db_identity": db_identity,
+        }, "db-reset-tail"
+
+    return {
+        "rowid": saved["rowid"],
+        "generation": saved["generation"],
+        "db_identity": db_identity,
+    }, "resume"
+
+
+def refresh_cursor_for_db(
+    last_rowid: int,
+    generation: int,
+    db_identity: str,
+) -> tuple[int, int, str, str | None]:
+    """Detect DB replacement or rowid regression during runtime."""
+
+    tail, current_identity = current_db_snapshot()
+
+    if current_identity != db_identity:
+        # A replacement DB may already contain historical rows. Preserve
+        # the no-backfill boundary by starting at its current tail.
+        return (
+            tail,
+            generation + 1,
+            current_identity,
+            "db-replaced",
+        )
+
+    if tail < last_rowid:
+        # Same database file, but RECORD was cleared/recreated. Rows now
+        # present in the reset database belong to the new generation, so
+        # begin again at rowid 0 rather than silently losing them.
+        return (
+            0,
+            generation + 1,
+            current_identity,
+            "rowid-regressed",
+        )
+
+    return (
+        last_rowid,
+        generation,
+        current_identity,
+        None,
+    )
+
+
+def wait_for_chat_db_state() -> tuple[int, str]:
+    """Wait for the Assistant DB at login."""
+
     announced = False
+
     while True:
         try:
-            return current_max_rowid()
-        except (OSError, sqlite3.Error):
+            return current_db_snapshot()
+        except (
+            OSError,
+            sqlite3.Error,
+            ChatDbChanged,
+        ):
             if not announced:
-                print(f"[bridge] waiting for Chat DB: {DB_PATH}", flush=True)
+                print(
+                    f"[bridge] waiting for Chat DB: {DB_PATH}",
+                    flush=True,
+                )
                 announced = True
+
             time.sleep(1)
 
 
@@ -223,46 +470,107 @@ def main() -> None:
     print(f"[bridge] user_id : {USER_ID}", flush=True)
 
     if not IPC_CALL.exists():
-        raise SystemExit(f"[bridge] FAIL: IPC client not found: {IPC_CALL}")
+        raise SystemExit(
+            f"[bridge] FAIL: IPC client not found: {IPC_CALL}"
+        )
 
-    # First install deliberately starts at the current DB tail (no historical
-    # backfill). After that, persist the acknowledged row cursor so a bridge
-    # restart cannot silently lose a preference that arrived while IPC was down.
-    tail = wait_for_chat_db_tail()
+    # First install starts at current tail: no historical backfill.
+    tail, db_identity = wait_for_chat_db_state()
     saved_cursor = load_cursor()
-    if saved_cursor is None:
-        last_rowid = tail
-        save_cursor(last_rowid)
-        cursor_mode = "new-tail"
-    elif saved_cursor > tail:
-        # The Assistant DB was replaced/reset. A cursor beyond its current tail
-        # would otherwise stall forever, so re-baseline to the new DB tail.
-        last_rowid = tail
-        save_cursor(last_rowid)
-        cursor_mode = "db-reset-tail"
-    else:
-        last_rowid = saved_cursor
-        cursor_mode = "resume"
+
+    cursor, cursor_mode = reconcile_cursor(
+        saved_cursor,
+        tail,
+        db_identity,
+    )
+
+    last_rowid = cursor["rowid"]
+    generation = cursor["generation"]
+    db_identity = cursor["db_identity"]
+
+    save_cursor(
+        last_rowid,
+        generation,
+        db_identity,
+    )
+
     print(
-        f"[bridge] starting_after_rowid={last_rowid} cursor_mode={cursor_mode}",
+        f"[bridge] starting_after_rowid={last_rowid} "
+        f"generation={generation} "
+        f"cursor_mode={cursor_mode}",
         flush=True,
     )
 
     while True:
         try:
-            rows, high_watermark = read_new_user_rows(last_rowid)
-            new_last_rowid, retry_required = process_rows(last_rowid, rows)
+            (
+                last_rowid,
+                generation,
+                db_identity,
+                reset_reason,
+            ) = refresh_cursor_for_db(
+                last_rowid,
+                generation,
+                db_identity,
+            )
+
+            if reset_reason is not None:
+                save_cursor(
+                    last_rowid,
+                    generation,
+                    db_identity,
+                )
+
+                print(
+                    f"[bridge] DB_RESET "
+                    f"reason={reset_reason} "
+                    f"generation={generation} "
+                    f"starting_after_rowid={last_rowid}",
+                    flush=True,
+                )
+
+                time.sleep(POLL_INTERVAL)
+                continue
+
+            rows, high_watermark = read_new_user_rows(
+                last_rowid,
+                expected_identity=db_identity,
+            )
+
+            new_last_rowid, retry_required = process_rows(
+                last_rowid,
+                rows,
+                generation=generation,
+            )
+
             if not retry_required:
-                # Safe because high_watermark came from the same fetched batch.
-                new_last_rowid = max(new_last_rowid, high_watermark)
+                new_last_rowid = max(
+                    new_last_rowid,
+                    high_watermark,
+                )
+
             if new_last_rowid != last_rowid:
-                save_cursor(new_last_rowid)
+                save_cursor(
+                    new_last_rowid,
+                    generation,
+                    db_identity,
+                )
                 last_rowid = new_last_rowid
-            time.sleep(1 if retry_required else POLL_INTERVAL)
+
+            time.sleep(
+                1 if retry_required else POLL_INTERVAL
+            )
+
         except KeyboardInterrupt:
             break
-        except Exception as exc:  # keep watcher alive; do not expose message content
-            print(f"[bridge] ERROR {type(exc).__name__}: {exc}", flush=True)
+
+        except Exception as exc:
+            # Keep watcher alive; never log user message contents.
+            print(
+                f"[bridge] ERROR "
+                f"{type(exc).__name__}: {exc}",
+                flush=True,
+            )
             time.sleep(1)
 
 

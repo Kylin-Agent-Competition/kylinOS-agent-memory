@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE_DIR = ROOT / "host-memory-bridge"
@@ -64,20 +68,30 @@ def test_bridge_does_not_advance_failed_preference_row():
     ]
     calls = []
 
-    def fail_writer(rowid, pref):
-        calls.append((rowid, pref["value"]))
+    def fail_writer(rowid, pref, generation):
+        calls.append(
+            (rowid, pref["value"], generation)
+        )
         return False
 
-    last_rowid, retry = bridge.process_rows(10, rows, writer=fail_writer)
+    last_rowid, retry = bridge.process_rows(
+        10,
+        rows,
+        writer=fail_writer,
+    )
     assert last_rowid == 11
     assert retry is True
-    assert calls == [(12, "Rust")]
+    assert calls == [(12, "Rust", 0)]
 
 
 def test_bridge_advances_preference_row_only_after_success():
     bridge = _load("host_memory_bridge_success_rc", BRIDGE_DIR / "host_memory_bridge.py")
     rows = [{"rowid": 21, "text": "请记住：项目偏好语言=C++"}]
-    last_rowid, retry = bridge.process_rows(20, rows, writer=lambda _rowid, _pref: True)
+    last_rowid, retry = bridge.process_rows(
+        20,
+        rows,
+        writer=lambda _rowid, _pref, _generation: True,
+    )
     assert last_rowid == 21
     assert retry is False
 
@@ -103,8 +117,12 @@ def test_bridge_cursor_round_trip(tmp_path):
     bridge = _load("host_memory_bridge_cursor_rc", BRIDGE_DIR / "host_memory_bridge.py")
     bridge.CURSOR_PATH = tmp_path / "bridge.cursor"
     assert bridge.load_cursor() is None
-    bridge.save_cursor(123)
-    assert bridge.load_cursor() == 123
+    bridge.save_cursor(123, 4, "10:20")
+    assert bridge.load_cursor() == {
+        "rowid": 123,
+        "generation": 4,
+        "db_identity": "10:20",
+    }
     assert oct(bridge.CURSOR_PATH.stat().st_mode & 0o777) == "0o600"
 
 
@@ -134,6 +152,277 @@ def test_bridge_batch_high_watermark_advances_past_non_user_rows(tmp_path):
     last, retry = bridge.process_rows(0, rows, writer=lambda *_: True)
     assert retry is False
     assert max(last, high) == 3
+
+
+
+def test_bridge_legacy_integer_cursor_is_backward_compatible(
+    tmp_path,
+):
+    bridge = _load(
+        "host_memory_bridge_legacy_cursor_rc",
+        BRIDGE_DIR / "host_memory_bridge.py",
+    )
+    bridge.CURSOR_PATH = tmp_path / "bridge.cursor"
+    bridge.CURSOR_PATH.write_text(
+        "77\n",
+        encoding="ascii",
+    )
+
+    assert bridge.load_cursor() == {
+        "rowid": 77,
+        "generation": 0,
+        "db_identity": None,
+    }
+
+
+def test_bridge_detects_runtime_db_clear(
+    tmp_path,
+):
+    bridge = _load(
+        "host_memory_bridge_runtime_clear_rc",
+        BRIDGE_DIR / "host_memory_bridge.py",
+    )
+
+    db = tmp_path / "chat.db"
+
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE RECORD(message TEXT)")
+
+    for i in range(3):
+        con.execute(
+            "INSERT INTO RECORD(message) VALUES(?)",
+            (
+                json.dumps(
+                    {
+                        "author": "Bot",
+                        "message": f"old-{i}",
+                    }
+                ),
+            ),
+        )
+
+    con.commit()
+    con.close()
+
+    bridge.DB_PATH = db
+    old_identity = bridge.current_db_identity()
+
+    con = sqlite3.connect(db)
+    con.execute("DELETE FROM RECORD")
+    con.execute(
+        "INSERT INTO RECORD(message) VALUES(?)",
+        (
+            json.dumps(
+                {
+                    "author": "User",
+                    "message": (
+                        "请记住：项目偏好语言=Rust"
+                    ),
+                },
+                ensure_ascii=False,
+            ),
+        ),
+    )
+    con.commit()
+    con.close()
+
+    (
+        rowid,
+        generation,
+        identity,
+        reason,
+    ) = bridge.refresh_cursor_for_db(
+        3,
+        0,
+        old_identity,
+    )
+
+    assert reason == "rowid-regressed"
+    assert rowid == 0
+    assert generation == 1
+    assert identity == old_identity
+
+    rows, high = bridge.read_new_user_rows(
+        0,
+        expected_identity=identity,
+    )
+
+    calls = []
+
+    def writer(new_rowid, pref, new_generation):
+        calls.append(
+            (
+                new_rowid,
+                pref["value"],
+                new_generation,
+            )
+        )
+        return True
+
+    last, retry = bridge.process_rows(
+        0,
+        rows,
+        writer=writer,
+        generation=generation,
+    )
+
+    assert retry is False
+    assert max(last, high) == 1
+    assert calls == [(1, "Rust", 1)]
+
+
+def test_bridge_detects_runtime_db_file_replacement(
+    tmp_path,
+):
+    bridge = _load(
+        "host_memory_bridge_runtime_replace_rc",
+        BRIDGE_DIR / "host_memory_bridge.py",
+    )
+
+    db = tmp_path / "chat.db"
+
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE RECORD(message TEXT)")
+    con.execute(
+        "INSERT INTO RECORD(message) VALUES(?)",
+        (
+            json.dumps(
+                {
+                    "author": "Bot",
+                    "message": "old",
+                }
+            ),
+        ),
+    )
+    con.commit()
+    con.close()
+
+    bridge.DB_PATH = db
+    old_identity = bridge.current_db_identity()
+
+    replacement = tmp_path / "replacement.db"
+
+    con = sqlite3.connect(replacement)
+    con.execute("CREATE TABLE RECORD(message TEXT)")
+    con.execute(
+        "INSERT INTO RECORD(message) VALUES(?)",
+        (
+            json.dumps(
+                {
+                    "author": "Bot",
+                    "message": "replacement-history",
+                }
+            ),
+        ),
+    )
+    con.commit()
+    con.close()
+
+    os.replace(replacement, db)
+
+    (
+        rowid,
+        generation,
+        new_identity,
+        reason,
+    ) = bridge.refresh_cursor_for_db(
+        1,
+        5,
+        old_identity,
+    )
+
+    assert reason == "db-replaced"
+    assert rowid == 1
+    assert generation == 6
+    assert new_identity != old_identity
+
+    # Replacement history is not backfilled.
+    con = sqlite3.connect(db)
+    con.execute(
+        "INSERT INTO RECORD(message) VALUES(?)",
+        (
+            json.dumps(
+                {
+                    "author": "User",
+                    "message": (
+                        "请记住：项目偏好语言=Go"
+                    ),
+                },
+                ensure_ascii=False,
+            ),
+        ),
+    )
+    con.commit()
+    con.close()
+
+    rows, high = bridge.read_new_user_rows(
+        1,
+        expected_identity=new_identity,
+    )
+
+    assert high == 2
+    assert [row["rowid"] for row in rows] == [2]
+
+
+def test_bridge_generation_scopes_idempotency_and_evidence_ids(
+    monkeypatch,
+):
+    bridge = _load(
+        "host_memory_bridge_generation_id_rc",
+        BRIDGE_DIR / "host_memory_bridge.py",
+    )
+
+    captured = []
+
+    def fake_run(cmd, **_kwargs):
+        captured.append(cmd)
+        return SimpleNamespace(
+            returncode=0,
+            stdout='{"status":"ok"}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        bridge.subprocess,
+        "run",
+        fake_run,
+    )
+
+    pref = {
+        "key": "project_language",
+        "scope": "topic",
+        "value": "Rust",
+    }
+
+    assert bridge.write_preference(
+        12,
+        pref,
+        generation=0,
+    )
+
+    assert bridge.write_preference(
+        12,
+        pref,
+        generation=3,
+    )
+
+    legacy_payload = json.loads(captured[0][3])
+    assert legacy_payload["evidence_event_ids"] == [
+        "kylin-aiassistant-chat-record-12"
+    ]
+    assert (
+        captured[0][4]
+        == "host-chat-pref-12-project_language"
+    )
+
+    generation_payload = json.loads(captured[1][3])
+    assert generation_payload["evidence_event_ids"] == [
+        "kylin-aiassistant-chat-g3-record-12"
+    ]
+    assert (
+        captured[1][4]
+        == "host-chat-pref-g3-12-project_language"
+    )
 
 
 def test_uninstall_discards_transaction_backups_after_success():
