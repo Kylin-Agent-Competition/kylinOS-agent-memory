@@ -247,6 +247,8 @@ python3 -m json.tool "$PKG/manifest.json" | less
 ( cd "$PKG" && sha256sum -c SHA256SUMS )
 ```
 
+`SHA256SUMS` 中记录的是相对于发布包根目录的路径，因此校验必须在 `$PKG` 目录中执行；不要在仓库目录直接运行 `sha256sum -c "$PKG/SHA256SUMS"`。
+
 正式交付时建议单独记录：
 
 ```text
