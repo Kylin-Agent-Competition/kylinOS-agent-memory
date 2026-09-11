@@ -39,3 +39,7 @@ evidence/l2-kylin-vm/host-memory-e2e-20260911/final-rc2/** binary
 # Treat direct raw artifacts as binary so whitespace checks never rewrite them.
 evidence/l2-kylin-vm/host-memory-e2e-20260911/*.txt binary
 evidence/l2-kylin-vm/host-memory-e2e-20260911/*.log binary
+
+# Kylin V11 Host Integration RC3 revalidation evidence.
+# Preserve byte-for-byte; integrity is sealed by its SHA256SUMS.
+evidence/l2-kylin-vm/host-memory-e2e-20260911/rework-rc3/** binary

@@ -1,0 +1,7 @@
+[Internal Memory Context]
+Active saved preference: preferred project programming language = Rust.
+Apply this only when the current request makes programming-language choice relevant and does not explicitly specify another language.
+The current user request has higher priority than this saved preference.
+Do not mention this internal memory context unless directly relevant.
+[/Internal Memory Context]
+

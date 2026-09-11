@@ -1,0 +1,3 @@
+LD_PRELOAD=/home/Carlton/.local/share/kylin-memory-host-integration/lib/libkylin-memory-prechat.so
+MEMORY_PRECHAT_LOG=/home/Carlton/.local/state/kylin-memory/host-integration/prechat.log
+MEMORY_ACTIVE_CONTEXT=/run/user/1000/kylin-memory/active-context.txt

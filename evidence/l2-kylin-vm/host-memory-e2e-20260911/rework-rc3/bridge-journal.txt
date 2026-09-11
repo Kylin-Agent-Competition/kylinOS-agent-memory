@@ -1,0 +1,42 @@
+9月 11 12:50:45 Carlton-pc python3[205424]: [bridge] IPC     : /home/Carlton/.local/share/kylin-memory-host-integration/bin/ipc_call.py
+9月 11 12:50:45 Carlton-pc python3[205424]: [bridge] user_id : local-user
+9月 11 12:50:45 Carlton-pc python3[205424]: [bridge] starting_after_rowid=46 cursor_mode=new-tail
+9月 11 12:50:45 Carlton-pc systemd[1665]: Stopping kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC)...
+9月 11 12:50:45 Carlton-pc systemd[1665]: Stopped kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC).
+9月 11 12:50:45 Carlton-pc systemd[1665]: Started kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC).
+9月 11 12:50:45 Carlton-pc python3[205445]: ==============================================
+9月 11 12:50:45 Carlton-pc python3[205445]:  Kylin AI Assistant -> Memory Service Bridge
+9月 11 12:50:45 Carlton-pc python3[205445]: ==============================================
+9月 11 12:50:45 Carlton-pc python3[205445]: [bridge] Chat DB : /home/Carlton/.config/kylin-aiassistant/kylin_aiassistant_database.db
+9月 11 12:50:45 Carlton-pc python3[205445]: [bridge] IPC     : /home/Carlton/.local/share/kylin-memory-host-integration/bin/ipc_call.py
+9月 11 12:50:45 Carlton-pc python3[205445]: [bridge] user_id : local-user
+9月 11 12:50:45 Carlton-pc python3[205445]: [bridge] starting_after_rowid=46 cursor_mode=resume
+9月 11 14:29:53 Carlton-pc systemd[1665]: Stopping kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC)...
+9月 11 14:29:53 Carlton-pc systemd[1665]: Stopped kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC).
+9月 11 14:29:53 Carlton-pc systemd[1665]: kylin-memory-host-bridge.service: Consumed 6.594s CPU time.
+-- Boot e39fe6feeeb84b638a0465a1cddeca27 --
+9月 11 15:14:57 Carlton-pc systemd[1665]: Stopping kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC)...
+9月 11 15:14:57 Carlton-pc systemd[1665]: Stopped kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC).
+9月 11 15:14:57 Carlton-pc systemd[1665]: kylin-memory-host-bridge.service: Consumed 2.768s CPU time.
+-- Boot e8b2e314c06f489cb0e2e0c95fcf60d6 --
+9月 11 17:11:32 Carlton-pc systemd[1647]: Stopping kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC)...
+9月 11 17:11:32 Carlton-pc systemd[1647]: Stopped kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC).
+9月 11 17:11:32 Carlton-pc systemd[1647]: kylin-memory-host-bridge.service: Consumed 2.812s CPU time, 6.4M memory peak, 0B memory swap peak.
+9月 11 17:11:32 Carlton-pc systemd[1647]: Started kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC).
+9月 11 17:11:32 Carlton-pc python3[62343]: ==============================================
+9月 11 17:11:32 Carlton-pc python3[62343]:  Kylin AI Assistant -> Memory Service Bridge
+9月 11 17:11:32 Carlton-pc python3[62343]: ==============================================
+9月 11 17:11:32 Carlton-pc python3[62343]: [bridge] Chat DB : /home/Carlton/.config/kylin-aiassistant/kylin_aiassistant_database.db
+9月 11 17:11:32 Carlton-pc python3[62343]: [bridge] IPC     : /home/Carlton/.local/share/kylin-memory-host-integration/bin/ipc_call.py
+9月 11 17:11:32 Carlton-pc python3[62343]: [bridge] user_id : local-user
+9月 11 17:11:32 Carlton-pc python3[62343]: [bridge] starting_after_rowid=50 generation=0 cursor_mode=resume
+9月 11 17:11:33 Carlton-pc systemd[1647]: Stopping kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC)...
+9月 11 17:11:33 Carlton-pc systemd[1647]: Stopped kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC).
+9月 11 17:11:33 Carlton-pc systemd[1647]: Started kylin-memory-host-bridge.service - Kylin Memory Host Chat Bridge (post-D15D RC).
+9月 11 17:11:33 Carlton-pc python3[62363]: ==============================================
+9月 11 17:11:33 Carlton-pc python3[62363]:  Kylin AI Assistant -> Memory Service Bridge
+9月 11 17:11:33 Carlton-pc python3[62363]: ==============================================
+9月 11 17:11:33 Carlton-pc python3[62363]: [bridge] Chat DB : /home/Carlton/.config/kylin-aiassistant/kylin_aiassistant_database.db
+9月 11 17:11:33 Carlton-pc python3[62363]: [bridge] IPC     : /home/Carlton/.local/share/kylin-memory-host-integration/bin/ipc_call.py
+9月 11 17:11:33 Carlton-pc python3[62363]: [bridge] user_id : local-user
+9月 11 17:11:33 Carlton-pc python3[62363]: [bridge] starting_after_rowid=50 generation=0 cursor_mode=resume
