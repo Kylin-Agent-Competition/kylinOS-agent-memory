@@ -73,6 +73,19 @@ def main() -> int:
     stderr_path = output_dir / "stderr.log"
     command = f'"{sys.executable}" "{Path(__file__).resolve()}" --output-dir "{output_dir}"'
     (output_dir / "runner_command.txt").write_text(command + "\n", encoding="utf-8", newline="\n")
+    _write_json(
+        output_dir / "frozen_build_identity.json",
+        {
+            "identity_version": "m3-frozen-build-identity/v1",
+            "status": "FROZEN",
+            "tested_commit": tested_commit,
+            "build_sha256": source_tree_sha256,
+            "build_hash_scope": "git archive --format=tar HEAD",
+            "tested_worktree_clean": True,
+            "runner_path": "scripts/run_m3_runtime_smoke.py",
+            "runner_sha256": _sha256(Path(__file__).resolve()),
+        },
+    )
 
     now = datetime.now(timezone.utc).isoformat()
     payload = {
@@ -171,7 +184,7 @@ def main() -> int:
             "This receipt does not claim system production readiness or authorize Runtime160 execution.",
         ],
         "artifacts": {name: _sha256(output_dir / name) for name in (
-            "runner_command.txt", "input_script.json", "raw_trace.jsonl",
+            "frozen_build_identity.json", "runner_command.txt", "input_script.json", "raw_trace.jsonl",
             "side_effect_before.json", "side_effect_after.json", "stdout.log", "stderr.log",
         )},
     }
