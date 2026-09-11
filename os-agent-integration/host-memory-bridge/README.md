@@ -101,3 +101,20 @@ not a claim that the frozen D15D package became `release_ready` or
 `production_ready`, and it does not promote candidate preference/forget IPC
 routes to the repository's default production registry. The installer activates
 those routes through a reversible user-level systemd drop-in for this RC only.
+
+## Failure semantics
+
+For the validated Assistant ABI, memory **augmentation** is fail-open: when
+runtime context is absent, the request shape is unsupported, or context cannot
+be injected, the original request is forwarded unchanged to the real
+`OsAssistant::chatAsync`.
+
+ABI resolution is a separate safety boundary. If the downstream
+`chatAsync` symbol cannot be resolved with `RTLD_NEXT`, the hook records
+`ABI_FAIL_CLOSED real-chatAsync-not-found` and does not attempt an unsafe call
+through an unknown ABI. The installer therefore verifies both the exact
+validated Assistant SHA-256 and the downstream `libkyai-assistant` symbol before
+activating the user-scoped integration.
+
+Accordingly, this RC claims **augmentation fail-open on the validated ABI**,
+not unconditional fail-open under arbitrary Assistant binary/library drift.

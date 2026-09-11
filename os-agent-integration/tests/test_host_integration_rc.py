@@ -435,3 +435,129 @@ def test_ipc_client_uses_xdg_runtime_dir_by_default(monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", "/tmp/kylin-runtime-test")
     ipc = _load("ipc_call_xdg_rc", BRIDGE_DIR / "ipc_call.py")
     assert ipc.DEFAULT_SOCKET == "/tmp/kylin-runtime-test/kylin-memory/memory.sock"
+
+
+def test_prechat_hook_real_missing_downstream_symbol_is_abi_fail_closed(
+    tmp_path,
+):
+    import os
+    import subprocess
+
+    hook_src = (
+        ROOT
+        / "prechat-hook"
+        / "memory_prechat_final.cpp"
+    )
+    hook_so = tmp_path / "libmemory-prechat-test.so"
+    harness_src = tmp_path / "missing_downstream.cpp"
+    harness_bin = tmp_path / "missing-downstream"
+    log_path = tmp_path / "prechat.log"
+
+    symbol = (
+        "_ZN4kyai9assistant11OsAssistant9chatAsyncERK"
+        "NSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+    )
+
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-shared",
+            "-fPIC",
+            str(hook_src),
+            "-ldl",
+            "-o",
+            str(hook_so),
+        ],
+        check=True,
+    )
+
+    harness_src.write_text(
+        r'''
+#include <dlfcn.h>
+#include <string>
+
+int main(int argc, char** argv) {
+    if (argc != 2) return 10;
+
+    void* handle = dlopen(
+        argv[1],
+        RTLD_NOW | RTLD_GLOBAL
+    );
+    if (!handle) return 11;
+
+    const char* symbol =
+        "_ZN4kyai9assistant11OsAssistant9chatAsyncERK"
+        "NSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE";
+
+    using Fn = void (*)(void*, const std::string&);
+
+    auto fn = reinterpret_cast<Fn>(
+        dlsym(handle, symbol)
+    );
+    if (!fn) return 12;
+
+    std::string request =
+        R"({"content":"ordinary request"})";
+
+    // No downstream libkyai-assistant is loaded after the hook.
+    // RTLD_NEXT must therefore fail safely.
+    fn(nullptr, request);
+
+    dlclose(handle);
+    return 0;
+}
+''',
+        encoding="utf-8",
+    )
+
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            str(harness_src),
+            "-ldl",
+            "-o",
+            str(harness_bin),
+        ],
+        check=True,
+    )
+
+    env = os.environ.copy()
+    env["MEMORY_PRECHAT_LOG"] = str(log_path)
+    env["MEMORY_ACTIVE_CONTEXT"] = str(
+        tmp_path / "missing-context.txt"
+    )
+
+    proc = subprocess.run(
+        [
+            str(harness_bin),
+            str(hook_so),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert proc.returncode == 0
+
+    log = log_path.read_text(encoding="utf-8")
+    assert (
+        "ABI_FAIL_CLOSED real-chatAsync-not-found"
+        in log
+    )
+
+
+def test_installer_preflights_downstream_assistant_chat_abi():
+    text = (
+        BRIDGE_DIR / "install_host_integration_rc.sh"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "/lib/x86_64-linux-gnu/"
+        "libkyai-assistant.so.1.0.0"
+        in text
+    )
+    assert "ASSISTANT_CHAT_SYMBOL" in text
+    assert "assistant downstream chatAsync ABI: PASS" in text

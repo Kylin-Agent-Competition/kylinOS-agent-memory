@@ -39,6 +39,8 @@ command -v kaiming >/dev/null || die "kaiming not found"
 KAIMING_BIN="/opt/kaiming-tools/bin/kaiming"
 [ -x "$KAIMING_BIN" ] || KAIMING_BIN="$(command -v kaiming)"
 EXPECTED_ASSISTANT_SHA256="86453fc660a47940c26031d87807cc735ea1cfd628a657f34a5c896cb0c7ccf6"
+ASSISTANT_CHAT_SYMBOL="_ZN4kyai9assistant11OsAssistant9chatAsyncERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+ASSISTANT_RUNTIME_LIB="/lib/x86_64-linux-gnu/libkyai-assistant.so.1.0.0"
 MEMORY_SERVER_LINK="$HOME/.local/bin/kylin-memory-server"
 [ -x "$MEMORY_SERVER_LINK" ] \
     || die "base Memory Service is not installed at ~/.local/bin/kylin-memory-server"
@@ -101,10 +103,7 @@ ASSISTANT_HASH_OUTPUT="$(
 )"
 [[ "$ASSISTANT_HASH_OUTPUT" == *"$EXPECTED_ASSISTANT_SHA256"* ]] \
     || die "unsupported Kylin AI Assistant binary; expected SHA-256 $EXPECTED_ASSISTANT_SHA256"
-log "assistant binary identity: PASS"
-
-# Prove the *installed* hook path can be loaded inside Kaiming and that the
-# runtime context directory is visible there. This catches KYSEC/path/mount
+log "assistant binary identity: PASS"\n\n# The hook can only delegate safely when the exact downstream chatAsync ABI is\n# exported by the Assistant runtime library. Treat a mismatch as install-time\n# fail-closed rather than activating an interposer that could swallow requests.\ncommand -v nm >/dev/null || die "nm not found; cannot verify Assistant runtime ABI"\nASSISTANT_ABI_OUTPUT="$(\n    "$KAIMING_BIN" run --command=/usr/bin/nm +        cn.kylin.kylin-aiassistant -- +        -D --defined-only "$ASSISTANT_RUNTIME_LIB" 2>&1 || true\n)"\n[[ "$ASSISTANT_ABI_OUTPUT" == *"$ASSISTANT_CHAT_SYMBOL"* ]] +    || die "validated downstream chatAsync ABI symbol not found in $ASSISTANT_RUNTIME_LIB"\nlog "assistant downstream chatAsync ABI: PASS"\n\n# Prove the *installed* hook path can be loaded inside Kaiming and that the\n# runtime context directory is visible there. This catches KYSEC/path/mount
 # failures before the user's normal Assistant launch is overridden.
 PROBE_DIR="${XDG_RUNTIME_DIR}/kylin-memory"
 PROBE_CONTEXT="$PROBE_DIR/host-integration-install-probe.txt"

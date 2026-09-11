@@ -304,7 +304,13 @@ void OsAssistant::chatAsync(const std::string& request) {
     static RealFn real_fn = reinterpret_cast<RealFn>(dlsym(RTLD_NEXT, SYMBOL));
 
     if (!real_fn) {
-        log_line("[memory-prechat] ERROR real-chatAsync-not-found");
+        // No safe downstream call exists when the validated host ABI cannot
+        // be resolved. This is deliberately ABI-fail-closed, not the normal
+        // memory-augmentation fail-open path.
+        log_line(
+            "[memory-prechat] ABI_FAIL_CLOSED "
+            "real-chatAsync-not-found"
+        );
         return;
     }
 
