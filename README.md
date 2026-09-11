@@ -10,15 +10,16 @@
 
 ## 当前阶段
 
-仓库已经从早期 Gate 0 / 工程基线阶段进入 **competition RC / L3 验证阶段**。
+仓库已经从早期 Gate 0 / 工程基线阶段进入 **post-D15D competition RC / 当前 main 重建待办阶段**。
 
-当前冻结发布边界保持为：
+需要严格区分“历史 D15D release identity”与“当前 main”：
 
-- `L3_READY=true`
-- `release_ready=false`
-- `production_ready=false`
+- 2026-09-10 的 D15D historical closeout 曾达到 `L3_READY=true / release_ready=false / production_ready=false`；该结论仅对当时的 release identity / evidence root 有效。
+- PR #181 之后 `memory-service/` 与 `migrations/` 出现 runtime/package-impacting drift，旧 release identity 对当前 main 已标记为 `HISTORICAL_VALID_AT_RELEASE_COMMIT / SUPERSEDED_FOR_CURRENT_MAIN`。
+- 当前 release freshness 状态为 `RUNTIME_EVIDENCE_STALE_PENDING_REBUILD`，并且 `frozen_package_lock_valid=false`、`rebuild_required=true`、`rebuild_completed=false`、`host_vm_required=true`、`host_vm_completed=false`。
+- PR #183 的 Host Integration RC3 证明了 post-D15D 真实助手链路仍可在 Kylin V11 上运行，但**不等同于重新取得当前 main 的正式 L3 release closure，也不生成新的正式 release identity**。
 
-这意味着：核心工程链路、CI、Kylin V11 实机验证与 Host Integration RC 已形成可复现证据，但当前结果仍是竞赛 RC，不宣称已经成为生产级官方集成。
+因此，不得把历史 `L3_READY=true` 或旧 release evidence 表述为当前 main 的 Gate PASS；当前 main 若要重新取得正式发布闭包，仍需在最终 runtime freeze 后完成 clean rebuild、真实 Kylin VM 验证与新的 release identity 绑定。
 
 ## 已实现与已验证能力
 
@@ -27,7 +28,11 @@
 - Python 本地 Memory Service
 - SQLite 结构化记忆真源与 Alembic 迁移
 - Unix Domain Socket 本地 IPC
-- 偏好、知识、遗忘与检索相关业务链路
+- 偏好、知识、遗忘与检索相关的候选 / 验证链路已经实现
+- `preference.*` 为 `CANDIDATE_SYNC`，production 默认不注册；未显式激活时返回 `UNSUPPORTED_METHOD`
+- `forget.preview / forget.execute` 属于 validation / candidate 路径，production 默认不注册；未显式激活时返回 `UNSUPPORTED_METHOD`
+- `event.ingest`、`turn.finalized` 等 validation seam 同样按显式 profile 激活，不应表述为默认 production registry 已启用
+- Host Integration RC 通过可回滚的 user-level systemd drop-in 显式激活所需 candidate handlers；这不改变默认 production profile 的注册边界
 - Embedding / Vector / FTS / RRF 等检索与评测支撑
 - systemd 用户级运行与验证脚本
 
@@ -55,12 +60,14 @@
 - 用户请求未显式指定 Rust 时，active Rust 偏好可影响真实助手语言选择
 - Internal Memory Context 写入 Chat DB：0 rows
 
-RC3 单次真实回归仅用于证明修复后的端到端链路仍然成立，不作为正式偏好准确率指标。
+RC3 单次真实回归仅用于证明修复后的端到端链路仍然成立，不作为正式偏好准确率指标，也不替代当前 main 所需的正式 release rebuild / L3 closure。
 
 详细说明见：
 
 - [Host Memory Integration RC README](os-agent-integration/host-memory-bridge/README.md)
 - [Kylin V11 Host E2E evidence](evidence/l2-kylin-vm/host-memory-e2e-20260911/)
+- [D15D TaskCard / release freshness](docs/D15D_TaskCard_20260906.md)
+- [D15D Version Manifest](docs/day15/D15D_VERSION_MANIFEST.json)
 
 ## 关键语义边界
 
@@ -116,13 +123,13 @@ pre-chat hook 的失败语义已经明确区分：
 ## 测试与证据层级
 
 | 层级 | 环境 | 说明 |
-|------|------|------|
+|------|------|
 | **L0** | WSL2 / CI | 单元测试、静态检查、Mock、C++/Qt contract |
 | **L1** | WSL2 / CI | 组件集成、本地 IPC、发布与 provenance 门禁 |
 | **L2** | Kylin VM | Runtime Test、真实 SDK / Assistant 环境验证 |
 | **L3** | Kylin VM 干净快照 / 冻结证据 | 发布前全链路验收与证据封存 |
 
-当前 CI 已覆盖 repository baseline、Memory Client L0、QML smoke、OS Agent contract，以及 Host Integration RC pytest 与 sealed evidence closure。
+当前 CI 已覆盖 repository baseline、Memory Client L0、QML smoke、OS Agent contract，以及 Host Integration RC pytest 与 sealed evidence closure。CI / RC3 PASS 不应替代当前 main 的正式 release freshness / L3 closure 判断。
 
 ## 快速开始
 
@@ -152,6 +159,8 @@ PYTHONPATH=memory-service python memory-service/app.py --no-migrate
 
 > 不要混用 `metadata.create_all` 与 Alembic 作为同一生产数据库的首次建表路径，否则 default 语义和后续 migration history 可能分叉。
 
+> `preference.*`、`forget.preview / forget.execute`、`event.ingest`、`turn.finalized` 等 candidate / validation handlers 并非默认 production registry 的组成部分；仅在相应显式 profile / RC drop-in 中启用。未启用时按契约返回 `UNSUPPORTED_METHOD`。
+
 ### 3. Host Integration RC（Kylin V11）
 
 前提：D14A Memory Service RC 已安装，并存在：
@@ -165,6 +174,8 @@ PYTHONPATH=memory-service python memory-service/app.py --no-migrate
 ```bash
 bash os-agent-integration/host-memory-bridge/install_host_integration_rc.sh
 ```
+
+该 RC installer 会通过可回滚的 user-level systemd drop-in 显式启用 Host Integration 验证所需的 candidate handlers；这不表示默认 production profile 已注册这些方法。
 
 安装完成后按提示重新登录，并运行：
 
@@ -191,6 +202,8 @@ bash os-agent-integration/host-memory-bridge/verify_host_integration_rc.sh --run
 | 文档 | 位置 |
 |------|------|
 | Host Integration RC | [os-agent-integration/host-memory-bridge/README.md](os-agent-integration/host-memory-bridge/README.md) |
+| D15D release freshness | [docs/D15D_TaskCard_20260906.md](docs/D15D_TaskCard_20260906.md) |
+| D15D version manifest | [docs/day15/D15D_VERSION_MANIFEST.json](docs/day15/D15D_VERSION_MANIFEST.json) |
 | 贡献指南 | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | 安全策略 | [SECURITY.md](SECURITY.md) |
 | 变更日志 | [CHANGELOG.md](CHANGELOG.md) |
@@ -211,8 +224,11 @@ bash os-agent-integration/host-memory-bridge/verify_host_integration_rc.sh --run
 
 特别地，本项目当前不宣称：
 
+- 当前 main 已重新取得正式 `L3_READY=true`
+- 当前 main 已完成新的 release identity / frozen package lock
 - `release_ready=true`
 - `production_ready=true`
+- 默认 production registry 已启用 `preference.*` 或 `forget.*` candidate handlers
 - RC3 单次实机回归等同于正式偏好准确率 100%
 - 任意版本麒灵助手都与当前 pre-chat ABI 兼容
 
