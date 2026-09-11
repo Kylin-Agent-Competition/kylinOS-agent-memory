@@ -53,10 +53,13 @@ final signoff, or unrestricted full-system performance claims.
 
 ## Requirement Traceability
 
-The final technical document must include a requirement-analysis section bound
-to `docs/project-management/REQUIREMENT_TRACEABILITY_MATRIX.md`. The following
-section mapping is mandatory; evidence status remains separately governed by
-the matrix and D15E mapping, and must not be promoted by section presence.
+The final technical document must include a requirement-analysis section that
+uses `docs/project-management/REQUIREMENT_TRACEABILITY_MATRIX.md` only as the
+REQ-01 through REQ-07 taxonomy and historical traceability source. That matrix
+is a draft for the early D1-D2-to-D3 gate, not the current evidence-status
+SSOT. Current status and evidence must bind to the Day13/14/15 SSOT, formal
+evidence roots, and the final E15 refresh. The following section mapping is
+mandatory; evidence status must not be promoted by section presence.
 
 | Requirement | Final-document traceability |
 | --- | --- |
@@ -120,7 +123,7 @@ the matrix and D15E mapping, and must not be promoted by section presence.
      boundaries; no unbounded extrapolation
 8. **Kylin adaptation and compatibility evidence locations**
    - `docs/day3/14_os_agent_kylin_host_test_report_20260816.md`
-   - `evidence/l2-kylin-vm/d14d_20260907T141000Z_ba3b50e`
+   - `evidence/l3-kylin-vm/d14d_20260907T141000Z_ba3b50e`
    - `evidence/d15d-lock/20260910T205300Z`
    - compatibility claims must remain bounded to the cited commit/package and
      evidence tier

@@ -77,7 +77,7 @@ These merged changes are inputs to later E15-1/E15-4 wording, not closure facts:
 | PR | Scope allowed by this draft | Boundary |
 | --- | --- | --- |
 | PR #180 | Include the M1-KB production-import contract in the technical document's data handoff boundary | Does not by itself make M2/M3 or Runtime Gate complete |
-| PR #181 | Record M2 implementation as a post-base integration dependency and inventory candidate | M2 final evidence/acceptance remains incomplete; no synthetic completion claim |
+| PR #181 | Record M2 implementation as a post-base integration dependency and inventory candidate | Main-side M2 evidence is ready/PASS; Data-R final adjudication remains pending; no synthetic completion claim |
 | PR #182 | Refresh release freshness wording: the former D15D release identity is historical at its release commit and stale for current main | Rebuild and host/VM revalidation remain prerequisites for current-main release claims |
 
 ## Submission Inventory Draft
