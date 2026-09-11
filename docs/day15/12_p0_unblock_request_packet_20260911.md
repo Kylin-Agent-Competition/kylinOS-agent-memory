@@ -18,7 +18,8 @@ D15E_SIGNOFF_STATUS=BLOCKED
 | Field | Value |
 | --- | --- |
 | as-of | 2026-09-11 |
-| main head | `e62d525e3b7baf2bd4cd18ad8c2128a10aba8a96` |
+| branch base at scan time | `e62d525e3b7baf2bd4cd18ad8c2128a10aba8a96` |
+| scan-time main head | `afc701ec2ce269268508a278f5aa50fd3ddfc93c` |
 | frozen tested commit | `ba3b50e1bdeea185bca9daee9d1d45958f62a636` |
 | D14B control handoff | `release/handoff/d13d-handoff.json` |
 | D14D clean-VM handoff | `release/handoff/d14d-handoff.json` |

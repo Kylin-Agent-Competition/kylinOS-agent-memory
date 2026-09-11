@@ -6,7 +6,7 @@
 
 ## Status Lines
 
-E15_1_TECHNICAL_AND_USER_MANUAL_POSITIONING=READY_FOR_REVIEW
+E15_1_TECHNICAL_AND_USER_MANUAL_POSITIONING=REWORK_READY_FOR_REVIEW
 E15_1_FINAL_POSITION_LOCK=WAITING_PREREQ
 D15E_FINAL_SUBMISSION_LOCK=WAITING_PREREQ
 D15E_FINAL_SUBMISSION_LOCK_DECLARED=false
@@ -28,7 +28,7 @@ positioning layer so later drafting can use one consistent claim boundary.
 | Deliverable | Primary audience | Position |
 | --- | --- | --- |
 | Technical document | reviewers, integrators, maintainers | explain architecture, runtime boundaries, evidence chain, and limitations |
-| User manual | evaluator, operator, user | explain installation, operation, verification, upgrade/rollback, and troubleshooting |
+| User manual | evaluator, operator, user | explain installation, operation, verification, evidence-backed maintenance, and troubleshooting |
 
 Both documents must remain traceable to repository evidence. Neither may
 restate preparation, substitute, or candidate results as formal runtime proof.
@@ -51,32 +51,89 @@ The following must not appear as achieved facts: release readiness,
 production readiness, official AI Assistant production E2E success, D14E
 final signoff, or unrestricted full-system performance claims.
 
+## Requirement Traceability
+
+The final technical document must include a requirement-analysis section bound
+to `docs/project-management/REQUIREMENT_TRACEABILITY_MATRIX.md`. The following
+section mapping is mandatory; evidence status remains separately governed by
+the matrix and D15E mapping, and must not be promoted by section presence.
+
+| Requirement | Final-document traceability |
+| --- | --- |
+| REQ-01 multi-source data | multi-source ingestion, normalization, event provenance, and write-boundary sections |
+| REQ-02 dynamic preference capture | preference extraction, confidence/versioning, update semantics, and decay/lifecycle sections |
+| REQ-03 knowledge integration and conflict | knowledge normalization, conflict detection, resolution priority, and audit sections |
+| REQ-04 on-device embedding and lightweight retrieval | embedding/bridge boundary, SQLite/FTS5/Vector roles, and fusion-retrieval sections |
+| REQ-05 sensitive filtering and precise forgetting | write gate, sensitivity classification, forget preview/execute, and residue checks |
+| REQ-06 short/mid/long-term flow | lifecycle states, promotion/decay rules, SQLite truth source, and index rebuild sections |
+| REQ-07 standardized evaluation | dataset/gold/threshold identity, metric definitions, execution environment, and report generation |
+
 ## Technical Document Skeleton
 
 1. **Scope and system summary**
    - target environment: Kylin Desktop V11 x86_64
    - objective: local multi-source preference and knowledge memory service
    - supported integration boundary and non-goals
-2. **Architecture**
+2. **Requirement analysis and traceability**
+   - REQ-01 through REQ-07 mapping from the section above
+   - explicit separation of implemented behavior, candidate behavior, and
+     evidence-blocked behavior
+3. **Architecture**
    - Memory Service, SQLite truth source
-   - FTS5, Vector, and RRF retrieval paths
+   - FTS5, Vector, and application-layer RRF retrieval paths
    - embedding and bridge boundary
    - IPC and event flow
-3. **Runtime and deployment**
+   - Main-to-Data handoff boundary introduced by PR #180, with M2/M3 kept
+     separate from final Runtime Gate claims
+4. **Core algorithm and implementation semantics**
+   - preference dynamic capture, confidence, versioning, and update precedence
+   - knowledge conflict detection, resolution priority, and unresolved-conflict
+     exclusion
+   - SQLite/FTS5/Vector fusion and candidate explainability
+   - sensitive-write filtering and retrieval-output filtering
+   - forget preview/execute separation, scope resolution, idempotency, and
+     SQLite/index residue checks
+5. **Short-term and mid-term memory flow**
+   - turn/event ingestion into candidate or short-term state
+   - evidence, confidence, explicit confirmation, and time decay as promotion
+     or suppression inputs
+   - interaction with retrieval and model-request context while original user
+     text remains isolated in the chat/UI source
+   - handoff toward long-term storage through versioned SQLite records and
+     asynchronous index updates
+6. **Runtime and deployment**
    - package identity and installation path
    - systemd service lifecycle
    - migration and startup order
    - configuration inputs and local data ownership
-4. **Retrieval and memory semantics**
+7. **Testing, datasets, and quantitative analysis**
+   - dataset and gold-label identity: `datasets/ANNOTATION_GUIDELINE_V0.1.md`,
+     `datasets/GATE0_BUSINESS_ACCEPTANCE_CASES_V0.1.json`,
+     `evaluation/D9_RETRIEVAL_DATASET_README_V2.md`, and
+     `evaluation/d13e/README.md`
+   - metric definitions and thresholds: `evaluation/D3_GOLD_LABEL_AND_METRICS_SPEC_V1.md`
+   - D13E formal test set and threshold identity under `evaluation/d13e/`
+   - comparative retrieval design: compare SQLite/FTS5/Vector and fused RRF
+     candidates on the same frozen inputs, commands, seed, and environment
+   - quantitative metric analysis structure: sample size, numerator/denominator,
+     failed-case classes, confidence intervals when specified, and failure
+     boundaries; no unbounded extrapolation
+8. **Kylin adaptation and compatibility evidence locations**
+   - `docs/day3/14_os_agent_kylin_host_test_report_20260816.md`
+   - `evidence/l2-kylin-vm/d14d_20260907T141000Z_ba3b50e`
+   - `evidence/d15d-lock/20260910T205300Z`
+   - compatibility claims must remain bounded to the cited commit/package and
+     evidence tier
+9. **Retrieval and memory semantics**
    - user isolation and versioning
    - conflict and lifecycle handling
    - delete, forget, and rebuild semantics
-5. **Testing and evidence**
+10. **Testing and evidence hierarchy**
    - D13D formal evidence
    - D14A package identity evidence
    - D14D L3 evidence and its boundaries
    - D14B/D14C open items and why they remain blocked
-6. **Operational limits**
+11. **Operational limits**
    - no unqualified performance claims
    - no release or production readiness claim
    - known debts and follow-up items
@@ -98,13 +155,30 @@ final signoff, or unrestricted full-system performance claims.
    - service restart
    - index rebuild
    - backup and restore expectations
-5. **Upgrade and rollback**
-   - supported flow
-   - package/service identity checks
+5. **Evidence-backed capability and limitation matrix**
+   - installation and rollback: describe only the scope covered by the cited
+     historical D15D clean-tar smoke evidence
+   - upgrade: keep `PENDING_UPSTREAM`; D14D G7 is `NOT_RUN/N-A` with waiver and
+     D14B formal regression has not closed, so no user-reliable upgrade promise
+     is permitted
+   - package/service identity checks before any lifecycle operation
 6. **Troubleshooting and safety**
    - common service and IPC failures
    - what information to collect for support
    - local-data and privacy boundary
+
+## Four Core Metric Evidence Binding
+
+The final technical document must bind each official metric to its definition,
+dataset/gold identity, execution identity, and result status. This positioning
+draft records no result values.
+
+| Metric | Required evidence binding | Current final-conclusion status |
+| --- | --- | --- |
+| Preference accuracy | D3 metric definition, D13E dataset/gold/threshold identity, tested commit, execution environment, and report hash | Restricted D13D evidence only; not an unrestricted final conclusion |
+| Retrieval recall | D3 metric definition, frozen D9/D15B inputs, evaluator command, tested commit, and formal report | Blocked by D14B and D15B input freeze |
+| Retrieval latency | D3 metric definition, approved A15-2 runner/thresholds or scope ruling, tested package identity, and raw timing evidence | Blocked by A15-2 |
+| Conflict-handling correctness | D3 metric definition, conflict gold identity, tested commit, execution environment, and report hash | Restricted D13D evidence only; not an unrestricted final conclusion |
 
 ## Required Identity Fields
 
@@ -112,7 +186,8 @@ The final documents must carry these identities separately:
 
 | Identity | Source |
 | --- | --- |
-| main head | `git rev-parse HEAD` at final refresh |
+| scan-time main head | `git rev-parse origin/main` at final refresh |
+| branch base at scan time | the main commit from which the drafting branch starts |
 | frozen tested commit | D13D/D14D evidence |
 | package tar/manifest/SHA256SUMS hashes | D14A freeze record |
 | evidence report hash | D13D formal report |
