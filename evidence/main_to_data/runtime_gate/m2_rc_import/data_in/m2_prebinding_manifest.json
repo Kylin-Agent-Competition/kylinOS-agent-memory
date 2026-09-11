@@ -1,0 +1,27 @@
+{
+  "schema": "main_to_data_m2_prebinding_manifest",
+  "schema_version": "1",
+  "state": "PREPARED_PENDING_MAIN_BINDING",
+  "source_candidate_file": "data/interim/d3_kb400_20260909/kb_selected400_20260909.jsonl",
+  "source_candidate_file_sha256": "7ce8047fbb43eda483e4563dbfa8100c0c2fe5b2836ff742d8f51b1ac288996f",
+  "selected_count": 10,
+  "selected_local_candidate_ids": [
+    "os_kb_0001",
+    "os_kb_0002",
+    "os_kb_0003",
+    "os_kb_0004",
+    "os_kb_0005",
+    "os_kb_0006",
+    "os_kb_0007",
+    "os_kb_0008",
+    "os_kb_0009",
+    "os_kb_0010"
+  ],
+  "prebinding_candidate_file": "m2_prebinding_candidates_10.jsonl",
+  "prebinding_candidate_file_sha256": "ae8e10feb11b2e76b784fc5fd737efe3fe084de96518464f5b608b9ee1312708",
+  "binding_request_file": "m2_main_binding_request.json",
+  "production_knowledge_id_generated": false,
+  "production_binding_status": "PRODUCTION_BINDING_PENDING",
+  "m2_gate_status": "BLOCKED_MAIN_SOURCE_BINDING",
+  "next_action": "Main returns admitted same-user source-event bindings; rerun a separate final-RC builder against the merged M1-KB contract."
+}

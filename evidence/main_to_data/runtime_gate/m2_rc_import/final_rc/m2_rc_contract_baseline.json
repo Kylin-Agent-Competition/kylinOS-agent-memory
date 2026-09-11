@@ -1,0 +1,11 @@
+{
+  "schema": "main_to_data_m2_rc_contract_baseline",
+  "schema_version": "1",
+  "main_repository": "Kylin-Agent-Competition/kylinOS-agent-memory",
+  "main_default_branch_merge_commit": "d743f27c722fe24e38943f46fd9904cbb71c324d",
+  "m1_kb_contract_path": "interfaces/main_to_data/kb_import_contract.json",
+  "m1_kb_contract_schema_version": "2",
+  "m1_kb_contract_status": "FROZEN",
+  "m1_kb_contract_sha256_lf": "3b2b3ee1664f5f740b231640f545baa50f8dff63d691a76855c228eeca9a645c",
+  "recorded_by": "Data-B"
+}

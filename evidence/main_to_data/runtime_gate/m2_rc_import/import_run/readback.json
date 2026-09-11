@@ -1,0 +1,92 @@
+[
+  {
+    "current_memory_status": "candidate",
+    "current_version": 1,
+    "current_version_id": "v1",
+    "knowledge_id": "d90ccd49d7124d35bbbbd5a6361d8c25",
+    "memory_id": "1",
+    "scope": "user",
+    "user_id": "m2-rc10-user"
+  },
+  {
+    "current_memory_status": "candidate",
+    "current_version": 1,
+    "current_version_id": "v1",
+    "knowledge_id": "6386e84d9b3343e7956827cf8124140b",
+    "memory_id": "2",
+    "scope": "user",
+    "user_id": "m2-rc10-user"
+  },
+  {
+    "current_memory_status": "candidate",
+    "current_version": 1,
+    "current_version_id": "v1",
+    "knowledge_id": "f702489591ad468395d8eab0add39204",
+    "memory_id": "3",
+    "scope": "user",
+    "user_id": "m2-rc10-user"
+  },
+  {
+    "current_memory_status": "candidate",
+    "current_version": 1,
+    "current_version_id": "v1",
+    "knowledge_id": "c59eac247e2045e1a5a3d3da9f098cc3",
+    "memory_id": "4",
+    "scope": "user",
+    "user_id": "m2-rc10-user"
+  },
+  {
+    "current_memory_status": "candidate",
+    "current_version": 1,
+    "current_version_id": "v1",
+    "knowledge_id": "62858798fd3042ca93aef16db3dc60f3",
+    "memory_id": "5",
+    "scope": "user",
+    "user_id": "m2-rc10-user"
+  },
+  {
+    "current_memory_status": "candidate",
+    "current_version": 1,
+    "current_version_id": "v1",
+    "knowledge_id": "dccabaa70243481693571b623cdc7961",
+    "memory_id": "6",
+    "scope": "user",
+    "user_id": "m2-rc10-user"
+  },
+  {
+    "current_memory_status": "candidate",
+    "current_version": 1,
+    "current_version_id": "v1",
+    "knowledge_id": "95d35ebc4a5240f99cdc82ca5e762644",
+    "memory_id": "7",
+    "scope": "user",
+    "user_id": "m2-rc10-user"
+  },
+  {
+    "current_memory_status": "candidate",
+    "current_version": 1,
+    "current_version_id": "v1",
+    "knowledge_id": "4f0356e028f6489e98fc866eba3cee05",
+    "memory_id": "8",
+    "scope": "user",
+    "user_id": "m2-rc10-user"
+  },
+  {
+    "current_memory_status": "candidate",
+    "current_version": 1,
+    "current_version_id": "v1",
+    "knowledge_id": "6068827d409a49df98636f4234a409be",
+    "memory_id": "9",
+    "scope": "user",
+    "user_id": "m2-rc10-user"
+  },
+  {
+    "current_memory_status": "candidate",
+    "current_version": 1,
+    "current_version_id": "v1",
+    "knowledge_id": "28a76192e4b844549c40f03cdc3a083b",
+    "memory_id": "10",
+    "scope": "user",
+    "user_id": "m2-rc10-user"
+  }
+]

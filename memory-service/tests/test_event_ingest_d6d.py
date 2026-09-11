@@ -545,7 +545,7 @@ def test_migration_upgrade_creates_source_events(mig_db):
         "idx_source_events_status",
     } <= indexes
     assert {"id", "event_id", "content_fingerprint", "dedup_group", "duplicate_of"} <= cols
-    assert revision == "20260906_add_preference_receipt_trace"  # D13D Safety receipt 迁移为当前链尾
+    assert revision == "20260911_main_to_data_m2_registry"  # M2 durable registry is current chain tail
 
 
 def test_migration_downgrade_rolls_back_source_events(mig_db):

@@ -1,0 +1,154 @@
+{
+  "schema": "main_to_data_m2_prebinding_request",
+  "schema_version": "1",
+  "state": "PREBINDING_NOT_IMPORTABLE",
+  "m2_gate_status": "BLOCKED_MAIN_SOURCE_BINDING",
+  "record_count": 10,
+  "candidate_file": "m2_prebinding_candidates_10.jsonl",
+  "candidate_file_sha256": "ae8e10feb11b2e76b784fc5fd737efe3fe084de96518464f5b608b9ee1312708",
+  "required_main_conditions": [
+    "Merged and FROZEN Main M1-KB contract available in Data baseline",
+    "One existing same-user Main source event per record",
+    "Every source event has admission_decision=allow_extraction",
+    "Authenticated Main import scope matches every returned user_id",
+    "Main issues stable idempotency_key values before final RC conversion"
+  ],
+  "prohibited_actions": [
+    "Do not submit this prebinding JSONL to a production importer",
+    "Do not fabricate user_id, source_event_id, source_reference, or idempotency_key",
+    "Do not create, derive, or assume knowledge_id, memory_id, version, or version_id",
+    "Do not record M2 PASS before Main's production import receipt"
+  ],
+  "records": [
+    {
+      "data_record_id": "data-prebinding:os_kb_0001",
+      "local_candidate_id": "os_kb_0001",
+      "required_from_main": [
+        "user_id",
+        "source_event_id",
+        "source_type",
+        "source_business_status",
+        "source_reference",
+        "idempotency_key",
+        "admission_decision=allow_extraction"
+      ]
+    },
+    {
+      "data_record_id": "data-prebinding:os_kb_0002",
+      "local_candidate_id": "os_kb_0002",
+      "required_from_main": [
+        "user_id",
+        "source_event_id",
+        "source_type",
+        "source_business_status",
+        "source_reference",
+        "idempotency_key",
+        "admission_decision=allow_extraction"
+      ]
+    },
+    {
+      "data_record_id": "data-prebinding:os_kb_0003",
+      "local_candidate_id": "os_kb_0003",
+      "required_from_main": [
+        "user_id",
+        "source_event_id",
+        "source_type",
+        "source_business_status",
+        "source_reference",
+        "idempotency_key",
+        "admission_decision=allow_extraction"
+      ]
+    },
+    {
+      "data_record_id": "data-prebinding:os_kb_0004",
+      "local_candidate_id": "os_kb_0004",
+      "required_from_main": [
+        "user_id",
+        "source_event_id",
+        "source_type",
+        "source_business_status",
+        "source_reference",
+        "idempotency_key",
+        "admission_decision=allow_extraction"
+      ]
+    },
+    {
+      "data_record_id": "data-prebinding:os_kb_0005",
+      "local_candidate_id": "os_kb_0005",
+      "required_from_main": [
+        "user_id",
+        "source_event_id",
+        "source_type",
+        "source_business_status",
+        "source_reference",
+        "idempotency_key",
+        "admission_decision=allow_extraction"
+      ]
+    },
+    {
+      "data_record_id": "data-prebinding:os_kb_0006",
+      "local_candidate_id": "os_kb_0006",
+      "required_from_main": [
+        "user_id",
+        "source_event_id",
+        "source_type",
+        "source_business_status",
+        "source_reference",
+        "idempotency_key",
+        "admission_decision=allow_extraction"
+      ]
+    },
+    {
+      "data_record_id": "data-prebinding:os_kb_0007",
+      "local_candidate_id": "os_kb_0007",
+      "required_from_main": [
+        "user_id",
+        "source_event_id",
+        "source_type",
+        "source_business_status",
+        "source_reference",
+        "idempotency_key",
+        "admission_decision=allow_extraction"
+      ]
+    },
+    {
+      "data_record_id": "data-prebinding:os_kb_0008",
+      "local_candidate_id": "os_kb_0008",
+      "required_from_main": [
+        "user_id",
+        "source_event_id",
+        "source_type",
+        "source_business_status",
+        "source_reference",
+        "idempotency_key",
+        "admission_decision=allow_extraction"
+      ]
+    },
+    {
+      "data_record_id": "data-prebinding:os_kb_0009",
+      "local_candidate_id": "os_kb_0009",
+      "required_from_main": [
+        "user_id",
+        "source_event_id",
+        "source_type",
+        "source_business_status",
+        "source_reference",
+        "idempotency_key",
+        "admission_decision=allow_extraction"
+      ]
+    },
+    {
+      "data_record_id": "data-prebinding:os_kb_0010",
+      "local_candidate_id": "os_kb_0010",
+      "required_from_main": [
+        "user_id",
+        "source_event_id",
+        "source_type",
+        "source_business_status",
+        "source_reference",
+        "idempotency_key",
+        "admission_decision=allow_extraction"
+      ]
+    }
+  ]
+}

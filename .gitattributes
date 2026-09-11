@@ -25,3 +25,8 @@
 # D13D L2 evidence is verified byte-for-byte by SHA256SUMS. Treat the
 # immutable package as binary: no line-ending conversion or text diff checks.
 evidence/l2-kylin-vm/d13d_20260905T090507Z/** binary
+
+# M2 RC10 import evidence is verified by exact JSONL SHA-256 and the RFC 8785
+# source manifest; treat the immutable package as binary to prevent any
+# line-ending conversion on checkout.
+evidence/main_to_data/runtime_gate/m2_rc_import/** binary

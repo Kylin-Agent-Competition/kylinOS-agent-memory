@@ -1,0 +1,38 @@
+{
+  "conflict_zero_extra_production_state": true,
+  "production_state_counts_after_conflict": {
+    "evidence_relations": 10,
+    "import_registry_rows": 10,
+    "knowledge_rows": 10,
+    "manifest_registry_rows": 10,
+    "outbox_events": 10
+  },
+  "production_state_counts_after_import": {
+    "evidence_relations": 10,
+    "import_registry_rows": 10,
+    "knowledge_rows": 10,
+    "manifest_registry_rows": 10,
+    "outbox_events": 10
+  },
+  "production_state_counts_after_replay": {
+    "evidence_relations": 10,
+    "import_registry_rows": 10,
+    "knowledge_rows": 10,
+    "manifest_registry_rows": 10,
+    "outbox_events": 10
+  },
+  "production_state_counts_before": {
+    "evidence_relations": 0,
+    "import_registry_rows": 0,
+    "knowledge_rows": 0,
+    "manifest_registry_rows": 0,
+    "outbox_events": 0
+  },
+  "production_state_counts_before_conflict": {
+    "evidence_relations": 10,
+    "import_registry_rows": 10,
+    "knowledge_rows": 10,
+    "manifest_registry_rows": 10,
+    "outbox_events": 10
+  }
+}

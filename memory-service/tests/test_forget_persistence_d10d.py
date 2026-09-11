@@ -1013,13 +1013,13 @@ def test_migration_upgrade_creates_forget_tables_and_priority(tmp_path):
     assert "trace_id" in receipt_columns
     assert str(outbox_info["attempts"][4]) in {"0", "'0'", '"0"'}
     assert "'forget'" in outbox_sql  # aggregate_type CHECK 扩展
-    assert revision == "20260906_add_preference_receipt_trace"
+    assert revision == "20260911_main_to_data_m2_registry"
 
 
 def test_migration_single_head(tmp_path):
     r = _run_alembic(tmp_path / "heads.db", "heads")
     assert r.returncode == 0, r.stderr
-    assert r.stdout.strip() == "20260906_add_preference_receipt_trace (head)"
+    assert r.stdout.strip() == "20260911_main_to_data_m2_registry (head)"
 
 
 def test_migration_downgrade_roundtrip(tmp_path):
@@ -1055,7 +1055,7 @@ def test_migration_populated_upgrade_preserves_legacy_rows_and_null_topic(tmp_pa
     revision = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     conn.close()
     assert row == ('{"value":"legacy"}', None)
-    assert revision == "20260906_add_preference_receipt_trace"
+    assert revision == "20260911_main_to_data_m2_registry"
 
 
 def test_migration_metadata_create_all_matches_d13d_columns_and_index(tmp_path):
