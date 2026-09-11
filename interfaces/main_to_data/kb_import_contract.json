@@ -1,0 +1,235 @@
+{
+  "schema": "main_to_data_kb_import_contract",
+  "schema_version": "1",
+  "status": "FROZEN",
+  "source_main_commit": "e62d525e3b7baf2bd4cd18ad8c2128a10aba8a96",
+  "canonical_schema": {
+    "path": "interfaces/main_to_data/schema_snapshot.json",
+    "schema_version": "1",
+    "status": "FROZEN",
+    "source_main_commit": "ba3b50e1bdeea185bca9daee9d1d45958f62a636",
+    "compatibility": "This contract reuses the frozen memory_status and knowledge_type value sets. It does not alter the canonical schema or promote any pending host mapping."
+  },
+  "boundary": {
+    "producer": "Data-side RC producer",
+    "consumer": "Main production KB import service",
+    "transport": "One JSON object per JSONL line, wrapped by an authenticated import request",
+    "request_envelope": {
+      "additional_properties": false,
+      "required_fields": {
+        "request_id": {"type": "string", "constraints": ["non-empty", "unique request correlation ID"]},
+        "source_manifest_sha256": {"type": "string", "constraints": ["exactly 64 lowercase hexadecimal characters", "SHA-256 of the supplied source manifest"]},
+        "source_manifest": {
+          "type": "object",
+          "required_fields": ["schema", "schema_version", "data_rc_sha256", "record_count"],
+          "schema": "main_to_data_source_manifest",
+          "schema_version": "1",
+          "data_rc_sha256": "Exactly 64 lowercase hexadecimal characters: SHA-256 of the exact UTF-8 JSONL bytes submitted in this request.",
+          "record_count": "Strict positive integer equal to the number of submitted JSONL records.",
+          "additional_properties": false
+        },
+        "authenticated_principal": {"type": "string", "constraints": ["set by Main authentication middleware, not trusted from an unsigned JSONL record"]}
+      },
+      "authorization": "Main resolves authenticated_principal to its permitted user scope before reading any record. A record user_id outside that scope is rejected.",
+      "manifest_integrity": "Main serializes source_manifest using RFC 8785 JSON Canonicalization Scheme, UTF-8 encodes those canonical bytes, and requires their SHA-256 to equal source_manifest_sha256. Main also hashes the exact submitted JSONL byte stream and requires it to equal source_manifest.data_rc_sha256, then verifies record_count before importing any record.",
+      "manifest_record_key": ["user_id", "source_manifest_sha256", "data_record_id"]
+    },
+    "unknown_input_policy": "fail_closed",
+    "unknown_input_policy_detail": "The request envelope, each record, and nested source descriptor reject unknown fields. Unknown enum values, missing required fields, malformed IDs, cross-user references, and unadmitted sources are rejected without a partial write for that record.",
+    "production_path_required": true,
+    "prohibited_substitutes": [
+      "manual SQLite INSERT",
+      "mock import",
+      "schema-only validation",
+      "synthetic success receipt"
+    ]
+  },
+  "record_contract": {
+    "additional_properties": false,
+    "allowed_input_fields": ["data_record_id", "user_id", "knowledge_type", "memory_status", "scope", "content", "confidence", "source", "idempotency_key", "conditions", "topic_key", "trace_id"],
+    "required_input_fields": {
+      "data_record_id": {
+        "type": "string",
+        "constraints": ["non-empty", "unique within source_manifest"],
+        "meaning": "Data-local traceability key; it is never a production identity."
+      },
+      "user_id": {
+        "type": "string",
+        "constraints": ["non-empty", "must match authenticated import scope"],
+        "meaning": "Owner isolation key. The importer rejects a claimed user outside its trusted scope."
+      },
+      "knowledge_type": {
+        "type": "string",
+        "enum": ["workflow", "case", "template", "fact", "constraint", "failure_experience"],
+        "meaning": "Frozen Canonical knowledge subtype; primary_category cannot replace it."
+      },
+      "memory_status": {
+        "type": "string",
+        "enum": ["candidate"],
+        "meaning": "A newly imported Data RC enters Main as candidate. Lifecycle promotion, expiry, supersession, and removal are Main-controlled transitions."
+      },
+      "scope": {
+        "type": "string",
+        "enum": ["user"],
+        "meaning": "This v1 import is user-scoped only; global or cross-user imports are rejected."
+      },
+      "content": {
+        "type": "object",
+        "required_fields": {
+          "content_summary": {"type": "string", "constraints": ["non-empty", "must pass the production sensitive-content and projection policy"]}
+        },
+        "optional_fields": {
+          "content_ref": {"type": ["string", "null"], "constraints": ["non-blank when present"]},
+          "primary_category": {"type": ["string", "null"], "constraints": ["non-blank when present", "cannot replace knowledge_type"]},
+          "language_tag": {"type": ["string", "null"], "constraints": ["BCP 47 when present"]},
+          "extracted_entities": {"type": ["array", "null"], "item_type": "string"}
+        },
+        "additional_properties": false,
+        "meaning": "V1 structured knowledge payload persisted through the Main repository ingress. Fields outside this allowlist are rejected; a future content schema requires a new contract version."
+      },
+      "confidence": {
+        "type": "number",
+        "constraints": ["0 <= value <= 1"],
+        "meaning": "Producer confidence supplied to the Main repository ingress."
+      },
+      "source": {
+        "type": "object",
+        "required_fields": ["source_event_id", "source_type", "source_business_status", "source_reference"],
+        "source_event_id": {"type": "string", "constraints": ["non-empty", "must name an existing Main source event owned by user_id", "must have admission_decision=allow_extraction"]},
+        "source_type": {"type": "string", "enum": ["chat", "tool_result", "manual_config", "recollect", "file", "meeting", "voice"]},
+        "source_business_status": {"type": "string", "enum": ["raw", "completed", "success", "partial", "failed", "cancelled", "timeout", "ignored"]},
+        "source_reference": {"type": "string", "constraints": ["non-empty", "must equal the registered immutable source reference for source_event_id"]},
+        "additional_properties": false,
+        "meaning": "Reference to an existing, admitted Main source event. Main does not create source events through this KB import contract; it rejects a missing, cross-user, unadmitted, or descriptor-mismatched event."
+      },
+      "idempotency_key": {
+        "type": "string",
+        "constraints": ["non-empty", "stable for every retry of one logical record import", "unique for a distinct logical record within a user scope"],
+        "meaning": "Data-supplied retry key. It is the only producer key that Main uses to recover an already allocated production identity."
+      }
+    },
+    "optional_input_fields": {
+      "conditions": {"type": ["string", "null"], "constraints": ["non-blank when present"]},
+      "topic_key": {"type": ["string", "null"], "constraints": ["non-blank when present"]},
+      "trace_id": {"type": ["string", "null"], "constraints": ["Main tracing policy applies"]}
+    },
+    "forbidden_input_fields": {
+      "knowledge_id": "Only Main may allocate a production knowledge_id. Data must not supply, derive, or assume one.",
+      "memory_id": "SQLite-derived production identity; supplied values are rejected.",
+      "version_id": "Main-derived current content/index version identity; supplied values are rejected.",
+      "version": "Main-controlled content/index version; supplied values are rejected.",
+      "production_id": "No alias may bypass Main production identity allocation."
+    },
+    "required_output_fields": {
+      "data_record_id": "Echo of the accepted producer traceability key.",
+      "accepted": "Always true for an accepted record.",
+      "knowledge_id": "Opaque production business identity allocated by Main trusted ingress; stable for the logical knowledge item and unique per user.",
+      "memory_id": "Canonical decimal-string representation of memory_entries.id for the same user and knowledge_id.",
+      "version": "Current positive integer content/index version from memory_entries.version.",
+      "version_id": "Canonical string v<version>; for example version 1 yields v1.",
+      "memory_status": "Current Main lifecycle value.",
+      "user_id": "Authenticated owner scope.",
+      "scope": "Always user in v1.",
+      "knowledge_type": "Accepted frozen Canonical subtype.",
+      "source_event_id": "Main-resolved admitted same-user source event identity.",
+      "replayed": "True only when an identical idempotent logical import returned the existing production identity."
+    },
+    "accepted_record_result": {
+      "additional_properties": false,
+      "required_fields": {
+        "data_record_id": {"type": "string", "constraints": ["non-empty"]},
+        "accepted": {"type": "boolean", "const": true},
+        "knowledge_id": {"type": "string", "constraints": ["non-empty"]},
+        "memory_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "version": {"type": "integer", "minimum": 1},
+        "version_id": {"type": "string", "pattern": "^v[1-9][0-9]*$"},
+        "memory_status": {"type": "string", "enum": ["active", "superseded", "deprecated", "expired", "removed", "candidate"]},
+        "user_id": {"type": "string", "constraints": ["non-empty"]},
+        "scope": {"type": "string", "const": "user"},
+        "knowledge_type": {"type": "string", "enum": ["workflow", "case", "template", "fact", "constraint", "failure_experience"]},
+        "source_event_id": {"type": "string", "constraints": ["non-empty"]},
+        "replayed": {"type": "boolean"}
+      }
+    },
+    "rejected_record_result": {
+      "additional_properties": false,
+      "required_fields": {
+        "data_record_id": {"type": ["string", "null"], "meaning": "Echo when parseable; otherwise null."},
+        "accepted": {"type": "boolean", "const": false},
+        "replayed": {"type": "boolean", "const": false},
+        "reason_code": {"type": "string", "enum": ["invalid_input", "unknown_field", "unknown_enum", "unauthorized_scope", "source_not_admitted", "idempotency_conflict", "duplicate_data_record", "persistence_failure"]},
+        "reason_detail": {"type": "string", "constraints": ["sanitized", "non-sensitive", "non-empty"]}
+      },
+      "forbidden_fields": ["knowledge_id", "memory_id", "version", "version_id", "source_event_id"],
+      "transport_failure": "A request-level authentication, manifest-integrity, or JSONL framing failure returns no per-record acceptance result and is reported as a failed import command, not as a rejected record."
+    }
+  },
+  "production_identity_mapping": {
+    "knowledge_id": {
+      "owner": "Main trusted production ingress",
+      "generation": "Opaque server-generated identifier allocated before calling db.repositories.insert_knowledge_entry; no format is exposed as a Data contract.",
+      "stability": "Stable across readback, lifecycle changes, and idempotent replay for the same logical knowledge item.",
+      "uniqueness": "Unique for (user_id, knowledge_id)."
+    },
+    "memory_id": {
+      "mapping": "decimal string of the SQLite memory_entries.id row that carries the knowledge_id",
+      "equal_to_knowledge_id": false,
+      "stability": "Stable for that persisted row and returned only by Main."
+    },
+    "version": {
+      "mapping": "positive integer memory_entries.version",
+      "purpose": "Content and index version, not the optimistic-concurrency token."
+    },
+    "version_id": {
+      "mapping": "literal 'v' concatenated with version",
+      "example": {"version": 1, "version_id": "v1"},
+      "identity_tuple": ["user_id", "memory_id", "version_id"]
+    },
+    "row_revision": {
+      "mapping": "Main internal optimistic-CAS token",
+      "exposure": "not an import identity and not a Data input field"
+    }
+  },
+  "admission_and_idempotency": {
+    "source_admission": "Main resolves the referenced existing same-user source event and accepts knowledge only when that event has admission_decision=allow_extraction and its immutable source_type, source_business_status, and source_reference equal the submitted descriptor. This import contract never creates a source event or fabricates provenance/security metadata. A failed source may create only failure_experience knowledge; partial, cancelled, timeout, and ignored sources are rejected.",
+    "idempotency_registry": {
+      "key": ["user_id", "idempotency_key"],
+      "canonical_request_sha256": {
+        "algorithm": "SHA-256",
+        "canonicalization": "RFC 8785 JSON Canonicalization Scheme followed by UTF-8 encoding",
+        "projection": ["data_record_id", "user_id", "knowledge_type", "memory_status", "scope", "content", "confidence", "source", "idempotency_key", "conditions", "topic_key"],
+        "excluded_fields": ["trace_id", "request_id", "source_manifest_sha256", "source_manifest", "authenticated_principal"],
+        "missing_optional_field_rule": "For every optional projection field that is absent, omit the property rather than substituting null."
+      },
+      "stored_on_first_attempt": ["canonical_request_sha256", "data_record_id", "knowledge_id", "memory_id", "version", "version_id", "source_event_id", "result_status"],
+      "atomicity": "Main persists this mapping in the same production transaction as source admission and knowledge creation, before reporting acceptance.",
+      "replay": "A retry with the same key and identical canonical request hash returns the stored complete production identity tuple with replayed=true; it does not allocate another knowledge_id or create another row, relation, or outbox event.",
+      "conflict": "Reuse of the key with a different canonical request hash or data_record_id is rejected as idempotency_conflict."
+    },
+    "manifest_record_registry": {
+      "key": ["user_id", "source_manifest_sha256", "data_record_id"],
+      "stored_value": "canonical_request_sha256 and the result identity tuple",
+      "behavior": "The same manifest record with the same canonical request is replayed through its stored result. The same key with a different request hash is rejected as duplicate_data_record. The key is stored atomically with the idempotency registry."
+    },
+    "duplicate_policy": "The per-record idempotency registry and manifest-record registry are the external replay boundaries. The repository-level same knowledge_id/source_event_id immutable replay check is a second Main-internal guard after the registry has recovered the allocated knowledge_id.",
+    "cross_user_policy": "Lookup, replay, update, and readback are all scoped by user_id. Cross-user identity probing and reuse are rejected."
+  },
+  "update_version_delete_lifecycle": {
+    "update": "Main alone authorizes and performs updates. A content or index identity change advances version and returns a new version_id while retaining knowledge_id and memory_id. Lifecycle-only changes advance row_revision but do not rewrite version or version_id.",
+    "superseded": "memory_status=superseded is a Main lifecycle state. If a successor is established, Main records the relationship; Data must not infer a successor from IDs.",
+    "expired": "memory_status=expired is Main-controlled and remains observable for authorized readback but is not eligible for normal retrieval.",
+    "removed": "Removal is a Main-controlled soft delete: memory_status becomes removed and the record is excluded from normal reads and retrieval. The identity is retained only for authorized audit and receipt linkage.",
+    "id_reuse": "A removed, expired, or superseded identity is never reallocated to a new Data record."
+  },
+  "failure_contract": {
+    "atomicity": "Each record either yields the complete required output identity tuple or yields a structured rejection; no partial production identity is returned.",
+    "reject_reason_categories": ["invalid_input", "unknown_field", "unknown_enum", "unauthorized_scope", "source_not_admitted", "idempotency_conflict", "duplicate_data_record", "persistence_failure"],
+    "no_fallback": "The importer never maps unknown values to defaults, never converts Data-local IDs into production IDs, and never reports an unexecuted import as accepted."
+  },
+  "implementation_anchors": {
+    "identity_and_uniqueness": "memory-service/db/schema.py: memory_entries, uq_memory_entries_user_knowledge",
+    "write_and_replay": "memory-service/db/repositories.py: insert_knowledge_entry",
+    "canonical_values": "memory-service/domain/enums.py: KnowledgeType, MemoryStatus",
+    "governance": "docs/adr/017-relation-conflict-lifecycle-persistence.md"
+  }
+}
