@@ -2,10 +2,11 @@
   "gate": "M1-KB",
   "status": "PASS",
   "contract_path": "interfaces/main_to_data/kb_import_contract.json",
-  "contract_sha256": "c87fc405b9c3a19b24f167536dee53c8cf6e36ffdc9ad0948590aead098993fe",
+  "contract_sha256": "3b2b3ee1664f5f740b231640f545baa50f8dff63d691a76855c228eeca9a645c",
+  "contract_schema_version": "2",
   "source_main_commit": "e62d525e3b7baf2bd4cd18ad8c2128a10aba8a96",
   "production_id_mapping_defined": true,
   "schema_compatible": true,
   "fail_closed_defined": true,
-  "notes": "M1-KB freezes the production import contract only. It does not claim M2 RC import execution, M3 Runtime smoke, or final Runtime Gate readiness."
+  "notes": "M1-KB freezes the production import contract only, including durable import idempotency and first-acceptance replay receipt semantics. It does not claim M2 RC import execution, M3 Runtime smoke, or final Runtime Gate readiness."
 }

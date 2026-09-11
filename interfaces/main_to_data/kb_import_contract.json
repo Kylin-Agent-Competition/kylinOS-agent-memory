@@ -1,6 +1,6 @@
 {
   "schema": "main_to_data_kb_import_contract",
-  "schema_version": "1",
+  "schema_version": "2",
   "status": "FROZEN",
   "source_main_commit": "e62d525e3b7baf2bd4cd18ad8c2128a10aba8a96",
   "canonical_schema": {
@@ -125,9 +125,9 @@
       "accepted": "Always true for an accepted record.",
       "knowledge_id": "Opaque production business identity allocated by Main trusted ingress; stable for the logical knowledge item and unique per user.",
       "memory_id": "Canonical decimal-string representation of memory_entries.id for the same user and knowledge_id.",
-      "version": "Current positive integer content/index version from memory_entries.version.",
-      "version_id": "Canonical string v<version>; for example version 1 yields v1.",
-      "memory_status": "Current Main lifecycle value.",
+      "accepted_version": "Positive integer content/index version from memory_entries.version at the first successful import acceptance. It is an immutable acceptance-receipt snapshot, not a current-state field.",
+      "accepted_version_id": "Canonical string v<accepted_version> stored at first successful import acceptance; for example accepted_version 1 yields v1.",
+      "accepted_memory_status": "Main lifecycle value at the first successful import acceptance. It is an immutable acceptance-receipt snapshot, not a current-state field.",
       "user_id": "Authenticated owner scope.",
       "scope": "Always user in v1.",
       "knowledge_type": "Accepted frozen Canonical subtype.",
@@ -141,9 +141,9 @@
         "accepted": {"type": "boolean", "const": true},
         "knowledge_id": {"type": "string", "constraints": ["non-empty"]},
         "memory_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
-        "version": {"type": "integer", "minimum": 1},
-        "version_id": {"type": "string", "pattern": "^v[1-9][0-9]*$"},
-        "memory_status": {"type": "string", "enum": ["active", "superseded", "deprecated", "expired", "removed", "candidate"]},
+        "accepted_version": {"type": "integer", "minimum": 1},
+        "accepted_version_id": {"type": "string", "pattern": "^v[1-9][0-9]*$"},
+        "accepted_memory_status": {"type": "string", "enum": ["active", "superseded", "deprecated", "expired", "removed", "candidate"]},
         "user_id": {"type": "string", "constraints": ["non-empty"]},
         "scope": {"type": "string", "const": "user"},
         "knowledge_type": {"type": "string", "enum": ["workflow", "case", "template", "fact", "constraint", "failure_experience"]},
@@ -160,7 +160,7 @@
         "reason_code": {"type": "string", "enum": ["invalid_input", "unknown_field", "unknown_enum", "unauthorized_scope", "source_not_admitted", "idempotency_conflict", "duplicate_data_record", "persistence_failure"]},
         "reason_detail": {"type": "string", "constraints": ["sanitized", "non-sensitive", "non-empty"]}
       },
-      "forbidden_fields": ["knowledge_id", "memory_id", "version", "version_id", "source_event_id"],
+      "forbidden_fields": ["knowledge_id", "memory_id", "accepted_version", "accepted_version_id", "accepted_memory_status", "source_event_id"],
       "transport_failure": "A request-level authentication, manifest-integrity, or JSONL framing failure returns no per-record acceptance result and is reported as a failed import command, not as a rejected record."
     }
   },
@@ -185,6 +185,11 @@
       "example": {"version": 1, "version_id": "v1"},
       "identity_tuple": ["user_id", "memory_id", "version_id"]
     },
+    "acceptance_receipt_snapshot": {
+      "fields": ["knowledge_id", "memory_id", "accepted_version", "accepted_version_id", "accepted_memory_status", "source_event_id"],
+      "meaning": "The immutable result snapshot from the first successful import acceptance. An idempotent replay returns this snapshot even when the current row version or lifecycle state has subsequently changed.",
+      "current_state_boundary": "Current version and lifecycle state are returned only by a separate authorized readback; they are never substituted into an import acceptance replay."
+    },
     "row_revision": {
       "mapping": "Main internal optimistic-CAS token",
       "exposure": "not an import identity and not a Data input field"
@@ -201,28 +206,47 @@
         "excluded_fields": ["trace_id", "request_id", "source_manifest_sha256", "source_manifest", "authenticated_principal"],
         "missing_optional_field_rule": "For every optional projection field that is absent, omit the property rather than substituting null."
       },
-      "stored_on_first_attempt": ["canonical_request_sha256", "data_record_id", "knowledge_id", "memory_id", "version", "version_id", "source_event_id", "result_status"],
+      "stored_on_first_attempt": ["canonical_request_sha256", "data_record_id", "knowledge_id", "memory_id", "accepted_version", "accepted_version_id", "accepted_memory_status", "source_event_id", "result_status"],
       "atomicity": "Main persists this mapping in the same production transaction as source admission and knowledge creation, before reporting acceptance.",
-      "replay": "A retry with the same key and identical canonical request hash returns the stored complete production identity tuple with replayed=true; it does not allocate another knowledge_id or create another row, relation, or outbox event.",
+      "replay_result_semantics": {
+        "kind": "acceptance_receipt_snapshot",
+        "returns": ["knowledge_id", "memory_id", "accepted_version", "accepted_version_id", "accepted_memory_status", "source_event_id"],
+        "current_row_lookup": "prohibited",
+        "rule": "A retry with the same key and identical canonical request hash returns the first successful acceptance-receipt snapshot with replayed=true. It never substitutes a later version or lifecycle state, and it does not allocate another knowledge_id or create another row, relation, or outbox event."
+      },
+      "durable_retention": {
+        "registry_kind": "durable_import_identity_registry",
+        "request_cache_relation": "The registry must not reuse or degrade to idempotency_cache, whose (user_id, session_id, idempotency_key) entries expire after 24 hours.",
+        "ttl": "none",
+        "minimum_retention": "Retain the registry and its first-success receipt snapshot for the full audit and production-identity retention lifetime of the referenced knowledge record.",
+        "terminal_lifecycle": "removed, expired, and superseded do not release or rewrite the key. A matching replay still returns the original acceptance-receipt snapshot and a mismatched replay remains idempotency_conflict.",
+        "gc_boundary": "No TTL-based or lifecycle-only GC is permitted. Physical GC is allowed only when an authorized Main retention policy permanently purges the referenced production identity and every audit/receipt record that could require replay recovery; the registry entry and receipt snapshot must be purged atomically with that policy action."
+      },
       "conflict": "Reuse of the key with a different canonical request hash or data_record_id is rejected as idempotency_conflict."
     },
     "manifest_record_registry": {
       "key": ["user_id", "source_manifest_sha256", "data_record_id"],
-      "stored_value": "canonical_request_sha256 and the result identity tuple",
-      "behavior": "The same manifest record with the same canonical request is replayed through its stored result. The same key with a different request hash is rejected as duplicate_data_record. The key is stored atomically with the idempotency registry."
+      "stored_value": "canonical_request_sha256 and the first-success acceptance-receipt snapshot",
+      "retention": "The manifest-record registry follows the durable import identity registry retention and GC boundary; it has no request-cache TTL.",
+      "behavior": "The same manifest record with the same canonical request is replayed through its stored acceptance-receipt snapshot. The same key with a different request hash is rejected as duplicate_data_record. The key is stored atomically with the idempotency registry."
     },
     "duplicate_policy": "The per-record idempotency registry and manifest-record registry are the external replay boundaries. The repository-level same knowledge_id/source_event_id immutable replay check is a second Main-internal guard after the registry has recovered the allocated knowledge_id.",
-    "cross_user_policy": "Lookup, replay, update, and readback are all scoped by user_id. Cross-user identity probing and reuse are rejected."
+    "cross_user_policy": "Lookup, replay, update, and readback are all scoped by user_id. Cross-user identity probing and reuse are rejected.",
+    "authorized_current_state_readback": {
+      "separate_from_import_response": true,
+      "required_fields": ["knowledge_id", "memory_id", "current_version", "current_version_id", "current_memory_status", "user_id", "scope"],
+      "meaning": "Only this authorized readback represents the current row state. Import acceptance and idempotent replay represent the first-success acceptance-receipt snapshot."
+    }
   },
   "update_version_delete_lifecycle": {
-    "update": "Main alone authorizes and performs updates. A content or index identity change advances version and returns a new version_id while retaining knowledge_id and memory_id. Lifecycle-only changes advance row_revision but do not rewrite version or version_id.",
+    "update": "Main alone authorizes and performs updates. A content or index identity change advances the current version and returns a new current_version_id through authorized readback while retaining knowledge_id and memory_id. Lifecycle-only changes advance row_revision but do not rewrite the current version. Neither change rewrites a previously stored import acceptance-receipt snapshot.",
     "superseded": "memory_status=superseded is a Main lifecycle state. If a successor is established, Main records the relationship; Data must not infer a successor from IDs.",
     "expired": "memory_status=expired is Main-controlled and remains observable for authorized readback but is not eligible for normal retrieval.",
     "removed": "Removal is a Main-controlled soft delete: memory_status becomes removed and the record is excluded from normal reads and retrieval. The identity is retained only for authorized audit and receipt linkage.",
     "id_reuse": "A removed, expired, or superseded identity is never reallocated to a new Data record."
   },
   "failure_contract": {
-    "atomicity": "Each record either yields the complete required output identity tuple or yields a structured rejection; no partial production identity is returned.",
+    "atomicity": "Each record either yields the complete required acceptance-receipt snapshot or yields a structured rejection; no partial production identity is returned.",
     "reject_reason_categories": ["invalid_input", "unknown_field", "unknown_enum", "unauthorized_scope", "source_not_admitted", "idempotency_conflict", "duplicate_data_record", "persistence_failure"],
     "no_fallback": "The importer never maps unknown values to defaults, never converts Data-local IDs into production IDs, and never reports an unexecuted import as accepted."
   },
