@@ -1,0 +1,89 @@
+{
+  "production_state_counts_after": {
+    "evidence_relations": 10,
+    "import_registry_rows": 10,
+    "knowledge_rows": 10,
+    "manifest_registry_rows": 10,
+    "outbox_events": 10
+  },
+  "production_state_counts_before": {
+    "evidence_relations": 10,
+    "import_registry_rows": 10,
+    "knowledge_rows": 10,
+    "manifest_registry_rows": 10,
+    "outbox_events": 10
+  },
+  "records": [
+    {
+      "accepted": false,
+      "data_record_id": "data-prebinding:os_kb_0001",
+      "reason_code": "idempotency_conflict",
+      "reason_detail": "idempotency key reused for a different request",
+      "replayed": false
+    },
+    {
+      "accepted": false,
+      "data_record_id": "data-prebinding:os_kb_0002",
+      "reason_code": "idempotency_conflict",
+      "reason_detail": "idempotency key reused for a different request",
+      "replayed": false
+    },
+    {
+      "accepted": false,
+      "data_record_id": "data-prebinding:os_kb_0003",
+      "reason_code": "idempotency_conflict",
+      "reason_detail": "idempotency key reused for a different request",
+      "replayed": false
+    },
+    {
+      "accepted": false,
+      "data_record_id": "data-prebinding:os_kb_0004",
+      "reason_code": "idempotency_conflict",
+      "reason_detail": "idempotency key reused for a different request",
+      "replayed": false
+    },
+    {
+      "accepted": false,
+      "data_record_id": "data-prebinding:os_kb_0005",
+      "reason_code": "idempotency_conflict",
+      "reason_detail": "idempotency key reused for a different request",
+      "replayed": false
+    },
+    {
+      "accepted": false,
+      "data_record_id": "data-prebinding:os_kb_0006",
+      "reason_code": "idempotency_conflict",
+      "reason_detail": "idempotency key reused for a different request",
+      "replayed": false
+    },
+    {
+      "accepted": false,
+      "data_record_id": "data-prebinding:os_kb_0007",
+      "reason_code": "idempotency_conflict",
+      "reason_detail": "idempotency key reused for a different request",
+      "replayed": false
+    },
+    {
+      "accepted": false,
+      "data_record_id": "data-prebinding:os_kb_0008",
+      "reason_code": "idempotency_conflict",
+      "reason_detail": "idempotency key reused for a different request",
+      "replayed": false
+    },
+    {
+      "accepted": false,
+      "data_record_id": "data-prebinding:os_kb_0009",
+      "reason_code": "idempotency_conflict",
+      "reason_detail": "idempotency key reused for a different request",
+      "replayed": false
+    },
+    {
+      "accepted": false,
+      "data_record_id": "data-prebinding:os_kb_0010",
+      "reason_code": "idempotency_conflict",
+      "reason_detail": "idempotency key reused for a different request",
+      "replayed": false
+    }
+  ],
+  "request_id": "m2-rc10-production-import:conflict"
+}
