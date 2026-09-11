@@ -33,6 +33,13 @@ def test_detect_phone_medium():
     assert level in (SensitivityLevel.MEDIUM, SensitivityLevel.HIGH)
 
 
+def test_plain_device_or_document_terms_are_not_identity_data():
+    """Bare labels are not personal identifiers; actual values remain covered below."""
+    level, matched = detect_sensitivity("学习环境固定安静，减少手机干扰；身份证件妥善保管。")
+    assert level == SensitivityLevel.NONE
+    assert matched is False
+
+
 def test_detect_password_critical():
     level, matched = detect_sensitivity("password=sup3rSecret")
     assert level == SensitivityLevel.CRITICAL

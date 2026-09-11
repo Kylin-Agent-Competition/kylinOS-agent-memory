@@ -29,8 +29,6 @@ from pipeline.schemas import (
 # 凭据类关键词（命中即 critical）
 _CRITICAL_KEYWORDS = re.compile(
     r"(?i)(api[_-]?key|secret|token|password|passwd|private[_-]?key|BEGIN.*PRIVATE KEY)")
-# 身份类关键词（命中升 high）
-_IDENTITY_KEYWORDS = re.compile(r"(?i)(phone|手机|身份证|id[_-]?card)")
 # 密码 leetspeak 变体（P@ssw0rd 等）→ critical
 _PASSWORD_LEET = re.compile(r"(?i)\b(?:p[a@]ssw[o0]rd|p[a@]ss|p[a@]ssw0rd)[^\s]{0,12}\b")
 # 云厂商 API Key 前缀（sk_/pk_/ak_/rk_）→ critical
@@ -72,8 +70,8 @@ def detect_sensitivity(text: Optional[str]) -> tuple[SensitivityLevel, bool]:
             or _LONG_SECRET.search(text)):
         return SensitivityLevel.CRITICAL, True
     # 身份类 → high
-    if (_IDENTITY_KEYWORDS.search(text) or _PHONE.search(text)
-            or _ID_CARD.search(text) or _SENSITIVE_PATH.search(text)):
+    if (_PHONE.search(text) or _ID_CARD.search(text)
+            or _SENSITIVE_PATH.search(text)):
         return SensitivityLevel.HIGH, True
     # 其余（兜底扫描 _SENSITIVE_PATTERNS）
     for pat in _SENSITIVE_PATTERNS:
