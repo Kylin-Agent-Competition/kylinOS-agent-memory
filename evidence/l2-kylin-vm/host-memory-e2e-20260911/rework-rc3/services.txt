@@ -1,0 +1,3 @@
+kylin-memory.service                          active
+kylin-memory-host-bridge.service              active
+kylin-memory-context-sync.service             active

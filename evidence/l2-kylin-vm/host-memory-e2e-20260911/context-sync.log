@@ -1,0 +1,4 @@
+nohup: 忽略输入
+[context-sync] ipc=/home/Carlton/kylin-memory-final/ipc_call.py
+[context-sync] out=/home/Carlton/kylin-memory-host-bridge/active-context.txt
+[context-sync] updated active=yes language=Rust

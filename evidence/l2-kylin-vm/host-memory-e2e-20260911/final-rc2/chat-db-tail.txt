@@ -1,0 +1,203 @@
+ROWID: 45
+AUTHOR: User
+MESSAGE: 帮我写一个最小的命令行参数解析示例，请选择一种合适的编程语言，给出完整可运行代码
+---
+ROWID: 46
+AUTHOR: Bot
+MESSAGE: 下面使用 **Rust** 实现一个最小的命令行参数解析示例，只依赖标准库，完整可运行。
+
+```rust
+use std::env;
+use std::process;
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    let mut name = String::from("世界");
+    let mut count = 1u32;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-h" | "--help" => {
+                println!("用法: {} [--name <名字>] [--count <次数>]", args[0]);
+                println!("  -h, --help       显示帮助");
+                println!("  --name <名字>    要问候的名字（默认：世界）");
+                println!("  --count <次数>   问候次数（默认：1）");
+                return;
+            }
+            "--name" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("错误：--name 需要一个值");
+                    process::exit(1);
+                }
+                name = args[i].clone();
+            }
+            "--count" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("错误：--count 需要一个值");
+                    process::exit(1);
+                }
+                count = args[i].parse().unwrap_or_else(|_| {
+                    eprintln!("错误：--count 的值必须是数字");
+                    process::exit(1);
+                });
+            }
+            other => {
+                eprintln!("错误：无法识别的参数：{}", other);
+                eprintln!("使用 --help 查看用法");
+                process::exit(1);
+            }
+        }
+        i += 1;
+    }
+
+    for _ in 0..count {
+        println!("你好，{}！", name);
+    }
+}
+```
+
+## 运行方式
+
+将代码保存为 `args_demo.rs`，然后编译并运行：
+
+```bash
+rustc args_demo.rs
+./args_demo --name Alice --count 3
+```
+
+输出：
+
+```
+你好，Alice！
+你好，Alice！
+你好，Alice！
+```
+
+## 支持的功能
+
+- `--name <名字>`：指定要问候的名字，默认是“世界”。
+- `--count <次数>`：指定问候次数，默认是 1。
+- `-h` / `--help`：显示帮助信息。
+- 对缺失值、非法数字、未知参数进行简单错误处理。
+---
+ROWID: 47
+AUTHOR: User
+MESSAGE: 帮我写一个最小的命令行参数解析示例，请选择一种合适的编程语言，给出完整可运行代码
+---
+ROWID: 48
+AUTHOR: Bot
+MESSAGE: 这里选择 **Rust**：它很适合写命令行工具，且标准库自带 `std::env`，不引入第三方 crate 也能完成最小参数解析。
+
+完整可运行代码如下：
+
+```rust
+use std::env;
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    // 第一个参数是程序名本身，因此至少需要两个参数
+    if args.len() < 2 {
+        eprintln!("用法: {} <名字> [--uppercase]", args[0]);
+        std::process::exit(1);
+    }
+
+    // 约定：第一个位置参数是名字
+    let name = &args[1];
+
+    // 检查是否包含 --uppercase 可选标志
+    let uppercase = args.iter().any(|arg| arg == "--uppercase");
+
+    if uppercase {
+        println!("你好, {}!", name.to_uppercase());
+    } else {
+        println!("你好, {}!", name);
+    }
+}
+```
+
+### 运行示例
+
+假设文件名为 `main.rs`：
+
+```bash
+rustc main.rs -o parse_args
+./parse_args Alice
+# 输出：你好, Alice!
+
+./parse_args Alice --uppercase
+# 输出：你好, ALICE!
+```
+
+如果使用 Cargo 项目，将代码放入 `src/main.rs`，然后运行：
+
+```bash
+cargo run -- Alice --uppercase
+```
+---
+ROWID: 49
+AUTHOR: User
+MESSAGE: 帮我写一个最小的命令行参数解析示例，请选择一种合适的编程语言，给出完整可运行代码
+---
+ROWID: 50
+AUTHOR: Bot
+MESSAGE: 这里选择 **Rust** 来实现，使用标准库 `std::env`，不依赖第三方 crate。完整可运行代码如下：
+
+```rust
+use std::env;
+
+fn main() {
+    let mut args = env::args();
+    let program = args.next().unwrap_or_else(|| "args_demo".to_string());
+    let args: Vec<String> = args.collect();
+
+    let mut name = String::from("世界");
+    let mut i = 0;
+
+    while i < args.len() {
+        match args[i].as_str() {
+            "-h" | "--help" => {
+                println!("用法: {} [--name <名字>]", program);
+                println!("  -h, --help      显示帮助");
+                println!("  -n, --name <值>  指定要问候的名字");
+                return;
+            }
+            "-n" | "--name" => {
+                if i + 1 < args.len() {
+                    name = args[i + 1].clone();
+                    i += 1;
+                } else {
+                    eprintln!("错误: --name 需要一个值");
+                    std::process::exit(1);
+                }
+            }
+            other => {
+                eprintln!("错误: 未知参数 '{}'", other);
+                eprintln!("使用 '{} --help' 查看用法。", program);
+                std::process::exit(1);
+            }
+        }
+        i += 1;
+    }
+
+    println!("你好，{}！", name);
+}
+```
+
+将代码保存为 `args_demo.rs`，编译并运行：
+
+```bash
+rustc args_demo.rs -o args_demo
+./args_demo --name 麒麟
+# 输出：你好，麒麟！
+
+./args_demo --help
+# 输出帮助信息
+```
+
+这个示例展示了最小化的参数解析流程：识别 `-n/--name` 选项并读取其值，同时支持 `-h/--help` 帮助选项，遇到未知参数时会报错退出。
+---

@@ -6,12 +6,14 @@ on:
     paths:
       - 'memory-client/**'
       - 'os-agent-integration/**'
+      - 'evidence/l2-kylin-vm/host-memory-e2e-20260911/**'
       - '.github/workflows/memory-client-ctest.yml'
   push:
     branches: [main, integration, 'feat/**']
     paths:
       - 'memory-client/**'
       - 'os-agent-integration/**'
+      - 'evidence/l2-kylin-vm/host-memory-e2e-20260911/**'
       - '.github/workflows/memory-client-ctest.yml'
   workflow_dispatch:
 
@@ -160,3 +162,43 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
 
+  host-integration-rc:
+    name: host integration RC pytest + evidence closure
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Host RC test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            python3-pytest
+
+      - name: Python syntax check
+        run: |
+          python3 -m py_compile \
+            os-agent-integration/host-memory-bridge/host_memory_bridge.py \
+            os-agent-integration/host-memory-bridge/memory_context_sync.py \
+            os-agent-integration/host-memory-bridge/ipc_call.py
+
+      - name: Shell syntax check
+        run: |
+          bash -n \
+            os-agent-integration/host-memory-bridge/install_host_integration_rc.sh
+          bash -n \
+            os-agent-integration/host-memory-bridge/uninstall_host_integration_rc.sh
+          bash -n \
+            os-agent-integration/host-memory-bridge/verify_host_integration_rc.sh
+
+      - name: Run Host Integration RC regression tests
+        run: |
+          python3 -m pytest -q \
+            os-agent-integration/tests/test_host_integration_rc.py
+
+      - name: Verify sealed Kylin VM E2E evidence closure
+        run: |
+          python3 -m pytest -q \
+            evidence/l2-kylin-vm/host-memory-e2e-20260911/test_final_rc2_closure.py

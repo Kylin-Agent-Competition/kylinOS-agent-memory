@@ -1,0 +1,5 @@
+PID=50882
+  50882   50872 /usr/bin/kylin-aiassistant --silence
+
+SHA256:
+86453fc660a47940c26031d87807cc735ea1cfd628a657f34a5c896cb0c7ccf6  /usr/bin/kylin-aiassistant

@@ -1,0 +1,15 @@
+[PASS] sandbox launcher installed
+[PASS] pre-chat hook installed
+[PASS] application desktop override
+[PASS] autostart desktop override
+[PASS] memory service uses resolved D14A launcher
+[PASS] memory service active
+[PASS] preference.list handler reachable
+[PASS] host bridge active
+[PASS] context sync active
+[PASS] memory UDS exists
+[PASS] active context mode=600
+[PASS] chatAsync interposer symbol
+[PASS] running AI Assistant has RC LD_PRELOAD
+[PASS] running AI Assistant uses runtime context
+[PASS] hook constructor observed for running assistant

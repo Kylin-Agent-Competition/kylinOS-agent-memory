@@ -30,3 +30,16 @@ evidence/l2-kylin-vm/d13d_20260905T090507Z/** binary
 # source manifest; treat the immutable package as binary to prevent any
 # line-ending conversion on checkout.
 evidence/main_to_data/runtime_gate/m2_rc_import/** binary
+
+# Host Memory E2E final RC evidence is sealed byte-for-byte by SHA256SUMS.
+# Treat the immutable evidence as binary to prevent line-ending conversion.
+evidence/l2-kylin-vm/host-memory-e2e-20260911/final-rc2/** binary
+
+# Host Memory E2E raw text/log evidence is immutable byte evidence.
+# Treat direct raw artifacts as binary so whitespace checks never rewrite them.
+evidence/l2-kylin-vm/host-memory-e2e-20260911/*.txt binary
+evidence/l2-kylin-vm/host-memory-e2e-20260911/*.log binary
+
+# Kylin V11 Host Integration RC3 revalidation evidence.
+# Preserve byte-for-byte; integrity is sealed by its SHA256SUMS.
+evidence/l2-kylin-vm/host-memory-e2e-20260911/rework-rc3/** binary
