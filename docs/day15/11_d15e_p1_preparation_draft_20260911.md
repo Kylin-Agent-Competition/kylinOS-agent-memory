@@ -17,7 +17,7 @@ D15E_SIGNOFF_STATUS=BLOCKED
 | --- | --- |
 | as-of | 2026-09-11 |
 | branch base at scan time | `e62d525e3b7baf2bd4cd18ad8c2128a10aba8a96` |
-| scan-time main head | `afc701ec2ce269268508a278f5aa50fd3ddfc93c` |
+| scan-time main head | `657dbb9d18c7cb863924380c7dfac674c8ca36d1` |
 | merged closeout at branch base | PR #178 |
 | frozen tested commit | `ba3b50e1bdeea185bca9daee9d1d45958f62a636` |
 | package | `kylin-memory-a-d14a 0.1.0-d14a` |
@@ -36,11 +36,14 @@ and stale for current main pending rebuild and host/VM revalidation.
 
 ## P0 Inputs Still Required
 
-1. D14B: original frozen tar bytes or an authoritative refreeze decision.
-2. D15A: a package-only performance runner and thresholds, or a formal scope
-   ruling for A15-2.
-3. D14C: a usable real Host Chat LLM with recorded package, binary, version
-   and SHA-256 identity.
+1. D14B package identity: authority acceptance of the located original frozen
+   tar bytes, or an authoritative refreeze decision.
+2. D14B vector CLI identity: the original `vector_bridge_cli` bytes or an
+   authoritative provenance-labeled rebuild refreeze decision.
+3. D14C Host Chat LLM: a usable real Host Chat LLM with recorded package,
+   binary, model/runtime version, and SHA-256 identity for the exact round.
+4. D15A A15-2: a package-only performance runner with explicit thresholds, or
+   a formal scope ruling.
 
 No P0 ruling has been recorded in this draft. The corresponding upstream tracks
 remain blocked and must not be treated as complete.
@@ -112,7 +115,7 @@ These merged changes are inputs to later E15-1/E15-4 wording, not closure facts:
 
 1. Separated branch base, scan-time main head, frozen tested commit, package
    hashes, and evidence hashes.
-2. Recorded the three P0 inputs that still block formal execution.
+2. Recorded the four P0 inputs that still block formal execution.
 3. Added the four-metric unlock conditions so D14C is not treated as a single
    master key for E15-3.
 4. Kept all formal and signoff locks separate from draft work.
@@ -127,7 +130,7 @@ These merged changes are inputs to later E15-1/E15-4 wording, not closure facts:
 
 ## Remaining Actions
 
-1. Obtain the three P0 rulings or inputs listed above.
+1. Obtain the four P0 rulings or inputs listed above.
 2. Keep D14B and D14C formal work on their prescribed clean-VM routes.
 3. Do not freeze this draft until E15-1 through E15-6 each have an auditable
    upstream-supported status.
