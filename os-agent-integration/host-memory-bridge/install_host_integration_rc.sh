@@ -48,6 +48,36 @@ BASE_MEMORY_SERVER="$(readlink -f "$MEMORY_SERVER_LINK" 2>/dev/null || true)"
 [ -n "$BASE_MEMORY_SERVER" ] && [ -x "$BASE_MEMORY_SERVER" ] \
     || die "cannot resolve executable base Memory Service launcher from $MEMORY_SERVER_LINK"
 
+# Compatibility preflight: fail before writing/replacing runtime integration files.
+# The post-D15D interposer is validated only against the exact Assistant binary
+# and the exact downstream chatAsync ABI used by this RC.
+command -v nm >/dev/null || die "nm not found; cannot verify Assistant runtime ABI"
+command -v sha256sum >/dev/null || die "sha256sum not found"
+[ -r "$ASSISTANT_RUNTIME_LIB" ] || die "Assistant runtime library not readable: $ASSISTANT_RUNTIME_LIB"
+
+ASSISTANT_HASH_OUTPUT="$(
+    "$KAIMING_BIN" run --command=/usr/bin/sha256sum \
+        cn.kylin.kylin-aiassistant -- /usr/bin/kylin-aiassistant 2>&1 || true
+)"
+[[ "$ASSISTANT_HASH_OUTPUT" == *"$EXPECTED_ASSISTANT_SHA256"* ]] \
+    || die "unsupported Kylin AI Assistant binary; expected SHA-256 $EXPECTED_ASSISTANT_SHA256"
+log "assistant binary identity: PASS"
+
+HOST_ASSISTANT_LIB_SHA="$(sha256sum "$ASSISTANT_RUNTIME_LIB")"
+HOST_ASSISTANT_LIB_SHA="${HOST_ASSISTANT_LIB_SHA%% *}"
+SANDBOX_ASSISTANT_LIB_HASH_OUTPUT="$(
+    "$KAIMING_BIN" run --command=/usr/bin/sha256sum \
+        cn.kylin.kylin-aiassistant -- "$ASSISTANT_RUNTIME_LIB" 2>&1 || true
+)"
+[[ "$SANDBOX_ASSISTANT_LIB_HASH_OUTPUT" == *"$HOST_ASSISTANT_LIB_SHA"* ]] \
+    || die "Assistant runtime library differs between host and Kaiming sandbox"
+log "assistant runtime library identity: PASS"
+
+ASSISTANT_ABI_OUTPUT="$(nm -D --defined-only "$ASSISTANT_RUNTIME_LIB" 2>/dev/null || true)"
+[[ "$ASSISTANT_ABI_OUTPUT" == *"$ASSISTANT_CHAT_SYMBOL"* ]] \
+    || die "validated downstream chatAsync ABI symbol not found in $ASSISTANT_RUNTIME_LIB"
+log "assistant downstream chatAsync ABI: PASS"
+
 mkdir -p "$BIN_DIR" "$LIB_DIR" "$STATE_DIR" "$BACKUP_DIR" \
     "$USER_UNIT_DIR" "$MEMORY_DROPIN_DIR" "$APP_DIR" "$AUTOSTART_DIR"
 chmod 700 "$INSTALL_ROOT" "$BIN_DIR" "$LIB_DIR" "$STATE_DIR" "$BACKUP_DIR"
@@ -94,16 +124,7 @@ else
     trap - EXIT
 fi
 
-# Fail before touching desktop/systemd activation if the exact validated host
-# binary is not present. The interposer targets this 3.0.67 ABI and must not be
-# enabled blindly on an upgraded Assistant.
-ASSISTANT_HASH_OUTPUT="$(
-    "$KAIMING_BIN" run --command=/usr/bin/sha256sum \
-        cn.kylin.kylin-aiassistant -- /usr/bin/kylin-aiassistant 2>&1 || true
-)"
-[[ "$ASSISTANT_HASH_OUTPUT" == *"$EXPECTED_ASSISTANT_SHA256"* ]] \
-    || die "unsupported Kylin AI Assistant binary; expected SHA-256 $EXPECTED_ASSISTANT_SHA256"
-log "assistant binary identity: PASS"\n\n# The hook can only delegate safely when the exact downstream chatAsync ABI is\n# exported by the Assistant runtime library. Treat a mismatch as install-time\n# fail-closed rather than activating an interposer that could swallow requests.\ncommand -v nm >/dev/null || die "nm not found; cannot verify Assistant runtime ABI"\nASSISTANT_ABI_OUTPUT="$(\n    "$KAIMING_BIN" run --command=/usr/bin/nm +        cn.kylin.kylin-aiassistant -- +        -D --defined-only "$ASSISTANT_RUNTIME_LIB" 2>&1 || true\n)"\n[[ "$ASSISTANT_ABI_OUTPUT" == *"$ASSISTANT_CHAT_SYMBOL"* ]] +    || die "validated downstream chatAsync ABI symbol not found in $ASSISTANT_RUNTIME_LIB"\nlog "assistant downstream chatAsync ABI: PASS"\n\n# Prove the *installed* hook path can be loaded inside Kaiming and that the\n# runtime context directory is visible there. This catches KYSEC/path/mount
+# Prove the *installed* hook path can be loaded inside Kaiming and that the\n# runtime context directory is visible there. This catches KYSEC/path/mount
 # failures before the user's normal Assistant launch is overridden.
 PROBE_DIR="${XDG_RUNTIME_DIR}/kylin-memory"
 PROBE_CONTEXT="$PROBE_DIR/host-integration-install-probe.txt"

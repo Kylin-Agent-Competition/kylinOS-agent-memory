@@ -560,4 +560,32 @@ def test_installer_preflights_downstream_assistant_chat_abi():
         in text
     )
     assert "ASSISTANT_CHAT_SYMBOL" in text
+    assert "assistant binary identity: PASS" in text
+    assert "assistant runtime library identity: PASS" in text
     assert "assistant downstream chatAsync ABI: PASS" in text
+    assert "run --command=/usr/bin/sha256sum" in text
+    assert 'nm -D --defined-only "$ASSISTANT_RUNTIME_LIB"' in text
+    assert "run --command=/usr/bin/nm" not in text
+
+    preflight = text.split(
+        "# Compatibility preflight:",
+        1,
+    )[1].split(
+        'mkdir -p "$BIN_DIR"',
+        1,
+    )[0]
+
+    # Guard against the RC3 generator/paste corruption that produced one
+    # physical shell line containing literal "\\n" and patch '+' markers.
+    assert r"\n" not in preflight
+    assert not any(
+        line.startswith("+")
+        for line in preflight.splitlines()
+    )
+
+    assert text.index(
+        'log "assistant downstream chatAsync ABI: PASS"'
+    ) < text.index(
+        'install -m 0700 "$SELF_DIR/host_memory_bridge.py"'
+    )
+
